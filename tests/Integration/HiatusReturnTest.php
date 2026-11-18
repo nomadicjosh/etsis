@@ -38,7 +38,8 @@ final class HiatusReturnTest extends TestCase
             new EntityId($review['operation_id']),
             new DateTimeImmutable($review['return_on']),
             $review['revision'],
-            $reactivate
+            $reactivate,
+            $review['review_token'],
         );
     }
 

@@ -20,15 +20,22 @@ final readonly class SisHiatusController
     {
     }
 
-    public function page(ServerRequest $request, string $student): ResponseInterface
-    {
+    public function page(
+        ServerRequest $request,
+        string $student,
+    ): ResponseInterface {
         return new JsonResponse(
-            $this->service->page(new EntityId($student), FormInput::from($request)->optionalId("after")),
+            $this->service->page(
+                new EntityId($student),
+                FormInput::from($request)->optionalId("after"),
+            ),
         );
     }
 
-    public function create(ServerRequest $request, string $student): ResponseInterface
-    {
+    public function create(
+        #[\SensitiveParameter] ServerRequest $request,
+        string $student,
+    ): ResponseInterface {
         $f = FormInput::from($request);
         $hiatus = new StudentHiatus(
             $f->id("operation_id"),
@@ -42,11 +49,16 @@ final readonly class SisHiatusController
 
     public function show(string $student, string $id): ResponseInterface
     {
-        return new JsonResponse($this->service->view(new EntityId($student), new EntityId($id)));
+        return new JsonResponse(
+            $this->service->view(new EntityId($student), new EntityId($id)),
+        );
     }
 
-    public function end(ServerRequest $request, string $student, string $id): ResponseInterface
-    {
+    public function end(
+        #[\SensitiveParameter] ServerRequest $request,
+        string $student,
+        string $id,
+    ): ResponseInterface {
         $f = FormInput::from($request);
         $this->service->end(
             new EntityId($student),
@@ -59,8 +71,11 @@ final readonly class SisHiatusController
         return new JsonResponse(["status" => "saved"]);
     }
 
-    public function void(ServerRequest $request, string $student, string $id): ResponseInterface
-    {
+    public function void(
+        #[\SensitiveParameter] ServerRequest $request,
+        string $student,
+        string $id,
+    ): ResponseInterface {
         $f = FormInput::from($request);
         $this->service->void(
             new EntityId($student),
@@ -72,8 +87,11 @@ final readonly class SisHiatusController
         return new JsonResponse(["status" => "voided"]);
     }
 
-    public function history(ServerRequest $request, string $student, string $id): ResponseInterface
-    {
+    public function history(
+        ServerRequest $request,
+        string $student,
+        string $id,
+    ): ResponseInterface {
         return new JsonResponse(
             $this->service->history(
                 new EntityId($student),

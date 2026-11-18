@@ -18,8 +18,11 @@ final readonly class SisHiatusReturnController
     {
     }
 
-    public function review(ServerRequest $request, string $student, string $id): ResponseInterface
-    {
+    public function review(
+        ServerRequest $request,
+        string $student,
+        string $id,
+    ): ResponseInterface {
         return new JsonResponse(
             $this->service->review(
                 new EntityId($student),
@@ -29,8 +32,11 @@ final readonly class SisHiatusReturnController
         );
     }
 
-    public function commit(ServerRequest $request, string $student, string $id): ResponseInterface
-    {
+    public function commit(
+        #[\SensitiveParameter] ServerRequest $request,
+        string $student,
+        string $id,
+    ): ResponseInterface {
         $f = FormInput::from($request);
         return new JsonResponse(
             $this->service->commit(
@@ -41,6 +47,7 @@ final readonly class SisHiatusReturnController
                     $f->date("return_on"),
                     $f->text("revision", 64),
                     $f->requiredBoolean("reactivate"),
+                    $f->text("review_token", 8192),
                 ),
                 $f->bodyText("note"),
             ),
@@ -48,10 +55,17 @@ final readonly class SisHiatusReturnController
         );
     }
 
-    public function show(string $student, string $id, string $operation): ResponseInterface
-    {
+    public function show(
+        string $student,
+        string $id,
+        string $operation,
+    ): ResponseInterface {
         return new JsonResponse(
-            $this->service->saved(new EntityId($student), new EntityId($id), new EntityId($operation)),
+            $this->service->saved(
+                new EntityId($student),
+                new EntityId($id),
+                new EntityId($operation),
+            ),
         );
     }
 }

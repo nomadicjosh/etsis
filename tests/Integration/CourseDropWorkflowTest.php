@@ -438,13 +438,13 @@ final class CourseDropWorkflowTest extends TestCase
             \Domain\Student\Enum\HiatusCode::Withdrawal,
             $dates,
         );
-        $receipt = $workflow->commit($hiatus, "Fictional grace-period withdrawal", $impact);
+        $receipt = $workflow->commit($hiatus, "Fictional grace-period withdrawal", $impact, $r["review_token"]);
         self::assertNull($f->registration->enrollment($student->id, $a->id));
         self::assertNotNull($f->registration->enrollment($student->id, $b->id));
         self::assertSame(10000, $f->accounts->get($this->account($f, $student->id))->balance()->minor);
         self::assertTrue($receipt["impact"]["course_changes"][0]["academic_records_removed"]);
         $events = $f->sql->rows("sis_history_events");
-        self::assertSame($receipt, $workflow->commit($hiatus, "Fictional grace-period withdrawal", $impact));
+        self::assertSame($receipt, $workflow->commit($hiatus, "Fictional grace-period withdrawal", $impact, $r["review_token"]));
         self::assertSame($events, $f->sql->rows("sis_history_events"));
     }
     public function testRootHiatusFailureRollsBackNestedEarlyChargeReversalAndAcademicRemoval(): void
@@ -478,6 +478,7 @@ final class CourseDropWorkflowTest extends TestCase
                 ),
                 "Fictional rollback",
                 new \Domain\Student\ValueObject\HiatusImpact(true, $r["revision"], [], $section->id),
+                $r["review_token"],
             );
             self::fail("Parent failure committed nested drop.");
         } catch (RuntimeException $e) {

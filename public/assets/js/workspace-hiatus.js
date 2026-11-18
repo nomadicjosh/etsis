@@ -208,7 +208,7 @@ window.createWorkspaceHiatus = function (ui) {
             event.preventDefault();
             task(async () => {
                 if (!form.reportValidity()) return;
-                const data = formData(form, fields);
+                const data = { ...draft, ...formData(form, fields) };
                 data.code = data.code.split(" — ")[0];
                 const reviewed = await request(
                     `/sis/students/${student}/hiatus-workflow/review/`,
@@ -232,12 +232,24 @@ window.createWorkspaceHiatus = function (ui) {
             "Review student hiatus plan",
             "DETAILS → REVIEW → CONFIRM",
         );
-        const selected = new Set(reviewed.defaults.section_ids);
+        const eligible = new Set(
+            reviewed.courses
+                .filter((course) => course.eligible)
+                .map((course) => course.section_id),
+        );
+        const selected = new Set(
+            (draft.section_ids ?? reviewed.defaults.section_ids).filter((id) =>
+                eligible.has(id),
+            ),
+        );
         const activity = node("input", {
             type: "checkbox",
             class: "form-check-input",
             id: "hiatus-deactivate",
-            checked: reviewed.defaults.deactivate,
+            checked:
+                reviewed.effective_now &&
+                reviewed.student.active &&
+                (draft.deactivate ?? reviewed.defaults.deactivate),
             disabled: !reviewed.effective_now || !reviewed.student.active,
         });
         const summary = node("p", { role: "status", "aria-live": "polite" });
@@ -246,7 +258,21 @@ window.createWorkspaceHiatus = function (ui) {
         }
         activity.addEventListener("change", announce);
         body.append(
-            button("Change details", () => create(student, draft), "btn-link"),
+            button(
+                "Change details",
+                () =>
+                    create(student, {
+                        ...draft,
+                        section_ids: [...selected],
+                        deactivate: activity.checked,
+                    }),
+                "btn-link",
+            ),
+            node(
+                "p",
+                { class: "form-text" },
+                "This review is valid for 20 minutes. If it expires, change details to review again; your entered details are kept.",
+            ),
             node("h3", {}, reviewed.label),
             node(
                 "p",
@@ -304,7 +330,13 @@ window.createWorkspaceHiatus = function (ui) {
                 course.section_code,
                 course.course_title,
                 course.term_code,
-                course.drop_policy ? (course.drop_policy.delete_records ? "Remove course · reverse course charge" : `Retain course · grade ${course.drop_policy.grade_code} · keep charge`) : (course.proposed_status === "D" ? "Remove course · reverse course charge" : "Withdraw (W)"),
+                course.drop_policy
+                    ? course.drop_policy.delete_records
+                        ? "Remove course · reverse course charge"
+                        : `Retain course · grade ${course.drop_policy.grade_code} · keep charge`
+                    : course.proposed_status === "D"
+                      ? "Remove course · reverse course charge"
+                      : "Withdraw (W)",
                 node(
                     "div",
                     {},
@@ -377,6 +409,7 @@ window.createWorkspaceHiatus = function (ui) {
                                 ...draft,
                                 operation_id: reviewed.operation_id,
                                 revision: reviewed.revision,
+                                review_token: reviewed.review_token,
                                 section_ids: [...selected],
                                 deactivate: activity.checked,
                             },
@@ -444,7 +477,7 @@ window.createWorkspaceHiatus = function (ui) {
             event.preventDefault();
             task(async () => {
                 if (!form.reportValidity()) return;
-                const data = formData(form, fields);
+                const data = { ...draft, ...formData(form, fields) };
                 const review = await request(
                     `/sis/students/${student}/hiatuses/${value.id}/return/review/`,
                     "POST",
@@ -471,13 +504,17 @@ window.createWorkspaceHiatus = function (ui) {
             type: "checkbox",
             id: "return-reactivate",
             class: "form-check-input",
-            checked: false,
+            checked: !review.student.active && (draft.reactivate ?? false),
             disabled: review.student.active,
         });
         body.append(
             button(
                 "Change return details",
-                () => returnDetails(student, value, draft),
+                () =>
+                    returnDetails(student, value, {
+                        ...draft,
+                        reactivate: activity.checked,
+                    }),
                 "btn-link",
             ),
             node(
@@ -534,7 +571,7 @@ window.createWorkspaceHiatus = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
-                "If the response is interrupted, keep this review to retry or check the saved return.",
+                "This review is valid for 20 minutes. If the response is interrupted, keep it to retry or check the saved return. Changing return details keeps your entries.",
             ),
             node(
                 "div",
@@ -549,6 +586,7 @@ window.createWorkspaceHiatus = function (ui) {
                                 ...draft,
                                 operation_id: review.operation_id,
                                 revision: review.revision,
+                                review_token: review.review_token,
                                 reactivate: activity.checked,
                             },
                         );
@@ -602,6 +640,13 @@ window.createWorkspaceHiatus = function (ui) {
                 `${value.starts_on} through ${value.ends_on || "open-ended"}`,
             ),
             badge(value.state),
+            node(
+                "p",
+                { class: "form-text" },
+                value.history_tracked
+                    ? "This case has verified decision history."
+                    : "Earlier case evidence is retained; its original decision history may be incomplete.",
+            ),
             node("p", { class: "form-text" }, explanation),
             node("h3", {}, "Initial staff comment"),
             node(
@@ -638,7 +683,13 @@ window.createWorkspaceHiatus = function (ui) {
                               value.impact.course_changes.map((change) => [
                                   change.course_code,
                                   change.term_code,
-                                  change.academic_records_removed === true ? "Course removed · course charge reversed if present" : (change.grade_code ? `Retained · grade ${change.grade_code} · course charge kept` : (change.status === "D" ? "Dropped (D)" : "Withdrawn (W)")),
+                                  change.academic_records_removed === true
+                                      ? "Course removed · course charge reversed if present"
+                                      : change.grade_code
+                                        ? `Retained · grade ${change.grade_code} · course charge kept`
+                                        : change.status === "D"
+                                          ? "Dropped (D)"
+                                          : "Withdrawn (W)",
                                   change.effective_date,
                               ]),
                               "Recorded course changes",
@@ -750,7 +801,9 @@ window.createWorkspaceHiatus = function (ui) {
                 request(
                     `/sis/students/${student}/hiatuses/${id}/history/`,
                     "POST",
-                    { after },
+                    {
+                        after,
+                    },
                 ),
             (rows) =>
                 rows.length
@@ -776,6 +829,13 @@ window.createWorkspaceHiatus = function (ui) {
                                       "p",
                                       { class: "form-text" },
                                       `${item.created_at} · ${item.actor_name || item.actor_id}`,
+                                  ),
+                                  node(
+                                      "p",
+                                      { class: "form-text" },
+                                      item.history_tracked
+                                          ? "Verified decision"
+                                          : "Earlier case evidence",
                                   ),
                                   item.action === "end_changed" ||
                                       item.action === "returned"

@@ -1259,6 +1259,7 @@ $caseCommit = $caseDraft + [
     "section_ids" => [$caseSection->id->value],
     "revision" => $caseReview["revision"],
     "operation_id" => $caseReview["operation_id"],
+    "review_token" => $caseReview["review_token"],
 ];
 $caseCommitted = $teachingPost($casePath . "/hiatus-workflow/commit/", $caseCommit);
 $caseRepeated = $teachingPost($casePath . "/hiatus-workflow/commit/", $caseCommit);
@@ -1333,6 +1334,7 @@ $returnData = [
     "return_on" => $returnReview["return_on"],
     "revision" => $returnReview["revision"],
     "operation_id" => $returnReview["operation_id"],
+    "review_token" => $returnReview["review_token"],
     "reactivate" => true,
     "note" => "Fictional registrar return",
 ];

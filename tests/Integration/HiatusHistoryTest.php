@@ -38,7 +38,7 @@ final class HiatusHistoryTest extends TestCase
         $section = $f->section();
         $f->service->register($student->id, $section->id);
         $credits = $f->sql->rows('sis_academic_credits');
-        $events = $f->sql->rows('sis_history_events');
+        $events = $f->financialEvents();
         $hiatus = $this->hiatus($student->id);
         $note = 'Fictional sensitive comment <script>example</script>.';
         $h->history->create($hiatus, $note);
@@ -58,7 +58,7 @@ final class HiatusHistoryTest extends TestCase
         self::assertNull($history[0]['previous_ends_on']);
         self::assertSame('2026-08-31', $history[0]['new_ends_on']);
         self::assertSame($credits, $f->sql->rows('sis_academic_credits'));
-        self::assertSame($events, $f->sql->rows('sis_history_events'));
+        self::assertSame($events, $f->financialEvents());
         self::assertTrue($f->admissions->student($student->id)->active);
         $metadata = $h->history->page($student->id)['items'][0];
         self::assertArrayNotHasKey('comment', $metadata);

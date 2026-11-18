@@ -32,8 +32,40 @@ final readonly class SqlHiatusRepository implements HiatusRepository
 
     public function find(EntityId $id): ?StudentHiatus
     {
-        $row = $this->sql->rows("sis_student_hiatuses", ["id" => $id->value], 1)[0] ?? null;
+        $row = $this->sql->current("sis_student_hiatuses", $id->value);
         return $row === null ? null : $this->hydrate($row);
+    }
+
+    public function historyPosition(EntityId $id): ?int
+    {
+        $row = $this->sql->current("sis_student_hiatuses", $id->value);
+        $position = $row["history_position"] ?? null;
+        if ($position === null) {
+            return null;
+        }
+        if (
+            (!is_int($position) &&
+                (!is_string($position) ||
+                    (string) (int) $position !== $position)) ||
+            (int) $position < 1
+        ) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        return (int) $position;
+    }
+
+    public function markHistory(EntityId $id, int $position): void
+    {
+        if (
+            $position < 1 ||
+            $this->sql->update(
+                "sis_student_hiatuses",
+                ["history_position" => $position],
+                ["id" => $id->value],
+            ) !== 1
+        ) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
     }
 
     public function add(StudentHiatus $hiatus): void
@@ -62,7 +94,9 @@ final readonly class SqlHiatusRepository implements HiatusRepository
                 ["id" => $hiatus->id->value, "version" => $expectedVersion],
             ) !== 1
         ) {
-            throw new ConcurrentModificationException("Reload the current hiatus before changing it.");
+            throw new ConcurrentModificationException(
+                "Reload the current hiatus before changing it.",
+            );
         }
     }
 
@@ -119,7 +153,9 @@ final readonly class SqlHiatusRepository implements HiatusRepository
                     " ORDER BY " .
                     $q("id") .
                     " DESC",
-                $after === null ? [$student->value] : [$student->value, $after->value],
+                $after === null
+                    ? [$student->value]
+                    : [$student->value, $after->value],
                 $limit,
             ),
         );
@@ -127,7 +163,7 @@ final readonly class SqlHiatusRepository implements HiatusRepository
 
     public function action(EntityId $id): ?array
     {
-        return $this->sql->rows("sis_student_hiatus_actions", ["id" => $id->value], 1)[0] ?? null;
+        return $this->sql->current("sis_student_hiatus_actions", $id->value);
     }
 
     public function returned(EntityId $hiatus): ?array
@@ -160,8 +196,11 @@ final readonly class SqlHiatusRepository implements HiatusRepository
         ]);
     }
 
-    public function history(EntityId $hiatus, ?EntityId $after, int $limit): array
-    {
+    public function history(
+        EntityId $hiatus,
+        ?EntityId $after,
+        int $limit,
+    ): array {
         $q = $this->sql->quote(...);
         return $this->sql->fetch(
             "SELECT a.*, u." .
@@ -187,7 +226,9 @@ final readonly class SqlHiatusRepository implements HiatusRepository
                 " ORDER BY a." .
                 $q("id") .
                 " DESC",
-            $after === null ? [$hiatus->value] : [$hiatus->value, $after->value],
+            $after === null
+                ? [$hiatus->value]
+                : [$hiatus->value, $after->value],
             $limit,
         );
     }
@@ -195,13 +236,29 @@ final readonly class SqlHiatusRepository implements HiatusRepository
     /** @param array<string, mixed> $row */
     private function hydrate(array $row): StudentHiatus
     {
+        \Domain\Student\ValueObject\HiatusFacts::date($row["starts_on"]);
+        if ($row["ends_on"] !== null) {
+            \Domain\Student\ValueObject\HiatusFacts::date($row["ends_on"]);
+        }
+        if (
+            !is_string($row["code"]) ||
+            HiatusCode::tryFrom($row["code"]) === null ||
+            !in_array($row["voided"], [0, 1, "0", "1", false, true], true) ||
+            (!is_int($row["version"]) &&
+                (!is_string($row["version"]) ||
+                    (string) (int) $row["version"] !== $row["version"]))
+        ) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
         return new StudentHiatus(
             new EntityId($row["id"]),
             new EntityId($row["student_id"]),
             HiatusCode::parse($row["code"]),
             new DateRange(
                 new DateTimeImmutable($row["starts_on"]),
-                $row["ends_on"] === null ? null : new DateTimeImmutable($row["ends_on"]),
+                $row["ends_on"] === null
+                    ? null
+                    : new DateTimeImmutable($row["ends_on"]),
             ),
             (bool) $row["voided"],
             (int) $row["version"],
@@ -209,13 +266,19 @@ final readonly class SqlHiatusRepository implements HiatusRepository
     }
 
     /** @param array<string, scalar|null> $values */
-    private function insert(string $table, #[\SensitiveParameter] array $values): void
-    {
+    private function insert(
+        string $table,
+        #[\SensitiveParameter] array $values,
+    ): void {
         try {
             $this->sql->insert($table, $values);
         } catch (PDOException $error) {
-            if (in_array((string) $error->getCode(), ["23000", "23505"], true)) {
-                throw new ConcurrentModificationException("Check the existing hiatus operation before retrying.");
+            if (
+                in_array((string) $error->getCode(), ["23000", "23505"], true)
+            ) {
+                throw new ConcurrentModificationException(
+                    "Check the existing hiatus operation before retrying.",
+                );
             }
             throw $error;
         }

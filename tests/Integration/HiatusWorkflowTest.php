@@ -52,7 +52,7 @@ final class HiatusWorkflowTest extends TestCase
             $dates,
         );
         $impact = new HiatusImpact(true, $review["revision"], [], $a->id, $b->id);
-        $result = $workflow->commit($hiatus, "Fictional private withdrawal comment", $impact);
+        $result = $workflow->commit($hiatus, "Fictional private withdrawal comment", $impact, $review["review_token"]);
         self::assertCount(2, $result["impact"]["course_changes"]);
         self::assertFalse($f->admissions->student($student->id)->active);
         foreach ([$a, $b] as $section) {
@@ -70,7 +70,7 @@ final class HiatusWorkflowTest extends TestCase
         self::assertFalse($result["impact"]["automatic_refund"]);
         self::assertSame(
             $result,
-            $workflow->commit($hiatus, "Fictional private withdrawal comment", $impact),
+            $workflow->commit($hiatus, "Fictional private withdrawal comment", $impact, $review["review_token"]),
         );
         self::assertCount(1, $f->sql->rows("sis_student_hiatuses"));
         self::assertCount(1, $f->sql->rows("sis_student_hiatus_actions"));
@@ -100,6 +100,7 @@ final class HiatusWorkflowTest extends TestCase
             ),
             "Fictional limited review",
             new HiatusImpact(false, $review["revision"], [], $a->id),
+            $review["review_token"],
         );
         self::assertTrue($f->admissions->student($student->id)->active);
         self::assertNull($f->registration->enrollment($student->id, $a->id));
@@ -163,12 +164,13 @@ final class HiatusWorkflowTest extends TestCase
                 $hiatus,
                 "Fictional future case",
                 new HiatusImpact(true, $review["revision"], []),
+                $review["review_token"],
             );
             self::fail("A future date changed current activity.");
         } catch (ValidationException) {
             self::assertTrue($f->admissions->student($student->id)->active);
         }
-        $workflow->commit($hiatus, "Fictional future case", new HiatusImpact(false, $review["revision"], []));
+        $workflow->commit($hiatus, "Fictional future case", new HiatusImpact(false, $review["revision"], []), $review["review_token"]);
         self::assertSame("scheduled", $h->history->view($student->id, $hiatus->id)["state"]);
         self::assertSame("N", $f->registration->enrollment($student->id, $section->id)->status->value);
     }
@@ -213,6 +215,7 @@ final class HiatusWorkflowTest extends TestCase
                 ),
                 "Fictional protected grade",
                 new HiatusImpact(true, $review["revision"], [], $section->id),
+                $review["review_token"],
             );
             self::fail("A posted grade was wiped by withdrawal.");
         } catch (ValidationException) {
@@ -256,6 +259,7 @@ final class HiatusWorkflowTest extends TestCase
                     ),
                     "Fictional stale review",
                     new HiatusImpact(true, $review["revision"], [], $section->id),
+                    $review["review_token"],
                 );
                 self::fail("A changed " . $change . " was not reviewed again.");
             } catch (ConcurrentModificationException) {
@@ -304,6 +308,7 @@ final class HiatusWorkflowTest extends TestCase
                 ),
                 "Fictional rollback",
                 new HiatusImpact(true, $review["revision"], [], $section->id),
+                $review["review_token"],
             );
             self::fail("A partially audited workflow committed.");
         } catch (RuntimeException) {

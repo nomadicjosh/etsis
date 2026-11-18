@@ -483,8 +483,9 @@ final readonly class InstitutionalCreditLedger
         EntityId $student,
         EntityId $section,
         string $code,
+        ?HistoryReadBudget $budget = null,
     ): ?array {
-        [$id, $root, $facts] = $this->source($enrollment, $student, $section);
+        [$id, $root, $facts] = $this->source($enrollment, $student, $section, $budget);
         foreach ($this->gradeChoices($root, $facts, $student, null) as $row) {
             if ($row["code"] === $code) {
                 return $row;

@@ -30,6 +30,7 @@ final readonly class HiatusService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private HiatusLedger $ledger,
     ) {
     }
 
@@ -50,15 +51,31 @@ final readonly class HiatusService
         }
         if ($hiatus->voided || $hiatus->version !== 0) {
             throw new ValidationException([
-                ["field" => "code", "message" => "Create a new, unmodified hiatus record."],
+                [
+                    "field" => "code",
+                    "message" => "Create a new, unmodified hiatus record.",
+                ],
             ]);
         }
-        $this->transactions->run(function () use ($hiatus, $actor, $request, $impact): void {
+        $this->transactions->run(function () use (
+            $hiatus,
+            $actor,
+            $request,
+            $impact,
+        ): void {
             $this->repository->lockStudent($hiatus->studentId);
             $this->admissions->student($hiatus->studentId);
             if (($existing = $this->repository->find($hiatus->id)) !== null) {
                 $this->forStudent($hiatus->studentId, $hiatus->id);
-                if (!$this->repeated($hiatus->id, $hiatus->id, $actor, "created", $request)) {
+                if (
+                    !$this->repeated(
+                        $hiatus->id,
+                        $hiatus->id,
+                        $actor,
+                        "created",
+                        $request,
+                    )
+                ) {
                     throw new ConcurrentModificationException(
                         "The hiatus operation already belongs to another request.",
                     );
@@ -66,8 +83,29 @@ final readonly class HiatusService
                 return;
             }
             $this->noOverlap($hiatus);
+            $this->authorize($actor);
+            $journal = $this->ledger->record(
+                null,
+                $hiatus,
+                $hiatus->id,
+                $actor,
+                "created",
+                $request,
+                $impact?->result,
+            );
             $this->repository->add($hiatus);
-            $this->record($hiatus->id, $hiatus, $actor, "created", $request, null, $impact?->result);
+            $this->repository->markHistory($hiatus->id, $journal["position"]);
+            $this->record(
+                $hiatus->id,
+                $hiatus,
+                $actor,
+                "created",
+                $request,
+                null,
+                $impact?->result,
+                $journal["confirmed_at"],
+            );
+            $this->authorize($actor);
         });
     }
 
@@ -99,14 +137,21 @@ final readonly class HiatusService
     {
         $actor = $this->access->requirePermission("sis:registration:manage");
         $hiatus = $this->forStudent($student, $id);
-        $initial = $this->repository->action($id) ?? throw new RecordNotFoundException("Hiatus comment not found.");
+        $initial =
+        $this->repository->action($id) ??
+        throw new RecordNotFoundException("Hiatus comment not found.");
+        $status = $this->ledger->verify($hiatus);
+        $this->ledger->evidencePage($hiatus, [$initial]);
         $data = $this->payload($initial);
         $this->audit->record($actor, "student.hiatus_read", $id);
+        $this->authorize($actor);
         return $this->describe($hiatus) + [
+            "history_tracked" => $status["tracked"],
             "comment" => $data["request"]["note"],
             "created_at" => $initial["created_at"],
             "impact" => $data["impact_result"] ?? null,
-            "return_operation_id" => $this->repository->returned($id)["id"] ?? null,
+            "return_operation_id" =>
+                $this->repository->returned($id)["id"] ?? null,
         ];
     }
 
@@ -123,7 +168,11 @@ final readonly class HiatusService
             $id,
             $operation,
             "end_changed",
-            ["ends_on" => $on->format("Y-m-d"), "revision" => $revision, "note" => $this->note($reason)],
+            [
+                "ends_on" => $on->format("Y-m-d"),
+                "revision" => $revision,
+                "note" => $this->note($reason),
+            ],
             $on,
         );
     }
@@ -155,7 +204,15 @@ final readonly class HiatusService
         ?DateTimeImmutable $on,
     ): void {
         $actor = $this->access->requirePermission("sis:registration:manage");
-        $this->transactions->run(function () use ($student, $id, $operation, $action, $request, $on, $actor): void {
+        $this->transactions->run(function () use (
+            $student,
+            $id,
+            $operation,
+            $action,
+            $request,
+            $on,
+            $actor,
+        ): void {
             $this->repository->lockStudent($student);
             $this->repository->lock($id);
             $current = $this->forStudent($student, $id);
@@ -163,33 +220,64 @@ final readonly class HiatusService
                 return;
             }
             if (!hash_equals($current->revision(), $request["revision"])) {
-                throw new ConcurrentModificationException("Reload the hiatus before changing it.");
+                throw new ConcurrentModificationException(
+                    "Reload the hiatus before changing it.",
+                );
             }
             $next = $on === null ? $current->void() : $current->withEnd($on);
             if (!$next->voided) {
                 $this->noOverlap($next);
             }
+            $this->authorize($actor);
+            $journal = $this->ledger->record(
+                $current,
+                $next,
+                $operation,
+                $actor,
+                $action,
+                $request,
+            );
             $this->repository->save($next, $current->version);
-            $this->record($operation, $next, $actor, $action, $request, $current->dates->end?->format("Y-m-d"));
+            $this->repository->markHistory($next->id, $journal["position"]);
+            $this->record(
+                $operation,
+                $next,
+                $actor,
+                $action,
+                $request,
+                $current->dates->end?->format("Y-m-d"),
+                on: $journal["confirmed_at"],
+            );
+            $this->authorize($actor);
         });
     }
 
     /** @return array<string, mixed> */
-    public function history(EntityId $student, EntityId $id, ?EntityId $after = null): array
-    {
+    public function history(
+        EntityId $student,
+        EntityId $id,
+        ?EntityId $after = null,
+    ): array {
         $actor = $this->access->requirePermission("sis:registration:manage");
-        $this->forStudent($student, $id);
+        $current = $this->forStudent($student, $id);
+        $this->ledger->verify($current);
         $rows = $this->repository->history($id, $after, 51);
         $more = count($rows) > 50;
         $rows = array_slice($rows, 0, 50);
+        $verified = $this->ledger->evidencePage($current, $rows);
         $items = [];
         foreach ($rows as $row) {
             $data = $this->payload($row);
             $items[] = [
                 "id" => $row["id"],
+                "history_tracked" => $verified[$row["id"]],
                 "action" => $row["action"],
                 "actor_id" => $row["actor_id"],
-                "actor_name" => trim((string) $row["actor_given_name"] . " " . (string) $row["actor_family_name"]),
+                "actor_name" => trim(
+                    (string) $row["actor_given_name"] .
+                        " " .
+                        (string) $row["actor_family_name"],
+                ),
                 "created_at" => $row["created_at"],
                 "note" => $data["request"]["note"],
                 "previous_ends_on" => $data["previous_ends_on"],
@@ -198,7 +286,11 @@ final readonly class HiatusService
             ];
         }
         $this->audit->record($actor, "student.hiatus_history_read", $id);
-        return ["items" => $items, "next_after" => $more ? (string) $rows[49]["id"] : null];
+        $this->authorize($actor);
+        return [
+            "items" => $items,
+            "next_after" => $more ? (string) $rows[49]["id"] : null,
+        ];
     }
 
     private function forStudent(EntityId $student, EntityId $id): StudentHiatus
@@ -214,7 +306,11 @@ final readonly class HiatusService
     {
         if ($this->repository->overlaps($hiatus)) {
             throw new ValidationException([
-                ["field" => "ends_on", "message" => "Dates overlap another non-voided record of this hiatus type."],
+                [
+                    "field" => "ends_on",
+                    "message" =>
+                        "Dates overlap another non-voided record of this hiatus type.",
+                ],
             ]);
         }
     }
@@ -235,10 +331,17 @@ final readonly class HiatusService
             $record["hiatus_id"] !== $id->value ||
             $record["actor_id"] !== $actor->value ||
             $record["action"] !== $action ||
-            $this->payload($record)["request"] !== $request
+            !HiatusLedger::same($this->payload($record)["request"], $request)
         ) {
-            throw new ConcurrentModificationException("The operation belongs to a different hiatus change.");
+            throw new ConcurrentModificationException(
+                "The operation belongs to a different hiatus change.",
+            );
         }
+        $current =
+        $this->repository->find($id) ??
+        throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        $this->ledger->retry($current, $operation, $actor, $action, $request);
+        $this->authorize($actor);
         return true;
     }
 
@@ -254,6 +357,7 @@ final readonly class HiatusService
         #[\SensitiveParameter] array $request,
         ?string $previousEnd,
         ?array $impactResult = null,
+        ?string $on = null,
     ): void {
         $this->repository->addAction(
             $operation,
@@ -271,10 +375,11 @@ final readonly class HiatusService
                     JSON_THROW_ON_ERROR,
                 ),
             ),
-            $this->clock
-                ->now()
-                ->setTimezone(new DateTimeZone("UTC"))
-                ->format(DATE_ATOM),
+            $on ??
+                $this->clock
+                    ->now()
+                    ->setTimezone(new DateTimeZone("UTC"))
+                    ->format(DATE_ATOM),
         );
         $this->audit->record($actor, "student.hiatus_" . $action, $hiatus->id);
     }
@@ -284,7 +389,12 @@ final readonly class HiatusService
      */
     private function payload(#[\SensitiveParameter] array $row): array
     {
-        return json_decode($this->cipher->open($row["encrypted_content"]), true, 16, JSON_THROW_ON_ERROR);
+        return json_decode(
+            $this->cipher->open($row["encrypted_content"]),
+            true,
+            16,
+            JSON_THROW_ON_ERROR,
+        );
     }
 
     /** @return array<string, mixed> */
@@ -303,6 +413,18 @@ final readonly class HiatusService
         ];
     }
 
+    private function authorize(EntityId $actor): void
+    {
+        if (
+            $this->access->requirePermission("sis:registration:manage")
+                ->value !== $actor->value
+        ) {
+            throw new \Domain\Shared\Exception\AccessDeniedException(
+                "The case actor changed.",
+            );
+        }
+    }
+
     private function note(#[\SensitiveParameter] string $value): string
     {
         $value = trim($value);
@@ -313,7 +435,11 @@ final readonly class HiatusService
             preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $value)
         ) {
             throw new ValidationException([
-                ["field" => "note", "message" => "Enter a staff comment of up to 10,000 characters."],
+                [
+                    "field" => "note",
+                    "message" =>
+                        "Enter a staff comment of up to 10,000 characters.",
+                ],
             ]);
         }
         return $value;

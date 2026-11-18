@@ -310,17 +310,18 @@ final class StudentActivityHistoryTest extends TestCase
         $review = $h->workflow()->review($id, HiatusCode::Withdrawal, $dates);
         $case = new StudentHiatus(new EntityId($review["operation_id"]), $id, HiatusCode::Withdrawal, $dates);
         $impact = new HiatusImpact(true, $review["revision"], []);
-        $receipt = $h->workflow()->commit($case, "Fictional case reason", $impact);
+        $receipt = $h->workflow()->commit($case, "Fictional case reason", $impact, $review["review_token"]);
         $ret = $h->returns()->review($id, $case->id, new DateTimeImmutable("2026-08-10"));
         $plan = new HiatusReturnPlan(
             new EntityId($ret["operation_id"]),
             new DateTimeImmutable("2026-08-10"),
             $ret["revision"],
             true,
+            $ret["review_token"],
         );
         $h->returns()->commit($id, $case->id, $plan, "Fictional return reason");
         $events = $f->sql->rows("sis_history_events");
-        self::assertSame($receipt, $h->workflow()->commit($case, "Fictional case reason", $impact));
+        self::assertSame($receipt, $h->workflow()->commit($case, "Fictional case reason", $impact, $review["review_token"]));
         self::assertSame($events, $f->sql->rows("sis_history_events"));
         self::assertTrue($f->admissions->student($id)->active);
         $items = $f->activityService()->history($id)["items"];
@@ -354,6 +355,7 @@ final class StudentActivityHistoryTest extends TestCase
                 $case,
                 "Fictional conflicting hiatus",
                 new HiatusImpact(true, $review["revision"], [], $section->id),
+                $review["review_token"],
             );
             self::fail("A contradictory current-status receipt was committed.");
         } catch (ValidationException) {

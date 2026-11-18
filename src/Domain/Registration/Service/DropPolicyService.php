@@ -313,6 +313,7 @@ final readonly class DropPolicyService
         ?EntityId $student = null,
         ?EntityId $enrollment = null,
         ?EntityId $section = null,
+        ?\Domain\Shared\EventSourcing\HistoryReadBudget $budget = null,
     ): array {
         $state = $this->current($term);
         $policy = $state["row"];
@@ -376,6 +377,7 @@ final readonly class DropPolicyService
             $student,
             $section,
             $code,
+            $budget,
         )
         : $this->policies->grade($code, $student);
         if ($grade === null) {

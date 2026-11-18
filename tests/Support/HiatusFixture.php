@@ -26,10 +26,22 @@ final class HiatusFixture
     {
         $this->sis = $f = new SisFixture();
         $config = Collection::factory([]);
-        $config->setConfigKey("app", ["crypto_key" => Key::createNewRandomKey()->saveToAsciiSafeString()]);
+        $config->setConfigKey("app", [
+            "crypto_key" => Key::createNewRandomKey()->saveToAsciiSafeString(),
+        ]);
         $this->cipher = new DefuseMessageCipher($config);
         $this->repository = new SqlHiatusRepository($f->sql);
         $this->history = $this->service();
+    }
+
+    public function ledger(): \Domain\Student\Service\HiatusLedger
+    {
+        return new \Domain\Student\Service\HiatusLedger(
+            $this->repository,
+            EventStoreFixture::history($this->sis->connection->queryBuilder()),
+            $this->cipher,
+            $this->sis->clock,
+        );
     }
 
     public function service(?AuditTrail $audit = null): HiatusService
@@ -43,11 +55,13 @@ final class HiatusFixture
             $audit ?? $f->audit,
             $this->cipher,
             $f->clock,
+            $this->ledger(),
         );
     }
 
-    public function returns(?AuditTrail $audit = null): \Domain\Student\Service\HiatusReturnService
-    {
+    public function returns(
+        ?AuditTrail $audit = null,
+    ): \Domain\Student\Service\HiatusReturnService {
         $f = $this->sis;
         return new \Domain\Student\Service\HiatusReturnService(
             $this->repository,
@@ -60,11 +74,15 @@ final class HiatusFixture
             $this->cipher,
             $f->clock,
             $f->activityLedger(),
+            $this->ledger(),
+            new \Domain\Student\Service\HiatusReview($this->cipher, $f->clock),
         );
     }
 
-    public function workflow(?AuditTrail $audit = null, ?HiatusPolicy $policy = null): HiatusWorkflowService
-    {
+    public function workflow(
+        ?AuditTrail $audit = null,
+        ?HiatusPolicy $policy = null,
+    ): HiatusWorkflowService {
         $f = $this->sis;
         return new HiatusWorkflowService(
             $this->service($audit),
@@ -80,6 +98,7 @@ final class HiatusFixture
             $f->drops,
             $f->dropPolicies,
             $f->activityLedger(),
+            new \Domain\Student\Service\HiatusReview($this->cipher, $f->clock),
         );
     }
 }

@@ -51,6 +51,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Student\Event\HiatusCaseWasRecorded::class => [
+                'type' => 'hiatus_case', 'root' => \Domain\Student\HiatusCase::class,
+                'fields' => \Domain\Student\ValueObject\HiatusCaseSchema::FIELDS,
+            ],
             \Domain\Registration\Event\DropPolicyWasPublished::class => [
                 'type' => 'term_drop_policy', 'root' => \Domain\Registration\DropPolicyPublication::class,
                 'fields' => \Domain\Registration\DropPolicyPublication::FIELDS,
@@ -489,6 +493,12 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if ($class === \Domain\Student\Event\HiatusCaseWasRecorded::class) {
+                \Domain\Student\ValueObject\HiatusCaseSchema::validate($payload);
+                if ($payload['facts']['id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\Registration\Event\DropPolicyWasPublished::class) {
                 \Domain\Registration\DropPolicyPublication::validate($payload);
                 if ($payload['definition']['term_id'] !== (string) $stream->aggregateId) {
@@ -834,6 +844,12 @@ final readonly class HistoricalSchemaRegistry
             }
             foreach ($payload as $name => $value) {
                 if (str_ends_with((string) $name, "_id")) {
+                    if (
+                        $class === \Domain\Student\Event\HiatusCaseWasRecorded::class
+                        && in_array($name, ['previous_operation_id', 'return_operation_id'], true) && $value === null
+                    ) {
+                        continue;
+                    }
                     if (
                         $class === \Domain\Registration\Event\DropPolicyWasPublished::class
                         && $name === 'previous_publication_id' && $value === null

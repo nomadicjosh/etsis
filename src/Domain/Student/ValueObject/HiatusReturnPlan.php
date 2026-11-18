@@ -15,9 +15,15 @@ final readonly class HiatusReturnPlan
         public DateTimeImmutable $on,
         public string $revision,
         public bool $reactivate,
+        #[\SensitiveParameter] public string $reviewToken,
     ) {
         if (preg_match('/^[a-f0-9]{64}$/D', $revision) !== 1) {
-            throw new ValidationException([['field' => 'revision', 'message' => 'Review the current return plan.']]);
+            throw new ValidationException([
+                [
+                    "field" => "revision",
+                    "message" => "Review the current return plan.",
+                ],
+            ]);
         }
     }
 }

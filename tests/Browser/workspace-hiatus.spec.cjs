@@ -21,7 +21,7 @@ async function fixture(page, interrupted = false) {
         else if (path === '/sis/ui/operation-id/') result = { id: id(String(operation++).padStart(2, '0')) };
         else if (path.startsWith('/sis/ui/data/')) result = { items: path.includes('/registrationstudents/') ? [{ id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', active: 1 }] : [], next_after: null };
         else if (path.endsWith('/finance-review/')) { if (data) financial = { id: id('96'), status: 'open', office: 'Finance', assigned: false }; result = data ? financial : { review: financial }; }
-        else if (path.endsWith('/return/review/')) result = { operation_id: id('95'), revision: 'e'.repeat(64),
+        else if (path.endsWith('/return/review/')) result = { operation_id: id('95'), revision: 'e'.repeat(64), review_token: 'fictional-return-review',
             student: { id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', active: false },
             primary_program: { code: 'BSCS', title: 'Computer Science' }, entry_term: { code: '26/FA' },
             hiatus_label: labels[code], hiatus_starts_on: '2026-11-01', hiatus_ends_on: '2026-11-06', return_on: data.return_on,
@@ -34,7 +34,7 @@ async function fixture(page, interrupted = false) {
         else if (path.endsWith('/hiatus-workflow/review/')) result = {
             student: { id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', active: true },
             code: data.code, label: labels[data.code], starts_on: data.starts_on, ends_on: data.ends_on || null,
-            effective_now: true, revision: 'f'.repeat(64), operation_id: hiatus, today: '2026-11-07', timezone: 'America/Los_Angeles',
+            effective_now: true, review_token: 'fictional-hiatus-review', revision: 'f'.repeat(64), operation_id: hiatus, today: '2026-11-07', timezone: 'America/Los_Angeles',
             defaults: { deactivate: data.code === 'W', section_ids: data.code === 'W' ? [section] : [] },
             courses: [
                 { section_id: section, section_code: 'MATH.101.A', course_title: 'Algebra', term_code: '26/FA', eligible: true, reason: '', proposed_status: 'W', drop_policy: { delete_records: false, grade_code: 'W' } },

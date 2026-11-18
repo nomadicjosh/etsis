@@ -39,30 +39,55 @@ final readonly class HiatusWorkflowService
         private \Domain\Registration\Service\CourseDropService $drops,
         private \Domain\Registration\Service\DropPolicyService $dropPolicies,
         private StudentActivityLedger $activity,
+        private HiatusReview $reviews,
     ) {
     }
 
     /** @return array<string, mixed> */
-    public function review(EntityId $student, HiatusCode $code, DateRange $dates): array
-    {
-        $this->access->requirePermission("sis:registration:manage");
+    public function review(
+        EntityId $student,
+        HiatusCode $code,
+        DateRange $dates,
+    ): array {
+        $actor = $this->access->requirePermission("sis:registration:manage");
         $routing = $this->routing($student, $dates);
-        return $this->transactions->run(function () use ($student, $code, $dates, $routing): array {
+        return $this->transactions->run(function () use (
+            $student,
+            $code,
+            $dates,
+            $routing,
+            $actor,
+        ): array {
             $this->lock($student, $routing);
             $context = $this->context($student, $code, $dates, $routing);
             $proposal = $this->policy->for($code);
             $now = $context["effective_now"];
+            $this->authorize($actor);
+            $operation = EntityId::generate();
+            $revision = $this->revision($context);
             return $context + [
-                "revision" => $this->revision($context),
-                "operation_id" => EntityId::generate()->value,
+                "revision" => $revision,
+                "operation_id" => $operation->value,
+                "review_token" => $this->reviews->issue(
+                    "start",
+                    $student,
+                    $actor,
+                    $operation,
+                    $revision,
+                ),
                 "defaults" => [
-                    "deactivate" => $proposal["deactivate"] && $now && $context["student"]["active"],
+                    "deactivate" =>
+                        $proposal["deactivate"] &&
+                        $now &&
+                        $context["student"]["active"],
                     "section_ids" =>
                         $proposal["courses"] && $now
                             ? array_column(
                                 array_filter(
                                     $context["courses"],
-                                    static fn(array $row): bool => $row["eligible"],
+                                    static fn(array $row): bool => $row[
+                                        "eligible"
+                                    ],
                                 ),
                                 "section_id",
                             )
@@ -77,28 +102,63 @@ final readonly class HiatusWorkflowService
         StudentHiatus $hiatus,
         #[\SensitiveParameter] string $note,
         HiatusImpact $impact,
+        #[\SensitiveParameter] string $reviewToken,
     ): array {
         $actor = $this->access->requirePermission("sis:registration:manage");
+        $this->reviews->validate(
+            $reviewToken,
+            "start",
+            $hiatus->studentId,
+            $actor,
+            $hiatus->id,
+            $impact->revision,
+            accepted: $this->history->find($hiatus->id) !== null,
+        );
         if ($this->history->find($hiatus->id) !== null) {
             return $this->replay($hiatus, $note, $impact);
         }
         $routing = $this->routing($hiatus->studentId, $hiatus->dates);
-        return $this->transactions->run(function () use ($hiatus, $note, $impact, $routing, $actor): array {
+        return $this->transactions->run(function () use (
+            $hiatus,
+            $note,
+            $impact,
+            $routing,
+            $actor,
+            $reviewToken,
+        ): array {
             $this->lock($hiatus->studentId, $routing);
             if ($this->history->find($hiatus->id) !== null) {
                 return $this->replay($hiatus, $note, $impact);
             }
-            $context = $this->context($hiatus->studentId, $hiatus->code, $hiatus->dates, $routing);
+            $this->reviews->validate(
+                $reviewToken,
+                "start",
+                $hiatus->studentId,
+                $actor,
+                $hiatus->id,
+                $impact->revision,
+            );
+            $this->authorize($actor);
+            $context = $this->context(
+                $hiatus->studentId,
+                $hiatus->code,
+                $hiatus->dates,
+                $routing,
+            );
             if (!hash_equals($this->revision($context), $impact->revision)) {
                 throw new ConcurrentModificationException(
                     "Review the current hiatus plan before confirming.",
                 );
             }
-            if (!$context["effective_now"] && ($impact->deactivate || $impact->sections !== [])) {
+            if (
+                !$context["effective_now"] &&
+                ($impact->deactivate || $impact->sections !== [])
+            ) {
                 throw new ValidationException([
                     [
                         "field" => "starts_on",
-                        "message" => "Course and activity changes need an effective date today or earlier.",
+                        "message" =>
+                            "Course and activity changes need an effective date today or earlier.",
                     ],
                 ]);
             }
@@ -124,31 +184,64 @@ final readonly class HiatusWorkflowService
                     "status" => $row["proposed_status"],
                     "effective_date" => $context["starts_on"],
                     "grade_code" => $row["drop_policy"]["grade_code"],
-                    "academic_records_removed" => $row["drop_policy"]["delete_records"],
-                    "course_charge" => $row["drop_policy"]["delete_records"] ? "reverse_if_present" : "kept",
+                    "academic_records_removed" =>
+                        $row["drop_policy"]["delete_records"],
+                    "course_charge" => $row["drop_policy"]["delete_records"]
+                        ? "reverse_if_present"
+                        : "kept",
                 ];
             }
             $result = [
                 "course_changes" => $changes,
-                "student_activity_changed" => $impact->deactivate && $context["student"]["active"],
-                "student_active" => $impact->deactivate ? false : $context["student"]["active"],
+                "student_activity_changed" =>
+                    $impact->deactivate && $context["student"]["active"],
+                "student_active" => $impact->deactivate
+                    ? false
+                    : $context["student"]["active"],
                 "automatic_refund" => false,
             ];
             foreach ($impact->sections as $index => $section) {
                 $row = $courses[$section->value];
-                $enrollment = $this->registration->enrollment($hiatus->studentId, $section);
-                if ($enrollment === null || $enrollment->version !== $row["version"]) {
-                    throw new ConcurrentModificationException("The enrollment changed before confirmation.");
+                $enrollment = $this->registration->enrollment(
+                    $hiatus->studentId,
+                    $section,
+                );
+                if (
+                    $enrollment === null ||
+                    $enrollment->version !== $row["version"]
+                ) {
+                    throw new ConcurrentModificationException(
+                        "The enrollment changed before confirmation.",
+                    );
                 }
-                $dropped = $this->drops->dropEffective($hiatus->studentId, $section, $context["starts_on"]);
-                $result["course_changes"][$index]["course_charge"] = $dropped["course_charge"];
-                $this->audit->record($actor, "registration.effective_dropped", $enrollment->id);
+                $dropped = $this->drops->dropEffective(
+                    $hiatus->studentId,
+                    $section,
+                    $context["starts_on"],
+                );
+                $result["course_changes"][$index]["course_charge"] =
+                    $dropped["course_charge"];
+                $result["course_changes"][$index]["drop_operation_id"] =
+                    $dropped["operation_id"];
+                $this->audit->record(
+                    $actor,
+                    "registration.effective_dropped",
+                    $enrollment->id,
+                );
             }
             $recorded = new HiatusImpact(
                 $impact->deactivate,
                 $impact->revision,
                 $result,
                 ...$impact->sections,
+            );
+            $this->reviews->validate(
+                $reviewToken,
+                "start",
+                $hiatus->studentId,
+                $actor,
+                $hiatus->id,
+                $impact->revision,
             );
             $this->hiatuses->create($hiatus, $note, $recorded);
             if ($result["student_activity_changed"]) {
@@ -166,8 +259,21 @@ final readonly class HiatusWorkflowService
                     $note,
                     true,
                 );
-                $this->audit->record($actor, "student.activity_updated", $hiatus->studentId);
+                $this->audit->record(
+                    $actor,
+                    "student.activity_updated",
+                    $hiatus->studentId,
+                );
             }
+            $this->reviews->validate(
+                $reviewToken,
+                "start",
+                $hiatus->studentId,
+                $actor,
+                $hiatus->id,
+                $impact->revision,
+            );
+            $this->authorize($actor);
             return ["id" => $hiatus->id->value, "impact" => $result];
         });
     }
@@ -181,16 +287,24 @@ final readonly class HiatusWorkflowService
         $this->hiatuses->create($hiatus, $note, $impact);
         return [
             "id" => $hiatus->id->value,
-            "impact" => $this->hiatuses->view($hiatus->studentId, $hiatus->id)["impact"],
+            "impact" => $this->hiatuses->view($hiatus->studentId, $hiatus->id)[
+                "impact"
+            ],
         ];
     }
 
     /** @return array{person: EntityId, rows: list<array<string, mixed>>} */
     private function routing(EntityId $student, DateRange $dates): array
     {
-        $rows = $this->impacts->enrollments($student, $dates->start->format("Y-m-d"));
+        $rows = $this->impacts->enrollments(
+            $student,
+            $dates->start->format("Y-m-d"),
+        );
         $this->bounded($rows);
-        return ["person" => $this->admissions->student($student)->personId, "rows" => $rows];
+        return [
+            "person" => $this->admissions->student($student)->personId,
+            "rows" => $rows,
+        ];
     }
 
     /** @param array{person: EntityId, rows: list<array<string, mixed>>} $routing */
@@ -198,6 +312,14 @@ final readonly class HiatusWorkflowService
     {
         $this->registration->lockStudent($student);
         $this->registration->lockPerson($routing["person"]);
+        if (
+            $this->admissions->student($student)->personId->value !==
+            $routing["person"]->value
+        ) {
+            throw new ConcurrentModificationException(
+                "The student identity changed. Review again.",
+            );
+        }
         $this->access->requirePermission("sis:registration:manage");
         foreach (["section_id", "course_id", "term_id"] as $field) {
             $ids = array_unique(array_column($routing["rows"], $field));
@@ -218,27 +340,45 @@ final readonly class HiatusWorkflowService
     /** @param array{person: EntityId, rows: list<array<string, mixed>>} $routing
      * @return array<string, mixed>
      */
-    private function context(EntityId $studentId, HiatusCode $code, DateRange $dates, array $routing): array
-    {
+    private function context(
+        EntityId $studentId,
+        HiatusCode $code,
+        DateRange $dates,
+        array $routing,
+    ): array {
         $student = $this->admissions->student($studentId);
         $activityVersion = $this->activity->verify($student);
         $person = $this->admissions->person($student->personId);
-        $rows = $this->impacts->enrollments($studentId, $dates->start->format("Y-m-d"));
+        $rows = $this->impacts->enrollments(
+            $studentId,
+            $dates->start->format("Y-m-d"),
+        );
         $this->bounded($rows);
-        if (array_column($rows, "id") !== array_column($routing["rows"], "id")) {
-            throw new ConcurrentModificationException("The enrollment selection changed. Review again.");
+        if (
+            array_column($rows, "id") !== array_column($routing["rows"], "id")
+        ) {
+            throw new ConcurrentModificationException(
+                "The enrollment selection changed. Review again.",
+            );
         }
         $effective = $dates->start->format("Y-m-d");
         $now = $this->clock->now();
+        $budget = new \Domain\Shared\EventSourcing\HistoryReadBudget();
         foreach ($rows as &$row) {
-            $registered = new DateTimeImmutable($row["registered_at"], new DateTimeZone("UTC"))
+            $registered = new DateTimeImmutable(
+                $row["registered_at"],
+                new DateTimeZone("UTC"),
+            )
                 ->setTimezone($now->getTimezone())
                 ->format("Y-m-d");
             $posted =
             $row["grade_id"] !== null ||
             $row["completed_milli"] !== 0 ||
             $row["grade_points_milli"] !== 0;
-            $row["eligible"] = !$posted && $registered <= $effective && $effective <= $now->format("Y-m-d");
+            $row["eligible"] =
+            !$posted &&
+            $registered <= $effective &&
+            $effective <= $now->format("Y-m-d");
             $row["reason"] = $posted
             ? "Final grade posted — keep; use the grade-change review process."
             : ($registered > $effective
@@ -246,13 +386,22 @@ final readonly class HiatusWorkflowService
                     : ($effective > $now->format("Y-m-d")
                         ? "Scheduled date — record history without immediate changes."
                         : ""));
-            unset($row["grade_id"], $row["completed_milli"], $row["grade_points_milli"]);
+            unset(
+                $row["grade_id"],
+                $row["completed_milli"],
+                $row["grade_points_milli"],
+            );
             $row["drop_policy"] = $this->dropPolicies->outcome(
                 new EntityId($row["term_id"]),
                 $effective,
                 $studentId,
+                new EntityId($row["id"]),
+                new EntityId($row["section_id"]),
+                $budget,
             );
-            $row["proposed_status"] = $row["drop_policy"]["delete_records"] ? "D" : "W";
+            $row["proposed_status"] = $row["drop_policy"]["delete_records"]
+            ? "D"
+            : "W";
         }
         unset($row);
         return [
@@ -286,6 +435,18 @@ final readonly class HiatusWorkflowService
                         "This case exceeds 100 open enrollments and requires a focused registrar review.",
                 ],
             ]);
+        }
+    }
+
+    private function authorize(EntityId $actor): void
+    {
+        if (
+            $this->access->requirePermission("sis:registration:manage")
+                ->value !== $actor->value
+        ) {
+            throw new \Domain\Shared\Exception\AccessDeniedException(
+                "The case actor changed.",
+            );
         }
     }
 

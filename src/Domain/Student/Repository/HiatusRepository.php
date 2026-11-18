@@ -13,10 +13,16 @@ interface HiatusRepository
     public function lock(EntityId $id): void;
     public function find(EntityId $id): ?StudentHiatus;
     public function add(StudentHiatus $hiatus): void;
+    public function historyPosition(EntityId $id): ?int;
+    public function markHistory(EntityId $id, int $position): void;
     public function save(StudentHiatus $hiatus, int $expectedVersion): void;
     public function overlaps(StudentHiatus $hiatus): bool;
     /** @return list<StudentHiatus> */
-    public function page(EntityId $student, ?EntityId $after, int $limit): array;
+    public function page(
+        EntityId $student,
+        ?EntityId $after,
+        int $limit,
+    ): array;
     /** @return array<string, mixed>|null */
     public function action(EntityId $id): ?array;
     /** @return array<string, mixed>|null */
@@ -30,5 +36,9 @@ interface HiatusRepository
         string $on,
     ): void;
     /** @return list<array<string, mixed>> */
-    public function history(EntityId $hiatus, ?EntityId $after, int $limit): array;
+    public function history(
+        EntityId $hiatus,
+        ?EntityId $after,
+        int $limit,
+    ): array;
 }

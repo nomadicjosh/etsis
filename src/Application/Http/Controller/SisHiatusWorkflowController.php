@@ -22,30 +22,51 @@ final readonly class SisHiatusWorkflowController
     {
     }
 
-    public function review(ServerRequest $request, string $student): ResponseInterface
-    {
+    public function review(
+        ServerRequest $request,
+        string $student,
+    ): ResponseInterface {
         $f = FormInput::from($request);
         return new JsonResponse(
             $this->service->review(
                 new EntityId($student),
                 HiatusCode::parse($f->text("code", 8)),
-                new DateRange($f->date("starts_on"), $f->optionalDate("ends_on")),
+                new DateRange(
+                    $f->date("starts_on"),
+                    $f->optionalDate("ends_on"),
+                ),
             ),
         );
     }
 
-    public function commit(ServerRequest $request, string $student): ResponseInterface
-    {
+    public function commit(
+        #[\SensitiveParameter] ServerRequest $request,
+        string $student,
+    ): ResponseInterface {
         $f = FormInput::from($request);
         $body = $request->getParsedBody();
         $sections = is_array($body) ? $body["section_ids"] ?? null : null;
-        if (!is_array($sections) || !array_is_list($sections) || count($sections) > 100) {
-            throw new ValidationException([["field" => "sections", "message" => "Choose up to 100 course changes."]]);
+        if (
+            !is_array($sections) ||
+            !array_is_list($sections) ||
+            count($sections) > 100
+        ) {
+            throw new ValidationException([
+                [
+                    "field" => "sections",
+                    "message" => "Choose up to 100 course changes.",
+                ],
+            ]);
         }
         $ids = [];
         foreach ($sections as $id) {
             if (!is_string($id)) {
-                throw new ValidationException([["field" => "sections", "message" => "Choose valid course sections."]]);
+                throw new ValidationException([
+                    [
+                        "field" => "sections",
+                        "message" => "Choose valid course sections.",
+                    ],
+                ]);
             }
             $ids[] = new EntityId($id);
         }
@@ -59,7 +80,13 @@ final readonly class SisHiatusWorkflowController
             $this->service->commit(
                 $hiatus,
                 $f->bodyText("note"),
-                new HiatusImpact($f->requiredBoolean("deactivate"), $f->text("revision", 64), [], ...$ids),
+                new HiatusImpact(
+                    $f->requiredBoolean("deactivate"),
+                    $f->text("revision", 64),
+                    [],
+                    ...$ids,
+                ),
+                $f->text("review_token", 8192),
             ),
             201,
         );

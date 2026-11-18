@@ -35,20 +35,41 @@ final readonly class HiatusReturnService
         private MessageCipher $cipher,
         private Clock $clock,
         private StudentActivityLedger $activity,
+        private HiatusLedger $ledger,
+        private HiatusReview $reviews,
     ) {
     }
 
     /** @return array<string, mixed> */
-    public function review(EntityId $student, EntityId $hiatus, DateTimeImmutable $on): array
-    {
-        $this->access->requirePermission("sis:registration:manage");
+    public function review(
+        EntityId $student,
+        EntityId $hiatus,
+        DateTimeImmutable $on,
+    ): array {
+        $actor = $this->access->requirePermission("sis:registration:manage");
         $person = $this->admissions->student($student)->personId;
-        return $this->transactions->run(function () use ($student, $hiatus, $on, $person): array {
+        return $this->transactions->run(function () use (
+            $student,
+            $hiatus,
+            $on,
+            $person,
+            $actor,
+        ): array {
             $current = $this->lock($student, $hiatus, $person);
             $context = $this->context($current, $on);
+            $this->authorize($actor);
+            $revision = $this->revision($context);
+            $operation = EntityId::generate();
             return $context + [
-                "revision" => $this->revision($context),
-                "operation_id" => EntityId::generate()->value,
+                "revision" => $revision,
+                "operation_id" => $operation->value,
+                "review_token" => $this->reviews->issue(
+                    "return",
+                    $hiatus,
+                    $actor,
+                    $operation,
+                    $revision,
+                ),
             ];
         });
     }
@@ -57,7 +78,7 @@ final readonly class HiatusReturnService
     public function commit(
         EntityId $student,
         EntityId $hiatus,
-        HiatusReturnPlan $plan,
+        #[\SensitiveParameter] HiatusReturnPlan $plan,
         #[\SensitiveParameter] string $reason,
     ): array {
         $actor = $this->access->requirePermission("sis:registration:manage");
@@ -69,7 +90,10 @@ final readonly class HiatusReturnService
             preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $note)
         ) {
             throw new ValidationException([
-                ["field" => "note", "message" => "Enter a reason of up to 10,000 characters."],
+                [
+                    "field" => "note",
+                    "message" => "Enter a reason of up to 10,000 characters.",
+                ],
             ]);
         }
         $request = [
@@ -89,35 +113,83 @@ final readonly class HiatusReturnService
         ): array {
             $current = $this->lock($student, $hiatus, $person);
             $previous = $this->history->action($plan->operation);
+            $this->reviews->validate(
+                $plan->reviewToken,
+                "return",
+                $hiatus,
+                $actor,
+                $plan->operation,
+                $plan->revision,
+                accepted: $previous !== null,
+            );
+            $this->authorize($actor);
             if ($previous !== null) {
                 if (
                     $previous["hiatus_id"] !== $hiatus->value ||
                     $previous["action"] !== "returned" ||
                     $previous["actor_id"] !== $actor->value ||
-                    $this->payload($previous)["request"] !== $request
+                    !HiatusLedger::same(
+                        $this->payload($previous)["request"],
+                        $request,
+                    )
                 ) {
                     throw new ConcurrentModificationException(
                         "The operation belongs to another return request.",
                     );
                 }
+                $this->ledger->retry(
+                    $current,
+                    $plan->operation,
+                    $actor,
+                    "returned",
+                    $request,
+                );
+                $this->authorize($actor);
                 return $this->receipt($previous);
             }
             $context = $this->context($current, $plan->on);
+            $this->reviews->validate(
+                $plan->reviewToken,
+                "return",
+                $hiatus,
+                $actor,
+                $plan->operation,
+                $plan->revision,
+            );
             if (!hash_equals($this->revision($context), $plan->revision)) {
-                throw new ConcurrentModificationException("The return context changed. Review it again.");
+                throw new ConcurrentModificationException(
+                    "The return context changed. Review it again.",
+                );
             }
-            $next = $current->withEnd(new DateTimeImmutable($context["hiatus_ends_on"]));
-            $this->history->save($next, $current->version);
+            $next = $current->withEnd(
+                new DateTimeImmutable($context["hiatus_ends_on"]),
+            );
             $result = [
                 "return_on" => $context["return_on"],
                 "hiatus_ends_on" => $context["hiatus_ends_on"],
-                "student_active" => $plan->reactivate || $context["student"]["active"],
-                "activity_changed" => $plan->reactivate && !$context["student"]["active"],
-                "staff_registration_blocked" => $context["staff_registration_blocked"],
-                "self_registration_blocked" => $context["self_registration_blocked"],
+                "student_active" =>
+                    $plan->reactivate || $context["student"]["active"],
+                "activity_changed" =>
+                    $plan->reactivate && !$context["student"]["active"],
+                "staff_registration_blocked" =>
+                    $context["staff_registration_blocked"],
+                "self_registration_blocked" =>
+                    $context["self_registration_blocked"],
                 "enrollments_restored" => false,
                 "financial_changes" => false,
             ];
+            $this->authorize($actor);
+            $journal = $this->ledger->record(
+                $current,
+                $next,
+                $plan->operation,
+                $actor,
+                "returned",
+                $request,
+                $result,
+            );
+            $this->history->save($next, $current->version);
+            $this->history->markHistory($next->id, $journal["position"]);
             if ($result["activity_changed"]) {
                 $this->activity->decide(
                     $this->admissions->student($student),
@@ -133,13 +205,19 @@ final readonly class HiatusReturnService
                     $request["note"],
                     true,
                 );
-                $this->audit->record($actor, "student.activity_updated", $student);
+                $this->audit->record(
+                    $actor,
+                    "student.activity_updated",
+                    $student,
+                );
             }
             $encrypted = $this->cipher->seal(
                 json_encode(
                     [
                         "request" => $request,
-                        "previous_ends_on" => $current->dates->end?->format("Y-m-d"),
+                        "previous_ends_on" => $current->dates->end?->format(
+                            "Y-m-d",
+                        ),
                         "new_ends_on" => $context["hiatus_ends_on"],
                         "return_result" => $result,
                     ],
@@ -152,12 +230,18 @@ final readonly class HiatusReturnService
                 $actor,
                 "returned",
                 $encrypted,
-                $this->clock
-                    ->now()
-                    ->setTimezone(new DateTimeZone("UTC"))
-                    ->format(DATE_ATOM),
+                $journal["confirmed_at"],
             );
             $this->audit->record($actor, "student.hiatus_returned", $hiatus);
+            $this->reviews->validate(
+                $plan->reviewToken,
+                "return",
+                $hiatus,
+                $actor,
+                $plan->operation,
+                $plan->revision,
+            );
+            $this->authorize($actor);
             return [
                 "operation_id" => $plan->operation->value,
                 "hiatus_id" => $hiatus->value,
@@ -167,51 +251,84 @@ final readonly class HiatusReturnService
     }
 
     /** @return array<string, mixed> */
-    public function saved(EntityId $student, EntityId $hiatus, EntityId $operation): array
-    {
+    public function saved(
+        EntityId $student,
+        EntityId $hiatus,
+        EntityId $operation,
+    ): array {
         $actor = $this->access->requirePermission("sis:registration:manage");
-        $this->owned($student, $hiatus);
+        $current = $this->owned($student, $hiatus);
+        $this->ledger->verify($current);
         $row = $this->history->action($operation);
-        if ($row === null || $row["hiatus_id"] !== $hiatus->value || $row["action"] !== "returned") {
+        if (
+            $row === null ||
+            $row["hiatus_id"] !== $hiatus->value ||
+            $row["action"] !== "returned"
+        ) {
             throw new RecordNotFoundException("Return case not found.");
         }
+        $this->ledger->evidencePage($current, [$row]);
         $this->audit->record($actor, "student.hiatus_return_read", $hiatus);
+        $this->authorize($actor);
         return $this->receipt($row);
     }
 
-    private function lock(EntityId $student, EntityId $hiatus, EntityId $person): StudentHiatus
-    {
+    private function lock(
+        EntityId $student,
+        EntityId $hiatus,
+        EntityId $person,
+    ): StudentHiatus {
         $this->registration->lockStudent($student);
         $this->registration->lockPerson($person);
         $this->history->lock($hiatus);
         $this->access->requirePermission("sis:registration:manage");
-        return $this->owned($student, $hiatus);
+        if (
+            $this->admissions->student($student)->personId->value !==
+            $person->value
+        ) {
+            throw new ConcurrentModificationException(
+                "The student identity changed. Review again.",
+            );
+        }
+        $current = $this->owned($student, $hiatus);
+        $this->ledger->verify($current);
+        return $current;
     }
 
     private function owned(EntityId $student, EntityId $hiatus): StudentHiatus
     {
         $current = $this->history->find($hiatus);
-        if ($current === null || $current->studentId->value !== $student->value) {
+        if (
+            $current === null ||
+            $current->studentId->value !== $student->value
+        ) {
             throw new RecordNotFoundException("Hiatus record not found.");
         }
         return $current;
     }
 
     /** @return array<string, mixed> */
-    private function context(StudentHiatus $hiatus, DateTimeImmutable $on): array
-    {
+    private function context(
+        StudentHiatus $hiatus,
+        DateTimeImmutable $on,
+    ): array {
         $date = $on->format("Y-m-d");
         $today = $this->clock->now()->format("Y-m-d");
         if ($hiatus->voided || $this->history->returned($hiatus->id) !== null) {
             throw new ValidationException([
-                ["field" => "hiatus", "message" => "Use a non-voided hiatus without a return case."],
+                [
+                    "field" => "hiatus",
+                    "message" =>
+                        "Use a non-voided hiatus without a return case.",
+                ],
             ]);
         }
         if ($date <= $hiatus->dates->start->format("Y-m-d") || $date > $today) {
             throw new ValidationException([
                 [
                     "field" => "return_on",
-                    "message" => "Choose a return date after the hiatus start and no later than today.",
+                    "message" =>
+                        "Choose a return date after the hiatus start and no later than today.",
                 ],
             ]);
         }
@@ -224,8 +341,16 @@ final readonly class HiatusReturnService
         $activityVersion = $this->activity->verify($student);
         $person = $this->admissions->person($student->personId);
         // Return review discloses hold effects, not private restriction codes or notes.
-        $staff = $this->registration->blockingRestriction($person->id, $this->clock->now(), true);
-        $self = $this->registration->blockingRestriction($person->id, $this->clock->now(), false);
+        $staff = $this->registration->blockingRestriction(
+            $person->id,
+            $this->clock->now(),
+            true,
+        );
+        $self = $this->registration->blockingRestriction(
+            $person->id,
+            $this->clock->now(),
+            false,
+        );
         return [
             "activity_version" => $activityVersion,
             "student" => [
@@ -249,9 +374,24 @@ final readonly class HiatusReturnService
             "self_registration_blocked" => $self !== null,
             "hold_revision" => hash(
                 "sha256",
-                json_encode([$staff?->id->value, $self?->id->value], JSON_THROW_ON_ERROR),
+                json_encode(
+                    [$staff?->id->value, $self?->id->value],
+                    JSON_THROW_ON_ERROR,
+                ),
             ),
         ];
+    }
+
+    private function authorize(EntityId $actor): void
+    {
+        if (
+            $this->access->requirePermission("sis:registration:manage")
+                ->value !== $actor->value
+        ) {
+            throw new \Domain\Shared\Exception\AccessDeniedException(
+                "The case actor changed.",
+            );
+        }
     }
 
     /** @param array<string, mixed> $context */
@@ -265,7 +405,12 @@ final readonly class HiatusReturnService
      */
     private function payload(#[\SensitiveParameter] array $row): array
     {
-        return json_decode($this->cipher->open($row["encrypted_content"]), true, 16, JSON_THROW_ON_ERROR);
+        return json_decode(
+            $this->cipher->open($row["encrypted_content"]),
+            true,
+            16,
+            JSON_THROW_ON_ERROR,
+        );
     }
 
     /** @param array<string, mixed> $row
