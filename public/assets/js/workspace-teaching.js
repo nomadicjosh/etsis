@@ -428,7 +428,7 @@ window.createWorkspaceTeaching = function (ui) {
         update();
     }
 
-    async function recordFinalGrade(sectionRow, student, back, assignment = null) {
+    async function recordFinalGrade(sectionRow, student, back, assignment = null, draft = null) {
         const loading = openDrawer("Review final grade", "ACADEMIC RECORD");
         loading.append(
             button("Back to record", back, "btn-link"),
@@ -590,7 +590,7 @@ window.createWorkspaceTeaching = function (ui) {
             ]);
         const form = await buildForm(
             descriptors,
-            { effective_on: choices.effective_on_default },
+            { effective_on: choices.effective_on_default, ...(draft || {}) },
             { layout: "final_grade" },
         );
         form.elements.reason.maxLength = 1000;
@@ -599,6 +599,60 @@ window.createWorkspaceTeaching = function (ui) {
             form.elements.grade_evidence.required = true;
             form.elements.grade_evidence.setAttribute("aria-describedby", "grade-evidence-help");
             form.append(evidenceNotice);
+        }
+        let courseworkRevision = null;
+        if (!choices.posted && choices.coursework) {
+            const suggestion = choices.coursework;
+            const message = node(
+                "p",
+                { role: "status", "aria-live": "polite", class: "mb-2" },
+                suggestion.available
+                    ? `${suggestion.score_display} → ${suggestion.grade_code}`
+                    : `${suggestion.score_display ? `${suggestion.score_display} · ` : ""}${suggestion.message}`,
+            );
+            const card = node(
+                "section",
+                { class: "alert alert-light border", "aria-label": "Coursework suggestion" },
+                node("h4", { class: "h6" }, "Coursework suggestion"),
+                message,
+            );
+            if (suggestion.available) {
+                card.append(
+                    node(
+                        "p",
+                        { class: "small" },
+                        "Uses the exact coursework average and this record's retained grading ranges. No rounding across grade boundaries or automatic posting. The displayed percentage is shortened to six decimals.",
+                    ),
+                    button("Use suggested grade", () => {
+                        form.elements.grade_id.value = suggestion.grade_id;
+                        courseworkRevision = suggestion.revision;
+                        message.textContent = `Selected ${suggestion.grade_code} from ${suggestion.score_display}. Review before confirming; the accepted calculation will be retained.`;
+                    }),
+                    button(
+                        "Choose manually",
+                        () => {
+                            courseworkRevision = null;
+                            message.textContent =
+                                "Choose the institutional grade using the institution's policy. No coursework calculation will be attached.";
+                            form.elements.grade_id.focus();
+                        },
+                        "btn-link",
+                    ),
+                );
+            }
+            card.append(
+                button(
+                    "Refresh suggestion",
+                    () =>
+                        recordFinalGrade(sectionRow, student, back, assignment, formData(form, descriptors)),
+                    "btn-outline-secondary btn-sm",
+                ),
+            );
+            form.elements.grade_id.addEventListener("change", () => {
+                courseworkRevision = null;
+                message.textContent = "Manual grade selection. Review before confirming.";
+            });
+            form.prepend(card);
         }
         const reviewButton = node(
             "button",
@@ -624,6 +678,7 @@ window.createWorkspaceTeaching = function (ui) {
                     student_id: student.student_id,
                     version: choices.current_version,
                     ...(assignment ? { assignment_id: assignment } : {}),
+                    ...(courseworkRevision ? { coursework_revision: courseworkRevision } : {}),
                 };
                 const sequence = ++reviewSequence;
                 const review = await request(
@@ -637,6 +692,13 @@ window.createWorkspaceTeaching = function (ui) {
                     "REVIEW ACADEMIC DECISION",
                 );
                 confirmation.append(
+                    review.coursework_summary
+                        ? node(
+                              "p",
+                              { class: "alert alert-info" },
+                              `Using the reviewed coursework calculation: ${review.coursework_summary.score_display}. Its inputs will be retained with the grade decision; later score edits will not change this official grade.`,
+                          )
+                        : null,
                     review.withdrawal_grade_correction
                         ? node(
                               "p",
@@ -1150,7 +1212,9 @@ window.createWorkspaceTeaching = function (ui) {
                                   }[item.action] || "Academic decision",
                                   item.action === "course_accepted"
                                       ? `${item.course_code} · ${item.course_title}`
-                                      : item.grade_code || "—",
+                                      : item.grade_code
+                                        ? `${item.grade_code}${item.coursework_summary ? ` · Coursework ${item.coursework_summary.score_display}` : ""}`
+                                        : "—",
                                   item.action === "completion_recorded"
                                       ? `${item.previous_completed_on || "Unknown"} → ${item.completed_on || "Unknown"}`
                                       : item.action === "period_recorded"

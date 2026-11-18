@@ -468,3 +468,87 @@ $sis->access->actor = $sis->admissions->person($other->personId)->ownerUserId;
 if ($read($bonusPortal)->getStatusCode() !== 403) {
     throw new RuntimeException("Another person read the student's bonus-only coursework.");
 }
+
+// The existing final-grade workflow explicitly accepts protected coursework evidence.
+$sis->access->actor = $originalSubmissionActor;
+$sis->access->staff = true;
+$sis->gradeScale([
+    ["code" => "A", "min_score_milli" => 93000, "max_score_milli" => 100000,
+        "points_milli" => 4000, "passes" => true, "counts_gpa" => true],
+    ["code" => "B", "min_score_milli" => 80000, "max_score_milli" => 92999,
+        "points_milli" => 3000, "passes" => true, "counts_gpa" => true],
+]);
+$gradeSection = $sis->section(faculty: $sis->access->actor);
+$sis->service->register($student->id, $gradeSection->id, true);
+$sis->access->staff = false;
+$gradeBase = "/sis/sections/" . $gradeSection->id->value;
+$gradeTask = $teachingPost($gradeBase . "/assignments/", [
+    "title" => "Fictional final assessment", "possible_hundredths" => 10000, "due_on" => "2026-09-01",
+]);
+$gradeTaskId = json_decode((string) $gradeTask->getBody(), true, flags: JSON_THROW_ON_ERROR)["id"];
+$gradeScorePath = "/sis/assignments/" . $gradeTaskId . "/scores/";
+if (
+    $teachingPost($gradeScorePath, ["student_id" => $student->id->value,
+    "earned_hundredths" => 9200, "version" => 0])->getStatusCode() !== 200
+) {
+    throw new RuntimeException("The fictional final assessment score failed.");
+}
+$gradeChoicePath = $gradeBase . "/students/" . $student->id->value . "/grade-choices/";
+$reviewCoursework = static function () use ($teachingPost, $gradeChoicePath, $gradeBase, $student): array {
+    $response = $teachingPost($gradeChoicePath, []);
+    $choices = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if (
+        $response->getStatusCode() !== 200 || ($choices["coursework"]["available"] ?? null) !== true ||
+        isset($choices["coursework"]["evidence"]) || isset($choices["coursework"]["scores"])
+    ) {
+        throw new RuntimeException("The private grade choice endpoint did not provide a bounded safe suggestion.");
+    }
+    $response = $teachingPost($gradeBase . "/final-grades/review/", [
+        "student_id" => $student->id->value, "grade_id" => $choices["coursework"]["grade_id"],
+        "version" => $choices["current_version"], "coursework_revision" => $choices["coursework"]["revision"],
+    ]);
+    $review = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if (
+        $response->getStatusCode() !== 200 || isset($review["coursework"]) ||
+        !isset($review["coursework_summary"]["score_display"])
+    ) {
+        throw new RuntimeException(
+            "The final-grade review leaked raw inputs or lost the accepted calculation summary.",
+        );
+    }
+    return $review;
+};
+$gradeReview = $reviewCoursework();
+$beforeGradeEvents = $sis->sql->rows("sis_history_events");
+$beforeGradeMoney = $sis->financialEvents();
+$teachingPost($gradeScorePath, ["student_id" => $student->id->value,
+    "earned_hundredths" => 9250, "version" => 1]);
+$gradeCommit = ["student_id" => $student->id->value, "review_token" => $gradeReview["review_token"]];
+if (
+    $teachingPost($gradeBase . "/final-grades/commit/", $gradeCommit)->getStatusCode() !== 409 ||
+    $beforeGradeEvents !== $sis->sql->rows("sis_history_events")
+) {
+    throw new RuntimeException("The actual grade endpoint accepted stale coursework or retained a failed event.");
+}
+$gradeReview = $reviewCoursework();
+$gradeCommit["review_token"] = $gradeReview["review_token"];
+$gradeReceipt = $teachingPost($gradeBase . "/final-grades/commit/", $gradeCommit);
+$confirmedGradeEvents = $sis->sql->rows("sis_history_events");
+$teachingPost($gradeScorePath, ["student_id" => $student->id->value,
+    "earned_hundredths" => 9400, "version" => 2]);
+$repeatedGrade = $teachingPost($gradeBase . "/final-grades/commit/", $gradeCommit);
+if (
+    $gradeReceipt->getStatusCode() !== 200 || $repeatedGrade->getStatusCode() !== 200 ||
+    (string) $gradeReceipt->getBody() !== (string) $repeatedGrade->getBody() ||
+    $confirmedGradeEvents !== $sis->sql->rows("sis_history_events") ||
+    $beforeGradeMoney !== $sis->financialEvents()
+) {
+    throw new RuntimeException("A grade retry changed its accepted calculation, official facts or finance.");
+}
+$sis->access->actor = $sis->admissions->person($student->personId)->ownerUserId;
+if (
+    $teachingPost($gradeChoicePath, [])->getStatusCode() !== 403 ||
+    $teachingPost($gradeBase . "/final-grades/commit/", $gradeCommit)->getStatusCode() !== 403
+) {
+    throw new RuntimeException("The student acquired faculty-grade authority.");
+}

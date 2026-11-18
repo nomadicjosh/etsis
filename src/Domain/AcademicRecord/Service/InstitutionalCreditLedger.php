@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Domain\AcademicRecord\Service;
 
+use Domain\Gradebook\Service\CourseworkGradeService;
+use Domain\Gradebook\ValueObject\CourseworkGradeEvidence;
 use DateMalformedStringException;
 use DateTimeImmutable;
 use DateTimeZone;
@@ -40,6 +42,8 @@ use Throwable;
 
 final readonly class InstitutionalCreditLedger
 {
+    public const int REVIEW_TOKEN_LIMIT = 262144;
+
     public function __construct(
         private AcademicCreditRepository $records,
         private HistoricalEventStore $history,
@@ -52,6 +56,7 @@ final readonly class InstitutionalCreditLedger
         private \Domain\Registration\Repository\SectionVersionRepository $versions,
         private WorkPursuitLedger $pursuits,
         private \Domain\AcademicRecord\Repository\GradeChangeRepository $changes,
+        private CourseworkGradeService $coursework,
     ) {
     }
 
@@ -140,7 +145,7 @@ final readonly class InstitutionalCreditLedger
         EntityId $enrollment,
         ?EntityId $assignment = null,
     ): array {
-        $this->readAuthority($section);
+        $actor = $this->readAuthority($section);
         [$id, $root, $facts] = $this->source($enrollment, $student, $section);
         $withdrawn = $this->withdrawn($facts);
         $this->gradeEnrollmentScope(
@@ -170,7 +175,7 @@ final readonly class InstitutionalCreditLedger
             $items = [];
             $needs = true;
         }
-        return [
+        $result = [
             "items" => $items,
             "pursuits" => $pursuits,
             "needs_assignment" => $needs,
@@ -211,6 +216,15 @@ final readonly class InstitutionalCreditLedger
                     : $root->grade()["code"] ??
                         $this->grades->snapshot(new EntityId($facts["grade_id"]))["code"],
         ];
+        if (!$result["posted"] && !$needs && $this->canReadCoursework($section)) {
+            $suggestion = $this->coursework->assess($student, $section, $items);
+            unset($suggestion["evidence"]);
+            $result["coursework"] = $suggestion;
+            $this->authority($section, false);
+        }
+        $this->actor($actor);
+        $this->readAuthority($section);
+        return $result;
     }
     /** @return array<string,mixed> */
     public function review(
@@ -223,6 +237,7 @@ final readonly class InstitutionalCreditLedger
         #[\SensitiveParameter] string $reason = "",
         ?string $effective = null,
         bool $gradeEvidence = false,
+        ?string $courseworkRevision = null,
     ): array {
         $this->readAuthority($section);
         return $this->transactions->run(function () use (
@@ -235,6 +250,7 @@ final readonly class InstitutionalCreditLedger
             $reason,
             $effective,
             $gradeEvidence,
+            $courseworkRevision,
         ): array {
             $this->records->lockStudent($student);
             $this->records->lockSection($section);
@@ -280,13 +296,29 @@ final readonly class InstitutionalCreditLedger
             }
             $when = $this->effective($enrollment, $effective);
             $selected = null;
-            foreach ($this->gradeChoices($root, $facts, $student, $assignment) as $r) {
+            $available = $this->gradeChoices($root, $facts, $student, $assignment);
+            foreach ($available as $r) {
                 if ($r["id"] === $grade->value) {
                     $selected = GradeSnapshot::fromRow($r)->facts;
                 }
             }
             if ($selected === null) {
                 self::invalid("grade_id", "Choose a grade from this record’s retained grading policy.");
+            }
+            $evidence = null;
+            if ($courseworkRevision !== null) {
+                $this->authority($section, false);
+                $assessment = $this->coursework->assess($student, $section, $available);
+                $evidence = $assessment["evidence"] ?? null;
+                if (
+                    $amend || $evidence === null || $evidence->facts["grade_id"] !== $grade->value ||
+                    !hash_equals($evidence->revision(), $courseworkRevision)
+                ) {
+                    self::invalid(
+                        "coursework_revision",
+                        "The coursework suggestion changed. Reload it or choose a grade manually.",
+                    );
+                }
             }
             $op = EntityId::generate();
             $baseline = $root->playhead() === 0;
@@ -323,16 +355,28 @@ final readonly class InstitutionalCreditLedger
                         : GradeSnapshot::fromRow($this->grades->snapshot(new EntityId($facts["grade_id"])))
                             ->facts),
             ];
+            if ($evidence !== null) {
+                $data["coursework"] = $evidence->facts;
+            }
             $this->actor($actor);
             $this->authority($section, $amend, $withdrawn);
-            return $data + ["review_token" => $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR))];
+            $token = $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR));
+            if (strlen($token) > self::REVIEW_TOKEN_LIMIT) {
+                self::invalid(
+                    "coursework_revision",
+                    "This calculation exceeds the review size limit. Choose a grade manually.",
+                );
+            }
+            unset($data["coursework"]);
+            return $data + ["review_token" => $token,
+                ...($evidence === null ? [] : ["coursework_summary" => $evidence->summary()])];
         });
     }
     /** @return array{operation_id:string,first_version:int,last_version:int,event_ids:list<string>} */
     public function commit(EntityId $student, EntityId $section, #[\SensitiveParameter] string $token): array
     {
         try {
-            if (strlen($token) > 65536) {
+            if (strlen($token) > self::REVIEW_TOKEN_LIMIT) {
                 throw new InvalidArgumentException();
             }
             $d = json_decode($this->cipher->open($token), true, 16, JSON_THROW_ON_ERROR);
@@ -387,6 +431,9 @@ final readonly class InstitutionalCreditLedger
                 "assignment_id" => $d["assignment_id"],
             ];
             $metadata = ["__aggregate_type" => "academic_credit"];
+            if (isset($d["coursework"])) {
+                $metadata["coursework"] = $d["coursework"];
+            }
             if ($d["withdrawal_grade_correction"] ?? false) {
                 $metadata["withdrawal_grade_correction"] = true;
             }
@@ -472,6 +519,20 @@ final readonly class InstitutionalCreditLedger
                         "The grading policy changed. Review the grade again.",
                     );
                 }
+                if (isset($d["coursework"])) {
+                    $this->authority($section, false);
+                    $evidence = new CourseworkGradeEvidence($d["coursework"]);
+                    $assessment = $this->coursework->assess($student, $section, $available);
+                    $currentEvidence = $assessment["evidence"] ?? null;
+                    if (
+                        $d["amendment"] || $currentEvidence === null ||
+                        !hash_equals($evidence->revision(), $currentEvidence->revision())
+                    ) {
+                        throw new ConcurrentModificationException(
+                            "The coursework changed. Review the final grade again.",
+                        );
+                    }
+                }
                 if ($d["baseline"]) {
                     $root->acceptHistorical($base);
                 }
@@ -518,11 +579,26 @@ final readonly class InstitutionalCreditLedger
                         throw new CorruptHistoryException();
                     }
                 }
+                if ($d["expires_at"] <= $this->clock->now()->getTimestamp()) {
+                    throw new ConcurrentModificationException(
+                        "This grade review expired during confirmation. Review again.",
+                    );
+                }
             }
             $this->actor($actor);
             $this->authority($section, $d["amendment"], $d["withdrawal_grade_correction"] ?? false);
             return $receipt;
         });
+    }
+
+    private function canReadCoursework(EntityId $section): bool
+    {
+        try {
+            $this->authority($section, false);
+            return true;
+        } catch (AccessDeniedException) {
+            return false;
+        }
     }
     /** @return array<string, mixed> */
     public function gradeChangePolicy(): array
@@ -1079,6 +1155,11 @@ final readonly class InstitutionalCreditLedger
             $e = $stored->event;
             $p = $e->payload();
             $items[] = [
+                ...($e instanceof FinalGradeWasDecided && $e->metaParam("coursework", null) !== null
+                    ? ["coursework_summary" => array_intersect_key(
+                        new CourseworkGradeEvidence($e->metaParam("coursework"))->summary(),
+                        array_flip(["score_display", "mode"]),
+                    )] : []),
                 "version" => $e->playhead(),
                 "action" => match (true) {
                     $e instanceof InstitutionalCreditWasEstablished => $p["provenance"],

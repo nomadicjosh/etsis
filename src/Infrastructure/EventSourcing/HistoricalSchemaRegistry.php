@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Infrastructure\EventSourcing;
 
+use Domain\Gradebook\ValueObject\CourseworkGradeEvidence;
 use Codefy\Domain\Aggregate\AggregateType;
 use Codefy\Domain\Aggregate\AggregateId;
 use Codefy\Domain\EventSourcing\AggregateChanged;
@@ -922,6 +923,19 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'coursework') {
+                    if (
+                        $class !== \Domain\AcademicRecord\Event\FinalGradeWasDecided::class || !is_array($value)
+                        || $payload['grade']['scale_version_id'] === null
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $evidence = new CourseworkGradeEvidence($value);
+                    if ($evidence->facts['grade_id'] !== $payload['grade']['id']) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'withdrawal_grade_correction') {
                     if (
                         $value !== true || !in_array($class, [

@@ -167,6 +167,7 @@ final readonly class SisGradebookController
                 $this->reason($request, $f),
                 $f->optionalText("effective_on", 10),
                 $f->boolean("grade_evidence"),
+                $f->optionalText("coursework_revision", 64),
             ),
         );
     }
@@ -177,7 +178,7 @@ final readonly class SisGradebookController
             $this->service->commitFinalGrade(
                 $f->id("student_id"),
                 new EntityId($id),
-                $f->text("review_token", 65536),
+                $f->text("review_token", \Domain\AcademicRecord\Service\InstitutionalCreditLedger::REVIEW_TOKEN_LIMIT),
             ),
         );
     }

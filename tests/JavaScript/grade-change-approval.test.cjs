@@ -242,3 +242,120 @@ test("missing-grade approval shows the unknown definition and preserves its evid
     await f.click("Change review");
     assert.match(f.body().textContent, /earlier definition will remain unknown/);
 });
+
+async function courseworkFixture(overrides = {}) {
+    const f = fixture();
+    const choices = {
+        posted: false,
+        can_amend: false,
+        current_grade_code: null,
+        current_version: 0,
+        effective_on_default: "2026-09-02",
+        items: [
+            { id: "grade-b", code: "B", points_milli: 3000 },
+            { id: "grade-a", code: "A", points_milli: 4000 },
+        ],
+        coursework: {
+            available: true,
+            grade_id: "grade-b",
+            grade_code: "B",
+            score_display: "92%",
+            revision: "first",
+            ...overrides,
+        },
+    };
+    f.ui.request = async (path, method, data) => {
+        f.sent.push({ path, method, data });
+        if (path.endsWith("/grade-choices/")) return choices;
+        if (path.endsWith("/review/"))
+            return {
+                grade: choices.items.find((g) => g.id === data.grade_id),
+                reason: data.reason,
+                review_token: "protected-proof",
+                ...(data.coursework_revision ? { coursework_summary: { score_display: "92%" } } : {}),
+            };
+        return {};
+    };
+    const window = {};
+    vm.runInNewContext(fs.readFileSync("public/assets/js/workspace-teaching.js", "utf8"), { window });
+    const component = window.createWorkspaceTeaching(f.ui);
+    await component.recordFinalGrade({ id: "section" }, { student_id: "student" }, () => {});
+    return { ...f, choices, component };
+}
+test("a coursework suggestion requires explicit selection, review and confirmation", async () => {
+    const f = await courseworkFixture();
+    const form = walk(f.body()).find((e) => e.tag === "form");
+    assert.match(f.body().textContent, /92% → B/);
+    assert.match(f.body().textContent, /No rounding across grade boundaries or automatic posting/);
+    assert.equal(
+        f.sent.some((r) => r.path.endsWith("/review/") || r.path.endsWith("/commit/")),
+        false,
+    );
+    await f.click("Use suggested grade");
+    assert.equal(form.elements.grade_id.value, "grade-b");
+    form.elements.reason.value = "Fictional final assessment.";
+    form.events.submit({ preventDefault() {} });
+    await f.done();
+    assert.equal(f.sent.at(-1).data.coursework_revision, "first");
+    assert.equal(f.sent.at(-1).data.version, 0);
+    assert.match(f.body().textContent, /Its inputs will be retained with the grade decision/);
+    await f.click("Change review");
+    assert.equal(
+        walk(f.body()).find((e) => e.tag === "form"),
+        form,
+    );
+    assert.equal(form.elements.reason.value, "Fictional final assessment.");
+    form.events.submit({ preventDefault() {} });
+    await f.done();
+    assert.equal(f.sent.at(-1).data.coursework_revision, "first");
+    await f.click("Confirm final grade");
+    assert.deepEqual(JSON.parse(JSON.stringify(f.sent.at(-1).data)), {
+        student_id: "student",
+        review_token: "protected-proof",
+    });
+});
+test("manually selecting another grade removes the coursework claim", async () => {
+    const f = await courseworkFixture();
+    const form = walk(f.body()).find((e) => e.tag === "form");
+    await f.click("Use suggested grade");
+    form.elements.grade_id.value = "grade-a";
+    form.elements.grade_id.events.change();
+    form.events.submit({ preventDefault() {} });
+    await f.done();
+    assert.equal(f.sent.at(-1).data.grade_id, "grade-a");
+    assert.equal("coursework_revision" in f.sent.at(-1).data, false);
+    assert.doesNotMatch(f.body().textContent, /Its inputs will be retained/);
+});
+test("refresh preserves the entered note and date while requiring fresh selection", async () => {
+    const f = await courseworkFixture();
+    const old = walk(f.body()).find((e) => e.tag === "form");
+    old.elements.reason.value = "Keep this fictional note.";
+    old.elements.effective_on.value = "2026-09-01";
+    await f.click("Use suggested grade");
+    f.choices.coursework.revision = "fresh";
+    await f.click("Refresh suggestion");
+    const form = walk(f.body()).find((e) => e.tag === "form");
+    assert.equal(form.elements.reason.value, "Keep this fictional note.");
+    assert.equal(form.elements.effective_on.value, "2026-09-01");
+    form.events.submit({ preventDefault() {} });
+    await f.done();
+    assert.equal("coursework_revision" in f.sent.at(-1).data, false);
+});
+test("an unavailable suggestion stays manual and renders its explanation as text", async () => {
+    const f = await courseworkFixture({ available: false, message: "Review a grading gap <img>." });
+    assert.equal(
+        walk(f.body()).some((e) => e.tag === "button" && e.textContent === "Use suggested grade"),
+        false,
+    );
+    assert.equal(
+        walk(f.body()).some((e) => e.tag === "img"),
+        false,
+    );
+    assert.match(f.body().textContent, /Review a grading gap <img>/);
+    assert.ok(walk(f.body()).some((e) => e.attributes.role === "status"));
+    const form = walk(f.body()).find((e) => e.tag === "form");
+    form.elements.grade_id.value = "grade-b";
+    form.events.submit({ preventDefault() {} });
+    await f.done();
+    assert.equal("coursework_revision" in f.sent.at(-1).data, false);
+});

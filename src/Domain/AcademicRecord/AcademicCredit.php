@@ -12,6 +12,8 @@ use Domain\AcademicRecord\Event\InstitutionalCreditWasDropped;
 use Domain\AcademicRecord\Event\AcademicCompletionWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted;
+use Domain\AcademicRecord\ValueObject\CreditSnapshot;
+use Domain\Gradebook\ValueObject\CourseworkGradeEvidence;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 
 final class AcademicCredit extends EventSourcedAggregate
@@ -90,6 +92,17 @@ final class AcademicCredit extends EventSourcedAggregate
         ) {
             throw new CorruptHistoryException();
         }
+        if ($event->metaParam("coursework", null) !== null) {
+            $evidence = new CourseworkGradeEvidence($event->metaParam("coursework"));
+            if (
+                $this->grade !== null || new CreditSnapshot($this->credit)->posted() ||
+                $evidence->facts["student_id"] !== $this->credit["student_id"] ||
+                $evidence->facts["section_id"] !== $this->section ||
+                $evidence->facts["grade_id"] !== $p["grade"]["id"]
+            ) {
+                throw new CorruptHistoryException();
+            }
+        }
         $this->decideGrade($p["grade"], $p["decision_id"]);
     }
     private function decideGrade(array $grade, string $decision): void
@@ -104,7 +117,7 @@ final class AcademicCredit extends EventSourcedAggregate
         ? intdiv($this->credit["attempted_milli"] * $grade["points_milli"], 1000)
         : 0;
         ++$this->credit["version"];
-        new \Domain\AcademicRecord\ValueObject\CreditSnapshot($this->credit);
+        new CreditSnapshot($this->credit);
         $this->decision = $decision;
     }
     public function whenGradeChangeWasRequested(
@@ -199,7 +212,7 @@ final class AcademicCredit extends EventSourcedAggregate
         $this->completedOn = $p["completed_on"];
         ++$this->credit["version"];
         $this->decision = $p["decision_id"];
-        new \Domain\AcademicRecord\ValueObject\CreditSnapshot($this->credit);
+        new CreditSnapshot($this->credit);
     }
     public function whenInstitutionalAcademicPeriodWasRecorded(
         InstitutionalAcademicPeriodWasRecorded $event,
@@ -222,7 +235,7 @@ final class AcademicCredit extends EventSourcedAggregate
         $this->academicOn = $p["academic_on"];
         ++$this->credit["version"];
         $this->decision = $p["decision_id"];
-        new \Domain\AcademicRecord\ValueObject\CreditSnapshot($this->credit);
+        new CreditSnapshot($this->credit);
     }
     public function academicOn(): ?string
     {
@@ -245,7 +258,7 @@ final class AcademicCredit extends EventSourcedAggregate
         $this->credit["course_code"] = $p["course_code"];
         $this->credit["course_title"] = $p["course_title"];
         ++$this->credit["version"];
-        new \Domain\AcademicRecord\ValueObject\CreditSnapshot($this->credit);
+        new CreditSnapshot($this->credit);
         $this->decision = $p["decision_id"];
     }
 
@@ -284,7 +297,7 @@ final class AcademicCredit extends EventSourcedAggregate
         : 0;
         $this->grade = $p["grade"];
         ++$this->credit["version"];
-        new \Domain\AcademicRecord\ValueObject\CreditSnapshot($this->credit);
+        new CreditSnapshot($this->credit);
         $this->decision = $p["decision_id"];
     }
     /** @param array<string,mixed> $p */

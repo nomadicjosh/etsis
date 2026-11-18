@@ -4,14 +4,17 @@ declare(strict_types=1);
 
 namespace Domain\Gradebook\ValueObject;
 
+use Brick\Math\BigRational;
+use Brick\Math\RoundingMode;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 
-/** Working feedback only: never an institutional grade, credit or GPA decision. */
+/** Shared coursework calculation; official grades require a separate, explicit academic decision. */
 final readonly class GradebookCalculation
 {
     public const int LIMIT = 500;
     public const int CATEGORY_LIMIT = 20;
+    public const int EXACT_DENOMINATOR_LIMIT = 64;
     /** @var array<string, int> */
     private array $categoryByAssignment;
     /** @var array<string, true> */
@@ -160,7 +163,7 @@ final readonly class GradebookCalculation
     /** @param list<array<string, mixed>> $scores
      * @return array<string, mixed>
      */
-    public function summarize(array $scores): array
+    public function summarize(#[\SensitiveParameter] array $scores, bool $includeExact = false): array
     {
         if (count($scores) > self::LIMIT) {
             self::invalid("This gradebook exceeds the 500-assignment calculation limit.");
@@ -209,18 +212,33 @@ final readonly class GradebookCalculation
                 self::invalid("The assignment types changed. Review gradebook setup before calculating.");
             }
         }
+        if ($includeExact && $this->mode === "weighted") {
+            $denominators = [];
+            foreach ($scores as $score) {
+                $weight = $this->weights[$score["assignment_id"]] ?? 0;
+                if ($weight === 0 || $score["earned_hundredths"] === null || ($score["excused"] ?? false)) {
+                    continue;
+                }
+                $denominator = $score["possible_hundredths"] ?: $score["bonus_hundredths"];
+                $part = BigRational::ofFraction($weight * $score["earned_hundredths"], $denominator);
+                $denominators[(string) $part->getDenominator()] = true;
+                if (count($denominators) > self::EXACT_DENOMINATOR_LIMIT) {
+                    throw new \Domain\Gradebook\Exception\CourseworkCalculationLimitException();
+                }
+            }
+        }
         if ($this->mode === "category") {
-            return $this->withExcusals($this->categorySummary($seen), $seen);
+            return $this->withExcusals($this->categorySummary($seen, $includeExact), $seen);
         }
         $total = 0;
         $graded = 0;
-        $contribution = 0.0;
+        $contribution = $includeExact ? BigRational::zero() : 0.0;
         $pending = 0;
         $included = 0;
         $bonusEarned = 0;
         $bonusEnabled = false;
         $excused = 0;
-        $bonusContribution = 0.0;
+        $bonusContribution = $includeExact ? BigRational::zero() : 0.0;
         $bonusPending = 0;
         $bonusOnly = 0;
         foreach ($scores as $score) {
@@ -244,9 +262,11 @@ final readonly class GradebookCalculation
                     ++$bonusPending;
                 } else {
                     $bonusEarned += $earned;
-                    $bonusContribution += $this->mode === "points"
-                    ? $earned
-                    : $weight * ($earned / $score["bonus_hundredths"]);
+                    $bonusContribution = $includeExact
+                    ? $bonusContribution->plus($this->mode === "points" ? $earned
+                            : BigRational::ofFraction($weight * $earned, $score["bonus_hundredths"]))
+                    : $bonusContribution + ($this->mode === "points" ? $earned
+                            : $weight * ($earned / $score["bonus_hundredths"]));
                 }
                 continue;
             }
@@ -257,17 +277,23 @@ final readonly class GradebookCalculation
             }
             $graded += $weight;
             $bonusEarned += max(0, $earned - $possible);
-            $contribution += $weight * ($earned / $possible);
+            $contribution = $includeExact
+            ? $contribution->plus(BigRational::ofFraction($weight * $earned, $possible))
+            : $contribution + $weight * ($earned / $possible);
         }
 
         return $this->withExcusals(
             [
                 "mode" => $this->mode,
-                // Floating arithmetic is deliberately restricted to rounded, non-authoritative feedback.
-                "percent_hundredths" => $graded === 0 ? null : (int) round(
-                    $this->mode === "points"
-                        ? (($contribution + $bonusContribution) / $graded) * 10000
-                        : ($contribution / $graded) * 10000 + $bonusContribution,
+                ...self::percentage(
+                    $graded === 0 ? null : ($includeExact
+                        ? ($this->mode === "points"
+                            ? $contribution->plus($bonusContribution)->dividedBy($graded)
+                            : $contribution->dividedBy($graded)->plus($bonusContribution->dividedBy(10000)))
+                        : ($this->mode === "points"
+                            ? ($contribution + $bonusContribution) / $graded
+                            : $contribution / $graded + $bonusContribution / 10000)),
+                    $includeExact,
                 ),
                 "coverage_hundredths" => $total === 0 ? 0 : (int) round(($graded / $total) * 10000),
                 "graded" => $included - $pending - $excused - $bonusPending,
@@ -287,10 +313,10 @@ final readonly class GradebookCalculation
     /** @param array<string, array<string, mixed>> $scores
      * @return array<string, mixed>
      */
-    private function categorySummary(array $scores): array
+    private function categorySummary(#[\SensitiveParameter] array $scores, bool $includeExact): array
     {
         $items = [];
-        $contribution = 0.0;
+        $contribution = $includeExact ? BigRational::zero() : 0.0;
         $activeWeight = 0;
         $coverage = 0.0;
         $included = 0;
@@ -365,7 +391,9 @@ final readonly class GradebookCalculation
                 $pending += count($category["assignments"]) - $graded - count($omitted) - $excused - $bonusPending;
                 if ($gradedPossible > 0) {
                     $activeWeight += $weight;
-                    $contribution += $weight * ($earned / $gradedPossible);
+                    $contribution = $includeExact
+                    ? $contribution->plus(BigRational::ofFraction($weight * $earned, $gradedPossible))
+                    : $contribution + $weight * ($earned / $gradedPossible);
                 } elseif (!$fullyExcused) {
                     ++$awaiting;
                 }
@@ -374,8 +402,7 @@ final readonly class GradebookCalculation
             $items[] = [
                 "title" => $category["title"],
                 "weight_hundredths" => $weight,
-                "percent_hundredths" =>
-                    $gradedPossible === 0 ? null : (int) round(($earned / $gradedPossible) * 10000),
+                ...self::percentage($gradedPossible === 0 ? null : $earned / $gradedPossible),
                 "coverage_hundredths" =>
                     $possible === 0 ? 0 : (int) round(($gradedPossible / $possible) * 10000),
                 "assignments" => count($category["assignments"]),
@@ -392,8 +419,8 @@ final readonly class GradebookCalculation
         }
         return [
             "mode" => "category",
-            "percent_hundredths" =>
-                $activeWeight === 0 ? null : (int) round(($contribution / $activeWeight) * 10000),
+            ...self::percentage($activeWeight === 0 ? null : ($includeExact
+                ? $contribution->dividedBy($activeWeight) : $contribution / $activeWeight), $includeExact),
             "coverage_hundredths" =>
                 $availableWeight === 0 ? 0 : (int) round($coverage * (10000 / $availableWeight)),
             "graded" => $included - $pending - count($dropped) - $excusedTotal - $bonusPendingTotal,
@@ -418,7 +445,7 @@ final readonly class GradebookCalculation
      * @param array<string,array<string,mixed>> $scores
      * @return list<array{assignment_id:string,title:string,earned_hundredths:int,possible_hundredths:int}>
      */
-    private function dropped(array $category, array $scores): array
+    private function dropped(array $category, #[\SensitiveParameter] array $scores): array
     {
         $count = $category["drop_lowest"] ?? 0;
         if ($count === 0) {
@@ -443,6 +470,21 @@ final readonly class GradebookCalculation
             strcmp($a["assignment_id"], $b["assignment_id"]),
         );
         return array_slice($graded, 0, min($count, max(0, count($graded) - 1)));
+    }
+
+    /** Exact grade-boundary comparisons use the fraction; only display percentages are rounded.
+     * @return array<string,mixed>
+     */
+    private static function percentage(BigRational|float|null $ratio, bool $includeExact = false): array
+    {
+        if (is_float($ratio)) {
+            return ["percent_hundredths" => (int) round($ratio * 10000)];
+        }
+        $percent = $ratio?->multipliedBy(100);
+        return [
+            "percent_hundredths" => $percent?->multipliedBy(100)->toScale(0, RoundingMode::HalfUp)->toInt(),
+            ...($includeExact ? ["exact_percent" => $percent === null ? null : (string) $percent] : []),
+        ];
     }
 
     private static function invalid(string $message, string $field = "weights"): never

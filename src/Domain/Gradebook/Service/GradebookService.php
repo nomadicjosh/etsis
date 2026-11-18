@@ -351,6 +351,7 @@ final readonly class GradebookService
         #[\SensitiveParameter] string $reason = "",
         ?string $effective = null,
         bool $gradeEvidence = false,
+        ?string $courseworkRevision = null,
     ): array {
         $enrollment = $this->gradeEnrollment($student, $section);
         return $this->credits->review(
@@ -363,6 +364,7 @@ final readonly class GradebookService
             $reason,
             $effective,
             $gradeEvidence,
+            $courseworkRevision,
         );
     }
     /** @return array<string,mixed> */
