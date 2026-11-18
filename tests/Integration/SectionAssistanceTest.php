@@ -72,6 +72,10 @@ final class SectionAssistanceTest extends TestCase
             $f->dropCipher,
             $f->clock,
             new SqlSectionVersionRepository($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlSectionClassificationRepository(
+                $f->sql,
+                new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
+            ),
         );
         $this->service = new SectionAssistanceService(
             $this->publications,

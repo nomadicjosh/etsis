@@ -854,6 +854,8 @@ return static function (Psr7Router $router): void {
     $classificationController = \Application\Http\Controller\SisClassificationController::class;
     $router->post("/sis/catalog/classifications/{kind}/page/", [$classificationController, "page"]);
     $router->post("/sis/catalog/classifications/{kind}/save/", [$classificationController, "save"]);
+    $router->get("/sis/sections/{id}/classifications/", [$classificationController, "section"]);
+    $router->post("/sis/sections/{id}/classifications/", [$classificationController, "assignSection"]);
     $router->get("/sis/courses/{id}/classifications/", [$classificationController, "course"]);
     $router->post("/sis/courses/{id}/classifications/", [$classificationController, "assign"]);
     $router->post("/sis/catalog/subjects/", [$subjectController, "page"]);

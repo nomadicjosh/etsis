@@ -302,7 +302,10 @@ final readonly class OfferingService
                         $proof["reason"],
                         $id,
                     );
-                    if ($publication["definition"] !== $section["section_definition"]) {
+                    if (
+                        $publication["definition"] !== $section["section_definition"]
+                        || $publication["classifications"] !== $section["classifications"]
+                    ) {
                         throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
                     }
                     $published = $this->sections->publish($sectionId, $publication["review_token"]);

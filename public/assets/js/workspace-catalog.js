@@ -404,7 +404,7 @@ window.createWorkspaceCatalog = function (ui) {
                         "details",
                         { class: "surface p-3 mb-3" },
                         node("summary", {}, `${row.code} · retained offering version`),
-                        offeringDetails(row.section_definition, row.faculty_name ?? "Not assigned"),
+                        offeringDetails(row.section_definition, row.faculty_name ?? "Not assigned", row.classifications ?? null),
                         reference(row.section_version_id),
                     ),
                 );
@@ -692,7 +692,7 @@ window.createWorkspaceCatalog = function (ui) {
                         {},
                         `${row.code} · ${row.instruction_starts_on} through ${row.instruction_ends_on}`,
                     ),
-                    offeringDetails(row.section_definition, row.faculty_name ?? "Not assigned"),
+                    offeringDetails(row.section_definition, row.faculty_name ?? "Not assigned", row.classifications ?? null),
                     node("h3", { class: "h5" }, "Retained course definition"),
                     definitionDetails(row.course_definition.definition),
                     reference(row.course_version_id),
@@ -1321,7 +1321,7 @@ window.createWorkspaceCatalog = function (ui) {
             button("Change selection", back),
         );
     }
-    function offeringDetails(definition, facultyLabel = null) {
+    function offeringDetails(definition, facultyLabel = null, classifications = null) {
         const fields = [
             ["Section", definition.code],
             [
@@ -1342,6 +1342,10 @@ window.createWorkspaceCatalog = function (ui) {
             ["Section fee", money(definition.fee_minor, definition.currency)],
         ];
         if (facultyLabel !== null) fields.push(["Faculty", facultyLabel]);
+        for (const [key, label] of [["instructional_method", "Instructional method"], ["campus", "Campus/site"]]) {
+            const value = classifications?.[key];
+            fields.push([label, classifications === null ? "Not recorded in this publication" : value ? `${value.code} — ${value.title}` : "Not specified"]);
+        }
         const details = node("dl", { class: "row g-2" });
         for (const [label, value] of fields) {
             details.append(
@@ -1558,7 +1562,7 @@ window.createWorkspaceCatalog = function (ui) {
                             {},
                             `Version ${reviewed.expected_version + 1} records the offering reviewed now.`,
                         ),
-                        offeringDetails(reviewed.definition, reviewed.faculty_label),
+                        offeringDetails(reviewed.definition, reviewed.faculty_label, reviewed.classifications ?? null),
                         node("p", {}, `Reason: ${reviewed.reason}`),
                         node(
                             "p",
@@ -1630,7 +1634,7 @@ window.createWorkspaceCatalog = function (ui) {
                         {},
                         `Version ${item.version} · ${item.definition.code} · ${item.definition.instruction_starts_on}`,
                     ),
-                    offeringDetails(item.definition),
+                    offeringDetails(item.definition, null, item.classifications ?? null),
                     node(
                         "p",
                         { class: "form-text" },
@@ -1677,7 +1681,7 @@ window.createWorkspaceCatalog = function (ui) {
                         {},
                         `${item.action === "amended" ? "Future offering amendment" : "Initial selection"} · publication version ${item.selected.version}`,
                     ),
-                    offeringDetails(item.selected.definition),
+                    offeringDetails(item.selected.definition, null, item.selected.classifications ?? null),
                     node(
                         "p",
                         { class: "form-text" },
@@ -1706,7 +1710,7 @@ window.createWorkspaceCatalog = function (ui) {
             "DETAILS → REVIEW → CONFIRM",
         );
         body.append(
-            offeringDetails(item.definition),
+            offeringDetails(item.definition, null, item.classifications ?? null),
             node(
                 "p",
                 {},
@@ -1746,7 +1750,7 @@ window.createWorkspaceCatalog = function (ui) {
                 if (amend)
                     target.append(
                         node("h3", { class: "h5" }, "Previously selected offering"),
-                        offeringDetails(reviewed.previous.definition),
+                        offeringDetails(reviewed.previous.definition, null, reviewed.previous.classifications ?? null),
                         node(
                             "p",
                             {},
@@ -1755,7 +1759,7 @@ window.createWorkspaceCatalog = function (ui) {
                         node("h3", { class: "h5" }, "Offering for future registrations"),
                     );
                 target.append(
-                    offeringDetails(reviewed.selected.definition, reviewed.faculty_label),
+                    offeringDetails(reviewed.selected.definition, reviewed.faculty_label, reviewed.selected.classifications ?? null),
                     node("p", {}, `Selected publication: version ${reviewed.selected.version}.`),
                     node("p", {}, `Reason: ${reviewed.reason}`),
                     node(

@@ -16,6 +16,8 @@ use Domain\Registration\Repository\SectionVersionRepository;
 use Domain\Registration\ValueObject\PublishedSectionDefinition;
 use Domain\Registration\SectionPublication;
 use Domain\Registration\ValueObject\SectionDefinitionV1;
+use Domain\Registration\ValueObject\SectionClassifications;
+use Domain\Registration\Repository\SectionClassificationRepository;
 use Domain\Registration\ValueObject\SectionPublicationId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
@@ -47,6 +49,7 @@ final readonly class SectionPublicationService
         private MessageCipher $cipher,
         private Clock $clock,
         private SectionVersionRepository $versions,
+        private SectionClassificationRepository $classifications,
     ) {
     }
 
@@ -56,7 +59,10 @@ final readonly class SectionPublicationService
     public function assistanceSnapshot(EntityId $section): array
     {
         $actor = $this->access->requirePermission("sis:catalog:manage");
-        return $this->transactions->run(function () use ($section, $actor): array {
+        return $this->transactions->run(function () use (
+            $section,
+            $actor,
+        ): array {
             [$row, $term] = $this->lock($section);
             $this->authorize($actor);
             $bound = $this->bindings->bound($section);
@@ -65,7 +71,8 @@ final readonly class SectionPublicationService
                 "section_code" => $row["code"],
                 "capacity" => (int) $row["capacity"],
                 "delivery_mode" => $row["delivery_mode"],
-                "teaching_assignment_present" => $row["faculty_user_id"] !== null,
+                "teaching_assignment_present" =>
+                    $row["faculty_user_id"] !== null,
                 "term" => [
                     "code" => $term["code"],
                     "starts_on" => $term["starts_on"],
@@ -78,13 +85,23 @@ final readonly class SectionPublicationService
                             "code" => $definition->code,
                             "title" => $definition->title,
                             "credits_milli" => $definition->creditsMilli,
-                            "transcript_title" => $definition->text->transcriptTitle,
+                            "transcript_title" =>
+                                $definition->text->transcriptTitle,
                             "description" => $definition->text->description,
-                            "prerequisite_count" => count($definition->prerequisites),
+                            "prerequisite_count" => count(
+                                $definition->prerequisites,
+                            ),
                         ],
             ];
             $this->authorize($actor);
-            return ["draft" => $draft, "revision" => $this->fingerprint([$row, $term, $bound?->describe()])];
+            return [
+                "draft" => $draft,
+                "revision" => $this->fingerprint([
+                    $row,
+                    $term,
+                    $bound?->describe(),
+                ]),
+            ];
         });
     }
 
@@ -93,19 +110,29 @@ final readonly class SectionPublicationService
     {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         $row = $this->catalog->get("sections", $section);
-        $term = $this->catalog->get("terms", new EntityId((string) $row["term_id"]));
+        $term = $this->catalog->get(
+            "terms",
+            new EntityId((string) $row["term_id"]),
+        );
         $projection = $this->versions->latest($section);
         $bound = $this->bindings->bound($section);
         $this->authorize($actor);
         return [
             "section" => $row,
+            "classifications" => $this->classifications
+                ->current($section)
+                ->describe(),
             "term" => $term,
             "course_definition" => $bound?->describe(),
             "latest" => $projection["latest"]?->describe(),
             "publication_status" => $projection["status"],
             "faculty_label" => $this->facultyLabel($row),
-            "selected_offering" => $this->versions->selected($section)?->describe(),
-            "has_student_records" => $this->bindings->hasStudentRecords($section),
+            "selected_offering" => $this->versions
+                ->selected($section)
+                ?->describe(),
+            "has_student_records" => $this->bindings->hasStudentRecords(
+                $section,
+            ),
         ];
     }
 
@@ -135,13 +162,24 @@ final readonly class SectionPublicationService
                     "Retain a course definition for this section before publishing its details.",
                 );
             [$root] = $this->load($section);
-            $definition = $this->definition($row, $term, $course, $startsOn, $endsOn);
+            $definition = $this->definition(
+                $row,
+                $term,
+                $course,
+                $startsOn,
+                $endsOn,
+            );
             $latest = $root->latest();
             if ($latest !== null) {
                 $this->sameOwnership($latest["definition"], $definition);
             }
             // Validate the protected reason before returning a review; the effective time is set on confirmation.
-            new EventContext($actor, $this->clock->now(), $section, reason: $reason);
+            new EventContext(
+                $actor,
+                $this->clock->now(),
+                $section,
+                reason: $reason,
+            );
             $review = [
                 "kind" => "section-publication-review.v1",
                 "section_id" => $section->value,
@@ -150,27 +188,42 @@ final readonly class SectionPublicationService
                 "expected_version" => $root->playhead(),
                 "previous_version_id" => $latest["version_id"] ?? null,
                 "definition" => $definition,
-                "source_hash" => $this->fingerprint([$row, $term, $course, $this->faculty($row)]),
+                "classifications" => $row["classifications"],
+                "source_hash" => $this->fingerprint([
+                    $row,
+                    $term,
+                    $course,
+                    $this->faculty($row),
+                ]),
                 "reason" => $reason,
                 "causation_id" => $causation?->value,
                 "expires_at" => $this->clock->now()->getTimestamp() + 1200,
             ];
             return $review + [
-                "review_token" => $this->cipher->seal(json_encode($review, JSON_THROW_ON_ERROR)),
+                "review_token" => $this->cipher->seal(
+                    json_encode($review, JSON_THROW_ON_ERROR),
+                ),
                 "faculty_label" => $this->facultyLabel($row),
             ];
         });
     }
 
     /** @return array{operation_id: string, first_version: int, last_version: int, event_ids: list<string>} */
-    public function publish(EntityId $section, #[\SensitiveParameter] string $token): array
-    {
+    public function publish(
+        EntityId $section,
+        #[\SensitiveParameter] string $token,
+    ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         try {
             if (strlen($token) > 32768) {
                 throw new InvalidArgumentException();
             }
-            $r = json_decode($this->cipher->open($token), true, 16, JSON_THROW_ON_ERROR);
+            $r = json_decode(
+                $this->cipher->open($token),
+                true,
+                16,
+                JSON_THROW_ON_ERROR,
+            );
             if (
                 !is_array($r) ||
                 ($r["kind"] ?? null) !== "section-publication-review.v1" ||
@@ -190,12 +243,21 @@ final readonly class SectionPublicationService
             new SectionDefinitionV1($r["definition"]);
             $operation = new EntityId($r["operation_id"]);
         } catch (Throwable) {
-            throw new InvalidArgumentException("Review this section again before publishing.");
+            throw new InvalidArgumentException(
+                "Review this section again before publishing.",
+            );
         }
         if ($r["actor_id"] !== $actor->value) {
-            throw new AccessDeniedException("This section review belongs to another staff member.");
+            throw new AccessDeniedException(
+                "This section review belongs to another staff member.",
+            );
         }
-        return $this->transactions->run(function () use ($section, $actor, $operation, $r): array {
+        return $this->transactions->run(function () use (
+            $section,
+            $actor,
+            $operation,
+            $r,
+        ): array {
             [$row, $term] = $this->lock($section);
             $this->authorize($actor);
             [$root, $accepted] = $this->load($section, $operation);
@@ -206,12 +268,22 @@ final readonly class SectionPublicationService
             ];
             if ($accepted !== null) {
                 if (
-                    $this->fingerprint($accepted->event->payload()) !== $this->fingerprint($payload) ||
+                    $this->fingerprint($accepted->event->payload()) !==
+                        $this->fingerprint($payload) ||
+                    $this->fingerprint([
+                        $accepted->event->metaParam(
+                            "offering_classifications",
+                            null,
+                        ),
+                    ]) !==
+                        $this->fingerprint([$r["classifications"] ?? null]) ||
                     $accepted->context->actor?->value !== $actor->value ||
                     $accepted->context->reason !== $r["reason"] ||
                     $accepted->event->playhead() !== $r["expected_version"] + 1
                 ) {
-                    throw new ConcurrentModificationException("This publication operation was already used.");
+                    throw new ConcurrentModificationException(
+                        "This publication operation was already used.",
+                    );
                 }
                 return [
                     "operation_id" => $operation->value,
@@ -222,13 +294,22 @@ final readonly class SectionPublicationService
             }
             $course = $this->verifiedCourse($section);
             if (
+                !isset($r["classifications"]) ||
+                $this->fingerprint($r["classifications"]) !==
+                    $this->fingerprint($row["classifications"]) ||
                 $r["expires_at"] <= $this->clock->now()->getTimestamp() ||
                 $root->playhead() !== $r["expected_version"] ||
-                ($root->latest()["version_id"] ?? null) !== $r["previous_version_id"] ||
+                ($root->latest()["version_id"] ?? null) !==
+                    $r["previous_version_id"] ||
                 $course === null ||
                 !hash_equals(
                     $r["source_hash"],
-                    $this->fingerprint([$row, $term, $course, $this->faculty($row)]),
+                    $this->fingerprint([
+                        $row,
+                        $term,
+                        $course,
+                        $this->faculty($row),
+                    ]),
                 ) ||
                 $this->definition(
                     $row,
@@ -243,11 +324,19 @@ final readonly class SectionPublicationService
                 );
             }
             if ($root->latest() !== null) {
-                $this->sameOwnership($root->latest()["definition"], $r["definition"]);
+                $this->sameOwnership(
+                    $root->latest()["definition"],
+                    $r["definition"],
+                );
             }
-            $event = SectionDefinitionWasPublished::occur($this->stream($section)->aggregateId, $payload, [
-                "__aggregate_type" => "section_publication",
-            ])->withPlayhead($root->playhead() + 1);
+            $event = SectionDefinitionWasPublished::occur(
+                $this->stream($section)->aggregateId,
+                $payload,
+                [
+                    "__aggregate_type" => "section_publication",
+                    "offering_classifications" => $r["classifications"],
+                ],
+            )->withPlayhead($root->playhead() + 1);
             $receipt = $this->history->append(
                 $this->stream($section),
                 $operation,
@@ -256,7 +345,9 @@ final readonly class SectionPublicationService
                     $actor,
                     $this->clock->now(),
                     $operation,
-                    causation: isset($r["causation_id"]) ? new EntityId($r["causation_id"]) : null,
+                    causation: isset($r["causation_id"])
+                        ? new EntityId($r["causation_id"])
+                        : null,
                     reason: $r["reason"],
                 ),
                 [$event],
@@ -267,9 +358,14 @@ final readonly class SectionPublicationService
                     $operation,
                     $receipt["last_version"],
                     new SectionDefinitionV1($r["definition"]),
+                    SectionClassifications::fromArray($r["classifications"]),
                 ),
             );
-            $this->audit->record($actor, "section.definition_published", $section);
+            $this->audit->record(
+                $actor,
+                "section.definition_published",
+                $section,
+            );
             return $receipt;
         });
     }
@@ -297,7 +393,11 @@ final readonly class SectionPublicationService
             $this->authorize($actor);
             $bound = $this->verifiedCourse($section);
             [$root] = $this->load($section);
-            $selected = SectionOfferingSelection::verify($section, $this->versions, $this->history);
+            $selected = SectionOfferingSelection::verify(
+                $section,
+                $this->versions,
+                $this->history,
+            );
             if ($requireEmpty && $this->bindings->hasStudentRecords($section)) {
                 throw new ValidationException([
                     [
@@ -311,23 +411,45 @@ final readonly class SectionPublicationService
             $latest = $root->latest();
             $start ??=
                 $selected?->definition->data["instruction_starts_on"] ??
-                ($latest["definition"]["instruction_starts_on"] ?? (string) $term["starts_on"]);
+                ($latest["definition"]["instruction_starts_on"] ??
+                    (string) $term["starts_on"]);
             $end ??=
                 $selected?->definition->data["instruction_ends_on"] ??
-                ($latest["definition"]["instruction_ends_on"] ?? (string) $term["ends_on"]);
+                ($latest["definition"]["instruction_ends_on"] ??
+                    (string) $term["ends_on"]);
             $this->validateDates($start, $end);
-            if ($bound !== null && $course !== null && $bound !== $course->describe()) {
+            if (
+                $bound !== null &&
+                $course !== null &&
+                $bound !== $course->describe()
+            ) {
                 throw new CorruptHistoryException();
             }
             $definition =
-                $course === null ? null : $this->definition($row, $term, $course->describe(), $start, $end);
-            if ($course !== null && $course->courseId->value !== $row["course_id"]) {
+                $course === null
+                    ? null
+                    : $this->definition(
+                        $row,
+                        $term,
+                        $course->describe(),
+                        $start,
+                        $end,
+                    );
+            if (
+                $course !== null &&
+                $course->courseId->value !== $row["course_id"]
+            ) {
                 throw new CorruptHistoryException();
             }
             if ($latest !== null && $definition !== null) {
                 $this->sameOwnership($latest["definition"], $definition);
             }
-            if ($selected !== null && $definition !== null && $selected->definition->data !== $definition) {
+            if (
+                $selected !== null &&
+                $definition !== null &&
+                ($selected->definition->data !== $definition ||
+                    !$this->matchingClassifications($selected, $row))
+            ) {
                 throw new ValidationException([
                     [
                         "field" => "sections",
@@ -341,10 +463,14 @@ final readonly class SectionPublicationService
                 "instruction_starts_on" => $start,
                 "instruction_ends_on" => $end,
                 "section_definition" => $definition,
+                "classifications" => $row["classifications"],
                 "expected_publication_position" => $root->playhead(),
                 "selected_offering" => $selected?->describe(),
-                "expected_selection_position" => $this->versions->selectionPosition($section),
-                "faculty_person_id" => $this->faculty($row)["person_id"] ?? null,
+                "expected_selection_position" => $this->versions->selectionPosition(
+                    $section,
+                ),
+                "faculty_person_id" =>
+                    $this->faculty($row)["person_id"] ?? null,
             ];
         });
     }
@@ -352,10 +478,16 @@ final readonly class SectionPublicationService
     /** Internal preparation for an explicit version-selection command, never an automatic "latest" choice.
      * Existing publications are verified from actual events before their reference cache is populated.
      */
-    public function cacheVersion(EntityId $section, EntityId $publication): PublishedSectionDefinition
-    {
+    public function cacheVersion(
+        EntityId $section,
+        EntityId $publication,
+    ): PublishedSectionDefinition {
         $actor = $this->access->requirePermission("sis:catalog:manage");
-        return $this->transactions->run(function () use ($section, $publication, $actor) {
+        return $this->transactions->run(function () use (
+            $section,
+            $publication,
+            $actor,
+        ) {
             $this->lock($section);
             $this->authorize($actor);
             [, $accepted] = $this->load($section, $publication);
@@ -368,7 +500,10 @@ final readonly class SectionPublicationService
                 $section,
                 $publication,
                 $accepted->event->playhead(),
-                new SectionDefinitionV1($accepted->event->payload()["definition"]),
+                new SectionDefinitionV1(
+                    $accepted->event->payload()["definition"],
+                ),
+                $this->recordedClassifications($accepted),
             );
             $this->versions->retain($definition);
             return $definition;
@@ -402,7 +537,9 @@ final readonly class SectionPublicationService
                 $actor,
                 $section,
             );
-            $course = $this->verifiedCourse($section) ?? throw new CorruptHistoryException();
+            $course =
+                $this->verifiedCourse($section) ??
+                throw new CorruptHistoryException();
             if (
                 $this->fingerprint(
                     $this->definition(
@@ -412,7 +549,8 @@ final readonly class SectionPublicationService
                         $d["instruction_starts_on"],
                         $d["instruction_ends_on"],
                     ),
-                ) !== $this->fingerprint($d)
+                ) !== $this->fingerprint($d) ||
+                !$this->matchingClassifications($definition, $row)
             ) {
                 throw new ConcurrentModificationException(
                     "Publish the current section details before selecting them.",
@@ -425,7 +563,12 @@ final readonly class SectionPublicationService
                 "actor_id" => $actor->value,
                 "operation_id" => EntityId::generate()->value,
                 "definition_hash" => $definition->fingerprint(),
-                "source_hash" => $this->fingerprint([$row, $term, $course, $this->faculty($row)]),
+                "source_hash" => $this->fingerprint([
+                    $row,
+                    $term,
+                    $course,
+                    $this->faculty($row),
+                ]),
                 "reason" => $reason,
                 "causation_id" => $causation?->value,
                 "expires_at" => $this->clock->now()->getTimestamp() + 1200,
@@ -433,20 +576,29 @@ final readonly class SectionPublicationService
             return $r + [
                 "selected" => $definition->describe(),
                 "faculty_label" => $this->facultyLabel($row),
-                "review_token" => $this->cipher->seal(json_encode($r, JSON_THROW_ON_ERROR)),
+                "review_token" => $this->cipher->seal(
+                    json_encode($r, JSON_THROW_ON_ERROR),
+                ),
             ];
         });
     }
 
     /** @return array{operation_id: string, first_version: int, last_version: int, event_ids: list<string>} */
-    public function select(EntityId $section, #[\SensitiveParameter] string $token): array
-    {
+    public function select(
+        EntityId $section,
+        #[\SensitiveParameter] string $token,
+    ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         try {
             if (strlen($token) > 32768) {
                 throw new InvalidArgumentException();
             }
-            $r = json_decode($this->cipher->open($token), true, 8, JSON_THROW_ON_ERROR);
+            $r = json_decode(
+                $this->cipher->open($token),
+                true,
+                8,
+                JSON_THROW_ON_ERROR,
+            );
             if (
                 !is_array($r) ||
                 ($r["kind"] ?? null) !== "section-offering-selection.v1" ||
@@ -462,10 +614,14 @@ final readonly class SectionPublicationService
             $operation = new EntityId($r["operation_id"]);
             $publication = new EntityId($r["publication_id"]);
         } catch (Throwable) {
-            throw new InvalidArgumentException("Review this offering selection again.");
+            throw new InvalidArgumentException(
+                "Review this offering selection again.",
+            );
         }
         if ($r["actor_id"] !== $actor->value) {
-            throw new AccessDeniedException("This offering review belongs to another staff member.");
+            throw new AccessDeniedException(
+                "This offering review belongs to another staff member.",
+            );
         }
         return $this->transactions->run(function () use (
             $section,
@@ -478,15 +634,24 @@ final readonly class SectionPublicationService
             $this->authorize($actor);
             $stream = SectionOfferingSelection::stream($section);
             $page = $this->history->page($stream, null, 2);
-            $payload = ["publication_id" => $publication->value, "definition_hash" => $r["definition_hash"]];
+            $payload = [
+                "publication_id" => $publication->value,
+                "definition_hash" => $r["definition_hash"],
+            ];
             if ($page->events !== []) {
-                SectionOfferingSelection::verify($section, $this->versions, $this->history);
+                SectionOfferingSelection::verify(
+                    $section,
+                    $this->versions,
+                    $this->history,
+                );
                 $accepted = $page->events[0];
                 if (
-                    $accepted->context->correlation?->value !== $operation->value ||
+                    $accepted->context->correlation?->value !==
+                        $operation->value ||
                     $accepted->context->actor?->value !== $actor->value ||
                     $accepted->context->reason !== $r["reason"] ||
-                    $this->fingerprint($accepted->event->payload()) !== $this->fingerprint($payload)
+                    $this->fingerprint($accepted->event->payload()) !==
+                        $this->fingerprint($payload)
                 ) {
                     throw new ConcurrentModificationException(
                         "This section already has a selected offering version.",
@@ -506,7 +671,12 @@ final readonly class SectionPublicationService
                 $course === null ||
                 !hash_equals(
                     $r["source_hash"],
-                    $this->fingerprint([$row, $term, $course, $this->faculty($row)]),
+                    $this->fingerprint([
+                        $row,
+                        $term,
+                        $course,
+                        $this->faculty($row),
+                    ]),
                 )
             ) {
                 throw new ConcurrentModificationException(
@@ -514,7 +684,9 @@ final readonly class SectionPublicationService
                 );
             }
             $definition = $this->publicationFromHistory($section, $publication);
-            if (!hash_equals($r["definition_hash"], $definition->fingerprint())) {
+            if (
+                !hash_equals($r["definition_hash"], $definition->fingerprint())
+            ) {
                 throw new CorruptHistoryException();
             }
             $event = \Domain\Registration\Event\SectionOfferingVersionWasSelected::occur(
@@ -530,21 +702,50 @@ final readonly class SectionPublicationService
                     $actor,
                     $this->clock->now(),
                     $operation,
-                    causation: isset($r["causation_id"]) ? new EntityId($r["causation_id"]) : null,
+                    causation: isset($r["causation_id"])
+                        ? new EntityId($r["causation_id"])
+                        : null,
                     reason: $r["reason"],
                 ),
                 [$event],
             );
             $this->versions->select($definition);
-            $this->audit->record($actor, "section.offering_version_selected", $section);
+            $this->audit->record(
+                $actor,
+                "section.offering_version_selected",
+                $section,
+            );
             return $receipt;
         });
+    }
+
+    private function recordedClassifications(
+        StoredEvent $stored,
+    ): ?SectionClassifications {
+        $data = $stored->event->metaParam("offering_classifications", null);
+        return $data === null ? null : SectionClassifications::fromArray($data);
+    }
+
+    /** @param array<string,mixed> $row */
+    private function matchingClassifications(
+        PublishedSectionDefinition $definition,
+        array $row,
+    ): bool {
+        $classes = SectionClassifications::fromArray($row["classifications"]);
+        return $definition->matchesClassifications(
+            $classes->instructionalMethod?->id,
+            $classes->campus?->id,
+        );
     }
 
     private function canSelect(EntityId $section): void
     {
         if (
-            SectionOfferingSelection::verify($section, $this->versions, $this->history) !== null ||
+            SectionOfferingSelection::verify(
+                $section,
+                $this->versions,
+                $this->history,
+            ) !== null ||
             $this->bindings->hasStudentRecords($section)
         ) {
             throw new DomainException(
@@ -568,21 +769,30 @@ final readonly class SectionPublicationService
             $publication,
             $accepted->event->playhead(),
             new SectionDefinitionV1($accepted->event->payload()["definition"]),
+            $this->recordedClassifications($accepted),
         );
     }
 
     /** Internal command context for an explicitly chosen publication; no projection writes or selection changes.
      * @return array{selected: PublishedSectionDefinition, source_hash: string, faculty_label: string}
      */
-    public function offeringContext(EntityId $section, EntityId $publication): array
-    {
+    public function offeringContext(
+        EntityId $section,
+        EntityId $publication,
+    ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
-        return $this->transactions->run(function () use ($section, $publication, $actor): array {
+        return $this->transactions->run(function () use (
+            $section,
+            $publication,
+            $actor,
+        ): array {
             [$row, $term] = $this->lock($section);
             $this->authorize($actor);
             $definition = $this->publicationFromHistory($section, $publication);
             $d = $definition->definition->data;
-            $course = $this->verifiedCourse($section) ?? throw new CorruptHistoryException();
+            $course =
+                $this->verifiedCourse($section) ??
+                throw new CorruptHistoryException();
             if (
                 $this->fingerprint(
                     $this->definition(
@@ -592,7 +802,8 @@ final readonly class SectionPublicationService
                         $d["instruction_starts_on"],
                         $d["instruction_ends_on"],
                     ),
-                ) !== $this->fingerprint($d)
+                ) !== $this->fingerprint($d) ||
+                !$this->matchingClassifications($definition, $row)
             ) {
                 throw new \Domain\Shared\Exception\ValidationException([
                     [
@@ -605,7 +816,12 @@ final readonly class SectionPublicationService
             }
             return [
                 "selected" => $definition,
-                "source_hash" => $this->fingerprint([$row, $term, $course, $this->faculty($row)]),
+                "source_hash" => $this->fingerprint([
+                    $row,
+                    $term,
+                    $course,
+                    $this->faculty($row),
+                ]),
                 "faculty_label" => $this->facultyLabel($row),
             ];
         });
@@ -628,6 +844,10 @@ final readonly class SectionPublicationService
                 "version" => $stored->event->playhead(),
                 "version_id" => $stored->event->payload()["version_id"],
                 "definition" => $stored->event->payload()["definition"],
+                "classifications" => $stored->event->metaParam(
+                    "offering_classifications",
+                    null,
+                ),
                 "effective_at" => $stored->context->describe()["effective_at"],
                 "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
             ];
@@ -649,8 +869,16 @@ final readonly class SectionPublicationService
             $page = $this->history->page($this->stream($section), $cursor, 20);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
-                if ($operation !== null && $stored->event->payload()["version_id"] === $operation->value) {
-                    if ($accepted !== null || $stored->context->correlation?->value !== $operation->value) {
+                if (
+                    $operation !== null &&
+                    $stored->event->payload()["version_id"] ===
+                        $operation->value
+                ) {
+                    if (
+                        $accepted !== null ||
+                        $stored->context->correlation?->value !==
+                            $operation->value
+                    ) {
                         throw new CorruptHistoryException();
                     }
                     $accepted = $stored;
@@ -661,19 +889,35 @@ final readonly class SectionPublicationService
         return [$root, $accepted];
     }
 
-    /** @return array{array<string, scalar|null>, array<string, scalar|null>} */
+    /** @return array{array<string, mixed>, array<string, mixed>} */
     private function lock(EntityId $section): array
     {
         $this->catalog->lock("sections", $section);
         $row = $this->catalog->get("sections", $section);
-        $this->catalog->lock("courses", new EntityId((string) $row["course_id"]));
+        $this->catalog->lock(
+            "courses",
+            new EntityId((string) $row["course_id"]),
+        );
         $this->catalog->lock("terms", new EntityId((string) $row["term_id"]));
-        return [$row, $this->catalog->get("terms", new EntityId((string) $row["term_id"]))];
+        $this->classifications->lockReferences($section);
+        $row["classifications"] = $this->classifications
+            ->current($section)
+            ->describe();
+        return [
+            $row,
+            $this->catalog->get(
+                "terms",
+                new EntityId((string) $row["term_id"]),
+            ),
+        ];
     }
 
     private function authorize(EntityId $actor): void
     {
-        if ($this->access->requirePermission("sis:catalog:manage")->value !== $actor->value) {
+        if (
+            $this->access->requirePermission("sis:catalog:manage")->value !==
+            $actor->value
+        ) {
             throw new AccessDeniedException("Access denied.");
         }
     }
@@ -690,7 +934,12 @@ final readonly class SectionPublicationService
             if (mb_strlen($reason) > 1000) {
                 throw new InvalidArgumentException();
             }
-            new EventContext($actor, $this->clock->now(), $section, reason: $reason);
+            new EventContext(
+                $actor,
+                $this->clock->now(),
+                $section,
+                reason: $reason,
+            );
         } catch (InvalidArgumentException) {
             throw new ValidationException([
                 [
@@ -704,13 +953,19 @@ final readonly class SectionPublicationService
 
     private function validateDates(string $start, string $end): void
     {
-        $dates = ["instruction_starts_on" => $start, "instruction_ends_on" => $end];
+        $dates = [
+            "instruction_starts_on" => $start,
+            "instruction_ends_on" => $end,
+        ];
         foreach ($dates as $field => $value) {
             try {
                 SectionDefinitionV1::assertDate($value);
             } catch (InvalidArgumentException) {
                 throw new ValidationException([
-                    ["field" => $field, "message" => "Choose a valid calendar date."],
+                    [
+                        "field" => $field,
+                        "message" => "Choose a valid calendar date.",
+                    ],
                 ]);
             }
         }
@@ -718,7 +973,8 @@ final readonly class SectionPublicationService
             throw new ValidationException([
                 [
                     "field" => "instruction_ends_on",
-                    "message" => "Instruction must end on or after its start date.",
+                    "message" =>
+                        "Instruction must end on or after its start date.",
                 ],
             ]);
         }
@@ -737,7 +993,9 @@ final readonly class SectionPublicationService
     {
         return $row["faculty_user_id"] === null
         ? null
-        : $this->relationships->faculty(new EntityId((string) $row["faculty_user_id"]));
+        : $this->relationships->faculty(
+            new EntityId((string) $row["faculty_user_id"]),
+        );
     }
 
     /** @return array<string, mixed>|null */
@@ -746,7 +1004,9 @@ final readonly class SectionPublicationService
         $bound = $this->bindings->bound($section);
         $page = $this->history->page(
             new StreamReference(
-                new \Domain\Registration\ValueObject\SectionCourseBindingId($section->value),
+                new \Domain\Registration\ValueObject\SectionCourseBindingId(
+                    $section->value,
+                ),
                 "section_course_binding",
             ),
             null,
@@ -762,7 +1022,10 @@ final readonly class SectionPublicationService
             $page->throughVersion !== 1 ||
             count($page->events) !== 1 ||
             $page->nextCursor !== null ||
-            !($page->events[0]->event instanceof \Domain\Registration\Event\SectionCourseVersionWasBound) ||
+            !(
+                $page->events[0]->event instanceof
+                \Domain\Registration\Event\SectionCourseVersionWasBound
+            ) ||
             $page->events[0]->event->payload() !== [
                 "course_id" => $bound->courseId->value,
                 "course_version_id" => $bound->versionId->value,
@@ -770,7 +1033,9 @@ final readonly class SectionPublicationService
         ) {
             throw new CorruptHistoryException();
         }
-        $published = $this->courses->publishedDefinition($bound->courseId, $bound->versionId)->describe();
+        $published = $this->courses
+            ->publishedDefinition($bound->courseId, $bound->versionId)
+            ->describe();
         if ($published !== $bound->describe()) {
             throw new CorruptHistoryException();
         }
@@ -782,8 +1047,13 @@ final readonly class SectionPublicationService
      * @param array<string, mixed> $course
      * @return array<string, mixed>
      */
-    private function definition(array $row, array $term, array $course, string $start, string $end): array
-    {
+    private function definition(
+        array $row,
+        array $term,
+        array $course,
+        string $start,
+        string $end,
+    ): array {
         return new SectionDefinitionV1([
             "course_id" => $row["course_id"],
             "course_version_id" => $course["version_id"],
@@ -827,11 +1097,17 @@ final readonly class SectionPublicationService
             ksort($value);
             return array_map($normalize, $value);
         };
-        return hash("sha256", json_encode($normalize($values), JSON_THROW_ON_ERROR));
+        return hash(
+            "sha256",
+            json_encode($normalize($values), JSON_THROW_ON_ERROR),
+        );
     }
 
     private function stream(EntityId $section): StreamReference
     {
-        return new StreamReference(new SectionPublicationId($section->value), "section_publication");
+        return new StreamReference(
+            new SectionPublicationId($section->value),
+            "section_publication",
+        );
     }
 }

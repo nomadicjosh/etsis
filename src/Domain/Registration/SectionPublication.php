@@ -16,6 +16,7 @@ final class SectionPublication extends EventSourcedAggregate
     private ?string $versionId = null;
     /** @var array<string, mixed>|null */
     private ?array $definition = null;
+    private ?\Domain\Registration\ValueObject\SectionClassifications $classifications = null;
 
     public function acceptHistorical(DomainEvent $event): void
     {
@@ -48,6 +49,13 @@ final class SectionPublication extends EventSourcedAggregate
                 }
             }
         }
+        $classes = $event->metaParam("offering_classifications", null);
+        $this->classifications =
+        $classes === null
+        ? null
+        : \Domain\Registration\ValueObject\SectionClassifications::fromArray(
+            $classes,
+        );
         $this->versionId = $p["version_id"];
         $this->definition = $p["definition"];
     }
@@ -58,9 +66,14 @@ final class SectionPublication extends EventSourcedAggregate
         return $this->versionId === null || $this->definition === null
         ? null
         : [
-                "version_id" => $this->versionId,
-                "version" => $this->playhead(),
-                "definition" => $this->definition,
-            ];
+                    "version_id" => $this->versionId,
+                    "version" => $this->playhead(),
+                    "definition" => $this->definition,
+                ] +
+        ($this->classifications === null
+        ? []
+        : [
+                            "classifications" => $this->classifications->describe(),
+                        ]);
     }
 }

@@ -45,3 +45,5 @@ Before extending the current course shape, an application-database check confirm
 This stage covers course classification and its retained downstream references. [Program publication](program-publication.md) now reuses departments/academic levels and adds degree/award definitions. Historical academic-level decisions for students remain separate work. Course classification alone does not decide registration eligibility, degree completion, GPA treatment, billing or access.
 
 Fictional integration checks cover retained labels after renames/retirement, reports, stale reviews, category/permission boundaries, bounded pages and rollback. Real-provider route checks cover empty searches, typed inputs, CSRF and privacy. Browser checks cover the combined chooser, search clearing, retirement, draft preservation, keyboard saving, literal rendering and accessibility.
+
+Section-specific [instructional methods and campuses/sites](section-publication.md#instructional-methods-and-campuses) use this same reference library and assignment editor. They belong to section setup and are not inferred from a course code or added to the course classification fields.

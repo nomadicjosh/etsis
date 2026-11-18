@@ -268,7 +268,7 @@
     const degreeAuditStudio = window.createWorkspaceDegreeAudit({ node, request, task, can, closeDrawer: () => drawer.hide() });
     const courseRuleStudio = window.createWorkspaceCourseRules({ node, request, task, can, openDrawer, closeDrawer: () => drawer.hide(), table });
     const catalogStudio = window.createWorkspaceCatalog({ templates: () => offeringTemplates, deliveryModes, node, request, task, buildForm, formData, openDrawer, table, money, openRecord, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
-    const classificationStudio = window.createWorkspaceClassifications({ node, request, task, buildForm, formData, openDrawer, publications: course => catalogStudio.publications(course) });
+    const classificationStudio = window.createWorkspaceClassifications({ node, request, task, buildForm, formData, openDrawer, publications: course => catalogStudio.publications(course), sectionPublications: section => catalogStudio.sectionPublications(section) });
     const programStudio = window.createWorkspacePrograms({ node, request, task, buildForm, formData, openDrawer, degreeAudit: () => degreeAuditStudio, references: () => classificationStudio, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const offeringTemplates = window.createWorkspaceOfferingTemplates({ node, request, task, table, badge, money, buildForm, formData, openDrawer, notify, catalog: () => catalogStudio });
     const batchRegistration = window.createWorkspaceRegistration({ node, request, task, can, table, money, recordSummary, buildForm, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
@@ -523,6 +523,8 @@
                     { label: 'Subjects', icon: 'journal-bookmark', run: () => catalogStudio.subjects() },
                     { label: 'Departments & levels', icon: 'diagram-3', run: () => classificationStudio.library() },
                     { label: 'Degrees & awards', icon: 'award', run: () => classificationStudio.library('award') },
+                    { label: 'Instructional methods', icon: 'easel', run: () => classificationStudio.library('instructional_method') },
+                    { label: 'Campuses & sites', icon: 'buildings', run: () => classificationStudio.library('campus') },
                 ], { icon: 'collection' }),
                 actionMenu('Academic calendar', [
                     { label: 'Academic years', icon: 'calendar-range', run: () => academicCalendarStudio.years() },

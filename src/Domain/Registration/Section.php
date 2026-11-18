@@ -23,6 +23,8 @@ final readonly class Section
         public Money $fee,
         public DeliveryMode $deliveryMode = DeliveryMode::Unspecified,
         public ?EntityId $publicationVersionId = null,
+        public ?EntityId $instructionalMethodId = null,
+        public ?EntityId $campusId = null,
     ) {
         if (trim($code) === '' || strlen($code) > 80 || $capacity < 1 || $capacity > 100000 || $fee->minor < 0) {
             throw new InvalidArgumentException('A section requires a code, positive capacity and nonnegative fees.');

@@ -896,6 +896,15 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'offering_classifications') {
+                    if (
+                        $class !== \Domain\Registration\Event\SectionDefinitionWasPublished::class || !is_array($value)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    \Domain\Registration\ValueObject\SectionClassifications::fromArray($value);
+                    continue;
+                }
                 if ($name === 'drop_policy') {
                     if ($class !== \Domain\AcademicRecord\Event\InstitutionalCreditWasDropped::class) {
                         throw new CorruptHistoryException();

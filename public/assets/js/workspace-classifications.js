@@ -18,6 +18,16 @@ window.createWorkspaceClassifications = function (ui) {
             plural: "Course levels",
             detail: "The course's place in the curriculum, such as introductory or advanced.",
         },
+        instructional_method: {
+            singular: "Instructional method",
+            plural: "Instructional methods",
+            detail: "How a section is taught, such as lecture, laboratory or seminar. Delivery mode separately identifies online, hybrid or in-person teaching.",
+        },
+        campus: {
+            singular: "Campus/site",
+            plural: "Campuses & sites",
+            detail: "An optional academic campus or site. Selecting a campus does not reserve a room; online sections can leave this blank.",
+        },
         award: {
             singular: "Award",
             plural: "Degrees & awards",
@@ -45,16 +55,23 @@ window.createWorkspaceClassifications = function (ui) {
         backLabel = "Back to course classifications",
     ) {
         const category = kinds[kind];
-        const data = await request(`/sis/catalog/classifications/${kind}/page/`, "POST", {
-            search,
-            ...(after ? { after } : {}),
-        });
+        const sectionKind = ["instructional_method", "campus"].includes(kind);
+        const data = await request(
+            `/sis/catalog/classifications/${kind}/page/`,
+            "POST",
+            {
+                search,
+                ...(after ? { after } : {}),
+            },
+        );
         const body = openDrawer(
             choose
                 ? `Choose ${category.singular.toLowerCase()}`
-                : kind === "award"
-                  ? "Degrees & awards"
-                  : "Departments & levels",
+                : sectionKind
+                  ? category.plural
+                  : kind === "award"
+                    ? "Degrees & awards"
+                    : "Departments & levels",
             "ACADEMIC CATALOG",
         );
         if (!choose) {
@@ -63,24 +80,33 @@ window.createWorkspaceClassifications = function (ui) {
                 role: "group",
                 "aria-label": "Classification category",
             });
-            Object.entries(kinds).forEach(([key, value]) => {
-                const tab = button(
-                    value.plural,
-                    () => library(key),
-                    key === kind ? "btn-primary" : "btn-outline-primary",
-                );
-                tab.setAttribute("aria-pressed", key === kind ? "true" : "false");
-                navigation.append(tab);
-            });
+            Object.entries(kinds)
+                .filter(
+                    ([key]) =>
+                        ["instructional_method", "campus"].includes(key) ===
+                        sectionKind,
+                )
+                .forEach(([key, value]) => {
+                    const tab = button(
+                        value.plural,
+                        () => library(key),
+                        key === kind ? "btn-primary" : "btn-outline-primary",
+                    );
+                    tab.setAttribute(
+                        "aria-pressed",
+                        key === kind ? "true" : "false",
+                    );
+                    navigation.append(tab);
+                });
             body.append(navigation);
         }
         body.append(
-            node("h3", { class: "h5" }, category.plural),
+            node("h3", { class: "h5 text-break" }, category.plural),
             node("p", {}, category.detail),
             node(
                 "p",
                 { class: "text-secondary" },
-                "Retire a definition to stop new assignments. Earlier published course and student records keep their original labels.",
+                "Retire a definition to stop new assignments. Earlier published academic definitions and student records keep their original labels.",
             ),
         );
         const form = node("form", { class: "mb-3" });
@@ -92,15 +118,26 @@ window.createWorkspaceClassifications = function (ui) {
             value: search,
         });
         form.append(
-            node("label", { for: input.id, class: "form-label" }, `Find ${category.plural.toLowerCase()}`),
+            node(
+                "label",
+                { for: input.id, class: "form-label" },
+                `Find ${category.plural.toLowerCase()}`,
+            ),
             input,
-            node("button", { type: "submit", class: "btn btn-primary mt-2" }, "Search classifications"),
+            node(
+                "button",
+                { type: "submit", class: "btn btn-primary mt-2" },
+                "Search classifications",
+            ),
         );
         form.addEventListener("submit", (event) => {
             event.preventDefault();
-            task(() => library(kind, input.value, null, [], choose, back, backLabel));
+            task(() =>
+                library(kind, input.value, null, [], choose, back, backLabel),
+            );
         });
-        const refresh = () => library(kind, search, after, stack, choose, back, backLabel);
+        const refresh = () =>
+            library(kind, search, after, stack, choose, back, backLabel);
         body.append(
             form,
             button(`Add ${category.singular.toLowerCase()}`, () =>
@@ -109,30 +146,58 @@ window.createWorkspaceClassifications = function (ui) {
         );
         if (!data.items.length)
             body.append(
-                node("p", { role: "status" }, "No matching classifications. Add one or try another search."),
+                node(
+                    "p",
+                    { role: "status" },
+                    "No matching classifications. Add one or try another search.",
+                ),
             );
         data.items.forEach((row) => {
             const card = node(
                 "div",
                 { class: "surface p-3 mb-2" },
-                node("h4", { class: "h5" }, `${row.code} — ${row.title}`),
+                node("h4", { class: "h5 text-break" }, `${row.code} — ${row.title}`),
                 node("p", {}, row.active ? "Active" : "Retired"),
-                button(`Edit ${row.code}`, () => editor(kind, row, refresh, refresh)),
+                button(`Edit ${row.code}`, () =>
+                    editor(kind, row, refresh, refresh),
+                ),
             );
             if (choose && row.active)
-                card.append(button(`Choose ${row.code}`, () => choose(row), "btn-primary"));
+                card.append(
+                    button(
+                        `Choose ${row.code}`,
+                        () => choose(row),
+                        "btn-primary",
+                    ),
+                );
             body.append(card);
         });
         if (stack.length)
             body.append(
                 button("Previous classifications", () =>
-                    library(kind, search, stack.at(-1), stack.slice(0, -1), choose, back, backLabel),
+                    library(
+                        kind,
+                        search,
+                        stack.at(-1),
+                        stack.slice(0, -1),
+                        choose,
+                        back,
+                        backLabel,
+                    ),
                 ),
             );
         if (data.next_after)
             body.append(
                 button("More classifications", () =>
-                    library(kind, search, data.next_after, [...stack, after], choose, back, backLabel),
+                    library(
+                        kind,
+                        search,
+                        data.next_after,
+                        [...stack, after],
+                        choose,
+                        back,
+                        backLabel,
+                    ),
                 ),
             );
         if (back) body.append(button(backLabel, back));
@@ -151,35 +216,61 @@ window.createWorkspaceClassifications = function (ui) {
         ];
         const form = await buildForm(fields, row || { active: true });
         form.elements.namedItem("code").maxLength = 40;
-        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save classification");
+        const save = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Save classification",
+        );
         form.append(save);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
                 if (!form.reportValidity()) return;
-                const result = await request(`/sis/catalog/classifications/${kind}/save/`, "POST", {
-                    ...formData(form, fields),
-                    id: row?.id ?? null,
-                    revision: row?.revision ?? null,
-                });
+                const result = await request(
+                    `/sis/catalog/classifications/${kind}/save/`,
+                    "POST",
+                    {
+                        ...formData(form, fields),
+                        id: row?.id ?? null,
+                        revision: row?.revision ?? null,
+                    },
+                );
                 await saved(result);
             }, save);
         });
         body.append(form, button("Back to classifications", back));
     }
 
-    async function course(id, saved = false) {
-        const current = await request(`/sis/courses/${id}/classifications/`);
+    async function assignment(target, id, saved = false) {
+        const isSection = target === "section";
+        const categoryKeys = isSection
+            ? ["instructional_method", "campus"]
+            : ["department", "academic_level", "course_level"];
+        const path = `/sis/${isSection ? "sections" : "courses"}/${id}/classifications/`;
+        const current = await request(path);
         const choices = { ...current.classifications };
         function render() {
-            const changed = JSON.stringify(choices) !== JSON.stringify(current.classifications);
-            const body = openDrawer("Course departments & levels", "DRAFT CLASSIFICATIONS");
+            const changed =
+                JSON.stringify(choices) !==
+                JSON.stringify(current.classifications);
+            const body = openDrawer(
+                isSection ? "Method & campus" : "Course departments & levels",
+                isSection ? "SECTION SETUP" : "DRAFT CLASSIFICATIONS",
+            );
             body.append(
-                node("p", { class: "h5" }, `${current.course.code} — ${current.course.title}`),
+                node(
+                    "h3",
+                    { class: "h5 text-break" },
+                    isSection
+                        ? current.section.code
+                        : `${current.course.code} — ${current.course.title}`,
+                ),
                 node(
                     "p",
                     {},
-                    "Choose the classifications together, save the draft, then publish the course to retain them. Earlier publications and student records stay unchanged.",
+                    isSection
+                        ? "Save these optional draft choices, then publish the section to retain them. For a selected offering, new registrations pause until changed assignments are published and chosen for future registrations. Earlier student records stay unchanged."
+                        : "Choose the classifications together, save the draft, then publish the course to retain them. Earlier publications and student records stay unchanged.",
                 ),
             );
             if (saved && !changed)
@@ -187,19 +278,30 @@ window.createWorkspaceClassifications = function (ui) {
                     node(
                         "p",
                         { role: "status", class: "alert alert-success" },
-                        "Draft classifications saved.",
+                        isSection
+                            ? "Section setup saved."
+                            : "Draft classifications saved.",
                     ),
                 );
             const cards = node("div", { class: "row g-3 mb-3" });
-            ["department", "academic_level", "course_level"].forEach((kind) => {
-                const category = kinds[kind];
-                const value = choices[kind];
+            for (const kind of categoryKeys) {
+                const category = kinds[kind],
+                    value = choices[kind];
                 const card = node(
                     "section",
-                    { class: "surface p-3 h-100", "aria-label": category.singular },
-                    node("h3", { class: "h5" }, category.singular),
+                    {
+                        class: "surface p-3 h-100",
+                        "aria-label": category.singular,
+                    },
+                    node("h3", { class: "h5 text-break" }, category.singular),
                     node("p", { class: "text-secondary" }, category.detail),
-                    node("p", {}, value ? `${value.code} — ${value.title}` : "Not specified"),
+                    node(
+                        "p",
+                        { class: "text-break" },
+                        value
+                            ? `${value.code} — ${value.title}`
+                            : "Not specified",
+                    ),
                     button(`Choose ${category.singular.toLowerCase()}`, () =>
                         library(
                             kind,
@@ -207,45 +309,89 @@ window.createWorkspaceClassifications = function (ui) {
                             null,
                             [],
                             (row) => {
-                                choices[kind] = { id: row.id, code: row.code, title: row.title };
+                                choices[kind] = {
+                                    id: row.id,
+                                    code: row.code,
+                                    title: row.title,
+                                };
                                 render();
                             },
                             render,
+                            isSection
+                                ? "Back to section setup"
+                                : "Back to course classifications",
                         ),
                     ),
                 );
                 if (value)
                     card.append(
-                        button(`Clear ${category.singular.toLowerCase()}`, () => {
-                            choices[kind] = null;
-                            render();
-                        }),
+                        button(
+                            `Clear ${category.singular.toLowerCase()}`,
+                            () => {
+                                choices[kind] = null;
+                                render();
+                            },
+                        ),
                     );
-                cards.append(node("div", { class: "col-12 col-xl-4" }, card));
-            });
-            if (changed)
-                body.append(
-                    node("p", { role: "status" }, "Save your draft choices before reviewing publication."),
+                cards.append(
+                    node(
+                        "div",
+                        {
+                            class: isSection
+                                ? "col-12 col-xl-6"
+                                : "col-12 col-xl-4",
+                        },
+                        card,
+                    ),
                 );
+            }
             const save = button(
-                "Save draft classifications",
+                isSection ? "Save section setup" : "Save draft classifications",
                 async () => {
-                    await request(`/sis/courses/${id}/classifications/`, "POST", {
-                        department_id: choices.department?.id ?? null,
-                        academic_level_id: choices.academic_level?.id ?? null,
-                        course_level_id: choices.course_level?.id ?? null,
+                    const values = Object.fromEntries(
+                        categoryKeys.map((kind) => [
+                            `${kind}_id`,
+                            choices[kind]?.id ?? null,
+                        ]),
+                    );
+                    await request(path, "POST", {
+                        ...values,
                         revision: current.revision,
                     });
-                    await course(id, true);
+                    await assignment(target, id, true);
                 },
                 "btn-primary",
             );
             save.disabled = !changed;
-            const publication = button("Review course publication", () => ui.publications(id));
+            const publication = button(
+                isSection ? "Review publication" : "Review course publication",
+                () =>
+                    isSection
+                        ? ui.sectionPublications(id)
+                        : ui.publications(id),
+            );
             publication.disabled = changed;
-            body.append(cards, save, publication);
+            if (changed)
+                body.append(
+                    node(
+                        "p",
+                        { role: "status" },
+                        "Save your draft choices before reviewing publication.",
+                    ),
+                );
+            body.append(
+                cards,
+                node(
+                    "div",
+                    { class: "d-flex flex-wrap gap-2" },
+                    save,
+                    publication,
+                ),
+            );
         }
         render();
     }
-    return { library, course };
+    const course = (id, saved = false) => assignment("course", id, saved);
+    const section = (id, saved = false) => assignment("section", id, saved);
+    return { library, course, section };
 };

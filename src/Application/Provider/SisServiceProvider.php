@@ -129,6 +129,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlReportRequestRepository::class,
             \Domain\Registration\Repository\CourseDropRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlCourseDropRepository::class,
+            \Domain\Registration\Repository\SectionClassificationRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlSectionClassificationRepository::class,
             \Domain\Registration\Repository\DropPolicyRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlDropPolicyRepository::class,
             \Domain\Transfer\Repository\TransferAwardRepository::class =>

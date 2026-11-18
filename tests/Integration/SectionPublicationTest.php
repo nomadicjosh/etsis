@@ -102,6 +102,10 @@ final class SectionPublicationTest extends TestCase
             $f->dropCipher,
             $f->clock,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlSectionClassificationRepository(
+                $f->sql,
+                new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
+            ),
         );
     }
 
@@ -574,6 +578,10 @@ final class SectionPublicationTest extends TestCase
             $this->f->dropCipher,
             $this->f->clock,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql),
+            new \Infrastructure\Persistence\Repository\SqlSectionClassificationRepository(
+                $this->f->sql,
+                new \Infrastructure\Persistence\Repository\SqlClassificationRepository($this->f->sql),
+            ),
         );
         $this->expectException(AccessDeniedException::class);
         try {
@@ -631,6 +639,7 @@ final class SectionPublicationTest extends TestCase
         $proof = $this->review();
         $receipt = $this->service->publish($this->section->id, $proof['review_token']);
         $id = new EntityId($receipt['operation_id']);
+        $this->f->sql->execute('DELETE FROM sis_section_version_classes WHERE id = ?', [$id->value]);
         $this->f->sql->execute('DELETE FROM sis_section_versions WHERE id = ?', [$id->value]);
         $events = $this->f->sql->rows('sis_history_events');
         $audit = $this->f->sql->rows('sis_audit');
@@ -730,7 +739,11 @@ final class SectionPublicationTest extends TestCase
             $f->audit,
             $f->dropCipher,
             $f->clock,
-            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql)
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlSectionClassificationRepository(
+                $f->sql,
+                new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
+            ),
         );
         $before = $f->sql->rows('sis_history_events');
         $setup = $service->setup($this->section->id);
@@ -745,6 +758,7 @@ final class SectionPublicationTest extends TestCase
         $this->service->publish($this->section->id, $first['review_token']);
         $second = $this->review('2026-09-01');
         $this->service->publish($this->section->id, $second['review_token']);
+        $this->f->sql->execute('DELETE FROM sis_section_version_classes WHERE id = ?', [$second['operation_id']]);
         $this->f->sql->execute('DELETE FROM sis_section_versions WHERE id = ?', [$second['operation_id']]);
         $before = $this->f->sql->rows('sis_history_events');
         $setup = $this->service->setup($this->section->id);
@@ -1212,6 +1226,7 @@ final class SectionPublicationTest extends TestCase
         [$first, $initial] = $this->selectedOffering();
         $this->service->select($this->section->id, $initial["review_token"]);
         $next = $this->futurePublication();
+        $this->f->sql->execute('DELETE FROM sis_section_version_classes WHERE id = ?', [$next->value]);
         $this->f->sql->execute("DELETE FROM sis_section_versions WHERE id = ?", [$next->value]);
         $service = $this->amendments();
         $review = $service->review($this->section->id, $next, "Audited amendment");

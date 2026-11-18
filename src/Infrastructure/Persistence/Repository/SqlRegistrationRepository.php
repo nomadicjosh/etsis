@@ -105,6 +105,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             1,
         )[0] ?? throw new \Domain\Shared\Exception\RecordNotFoundException("Section not found.");
 
+        $classes = $this->sql->current("sis_section_classifications", $id->value) ?? [];
         return new Section(
             $id,
             new EntityId($r["course_id"]),
@@ -117,6 +118,8 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             new Money((int) $r["fee_minor"], $r["currency"]),
             \Domain\Registration\Enum\DeliveryMode::parse($r["delivery_mode"] ?? "unspecified"),
             new SqlSectionVersionRepository($this->sql)->selected($id)?->publication,
+            isset($classes["instructional_method_id"]) ? new EntityId($classes["instructional_method_id"]) : null,
+            isset($classes["campus_id"]) ? new EntityId($classes["campus_id"]) : null,
         );
     }
 

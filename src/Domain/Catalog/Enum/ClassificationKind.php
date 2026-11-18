@@ -10,6 +10,8 @@ enum ClassificationKind: string
     case AcademicLevel = "academic_level";
     case CourseLevel = "course_level";
     case Award = "award";
+    case InstructionalMethod = "instructional_method";
+    case Campus = "campus";
 
     /** @return list<self> */
     public static function courseKinds(): array

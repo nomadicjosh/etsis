@@ -40,6 +40,11 @@ final class AcademicReportSchema
                 "sis_course_versions" => "Retained course definitions",
                 "sis_course_version_classes" => "Retained course classifications",
                 "sis_section_delivery" => "Delivery formats",
+                "sis_section_classifications" => "Current section setup",
+                "sis_section_version_classes" => "Retained offering details",
+                "sis_catalog_classifications" => "Academic reference definitions",
+                "sis_academic_credit_streams" => "Institutional offering links",
+                "sis_enrollment_section_versions" => "Accepted offering references",
                 "sis_enrollments" => "Enrollments",
                 default => "Related records",
             },
@@ -266,9 +271,46 @@ final class AcademicReportSchema
                     "course_version_id",
                     "id",
                 ),
+                "institutional_offering" => $join("sis_academic_credit_streams", "credit", "id", "id"),
+                "offering_reference" => $join(
+                    "sis_enrollment_section_versions",
+                    "institutional_offering",
+                    "enrollment_id",
+                    "id",
+                ),
+                "retained_offering" => $join(
+                    "sis_section_version_classes",
+                    "offering_reference",
+                    "publication_id",
+                    "id",
+                ),
             ],
             "fields" => $personFields +
                 $classificationFields + [
+                    "retained_instructional_method_code" => $field(
+                        "Retained instructional method code",
+                        "string",
+                        "retained_offering",
+                        "instructional_method_code",
+                    ),
+                    "retained_instructional_method_title" => $field(
+                        "Retained instructional method name",
+                        "string",
+                        "retained_offering",
+                        "instructional_method_title",
+                    ),
+                    "retained_campus_code" => $field(
+                        "Retained campus/site code",
+                        "string",
+                        "retained_offering",
+                        "campus_code",
+                    ),
+                    "retained_campus_title" => $field(
+                        "Retained campus/site name",
+                        "string",
+                        "retained_offering",
+                        "campus_title",
+                    ),
                     "retained_subject_code" => $field(
                         "Retained subject code",
                         "string",
@@ -337,6 +379,14 @@ final class AcademicReportSchema
                     "course_version_id",
                     "id",
                 ),
+                "section_setup" => $join("sis_section_classifications", "section", "id", "id"),
+                "current_method" => $join(
+                    "sis_catalog_classifications",
+                    "section_setup",
+                    "instructional_method_id",
+                    "id",
+                ),
+                "current_campus" => $join("sis_catalog_classifications", "section_setup", "campus_id", "id"),
                 "term" => $join("sis_terms", "section", "term_id", "id"),
                 "delivery" => $join("sis_section_delivery", "section", "id", "section_id"),
                 "enrollment" => $join("sis_enrollments", "section", "id", "section_id", $studentRead) + [
@@ -346,6 +396,21 @@ final class AcademicReportSchema
                 ...$personJoins,
             ],
             "fields" => $classificationFields + [
+                "current_instructional_method_code" => $field(
+                    "Current instructional method code",
+                    "string",
+                    "current_method",
+                    "code",
+                ),
+                "current_instructional_method_title" => $field(
+                    "Current instructional method name",
+                    "string",
+                    "current_method",
+                    "title",
+                ),
+                "current_campus_code" => $field("Current campus/site code", "string", "current_campus", "code"),
+                "current_campus_title" => $field("Current campus/site name", "string", "current_campus", "title"),
+
                 "retained_subject_code" => $field(
                     "Retained subject code",
                     "string",

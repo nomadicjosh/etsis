@@ -87,6 +87,10 @@ final class CatalogWorkflowFixture
             $this->fixture->cipher,
             $f->clock,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlSectionClassificationRepository(
+                $f->sql,
+                new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
+            ),
         );
     }
 

@@ -22,12 +22,18 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
 
     public function selected(EntityId $section): ?PublishedSectionDefinition
     {
-        $row = $this->sql->rows("sis_section_offering_versions", ["id" => $section->value], 1)[0] ?? null;
+        $row =
+        $this->sql->rows(
+            "sis_section_offering_versions",
+            ["id" => $section->value],
+            1,
+        )[0] ?? null;
         if ($row === null) {
             return null;
         }
         $definition =
-        $this->find(new EntityId($row["publication_id"])) ?? throw new CorruptHistoryException();
+        $this->find(new EntityId($row["publication_id"])) ??
+        throw new CorruptHistoryException();
         if ($definition->section->value !== $section->value) {
             throw new CorruptHistoryException();
         }
@@ -36,7 +42,12 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
 
     public function selectionPosition(EntityId $section): int
     {
-        $row = $this->sql->rows("sis_section_offering_versions", ["id" => $section->value], 1)[0] ?? null;
+        $row =
+        $this->sql->rows(
+            "sis_section_offering_versions",
+            ["id" => $section->value],
+            1,
+        )[0] ?? null;
         if ($row === null) {
             return 0;
         }
@@ -74,7 +85,9 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 ],
             ) !== 1
         ) {
-            throw new ConcurrentModificationException("The offering selection changed.");
+            throw new ConcurrentModificationException(
+                "The offering selection changed.",
+            );
         }
     }
 
@@ -98,12 +111,18 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
     public function enrollmentVersion(EntityId $enrollment): ?EntityId
     {
         $row =
-        $this->sql->rows("sis_enrollment_section_versions", ["id" => $enrollment->value], 1)[0] ?? null;
+        $this->sql->rows(
+            "sis_enrollment_section_versions",
+            ["id" => $enrollment->value],
+            1,
+        )[0] ?? null;
         return $row === null ? null : new EntityId($row["publication_id"]);
     }
 
-    public function retainEnrollmentVersion(EntityId $enrollment, ?EntityId $publication): void
-    {
+    public function retainEnrollmentVersion(
+        EntityId $enrollment,
+        ?EntityId $publication,
+    ): void {
         $old = $this->enrollmentVersion($enrollment);
         if ($old !== null) {
             if ($old->value !== $publication?->value) {
@@ -121,7 +140,12 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
 
     public function find(EntityId $publication): ?PublishedSectionDefinition
     {
-        $row = $this->sql->rows("sis_section_versions", ["id" => $publication->value], 1)[0] ?? null;
+        $row =
+        $this->sql->rows(
+            "sis_section_versions",
+            ["id" => $publication->value],
+            1,
+        )[0] ?? null;
         if ($row === null) {
             return null;
         }
@@ -174,13 +198,23 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
     }
 
     /** @param array<string, mixed> $row */
-    private function hydrate(EntityId $publication, array $row): PublishedSectionDefinition
-    {
+    private function hydrate(
+        EntityId $publication,
+        array $row,
+    ): PublishedSectionDefinition {
         try {
-            $facts = array_intersect_key($row, array_flip(SectionDefinitionV1::FIELDS));
+            $facts = array_intersect_key(
+                $row,
+                array_flip(SectionDefinitionV1::FIELDS),
+            );
             $facts["capacity"] = $this->integer($facts["capacity"]);
             $facts["fee_minor"] = $this->integer($facts["fee_minor"]);
-            if ($this->integer($row["schema_version"]) !== 1) {
+            $schema = $this->integer($row["schema_version"]);
+            $classes = $this->classifications($publication);
+            if (
+                !in_array($schema, [1, 2], true) ||
+                ($schema === 1) !== ($classes === null)
+            ) {
                 throw new CorruptHistoryException();
             }
             return new PublishedSectionDefinition(
@@ -188,6 +222,7 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 $publication,
                 $this->integer($row["stream_version"]),
                 new SectionDefinitionV1($facts),
+                $classes,
             );
         } catch (Throwable) {
             throw new CorruptHistoryException();
@@ -212,14 +247,63 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 "id" => $definition->publication->value,
                 "section_id" => $definition->section->value,
                 "stream_version" => $definition->position,
-                "schema_version" => 1,
+                "schema_version" =>
+                    $definition->classifications === null ? 1 : 2,
             ] + $definition->definition->data,
+        );
+        if ($definition->classifications !== null) {
+            $row = ["id" => $definition->publication->value];
+            $classes = $definition->classifications->describe();
+            foreach ($classes as $kind => $value) {
+                foreach (["id", "code", "title"] as $field) {
+                    $row[$kind . "_" . $field] = $value[$field] ?? null;
+                }
+            }
+            $this->sql->insert("sis_section_version_classes", $row);
+        }
+    }
+
+    private function classifications(
+        EntityId $publication,
+    ): ?\Domain\Registration\ValueObject\SectionClassifications {
+        $row =
+        $this->sql->rows(
+            "sis_section_version_classes",
+            ["id" => $publication->value],
+            1,
+        )[0] ?? null;
+        if ($row === null) {
+            return null;
+        }
+        $values = [];
+        foreach (["instructional_method", "campus"] as $kind) {
+            if ($row[$kind . "_id"] === null) {
+                if (
+                    $row[$kind . "_code"] !== null ||
+                    $row[$kind . "_title"] !== null
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                $values[$kind] = null;
+            } else {
+                $values[$kind] = [
+                    "id" => $row[$kind . "_id"],
+                    "code" => $row[$kind . "_code"],
+                    "title" => $row[$kind . "_title"],
+                ];
+            }
+        }
+        return \Domain\Registration\ValueObject\SectionClassifications::fromArray(
+            $values,
         );
     }
 
     private function integer(mixed $value): int
     {
-        if (!is_int($value) && (!is_string($value) || (string) (int) $value !== $value)) {
+        if (
+            !is_int($value) &&
+            (!is_string($value) || (string) (int) $value !== $value)
+        ) {
             throw new CorruptHistoryException();
         }
         return (int) $value;

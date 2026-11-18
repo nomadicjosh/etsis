@@ -7,13 +7,31 @@ Implemented 2026-11-09. Authorized catalog staff can review and retain a section
 1. Open **Academic catalog → Sections → a section → Published section details**.
 2. If necessary, use **Choose course definition** first. Retain an explicitly selected published course version, then choose **Publish section details** from that screen. The publication workflow verifies both the binding decision and its cached course definition against protected history.
 3. Enter **Instruction starts on** and **Instruction ends on**, with a reason for publication. The first setup suggests the term dates; staff must review the actual instructional period. Later setup starts from the latest section publication's dates.
-4. Choose **Review section publication**. Check the section, instructional dates, term and term dates, capacity, delivery, faculty, section fee and retained course reference. Reviewing writes no publication.
+4. Choose **Review section publication**. Check the section, instructional dates, term and term dates, capacity, delivery, instructional method, campus/site, faculty, section fee and retained course reference. Reviewing writes no publication.
 5. Use **Revise section publication** to change dates or reason without losing the draft. **Publish reviewed section details** records the decision and required audit together.
 6. Open **View section publications** to inspect retained versions. History is paged, oldest first. Paging preserves unsaved date/reason entries in page memory; browser storage is not used.
 
 The source remains the existing section editor: save changes to capacity, delivery, teaching assignment, code or fee there before reviewing another publication. Actual instructional dates belong to the reviewed publication in this stage; no inferred date backfill or duplicate writable date column is introduced.
 
 Publication takes effect on confirmation. Staff cannot backdate its decision time. The explicit instructional period may describe past or future teaching dates; those dates are not a claim that the publication decision occurred then. Dates outside the selected term are highlighted for explicit review rather than silently clipped or forbidden by an assumed institutional rule. Registration and drop deadlines still follow configured term policy.
+
+## Instructional methods and campuses
+
+In **Academic catalog → Curriculum**, use **Instructional methods** and **Campuses & sites** to create your institution's definitions. A method describes the teaching format, such as lecture, seminar or laboratory. Delivery mode still separately means in person, online or hybrid. A campus/site is optional and does not reserve or require a room. No institution-specific definitions are seeded.
+
+Open **Sections → a section → Method & campus** to choose both references in one editor. Search results are bounded, and returning from a search preserves the other choice. You can add a definition while choosing it, clear either choice and save once. **Review publication** becomes available after saving. This reuses the course-classification library/editor; ordinary reference setup and draft assignments remain audited CRUD.
+
+New section-publication reviews display the exact method/campus labels being retained. Confirmation records their ULIDs, codes and names as protected `offering_classifications` metadata on the existing `SectionDefinitionWasPublished` event. Its original schema-1 payload remains unchanged. Publication reasons remain protected and are not included in the curated history page. Reference edits or assignment changes after review require a fresh review; an accepted retry returns the original publication without rewriting it.
+
+Publishing is separate from selecting a version for registration. On a section with a selected offering, changing assigned reference IDs pauses new registrations until staff publish and explicitly select an updated offering version. This applies to student, staff and grouped registration. Existing accepted retries and student offering references remain intact. Renaming or retiring a reference alone does not rewrite the selected publication or stop registrations under its retained identity. Retired definitions cannot be newly assigned; an unchanged existing assignment may be retained.
+
+The offering-plan review/activation flow includes these saved choices as well. A changed definition invalidates its pending review; accepted activation retains the publication and selection atomically. Draft plans and reusable templates do not automatically assign a campus or instructional method.
+
+Existing publications without this metadata remain **Not recorded in this publication**. They are never decorated from today's section setup. New publications with explicitly blank choices show **Not specified**. Their cached references use format 2 and a required `sis_section_version_classes` row; format-1 caches retain their original fingerprints and unknown earlier classification history. A missing format-2 snapshot stops verification rather than becoming an apparent unknown. Both are reconstructible projections of the same authoritative journal, not parallel event stores.
+
+Migration `20261117000012` creates `sis_section_classifications` for draft identities and `sis_section_version_classes` for retained publication labels. The migration does not change events, older caches or student records, and does not infer assignments. Snapshot identities intentionally have no foreign key to a mutable reference definition. The existing section-publication lock order extends to reference identities in sorted order after section/course/term locks. Current-row reads protect reviews after waiting for locks; publication, its caches and required audit remain one transaction.
+
+Report Studio exposes **Current instructional method** and **Current campus/site** code/name fields on sections. Academic-credit reports expose **Retained instructional method** and **Retained campus/site** fields through the student's accepted offering reference. These use indexed one-to-one joins, not current reference labels or event replay. Earlier unknown references remain blank. A removed early drop does not reappear because its retained routing exists. Ordinary reporting cannot expose raw events or protected publication reasons.
 
 ## Facts retained
 
@@ -61,7 +79,7 @@ The entry-point review distinguishes these boundaries:
 | Gradebook and teaching access | Continue using the operational teaching assignment for authority. A retained publication reference is historical evidence, not a grant of present-day access. |
 | Portal, staff lists, reports and transcripts | Continue their existing authorized sources. This stage adds the private catalog publication/history screen; it does not relabel today's section values as a student's retained offering. |
 
-Further definition work includes grading and eligibility policy versions, normalized classifications, variable credits/CEUs, teaching teams, meetings/rooms, typed fee components and corrections that affect already enrolled students. Published instructional dates alone do not change add/drop precedence or institute a new refund policy.
+Further definition work includes grading and eligibility policy versions, additional classifications, variable credits/CEUs, teaching teams, typed fee components and corrections that affect already enrolled students. Published instructional dates alone do not change add/drop precedence or institute a new refund policy.
 
 ## Verification
 

@@ -15,20 +15,30 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisClassificationController
 {
-    public function __construct(private ClassificationService $service)
-    {
+    public function __construct(
+        private ClassificationService $service,
+        private \Domain\Registration\Service\SectionClassificationService $sections,
+    ) {
     }
 
-    public function page(ServerRequest $request, string $kind): ResponseInterface
-    {
+    public function page(
+        ServerRequest $request,
+        string $kind,
+    ): ResponseInterface {
         $input = FormInput::from($request);
         return new JsonResponse(
-            $this->service->page($this->kind($kind), $input->search(), $input->optionalId("after")),
+            $this->service->page(
+                $this->kind($kind),
+                $input->search(),
+                $input->optionalId("after"),
+            ),
         );
     }
 
-    public function save(ServerRequest $request, string $kind): ResponseInterface
-    {
+    public function save(
+        ServerRequest $request,
+        string $kind,
+    ): ResponseInterface {
         $input = FormInput::from($request);
         return new JsonResponse(
             $this->service->save(
@@ -47,12 +57,19 @@ final readonly class SisClassificationController
         return new JsonResponse($this->service->course(new EntityId($id)));
     }
 
-    public function assign(ServerRequest $request, string $id): ResponseInterface
-    {
+    public function assign(
+        ServerRequest $request,
+        string $id,
+    ): ResponseInterface {
         $body = $request->getParsedBody();
         foreach (ClassificationKind::courseKinds() as $kind) {
-            if (!is_array($body) || !array_key_exists($kind->value . "_id", $body)) {
-                throw new InvalidArgumentException("Provide all three course classification choices.");
+            if (
+                !is_array($body) ||
+                !array_key_exists($kind->value . "_id", $body)
+            ) {
+                throw new InvalidArgumentException(
+                    "Provide all three course classification choices.",
+                );
             }
         }
         $input = FormInput::from($request);
@@ -66,9 +83,38 @@ final readonly class SisClassificationController
         return new JsonResponse(["status" => "saved"]);
     }
 
+    public function section(string $id): ResponseInterface
+    {
+        return new JsonResponse($this->sections->show(new EntityId($id)));
+    }
+
+    public function assignSection(
+        ServerRequest $request,
+        string $id,
+    ): ResponseInterface {
+        $body = $request->getParsedBody();
+        foreach (["instructional_method_id", "campus_id"] as $key) {
+            if (!is_array($body) || !array_key_exists($key, $body)) {
+                throw new InvalidArgumentException(
+                    "Provide both section classification choices.",
+                );
+            }
+        }
+        $input = FormInput::from($request);
+        $this->sections->assign(
+            new EntityId($id),
+            $input->optionalId("instructional_method_id"),
+            $input->optionalId("campus_id"),
+            $input->text("revision", 64),
+        );
+        return new JsonResponse(["status" => "saved"]);
+    }
+
     private function kind(string $kind): ClassificationKind
     {
         return ClassificationKind::tryFrom($kind) ??
-        throw new InvalidArgumentException("Choose a supported classification category.");
+        throw new InvalidArgumentException(
+            "Choose a supported classification category.",
+        );
     }
 }

@@ -21,7 +21,11 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
 
     public function get(EntityId $id): array
     {
-        $row = $this->sql->one("sis_catalog_classifications", ["id" => $id->value]);
+        $row =
+        $this->sql->current("sis_catalog_classifications", $id->value) ??
+        throw new \Domain\Shared\Exception\RecordNotFoundException(
+            "Classification not found.",
+        );
         $row["active"] = (bool) $row["active"];
         return $row;
     }
@@ -31,13 +35,17 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
         $this->sql->lock("sis_catalog_classifications", $id->value, "id");
     }
 
-    public function page(ClassificationKind $kind, string $search, ?EntityId $after): array
-    {
+    public function page(
+        ClassificationKind $kind,
+        string $search,
+        ?EntityId $after,
+    ): array {
         $q = $this->sql->quote(...);
         $where = [$q("kind") . " = ?"];
         $params = [$kind->value];
         if ($search !== "") {
-            $where[] = "(" . $q("code") . " LIKE ? OR " . $q("title") . " LIKE ?)";
+            $where[] =
+            "(" . $q("code") . " LIKE ? OR " . $q("title") . " LIKE ?)";
             $params[] = "%" . $search . "%";
             $params[] = "%" . $search . "%";
         }
@@ -76,22 +84,40 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
         )[0] ?? null;
         if ($other !== null && $other["id"] !== $value->id->value) {
             throw new ValidationException([
-                ["field" => "code", "message" => "That code is already used in this category."],
+                [
+                    "field" => "code",
+                    "message" => "That code is already used in this category.",
+                ],
             ]);
         }
-        $row = $value->describe() + ["kind" => $kind->value, "active" => (int) $active];
+        $row = $value->describe() + [
+            "kind" => $kind->value,
+            "active" => (int) $active,
+        ];
         if ($create) {
             $this->sql->insert("sis_catalog_classifications", $row);
         } else {
             unset($row["id"]);
-            $this->sql->update("sis_catalog_classifications", $row, ["id" => $value->id->value]);
+            $this->sql->update("sis_catalog_classifications", $row, [
+                "id" => $value->id->value,
+            ]);
         }
     }
 
-    public function lockForCourse(EntityId $course, array $additional = []): void
-    {
-        $row = $this->sql->rows("sis_course_classifications", ["id" => $course->value], 1)[0] ?? [];
-        $ids = array_map(static fn(EntityId $id): string => $id->value, $additional);
+    public function lockForCourse(
+        EntityId $course,
+        array $additional = [],
+    ): void {
+        $row =
+        $this->sql->rows(
+            "sis_course_classifications",
+            ["id" => $course->value],
+            1,
+        )[0] ?? [];
+        $ids = array_map(
+            static fn(EntityId $id): string => $id->value,
+            $additional,
+        );
         foreach (ClassificationKind::courseKinds() as $kind) {
             if (($row[$kind->value . "_id"] ?? null) !== null) {
                 $ids[] = $row[$kind->value . "_id"];
@@ -106,7 +132,12 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
 
     public function course(EntityId $course): CourseClassifications
     {
-        $row = $this->sql->rows("sis_course_classifications", ["id" => $course->value], 1)[0] ?? [];
+        $row =
+        $this->sql->rows(
+            "sis_course_classifications",
+            ["id" => $course->value],
+            1,
+        )[0] ?? [];
         $values = [];
         foreach (ClassificationKind::courseKinds() as $kind) {
             $id = $row[$kind->value . "_id"] ?? null;
@@ -115,21 +146,39 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
                 throw new CorruptHistoryException();
             }
             $values[$kind->value] =
-            $value === null ? null : array_intersect_key($value, array_flip(["id", "code", "title"]));
+            $value === null
+            ? null
+            : array_intersect_key(
+                $value,
+                array_flip(["id", "code", "title"]),
+            );
         }
         return CourseClassifications::fromArray($values);
     }
 
-    public function assign(EntityId $course, CourseClassifications $values): void
-    {
+    public function assign(
+        EntityId $course,
+        CourseClassifications $values,
+    ): void {
         $row = [];
         foreach ($values->describe() as $kind => $value) {
             $row[$kind . "_id"] = $value["id"] ?? null;
         }
-        if ($this->sql->rows("sis_course_classifications", ["id" => $course->value], 1) === []) {
-            $this->sql->insert("sis_course_classifications", ["id" => $course->value] + $row);
+        if (
+            $this->sql->rows(
+                "sis_course_classifications",
+                ["id" => $course->value],
+                1,
+            ) === []
+        ) {
+            $this->sql->insert(
+                "sis_course_classifications",
+                ["id" => $course->value] + $row,
+            );
         } else {
-            $this->sql->update("sis_course_classifications", $row, ["id" => $course->value]);
+            $this->sql->update("sis_course_classifications", $row, [
+                "id" => $course->value,
+            ]);
         }
     }
 }
