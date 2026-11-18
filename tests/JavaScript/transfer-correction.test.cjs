@@ -13,7 +13,8 @@ async function fixture() {
         deferred,
         release,
         reviews = 0,
-        reviewedDates;
+        reviewedDates,
+        reviewedCourse;
     const sent = [];
     const value = {
         given_name: "Fictional",
@@ -28,6 +29,7 @@ async function fixture() {
         effective_on_default: "2026-08-10",
         grade_code: "TR",
         credit: {
+            course_id: "course-original",
             course_code: "TEST.101",
             course_title: "Fictional course",
             completed_milli: 3000,
@@ -54,8 +56,20 @@ async function fixture() {
         buildForm: async (fields, initial) => {
             const form = node("form");
             form.elements = {};
-            for (const [name, label] of fields) {
-                const input = node("input", { name });
+            for (const [name, label, type, source] of fields) {
+                const input = node(type === "choice" ? "select" : "input", { name });
+                Object.defineProperty(input, "parentElement", { get: () => input.parent });
+                if (type === "choice") {
+                    for (const option of source)
+                        input.append(node("option", { value: option.value }, option.label));
+                    Object.defineProperty(input, "options", {
+                        get: () => input.children.filter((e) => e.tag === "option"),
+                    });
+                    Object.defineProperty(input, "selectedOptions", {
+                        get: () => input.options.filter((e) => e.attributes.value === input.value),
+                    });
+                    for (const option of input.children) option.value = option.attributes.value;
+                }
                 input.value = initial[name] ?? "";
                 form.elements[name] = input;
                 form.append(node("label", {}, label), input);
@@ -73,6 +87,55 @@ async function fixture() {
             ),
         request: async (path, method, data) => {
             sent.push({ path, method, data });
+            if (path.endsWith("/accepted-course/search/"))
+                return {
+                    items: [{ id: "course-target", code: "ENG.220", title: "Fictional literature" }],
+                    next_after: null,
+                };
+            if (path.endsWith("/accepted-course/choices/"))
+                return {
+                    items: [
+                        {
+                            version_id:
+                                data.course_id === "course-target"
+                                    ? "target-publication"
+                                    : "original-publication",
+                            code: data.course_id === "course-target" ? "ENG.220" : "TEST.101",
+                            transcript_title: "Fictional published course",
+                            credits_milli: 4000,
+                            version: 1,
+                        },
+                    ],
+                    next_cursor: null,
+                };
+            if (path.endsWith("/accepted-course/review/")) {
+                const review = {
+                    ...data,
+                    before: value.credit,
+                    after: {
+                        course_code: data.course_id === "course-target" ? "ENG.220" : "TEST.101",
+                        course_title: "Fictional published course",
+                    },
+                    replacement: data.course_id !== value.credit.course_id,
+                    previous_course_version_id: null,
+                    review_token: "private-course-proof-" + ++reviews,
+                };
+                reviewedCourse = review;
+                if (deferred)
+                    return new Promise((resolve) => {
+                        release = () => resolve(review);
+                    });
+                return review;
+            }
+            if (path.endsWith("/accepted-course/commit/")) {
+                if (failure) {
+                    const error = failure;
+                    failure = null;
+                    throw error;
+                }
+                Object.assign(value.credit, reviewedCourse.after, { course_id: reviewedCourse.course_id });
+                return { operation_id: "course-operation" };
+            }
             if (path.endsWith("/source-period/review/")) {
                 const review = {
                     ...data,
@@ -143,7 +206,7 @@ async function fixture() {
         await pending;
     };
     const submit = () => {
-        const form = walk(body).find((e) => e.tag === "form");
+        const form = walk(body).find((e) => e.tag === "form" && e.elements);
         form.events.submit({ preventDefault() {} });
         return pending;
     };
@@ -157,6 +220,7 @@ async function fixture() {
     };
     return {
         body: () => body,
+        settled: () => pending,
         sent,
         value,
         click,
@@ -323,4 +387,56 @@ test("posting term and source dates share one proof and survive revising and ref
     const commands = f.sent.filter((r) => r.path.endsWith("/source-period/commit/"));
     assert.equal(commands.length, 1);
     assert.deepEqual(Object.keys(commands[0].data), ["review_token"]);
+});
+
+test("receiving-course search reuses the editor and preserves reasons while requiring a new publication", async () => {
+    const f = await fixture();
+    await f.click("Review accepted course");
+    let form = walk(f.body()).find((e) => e.tag === "form" && e.elements);
+    form.elements.reason.value = "Fictional replacement evidence.";
+    assert.equal(
+        f.sent.some((r) => r.path.endsWith("/search/")),
+        false,
+    );
+    const search = walk(f.body()).find((e) => e.tag === "input" && e.attributes.type === "search");
+    search.value = "ENG";
+    const searchForm = walk(f.body()).find((e) => e.tag === "form" && e.attributes.role === "search");
+    await searchForm.events.submit({ preventDefault() {} });
+    await f.settled();
+    await f.click("ENG.220 · Fictional literature");
+    form = walk(f.body()).find((e) => e.tag === "form" && e.elements);
+    assert.equal(form.elements.reason.value, "Fictional replacement evidence.");
+    assert.equal(form.elements.course_version_id.value, "");
+    form.elements.course_version_id.value = "target-publication";
+    await f.submit();
+    assert.match(f.body().textContent, /replaces the receiving course/);
+    await f.click("Revise accepted course");
+    form = walk(f.body()).find((e) => e.tag === "form" && e.elements);
+    assert.equal(form.elements.course_version_id.value, "target-publication");
+    await f.click("Refresh award");
+    await f.submit();
+    f.fail(0);
+    await assert.rejects(f.click("Confirm course acceptance"), /Fictional/);
+    await f.click("Confirm course acceptance");
+    assert.equal(f.value.credit.course_id, "course-target");
+    assert.equal(f.value.credit.completed_milli, 3000);
+    const commits = f.sent.filter((r) => r.path.endsWith("/accepted-course/commit/"));
+    assert.deepEqual(commits[0].data, commits[1].data);
+    assert.deepEqual(Object.keys(commits[0].data), ["review_token"]);
+});
+
+test("a late accepted-course review cannot reopen a closed private drawer", async () => {
+    const f = await fixture();
+    await f.click("Review accepted course");
+    const form = walk(f.body()).find((e) => e.tag === "form" && e.elements);
+    form.elements.course_version_id.value = "original-publication";
+    form.elements.reason.value = "Fictional pending review.";
+    f.defer();
+    const pending = f.submit();
+    await Promise.resolve();
+    const closed = f.close();
+    f.release();
+    await pending;
+    assert.equal(f.body(), closed);
+    assert.equal(closed.textContent, "");
 });

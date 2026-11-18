@@ -23,6 +23,7 @@ use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\Event\TransferCourseWasAccepted;
+use Domain\Transfer\Event\TransferCourseWasReplaced;
 use Domain\Transfer\Event\TransferCreditWasEstablished;
 use Domain\Transfer\Repository\TransferAwardRepository;
 use Domain\Transfer\Repository\TransferCreditRepository;
@@ -30,7 +31,7 @@ use Domain\Transfer\ValueObject\TransferCreditFacts;
 use Domain\Transfer\ValueObject\TransferCreditId;
 use Throwable;
 
-/** A new acceptance decision within the same institutional course; never inferred earlier evidence. */
+/** Reviewed receiving-course decisions; preserve original award identity and explicit prior evidence. */
 final readonly class TransferCourseService
 {
     public function __construct(
@@ -45,17 +46,52 @@ final readonly class TransferCourseService
         private MessageCipher $cipher,
         private Clock $clock,
         private AuditTrail $audit,
+        private \Domain\Catalog\Repository\CourseSearchRepository $catalog,
     ) {
     }
 
-    /** @return array<string,mixed> */
-    public function choices(EntityId $student, EntityId $award, ?string $cursor = null): array
+    /** Search current identity labels only. Published choices establish the actual accepted facts.
+     * @return array<string,mixed>
+     */
+    public function search(EntityId $student, EntityId $award, string $search, ?EntityId $after = null): array
     {
         $actor = $this->authorize();
-        return $this->transactions->run(function () use ($student, $award, $cursor, $actor): array {
+        $search = trim($search);
+        if (
+            !mb_check_encoding($search, "UTF-8") ||
+            mb_strlen($search) > 80 ||
+            preg_match('/[\x00-\x1F\x7F]/', $search)
+        ) {
+            self::invalid("search", "Search by course code or title using at most 80 characters.");
+        }
+        return $this->transactions->run(function () use ($student, $award, $search, $after, $actor): array {
             $this->lock($student, $award, $actor);
             [, $facts] = $this->credits->decisionRecord($student, $award, new HistoryReadBudget());
-            $page = $this->courses->page(new EntityId($facts["course_id"]), $cursor);
+            $this->active($facts);
+            $rows = $search === "" ? [] : $this->catalog->page($search, $after);
+            $more = count($rows) > 20;
+            $items = array_slice($rows, 0, 20);
+            $this->actor($actor);
+            return [
+                "items" => $items,
+                "next_after" => $more ? $items[19]["id"] : null,
+                "search_required" => $search === "",
+            ];
+        });
+    }
+
+    /** @return array<string,mixed> */
+    public function choices(
+        EntityId $student,
+        EntityId $award,
+        ?string $cursor = null,
+        ?EntityId $course = null,
+    ): array {
+        $actor = $this->authorize();
+        return $this->transactions->run(function () use ($student, $award, $cursor, $actor, $course): array {
+            $this->lock($student, $award, $actor);
+            [, $facts] = $this->credits->decisionRecord($student, $award, new HistoryReadBudget());
+            $page = $this->courses->page($course ?? new EntityId($facts["course_id"]), $cursor);
             $this->actor($actor);
             return $page;
         });
@@ -69,6 +105,7 @@ final readonly class TransferCourseService
         int $version,
         #[\SensitiveParameter] string $effectiveOn,
         #[\SensitiveParameter] string $reason,
+        ?EntityId $course = null,
     ): array {
         $actor = $this->authorize();
         return $this->transactions->run(function () use (
@@ -79,6 +116,7 @@ final readonly class TransferCourseService
             $effectiveOn,
             $reason,
             $actor,
+            $course,
         ): array {
             $this->lock($student, $award, $actor);
             $budget = new HistoryReadBudget();
@@ -94,7 +132,8 @@ final readonly class TransferCourseService
             if ($root->courseVersion() === $courseVersion->value) {
                 self::invalid("course_version_id", "Select a different accepted publication.");
             }
-            $definition = $this->courses->version(new EntityId($facts["course_id"]), $courseVersion, $budget);
+            $course ??= new EntityId($facts["course_id"]);
+            $definition = $this->courses->version($course, $courseVersion, $budget);
             $reason = trim($reason);
             if (
                 $reason === "" ||
@@ -121,7 +160,10 @@ final readonly class TransferCourseService
                 "previous_decision_id" => $previous,
                 "previous_course_version_id" => $root->courseVersion(),
                 "course_version_id" => $courseVersion->value,
-                "course_id" => $facts["course_id"],
+                "previous_course_id" => $facts["course_id"],
+                "previous_course_code" => $facts["course_code"],
+                "previous_course_title" => $facts["course_title"],
+                "course_id" => $course->value,
                 "course_code" => $definition->definition->code,
                 "course_title" =>
                     $definition->definition->text->transcriptTitle ?? $definition->definition->title,
@@ -132,6 +174,7 @@ final readonly class TransferCourseService
             ];
             $this->actor($actor);
             return [
+                "replacement" => $course->value !== $facts["course_id"],
                 "previous_course_version_id" => $root->courseVersion(),
                 "before" => [
                     "course_code" => $facts["course_code"],
@@ -187,21 +230,32 @@ final readonly class TransferCourseService
                 $this->fresh($d, $record, $facts);
                 $root = $this->credits->observe($record, $actor, $operation, $budget);
             }
-            $event = TransferCourseWasAccepted::occur(
-                new TransferCreditId($award->value),
-                array_intersect_key(
+            $replacement = isset($d["previous_course_id"]) && $d["previous_course_id"] !== $d["course_id"];
+            $eventClass = $replacement ? TransferCourseWasReplaced::class : TransferCourseWasAccepted::class;
+            $prior = $replacement
+                ? array_intersect_key(
                     $d,
-                    array_flip([
-                        "previous_decision_id",
-                        "previous_course_version_id",
-                        "course_version_id",
-                        "course_id",
-                        "course_code",
-                        "course_title",
-                    ]),
-                ) + ["decision_id" => $operation->value],
-                ["__aggregate_type" => "transfer_credit"],
-            )->withPlayhead($d["expected_version"] + 1);
+                    array_flip(["previous_course_id", "previous_course_code", "previous_course_title"]),
+                )
+                : [];
+            $event = $eventClass
+                ::occur(
+                    new TransferCreditId($award->value),
+                    array_intersect_key(
+                        $d,
+                        array_flip([
+                            "previous_decision_id",
+                            "previous_course_version_id",
+                            "course_version_id",
+                            "course_id",
+                            "course_code",
+                            "course_title",
+                        ]),
+                    ) + ["decision_id" => $operation->value] +
+                        $prior,
+                    ["__aggregate_type" => "transfer_credit"],
+                )
+                ->withPlayhead($d["expected_version"] + 1);
             $receipt = $this->history->append(
                 $this->stream($award),
                 $operation,
@@ -219,7 +273,7 @@ final readonly class TransferCourseService
             if ($receipt["event_ids"] === [(string) $event->eventId()]) {
                 $this->fresh($d, $record, $facts);
                 $definition = $this->courses->version(
-                    new EntityId($facts["course_id"]),
+                    new EntityId($d["course_id"]),
                     new EntityId($d["course_version_id"]),
                     $budget,
                 );
@@ -237,11 +291,16 @@ final readonly class TransferCourseService
                     $d["previous_course_version_id"] === null
                         ? null
                         : new EntityId($d["previous_course_version_id"]),
+                    new EntityId($facts["course_id"]),
                 );
                 $current = $root->credit() ?? throw new CorruptHistoryException();
                 $this->records->project($current, $facts["version"]);
                 $this->records->track($root->source() ?? throw new CorruptHistoryException(), $current);
-                $this->audit->record($actor, "transfer.course_accepted", $award);
+                $this->audit->record(
+                    $actor,
+                    $replacement ? "transfer.course_replaced" : "transfer.course_accepted",
+                    $award,
+                );
                 if ($d["expires_at"] <= $this->clock->now()->getTimestamp()) {
                     throw new ConcurrentModificationException(
                         "The accepted-course review expired during confirmation.",
@@ -269,6 +328,7 @@ final readonly class TransferCourseService
                 $event = $stored->event;
                 $p = $event->payload();
                 if (
+                    !($event instanceof TransferCourseWasReplaced) &&
                     !($event instanceof TransferCourseWasAccepted) &&
                     !($event instanceof TransferCreditWasEstablished)
                 ) {
@@ -276,7 +336,15 @@ final readonly class TransferCourseService
                 }
                 $initial = $event instanceof TransferCreditWasEstablished;
                 $items[] = [
-                    "action" => $initial ? $p["provenance"] : "course_accepted",
+                    "action" => $initial
+                        ? $p["provenance"]
+                        : ($event instanceof TransferCourseWasReplaced
+                            ? "course_replaced"
+                            : "course_accepted"),
+                    "previous_course_code" =>
+                        $event instanceof TransferCourseWasReplaced ? $p["previous_course_code"] : null,
+                    "previous_course_title" =>
+                        $event instanceof TransferCourseWasReplaced ? $p["previous_course_title"] : null,
                     "course_version_id" => $initial
                         ? $event->metaParam("course_version_id", null)
                         : $p["course_version_id"],

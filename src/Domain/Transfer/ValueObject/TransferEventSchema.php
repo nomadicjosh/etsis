@@ -11,6 +11,7 @@ use Domain\Transfer\Event\TransferCreditWasEstablished;
 use Domain\Transfer\Event\TransferCreditWasChanged;
 use Domain\Transfer\Event\TransferAcademicPeriodWasRecorded;
 use Domain\Transfer\Event\TransferCourseWasAccepted;
+use Domain\Transfer\Event\TransferCourseWasReplaced;
 use Domain\Transfer\Event\TransferAcademicDatesWereRecorded;
 use Domain\Transfer\Event\TransferPostingTermWasChanged;
 use InvalidArgumentException;
@@ -47,6 +48,18 @@ final class TransferEventSchema
                 "term_id",
                 "previous_term_code",
                 "term_code",
+            ],
+            TransferCourseWasReplaced::class => [
+                "decision_id",
+                "previous_decision_id",
+                "previous_course_version_id",
+                "course_version_id",
+                "previous_course_id",
+                "course_id",
+                "previous_course_code",
+                "previous_course_title",
+                "course_code",
+                "course_title",
             ],
             TransferCourseWasAccepted::class => [
                 "decision_id",
@@ -141,7 +154,18 @@ final class TransferEventSchema
                 self::invalid();
             }
             new EntityId($p["previous_decision_id"]);
-            if ($class === TransferCourseWasAccepted::class) {
+            if (
+                in_array($class, [TransferCourseWasAccepted::class, TransferCourseWasReplaced::class], true)
+            ) {
+                if ($class === TransferCourseWasReplaced::class) {
+                    if (!is_string($p["previous_course_id"])) {
+                        self::invalid();
+                    }
+                    new EntityId($p["previous_course_id"]);
+                    if ($p["previous_course_id"] === $p["course_id"]) {
+                        self::invalid();
+                    }
+                }
                 foreach (["course_version_id", "course_id"] as $key) {
                     if (!is_string($p[$key])) {
                         self::invalid();
@@ -157,7 +181,11 @@ final class TransferEventSchema
                 if ($p["previous_course_version_id"] === $p["course_version_id"]) {
                     self::invalid();
                 }
-                foreach (["course_code" => 96, "course_title" => 191] as $key => $max) {
+                $labels = ["course_code" => 96, "course_title" => 191];
+                if ($class === TransferCourseWasReplaced::class) {
+                    $labels += ["previous_course_code" => 96, "previous_course_title" => 191];
+                }
+                foreach ($labels as $key => $max) {
                     if (
                         !is_string($p[$key]) ||
                         trim($p[$key]) === "" ||

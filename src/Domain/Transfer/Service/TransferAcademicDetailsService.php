@@ -221,19 +221,20 @@ final readonly class TransferAcademicDetailsService
                     array_flip(["previous_term_id", "term_id", "previous_term_code", "term_code"]),
                 )
                 : [];
-            $payload = [
-                "decision_id" => $operation->value,
-                "previous_decision_id" => $d["previous_decision_id"],
-                "previous_academic_on" => $d["previous_academic_on"],
-                "academic_on" => $d["academic_on"],
-                "previous_completed_on" => $d["previous_completed_on"],
-                "completed_on" => $d["completed_on"],
-            ] + $placement;
-            $event = $eventClass::occur(
-                new TransferCreditId($award->value),
-                $payload,
-                ["__aggregate_type" => "transfer_credit"],
-            )->withPlayhead($d["expected_version"] + ($d["baseline"] ? 2 : 1));
+            $payload =
+                [
+                    "decision_id" => $operation->value,
+                    "previous_decision_id" => $d["previous_decision_id"],
+                    "previous_academic_on" => $d["previous_academic_on"],
+                    "academic_on" => $d["academic_on"],
+                    "previous_completed_on" => $d["previous_completed_on"],
+                    "completed_on" => $d["completed_on"],
+                ] + $placement;
+            $event = $eventClass
+                ::occur(new TransferCreditId($award->value), $payload, [
+                    "__aggregate_type" => "transfer_credit",
+                ])
+                ->withPlayhead($d["expected_version"] + ($d["baseline"] ? 2 : 1));
             // Original retries are resolved before expiry/current-state checks. A failed new decision
             // rolls its event, receipt and projection back together in this same transaction.
             $receipt = $this->history->append(
@@ -312,11 +313,13 @@ final readonly class TransferAcademicDetailsService
                             ? ($dates
                                 ? "dates_recorded"
                                 : "period_recorded")
-                            : ($e instanceof \Domain\Transfer\Event\TransferCourseWasAccepted
-                                ? "course_accepted"
-                                : ($e instanceof \Domain\Transfer\Event\TransferCreditWasEstablished
-                                    ? $p["provenance"]
-                                    : $p["action"]))),
+                            : ($e instanceof \Domain\Transfer\Event\TransferCourseWasReplaced
+                                ? "course_replaced"
+                                : ($e instanceof \Domain\Transfer\Event\TransferCourseWasAccepted
+                                    ? "course_accepted"
+                                    : ($e instanceof \Domain\Transfer\Event\TransferCreditWasEstablished
+                                        ? $p["provenance"]
+                                        : $p["action"])))),
                     "previous_term_code" => $placement ? $p["previous_term_code"] : null,
                     "term_code" => $placement ? $p["term_code"] : null,
                     "previous_academic_on" => $period ? $p["previous_academic_on"] : null,

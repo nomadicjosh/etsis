@@ -2,6 +2,7 @@
 window.createWorkspaceTransferAwards = function (ui) {
     "use strict";
     const { node, request, task, table, recordSummary, actionMenu, buildForm, formData, openDrawer } = ui;
+    let receivingSearchSerial = 0;
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
             "button",
@@ -138,13 +139,25 @@ window.createWorkspaceTransferAwards = function (ui) {
             );
         actions.append(actionMenu("More", more, { context: "More transfer award actions" }));
     }
-    async function editCourse(student, award, value) {
+    async function editCourse(student, award, value, target = null, draft = null) {
         const base = endpoint(student, award) + "accepted-course/";
-        const choices = await request(base + "choices/", "POST", {});
-        if (!choices.items.length)
-            throw new Error(
-                "Catalog staff must publish the receiving course before reviewing its acceptance.",
-            );
+        const selected = target || {
+            id: value.credit.course_id,
+            code: value.credit.course_code,
+            title: value.credit.course_title,
+        };
+        let form = null,
+            fields = [];
+        const draftValues = () =>
+            form
+                ? {
+                      ...formData(form, fields),
+                      _publication_label:
+                          form.elements.course_version_id.selectedOptions?.[0]?.textContent ||
+                          "Selected publication",
+                  }
+                : draft;
+
         const label = (item) =>
             `Version ${item.version} · ${item.code} · ${item.transcript_title} · ${item.credits_milli / 1000} catalog credits`;
         const body = openDrawer("Accepted course definition", "REASONED TRANSFER REVIEW");
@@ -153,10 +166,92 @@ window.createWorkspaceTransferAwards = function (ui) {
             node(
                 "p",
                 {},
-                "Select the receiving-course publication supported by your evaluation. Its code and transcript title will be applied to this award. The existing credits, grade, sending institution and posting term stay as recorded. Previous decisions remain in history.",
+                "Select the receiving course and publication supported by your evaluation. Its course identity, code and transcript title will apply to this award. Credits, grade, pursuit, sending institution, source dates and posting term stay unchanged. The original equivalency and earlier decisions remain preserved.",
             ),
             button("Back to award", () => record(student, award)),
         );
+        body.append(
+            node("p", { class: "fw-semibold" }, `Receiving course: ${selected.code} · ${selected.title}`),
+        );
+        const searchId = `receiving-course-search-${++receivingSearchSerial}`;
+        const search = node("input", {
+            type: "search",
+            id: searchId,
+            class: "form-control",
+            maxlength: 80,
+            required: true,
+            placeholder: "Course code or title",
+        });
+        const results = node("div", { class: "d-grid gap-2 mt-3" });
+        const searchStatus = node(
+            "p",
+            { role: "status", class: "form-text" },
+            "Search for a course before choosing a publication.",
+        );
+        let searchRequest = 0,
+            after = null;
+        const moreResults = button("More courses", () => findCourses(after), "btn-outline-secondary btn-sm");
+        moreResults.hidden = true;
+        async function findCourses(continuation = null) {
+            const query = search.value.trim(),
+                sequence = ++searchRequest;
+            if (!continuation) results.replaceChildren();
+            moreResults.hidden = true;
+            searchStatus.textContent = "Searching courses…";
+            const found = await request(base + "search/", "POST", { search: query, after: continuation });
+            if (!body.isConnected || sequence !== searchRequest || search.value.trim() !== query) return;
+            found.items.forEach((item) =>
+                results.append(
+                    button(
+                        `${item.code} · ${item.title}`,
+                        () =>
+                            editCourse(student, award, value, item, {
+                                ...(draftValues() || {}),
+                                course_version_id: "",
+                            }),
+                        "btn-outline-primary text-start",
+                    ),
+                ),
+            );
+            after = found.next_after;
+            moreResults.hidden = !after;
+            searchStatus.textContent = found.search_required
+                ? "Enter a course code or title."
+                : found.items.length
+                  ? "Choose a course, then select its published definition."
+                  : "No matching courses found.";
+        }
+        const searchForm = node(
+            "form",
+            { role: "search", "aria-label": "Receiving courses", class: "mt-3" },
+            node("label", { for: searchId, class: "form-label" }, "Find receiving course"),
+            search,
+        );
+        const find = node(
+            "button",
+            { type: "submit", class: "btn btn-outline-primary mt-2" },
+            "Find courses",
+        );
+        searchForm.append(find, searchStatus, results, moreResults);
+        searchForm.addEventListener("submit", (event) => {
+            event.preventDefault();
+            if (searchForm.reportValidity()) task(() => findCourses(), find);
+        });
+        body.append(
+            node("details", { class: "mb-4" }, node("summary", {}, "Choose another course"), searchForm),
+        );
+        const choices = await request(base + "choices/", "POST", { course_id: selected.id });
+        if (!body.isConnected) return;
+        if (!choices.items.length) {
+            body.append(
+                node(
+                    "p",
+                    { class: "alert alert-info", role: "status" },
+                    "Catalog staff must publish the receiving course before reviewing its acceptance. Choose another course or return to the award.",
+                ),
+            );
+            return;
+        }
         if (!value.course_version_id)
             body.append(
                 node(
@@ -165,7 +260,7 @@ window.createWorkspaceTransferAwards = function (ui) {
                     "The earlier accepted publication is unknown. This records a new reviewed acceptance; it does not reconstruct an earlier decision.",
                 ),
             );
-        const fields = [
+        fields = [
             [
                 "course_version_id",
                 "Accepted course publication",
@@ -175,10 +270,36 @@ window.createWorkspaceTransferAwards = function (ui) {
             ["effective_on", "Effective date", "date"],
             ["reason", "Reason and acceptance evidence", "textarea"],
         ];
-        const form = await buildForm(
+        form = await buildForm(
             fields,
-            { effective_on: value.effective_on_default },
+            { effective_on: value.effective_on_default, ...(draft || {}) },
             { layout: "transfer_course" },
+        );
+        if (!body.isConnected) return;
+        if (
+            draft?.course_version_id &&
+            ![...form.elements.course_version_id.options].some(
+                (option) => option.value === draft.course_version_id,
+            )
+        ) {
+            form.elements.course_version_id.append(
+                node(
+                    "option",
+                    { value: draft.course_version_id },
+                    draft._publication_label || "Previously selected publication",
+                ),
+            );
+            form.elements.course_version_id.value = draft.course_version_id;
+        }
+        body.append(
+            button(
+                "Refresh award",
+                async () => {
+                    const fresh = await request(endpoint(student, award));
+                    if (body.isConnected) await editCourse(student, award, fresh, selected, draftValues());
+                },
+                "btn-outline-secondary btn-sm",
+            ),
         );
         form.elements.effective_on.min = value.completed_on;
         form.elements.effective_on.max = value.effective_on_default;
@@ -192,7 +313,7 @@ window.createWorkspaceTransferAwards = function (ui) {
         form.elements.course_version_id.parentElement.append(status);
         if (cursor) {
             const more = button("More course choices", async () => {
-                const next = await request(base + "choices/", "POST", { cursor });
+                const next = await request(base + "choices/", "POST", { cursor, course_id: selected.id });
                 if (!form.isConnected) return;
                 next.items.forEach((item) =>
                     form.elements.course_version_id.append(
@@ -222,8 +343,10 @@ window.createWorkspaceTransferAwards = function (ui) {
                 const data = formData(form, fields);
                 const review = await request(base + "review/", "POST", {
                     ...data,
+                    course_id: selected.id,
                     version: value.credit.version,
                 });
+                if (!form.isConnected) return;
                 const confirm = openDrawer("Confirm accepted course", "PRESERVE ORIGINAL ACCEPTANCE");
                 confirm.append(
                     grid(
@@ -245,6 +368,13 @@ window.createWorkspaceTransferAwards = function (ui) {
                         ],
                         "Accepted course comparison",
                     ),
+                    review.replacement
+                        ? node(
+                              "p",
+                              { class: "alert alert-warning" },
+                              "This replaces the receiving course for this award only. It does not create a reusable equivalency or re-award catalog credits. Course matching and repeat-course calculations may change.",
+                          )
+                        : null,
                     node("p", {}, `Effective ${review.effective_on}`),
                     node("p", {}, review.reason),
                     node(
@@ -252,8 +382,13 @@ window.createWorkspaceTransferAwards = function (ui) {
                         {},
                         "This can change course-group matching and the current transcript labels. Existing issued documents and earlier decisions remain preserved; a prepared transcript may need a fresh review.",
                     ),
+                    node(
+                        "p",
+                        { class: "text-muted small" },
+                        "This review expires after 20 minutes. Interrupted confirmations retry the same review.",
+                    ),
                     button("Revise accepted course", () =>
-                        openDrawer("Accepted course definition", "REASONED TRANSFER REVIEW").append(form),
+                        editCourse(student, award, value, selected, draftValues()),
                     ),
                     button(
                         "Confirm course acceptance",
@@ -288,8 +423,11 @@ window.createWorkspaceTransferAwards = function (ui) {
                               award: "Original award",
                               observed_existing: "Earlier facts observed",
                               course_accepted: "Course acceptance reviewed",
+                              course_replaced: "Receiving course replaced",
                           }[item.action],
-                          `${item.course_code} · ${item.course_title}`,
+                          item.action === "course_replaced"
+                              ? `${item.previous_course_code} · ${item.previous_course_title} → ${item.course_code} · ${item.course_title}`
+                              : `${item.course_code} · ${item.course_title}`,
                           item.course_version_id ? "Retained" : "Unknown",
                           item.effective_at || "Unknown",
                           item.recorded_at,
@@ -448,6 +586,7 @@ window.createWorkspaceTransferAwards = function (ui) {
                       data.items.map((item) => [
                           {
                               course_accepted: "Accepted course reviewed",
+                              course_replaced: "Receiving course replaced",
                               period_recorded: "Source period recorded",
                               dates_recorded: "Academic dates recorded",
                               posting_term_changed: "Posting term corrected",

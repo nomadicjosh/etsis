@@ -74,7 +74,10 @@ final readonly class TransferCreditLedger
             $existing = $this->records->existing($student, $rule->id, $completed->format("Y-m-d"));
             if ($existing !== null) {
                 $retained = $this->load(new EntityId($existing["id"]), new HistoryReadBudget());
-                if ($retained->originalCourseVersion() !== $courseVersion->value) {
+                if (
+                    $retained->originalCourseVersion() !== $courseVersion->value ||
+                    $retained->originalCourseId() !== $rule->institutionalCourseId->value
+                ) {
                     throw new DomainException(
                         "This award retains a different or unknown course publication. " .
                             "Review the existing award; a retry cannot replace its history.",

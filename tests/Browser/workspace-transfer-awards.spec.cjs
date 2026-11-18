@@ -49,6 +49,7 @@ async function fixture(page, options = {}) {
         counts_gpa: false,
         credit: {
             id: creditId,
+            course_id: course,
             source_id: award,
             credit_type: "transfer",
             course_code: "MATH.101",
@@ -159,19 +160,28 @@ async function fixture(page, options = {}) {
                 };
                 result = periodReview;
             }
+        } else if (path === endpoint + "accepted-course/search/") {
+            result = {
+                items: data.search ? [{ id: id(62), code: "ENG.220", title: "Fictional literature" }] : [],
+                next_after: null,
+                search_required: !data.search,
+            };
         } else if (path === endpoint + "accepted-course/choices/") {
             result = {
                 items: options.noCourses
                     ? []
                     : [
                           {
-                              version_id: data.cursor ? id(52) : id(51),
+                              version_id: data.course_id === id(62) ? id(63) : data.cursor ? id(52) : id(51),
                               version: data.cursor ? 1 : 2,
-                              code: "MATH.101",
-                              title: "Catalog Algebra",
-                              transcript_title: data.cursor
-                                  ? "Reviewed <script>algebra</script>"
-                                  : "Reviewed Algebra",
+                              code: data.course_id === id(62) ? "ENG.220" : "MATH.101",
+                              title: data.course_id === id(62) ? "Fictional literature" : "Catalog Algebra",
+                              transcript_title:
+                                  data.course_id === id(62)
+                                      ? "Fictional literature"
+                                      : data.cursor
+                                        ? "Reviewed <script>algebra</script>"
+                                        : "Reviewed Algebra",
                               credits_milli: 6000,
                           },
                       ],
@@ -184,6 +194,8 @@ async function fixture(page, options = {}) {
             } else {
                 courseReview = {
                     review_token: `fictional-course-review-${++courseSerial}`,
+                    course_id: data.course_id,
+                    replacement: data.course_id !== value.credit.course_id,
                     course_version_id: data.course_version_id,
                     previous_course_version_id: value.course_version_id,
                     before: {
@@ -191,11 +203,13 @@ async function fixture(page, options = {}) {
                         course_title: value.credit.course_title,
                     },
                     after: {
-                        course_code: "MATH.101",
+                        course_code: data.course_id === id(62) ? "ENG.220" : "MATH.101",
                         course_title:
-                            data.course_version_id === id(52)
-                                ? "Reviewed <script>algebra</script>"
-                                : "Reviewed Algebra",
+                            data.course_id === id(62)
+                                ? "Fictional literature"
+                                : data.course_version_id === id(52)
+                                  ? "Reviewed <script>algebra</script>"
+                                  : "Reviewed Algebra",
                     },
                     effective_on: data.effective_on,
                     reason: data.reason,
@@ -206,6 +220,7 @@ async function fixture(page, options = {}) {
             if (!courseCommitted) {
                 courseCommitted = true;
                 value.course_version_id = courseReview.course_version_id;
+                value.credit.course_id = courseReview.course_id;
                 value.credit.course_code = courseReview.after.course_code;
                 value.credit.course_title = courseReview.after.course_title;
                 value.credit.version++;
@@ -222,7 +237,9 @@ async function fixture(page, options = {}) {
                 items: data.cursor
                     ? [
                           {
-                              action: "course_accepted",
+                              action: courseReview.replacement ? "course_replaced" : "course_accepted",
+                              previous_course_code: courseReview.before.course_code,
+                              previous_course_title: courseReview.before.course_title,
                               course_version_id: courseReview.course_version_id,
                               course_code: courseReview.after.course_code,
                               course_title: courseReview.after.course_title,
@@ -764,7 +781,7 @@ test("stale accepted-course review preserves entered values and never submits a 
 test("course acceptance explains missing publications without creating a review", async ({ page }) => {
     const f = await fixture(page, { noCourses: true });
     await page.getByRole("button", { name: "Review accepted course", exact: true }).click();
-    await expect(page.locator("#drawer-error")).toContainText("Catalog staff must publish");
+    await expect(page.locator("#drawer-body")).toContainText("Catalog staff must publish");
     expect(f.calls.some((c) => c.path.endsWith("accepted-course/review/"))).toBe(false);
     expect(f.errors).toEqual([]);
 });
@@ -792,5 +809,49 @@ test("registrar corrects posting term and completion in one academic review", as
     await page.getByRole("button", { name: "Next source history page", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("Posting term corrected");
     expect(f.calls.filter((c) => c.path.endsWith("source-period/commit/"))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
+
+test("registrar searches and replaces a receiving course without re-awarding credit", async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole("button", { name: "Review accepted course", exact: true }).click();
+    const reason = page.getByRole("textbox", { name: "Reason and acceptance evidence", exact: true });
+    await reason.fill("Fictional replacement evaluation.");
+    expect(f.calls.some((c) => c.path.endsWith("accepted-course/search/"))).toBe(false);
+    await page.getByText("Choose another course", { exact: true }).click();
+    await page.getByRole("searchbox", { name: "Find receiving course", exact: true }).fill("ENG");
+    await page.getByRole("button", { name: "Find courses", exact: true }).click();
+    await expect(
+        page.getByRole("button", { name: "ENG.220 · Fictional literature", exact: true }),
+    ).toBeVisible();
+    const searchAccessibility = await new AxeBuilder({ page })
+        .include("#drawer-body")
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+    expect(searchAccessibility.violations).toEqual([]);
+    await page.getByRole("button", { name: "ENG.220 · Fictional literature", exact: true }).click();
+    await expect(reason).toHaveValue("Fictional replacement evaluation.");
+    await page
+        .getByRole("combobox", { name: "Accepted course publication", exact: true })
+        .selectOption(id(63));
+    const accessibility = await new AxeBuilder({ page })
+        .include("#drawer-body")
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+    expect(accessibility.violations).toEqual([]);
+    await page.getByRole("button", { name: "Review accepted definition", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("replaces the receiving course");
+    await page.getByRole("button", { name: "Revise accepted course", exact: true }).click();
+    await expect(
+        page.getByRole("combobox", { name: "Accepted course publication", exact: true }),
+    ).toHaveValue(id(63));
+    await page.getByRole("button", { name: "Review accepted definition", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm course acceptance", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("ENG.220");
+    await recordAction(page, "Course definition history");
+    await page.getByRole("button", { name: "Next course history page", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Receiving course replaced");
+    await expect(page.locator("#drawer-body")).toContainText("MATH.101");
+    expect(f.calls.filter((c) => c.path.endsWith("accepted-course/commit/"))).toHaveLength(1);
     expect(f.errors).toEqual([]);
 });

@@ -68,11 +68,15 @@ final readonly class SqlTransferCreditRepository implements TransferCreditReposi
         $row = $this->sql->rows("sis_credit_course_versions", ["id" => $credit->value], 1)[0] ?? null;
         return $row === null ? null : new EntityId($row["course_version_id"]);
     }
-    public function acceptCourse(EntityId $credit, PublishedCourseDefinition $definition, ?EntityId $previous): void
-    {
+    public function acceptCourse(
+        EntityId $credit,
+        PublishedCourseDefinition $definition,
+        ?EntityId $previous,
+        EntityId $previousCourse,
+    ): void {
         $facts = $this->credit($credit);
         if (
-            $facts["course_id"] !== $definition->courseId->value ||
+            $facts["course_id"] !== $previousCourse->value ||
             $this->courseVersion($credit)?->value !== $previous?->value
         ) {
             throw new CorruptHistoryException();

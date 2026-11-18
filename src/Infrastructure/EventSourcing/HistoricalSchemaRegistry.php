@@ -281,6 +281,15 @@ final readonly class HistoricalSchemaRegistry
                 "fields" => ["decision_id", "previous_decision_id", "previous_course_version_id", "course_version_id",
                     "course_id", "course_code", "course_title"],
             ],
+            \Domain\Transfer\Event\TransferCourseWasReplaced::class => [
+                "type" => "transfer_credit",
+                "root" => \Domain\Transfer\TransferCredit::class,
+                "fields" => [
+                    "decision_id", "previous_decision_id", "previous_course_version_id", "course_version_id",
+                    "previous_course_id", "course_id", "previous_course_code", "previous_course_title",
+                    "course_code", "course_title",
+                ],
+            ],
             \Domain\Transfer\Event\TransferAcademicPeriodWasRecorded::class => [
                 "type" => "transfer_credit",
                 "root" => \Domain\Transfer\TransferCredit::class,
@@ -899,6 +908,7 @@ final readonly class HistoricalSchemaRegistry
                     }
                     if (
                         in_array($class, [\Domain\Transfer\Event\TransferCourseWasAccepted::class,
+                            \Domain\Transfer\Event\TransferCourseWasReplaced::class,
                             \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted::class], true) &&
                         $name === "previous_course_version_id" && $value === null
                     ) {

@@ -107,8 +107,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlAcademicGradeRepository::class,
             \Domain\Gradebook\Repository\GradingScaleRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlGradingScaleRepository::class,
-            \Domain\DegreeAudit\Repository\ReplacementCourseRepository::class =>
-                \Infrastructure\Persistence\Repository\SqlReplacementCourseRepository::class,
+            \Domain\Catalog\Repository\CourseSearchRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlCourseSearchRepository::class,
             \Domain\DegreeAudit\Repository\RequirementAdjustmentRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlRequirementAdjustmentRepository::class,
             \Domain\DegreeAudit\Repository\StudentRequirementsRepository::class =>

@@ -45,7 +45,7 @@ final readonly class RequirementAdjustmentService
         private MessageCipher $cipher,
         private Clock $clock,
         private PublishedRequirementsReader $published,
-        private \Domain\DegreeAudit\Repository\ReplacementCourseRepository $replacementCourses,
+        private \Domain\Catalog\Repository\CourseSearchRepository $replacementCourses,
         private StudentCurriculumContext $curriculum,
         private SavedCourseRulePreview $rules,
         private AcademicInputService $inputs,

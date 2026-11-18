@@ -145,6 +145,7 @@ final class TransferAwardFixture
             $f->transferCredits(), new \Infrastructure\Persistence\Repository\SqlTransferCreditRepository($f->sql),
             $this->repository, $f->registration, new \Domain\Catalog\Service\PublishedCourseReader($history),
             $history, $f->transactions, $f->access, $this->cipher, $f->clock, $audit ?? $f->audit,
+            new \Infrastructure\Persistence\Repository\SqlCourseSearchRepository($f->sql),
         );
     }
     public function periods(?AuditTrail $audit = null): \Domain\Transfer\Service\TransferAcademicDetailsService

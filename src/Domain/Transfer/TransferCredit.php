@@ -11,6 +11,7 @@ use Domain\Transfer\Event\TransferCreditWasEstablished;
 use Domain\Transfer\Event\TransferCreditWasChanged;
 use Domain\Transfer\Event\TransferAcademicPeriodWasRecorded;
 use Domain\Transfer\Event\TransferCourseWasAccepted;
+use Domain\Transfer\Event\TransferCourseWasReplaced;
 use Domain\Transfer\Event\TransferAcademicDatesWereRecorded;
 use Domain\Transfer\Event\TransferPostingTermWasChanged;
 use Domain\Transfer\ValueObject\TransferEventSchema;
@@ -30,6 +31,7 @@ final class TransferCredit extends EventSourcedAggregate
     private ?string $academicOn = null;
     private ?string $courseVersion = null;
     private ?string $originalCourseVersion = null;
+    private ?string $originalCourseId = null;
     private ?string $originalCompletedOn = null;
     private ?string $originalTermId = null;
     public function acceptHistorical(DomainEvent $event): void
@@ -60,6 +62,7 @@ final class TransferCredit extends EventSourcedAggregate
         $this->originalCourseVersion = $this->courseVersion;
         $this->credit = $p["credit"];
         $this->source = $p["source"];
+        $this->originalCourseId = $p["source"]["course_id"];
         $this->originalCompletedOn = $p["source"]["completed_on"];
         $this->originalTermId = $p["source"]["term_id"];
         $this->grade = $p["grade"];
@@ -123,13 +126,42 @@ final class TransferCredit extends EventSourcedAggregate
     }
     public function whenTransferCourseWasAccepted(TransferCourseWasAccepted $event): void
     {
+        $this->acceptCourse($event->payload());
+    }
+
+    public function whenTransferCourseWasReplaced(TransferCourseWasReplaced $event): void
+    {
         $p = $event->payload();
+        if (
+            $this->credit === null ||
+            $this->source === null ||
+            $p["previous_course_id"] !== $this->credit["course_id"] ||
+            $p["previous_course_id"] !== $this->source["course_id"] ||
+            $p["previous_course_code"] !== $this->credit["course_code"] ||
+            $p["previous_course_title"] !== $this->credit["course_title"]
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->acceptCourse($p, replacement: true);
+        $this->credit["course_id"] = $p["course_id"];
+        $this->source["course_id"] = $p["course_id"];
+        new TransferCreditFacts($this->credit);
+    }
+
+    public function originalCourseId(): ?string
+    {
+        return $this->originalCourseId;
+    }
+
+    /** @param array<string,mixed> $p */
+    private function acceptCourse(array $p, bool $replacement = false): void
+    {
         if (
             $this->credit === null ||
             !in_array($this->credit["status"], ["A", "N"], true) ||
             $p["previous_decision_id"] !== $this->decision ||
             $p["previous_course_version_id"] !== $this->courseVersion ||
-            $p["course_id"] !== $this->credit["course_id"]
+            (!$replacement && $p["course_id"] !== $this->credit["course_id"])
         ) {
             throw new CorruptHistoryException();
         }

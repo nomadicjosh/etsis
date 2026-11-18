@@ -34,7 +34,7 @@ final class RequirementAdjustmentTest extends TestCase
             $f->f->catalog->fixture->cipher,
             $s->clock,
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($f->f->history),
-            new \Infrastructure\Persistence\Repository\SqlReplacementCourseRepository($s->sql),
+            new \Infrastructure\Persistence\Repository\SqlCourseSearchRepository($s->sql),
             new \Domain\DegreeAudit\Service\StudentCurriculumContext($f->service, $s->specializations($f->f->history)),
             new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->f->history)),
             $s->academicInputs($f->service),

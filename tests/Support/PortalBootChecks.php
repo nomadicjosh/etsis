@@ -3015,6 +3015,8 @@ $sis->access->staff = true;
 // Existing transfer acceptance reviews use real providers, private transport and the same event store.
 $acceptedPath = $correctionPath . "accepted-course/";
 $nextAccepted = $sis->publishCourse($teachingSection->courseId);
+$replacementReceivingCourse = $sis->section(20, 0)->courseId;
+$replacementPublication = $sis->publishCourse($replacementReceivingCourse);
 $sis->access->staff = false;
 $sis->access->grants = ["sis:transfer:manage", "sis:student:read"];
 $acceptedChoices = $teachingPost($acceptedPath . "choices/", []);
@@ -3039,8 +3041,40 @@ if ($acceptedCommit->getStatusCode() !== 200 || (string) $acceptedCommit->getBod
     str_contains((string) $acceptedHistoryResponse->getBody(), "Fictional accepted course review")) {
     throw new RuntimeException("Transfer acceptance confirmation/retry or curated history failed.");
 }
+$courseSearchResponse = $teachingPost($acceptedPath . "search/", ["search" => "CS-"]);
+$courseSearch = json_decode((string) $courseSearchResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($courseSearchResponse->getStatusCode() !== 200 || !is_array($courseSearch["items"] ?? null) ||
+    !str_contains($courseSearchResponse->getHeaderLine("Cache-Control"), "no-store")) {
+    throw new RuntimeException("Registrar receiving-course search lost its provider/privacy boundary.");
+}
+$searchWithoutCsrf = new \Qubus\Http\ServerRequest([], [], "https://campus.example.invalid" . $acceptedPath . "search/", "POST");
+if ($app->router->match($searchWithoutCsrf->withParsedBody(["search" => "CS-"]))->getStatusCode() !== 403) {
+    throw new RuntimeException("Receiving-course search bypassed browser CSRF protection.");
+}
+$replacementVersion = (int) $sis->sql->one("sis_academic_credits", ["id" => $postedTransfer["credit_id"]])["version"];
+$replacementChoices = $teachingPost($acceptedPath . "choices/", ["course_id" => $replacementReceivingCourse->value]);
+$replacementResponse = $teachingPost($acceptedPath . "review/", [
+    "course_id" => $replacementReceivingCourse->value, "course_version_id" => $replacementPublication->value,
+    "version" => $replacementVersion, "effective_on" => $sis->clock->now()->format("Y-m-d"),
+    "reason" => "Fictional receiving-course replacement.",
+]);
+$replacementReview = json_decode((string) $replacementResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($replacementChoices->getStatusCode() !== 200 || $replacementResponse->getStatusCode() !== 200 ||
+    ($replacementReview["replacement"] ?? null) !== true) {
+    throw new RuntimeException("Receiving-course replacement review failed its real provider boundary.");
+}
+$replacementData = ["review_token" => $replacementReview["review_token"]];
+$replacementSaved = $teachingPost($acceptedPath . "commit/", $replacementData);
+$replacementRetry = $teachingPost($acceptedPath . "commit/", $replacementData);
+$replacementHistory = $teachingPost($acceptedPath . "history/", []);
+if ($replacementSaved->getStatusCode() !== 200 || (string) $replacementSaved->getBody() !== (string) $replacementRetry->getBody() ||
+    $sis->sql->one("sis_academic_credits", ["id" => $postedTransfer["credit_id"]])["course_id"] !== $replacementReceivingCourse->value ||
+    !str_contains((string) $replacementHistory->getBody(), "course_replaced") ||
+    str_contains((string) $replacementHistory->getBody(), "Fictional receiving-course replacement")) {
+    throw new RuntimeException("Receiving-course replacement/retry or curated history failed.");
+}
 $sis->access->grants = ["sis:transfer:manage"];
-foreach (["choices", "history", "commit"] as $acceptedAction) {
+foreach (["search", "choices", "history", "commit"] as $acceptedAction) {
     if ($teachingPost($acceptedPath . $acceptedAction . "/", $acceptedData)->getStatusCode() !== 403) {
         throw new RuntimeException("Transfer-only access exposed protected course-acceptance decisions.");
     }

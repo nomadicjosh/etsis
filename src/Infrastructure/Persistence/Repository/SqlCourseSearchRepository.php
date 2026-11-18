@@ -4,11 +4,11 @@ declare(strict_types=1);
 
 namespace Infrastructure\Persistence\Repository;
 
-use Domain\DegreeAudit\Repository\ReplacementCourseRepository;
+use Domain\Catalog\Repository\CourseSearchRepository;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\SqlRecords;
 
-final readonly class SqlReplacementCourseRepository implements ReplacementCourseRepository
+final readonly class SqlCourseSearchRepository implements CourseSearchRepository
 {
     public function __construct(private SqlRecords $sql)
     {

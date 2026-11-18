@@ -105,6 +105,16 @@ final readonly class SisTransferAwardController
             ),
         );
     }
+    public function courseSearch(ServerRequest $request, string $student, string $award): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->courses->search(
+            new EntityId($student),
+            new EntityId($award),
+            $f->optionalText("search", 80) ?? "",
+            $f->optionalId("after"),
+        ));
+    }
     public function courseChoices(ServerRequest $request, string $student, string $award): ResponseInterface
     {
         return new JsonResponse(
@@ -112,6 +122,7 @@ final readonly class SisTransferAwardController
                 new EntityId($student),
                 new EntityId($award),
                 FormInput::from($request)->optionalText("cursor", 16384),
+                FormInput::from($request)->optionalId("course_id"),
             ),
         );
     }
@@ -126,6 +137,7 @@ final readonly class SisTransferAwardController
                 $f->integer("version", 0),
                 $f->text("effective_on", 10),
                 $f->bodyText("reason"),
+                $f->optionalId("course_id"),
             ),
         );
     }

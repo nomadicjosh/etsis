@@ -227,7 +227,7 @@ final class CombinedDegreeProgressTest extends TestCase
             $f->r->catalog->fixture->cipher,
             $s->clock,
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($f->r->history),
-            new \Infrastructure\Persistence\Repository\SqlReplacementCourseRepository($s->sql),
+            new \Infrastructure\Persistence\Repository\SqlCourseSearchRepository($s->sql),
             new \Domain\DegreeAudit\Service\StudentCurriculumContext($f->requirements(), $f->service),
             new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->r->history)),
             $s->academicInputs($f->requirements()),

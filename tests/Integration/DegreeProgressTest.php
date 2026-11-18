@@ -33,7 +33,7 @@ use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\ValueObject\AwardChange;
 use Infrastructure\Persistence\Repository\SqlAcademicInputRepository;
-use Infrastructure\Persistence\Repository\SqlReplacementCourseRepository;
+use Infrastructure\Persistence\Repository\SqlCourseSearchRepository;
 use Infrastructure\Persistence\Repository\SqlRequirementAdjustmentRepository;
 use Infrastructure\Persistence\Repository\SqlStudentRecordRepository;
 use PHPUnit\Framework\TestCase;
@@ -56,7 +56,7 @@ final class DegreeProgressTest extends TestCase
             $f->f->catalog->fixture->cipher,
             $s->clock,
             new PublishedRequirementsReader($f->f->history),
-            new SqlReplacementCourseRepository($s->sql),
+            new SqlCourseSearchRepository($s->sql),
             new \Domain\DegreeAudit\Service\StudentCurriculumContext($f->service, $s->specializations($f->f->history)),
             new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->f->history)),
             $s->academicInputs($f->service),

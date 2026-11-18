@@ -280,6 +280,10 @@ return static function (Psr7Router $router): void {
         ])
         ->name("sis.transfer.award.history");
     $router
+        ->map(["POST"], "/sis/students/{student}/transfer-awards/{award}/accepted-course/search/", [
+            \Application\Http\Controller\SisTransferAwardController::class, "courseSearch",
+        ])->name("sis.transfer.course.search");
+    $router
         ->map(["POST"], "/sis/students/{student}/transfer-awards/{award}/accepted-course/choices/", [
             \Application\Http\Controller\SisTransferAwardController::class, "courseChoices",
         ])->name("sis.transfer.course.choices");
