@@ -152,3 +152,64 @@ if (
 ) {
     throw new RuntimeException("An expired portal review appended registration or financial facts.");
 }
+
+// Staff and student schedule planning share the same private/CSRF-protected acceptance boundary.
+foreach ([true, false] as $staffPlan) {
+    $sis->access->staff = true;
+    $planOwner = $sis->user();
+    $planStudent = $sis->student($planOwner);
+    $planSections = [$sis->section(fee: 0)->id->value, $sis->section(fee: 0)->id->value];
+    $sis->access->actor = $planOwner;
+    $sis->access->staff = $staffPlan;
+    $sis->access->grants = [];
+    $planPath = $staffPlan ? '/sis/registration-plans/' : '/portal/api/registration-plan/';
+    $planInput = ['student_id' => $planStudent->id->value, 'section_ids' => $planSections];
+    $unprotected = new \Qubus\Http\ServerRequest(
+        [],
+        [],
+        'https://campus.example.invalid' . $planPath . 'review/',
+        'POST',
+    );
+    if ($app->router->match($unprotected->withParsedBody($planInput))->getStatusCode() !== 403) {
+        throw new RuntimeException('Schedule review bypassed CSRF.');
+    }
+    $planBefore = $t->digest();
+    $response = $teachingPost($planPath . 'review/', $planInput);
+    $planReview = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if (
+        $response->getStatusCode() !== 200 || !($planReview['can_confirm'] ?? false) ||
+        !str_contains($response->getHeaderLine('Cache-Control'), 'no-store') || $t->digest() !== $planBefore
+    ) {
+        throw new RuntimeException('Actual schedule review failed its private read-only boundary.');
+    }
+    $planCommand = $planInput + array_intersect_key(
+        $planReview,
+        array_flip(['operation_id', 'revision', 'review_token']),
+    );
+    $unprotected = new \Qubus\Http\ServerRequest(
+        [],
+        [],
+        'https://campus.example.invalid' . $planPath . 'commit/',
+        'POST',
+    );
+    if ($app->router->match($unprotected->withParsedBody($planCommand))->getStatusCode() !== 403) {
+        throw new RuntimeException('Schedule confirmation bypassed CSRF.');
+    }
+    $planActor = $sis->access->actor;
+    $sis->access->staff = false;
+    $sis->access->actor = $sis->user();
+    if (!in_array($teachingPost($planPath . 'commit/', $planCommand)->getStatusCode(), [403, 404], true)) {
+        throw new RuntimeException('Another account confirmed a private registration schedule.');
+    }
+    $sis->access->actor = $planActor;
+    $sis->access->staff = $staffPlan;
+    $acceptedPlan = $teachingPost($planPath . 'commit/', $planCommand);
+    $retriedPlan = $teachingPost($planPath . 'commit/', $planCommand);
+    if (
+        $acceptedPlan->getStatusCode() !== 200 || $retriedPlan->getStatusCode() !== 200 ||
+        (string) $acceptedPlan->getBody() !== (string) $retriedPlan->getBody() ||
+        !str_contains($acceptedPlan->getHeaderLine('Cache-Control'), 'no-store')
+    ) {
+        throw new RuntimeException('Actual coordinated schedule confirmation or original-result retry failed.');
+    }
+}

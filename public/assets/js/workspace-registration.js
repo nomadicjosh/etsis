@@ -56,6 +56,95 @@ window.createWorkspaceRegistration = function (ui) {
             back ? button("Back to registration", back, "btn-link") : null,
         );
     }
+    async function plan(student, back, identity = null) {
+        const selected = new Map();
+        let body = openDrawer("Plan registration", "SELECT SECTIONS → REVIEW SCHEDULE → CONFIRM");
+        const form = await buildForm([["section_id", "Add a course section", "lookup", "sections"]]);
+        if (!body.isConnected) return;
+        const list = node("div", { "aria-live": "polite" });
+        const add = node("button", { type: "submit", class: "btn btn-outline-primary" }, "Add section");
+        form.append(add);
+        function draw() {
+            list.replaceChildren(node("p", { role: "status" }, `${selected.size} of 10 sections selected.`));
+            if (selected.size)
+                list.append(
+                    grid(
+                        ["Section", "Action"],
+                        [...selected].map(([id, label]) => [
+                            label,
+                            button("Remove section", () => {
+                                selected.delete(id);
+                                draw();
+                            }),
+                        ]),
+                        "Selected course sections",
+                    ),
+                );
+            review.disabled = !selected.size;
+        }
+        function edit() {
+            body = openDrawer("Plan registration", "SELECT SECTIONS → REVIEW SCHEDULE → CONFIRM");
+            body.append(
+                identity
+                    ? recordSummary([
+                          ["Student", `${identity.given_name} ${identity.family_name}`],
+                          ["Institutional ID", identity.institutional_id],
+                      ])
+                    : null,
+                node(
+                    "p",
+                    {},
+                    "Select up to ten sections. Review prerequisites, timetable and actual charges together before anything is saved.",
+                ),
+                form,
+                list,
+                review,
+                button("Back to student", back, "btn-link"),
+            );
+            draw();
+        }
+        const reviewSchedule = window.createRegistrationPlanReview({
+            node,
+            request,
+            money,
+            open: (title) => openDrawer(title, "REVIEWED REGISTRATION"),
+            button: (label, action, primary) =>
+                button(label, action, primary ? "btn-primary" : "btn-outline-primary"),
+        });
+        const review = button(
+            "Review schedule",
+            () =>
+                reviewSchedule({
+                    student,
+                    sections: [...selected.keys()],
+                    reviewUrl: "/sis/registration-plans/review/",
+                    commitUrl: "/sis/registration-plans/commit/",
+                    onRevise: edit,
+                    onComplete: async (result) => {
+                        const saved = receipt(
+                            result,
+                            () => plan(student, back, identity),
+                            "Plan another schedule",
+                        );
+                        saved.append(button("Back to student", back, "btn-link"));
+                    },
+                }),
+            "btn-primary",
+        );
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(() => {
+                if (!form.reportValidity()) return;
+                const control = form.elements.section_id;
+                if (selected.has(control.value)) throw new Error("This section is already selected.");
+                if (selected.size >= 10) throw new Error("Select at most ten sections.");
+                selected.set(control.value, control.selectedOptions[0].textContent);
+                draw();
+            }, add);
+        });
+        edit();
+    }
+
     async function single(student, back, draft = {}) {
         let body = openDrawer("Register student", "SECTION → ELIGIBILITY & FEES → CONFIRM");
         const form = await buildForm([["section_id", "Course section", "lookup", "sections"]], draft);
@@ -115,23 +204,27 @@ window.createWorkspaceRegistration = function (ui) {
         });
         body.append(form, button("Back to student", back, "btn-link"));
     }
-    function receipt(result, again) {
-        const body = openDrawer("Batch completed", "REGISTRATION RECEIPT");
+    function receipt(result, again, againLabel = "Start another group") {
+        const planned = !!result.plan_id;
+        const body = openDrawer(planned ? "Schedule registered" : "Batch completed", "REGISTRATION RECEIPT");
         body.append(
             node(
                 "p",
                 { role: "status" },
-                `${result.created} ${result.created === 1 ? "registration" : "registrations"} created. ${result.existing} existing ${result.existing === 1 ? "registration" : "registrations"} kept.`,
+                planned
+                    ? `${result.created} registrations created together.`
+                    : `${result.created} ${result.created === 1 ? "registration" : "registrations"} created. ${result.existing} existing ${result.existing === 1 ? "registration" : "registrations"} kept.`,
             ),
-            node("p", {}, "The registrations, applicable charges and batch receipt were saved together."),
+            node("p", {}, "The registrations, applicable charges and receipt were saved together."),
             node(
                 "p",
                 { class: "registration-reference" },
-                "Batch reference: ",
-                node("code", {}, result.batch_id),
+                planned ? "Schedule reference: " : "Batch reference: ",
+                node("code", {}, result.plan_id || result.batch_id),
             ),
-            button("Start another group", again, "btn-primary"),
+            button(againLabel, again, "btn-primary"),
         );
+        return body;
     }
     async function findReceipt() {
         const body = openDrawer("Find a completed batch", "REGISTRATION RECEIPT");
@@ -540,5 +633,5 @@ window.createWorkspaceRegistration = function (ui) {
             );
         body.append(nav);
     }
-    return { single, policy, start, history };
+    return { single, plan, policy, start, history };
 };

@@ -9,6 +9,7 @@
         ? JSON.parse(one('#campus-config').textContent)
         : {};
     let me = null;
+    let addToRegistrationPlan = null;
     let dialogOpener = null;
     let portalDialogGeneration = 0;
     let pageLeaving = false;
@@ -422,6 +423,7 @@
                     () => confirmRegistration(course),
                     true,
                 ),
+                addToRegistrationPlan ? button('Add to schedule', () => addToRegistrationPlan(course)) : null,
             );
         } else if (!Number(course.web_registration))
             card.append(
@@ -1737,6 +1739,88 @@
                 ),
             );
         }
+        const selected = new Map();
+        const cart = el(
+            'section',
+            { class: 'campus-surface p-4 my-4', 'aria-label': 'Your planned schedule' },
+            el('h2', { class: 'h4' }, 'Plan your schedule'),
+            el(
+                'p',
+                {},
+                'Add sections from your search results, then review eligibility, meetings and actual charges together.',
+            ),
+        );
+        const studentChoice = control(cart, 'plan_student', 'Student record', 'select', { required: true });
+        selectOptions(
+            studentChoice,
+            me.students.map((item) => ({ id: item.id, label: programName(item.primary_program_id) })),
+        );
+        if (me.students.length === 1) studentChoice.value = me.students[0].id;
+        const selectedList = el('div', { 'aria-live': 'polite' });
+        function drawSelection() {
+            selectedList.replaceChildren(
+                el('p', { role: 'status' }, `${selected.size} of 10 sections selected.`),
+            );
+            if (selected.size)
+                selectedList.append(
+                    table(
+                        ['Course section', 'Action'],
+                        [...selected].map(([id, item]) => [
+                            `${item.course_code} · ${item.section_code}`,
+                            button('Remove section', () => {
+                                selected.delete(id);
+                                drawSelection();
+                            }),
+                        ]),
+                        'Your selected course sections',
+                    ),
+                );
+            reviewScheduleButton.disabled = !selected.size || !studentChoice.value;
+        }
+        studentChoice.addEventListener('change', drawSelection);
+        let generation = 0;
+        const reviewSchedule = window.createRegistrationPlanReview({
+            node: el,
+            request,
+            money: amount,
+            button,
+            open: (title) => {
+                const body = el('div');
+                dialog(title, body);
+                generation = portalDialogGeneration;
+                return body;
+            },
+            isCurrent: () => !pageLeaving && generation === portalDialogGeneration,
+        });
+        const reviewScheduleButton = button(
+            'Review schedule',
+            () =>
+                reviewSchedule({
+                    student: studentChoice.value,
+                    sections: [...selected.keys()],
+                    reviewUrl: '/portal/api/registration-plan/review/',
+                    commitUrl: '/portal/api/registration-plan/commit/',
+                    onRevise: () => {
+                        bootstrap.Modal.getInstance(one('#campus-dialog')).hide();
+                    },
+                    onComplete: async (result) => {
+                        selected.clear();
+                        bootstrap.Modal.getInstance(one('#campus-dialog')).hide();
+                        notice(`${result.created} course sections registered together.`);
+                        await renderService();
+                    },
+                }),
+            true,
+        );
+        addToRegistrationPlan = (course) => {
+            if (selected.has(course.id)) throw new Error('This section is already selected.');
+            if (selected.size >= 10) throw new Error('Select at most ten sections.');
+            selected.set(course.id, course);
+            drawSelection();
+        };
+        cart.append(selectedList, reviewScheduleButton);
+        drawSelection();
+        container.append(cart);
         const form = el('form', { class: 'campus-catalog-filters' });
         const term = control(form, 'term', 'Academic term', 'select');
         selectOptions(

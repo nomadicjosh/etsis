@@ -37,6 +37,27 @@ final readonly class SisRegistrationBatchController
         );
     }
 
+    public function reviewPlan(ServerRequest $request): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->service->reviewPlan(\Application\Http\RegistrationPlanInput::selection($request), true),
+        );
+    }
+
+    public function commitPlan(ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->service->commitPlan(
+                $f->id("operation_id"),
+                \Application\Http\RegistrationPlanInput::selection($request),
+                $f->text("revision", 64),
+                $f->text("review_token", 8192),
+                true,
+            ),
+        );
+    }
+
     public function show(string $id): ResponseInterface
     {
         return new JsonResponse($this->service->receipt(new EntityId($id)));

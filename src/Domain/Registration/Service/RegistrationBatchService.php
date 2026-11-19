@@ -10,6 +10,7 @@ use Domain\Registration\Repository\RegistrationBatchRepository;
 use Domain\Registration\Repository\RegistrationRepository;
 use Domain\Registration\Repository\SectionVersionRepository;
 use Domain\Registration\ValueObject\RegistrationBatchSelection;
+use Domain\Registration\ValueObject\RegistrationPlanSelection;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
@@ -40,6 +41,356 @@ final readonly class RegistrationBatchService
         private RegistrationBilling $billing,
         private \Domain\Shared\Service\ReviewProof $reviews,
     ) {
+    }
+
+    /** Several sections for one student, using the same readiness, pricing, proofs and receipt storage.
+     * @return array<string,mixed> */
+    public function reviewPlan(RegistrationPlanSelection $selection, bool $byStaff): array
+    {
+        $actor = $this->authorize($this->singleSelection($selection), $byStaff);
+        $routing = $this->planRouting($selection);
+        return $this->transactions->run(function () use ($selection, $routing, $actor, $byStaff): array {
+            $this->lockPlan($selection, $routing);
+            $quotes = [];
+            $context = $this->planContext(
+                $selection,
+                new \Domain\Shared\EventSourcing\HistoryReadBudget(),
+                $byStaff,
+                $quotes,
+            );
+            $this->actor($actor, $this->singleSelection($selection), $byStaff);
+            $operation = EntityId::generate();
+            $revision = $this->revision($context);
+            return $context + [
+                "operation_id" => $operation->value,
+                "revision" => $revision,
+                "review_token" => $this->reviews->issue(
+                    "registration-plan",
+                    $byStaff ? "staff" : "student",
+                    $selection->student,
+                    $actor,
+                    $operation,
+                    $revision,
+                ),
+                "expires_at" => $this->clock
+                    ->now()
+                    ->modify("+20 minutes")
+                    ->format(DATE_ATOM),
+            ];
+        });
+    }
+
+    /** @return array<string,mixed> */
+    public function commitPlan(
+        EntityId $operation,
+        RegistrationPlanSelection $selection,
+        string $revision,
+        #[\SensitiveParameter] string $token,
+        bool $byStaff,
+    ): array {
+        $single = $this->singleSelection($selection);
+        $actor = $this->authorize($single, $byStaff);
+        $hash = $selection->requestHash($revision, $byStaff);
+        $receipt = $this->batches->receipt($operation);
+        $this->reviews->validate(
+            $token,
+            "registration-plan",
+            $byStaff ? "staff" : "student",
+            $selection->student,
+            $actor,
+            $operation,
+            $revision,
+            accepted: $receipt !== null,
+        );
+        if ($receipt !== null) {
+            return $this->replay($receipt, $actor, $hash);
+        }
+        $routing = $this->planRouting($selection);
+        return $this->transactions->run(function () use (
+            $selection,
+            $single,
+            $routing,
+            $actor,
+            $operation,
+            $revision,
+            $token,
+            $byStaff,
+            $hash,
+        ): array {
+            $this->lockPlan($selection, $routing);
+            $receipt = $this->batches->receipt($operation);
+            $this->reviews->validate(
+                $token,
+                "registration-plan",
+                $byStaff ? "staff" : "student",
+                $selection->student,
+                $actor,
+                $operation,
+                $revision,
+                accepted: $receipt !== null,
+            );
+            if ($receipt !== null) {
+                return $this->replay($receipt, $actor, $hash);
+            }
+            $budget = new \Domain\Shared\EventSourcing\HistoryReadBudget();
+            $quotes = [];
+            $context = $this->planContext($selection, $budget, $byStaff, $quotes);
+            if (!hash_equals($this->revision($context), $revision)) {
+                throw new ConcurrentModificationException("The selected schedule changed. Review it again.");
+            }
+            if (!$context["can_confirm"]) {
+                throw new ValidationException([
+                    [
+                        "field" => "sections",
+                        "message" =>
+                            "Resolve the readiness, timetable, seat or pricing issues before confirming. " .
+                            "No registrations were saved.",
+                    ],
+                ]);
+            }
+            $items = [];
+            foreach ($selection->sections as $section) {
+                $current = $this->repository->section($section);
+                $course = $this->repository->courseForSection($current);
+                $quote = $this->billing->registrationQuote(
+                    $selection->student,
+                    $current->termId,
+                    $current->fee,
+                    $course->creditsMilli,
+                    $budget,
+                );
+                if ($quote->definitionFingerprint() !== $quotes[$section->value]->definitionFingerprint()) {
+                    throw new ConcurrentModificationException(
+                        "Registration prices changed. Review the schedule again.",
+                    );
+                }
+                $enrollment = $this->registration->register(
+                    $selection->student,
+                    $section,
+                    $byStaff,
+                    budget: $budget,
+                    chargeQuote: $quote,
+                );
+                $items[] = [
+                    "section_id" => $section->value,
+                    "enrollment_id" => $enrollment->id->value,
+                    "status" => $enrollment->status->value,
+                ];
+            }
+            $result = [
+                "plan_id" => $operation->value,
+                "student_id" => $selection->student->value,
+                "created" => count($items),
+                "registrations" => $items,
+            ];
+            $this->batches->save(
+                $operation,
+                $actor,
+                $selection->sections[0],
+                $hash,
+                $result,
+                $this->clock->now()->format(DATE_ATOM),
+            );
+            $this->audit->record($actor, "registration.plan_completed", $operation);
+            // Check every accepted section after the final write/audit, not just the last section.
+            foreach ($selection->sections as $section) {
+                $this->registration->verifyCompletion(
+                    $selection->student,
+                    $section,
+                    $actor,
+                    $byStaff,
+                    $budget,
+                );
+                $current = $this->repository->section($section);
+                $course = $this->repository->courseForSection($current);
+                $expected = array_values(
+                    array_filter(
+                        $context["sections"],
+                        static fn(array $row): bool => $row["section"]["id"] === $section->value,
+                    ),
+                )[0]["section"];
+                if (
+                    $current->termId->value !== $expected["term_id"] ||
+                    $course->id->value !== $expected["course_id"] ||
+                    $current->publicationVersionId?->value !== $expected["section_version_id"] ||
+                    $this->versions->selectionPosition($section) !== $expected["selection_position"] ||
+                    $course->publicationVersionId?->value !== $expected["course_version_id"] ||
+                    $current->capacity !== $expected["capacity"] ||
+                    $course->code !== $expected["course_code"] ||
+                    $course->title !== $expected["course_title"]
+                ) {
+                    throw new ConcurrentModificationException(
+                        "Section definitions changed before completion. Review again.",
+                    );
+                }
+                $fresh = $this->billing->registrationQuote(
+                    $selection->student,
+                    $current->termId,
+                    $current->fee,
+                    $course->creditsMilli,
+                    $budget,
+                );
+                if ($fresh->definitionFingerprint() !== $quotes[$section->value]->definitionFingerprint()) {
+                    throw new ConcurrentModificationException(
+                        "Registration prices changed before completion. Review again.",
+                    );
+                }
+            }
+            if ($this->schedules->between($selection->sections) !== $context["planned_schedule"]) {
+                throw new ConcurrentModificationException(
+                    "Selected meeting publications or policy changed. Review again.",
+                );
+            }
+            $this->verifyPlanRouting($selection, $routing);
+            $this->actor($actor, $single, $byStaff);
+            $this->reviews->validate(
+                $token,
+                "registration-plan",
+                $byStaff ? "staff" : "student",
+                $selection->student,
+                $actor,
+                $operation,
+                $revision,
+            );
+            return $result;
+        });
+    }
+
+    private function singleSelection(RegistrationPlanSelection $selection): RegistrationBatchSelection
+    {
+        return new RegistrationBatchSelection($selection->sections[0], $selection->student);
+    }
+
+    /** @return array<string,mixed> */
+    private function planRouting(RegistrationPlanSelection $selection): array
+    {
+        $courses = [];
+        foreach ($selection->sections as $section) {
+            $id = $this->repository->section($section)->courseId;
+            $courses[$id->value] = $id;
+        }
+        ksort($courses, SORT_STRING);
+        $person = $this->admissions->student($selection->student)->personId;
+        return [
+            "person" => $person,
+            "owner" => $this->admissions->person($person)->ownerUserId?->value,
+            "courses" => array_values($courses),
+        ];
+    }
+
+    private function lockPlan(RegistrationPlanSelection $selection, array $routing): void
+    {
+        $this->repository->lockStudent($selection->student);
+        $this->repository->lockPerson($routing["person"]);
+        foreach ($selection->sections as $section) {
+            $this->repository->lockSection($section);
+        }
+        foreach ($routing["courses"] as $course) {
+            $this->repository->lockCourse($course);
+        }
+        $this->verifyPlanRouting($selection, $routing);
+    }
+
+    private function verifyPlanRouting(RegistrationPlanSelection $selection, array $routing): void
+    {
+        if (
+            $this->admissions->student($selection->student)->personId->value !== $routing["person"]->value ||
+            $this->admissions->person($routing["person"])->ownerUserId?->value !== $routing["owner"]
+        ) {
+            throw new ConcurrentModificationException("The student identity or account link changed. Review again.");
+        }
+    }
+
+    /** @return array<string,mixed> */
+    private function planContext(
+        RegistrationPlanSelection $selection,
+        \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
+        bool $byStaff,
+        array &$quotes,
+    ): array {
+        $rows = $issues = $terms = $termFees = $totals = $termCharges = $termCurrencies = [];
+        $read = new RegistrationScheduleRead();
+        foreach ($selection->sections as $section) {
+            $childQuotes = [];
+            $child = $this->context(
+                new RegistrationBatchSelection($section, $selection->student),
+                $budget,
+                $byStaff,
+                $childQuotes,
+                $read,
+            );
+            $row = $child["students"][0];
+            if ($row["enrollment_id"] !== null) {
+                $issues[] = "A selected section already has an enrollment. Review it separately.";
+            }
+            if (!$child["section"]["active"] || $child["section"]["seats_remaining"] < 1) {
+                $issues[] = "A selected section is inactive or full.";
+            }
+            if (
+                $row["issues"] !== [] ||
+                $row["schedule"]["blocked"] ||
+                $row["prerequisites"]["status"] === "missing" ||
+                $row["charges"]["problems"] !== []
+            ) {
+                $issues[] = "A selected section has readiness, timetable or pricing issues.";
+            }
+            $term = $this->repository->section($section)->termId;
+            $terms[$term->value] = ($terms[$term->value] ?? 0) + 1;
+            $quotes[$section->value] = $childQuotes[$selection->student->value] ?? null;
+            $quote = $quotes[$section->value];
+            if ($quote !== null) {
+                $row["charges"] = $quote->planSummary($termFees);
+                if ($row["charges"]["total_minor"] !== null) {
+                    $currency = $row["charges"]["currency"];
+                    if (isset($termCurrencies[$term->value]) && $termCurrencies[$term->value] !== $currency) {
+                        $issues[] = "Selected sections in the same billing term must use one currency.";
+                    }
+                    $termCurrencies[$term->value] = $currency;
+                    $amount = $row["charges"]["total_minor"];
+                    $maximum = \Domain\Finance\ValueObject\Money::MAX_MINOR;
+                    if (
+                        (array_key_exists($currency, $totals) && $totals[$currency] === null) ||
+                        $amount > $maximum - ($totals[$currency] ?? 0) ||
+                        $amount > $maximum - ($termCharges[$term->value] ?? 0)
+                    ) {
+                        $totals[$currency] = null;
+                        $issues[] = "The selected schedule exceeds the supported account amount limit.";
+                    } else {
+                        $totals[$currency] = ($totals[$currency] ?? 0) + $amount;
+                        $termCharges[$term->value] = ($termCharges[$term->value] ?? 0) + $amount;
+                        if (
+                            $quote->termQuote->facts()["balance_before_minor"] >
+                            $maximum - $termCharges[$term->value]
+                        ) {
+                            $issues[] = "The selected schedule exceeds the supported account amount limit.";
+                        }
+                    }
+                }
+            }
+            $rows[] = ["section" => $child["section"], "student" => $row];
+        }
+        foreach ($terms as $id => $count) {
+            $term = new EntityId($id);
+            if (
+                $this->repository->enrolledCount($selection->student, $term) + $count >
+                $this->repository->window($term)->courseLimit
+            ) {
+                $issues[] = "The selected schedule exceeds the course limit for an academic term.";
+            }
+        }
+        $schedule = $this->schedules->between($selection->sections, $read);
+        if ($schedule["blocked"]) {
+            $issues[] = "Selected sections have overlapping published meetings.";
+        }
+        return [
+            "student_id" => $selection->student->value,
+            "by_staff" => $byStaff,
+            "sections" => $rows,
+            "planned_schedule" => $schedule,
+            "totals" => $totals,
+            "issues" => array_values(array_unique($issues)),
+            "can_confirm" => $issues === [],
+        ];
     }
 
     /** @return array<string, mixed> */
@@ -326,13 +677,14 @@ final readonly class RegistrationBatchService
         \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
         bool $byStaff,
         array &$quotes,
+        ?RegistrationScheduleRead $scheduleRead = null,
     ): array {
         $section = $this->repository->section($selection->section);
         $course = $this->repository->courseForSection($section);
         $students = [];
         $window = $this->repository->window($section->termId);
         $term = $this->repository->term($section->termId);
-        $scheduleRead = new RegistrationScheduleRead();
+        $scheduleRead ??= new RegistrationScheduleRead();
         $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
         $records = $existing = $programs = [];
         foreach ($selection->students as $id) {
@@ -446,6 +798,7 @@ final readonly class RegistrationBatchService
                 "section_version_id" => $section->publicationVersionId?->value,
                 "selection_position" => $this->versions->selectionPosition($section->id),
                 "course_version_id" => $course->publicationVersionId?->value,
+                "course_id" => $course->id->value,
                 "course_code" => $course->code,
                 "course_title" => $course->title,
                 "prerequisite_courses" => $prerequisiteCourses,

@@ -125,6 +125,23 @@ final readonly class CampusService
         $this->contacts->save($preferredName, $phone, $address, $version);
     }
 
+    public function reviewRegistrationPlan(
+        \Domain\Registration\ValueObject\RegistrationPlanSelection $selection,
+    ): array {
+        $this->repository->ownedStudent($this->access->authenticatedUserId(), $selection->student);
+        return $this->registrations->reviewPlan($selection, false);
+    }
+
+    public function registerPlan(
+        \Domain\Registration\ValueObject\RegistrationPlanSelection $selection,
+        EntityId $operation,
+        string $revision,
+        #[\SensitiveParameter] string $token,
+    ): array {
+        $this->repository->ownedStudent($this->access->authenticatedUserId(), $selection->student);
+        return $this->registrations->commitPlan($operation, $selection, $revision, $token, false);
+    }
+
     public function reviewRegistration(EntityId $student, EntityId $section): array
     {
         $this->repository->ownedStudent($this->access->authenticatedUserId(), $student);

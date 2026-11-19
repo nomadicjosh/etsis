@@ -283,6 +283,7 @@ window.createWorkspaceOperations = function (ui) {
                 button("Register for a section", () =>
                     ui.batchRegistration().single(row.id, back),
                 ),
+                button("Plan registration", () => ui.batchRegistration().plan(row.id, back, row)),
             );
         await paged(actions, "enrollments", row.id, (rows) =>
             scrollTable(

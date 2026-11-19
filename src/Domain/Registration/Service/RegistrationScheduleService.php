@@ -80,6 +80,57 @@ final readonly class RegistrationScheduleService
             "conflicts" => $conflicts,
         ]);
     }
+    /** Current publications for proposed sections, without inventing enrollments or reserving seats.
+     * @param list<EntityId> $sections
+     * @return array<string,mixed> */
+    public function between(array $sections, ?RegistrationScheduleRead $read = null): array
+    {
+        if (count($sections) > 10) {
+            $this->limit();
+        }
+        $read ??= new RegistrationScheduleRead();
+        $policy = $this->records->policy();
+        $plans = $references = $conflicts = [];
+        $unknown = 0;
+        foreach ($sections as $section) {
+            if (isset($references[$section->value])) {
+                $this->limit();
+            }
+            $plans[$section->value] = $read->read($section, $this->plans);
+            $references[$section->value] = $this->reference($section->value, $plans[$section->value]);
+            $unknown += (int) ($plans[$section->value] === null);
+        }
+        $ids = array_keys($plans);
+        foreach ($ids as $i => $left) {
+            foreach (array_slice($ids, $i + 1) as $right) {
+                if ($plans[$left] === null || $plans[$right] === null) {
+                    continue;
+                }
+                $overlap = MeetingOverlap::first(
+                    $plans[$left]["definition"]["meetings"],
+                    $plans[$right]["definition"]["meetings"],
+                );
+                if ($overlap !== null) {
+                    $conflicts[] =
+                    [
+                            "section_id" => $left,
+                            "section_code" => $plans[$left]["definition"]["section_code"],
+                            "other_section_id" => $right,
+                            "other_section_code" => $plans[$right]["definition"]["section_code"],
+                        ] + $overlap;
+                }
+            }
+        }
+        ksort($references, SORT_STRING);
+        return [
+            "policy" => $policy,
+            "plans" => array_values($references),
+            "conflicts" => $conflicts,
+            "unpublished_count" => $unknown,
+            "blocked" => $policy["mode"] === "block" && $conflicts !== [],
+        ];
+    }
+
     private function reference(string $id, ?array $plan): array
     {
         return $plan["reference"] ?? [

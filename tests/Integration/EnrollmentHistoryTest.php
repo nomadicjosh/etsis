@@ -176,7 +176,7 @@ final class EnrollmentHistoryTest extends TestCase
         try {
             $f->service->register($student->id, $section->id);
             self::fail("Billing failure left an accepted seat.");
-        } catch (DomainException) {
+        } catch (\Domain\Shared\Exception\ValidationException) {
             self::assertSame($events, $f->sql->rows("sis_history_events"));
             $historyCases2 = [
                     "sis_registration_streams",

@@ -210,6 +210,28 @@ final readonly class CampusPortalController
         );
     }
 
+    public function reviewRegistrationPlan(ServerRequest $request): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->service->reviewRegistrationPlan(
+                \Application\Http\RegistrationPlanInput::selection($request),
+            ),
+        );
+    }
+
+    public function registerPlan(ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->service->registerPlan(
+                \Application\Http\RegistrationPlanInput::selection($request),
+                $f->id("operation_id"),
+                $f->text("revision", 64),
+                $f->text("review_token", 8192),
+            ),
+        );
+    }
+
     public function reviewRegistration(ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);

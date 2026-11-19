@@ -1045,6 +1045,9 @@ window.createWorkspaceStudents = function (ui) {
                 id,
                 person_id: record.person_id,
                 active: record.active,
+                given_name: record.given_name,
+                family_name: record.family_name,
+                institutional_id: record.institutional_id,
             });
         if (body.isConnected && can("sis:restrictions:manage"))
             await ui.restrictions().list(body, { id, person_id: record.person_id, active: record.active });

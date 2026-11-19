@@ -312,6 +312,54 @@ final readonly class RegistrationService
         });
     }
 
+    /** Internal completion check for a coordinated registration transaction; never creates or repairs facts. */
+    public function verifyCompletion(
+        EntityId $studentId,
+        EntityId $sectionId,
+        EntityId $actor,
+        bool $byStaff,
+        \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
+    ): void {
+        $student = $this->admissions->student($studentId);
+        $person = $this->admissions->person($student->personId);
+        $this->authorize($actor, $person->ownerUserId, $byStaff);
+        $this->activity->verify($student);
+        $this->primaryPrograms->verify($student);
+        $section = $this->repository->section($sectionId);
+        $course = $this->repository->courseForSection($section);
+        $enrollment = $this->repository->enrollment($studentId, $sectionId);
+        if (
+            $enrollment === null ||
+            !$enrollment->status->isEnrolled() ||
+            !$section->active ||
+            !$course->active ||
+            $this->repository->sectionCount($sectionId) > $section->capacity
+        ) {
+            throw new ConcurrentModificationException(
+                "The accepted schedule changed before completion. Review it again.",
+            );
+        }
+        $this->enrollments->verifyExisting($enrollment, $section);
+        $assignment = $this->pursuits->activePursuit($studentId);
+        $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
+        $prerequisites = $this->prerequisites->evaluate($studentId, $assignment, $required, $budget);
+        $this->assertEligible(
+            $student,
+            $section,
+            $this->repository->window($section->termId),
+            $byStaff,
+            max(0, $this->repository->enrolledCount($studentId, $section->termId) - 1),
+            $prerequisites->isMet(),
+            $this->clock->now(),
+        );
+        if ($this->schedules->evaluate($studentId, $sectionId)->blocked()) {
+            throw new ConcurrentModificationException(
+                "The published timetable changed before completion. Review it again.",
+            );
+        }
+        $this->verifyAccess($actor, $student, $person->ownerUserId, $byStaff);
+    }
+
     private function authorize(
         EntityId $actor,
         ?EntityId $owner,

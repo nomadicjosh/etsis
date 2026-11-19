@@ -96,7 +96,53 @@ final readonly class RegistrationChargeQuote implements \JsonSerializable
         return $this->summary;
     }
 
-    public function fingerprint(): string
+    /** Deduplicate term-wide fees across a working schedule; never changes accepted financial facts.
+     * @param array<string,true> $termFees
+     * @return array<string,mixed> */
+    public function planSummary(array &$termFees): array
+    {
+        $summary = $this->summary;
+        $index = $this->sectionFee->minor > 0 ? 1 : 0;
+        foreach ($this->termQuote->rules as $rule) {
+            $key = $this->termQuote->term->value . ":" . (string) $rule->aggregateId();
+            if ($rule->basis() === BillingBasis::Term && $summary["items"][$index]["status"] === "new") {
+                if (isset($termFees[$key])) {
+                    $summary["items"][$index]["status"] = "included_in_schedule";
+                    if ($summary["total_minor"] !== null) {
+                        $summary["total_minor"] -= $summary["items"][$index]["minor"];
+                    }
+                }
+                $termFees[$key] = true;
+            }
+            ++$index;
+        }
+        return $summary;
+    }
+
+    /** Immutable prices and program context, excluding account changes caused by this same schedule. */
+    public function definitionFingerprint(): string
+    {
+        $facts = $this->termQuote->facts();
+        return hash(
+            "sha256",
+            json_encode(
+                [
+                    $this->termQuote->student->value,
+                    $this->termQuote->term->value,
+                    $facts["program_id"],
+                    $facts["primary_position"],
+                    $facts["currency"] ?? $this->sectionFee->currency,
+                    $this->ruleFacts(),
+                    $this->sectionFee->minor,
+                    $this->sectionFee->currency,
+                    $this->creditsMilli,
+                ],
+                JSON_THROW_ON_ERROR,
+            ),
+        );
+    }
+
+    private function ruleFacts(): array
     {
         $rules = [];
         foreach ($this->termQuote->rules as $rule) {
@@ -109,6 +155,12 @@ final readonly class RegistrationChargeQuote implements \JsonSerializable
                 $rule->basis()->value,
             ];
         }
+        return $rules;
+    }
+
+    public function fingerprint(): string
+    {
+        $rules = $this->ruleFacts();
         return hash(
             "sha256",
             json_encode(

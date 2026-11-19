@@ -181,6 +181,7 @@ echo $loader->render('framework::backend/workspace/index', [
         '/admin/hold-handoff-fixture/' => ['sis:restrictions:manage', 'sis:restrictions:handoff'],
         '/admin/office-admin-fixture/' => ['admin:access:manage', 'sis:restrictions:manage'],
         '/admin/registration-fixture/' => ['sis:registration:manage'],
+        '/admin/registration-plan-fixture/' => ['sis:registration:manage', 'sis:student:read'],
         '/admin/report-fixture/' => ['sis:reporting:run'],
         '/admin/report-billing-fixture/' => ['sis:reporting:run', 'sis:student:read',
             'sis:finance:read', 'sis:finance:post'],
