@@ -258,6 +258,7 @@ window.createWorkspaceTeaching = function (ui) {
                 "div",
                 { class: "inline-actions mb-3" },
                 button("Take attendance", () => takeAttendance(row, back), "btn-primary"),
+                button("Review ungraded", () => gradeQueue(row, back, filters.search)),
             ),
         );
         const assignments = area("Assignments");
@@ -506,20 +507,104 @@ window.createWorkspaceTeaching = function (ui) {
         update();
     }
 
-    async function recordFinalGrade(sectionRow, student, back, assignment = null, draft = null) {
-        const loading = openDrawer("Review final grade", "ACADEMIC RECORD");
-        loading.append(
-            button("Back to record", back, "btn-link"),
-            node("p", { role: "status" }, "Loading grading context…"),
+    async function gradeQueue(sectionRow, back, search = "", after = null) {
+        const body = openDrawer("Final-grade queue", "INDIVIDUAL ACADEMIC REVIEWS");
+        body.append(
+            button("Back to roster", back, "btn-link"),
+            node("p", { role: "status" }, "Finding the next active registration without a final grade…"),
         );
+        const page = await request(`/sis/ui/context/roster/${sectionRow.id}/`, "POST", {
+            search,
+            grade_status: "needs_grade",
+            after,
+        });
+        if (!body.isConnected) return;
+        if (!page.can_grade) throw new Error("Grading access is required for this queue.");
+        const student = page.items[0];
+        if (!student) {
+            body.replaceChildren(
+                node(
+                    "p",
+                    { role: "status" },
+                    "End of this pass. Skipped or newly registered students may still need review.",
+                ),
+                node(
+                    "p",
+                    { class: "form-text" },
+                    search ? `Applied roster search: ${search}` : "Using the full section roster.",
+                ),
+                button("Restart queue", () => gradeQueue(sectionRow, back, search)),
+                button("Back to roster", back, "btn-link"),
+            );
+            return;
+        }
+        await recordFinalGrade(sectionRow, student, back, null, null, {
+            search,
+            next: () => gradeQueue(sectionRow, back, search, student.id),
+        });
+    }
+
+    async function recordFinalGrade(
+        sectionRow,
+        student,
+        back,
+        assignment = null,
+        draft = null,
+        queue = null,
+    ) {
+        const identity = () =>
+            recordSummary([
+                ["Student", `${student.given_name} ${student.family_name}`],
+                ["Institutional ID", student.institutional_id],
+                ["Section", sectionRow.code || "Selected section"],
+                ...(sectionRow.course_code ? [["Course", sectionRow.course_code]] : []),
+            ]);
+        function appendContext(container) {
+            container.append(identity());
+            if (queue)
+                container.append(
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        queue.search
+                            ? `Applied roster search: ${queue.search}`
+                            : "Using the full section roster.",
+                    ),
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        "Each student needs a separate confirmation. Grades and coursework choices are not carried forward.",
+                    ),
+                    button("Skip student", queue.next),
+                );
+            container.append(button(queue ? "Back to roster" : "Back to record", back, "btn-link"));
+        }
+        const loading = openDrawer("Review final grade", "ACADEMIC RECORD");
+        appendContext(loading);
+        loading.append(node("p", { role: "status" }, "Loading grading context…"));
         const choices = await request(
             `/sis/sections/${sectionRow.id}/students/${student.student_id}/grade-choices/`,
             "POST",
             assignment ? { assignment_id: assignment } : {},
         );
         if (!loading.isConnected) return;
+        if (queue && choices.posted) {
+            loading.replaceChildren(
+                identity(),
+                node(
+                    "p",
+                    { role: "status" },
+                    "This record already has an official grade. The queue will not change it.",
+                ),
+                button("Next student", queue.next),
+                button("Back to roster", back, "btn-link"),
+            );
+            return;
+        }
         if (choices.needs_assignment) {
             const body = openDrawer("Choose grading program", "STUDENT PROGRAM CONTEXT");
+            body.append(identity());
+            if (queue) body.append(button("Skip student", queue.next));
             const key = "grade-pursuit-choice";
             const select = node(
                 "select",
@@ -538,16 +623,25 @@ window.createWorkspaceTeaching = function (ui) {
                 select,
                 button("Use selected program", async () => {
                     if (!select.value) throw new Error("Choose the applicable program.");
-                    await recordFinalGrade(sectionRow, student, back, select.value);
+                    await recordFinalGrade(sectionRow, student, back, select.value, null, queue);
                 }),
                 button("Back to roster", back, "btn-link"),
             );
             return;
         }
-        if (!choices.items.length)
-            throw new Error(
-                "Catalog staff must publish the applicable grading scale before a grade can be recorded.",
+        if (!choices.items.length) {
+            loading.replaceChildren(
+                identity(),
+                node(
+                    "p",
+                    { role: "status" },
+                    "Catalog staff must publish the applicable grading scale before a grade can be recorded.",
+                ),
+                button(queue ? "Back to roster" : "Back to record", back, "btn-link"),
             );
+            if (queue) loading.append(button("Skip student", queue.next));
+            return;
+        }
         const body = openDrawer(
             choices.missing_withdrawal_grade
                 ? "Resolve withdrawn grade"
@@ -556,8 +650,8 @@ window.createWorkspaceTeaching = function (ui) {
                   : "Record final grade",
             "ACADEMIC RECORD",
         );
+        appendContext(body);
         body.append(
-            button("Back to record", back, "btn-link"),
             recordSummary([
                 [
                     "Final grade",
@@ -579,7 +673,7 @@ window.createWorkspaceTeaching = function (ui) {
             related.append(
                 button("Review course publication", () =>
                     coursePublication(sectionRow, student, choices, () =>
-                        recordFinalGrade(sectionRow, student, back, assignment),
+                        recordFinalGrade(sectionRow, student, back, assignment, null, queue),
                     ),
                 ),
             );
@@ -590,7 +684,7 @@ window.createWorkspaceTeaching = function (ui) {
                         sectionRow,
                         student,
                         choices,
-                        () => recordFinalGrade(sectionRow, student, back, assignment),
+                        () => recordFinalGrade(sectionRow, student, back, assignment, null, queue),
                         "academic_period",
                     ),
                 ),
@@ -599,7 +693,7 @@ window.createWorkspaceTeaching = function (ui) {
             related.append(
                 button("Review actual completion date", () =>
                     academicDate(sectionRow, student, choices, () =>
-                        recordFinalGrade(sectionRow, student, back, assignment),
+                        recordFinalGrade(sectionRow, student, back, assignment, null, queue),
                     ),
                 ),
             );
@@ -722,7 +816,14 @@ window.createWorkspaceTeaching = function (ui) {
                 button(
                     "Refresh suggestion",
                     () =>
-                        recordFinalGrade(sectionRow, student, back, assignment, formData(form, descriptors)),
+                        recordFinalGrade(
+                            sectionRow,
+                            student,
+                            back,
+                            assignment,
+                            formData(form, descriptors),
+                            queue,
+                        ),
                     "btn-outline-secondary btn-sm",
                 ),
             );
@@ -770,68 +871,74 @@ window.createWorkspaceTeaching = function (ui) {
                     "REVIEW ACADEMIC DECISION",
                 );
                 confirmation.append(
-                    review.coursework_summary
-                        ? node(
-                              "p",
-                              { class: "alert alert-info" },
-                              `Using the reviewed coursework calculation: ${review.coursework_summary.score_display}. Its inputs will be retained with the grade decision; later score edits will not change this official grade.`,
-                          )
-                        : null,
-                    review.withdrawal_grade_correction
-                        ? node(
-                              "p",
-                              { class: "alert alert-info" },
-                              "Enrollment remains withdrawn. Earned credit remains zero. Charges stay unchanged; the selected grade definition controls GPA treatment.",
-                          )
-                        : null,
-                    review.missing_withdrawal_grade
-                        ? node(
-                              "p",
-                              { class: "alert alert-warning" },
-                              "The earlier grading definition remains unknown. This confirms a new, evidence-reviewed grade decision.",
-                          )
-                        : null,
-                    review.requires_approval
-                        ? node(
-                              "p",
-                              { class: "alert alert-info" },
-                              "This submits a request for another authorized registrar. The original grade remains in effect until approval.",
-                          )
-                        : null,
-                    node(
-                        "p",
-                        {},
-                        `${choices.current_grade_code || (choices.missing_withdrawal_grade ? "Unknown definition" : "Not graded")} → ${review.grade.code} · ${Number(review.grade.points_milli) / 1000} grade points`,
-                    ),
-                    node("p", {}, `Effective date: ${payload.effective_on}`),
-                    node("p", {}, review.reason),
-                    node(
-                        "p",
-                        { class: "form-text" },
-                        "This review expires after 20 minutes. If it expires, choose Change review and review again; your entries are preserved.",
-                    ),
-                    review.earlier_history_unknown
-                        ? node(
-                              "p",
-                              { class: "alert alert-info" },
-                              "Earlier academic facts are retained as an observation. Earlier decision dates and authors are unknown.",
-                          )
-                        : null,
-                    button("Change review", () => {
-                        const restored = openDrawer("Review final grade", "ACADEMIC RECORD");
-                        restored.append(button("Back to record", back, "btn-link"), form);
-                    }),
-                    button(
-                        review.requires_approval ? "Submit request" : "Confirm final grade",
-                        async () => {
-                            await request(`/sis/sections/${sectionRow.id}/final-grades/commit/`, "POST", {
-                                student_id: student.student_id,
-                                review_token: review.review_token,
-                            });
-                            await back();
-                        },
-                        "btn-primary",
-                    ),
+                    ...[
+                        identity(),
+                        review.coursework_summary
+                            ? node(
+                                  "p",
+                                  { class: "alert alert-info" },
+                                  `Using the reviewed coursework calculation: ${review.coursework_summary.score_display}. Its inputs will be retained with the grade decision; later score edits will not change this official grade.`,
+                              )
+                            : null,
+                        review.withdrawal_grade_correction
+                            ? node(
+                                  "p",
+                                  { class: "alert alert-info" },
+                                  "Enrollment remains withdrawn. Earned credit remains zero. Charges stay unchanged; the selected grade definition controls GPA treatment.",
+                              )
+                            : null,
+                        review.missing_withdrawal_grade
+                            ? node(
+                                  "p",
+                                  { class: "alert alert-warning" },
+                                  "The earlier grading definition remains unknown. This confirms a new, evidence-reviewed grade decision.",
+                              )
+                            : null,
+                        review.requires_approval
+                            ? node(
+                                  "p",
+                                  { class: "alert alert-info" },
+                                  "This submits a request for another authorized registrar. The original grade remains in effect until approval.",
+                              )
+                            : null,
+                        node(
+                            "p",
+                            {},
+                            `${choices.current_grade_code || (choices.missing_withdrawal_grade ? "Unknown definition" : "Not graded")} → ${review.grade.code} · ${Number(review.grade.points_milli) / 1000} grade points`,
+                        ),
+                        node("p", {}, `Effective date: ${payload.effective_on}`),
+                        node("p", {}, review.reason),
+                        node(
+                            "p",
+                            { class: "form-text" },
+                            "This review expires after 20 minutes. If it expires, choose Change review and review again; your entries are preserved.",
+                        ),
+                        review.earlier_history_unknown
+                            ? node(
+                                  "p",
+                                  { class: "alert alert-info" },
+                                  "Earlier academic facts are retained as an observation. Earlier decision dates and authors are unknown.",
+                              )
+                            : null,
+                        button("Change review", () => {
+                            const restored = openDrawer("Review final grade", "ACADEMIC RECORD");
+                            appendContext(restored);
+                            restored.append(form);
+                        }),
+                        button(
+                            review.requires_approval ? "Submit request" : "Confirm final grade",
+                            async () => {
+                                await request(`/sis/sections/${sectionRow.id}/final-grades/commit/`, "POST", {
+                                    student_id: student.student_id,
+                                    review_token: review.review_token,
+                                });
+                                if (!confirmation.isConnected) return;
+                                if (queue) await queue.next();
+                                else await back();
+                            },
+                            "btn-primary",
+                        ),
+                    ].filter(Boolean),
                 );
             }, reviewButton);
         });

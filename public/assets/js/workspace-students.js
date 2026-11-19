@@ -834,10 +834,20 @@ window.createWorkspaceStudents = function (ui) {
                                                                   .recordFinalGrade(
                                                                       {
                                                                           id: item.section_id,
+                                                                          code:
+                                                                              item.section_code,
+                                                                          course_code:
+                                                                              item.course_code,
                                                                       },
                                                                       {
                                                                           student_id:
                                                                               id,
+                                                                          given_name:
+                                                                              record.given_name,
+                                                                          family_name:
+                                                                              record.family_name,
+                                                                          institutional_id:
+                                                                              record.institutional_id,
                                                                           grade_code:
                                                                               item.grade_code,
                                                                       },

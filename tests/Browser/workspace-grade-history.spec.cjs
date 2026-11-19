@@ -17,7 +17,9 @@ test("registrar reviews a correction, preserves entries after expiry and reads b
     await page.route("**/sis/**", async (route) => {
         const req = route.request(),
             path = new URL(req.url()).pathname;
-        const data = req.postData() ? JSON.parse(new URLSearchParams(req.postData()).get("_workspace_json")) : {};
+        const data = req.postData()
+            ? JSON.parse(new URLSearchParams(req.postData()).get("_workspace_json"))
+            : {};
         calls.push({ path, data, csrf: req.headers()["x-csrf-token"] });
         let result = { items: [], next_after: null };
         if (path === "/sis/ui/metrics/") result = { cards: [], intake: [], pipeline: [], queue: [] };
@@ -121,6 +123,8 @@ test("registrar reviews a correction, preserves entries after expiry and reads b
     await page.getByRole("button", { name: "Back to record", exact: true }).click();
     await page.getByRole("button", { name: "View transcript", exact: true }).click();
     await page.getByRole("button", { name: "Review final grade", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Alex Example");
+    await expect(page.locator("#drawer-body")).toContainText("FICTIONAL");
     await page.getByRole("combobox", { name: "Institutional grade", exact: true }).selectOption(grade);
     await expect(
         page.getByRole("textbox", {
@@ -133,6 +137,8 @@ test("registrar reviews a correction, preserves entries after expiry and reads b
         .fill("Approved <b>assessment</b> review.");
     await page.getByRole("textbox", { name: "Effective date", exact: true }).fill("2026-08-10");
     await page.getByRole("button", { name: "Review final grade", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Alex Example");
+    await expect(page.locator("#drawer-body")).toContainText("FICTIONAL");
     await expect(page.locator("#drawer-body")).toContainText("A → B · 3 grade points");
     await expect(page.locator("#drawer-body b")).toHaveCount(0);
     await page.getByRole("button", { name: "Change review", exact: true }).click();
@@ -142,12 +148,16 @@ test("registrar reviews a correction, preserves entries after expiry and reads b
             exact: true,
         }),
     ).toHaveValue("Approved <b>assessment</b> review.");
-    await expect(page.getByRole("textbox", { name: "Effective date", exact: true })).toHaveValue("2026-08-10");
+    await expect(page.getByRole("textbox", { name: "Effective date", exact: true })).toHaveValue(
+        "2026-08-10",
+    );
     await page.getByRole("button", { name: "Review final grade", exact: true }).click();
     expect(calls.some((c) => c.path.endsWith("/final-grades/commit/"))).toBe(false);
     await expect(page.locator("#drawer-body")).toContainText("This review expires after 20 minutes.");
     await page.setViewportSize({ width: 390, height: 844 });
-    const scan = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    const scan = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
     expect(scan.violations.map((v) => v.id)).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.getByRole("button", { name: "Confirm final grade", exact: true }).click();
@@ -159,7 +169,9 @@ test("registrar reviews a correction, preserves entries after expiry and reads b
             exact: true,
         }),
     ).toHaveValue("Approved <b>assessment</b> review.");
-    await expect(page.getByRole("textbox", { name: "Effective date", exact: true })).toHaveValue("2026-08-10");
+    await expect(page.getByRole("textbox", { name: "Effective date", exact: true })).toHaveValue(
+        "2026-08-10",
+    );
     await expect(
         page.getByRole("combobox", {
             name: "Institutional grade",
