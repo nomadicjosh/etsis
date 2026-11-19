@@ -9,5 +9,11 @@ use Domain\Shared\ValueObject\EntityId;
 interface OperationsRepository
 {
     /** @return array{items: list<array<string, mixed>>, next_after: ?string} */
-    public function page(string $context, EntityId $id, ?EntityId $after): array;
+    public function page(
+        string $context,
+        EntityId $id,
+        ?EntityId $after,
+        string $search = "",
+        string $gradeStatus = "all",
+    ): array;
 }

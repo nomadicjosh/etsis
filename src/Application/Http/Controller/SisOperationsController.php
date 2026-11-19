@@ -22,43 +22,55 @@ final readonly class SisOperationsController
 
     public function page(ServerRequest $request, string $context, string $id): ResponseInterface
     {
-        return new JsonResponse($this->service->page(
-            $context,
-            new EntityId($id),
-            FormInput::from($request)->optionalId('after')
-        ));
+        return new JsonResponse(
+            $this->service->page(
+                $context,
+                new EntityId($id),
+                FormInput::from($request)->optionalId("after"),
+                FormInput::from($request)->optionalText("search", 80) ?? "",
+                FormInput::from($request)->optionalText("grade_status", 16) ?? "all",
+            ),
+        );
     }
 
     public function rosterCsv(ServerRequest $request, string $id): ResponseInterface
     {
-        $page = $this->service->page('roster', new EntityId($id), FormInput::from($request)->optionalId('after'));
+        $f = FormInput::from($request);
+        $page = $this->service->page(
+            "roster",
+            new EntityId($id),
+            $f->optionalId("after"),
+            $f->optionalText("search", 80) ?? "",
+            $f->optionalText("grade_status", 16) ?? "all",
+        );
         $csv = Writer::fromString();
-        $csv->setEscape('');
-        $escape = new EscapeFormula("'", [' ', "\n"]);
+        $csv->setEscape("");
+        $escape = new EscapeFormula("'", [" ", "\n"]);
         $csv->addFormatter($escape->escapeRecord(...));
-        $headers = ['Institutional ID', 'Given name', 'Family name', 'Registration status'];
-        if ($page['can_grade']) {
-            $headers[] = 'Final grade';
+        $headers = ["Institutional ID", "Given name", "Family name", "Registration status"];
+        if ($page["can_grade"]) {
+            $headers[] = "Final grade";
         }
         $csv->insertOne($headers);
-        foreach ($page['items'] as $row) {
-            $record = [$row['institutional_id'], $row['given_name'], $row['family_name'], $row['status']];
-            if ($page['can_grade']) {
-                $record[] = $row['grade_code'] ?? '';
+        foreach ($page["items"] as $row) {
+            $record = [$row["institutional_id"], $row["given_name"], $row["family_name"], $row["status"]];
+            if ($page["can_grade"]) {
+                $record[] = $row["grade_code"] ?? "";
             }
             $csv->insertOne($record);
         }
 
         return new TextResponse($csv->toString(), 200, [
-            'Content-Type' => 'text/csv; charset=UTF-8',
-            'Content-Disposition' => 'attachment; filename="section-roster.csv"',
-            'Cache-Control' => 'private, no-store, max-age=0', 'X-Content-Type-Options' => 'nosniff',
-            'Content-Security-Policy' => "sandbox; default-src 'none'",
+            "Content-Type" => "text/csv; charset=UTF-8",
+            "Content-Disposition" => 'attachment; filename="section-roster.csv"',
+            "Cache-Control" => "private, no-store, max-age=0",
+            "X-Content-Type-Options" => "nosniff",
+            "Content-Security-Policy" => "sandbox; default-src 'none'",
         ]);
     }
 
     public function operationId(): ResponseInterface
     {
-        return new JsonResponse(['id' => $this->service->operationId()->value]);
+        return new JsonResponse(["id" => $this->service->operationId()->value]);
     }
 }

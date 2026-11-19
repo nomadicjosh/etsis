@@ -46,6 +46,7 @@ window.createWorkspaceTeaching = function (ui) {
             },
             table(headers, rows, caption),
         );
+    const rosterFilters = new Map();
     let worksheet = null;
     const canLeave = () => worksheet?.canLeave() ?? true;
     const gradeAssignment = (id, row, back) => {
@@ -118,13 +119,61 @@ window.createWorkspaceTeaching = function (ui) {
             );
         const panel = area("Section roster");
         body.append(panel);
-        let first;
-        try {
-            first = await pages(
-                panel,
+        const filters = rosterFilters.get(row.id) || { search: "", grade_status: "all" };
+        rosterFilters.delete(row.id);
+        rosterFilters.set(row.id, filters);
+        if (rosterFilters.size > 20) rosterFilters.delete(rosterFilters.keys().next().value);
+        const searchId = `roster-search-${row.id}`,
+            statusId = `roster-status-${row.id}`;
+        const search = node("input", {
+            id: searchId,
+            type: "search",
+            class: "form-control",
+            maxlength: 80,
+            value: filters.search,
+        });
+        const gradeStatus = node(
+            "select",
+            { id: statusId, class: "form-select" },
+            node("option", { value: "all" }, "All registrations"),
+            node("option", { value: "active" }, "Active registrations"),
+        );
+        const controls = node(
+            "form",
+            { class: "record-form mb-3", "aria-label": "Find roster students" },
+            node("label", { for: searchId, class: "form-label" }, "Student name or institutional ID"),
+            search,
+            node("label", { for: statusId, class: "form-label" }, "Roster view"),
+            gradeStatus,
+        );
+        const apply = node("button", { type: "submit", class: "btn btn-primary" }, "Apply filters");
+        controls.append(apply);
+        panel.append(controls);
+        const results = node("div");
+        panel.append(results);
+        async function loadRoster() {
+            const selected = { ...filters };
+            const listing = node("div");
+            const viewLabels = {
+                all: "All registrations",
+                active: "Active registrations",
+                needs_grade: "Not yet graded",
+                graded: "Graded",
+            };
+            results.replaceChildren(
+                node(
+                    "p",
+                    { class: "form-text", role: "status" },
+                    `Applied: ${selected.search ? `${selected.search} · ` : ""}${viewLabels[selected.grade_status]}`,
+                ),
+                listing,
+            );
+            return pages(
+                listing,
                 (after) =>
                     request(`/sis/ui/context/roster/${row.id}/`, "POST", {
                         after,
+                        ...selected,
                     }),
                 (page, after) =>
                     node(
@@ -135,7 +184,8 @@ window.createWorkspaceTeaching = function (ui) {
                             { class: "record-list-actions" },
                             button(
                                 "Export roster page",
-                                () => requestFile(`/sis/ui/exports/roster/${row.id}/`, { after }),
+                                () =>
+                                    requestFile(`/sis/ui/exports/roster/${row.id}/`, { after, ...selected }),
                                 "btn-outline-secondary btn-sm",
                             ),
                         ),
@@ -158,14 +208,42 @@ window.createWorkspaceTeaching = function (ui) {
                             : node(
                                   "p",
                                   { class: "muted-text mt-3" },
-                                  "No students are recorded for this section.",
+                                  "No students match this roster view. Adjust the search or filters to see other registrations.",
                               ),
                     ),
             );
+        }
+        controls.addEventListener("submit", (event) => {
+            event.preventDefault();
+            if (!controls.reportValidity()) return;
+            filters.search = search.value.trim();
+            filters.grade_status = gradeStatus.value;
+            task(loadRoster, apply);
+        });
+        let first;
+        try {
+            first = await loadRoster();
+            if (!body.isConnected) return;
+            if (first.can_grade) {
+                controls.append(
+                    node("p", { class: "form-text" }, "Grade views include active registrations."),
+                );
+                gradeStatus.append(
+                    node("option", { value: "needs_grade" }, "Not yet graded"),
+                    node("option", { value: "graded" }, "Graded"),
+                );
+            }
+            gradeStatus.value = filters.grade_status;
         } catch (error) {
             if (error.status !== 403) throw error;
             panel.replaceChildren(
                 node("h3", {}, "Section roster"),
+                ["needs_grade", "graded"].includes(filters.grade_status)
+                    ? button("Show all registrations", async () => {
+                          filters.grade_status = "all";
+                          await openRecord(sectionName, row);
+                      })
+                    : null,
                 node(
                     "p",
                     {},
