@@ -14,11 +14,13 @@ Each program row has **Program status history**, including the primary program. 
 
 ## What is retained
 
-The first accepted status change on an assignment without a stream records **StudentProgramWasObserved**. This captures its current student, program, entry term and status at the observation time. Earlier status decisions remain explicitly unknown. Neither opening a record nor reviewing a change manufactures earlier history. Additional assignments created through the reviewed assignment workflow instead begin with StudentProgramWasAssigned. Initial matriculation assignments retain this observation rule until their creation workflow is converted.
+The first accepted status change on an assignment without a stream records **StudentProgramWasObserved**. This captures its current student, program, entry term and status at the observation time. Earlier status decisions remain explicitly unknown. Neither opening a record nor reviewing a change manufactures earlier history. Additional assignments created through the reviewed assignment workflow instead begin with StudentProgramWasAssigned. Initial matriculation now also records genuine assignment creation in that same stream. Earlier untracked assignments still use the observation rule.
 
 **StudentProgramStatusWasChanged** then records the chosen active/closed status and preceding recorded decision. The protected context retains the trusted staff actor, entered reason, operation identity and actual confirmation time. Earlier events and existing curriculum/requirement histories remain intact. Reasons are encrypted in the shared journal and are not copied into general audit metadata or the ordinary timeline.
 
 A repeat confirmation returns its original accepted outcome. For example, retrying an earlier closure after the program was reopened returns the earlier closure receipt and leaves the program active. A different review made before that close/reopen cycle is rejected even if the current status has returned to its original value.
+
+The same pursuit stream/checkpoint now also retains [reviewed cohort changes](student-program-assignments.md#review-a-cohort-change). A cohort decision advances the shared expected version without changing assignment status, so it invalidates an older pending status review. The status timeline identifies **Cohort changed** and its retained year/revision; the cohort screen provides before/after details. A recorded cohort projection is verified alongside the assignment, including closed-pursuit reads.
 
 ## Record checks and migration
 

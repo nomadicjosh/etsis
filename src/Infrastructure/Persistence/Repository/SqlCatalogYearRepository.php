@@ -199,9 +199,17 @@ final readonly class SqlCatalogYearRepository implements CatalogYearRepository
     public function binding(EntityId $assignment): ?array
     {
         $r = $this->sql->rows("sis_student_catalogs", ["assignment_id" => $assignment->value], 1)[0] ?? null;
-        return $r === null
-        ? null
-        : ["id" => $r["id"], "catalog_id" => $r["catalog_id"], "version" => (int) $r["version"]];
+        if ($r === null) {
+            return null;
+        }
+        $version = $r['version'];
+        if (
+            (!is_int($version) && !is_string($version)) ||
+            filter_var($version, FILTER_VALIDATE_INT, ['options' => ['min_range' => 0]]) === false
+        ) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        return ['id' => $r['id'], 'catalog_id' => $r['catalog_id'], 'version' => (int) $version];
     }
 
     public function bind(EntityId $assignment, EntityId $catalog, int $expectedVersion): void

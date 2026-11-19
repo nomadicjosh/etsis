@@ -18,6 +18,8 @@ For example, publish a B.A. definition for **2022-2023**, then a revised definit
 
 Publishing another revision for the same year changes the default for subsequent assignments into that year. It does not move existing students. Retrying an earlier accepted confirmation returns its original receipt after later publications, edits or expiry, without restoring the earlier default.
 
+An existing student's exceptional curriculum change uses the registrar's [reviewed cohort workflow](student-program-assignments.md#review-a-cohort-change). Publication never initiates that change. The decision preserves both references in the student's existing pursuit stream; selected degree and specialization requirements require their own deliberate review.
+
 ## Program specialization setup
 
 Open **Academic catalog → Programs → a program → Program details & publications → Program specializations**. Add a code, title, optional plain-text description and active status. Codes are unique within that program; another program may use the same code for its own specialization. Editing requires the saved revision, so another person's changes cannot be overwritten by an older form. Deactivate an unavailable specialization instead of deleting its reference.

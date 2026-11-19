@@ -11,7 +11,9 @@ window.createWorkspaceAcademicCalendar = function (ui) {
         } catch (error) {
             if (error.status === 403 && scope?.isConnected) {
                 document.querySelector("#drawer-title").textContent = "Academic calendar";
-                scope.replaceChildren(node("p", {}, "This record is no longer available with your current access."));
+                scope.replaceChildren(
+                    node("p", {}, "This record is no longer available with your current access."),
+                );
             }
             throw error;
         }
@@ -79,11 +81,17 @@ window.createWorkspaceAcademicCalendar = function (ui) {
                           y.code,
                           `${y.starts_on} through ${y.ends_on}`,
                           y.term_count ?? "—",
-                          y.legacy ? "Existing calendar — review Terms classifications" : "Generated from term types",
+                          y.legacy
+                              ? "Existing calendar — review Terms classifications"
+                              : "Generated from term types",
                       ]),
                       "Academic years",
                   )
-                : node("p", {}, "No academic years yet. Configure active term types, then create your first year."),
+                : node(
+                      "p",
+                      {},
+                      "No academic years yet. Configure active term types, then create your first year.",
+                  ),
         );
         if (stack.length)
             body.append(button("Previous academic year page", () => years(stack.at(-1), stack.slice(0, -1))));
@@ -122,7 +130,8 @@ window.createWorkspaceAcademicCalendar = function (ui) {
                       "Add your usual terms, such as Fall and Spring. Use non-standard types for overlapping sessions.",
                   ),
         );
-        if (stack.length) body.append(button("Previous term type page", () => types(stack.at(-1), stack.slice(0, -1))));
+        if (stack.length)
+            body.append(button("Previous term type page", () => types(stack.at(-1), stack.slice(0, -1))));
         if (result.next_after)
             body.append(button("Next term type page", () => types(result.next_after, [...stack, after])));
     }
@@ -252,7 +261,11 @@ window.createWorkspaceAcademicCalendar = function (ui) {
             node(
                 "div",
                 { class: "mb-4" },
-                node("label", { class: "form-label", for: exampleInput.id }, "Example academic year starts in"),
+                node(
+                    "label",
+                    { class: "form-label", for: exampleInput.id },
+                    "Example academic year starts in",
+                ),
                 exampleInput,
                 context,
             ),
@@ -400,7 +413,11 @@ window.createWorkspaceAcademicCalendar = function (ui) {
         };
         const back = button("Change start year", createYear);
         body.append(
-            node("p", {}, `Academic year ${plan.code}. Active terms cover ${plan.starts_on} through ${plan.ends_on}.`),
+            node(
+                "p",
+                {},
+                `Academic year ${plan.code}. Active terms cover ${plan.starts_on} through ${plan.ends_on}.`,
+            ),
             node(
                 "p",
                 { class: "form-text" },
@@ -488,36 +505,241 @@ window.createWorkspaceAcademicCalendar = function (ui) {
         body.append(form);
     }
     async function studentCatalog(student, assignment) {
-        const value = await request(`/sis/students/${student}/programs/${assignment}/catalog/`, "POST", {});
-        const body = openPanel("Matriculation cohort", "DERIVED FROM THE PROGRAM ENTRY TERM");
-        body.append(
-            node("p", {}, `${value.program.code} — ${value.program.title}. Entry term: ${value.entry_term.code}.`),
-            node(
-                "p",
-                {},
-                value.current
-                    ? `Academic year ${value.current.year_code}; retained curriculum version ${value.current.revision}.`
-                    : "This legacy program assignment needs a matriculation review. A historical curriculum version is never guessed.",
-            ),
+        const path = `/sis/students/${student}/programs/${assignment}/catalog/`;
+        let value = await request(path, "POST", {});
+        const body = openPanel("Matriculation cohort", "STUDENT PROGRAM");
+        let selected = null,
+            reason = "",
+            after = null,
+            sequence = 0;
+        const title = (catalog) =>
+            catalog ? `${catalog.year_code} · revision ${catalog.revision}` : "No cohort assigned";
+        const explanation = () =>
             node(
                 "p",
                 { class: "form-text" },
-                "Later academic years and curriculum changes do not replace this program assignment. The cohort is derived; there is no catalog-year setup form.",
-            ),
-        );
-        const history = await request(`/sis/students/${student}/programs/${assignment}/catalog/history/`, "POST", {});
-        body.append(
-            grid(
-                ["Academic year", "Curriculum version", "Recorded", "Note"],
-                history.items.map((h) => [
-                    h.year_code,
-                    h.catalog_revision,
-                    h.created_at,
-                    h.note || "Automatically derived",
-                ]),
-                "Matriculation cohort history",
-            ),
-        );
+                "Changing a cohort preserves earlier assignments and academic work. Degree requirements and specializations stay assigned until separately reviewed.",
+            );
+        function focus(heading) {
+            if (heading.isConnected) heading.focus();
+        }
+        function overview() {
+            sequence++;
+            if (!body.isConnected) return;
+            body.replaceChildren(
+                node("h3", { class: "h5" }, `${value.program.code} · ${value.program.title}`),
+                node(
+                    "p",
+                    {},
+                    `Entry term: ${value.entry_term.code}. Current cohort: ${title(value.current)}.`,
+                ),
+                explanation(),
+                node(
+                    "p",
+                    { class: "form-text" },
+                    value.earlier_history_unknown
+                        ? "Some earlier cohort decisions were not recorded in protected history. Existing receipts remain available."
+                        : "The initial cohort was retained with the program assignment.",
+                ),
+                button("Cohort history", () => history()),
+            );
+            if (value.status === "active") body.append(button("Review cohort change", () => editor(), true));
+            else
+                body.append(
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        "This pursuit is closed. Its cohort and history remain available.",
+                    ),
+                );
+        }
+        async function editor(cursor = null, previous = []) {
+            const current = ++sequence;
+            const page = await request(path + "choices/", "POST", cursor ? { after: cursor } : {});
+            if (!body.isConnected || current !== sequence) return;
+            const heading = node("h3", { class: "h5", tabindex: "-1" }, "Choose a published curriculum");
+            const form = node("form", {});
+            const choices = node(
+                "fieldset",
+                { class: "d-grid gap-2 my-3" },
+                node("legend", { class: "h6" }, "Available cohorts"),
+            );
+            for (const item of page.items) {
+                const id = `cohort-${item.catalog_id}`;
+                const control = node("input", {
+                    id,
+                    type: "radio",
+                    name: "catalog_id",
+                    class: "form-check-input me-2",
+                    checked: selected?.catalog_id === item.catalog_id,
+                    disabled: item.catalog_id === value.current?.catalog_id,
+                    onchange: () => {
+                        selected = item;
+                    },
+                });
+                choices.append(
+                    node(
+                        "label",
+                        { for: id, class: "surface p-3" },
+                        control,
+                        `${title(item)} · ${item.program_title}${item.catalog_id === value.current?.catalog_id ? " · Current" : ""}`,
+                    ),
+                );
+            }
+            if (!page.items.length) choices.append(node("p", {}, "No published curricula on this page."));
+            const picked = node(
+                "p",
+                { class: "form-text", role: "status", "aria-live": "polite" },
+                selected ? `Selected: ${title(selected)}.` : "Choose a curriculum above.",
+            );
+            choices.addEventListener("change", () => {
+                picked.textContent = `Selected: ${title(selected)}.`;
+            });
+            const note = node("textarea", {
+                id: "cohort-reason",
+                name: "note",
+                class: "form-control",
+                required: true,
+                maxlength: "1000",
+                rows: "3",
+                oninput: (event) => {
+                    reason = event.target.value;
+                },
+            });
+            note.value = reason;
+            const review = node("button", { type: "submit", class: "btn btn-primary" }, "Review change");
+            form.append(
+                choices,
+                picked,
+                node("label", { for: "cohort-reason", class: "form-label" }, "Reason for cohort change"),
+                note,
+                explanation(),
+                review,
+            );
+            form.addEventListener("submit", (event) => {
+                event.preventDefault();
+                task(async () => {
+                    if (!form.reportValidity()) return;
+                    if (!selected) throw new Error("Choose a published curriculum first.");
+                    const command = { catalog_id: selected.catalog_id, version: value.version, note: reason };
+                    const current = ++sequence;
+                    const reviewed = await request(path + "review/", "POST", command);
+                    if (!body.isConnected || current !== sequence) return;
+                    confirmation(reviewed, command, () => editor(cursor, previous));
+                }, review);
+            });
+            const paging = node("div", { class: "inline-actions my-3" });
+            if (previous.length)
+                paging.append(button("Previous", () => editor(previous.at(-1), previous.slice(0, -1))));
+            if (page.next_after)
+                paging.append(button("Next", () => editor(page.next_after, [...previous, cursor])));
+            body.replaceChildren(
+                heading,
+                button("Back to cohort", overview),
+                form,
+                paging,
+                button("Refresh cohort", async () => {
+                    const current = ++sequence;
+                    const fresh = await request(path, "POST", {});
+                    if (!body.isConnected || current !== sequence) return;
+                    value = fresh;
+                    if (value.status !== "active") overview();
+                    else await editor(cursor, previous);
+                }),
+            );
+            focus(heading);
+        }
+        function confirmation(reviewed, command, revise) {
+            sequence++;
+            const heading = node("h3", { class: "h5", tabindex: "-1" }, "Confirm cohort change");
+            body.replaceChildren(
+                heading,
+                node("p", {}, `Before: ${title(reviewed.before)}. After: ${title(reviewed.after)}.`),
+                node("p", { class: "private-text" }, command.note),
+                explanation(),
+                button("Revise change", revise),
+                button(
+                    "Confirm change",
+                    async () => {
+                        const current = ++sequence;
+                        await request(path + "commit/", "POST", {
+                            ...command,
+                            operation_id: reviewed.operation_id,
+                            review_token: reviewed.review_token,
+                        });
+                        if (!body.isConnected || current !== sequence) return;
+                        notify("Cohort updated. Review assigned requirements separately.");
+                        const fresh = await request(path, "POST", {});
+                        if (!body.isConnected || current !== sequence) return;
+                        value = fresh;
+                        overview();
+                    },
+                    true,
+                ),
+            );
+            focus(heading);
+        }
+        async function history(cursor = null, previous = []) {
+            const current = ++sequence;
+            const page = await request(path + "history/", "POST", { cursor, after });
+            if (!body.isConnected || current !== sequence) return;
+            const heading = node("h3", { class: "h5", tabindex: "-1" }, "Cohort history");
+            body.replaceChildren(
+                heading,
+                button("Back to cohort", overview),
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Protected decisions retain their original labels. Reasons, actor details and raw events are excluded.",
+                ),
+                page.items.length
+                    ? grid(
+                          ["Before", "After", "Effective", "Recorded"],
+                          page.items.map((item) => [
+                              title(item.previous_catalog),
+                              title(item.catalog),
+                              item.effective_at,
+                              item.recorded_at,
+                          ]),
+                          "Protected cohort decisions",
+                      )
+                    : node("p", {}, "No cohort changes on this history page."),
+            );
+            const paging = node("div", { class: "inline-actions my-3" });
+            if (previous.length)
+                paging.append(button("Previous", () => history(previous.at(-1), previous.slice(0, -1))));
+            if (page.next_cursor)
+                paging.append(button("Next", () => history(page.next_cursor, [...previous, cursor])));
+            body.append(
+                paging,
+                node("h4", { class: "h6" }, "Earlier receipts"),
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "These receipts are preserved as originally recorded. They are not reconstructed events, and their calendar labels may reflect current reference data.",
+                ),
+                page.earlier_receipts.length
+                    ? grid(
+                          ["Academic year", "Revision", "Recorded"],
+                          page.earlier_receipts.map((item) => [
+                              item.year_code,
+                              item.catalog_revision,
+                              item.recorded_at,
+                          ]),
+                          "Earlier cohort receipts",
+                      )
+                    : node("p", {}, "No earlier receipts on this page."),
+            );
+            if (page.next_after)
+                body.append(
+                    button("More earlier receipts", () => {
+                        after = page.next_after;
+                        return history(cursor, previous);
+                    }),
+                );
+            focus(heading);
+        }
+        overview();
     }
     return { years, types, studentCatalog, newTerm: () => termForm(), editTerm: termForm };
 };

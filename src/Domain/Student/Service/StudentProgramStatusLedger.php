@@ -25,7 +25,7 @@ use Domain\Student\ValueObject\StudentProgramStatusId;
 use Domain\Student\ValueObject\StudentProgramStatusSchema;
 use Qubus\Exception\Data\TypeException;
 
-/** Internal status ledger. Calling services authorize, lock the student and own the transaction. */
+/** Internal pursuit ledger for status and cohort decisions. Callers authorize, lock and own the transaction. */
 final readonly class StudentProgramStatusLedger
 {
     public function __construct(
@@ -33,6 +33,7 @@ final readonly class StudentProgramStatusLedger
         private HistoricalEventStore $history,
         private StudentAccess $access,
         private Clock $clock,
+        private \Domain\Catalog\Repository\CatalogYearRepository $catalogs,
     ) {
     }
 
@@ -96,6 +97,8 @@ final readonly class StudentProgramStatusLedger
             "stream_version" => $root->playhead(),
             "earlier_history_unknown" => $root->earlierHistoryUnknown(),
             "source" => $root->assignmentSource(),
+            "cohort" => $root->cohort(),
+            "cohort_version" => $root->cohortVersion(),
         ];
     }
     /** Current uniqueness checks must not trust a conflicting status on another pursuit. */
@@ -197,6 +200,106 @@ final readonly class StudentProgramStatusLedger
     {
         return $this->load($assignment, $operation, $actor)["receipt"];
     }
+    /** @return array<string,mixed> */
+    public function cohortContext(StudentProgram $assignment, ?HistoryReadBudget $budget = null): array
+    {
+        $loaded = $this->load($assignment, budget: $budget);
+        $root = $loaded["root"];
+        return [
+            "binding" => $loaded["binding"],
+            "catalog" => $loaded["catalog"],
+            "stream_version" => $root->playhead(),
+            "history_recorded" => $root->cohortVersion() !== null,
+            "earlier_history_unknown" => $root->cohortEarlierUnknown($loaded["binding"]["version"] ?? -1),
+        ];
+    }
+    /** @param array<string,mixed> $catalog
+     * @return array<string,mixed>
+     */
+    public function changeCohort(
+        StudentProgram $assignment,
+        array $catalog,
+        EntityId $operation,
+        EntityId $actor,
+        #[\SensitiveParameter] string $reason,
+        int $expectedVersion,
+        int $expectedBindingVersion,
+    ): array {
+        if ($this->access->authenticatedUserId()->value !== $actor->value) {
+            throw new AccessDeniedException("The cohort decision actor changed.");
+        }
+        $loaded = $this->load($assignment);
+        $root = $loaded["root"];
+        $expected = $root->playhead();
+        if (
+            $expected !== $expectedVersion ||
+            ($loaded["binding"]["version"] ?? -1) !== $expectedBindingVersion
+        ) {
+            throw new \Domain\Shared\Exception\ConcurrentModificationException(
+                "The reviewed pursuit or cohort changed.",
+            );
+        }
+        $at = $this->clock->now();
+        if ($expected === 0) {
+            $observation = StudentProgramWasObserved::occur(
+                new StudentProgramStatusId($assignment->id->value),
+                [
+                    "decision_id" => PublishedGradeId::forVersion($operation, "cohort.observation")->value,
+                    "assignment" => StudentProgramStatusSchema::facts($assignment),
+                ],
+                ["__aggregate_type" => "student_program_status"],
+            )->withPlayhead(1);
+            $root->acceptHistorical($observation);
+            $this->history->append(
+                $this->stream($assignment->id),
+                PublishedGradeId::forVersion($operation, "cohort.observation"),
+                0,
+                new EventContext($actor, $at, $operation, reason: $reason),
+                [$observation],
+            );
+        }
+        $version = $loaded["binding"]["version"] ?? -1;
+        $event = \Domain\Student\Event\StudentCohortWasChanged::occur(
+            new StudentProgramStatusId($assignment->id->value),
+            [
+                "decision_id" => $operation->value,
+                "previous_decision_id" => $root->decision(),
+                "previous_catalog" => $loaded["catalog"],
+                "catalog" => $catalog,
+                "previous_binding_version" => $version,
+                "earlier_history_unknown" => $root->cohortEarlierUnknown($version),
+            ],
+            ["__aggregate_type" => "student_program_status"],
+        )->withPlayhead($root->playhead() + 1);
+        $previous = new EntityId($root->decision() ?? throw new CorruptHistoryException());
+        $before = $root->playhead();
+        $root->acceptHistorical($event);
+        $this->history->append(
+            $this->stream($assignment->id),
+            $operation,
+            $before,
+            new EventContext($actor, $at, $operation, $previous, $reason),
+            [$event],
+        );
+        $this->catalogs->bind($assignment->id, new EntityId($catalog["catalog_id"]), $version);
+        $this->records->project($root, $assignment->status, $expected);
+        return $this->cohortResult($root, $operation, $at->format(DATE_ATOM));
+    }
+    /** @param array<string,mixed> $release
+     * @return array<string,mixed> */
+    public static function catalogSnapshot(array $release): array
+    {
+        $catalog = [
+            "catalog_id" => $release["id"],
+            "program_id" => $release["program_id"],
+            "year_id" => $release["year_id"],
+            "year_code" => $release["year_code"],
+            "revision" => $release["revision"],
+            "program_code" => $release["program_code"],
+            "program_title" => $release["program_title"],
+        ];
+        return StudentProgramStatusSchema::catalog($catalog);
+    }
     /**
      * @return array<string,mixed>
      * @throws TypeException
@@ -252,11 +355,11 @@ final readonly class StudentProgramStatusLedger
             $eventClass = StudentProgramWasReplaced::class;
             $payload["replacement_assignment_id"] = $replacement->value;
         }
-        $event = $eventClass::occur(
-            new StudentProgramStatusId($assignment->id->value),
-            $payload,
-            ["__aggregate_type" => "student_program_status"],
-        )->withPlayhead($root->playhead() + 1);
+        $event = $eventClass
+        ::occur(new StudentProgramStatusId($assignment->id->value), $payload, [
+                "__aggregate_type" => "student_program_status",
+            ])
+            ->withPlayhead($root->playhead() + 1);
         $version = $root->playhead();
         $root->acceptHistorical($event);
         $this->history->append(
@@ -277,6 +380,18 @@ final readonly class StudentProgramStatusLedger
         $items = [];
         foreach ($page->events as $stored) {
             $p = $stored->event->payload();
+            if ($stored->event instanceof \Domain\Student\Event\StudentCohortWasChanged) {
+                $items[] = [
+                    "kind" => "cohort",
+                    "status" => null,
+                    "catalog" => $p["catalog"],
+                    "previous_catalog" => $p["previous_catalog"],
+                    "earlier_history_unknown" => $p["earlier_history_unknown"],
+                    "effective_at" => $stored->context->effectiveAt?->format(DATE_ATOM),
+                    "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
+                ];
+                continue;
+            }
             $observed = $stored->event instanceof StudentProgramWasObserved;
             $assigned = $stored->event instanceof StudentProgramWasAssigned;
             $items[] = [
@@ -305,7 +420,7 @@ final readonly class StudentProgramStatusLedger
         ];
     }
     /**
-     * @return array{root:StudentProgramStatus,receipt:?array<string,mixed>}
+     * @return array{root:StudentProgramStatus,receipt:?array<string,mixed>,binding:?array<string,mixed>,catalog:?array<string,mixed>}
      * @throws TypeException
      */
     private function load(
@@ -338,6 +453,20 @@ final readonly class StudentProgramStatusLedger
                             throw new CorruptHistoryException(),
                     );
                 }
+                if (
+                    $stored->event instanceof \Domain\Student\Event\StudentCohortWasChanged &&
+                    $root->decision() === $operation?->value
+                ) {
+                    if ($stored->context->actor?->value !== $actor?->value) {
+                        throw new AccessDeniedException("This cohort decision belongs to another actor.");
+                    }
+                    $receipt = $this->cohortResult(
+                        $root,
+                        $operation,
+                        $stored->context->effectiveAt?->format(DATE_ATOM) ??
+                            throw new CorruptHistoryException(),
+                    );
+                }
             }
             $cursor = $page->nextCursor;
         } while ($cursor !== null);
@@ -364,7 +493,42 @@ final readonly class StudentProgramStatusLedger
                 throw new CorruptHistoryException();
             }
         }
-        return ["root" => $root, "receipt" => $receipt];
+        $binding = $this->catalogs->binding($assignment->id);
+        $release = $binding === null ? null : $this->catalogs->release(new EntityId($binding["catalog_id"]));
+        if ($release !== null && !$release["published"]) {
+            throw new CorruptHistoryException();
+        }
+        $catalog = $release === null ? null : self::catalogSnapshot($release);
+        if ($catalog !== null && $catalog["program_id"] !== $assignment->programId->value) {
+            throw new CorruptHistoryException();
+        }
+        if ($root->cohortVersion() !== null) {
+            if ($root->cohort() !== $catalog || $root->cohortVersion() !== ($binding["version"] ?? -1)) {
+                throw new CorruptHistoryException();
+            }
+        } elseif (
+            ($root->assignmentSource()["cohort"] ?? null) !== null &&
+            ($binding["version"] ?? -1) <= 0
+        ) {
+            foreach ($root->assignmentSource()["cohort"] as $field => $value) {
+                if (($catalog[$field] ?? null) !== $value) {
+                    throw new CorruptHistoryException();
+                }
+            }
+        }
+        return ["root" => $root, "receipt" => $receipt, "binding" => $binding, "catalog" => $catalog];
+    }
+    /** @return array<string,mixed> */
+    private function cohortResult(StudentProgramStatus $root, EntityId $operation, string $at): array
+    {
+        return [
+            "operation_id" => $operation->value,
+            "assignment_id" => (string) $root->aggregateId(),
+            "catalog" => $root->cohort(),
+            "binding_version" => $root->cohortVersion(),
+            "stream_version" => $root->playhead(),
+            "effective_at" => $at,
+        ];
     }
     /** @return array<string,mixed> */
     private function result(StudentProgramStatus $root, EntityId $operation, string $effective): array

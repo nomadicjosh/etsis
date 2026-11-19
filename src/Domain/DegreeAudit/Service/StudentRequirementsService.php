@@ -48,20 +48,22 @@ final readonly class StudentRequirementsService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private \Domain\Student\Service\StudentProgramStatusLedger $programs,
     ) {
     }
     /** Authorize the pursuit scope without replaying its selected catalog publications. */
     public function authorizeRead(EntityId $student, EntityId $assignment): void
     {
-        $this->scope($student, $assignment);
+        $this->scope($student, $assignment, verify: false);
     }
     /** @return array<string, mixed> */
     public function view(EntityId $student, EntityId $assignment, ?HistoryReadBudget $budget = null): array
     {
-        $this->scope($student, $assignment);
+        $this->authorizeRead($student, $assignment);
+        $budget ??= new HistoryReadBudget();
         return $this->transactions->run(function () use ($student, $assignment, $budget): array {
             $this->records->lock($student);
-            $scope = $this->scope($student, $assignment);
+            $scope = $this->scope($student, $assignment, $budget);
             $state = $this->state($assignment, $budget);
             $selected = $state->selection();
             $requirements = null;
@@ -84,6 +86,7 @@ final readonly class StudentRequirementsService
                     $requirements["definition"]["length_months"],
                 );
             }
+            $this->authorizeRead($student, $assignment);
             return [
                 "student_id" => $student->value,
                 "assignment_id" => $assignment->value,
@@ -108,7 +111,7 @@ final readonly class StudentRequirementsService
         EntityId $assignment,
         HistoryReadBudget $budget,
     ): ?array {
-        $scope = $this->scope($student, $assignment);
+        $scope = $this->scope($student, $assignment, $budget);
         $selected = $this->state($assignment, $budget)->selection();
         if ($selected === null) {
             return null;
@@ -126,7 +129,7 @@ final readonly class StudentRequirementsService
         ) {
             throw new CorruptHistoryException();
         }
-        $this->scope($student, $assignment);
+        $this->authorizeRead($student, $assignment);
         return [
             "requirements" => $requirements,
             "cohort_changed" =>
@@ -333,8 +336,12 @@ final readonly class StudentRequirementsService
         return $actor;
     }
     /** @return array<string, mixed> */
-    private function scope(EntityId $student, EntityId $assignment): array
-    {
+    private function scope(
+        EntityId $student,
+        EntityId $assignment,
+        ?HistoryReadBudget $budget = null,
+        bool $verify = true
+    ): array {
         $this->access->authenticatedUserId();
         $record = $this->admissions->student($student);
         $this->access->requireOwnerOrPermission(
@@ -344,6 +351,9 @@ final readonly class StudentRequirementsService
         $a = $this->records->assignment($assignment);
         if ($a->studentId->value !== $student->value) {
             throw new RecordNotFoundException("Student program not found.");
+        }
+        if ($verify) {
+            $this->programs->verify($a, $budget);
         }
         $b = $this->catalogs->binding($assignment);
         $release = $b === null ? null : $this->catalogs->release(new EntityId($b["catalog_id"]));

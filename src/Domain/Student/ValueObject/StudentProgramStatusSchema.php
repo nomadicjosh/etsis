@@ -30,10 +30,21 @@ final class StudentProgramStatusSchema
     public static function validate(string $class, array $p): void
     {
         $fields = match ($class) {
+            \Domain\Student\Event\StudentCohortWasChanged::class => [
+                "decision_id",
+                "previous_decision_id",
+                "previous_catalog",
+                "catalog",
+                "previous_binding_version",
+                "earlier_history_unknown",
+            ],
             StudentProgramWasAssigned::class => ["decision_id", "assignment", "source"],
             StudentProgramWasObserved::class => ["decision_id", "assignment"],
             StudentProgramWasReplaced::class => [
-                "decision_id", "previous_decision_id", "status", "replacement_assignment_id"
+                "decision_id",
+                "previous_decision_id",
+                "status",
+                "replacement_assignment_id",
             ],
             StudentProgramStatusWasChanged::class => ["decision_id", "previous_decision_id", "status"],
             default => throw new CorruptHistoryException(),
@@ -42,7 +53,28 @@ final class StudentProgramStatusSchema
             throw new CorruptHistoryException();
         }
         self::id($p["decision_id"]);
-        if (in_array($class, [StudentProgramStatusWasChanged::class, StudentProgramWasReplaced::class], true)) {
+        if ($class === \Domain\Student\Event\StudentCohortWasChanged::class) {
+            self::id($p["previous_decision_id"]);
+            self::catalog($p["catalog"]);
+            if ($p["previous_catalog"] !== null) {
+                self::catalog($p["previous_catalog"]);
+            }
+            if (
+                !is_int($p["previous_binding_version"]) ||
+                $p["previous_binding_version"] < -1 ||
+                $p["previous_binding_version"] === PHP_INT_MAX ||
+                !is_bool($p["earlier_history_unknown"]) ||
+                ($p["previous_catalog"] === null) !== ($p["previous_binding_version"] === -1) ||
+                $p["decision_id"] === $p["previous_decision_id"] ||
+                ($p["previous_catalog"]["catalog_id"] ?? null) === $p["catalog"]["catalog_id"]
+            ) {
+                throw new CorruptHistoryException();
+            }
+            return;
+        }
+        if (
+            in_array($class, [StudentProgramStatusWasChanged::class, StudentProgramWasReplaced::class], true)
+        ) {
             self::id($p["previous_decision_id"]);
             self::status($p["status"]);
             if ($class === StudentProgramWasReplaced::class) {
@@ -109,6 +141,36 @@ final class StudentProgramStatusSchema
         self::id($c["catalog_id"]);
         self::id($c["year_id"]);
         self::text($c["year_code"]);
+    }
+    /** @param mixed $catalog
+     * @return array<string,mixed> */
+    public static function catalog(mixed $catalog): array
+    {
+        if (
+            !is_array($catalog) ||
+            count($catalog) !== 7 ||
+            array_diff(array_keys($catalog), [
+                "catalog_id",
+                "program_id",
+                "year_id",
+                "year_code",
+                "revision",
+                "program_code",
+                "program_title",
+            ]) !== [] ||
+            !is_int($catalog["revision"]) ||
+            $catalog["revision"] < 1
+        ) {
+            throw new CorruptHistoryException();
+        }
+        foreach (["catalog_id", "program_id", "year_id"] as $key) {
+            self::id($catalog[$key]);
+        }
+        foreach (["year_code", "program_code", "program_title"] as $key) {
+            self::text($catalog[$key]);
+        }
+        ksort($catalog, SORT_STRING);
+        return $catalog;
     }
     private static function text(mixed $v): void
     {

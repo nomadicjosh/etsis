@@ -45,7 +45,12 @@ final class CatalogYearWorkflowTest extends TestCase
             $f->transactions,
             $f->audit,
             $h->cipher,
-            $f->clock
+            $f->programStatusLedger(),
+            new \Domain\Catalog\Service\PublishedProgramReader(
+                EventStoreFixture::history($f->connection->queryBuilder()),
+                new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($f->sql),
+            ),
+            new \Domain\Shared\Service\ReviewProof($h->cipher, $f->clock),
         );
     }
     private function year(HiatusFixture $h, string $code, string $start, string $end): CatalogYear
@@ -151,21 +156,26 @@ final class CatalogYearWorkflowTest extends TestCase
         $events = $f->sql->rows('sis_history_events');
         $credits = $f->sql->rows('sis_academic_credits');
         $note = 'Fictional approved change <script>example</script>';
-        $service->change($student->id, $assignment, $b, $op, 0, $note);
-        $service->change($student->id, $assignment, $b, $op, 0, $note);
-        self::assertSame($b->value, $service->view($student->id, $assignment)['current']['id']);
-        self::assertCount(2, $service->history($student->id, $assignment)['items']);
-        self::assertSame($note, $service->history($student->id, $assignment)['items'][0]['note']);
+        $review = $service->review($student->id, $assignment, $b, 0, $note);
+        $op = new EntityId($review['operation_id']);
+        $service->commit($student->id, $assignment, $b, $op, 0, $note, $review['review_token']);
+        $service->commit($student->id, $assignment, $b, $op, 0, $note, $review['review_token']);
+        self::assertSame($b->value, $service->view($student->id, $assignment)['current']['catalog_id']);
+        self::assertCount(1, $service->history($student->id, $assignment)['items']);
+        self::assertArrayNotHasKey('note', $service->history($student->id, $assignment)['items'][0]);
         self::assertStringNotContainsString($note, json_encode($f->sql->rows('sis_student_catalog_changes')));
         self::assertStringNotContainsString($note, json_encode($f->sql->rows('sis_audit')));
-        $service->change($student->id, $assignment, $a, EntityId::generate(), 1, 'Fictional reversal of reference');
-        $service->change($student->id, $assignment, $b, $op, 0, $note);
-        self::assertSame($a->value, $service->view($student->id, $assignment)['current']['id']);
+        $back = $service->review($student->id, $assignment, $a, 1, 'Fictional reversal of reference');
+        $service->commit($student->id, $assignment, $a, new EntityId($back['operation_id']), 1,
+            'Fictional reversal of reference', $back['review_token']);
+        $service->commit($student->id, $assignment, $b, $op, 0, $note, $review['review_token']);
+        self::assertSame($a->value, $service->view($student->id, $assignment)['current']['catalog_id']);
         self::assertSame($student->entryTermId->value, $f->admissions->student($student->id)->entryTermId->value);
-        self::assertSame($events, $f->sql->rows('sis_history_events'));
+        self::assertSame($events, array_slice($f->sql->rows('sis_history_events'), 0, count($events)));
+        self::assertCount(count($events) + 3, $f->sql->rows('sis_history_events'));
         self::assertSame($credits, $f->sql->rows('sis_academic_credits'));
         $this->expectException(ConcurrentModificationException::class);
-        $service->change($student->id, $assignment, $b, EntityId::generate(), 0, 'Fictional stale reference');
+        $service->review($student->id, $assignment, $b, 0, 'Fictional stale reference');
     }
 
     public function testAnotherProgramCannotSupplyItsCatalogAndStudentReadersCannotChangeOrReadReasons(): void
@@ -180,7 +190,7 @@ final class CatalogYearWorkflowTest extends TestCase
         $assignment = $this->assignment($h, $student->id);
         $service = $this->registrar($h);
         try {
-            $service->change($student->id, $assignment, $wrong, EntityId::generate(), 0, 'Fictional wrong program');
+            $service->review($student->id, $assignment, $wrong, 0, 'Fictional wrong program');
             self::fail('A different program supplied the assigned curriculum.');
         } catch (ValidationException) {
             self::assertSame($f->program->value, $service->view($student->id, $assignment)['current']['program_id']);

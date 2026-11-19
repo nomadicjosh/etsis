@@ -428,6 +428,13 @@ return static function (Psr7Router $router): void {
             "history",
         ])
         ->name("sis.student.catalog.history");
+    foreach (['choices', 'review', 'commit'] as $action) {
+        $router->map(
+            ['POST'],
+            '/sis/students/{student}/programs/{assignment}/catalog/' . $action . '/',
+            [SisStudentCatalogController::class, $action]
+        )->name('sis.student.catalog.' . $action);
+    }
 
     $router
         ->map(["POST"], "/sis/students/{student}/hiatus-workflow/review/", [

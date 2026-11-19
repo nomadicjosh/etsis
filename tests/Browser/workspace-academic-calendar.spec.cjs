@@ -13,6 +13,9 @@ async function accessible(page) {
 }
 async function fixture(page, interrupted = false) {
     const calls = [], errors = []; let saved = false;
+    const initialCohort = { catalog_id: id(50), year_code: '2024-2025', revision: 1, program_title: 'Fictional Arts' };
+    const nextCohort = { catalog_id: id(51), year_code: '2025-2026', revision: 2, program_title: 'Fictional <script>Arts</script>' };
+    let cohort = initialCohort, cohortVersion = 0;
     let type = { id: typeId, code: 'FA', name_pattern: 'Fall {{START_YEAR}}', code_pattern: '{{START_YEAR_SHORT}}/FA', kind: 'standard', active: true, version: 0, dates };
     const plan = { ...year, terms: [term], revision: 'a'.repeat(64), operation_id: operation };
     page.on('pageerror', error => errors.push(error.message));
@@ -39,8 +42,11 @@ else if (path.startsWith('/sis/term-types/') && path.endsWith('/save/')) {
         else if (path === `/sis/calendar/terms/${termId}/`) result = term;
         else if (path.endsWith('/record/')) result = { id: student, person_id: id(8), given_name: 'Sadie', family_name: 'Example', institutional_id: 'S-FICTIONAL', active: true, primary_program: { id: program, code: 'BA', title: 'Fictional Arts' }, entry_term: { id: termId, code: '24/FA' }, revision: 'c'.repeat(64) };
         else if (path.endsWith('/programs/')) result = { items: [{ id: assignment, program_id: program, program_code: 'BA', program_title: 'Fictional Arts', term_code: '24/FA', status: 'active', is_primary: true, catalog_year: '2024-2025', catalog_revision: 1 }], next_after: null };
-        else if (path.endsWith('/catalog/')) result = { program: { code: 'BA', title: 'Fictional Arts' }, entry_term: { code: '24/FA' }, current: { year_code: '2024-2025', revision: 1 }, choices: [], next_after: null };
-        else if (path.endsWith('/catalog/history/')) result = { items: [{ year_code: '2024-2025', catalog_revision: 1, created_at: '2024-08-15', note: 'Fictional <script>historical</script> note' }], next_after: null };
+        else if (path.endsWith('/catalog/')) result = { program: { code: 'BA', title: 'Fictional Arts' }, entry_term: { code: '24/FA' }, current: cohort, version: cohortVersion, status: 'active', earlier_history_unknown: false };
+        else if (path.endsWith('/catalog/choices/')) result = { items: data.after ? [initialCohort] : [nextCohort], next_after: data.after ? null : id(52) };
+        else if (path.endsWith('/catalog/review/')) result = { before: cohort, after: nextCohort, operation_id: operation, review_token: 'fictional-cohort-proof', version: cohortVersion };
+        else if (path.endsWith('/catalog/commit/')) { cohort = nextCohort; cohortVersion++; result = { operation_id: operation }; }
+        else if (path.endsWith('/catalog/history/')) result = { items: cohortVersion ? [{ previous_catalog: initialCohort, catalog: nextCohort, effective_at: '2026-11-18', recorded_at: '2026-11-18' }] : [], next_cursor: null, earlier_receipts: [{ year_code: '2024-2025', catalog_revision: 1, recorded_at: '2024-08-15' }], next_after: null };
         else if (path.includes('/context/')) result = { items: [], next_after: null };
         await route.fulfill({ status, json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
@@ -125,14 +131,17 @@ test('separate Terms entry maintains generated terms and allows exceptional term
     expect(f.calls.find(call => call.path === '/sis/calendar/terms/create/')).toMatchObject({ data: { academic_year_id: yearId, code: '26/MINI', kind: 'non_standard', operation_id: operation } }); expect(f.errors).toEqual([]);
 });
 
-test('student cohort shows retained curriculum and escaped history without a manual year assignment', async ({ page }) => {
+test('student cohort shows retained curriculum and earlier receipts on demand', async ({ page }) => {
     const f = await fixture(page); await page.locator('.workspace-nav-link[data-workspace="students"]').click();
     await page.locator('#directory-search').fill('a');
     await page.locator('#directory-search').press('Enter');
     await page.getByRole('button', { name: 'Sadie Example', exact: true }).click();
     await recordAction(page, 'Matriculation cohort');
-    await expect(page.locator('#drawer-body')).toContainText('Academic year 2024-2025; retained curriculum version 1');
-    await expect(page.locator('#drawer-body')).toContainText('Fictional <script>historical</script> note');
+    await expect(page.locator('#drawer-body')).toContainText('Current cohort: 2024-2025 · revision 1');
+    expect(f.calls.some(call => call.path.endsWith('/catalog/choices/'))).toBe(false);
+    expect(f.calls.some(call => call.path.endsWith('/catalog/history/'))).toBe(false);
+    await page.getByRole('button', { name: 'Cohort history', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Earlier cohort receipts', exact: true })).toContainText('2024-2025');
     await expect(page.locator('#drawer-body script')).toHaveCount(0);
     await expect(page.locator('#drawer-body form')).toHaveCount(0);
     await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
@@ -268,4 +277,101 @@ test('optional J-Term and summer choices remain simple and use editable second-y
     await expect(page.getByRole('region', { name: 'Example generated term dates', exact: true })).toContainText('2029-07-20');
     await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
     expect(f.calls.some(call => call.path.endsWith('/save/'))).toBe(false); expect(f.errors).toEqual([]);
+});
+
+test('registrars review a cohort change with retained choices, reason and separate requirement selections', async ({ page }) => {
+    const f = await fixture(page);
+    await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await page.locator('#directory-search').fill('Sadie');
+    await page.locator('#directory-search').press('Enter');
+    await page.getByRole('button', { name: 'Sadie Example', exact: true }).click();
+    await recordAction(page, 'Matriculation cohort');
+    await page.getByRole('button', { name: 'Review cohort change', exact: true }).click();
+    await page.getByRole('radio', { name: '2025-2026 · revision 2 · Fictional <script>Arts</script>', exact: true }).check();
+    await page.getByLabel('Reason for cohort change', { exact: true }).fill('Fictional <script>registrar</script> reason');
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Selected: 2025-2026 · revision 2.');
+    await expect(page.getByLabel('Reason for cohort change', { exact: true })).toHaveValue('Fictional <script>registrar</script> reason');
+    await page.getByRole('button', { name: 'Previous', exact: true }).click();
+    await expect(page.getByRole('radio', { name: '2025-2026 · revision 2 · Fictional <script>Arts</script>', exact: true })).toBeChecked();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    await page.getByRole('button', { name: 'Review change', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Confirm cohort change', exact: true })).toBeFocused();
+    await expect(page.locator('#drawer-body')).toContainText('Before: 2024-2025 · revision 1. After: 2025-2026 · revision 2.');
+    await expect(page.locator('#drawer-body')).toContainText('Degree requirements and specializations stay assigned');
+    await accessible(page);
+    await page.getByRole('button', { name: 'Revise change', exact: true }).click();
+    await expect(page.getByLabel('Reason for cohort change', { exact: true })).toHaveValue('Fictional <script>registrar</script> reason');
+    await page.getByRole('button', { name: 'Review change', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm change', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Current cohort: 2025-2026 · revision 2');
+    await page.getByRole('button', { name: 'Cohort history', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Protected cohort decisions', exact: true })).toContainText('2025-2026');
+    expect(f.calls.find(call => call.path.endsWith('/catalog/commit/'))).toMatchObject({
+        csrf: 'fictional-test-token', data: { catalog_id: id(51), version: 0,
+            note: 'Fictional <script>registrar</script> reason', operation_id: operation,
+            review_token: 'fictional-cohort-proof' },
+    });
+    await expect(page.locator('#drawer-body script')).toHaveCount(0);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('a rejected cohort review preserves the registrar draft and closed pursuits keep history only', async ({ page }) => {
+    const f = await fixture(page);
+    await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await page.locator('#directory-search').fill('Sadie');
+    await page.locator('#directory-search').press('Enter');
+    await page.getByRole('button', { name: 'Sadie Example', exact: true }).click();
+    await recordAction(page, 'Matriculation cohort');
+    await page.getByRole('button', { name: 'Review cohort change', exact: true }).click();
+    await page.getByRole('radio', { name: /2025-2026/ }).check();
+    await page.getByLabel('Reason for cohort change', { exact: true }).fill('Fictional preserved draft.');
+    await page.route('**/catalog/review/', route => route.fulfill({ status: 422, json: {
+        error: 'Please correct the highlighted fields.', errors: [{ field: 'note', message: 'Fictional review rejection.' }],
+    } }));
+    await page.getByRole('button', { name: 'Review change', exact: true }).click();
+    await expect(page.locator('#drawer-error')).toBeVisible();
+    await expect(page.getByLabel('Reason for cohort change', { exact: true })).toHaveValue('Fictional preserved draft.');
+    await page.route('**/catalog/', route => route.fulfill({ json: {
+        program: { code: 'BA', title: 'Fictional Arts' }, entry_term: { code: '24/FA' },
+        current: { catalog_id: id(50), year_code: '2024-2025', revision: 1 }, status: 'closed', version: 0,
+    } }));
+    await page.getByRole('button', { name: 'Refresh cohort', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('This pursuit is closed.');
+    await expect(page.getByRole('button', { name: 'Review cohort change', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Cohort history', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Cohort history', exact: true })).toBeVisible();
+    expect(f.calls.some(call => call.path.endsWith('/catalog/commit/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('a delayed cohort chooser cannot replace a later history screen', async ({ page }) => {
+    const f = await fixture(page);
+    await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await page.locator('#directory-search').fill('Sadie');
+    await page.locator('#directory-search').press('Enter');
+    await page.getByRole('button', { name: 'Sadie Example', exact: true }).click();
+    await recordAction(page, 'Matriculation cohort');
+    let release;
+    const delayed = new Promise(resolve => { release = resolve; });
+    let started;
+    const received = new Promise(resolve => { started = resolve; });
+    await page.route('**/catalog/choices/', async route => {
+        started();
+        await delayed;
+        await route.fulfill({ json: { items: [], next_after: null } });
+    });
+    await page.getByRole('button', { name: 'Review cohort change', exact: true }).click();
+    await received;
+    await page.getByRole('button', { name: 'Cohort history', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Cohort history', exact: true })).toBeVisible();
+    const finished = page.waitForResponse(response => response.url().endsWith('/catalog/choices/'));
+    release();
+    await finished;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(page.getByRole('heading', { name: 'Cohort history', exact: true })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Choose a published curriculum', exact: true })).toHaveCount(0);
+    expect(f.errors).toEqual([]);
 });

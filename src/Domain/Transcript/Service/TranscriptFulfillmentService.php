@@ -656,7 +656,7 @@ final readonly class TranscriptFulfillmentService
             ) {
                 throw new CorruptHistoryException();
             }
-            $label = $definition["definition"] ?? ($primary["source"] ?? $primary["selection"]);
+            $label = $definition["definition"] ?? ($primary['cohort'] ?? $primary["source"] ?? $primary["selection"]);
             if ($label === null) {
                 $program = $this->students->program($s->programId);
             } else {
@@ -787,6 +787,7 @@ final readonly class TranscriptFulfillmentService
                 "labels_retained" => $label !== null,
                 "definition_recorded" => $definition !== null,
                 "definition_version" => $definition["stream_version"] ?? null,
+                'cohort_history_recorded' => $primary['cohort_version'] !== null,
             ],
             "credits" => $rows,
             "academic_verification" => [

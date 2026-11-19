@@ -102,7 +102,7 @@ final readonly class SqlStudentProgramStatusRepository implements StudentProgram
             throw new ConcurrentModificationException("The program history changed. Review it again.");
         }
         if (
-            $this->sql->update(
+            $f['status'] !== $before && $this->sql->update(
                 "sis_student_programs",
                 ["status" => $f["status"]],
                 [

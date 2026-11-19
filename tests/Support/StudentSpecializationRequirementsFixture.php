@@ -83,6 +83,7 @@ final class StudentSpecializationRequirementsFixture
             new \Infrastructure\Persistence\Repository\SqlRequirementsRepository($s->sql),
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($this->r->history),
             $this->r->history, $s->access, $s->transactions, $s->audit, $this->r->catalog->fixture->cipher, $s->clock,
+            $s->programStatusLedger(),
         );
     }
     public function publish(string $code = 'DATA'): string

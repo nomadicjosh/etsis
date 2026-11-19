@@ -713,6 +713,7 @@ final class SisFixture
             ),
             $this->access,
             $this->clock,
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
         );
     }
     public function specializations(
@@ -896,6 +897,20 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
             $this->audit,
             $this->clock,
+        );
+    }
+    public function studentCatalogs(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\Student\Service\StudentCatalogService
+    {
+        return new \Domain\Student\Service\StudentCatalogService(
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->access, $this->transactions, $audit ?? $this->audit, $this->dropCipher,
+            $this->programStatusLedger(),
+            new \Domain\Catalog\Service\PublishedProgramReader(
+                EventStoreFixture::history($this->connection->queryBuilder()),
+                new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql),
+            ),
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
         );
     }
 

@@ -2353,10 +2353,39 @@ if (
 ) {
     throw new RuntimeException("Automatic matriculation catalog assignment or private history failed.");
 }
+$cohortChoices = $teachingPost($studentCatalogPath . 'choices/', []);
+if ($cohortChoices->getStatusCode() !== 200 ||
+    !str_contains($cohortChoices->getHeaderLine('Cache-Control'), 'no-store')) {
+    throw new RuntimeException('Cohort choices lost their provider or private-response boundary.');
+}
+$sameCohort = json_decode((string) $catalogInfo->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$cohortReviewData = ['catalog_id' => $sameCohort['current']['catalog_id'],
+    'version' => $sameCohort['version'], 'note' => 'Fictional unchanged curriculum.'];
+if ($teachingPost($studentCatalogPath . 'review/', $cohortReviewData)->getStatusCode() !== 422 ||
+    $teachingPost($studentCatalogPath . 'commit/', $cohortReviewData)->getStatusCode() !== 422) {
+    throw new RuntimeException('Cohort decisions accepted unchanged inputs or a missing confirmation proof.');
+}
+foreach (['choices', 'review', 'commit'] as $cohortAction) {
+    $noCsrf = $post->withUri(new \Laminas\Diactoros\Uri(
+        'https://campus.example.invalid' . $studentCatalogPath . $cohortAction . '/'))
+        ->withBody(new \Laminas\Diactoros\Stream('php://temp', 'w+'));
+    $noCsrf->getBody()->write(http_build_query(['_workspace_json' => json_encode($cohortReviewData)]));
+    $noCsrf->getBody()->rewind();
+    if ($app->router->match($noCsrf)->getStatusCode() !== 403) {
+        throw new RuntimeException('Cohort routes bypassed framework CSRF.');
+    }
+}
 $sis->access->staff = false;
 $sis->access->grants = ["sis:student:read"];
 if ($teachingPost($studentCatalogPath . "history/", [])->getStatusCode() !== 403) {
     throw new RuntimeException("Academic read alone exposed private catalog-change reasons.");
+}
+foreach (['choices', 'review', 'commit'] as $cohortAction) {
+    $deniedCohortData = $cohortReviewData + ['operation_id' => \Domain\Shared\ValueObject\EntityId::generate()->value,
+        'review_token' => 'fictional-unaccepted-cohort-proof'];
+    if ($teachingPost($studentCatalogPath . $cohortAction . '/', $deniedCohortData)->getStatusCode() !== 403) {
+        throw new RuntimeException('Student read authority exposed registrar cohort decisions.');
+    }
 }
 $sis->access->staff = true;
 $sis->access->grants = [];
@@ -6732,3 +6761,46 @@ $sis->access->staff = true;
 require __DIR__ . "/AdmissionDeferralBootChecks.php";
 
 require __DIR__ . "/ApplicationRevisionsBootChecks.php";
+
+// Reviewed cohort changes use the same real providers and private CSRF boundary as the student workspace.
+$sis->access->staff = true;
+$sis->access->grants = [];
+$cohortPerson = $sis->legacyPerson($sis->user(), 'Fictional', 'Cohort confirmation');
+$cohortApplication = $sis->legacyApplication($cohortPerson->id, $sis->program,
+    new \Domain\Shared\ValueObject\EntityId($yearPlan['terms'][0]['id']));
+$sis->legacyAdmissionDecision($cohortApplication->id, true);
+$cohortStudent = $sis->legacyStudent($cohortApplication->id);
+$cohortAssignment = $sis->sql->rows('sis_student_programs', ['student_id' => $cohortStudent->id->value], 1)[0];
+$cohortPath = '/sis/students/' . $cohortStudent->id->value . '/programs/' . $cohortAssignment['id'] . '/catalog/';
+$cohortCurrent = json_decode((string) $teachingPost($cohortPath, [])->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$cohortProgramReview = json_decode((string) $teachingPost($programDetailsBase . 'publication/review/', [
+    'academic_year_id' => $yearPlan['id'], 'reason' => 'Fictional reviewed curriculum update.',
+])->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$cohortProgramResponse = $teachingPost($programDetailsBase . 'publication/commit/', [
+    'review_token' => $cohortProgramReview['review_token'],
+]);
+if ($cohortProgramResponse->getStatusCode() !== 200) {
+    throw new RuntimeException('The cohort HTTP fixture could not publish its curriculum.');
+}
+$cohortPublication = json_decode((string) $cohortProgramResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$cohortCommand = ['catalog_id' => $cohortPublication['operation_id'], 'version' => $cohortCurrent['version'],
+    'note' => 'Fictional registrar-approved cohort change.'];
+$cohortReviewResponse = $teachingPost($cohortPath . 'review/', $cohortCommand);
+if ($cohortReviewResponse->getStatusCode() !== 200 ||
+    !str_contains($cohortReviewResponse->getHeaderLine('Cache-Control'), 'no-store') ||
+    $cohortReviewResponse->hasHeader('phpdebugbar-id')) {
+    throw new RuntimeException('The reviewed cohort lost its private provider boundary.');
+}
+$cohortReviewed = json_decode((string) $cohortReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$cohortCommand += ['operation_id' => $cohortReviewed['operation_id'], 'review_token' => $cohortReviewed['review_token']];
+$cohortConfirmed = $teachingPost($cohortPath . 'commit/', $cohortCommand);
+$cohortEvents = $sis->sql->rows('sis_history_events');
+$cohortRepeated = $teachingPost($cohortPath . 'commit/', $cohortCommand);
+if ($cohortConfirmed->getStatusCode() !== 200 || $cohortRepeated->getStatusCode() !== 200 ||
+    (string) $cohortConfirmed->getBody() !== (string) $cohortRepeated->getBody() ||
+    !str_contains($cohortConfirmed->getHeaderLine('Cache-Control'), 'no-store') ||
+    $cohortConfirmed->hasHeader('phpdebugbar-id') || $cohortEvents !== $sis->sql->rows('sis_history_events') ||
+    $sis->sql->one('sis_student_catalogs', ['assignment_id' => $cohortAssignment['id']])['catalog_id'] !==
+        $cohortPublication['operation_id']) {
+    throw new RuntimeException('Cohort confirmation, current binding or its original retry lost integrity.');
+}

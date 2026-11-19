@@ -76,7 +76,7 @@ For example:
 | Brian. Smith | 2022-2023 | B.A., 2022-2023, throughout that program through graduation |
 | Mary Smith | 2024-2025 | B.A., 2024-2025, throughout that program through graduation |
 
-Creating 2024-2025 or revising its B.A. curriculum does not replace Brian's reference. Later revisions also leave existing assignments untouched. Each program assignment has its own entry term and retained reference. Staff can review **Matriculation cohort** and its history from a student's program record; the current workspace does not offer a manual cohort reassignment form.
+Creating 2024-2025 or revising its B.A. curriculum does not replace Brian's reference. Later revisions also leave existing assignments untouched. Each program assignment has its own entry term and retained reference. Staff can inspect **Matriculation cohort** from a student's program record. An exceptional [reviewed cohort change](student-program-assignments.md#review-a-cohort-change) requires an explicit published curriculum, a registrar reason and confirmation; it preserves the earlier assignment and does not automatically replace selected degree or specialization requirements.
 
 This establishes the stable identity needed by the forthcoming degree-audit builder. Requirement authoring, requirement evaluation and institutional exceptions are not implemented by calendar setup. An existing assignment without a reliable historical reference remains flagged for review; the system never silently substitutes the current year.
 

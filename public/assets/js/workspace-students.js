@@ -354,10 +354,12 @@ window.createWorkspaceStudents = function (ui) {
                 ? grid(
                       ["Status", "Effective", "Recorded", "Record"],
                       page.items.map((row) => [
-                          row.status,
+                          row.kind === "cohort" ? `${row.catalog.year_code} · revision ${row.catalog.revision}` : row.status,
                           row.effective_at,
                           row.recorded_at,
-                          row.kind === "program_change"
+                          row.kind === "cohort"
+                              ? "Cohort changed"
+                              : row.kind === "program_change"
                               ? "Program change"
                               : row.kind === "assignment"
                               ? "Program assigned"

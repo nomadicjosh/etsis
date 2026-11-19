@@ -232,6 +232,11 @@ final readonly class HistoricalSchemaRegistry
                 'type' => 'student_program_status', 'root' => \Domain\Student\StudentProgramStatus::class,
                 'fields' => ['decision_id', 'previous_decision_id', 'status', 'replacement_assignment_id'],
             ],
+            \Domain\Student\Event\StudentCohortWasChanged::class => [
+                'type' => 'student_program_status', 'root' => \Domain\Student\StudentProgramStatus::class,
+                'fields' => ['decision_id', 'previous_decision_id', 'previous_catalog', 'catalog',
+                    'previous_binding_version', 'earlier_history_unknown'],
+            ],
             \Domain\Student\Event\StudentProgramStatusWasChanged::class => [
                 "type" => "student_program_status",
                 "root" => \Domain\Student\StudentProgramStatus::class,

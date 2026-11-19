@@ -18,26 +18,45 @@ final readonly class SisStudentCatalogController
     }
     public function show(ServerRequest $request, string $student, string $assignment): ResponseInterface
     {
+        return new JsonResponse($this->service->view(new EntityId($student), new EntityId($assignment)));
+    }
+    public function choices(ServerRequest $request, string $student, string $assignment): ResponseInterface
+    {
         return new JsonResponse(
-            $this->service->view(
+            $this->service->choices(
                 new EntityId($student),
                 new EntityId($assignment),
                 FormInput::from($request)->optionalId("after"),
             ),
         );
     }
-    public function change(ServerRequest $request, string $student, string $assignment): ResponseInterface
+    public function review(ServerRequest $request, string $student, string $assignment): ResponseInterface
     {
         $f = FormInput::from($request);
-        $this->service->change(
-            new EntityId($student),
-            new EntityId($assignment),
-            $f->id("catalog_id"),
-            $f->id("operation_id"),
-            $f->integer("version", -1),
-            $f->bodyText("note"),
+        return new JsonResponse(
+            $this->service->review(
+                new EntityId($student),
+                new EntityId($assignment),
+                $f->id("catalog_id"),
+                $f->integer("version", -1),
+                $f->bodyText("note"),
+            ),
         );
-        return new JsonResponse(["status" => "saved"]);
+    }
+    public function commit(ServerRequest $request, string $student, string $assignment): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse(
+            $this->service->commit(
+                new EntityId($student),
+                new EntityId($assignment),
+                $f->id("catalog_id"),
+                $f->id("operation_id"),
+                $f->integer("version", -1),
+                $f->bodyText("note"),
+                $f->bodyText("review_token"),
+            ),
+        );
     }
     public function history(ServerRequest $request, string $student, string $assignment): ResponseInterface
     {
@@ -45,6 +64,7 @@ final readonly class SisStudentCatalogController
             $this->service->history(
                 new EntityId($student),
                 new EntityId($assignment),
+                FormInput::from($request)->optionalText("cursor", 4096),
                 FormInput::from($request)->optionalId("after"),
             ),
         );

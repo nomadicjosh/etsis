@@ -44,6 +44,7 @@ final class SpecializationProgressTest extends TestCase
             new SqlCatalogYearRepository($s->sql), new SqlRequirementsRepository($s->sql),
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($f->r->history),
             $f->r->history, $s->access, $s->transactions, $s->audit, $f->r->catalog->fixture->cipher, $s->clock,
+            $s->programStatusLedger(),
         );
         return DegreeProgressFixture::service($s, $f->r->history, $requirements,
             $f->r->catalog->fixture->cipher, $repository, specializations: $f->service);

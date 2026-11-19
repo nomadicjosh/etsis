@@ -71,6 +71,7 @@ final class StudentRequirementsFixture
             $audit ?? $s->audit,
             $f->catalog->fixture->cipher,
             $s->clock,
+            $s->programStatusLedger(),
         );
     }
     public function review(string $start = "2026-01-31"): array

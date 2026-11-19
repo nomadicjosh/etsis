@@ -63,6 +63,7 @@ final class EventClassMap
             \Domain\Student\Event\StudentProgramWasObserved::class,
             \Domain\Student\Event\StudentProgramWasReplaced::class,
             \Domain\Student\Event\StudentProgramStatusWasChanged::class,
+            \Domain\Student\Event\StudentCohortWasChanged::class,
             \Domain\Student\Event\StudentActivityWasObserved::class,
             \Domain\Student\Event\StudentActivityWasDecided::class,
             \Domain\Registration\Event\EnrollmentWasEstablished::class,

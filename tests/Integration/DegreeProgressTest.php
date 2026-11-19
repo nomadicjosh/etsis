@@ -4,10 +4,6 @@ declare(strict_types=1);
 
 namespace Tests\Integration;
 
-require_once dirname(__DIR__) . "/Support/StudentRequirementsFixture.php";
-require_once dirname(__DIR__) . "/Support/TransferAwardFixture.php";
-require_once dirname(__DIR__) . "/Support/DegreeProgressFixture.php";
-
 use Domain\DegreeAudit\Repository\AcademicInputRepository;
 use Domain\DegreeAudit\Service\AcademicInputService;
 use Domain\DegreeAudit\Service\AcademicPolicyEvaluator;
@@ -42,6 +38,13 @@ use TransferAwardFixture;
 
 final class DegreeProgressTest extends TestCase
 {
+    public static function setUpBeforeClass(): void
+    {
+        require_once dirname(__DIR__) . "/Support/StudentRequirementsFixture.php";
+        require_once dirname(__DIR__) . "/Support/TransferAwardFixture.php";
+        require_once dirname(__DIR__) . "/Support/DegreeProgressFixture.php";
+    }
+
     private function adjustments(StudentRequirementsFixture $f): RequirementAdjustmentService
     {
         $s = $f->f->sis;
@@ -57,8 +60,13 @@ final class DegreeProgressTest extends TestCase
             $s->clock,
             new PublishedRequirementsReader($f->f->history),
             new SqlCourseSearchRepository($s->sql),
-            new \Domain\DegreeAudit\Service\StudentCurriculumContext($f->service, $s->specializations($f->f->history)),
-            new \Domain\DegreeAudit\Service\SavedCourseRulePreview(new \Domain\Catalog\Service\PublishedCourseReader($f->f->history)),
+            new \Domain\DegreeAudit\Service\StudentCurriculumContext(
+                $f->service,
+                $s->specializations($f->f->history),
+            ),
+            new \Domain\DegreeAudit\Service\SavedCourseRulePreview(
+                new \Domain\Catalog\Service\PublishedCourseReader($f->f->history),
+            ),
             $s->academicInputs($f->service),
         );
     }
@@ -68,7 +76,12 @@ final class DegreeProgressTest extends TestCase
         int $steps = 100000,
     ): DegreeProgressService {
         return \DegreeProgressFixture::service(
-            $f->f->sis, $f->f->history, $f->service, $f->f->catalog->fixture->cipher, $repository, $steps,
+            $f->f->sis,
+            $f->f->history,
+            $f->service,
+            $f->f->catalog->fixture->cipher,
+            $repository,
+            $steps,
         );
     }
     private function institution(): StudentRequirementsFixture
@@ -119,8 +132,12 @@ final class DegreeProgressTest extends TestCase
         $f->assign();
         return $f;
     }
-    private function work(StudentRequirementsFixture $f, int $index = 0, ?string $grade = "A", ?array $course = null): array
-    {
+    private function work(
+        StudentRequirementsFixture $f,
+        int $index = 0,
+        ?string $grade = "A",
+        ?array $course = null,
+    ): array {
         $s = $f->f->sis;
         $c = $course ?? $f->f->groupDefinition["courses"][$index];
         $section = new Section(
@@ -170,7 +187,9 @@ final class DegreeProgressTest extends TestCase
         $receipts = $s->sql->rows("sis_history_operations");
         $repository = new class ($s) implements AcademicInputRepository {
             public int $reads = 0;
-            public function __construct(private \SisFixture $s) {}
+            public function __construct(private \SisFixture $s)
+            {
+            }
             public function inventory(EntityId $student): AcademicInputInventory
             {
                 $this->reads++;
@@ -185,17 +204,17 @@ final class DegreeProgressTest extends TestCase
             array_column($result["minimums"], "status"),
         );
         self::assertSame("feasible", $result["allocation"]["outcome"]);
-        $named = $result['allocation']['groups'][0]['course_review'][0];
-        self::assertSame('proposed', $named['placement']);
-        self::assertTrue($named['attempts'][0]['selected']);
+        $named = $result["allocation"]["groups"][0]["course_review"][0];
+        self::assertSame("proposed", $named["placement"]);
+        self::assertTrue($named["attempts"][0]["selected"]);
         $portal = new \Domain\Portal\ValueObject\StudentDegreeProgress($result)->describe();
-        $publicNamed = $portal['allocation']['groups'][0]['course_review'][0];
-        self::assertSame($named['course_code'], $publicNamed['course_code']);
-        self::assertArrayNotHasKey('course_id', $publicNamed);
-        self::assertArrayNotHasKey('work_id', $publicNamed['attempts'][0]);
+        $publicNamed = $portal["allocation"]["groups"][0]["course_review"][0];
+        self::assertSame($named["course_code"], $publicNamed["course_code"]);
+        self::assertArrayNotHasKey("course_id", $publicNamed);
+        self::assertArrayNotHasKey("work_id", $publicNamed["attempts"][0]);
         self::assertSame(
-            $result['records'][$publicNamed['attempts'][0]['record_index']]['id'],
-            $named['attempts'][0]['work_id'],
+            $result["records"][$publicNamed["attempts"][0]["record_index"]]["id"],
+            $named["attempts"][0]["work_id"],
         );
         self::assertSame(0, $result["work_summary"]["unused_completed_count"]);
         self::assertSame(0, $result["work_summary"]["awaiting_grade_milli"]);
@@ -219,7 +238,7 @@ final class DegreeProgressTest extends TestCase
             $f->f->catalog->fixture->cipher,
             $f->student,
             course: new EntityId($course["course_id"]),
-            courseVersion: new EntityId($course["version_id"])
+            courseVersion: new EntityId($course["version_id"]),
         );
         $f->f->sis->sql->update("sis_courses", ["title" => "Changed today"], ["id" => $course["course_id"]]);
         $f->f->sis->publishCourse(new EntityId($course["course_id"]));
@@ -240,11 +259,27 @@ final class DegreeProgressTest extends TestCase
         }
         $course = $f->f->groupDefinition["courses"][0];
         $different = $f->f->sis->publishCourse(new EntityId($course["course_id"]));
-        $t = new \TransferAwardFixture($f->f->sis, $f->f->catalog->fixture->cipher, $f->student,
-            course: new EntityId($course["course_id"]), courseVersion: $different);
-        self::assertNotSame("feasible", $this->service($f)->preview($f->student, $f->assignment)["allocation"]["outcome"]);
-        $review = $t->courses()->review($f->student, $t->award, new EntityId($course["version_id"]), 0,
-            "2026-08-01", "Fictional receiving-course evaluation.");
+        $t = new \TransferAwardFixture(
+            $f->f->sis,
+            $f->f->catalog->fixture->cipher,
+            $f->student,
+            course: new EntityId($course["course_id"]),
+            courseVersion: $different,
+        );
+        self::assertNotSame(
+            "feasible",
+            $this->service($f)->preview($f->student, $f->assignment)["allocation"]["outcome"],
+        );
+        $review = $t
+            ->courses()
+            ->review(
+                $f->student,
+                $t->award,
+                new EntityId($course["version_id"]),
+                0,
+                "2026-08-01",
+                "Fictional receiving-course evaluation.",
+            );
         $t->courses()->commit($f->student, $t->award, $review["review_token"]);
         $result = $this->service($f)->preview($f->student, $f->assignment);
         self::assertSame("feasible", $result["allocation"]["outcome"]);
@@ -258,7 +293,14 @@ final class DegreeProgressTest extends TestCase
         $t = new TransferAwardFixture($s, $f->f->catalog->fixture->cipher, $f->student);
         $change = new AwardChange("amend", 3000, "B", "Fictional accepted GPA-eligible transfer grade.");
         $plan = $t->service()->preview($f->student, $t->award, $change);
-        $t->service()->confirm($f->student, $t->award, EntityId::generate(), $change, $plan["revision"]);
+        $t->service()->confirm(
+            $f->student,
+            $t->award,
+            new EntityId($plan["operation_id"]),
+            $change,
+            $plan["revision"],
+            $plan["review_token"],
+        );
         $result = $this->service($f)->preview($f->student, $f->assignment);
         self::assertSame(4000, $result["gpa"]["cumulative"]["milli"]);
         self::assertSame(3500, $result["gpa"]["overall"]["milli"]);
@@ -275,16 +317,27 @@ final class DegreeProgressTest extends TestCase
             $this->work($f, $i);
         }
         $outside = EntityId::generate();
-        $f->f->sis->registration->addCourse(new \Domain\Catalog\Course($outside, "ART.100", "Fictional elective", 3000));
+        $f->f->sis->registration->addCourse(
+            new \Domain\Catalog\Course($outside, "ART.100", "Fictional elective", 3000),
+        );
         $publication = $f->f->catalog->publications();
         $review = $publication->review($outside, "Fictional elective publication.");
         $version = $publication->publish($outside, $review["review_token"]);
-        $this->work($f, 5, course: ["course_id" => $outside->value, "version_id" => $version["operation_id"]]);
+        $this->work(
+            $f,
+            5,
+            course: ["course_id" => $outside->value, "version_id" => $version["operation_id"]],
+        );
         $events = $f->f->sis->sql->rows("sis_history_events");
         $r = $this->service($f)->preview($f->student, $f->assignment);
         self::assertSame("feasible", $r["allocation"]["outcome"]);
         self::assertSame(1, $r["work_summary"]["unused_completed_count"]);
-        $unused = array_values(array_filter($r["records"], fn($w) => $w["academic_state"] === "completed" && $w["placement"] === "not_used"));
+        $unused = array_values(
+            array_filter(
+                $r["records"],
+                fn($w) => $w["academic_state"] === "completed" && $w["placement"] === "not_used",
+            ),
+        );
         self::assertCount(1, $unused);
         self::assertSame("included", $unused[0]["credit"]);
         self::assertSame("included", $unused[0]["overall_gpa"]);
@@ -302,9 +355,9 @@ final class DegreeProgressTest extends TestCase
         self::assertSame(3000, $before["work_summary"]["awaiting_grade_milli"]);
         self::assertNull($before["work_summary"]["unused_completed_count"]);
         self::assertSame(0, $before["minimums"][0]["actual_minimum_milli"]);
-        $namedBefore = $before['allocation']['groups'][0]['course_review'][0];
-        self::assertSame('in_progress', $namedBefore['attempts'][0]['status']);
-        self::assertNull($namedBefore['attempts'][0]['selected']);
+        $namedBefore = $before["allocation"]["groups"][0]["course_review"][0];
+        self::assertSame("in_progress", $namedBefore["attempts"][0]["status"]);
+        self::assertNull($namedBefore["attempts"][0]["selected"]);
         $ledger = $f->f->sis->academicCredits();
         $review = $ledger->review($f->student, $section->id, $enrollment, new EntityId($choices["A"]), 0);
         $ledger->commit($f->student, $section->id, $review["review_token"]);
@@ -312,11 +365,11 @@ final class DegreeProgressTest extends TestCase
         self::assertSame(0, $after["work_summary"]["awaiting_grade_count"]);
         self::assertSame(0, $after["work_summary"]["awaiting_grade_milli"]);
         self::assertSame(3000, $after["minimums"][0]["actual_minimum_milli"]);
-        $namedAfter = $after['allocation']['groups'][0]['course_review'][0];
-        self::assertSame('candidate', $namedAfter['attempts'][0]['status']);
-        self::assertNull($namedAfter['attempts'][0]['selected']);
-        self::assertSame('not_established', $namedAfter['placement']);
-        self::assertSame('in_progress', $namedBefore['attempts'][0]['status']);
+        $namedAfter = $after["allocation"]["groups"][0]["course_review"][0];
+        self::assertSame("candidate", $namedAfter["attempts"][0]["status"]);
+        self::assertNull($namedAfter["attempts"][0]["selected"]);
+        self::assertSame("not_established", $namedAfter["placement"]);
+        self::assertSame("in_progress", $namedBefore["attempts"][0]["status"]);
         $record = array_column($after["records"], null, "id")[$credit->value];
         self::assertSame("completed", $record["academic_state"]);
         self::assertSame("not_established", $record["placement"]);
@@ -376,13 +429,13 @@ final class DegreeProgressTest extends TestCase
         $current = $service->preview($f->student, $f->assignment);
         self::assertSame(4000, $original["gpa"]["cumulative"]["milli"]);
         self::assertSame(0, $current["gpa"]["cumulative"]["milli"]);
-        self::assertSame('A', $original['records'][0]['retained_grade']['code']);
-        self::assertSame(4000, $original['records'][0]['retained_grade']['points_milli']);
-        self::assertSame(3000, $original['records'][0]['recorded_earned_milli']);
-        self::assertSame('F', $current['records'][0]['retained_grade']['code']);
-        self::assertSame(0, $current['records'][0]['retained_grade']['points_milli']);
-        self::assertSame(0, $current['records'][0]['recorded_earned_milli']);
-        self::assertTrue($original['records'][0]['retained_grade']['grading_publication_retained']);
+        self::assertSame("A", $original["records"][0]["retained_grade"]["code"]);
+        self::assertSame(4000, $original["records"][0]["retained_grade"]["points_milli"]);
+        self::assertSame(3000, $original["records"][0]["recorded_earned_milli"]);
+        self::assertSame("F", $current["records"][0]["retained_grade"]["code"]);
+        self::assertSame(0, $current["records"][0]["retained_grade"]["points_milli"]);
+        self::assertSame(0, $current["records"][0]["recorded_earned_milli"]);
+        self::assertTrue($original["records"][0]["retained_grade"]["grading_publication_retained"]);
         self::assertSame("below_minimum", $current["minimums"][2]["status"]);
     }
     public function testNoGpaDenominatorAndEarlyRemovalCannotBecomeAFakeZeroOrAVisibleRemovedRecord(): void
@@ -425,7 +478,10 @@ final class DegreeProgressTest extends TestCase
         self::assertSame("review", $result["status"]);
         self::assertSame("undetermined", $result["allocation"]["outcome"]);
         self::assertNull($result["work_summary"]["unused_completed_count"]);
-        self::assertSame(["not_established"], array_values(array_unique(array_column($result["records"], "placement"))));
+        self::assertSame(
+            ["not_established"],
+            array_values(array_unique(array_column($result["records"], "placement"))),
+        );
         self::assertSame("satisfied", $result["minimums"][0]["status"]);
         self::assertSame([], $result["allocation"]["groups"][0]["placements"]);
     }
@@ -454,7 +510,9 @@ final class DegreeProgressTest extends TestCase
             self::assertTrue(true);
         }
         $repository = new class ($s) implements AcademicInputRepository {
-            public function __construct(private \SisFixture $s) {}
+            public function __construct(private \SisFixture $s)
+            {
+            }
             public function inventory(EntityId $student): AcademicInputInventory
             {
                 $inventory = new SqlAcademicInputRepository($this->s->sql)->inventory($student);
@@ -493,7 +551,9 @@ final class DegreeProgressTest extends TestCase
         }
         $repository = new class ($s) implements AcademicInputRepository {
             public int $reads = 0;
-            public function __construct(private \SisFixture $s) {}
+            public function __construct(private \SisFixture $s)
+            {
+            }
             public function inventory(EntityId $student): AcademicInputInventory
             {
                 $this->reads++;
@@ -507,7 +567,10 @@ final class DegreeProgressTest extends TestCase
         foreach ($raw["allocation"]["groups"] as $i => $group) {
             $public = $portal["allocation"]["groups"][$i];
             self::assertTrue($public["gaps"]["has_shortfall"]);
-            self::assertSame($group["gaps"]["credit_shortfall_milli"], $public["gaps"]["credit_shortfall_milli"]);
+            self::assertSame(
+                $group["gaps"]["credit_shortfall_milli"],
+                $public["gaps"]["credit_shortfall_milli"],
+            );
             self::assertCount(count($group["rules"]), $public["gaps"]["rules"]);
             self::assertSame([], $public["placements"]);
             self::assertArrayNotHasKey("id", $public["gaps"]["rules"][0]);
@@ -517,8 +580,7 @@ final class DegreeProgressTest extends TestCase
         }
     }
 
-
-    public function testReviewedInstitutionalCourseAcceptanceResolvesAnUnknownAuditBindingWithoutRewritingOldFacts(): void
+    public function testReviewedCourseAcceptanceResolvesAnUnknownAuditBindingAndRetainsOldFacts(): void
     {
         $f = $this->institution();
         $s = $f->f->sis;
@@ -568,6 +630,4 @@ final class DegreeProgressTest extends TestCase
         self::assertSame($events, array_slice($s->sql->rows("sis_history_events"), 0, count($events)));
         self::assertSame($finance, $s->financialEvents());
     }
-
-
 }
