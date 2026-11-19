@@ -178,7 +178,10 @@ final readonly class SisGradebookController
             $this->service->commitFinalGrade(
                 $f->id("student_id"),
                 new EntityId($id),
-                $f->text("review_token", \Domain\AcademicRecord\Service\InstitutionalCreditLedger::REVIEW_TOKEN_LIMIT),
+                $f->text(
+                    "review_token",
+                    \Domain\AcademicRecord\Service\InstitutionalCreditLedger::REVIEW_TOKEN_LIMIT,
+                ),
             ),
         );
     }
@@ -192,6 +195,41 @@ final readonly class SisGradebookController
             ),
         );
     }
+    public function reviewChronology(ServerRequest $request, string $id, string $student): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $body = $request->getParsedBody();
+        foreach (["academic_on", "completed_on"] as $field) {
+            if (!is_array($body) || !array_key_exists($field, $body)) {
+                throw new \Domain\Shared\Exception\ValidationException([
+                    ["field" => $field, "message" => "Enter this date, or explicitly mark it unknown."],
+                ]);
+            }
+        }
+        return new JsonResponse(
+            $this->dates->reviewChronology(
+                new EntityId($student),
+                new EntityId($id),
+                $f->id("enrollment_id"),
+                $f->optionalText("academic_on", 10),
+                $f->optionalText("completed_on", 10),
+                $f->integer("version", 0),
+                $f->bodyText("reason"),
+            ),
+        );
+    }
+
+    public function commitChronology(ServerRequest $request, string $id, string $student): ResponseInterface
+    {
+        return new JsonResponse(
+            $this->dates->commitChronology(
+                new EntityId($student),
+                new EntityId($id),
+                FormInput::from($request)->text("review_token", 16384),
+            ),
+        );
+    }
+
     public function reviewCompletion(ServerRequest $request, string $id, string $student): ResponseInterface
     {
         return $this->reviewDate($request, $id, $student, AcademicDateKind::Completion);

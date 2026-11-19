@@ -1504,4 +1504,61 @@ final class SectionPublicationTest extends TestCase
             $this->stream()->aggregateId,
         )->acceptHistorical($bad);
     }
+    public function testCombinedAcademicDatesPreserveThePublishedOfferingPeriod(): void
+    {
+        $f = $this->f;
+        $f->gradeScale([
+            [
+                "code" => "P",
+                "min_score_milli" => 0,
+                "max_score_milli" => 100000,
+                "points_milli" => 4000,
+                "passes" => true,
+                "counts_gpa" => true,
+            ],
+        ]);
+        [, $selection] = $this->selectedOffering();
+        $this->service->select($this->section->id, $selection["review_token"]);
+        $student = $f->student()->id;
+        $section = $this->section->id;
+        $enrollment = $f->service->register($student, $section, true)->id;
+        $choices = $f->academicCredits()->choices($student, $section, $enrollment);
+        $grade = $f
+            ->academicCredits()
+            ->review($student, $section, $enrollment, new EntityId($choices["items"][0]["id"]), 0);
+        $f->academicCredits()->commit($student, $section, $grade["review_token"]);
+        $events = $f->sql->rows("sis_history_events");
+        try {
+            $f->academicDates()->reviewChronology(
+                $student,
+                $section,
+                $enrollment,
+                "2026-01-12",
+                "2026-08-01",
+                1,
+                "Fictional source change against published dates.",
+            );
+            self::fail("Published offering chronology was replaced.");
+        } catch (\Domain\Shared\Exception\ValidationException) {
+            self::assertSame($events, $f->sql->rows("sis_history_events"));
+        }
+        $dates = $f
+            ->academicDates()
+            ->reviewChronology(
+                $student,
+                $section,
+                $enrollment,
+                null,
+                "2026-08-01",
+                1,
+                "Fictional actual completion evidence.",
+            );
+        self::assertSame(["completed_on"], $dates["changes"]);
+        $receipt = $f->academicDates()->commitChronology($student, $section, $dates["review_token"]);
+        self::assertCount(1, $receipt["event_ids"]);
+        self::assertSame(
+            "2026-08-01",
+            $f->academicCredits()->choices($student, $section, $enrollment)["completed_on"],
+        );
+    }
 }

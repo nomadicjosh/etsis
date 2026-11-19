@@ -2037,6 +2037,68 @@ if ($teachingPost($completionBase . "commit/", $completionCommit)->getStatusCode
 }
 $sis->access->staff = true;
 $sis->access->grants = [];
+$chronologyBase =
+"/sis/sections/" .
+$gradingSection->id->value .
+"/students/" .
+$gradingStudent->id->value .
+"/academic-dates/";
+$chronologyData = [
+    "enrollment_id" => $gradingEnrollment->id->value,
+    "version" => 3,
+    "academic_on" => "2026-01-12",
+    "completed_on" => "2026-08-10",
+    "reason" => "Fictional complete source chronology.",
+];
+$chronologyRequest = new \Qubus\Http\ServerRequest(
+    [],
+    [],
+    "https://campus.example.invalid" . $chronologyBase . "review/",
+    "POST",
+);
+if ($app->router->match($chronologyRequest->withParsedBody($chronologyData))->getStatusCode() !== 403) {
+    throw new RuntimeException("Combined academic dates bypassed CSRF.");
+}
+$missingChronologyDate = $chronologyData;
+unset($missingChronologyDate["academic_on"]);
+if ($teachingPost($chronologyBase . "review/", $missingChronologyDate)->getStatusCode() !== 422) {
+    throw new RuntimeException("An omitted chronology input was silently treated as an explicit clear.");
+}
+$chronologyResponse = $teachingPost($chronologyBase . "review/", $chronologyData);
+$chronologyReview = json_decode((string) $chronologyResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $chronologyResponse->getStatusCode() !== 200 ||
+    !isset($chronologyReview["review_token"]) ||
+    !str_contains($chronologyResponse->getHeaderLine("Cache-Control"), "no-store")
+) {
+    throw new RuntimeException("Combined academic dates failed the provider/privacy boundary.");
+}
+$chronologyCommit = ["review_token" => $chronologyReview["review_token"]];
+$chronologyNoCsrf = $chronologyRequest->withUri(
+    new \Laminas\Diactoros\Uri("https://campus.example.invalid" . $chronologyBase . "commit/"),
+);
+if ($app->router->match($chronologyNoCsrf->withParsedBody($chronologyCommit))->getStatusCode() !== 403) {
+    throw new RuntimeException("Combined academic confirmation bypassed CSRF.");
+}
+$chronologySaved = $teachingPost($chronologyBase . "commit/", $chronologyCommit);
+$chronologyRetry = $teachingPost($chronologyBase . "commit/", $chronologyCommit);
+if (
+    $chronologySaved->getStatusCode() !== 200 ||
+    $chronologyRetry->getStatusCode() !== 200 ||
+    (string) $chronologySaved->getBody() !== (string) $chronologyRetry->getBody()
+) {
+    throw new RuntimeException("Combined academic confirmation failed its original-result retry.");
+}
+$sis->access->staff = false;
+$sis->access->grants = ["sis:gradebook:manage", "sis:student:read"];
+if (
+    $teachingPost($chronologyBase . "commit/", $chronologyCommit)->getStatusCode() !== 403 ||
+    $teachingPost($chronologyBase . "review/", $chronologyData)->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Ordinary faculty gained registrar chronology access.");
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 $removedGradeApi = $teachingPost("/sis/grade-definitions/", [
     "code" => "UNSAFE",
     "points_milli" => 4000,
