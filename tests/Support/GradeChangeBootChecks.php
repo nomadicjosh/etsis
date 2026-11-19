@@ -48,6 +48,7 @@ if ($policy->getStatusCode() !== 200) {
 $base = "/sis/sections/" . $section->id->value . "/final-grades";
 $review = $teachingPost($base . "/review/", [
     "student_id" => $student->id->value,
+    'enrollment_id' => $enrollment->id->value,
     "grade_id" => $grades["A"],
     "version" => 1,
     "reason" => "Fictional marking correction.",
@@ -119,6 +120,7 @@ $preserved = [$sis->financialEvents(), $sis->sql->rows("sis_enrollments")];
 $sis->access->staff = false;
 $data = [
     "student_id" => $student->id->value,
+    'enrollment_id' => $enrollment->id->value,
     "grade_id" => $grades["B"],
     "version" => $sis->sql->one("sis_academic_credits", ["source_id" => $enrollment->id->value])["version"],
     "reason" => "Fictional withdrawn-grade review.",
@@ -201,6 +203,7 @@ $preserved = [$sis->financialEvents(), $sis->sql->rows("sis_enrollments")];
 $base = "/sis/sections/" . $section->id->value . "/final-grades";
 $data = [
     "student_id" => $student->id->value,
+    'enrollment_id' => $enrollmentId,
     "grade_id" => $grades["B"],
     "version" => 4,
     "reason" => "Fictional institutional records establish B; earlier definition unknown.",

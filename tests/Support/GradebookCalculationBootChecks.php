@@ -504,6 +504,7 @@ $reviewCoursework = static function () use ($teachingPost, $gradeChoicePath, $gr
         throw new RuntimeException("The private grade choice endpoint did not provide a bounded safe suggestion.");
     }
     $response = $teachingPost($gradeBase . "/final-grades/review/", [
+        'enrollment_id' => $choices['enrollment_id'],
         "student_id" => $student->id->value, "grade_id" => $choices["coursework"]["grade_id"],
         "version" => $choices["current_version"], "coursework_revision" => $choices["coursework"]["revision"],
     ]);

@@ -75,6 +75,7 @@ test("registrar reviews a correction, preserves entries after expiry and reads b
             };
         else if (path.endsWith("/grade-choices/"))
             result = {
+                enrollment_id: id(5),
                 items: [{ id: grade, code: "B", points_milli: 3000 }],
                 current_grade_code: "A",
                 posted: true,
@@ -189,6 +190,8 @@ test("registrar reviews a correction, preserves entries after expiry and reads b
     expect(calls.find((c) => c.path.endsWith("/final-grades/review/"))).toMatchObject({
         data: {
             student_id: student,
+            enrollment_id: id(5),
+            initial_only: false,
             version: 3,
             grade_id: grade,
             effective_on: "2026-08-10",

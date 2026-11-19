@@ -247,6 +247,7 @@ async function courseworkFixture(overrides = {}) {
     const f = fixture();
     const choices = {
         posted: false,
+        enrollment_id: 'fictional-enrollment',
         can_amend: false,
         current_grade_code: null,
         current_version: 0,
@@ -298,6 +299,8 @@ test("a coursework suggestion requires explicit selection, review and confirmati
     await f.done();
     assert.equal(f.sent.at(-1).data.coursework_revision, "first");
     assert.equal(f.sent.at(-1).data.version, 0);
+    assert.equal(f.sent.at(-1).data.enrollment_id, 'fictional-enrollment');
+    assert.equal(f.sent.at(-1).data.initial_only, true);
     assert.match(f.body().textContent, /Its inputs will be retained with the grade decision/);
     await f.click("Change review");
     assert.equal(

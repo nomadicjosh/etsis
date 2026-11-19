@@ -9,9 +9,14 @@ window.createTeachingWorksheet = function (ui) {
             return true;
         }
         if (!current.busy && !current.rows.some((row) => row.dirty())) return true;
-        current.announcement.textContent = current.busy
-            ? "Saving marks. Wait for the result before leaving."
-            : "You have unsaved marks. Save or discard your changes before leaving.";
+        current.announcement.textContent =
+            current.kind === "final grades"
+                ? current.busy
+                    ? "Working with final grades. Wait for the result before leaving."
+                    : "You have unposted selections or an unconfirmed result. Post, retry or discard selections before leaving."
+                : current.busy
+                  ? "Saving marks. Wait for the result before leaving."
+                  : "You have unsaved marks. Save or discard your changes before leaving.";
         current.announcement.focus();
         return false;
     }
@@ -578,9 +583,563 @@ window.createTeachingWorksheet = function (ui) {
         });
         await load();
     }
+    async function finalGrades(section, back, initialSearch = "") {
+        const body = openDrawer("Final-grade worksheet", `${section.code} · ACADEMIC RECORDS`);
+        const announcement = node("p", { role: "status", "aria-live": "polite", tabindex: "-1" });
+        const session = { body, announcement, rows: [], busy: false, kind: "final grades" };
+        current = session;
+        let cursor = "",
+            nextCursor = null,
+            previousCursors = [],
+            searchValue = initialSearch,
+            phase = "editing",
+            batch = [],
+            generation = 0;
+        const alive = () => body.isConnected && current === session;
+        const action = (label, run, style = "btn-outline-secondary") =>
+            node(
+                "button",
+                {
+                    type: "button",
+                    class: `btn ${style}`,
+                    onclick: () => task(run),
+                },
+                label,
+            );
+        const progress = node("progress", {
+            class: "w-100",
+            max: "1",
+            value: "0",
+            hidden: true,
+            "aria-label": "Final-grade task progress",
+        });
+        const search = node("input", {
+            id: "final-grade-search",
+            type: "search",
+            maxlength: "100",
+            class: "form-control",
+            value: initialSearch,
+        });
+        const find = node("button", { type: "submit", class: "btn btn-outline-primary" }, "Find students");
+        const filters = node(
+            "form",
+            { class: "row g-2 my-3" },
+            node(
+                "div",
+                { class: "col-sm-8" },
+                node("label", { for: search.id, class: "form-label" }, "Student name or ID"),
+                search,
+            ),
+            node("div", { class: "col-sm-4 align-self-end" }, find),
+        );
+        const content = node("div"),
+            confirmation = node("section", { hidden: true, "aria-label": "Reviewed final grades" });
+        const paging = node("p", { class: "form-text" });
+        const prepare = action("Load grade choices", () => loadChoices(), "btn-outline-primary");
+        const review = action("Review selected", () => reviewRows(), "btn-primary");
+        const discard = action("Discard selections", () => {
+            batch = [];
+            phase = "editing";
+            for (const row of session.rows) {
+                if (row.saved) continue;
+                row.select.value = "";
+                row.proof = null;
+                row.coursework = null;
+                row.feedback.textContent = "Selection discarded; no new grade was posted by this action.";
+            }
+            announcement.textContent = "Unposted selections discarded. Confirmed grades stay posted.";
+            update();
+        });
+        const refresh = action("Refresh", () => {
+            if (canLeave()) return load();
+        });
+        const previous = action("Previous page", async () => {
+            if (!canLeave()) return;
+            const target = previousCursors.at(-1) || "";
+            if (await load(target)) previousCursors.pop();
+            update();
+        });
+        const next = action("Next page", async () => {
+            if (!canLeave() || !nextCursor) return;
+            const old = cursor;
+            if (await load(nextCursor)) previousCursors.push(old);
+            update();
+        });
+        const backButton = action("Back to roster", () => {
+            if (canLeave()) return back();
+        });
+        const revise = action("Revise grades", () => {
+            for (const row of batch)
+                if (!row.saved) {
+                    row.proof = null;
+                    row.feedback.textContent = "Not posted. Review again before posting.";
+                }
+            batch = [];
+            phase = "editing";
+            update();
+            session.rows.find((row) => row.dirty())?.select.focus();
+        });
+        const post = action("Post reviewed grades", () => commitRows(), "btn-primary");
+        body.append(
+            node("h3", { class: "h5" }, section.course_title || section.course_code || section.code),
+            node(
+                "p",
+                { class: "form-text" },
+                "Initial final grades only. Load choices, select grades, then review before posting. Each student is confirmed separately; a stopped run can leave some grades posted. Posted grades require the individual registrar correction workflow.",
+            ),
+            announcement,
+            filters,
+            node("div", { class: "inline-actions my-3" }, prepare, review, discard, refresh, backButton),
+            progress,
+            content,
+            confirmation,
+            paging,
+            node("div", { class: "inline-actions" }, previous, next),
+        );
+        function update() {
+            const dirty = session.rows.some((row) => row.dirty());
+            const uncertain = session.rows.some((row) => row.uncertain);
+            const locked = session.busy || phase !== "editing";
+            prepare.disabled =
+                session.busy ||
+                phase !== "editing" ||
+                !session.rows.some((row) => !row.context && !row.unavailable);
+            review.disabled = locked || !dirty;
+            discard.disabled = session.busy || uncertain || !dirty;
+            refresh.disabled = session.busy || dirty;
+            search.disabled = find.disabled = locked;
+            previous.disabled = session.busy || !previousCursors.length;
+            next.disabled = session.busy || !nextCursor;
+            backButton.disabled = session.busy;
+            revise.disabled = session.busy || uncertain || !batch.some((row) => !row.saved);
+            post.disabled =
+                session.busy ||
+                !batch.some((row) => !row.saved) ||
+                batch.some((row) => !row.saved && !row.proof);
+            post.textContent = uncertain ? "Retry confirmation" : "Post reviewed grades";
+            content.hidden = phase !== "editing";
+            confirmation.hidden = phase === "editing";
+            for (const row of session.rows) {
+                if (phase === "editing" && row.feedback.parentNode !== row.editorStatus)
+                    row.editorStatus.replaceChildren(row.feedback);
+                row.select.disabled = locked || !row.context || row.unavailable || row.saved;
+                row.pursuit.disabled = locked || row.saved;
+                row.load.disabled = locked || row.unavailable || row.saved;
+                row.suggest.disabled = locked || row.unavailable || row.saved;
+            }
+        }
+        function chosen(row) {
+            row.proof = null;
+            row.coursework = null;
+            row.select.removeAttribute("aria-invalid");
+            row.feedback.setAttribute("class", "form-text mb-0");
+            row.feedback.textContent = row.select.value ? "Selected, not posted." : "No grade selected.";
+            update();
+        }
+        function makeRow(item) {
+            const key = `final-grade-${item.student_id}`;
+            const label = `${item.given_name} ${item.family_name}`;
+            const feedback = node(
+                "p",
+                { id: `${key}-status`, class: "form-text mb-0", role: "status", "aria-live": "polite" },
+                "Load this student's grading choices.",
+            );
+            const select = node(
+                "select",
+                { id: `${key}-grade`, class: "form-select", "aria-describedby": feedback.id },
+                node("option", { value: "" }, "Choose a grade"),
+            );
+            const pursuit = node(
+                "select",
+                { id: `${key}-pursuit`, class: "form-select", hidden: true },
+                node("option", { value: "" }, "Choose program pursuit"),
+            );
+            const row = {
+                item,
+                select,
+                pursuit,
+                feedback,
+                context: null,
+                proof: null,
+                coursework: null,
+                saved: false,
+                uncertain: false,
+                unavailable: false,
+                dirty() {
+                    return !row.saved && (!!select.value || row.uncertain);
+                },
+            };
+            const load = action("Load choices", () => loadChoices([row]));
+            const suggest = action(
+                "Use coursework suggestion",
+                () => {
+                    const suggestion = row.context?.coursework;
+                    if (
+                        !suggestion?.available ||
+                        !row.context.items.some((item) => item.id === suggestion.grade_id)
+                    )
+                        return;
+                    select.value = suggestion.grade_id;
+                    row.coursework = suggestion.revision;
+                    row.proof = null;
+                    feedback.textContent = `Using reviewed coursework: ${suggestion.score_display}. Not posted.`;
+                    update();
+                },
+                "btn-link btn-sm",
+            );
+            suggest.setAttribute("aria-label", `Use coursework suggestion for ${label}`);
+            suggest.hidden = true;
+            row.load = load;
+            row.suggest = suggest;
+            row.loadLabel = (text) => {
+                load.textContent = text;
+                load.setAttribute("aria-label", `${text} for ${label}`);
+            };
+            row.loadLabel("Load choices");
+            select.addEventListener("change", () => chosen(row));
+            pursuit.addEventListener("change", () => {
+                row.context = null;
+                select.value = "";
+                row.proof = null;
+                row.coursework = null;
+                suggest.hidden = true;
+                row.loadLabel("Use program");
+                feedback.textContent = "Load choices for the selected program before choosing a grade.";
+                update();
+            });
+            row.editorStatus = node("div", {}, feedback);
+            row.cells = [
+                node(
+                    "div",
+                    { class: "text-break" },
+                    node("strong", {}, label),
+                    node("div", { class: "small" }, item.institutional_id),
+                ),
+                node(
+                    "div",
+                    {},
+                    node("label", { for: select.id, class: "visually-hidden" }, `Final grade for ${label}`),
+                    select,
+                    node(
+                        "label",
+                        { for: pursuit.id, class: "visually-hidden" },
+                        `Program pursuit for ${label}`,
+                    ),
+                    pursuit,
+                    node("div", { class: "inline-actions mt-2" }, load, suggest),
+                ),
+                row.editorStatus,
+            ];
+            return row;
+        }
+        async function context(row) {
+            const choices = await request(
+                `/sis/sections/${section.id}/students/${row.item.student_id}/grade-choices/`,
+                "POST",
+                row.pursuit.value ? { assignment_id: row.pursuit.value } : {},
+            );
+            if (!alive()) return;
+            row.select.value = "";
+            row.proof = null;
+            row.coursework = null;
+            if (choices.enrollment_id !== row.item.id || choices.posted) {
+                row.unavailable = true;
+                row.feedback.textContent =
+                    choices.enrollment_id !== row.item.id
+                        ? "Registration changed. Refresh this worksheet before grading."
+                        : "Already posted. Use the individual correction workflow if necessary.";
+                return;
+            }
+            if (choices.needs_assignment) {
+                row.pursuit.hidden = false;
+                row.pursuit.replaceChildren(
+                    node("option", { value: "" }, "Choose program pursuit"),
+                    ...choices.pursuits.map((item) =>
+                        node("option", { value: item.id }, `${item.code} · ${item.title}`),
+                    ),
+                );
+                row.loadLabel("Use program");
+                row.feedback.textContent = "Choose the applicable program, then load its grading choices.";
+                return;
+            }
+            row.context = choices;
+            row.select.replaceChildren(
+                node("option", { value: "" }, "Choose a grade"),
+                ...choices.items.map((grade) =>
+                    node(
+                        "option",
+                        { value: grade.id },
+                        `${grade.code} · ${Number(grade.points_milli) / 1000} grade points`,
+                    ),
+                ),
+            );
+            row.suggest.hidden = !choices.coursework?.available;
+            row.loadLabel("Reload choices");
+            row.feedback.textContent = !choices.items.length
+                ? "A published grading scale is needed before this record can be graded."
+                : choices.coursework?.available
+                  ? `Coursework: ${choices.coursework.score_display}. Choose a grade or use the suggestion.`
+                  : "Choose a grade. No official grade is posted until confirmation.";
+        }
+        function failure(row, error, confirming = false) {
+            const status = error.status;
+            row.uncertain = confirming && (row.uncertain || ![401, 403, 409, 422].includes(status));
+            row.feedback.setAttribute("class", "form-text fw-semibold mb-0");
+            if (status === 422) row.select.setAttribute("aria-invalid", "true");
+            row.feedback.textContent = row.uncertain
+                ? "The outcome is unknown. Retry this same confirmation to check its original result."
+                : status === 401
+                  ? "Your session expired. Sign in again before continuing."
+                  : status === 403
+                    ? "Grading access changed. Remaining grades were not sent."
+                    : status === 409
+                      ? "The record or review changed or expired. Discard unposted selections and refresh."
+                      : status === 422
+                        ? "This grade needs individual review. Check the selected grade and program."
+                        : "Grading choices could not be loaded. Try again or use individual review.";
+            row.feedback.tabIndex = -1;
+            row.feedback.focus();
+        }
+        async function loadChoices(rows = session.rows.filter((row) => !row.context && !row.unavailable)) {
+            if (session.busy || phase !== "editing") return;
+            if (rows.some((row) => row.dirty())) {
+                announcement.textContent = "Discard this grade selection before reloading its choices.";
+                return;
+            }
+            session.busy = true;
+            progress.hidden = false;
+            progress.max = Math.max(1, rows.length);
+            progress.value = 0;
+            update();
+            try {
+                for (const row of rows) {
+                    if (!alive()) return;
+                    announcement.textContent = `Loading grading choices ${Number(progress.value) + 1} of ${rows.length}…`;
+                    try {
+                        await context(row);
+                    } catch (error) {
+                        failure(row, error);
+                        if ([401, 403].includes(error.status)) return;
+                    }
+                    progress.value++;
+                }
+                if (alive())
+                    announcement.textContent =
+                        "Choices loaded. Select grades, then review. Nothing has been posted.";
+            } finally {
+                session.busy = false;
+                if (alive()) update();
+            }
+        }
+        async function load(after = cursor, searchText = searchValue) {
+            const token = ++generation;
+            session.busy = true;
+            update();
+            try {
+                const page = await request(`/sis/ui/context/roster/${section.id}/`, "POST", {
+                    search: searchText,
+                    grade_status: "needs_grade",
+                    after,
+                });
+                if (!alive() || token !== generation) return false;
+                if (!page.can_grade) throw new Error("Grading access is required for this worksheet.");
+                const items = page.items.slice(0, 20);
+                nextCursor = page.items.length > 20 ? items.at(-1).id : page.next_after;
+                cursor = after;
+                searchValue = searchText;
+                search.value = searchText;
+                phase = "editing";
+                batch = [];
+                session.rows = items.map(makeRow);
+                content.replaceChildren(
+                    items.length
+                        ? node(
+                              "div",
+                              {
+                                  class: "table-responsive",
+                                  role: "region",
+                                  tabindex: "0",
+                                  "aria-label": "Initial final grades",
+                              },
+                              table(
+                                  ["Student", "Final grade", "Status"],
+                                  session.rows.map((row) => row.cells),
+                                  "Initial final grades",
+                              ),
+                          )
+                        : node("p", {}, "No active ungraded students match this page."),
+                );
+                paging.textContent = `${items.length} students on this page.${nextCursor ? " More are available." : ""} Only selected grades will be reviewed. Refresh after posting to find remaining work.`;
+                announcement.textContent = "Load grading choices on demand. Reviewing does not post grades.";
+                return true;
+            } finally {
+                if (token === generation) {
+                    session.busy = false;
+                    if (alive()) update();
+                }
+            }
+        }
+        function showReview() {
+            const heading = node("h3", { class: "h5", tabindex: "-1" }, "Review final grades");
+            confirmation.replaceChildren(
+                heading,
+                batch.some((row) => row.proof.earlier_history_unknown)
+                    ? node(
+                          "p",
+                          { class: "alert alert-info" },
+                          "Some earlier academic history is unknown. This records the reviewed grades now; it does not reconstruct earlier decisions.",
+                      )
+                    : null,
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Check every student and grade. Posting confirms one student at a time and stops at the first failure. Keep this worksheet open until posting finishes.",
+                ),
+                node(
+                    "div",
+                    {
+                        class: "table-responsive",
+                        role: "region",
+                        tabindex: "0",
+                        "aria-label": "Final-grade confirmations",
+                    },
+                    table(
+                        ["Student", "Grade", "Grade points", "Effective", "Status"],
+                        batch.map((row) => [
+                            node(
+                                "div",
+                                {},
+                                `${row.item.given_name} ${row.item.family_name}`,
+                                node("div", { class: "small" }, row.item.institutional_id),
+                                row.proof.earlier_history_unknown
+                                    ? node("div", { class: "form-text" }, "Earlier history incomplete")
+                                    : null,
+                            ),
+                            row.proof.grade.code,
+                            Number(row.proof.grade.points_milli) / 1000,
+                            row.proof.effective_at,
+                            row.feedback,
+                        ]),
+                        "Final-grade confirmations",
+                    ),
+                ),
+                node("div", { class: "inline-actions" }, post, revise),
+            );
+            phase = "reviewed";
+            update();
+            heading.focus();
+        }
+        async function reviewRows() {
+            if (session.busy || phase !== "editing") return;
+            const rows = session.rows.filter((row) => row.dirty());
+            if (!rows.length) return;
+            session.busy = true;
+            progress.hidden = false;
+            progress.max = rows.length;
+            progress.value = 0;
+            update();
+            try {
+                for (const row of rows) {
+                    if (!alive()) return;
+                    announcement.textContent = `Reviewing ${Number(progress.value) + 1} of ${rows.length} grades…`;
+                    try {
+                        const proof = await request(
+                            `/sis/sections/${section.id}/final-grades/review/`,
+                            "POST",
+                            {
+                                student_id: row.item.student_id,
+                                enrollment_id: row.item.id,
+                                initial_only: true,
+                                grade_id: row.select.value,
+                                version: row.context.current_version,
+                                effective_on: row.context.effective_on_default,
+                                ...(row.pursuit.value ? { assignment_id: row.pursuit.value } : {}),
+                                ...(row.coursework ? { coursework_revision: row.coursework } : {}),
+                            },
+                        );
+                        if (!alive()) return;
+                        if (
+                            proof.amendment ||
+                            proof.requires_approval ||
+                            proof.student_id !== row.item.student_id ||
+                            proof.enrollment_id !== row.item.id ||
+                            proof.grade.id !== row.select.value
+                        )
+                            throw Object.assign(new Error("Review context changed"), { status: 409 });
+                        row.proof = proof;
+                        row.feedback.textContent = "Reviewed, not posted.";
+                        progress.value++;
+                    } catch (error) {
+                        for (const item of rows) item.proof = null;
+                        failure(row, error);
+                        announcement.textContent =
+                            "Review stopped. No grades were posted. Correct or clear the highlighted selection, then review again.";
+                        return;
+                    }
+                }
+                batch = rows;
+                showReview();
+                announcement.textContent = `${rows.length} ${rows.length === 1 ? "grade" : "grades"} reviewed. No grades posted yet.`;
+            } finally {
+                session.busy = false;
+                if (alive()) update();
+            }
+        }
+        async function commitRows() {
+            if (session.busy || phase !== "reviewed") return;
+            if (batch.some((row) => !row.saved && !row.proof)) return;
+            session.busy = true;
+            progress.hidden = false;
+            progress.max = batch.length;
+            progress.value = batch.filter((row) => row.saved).length;
+            update();
+            try {
+                for (const row of batch) {
+                    if (!alive()) return;
+                    if (row.saved) continue;
+                    announcement.textContent = `Confirming ${Number(progress.value) + 1} of ${batch.length} reviewed grades…`;
+                    try {
+                        const receipt = await request(
+                            `/sis/sections/${section.id}/final-grades/commit/`,
+                            "POST",
+                            {
+                                student_id: row.item.student_id,
+                                review_token: row.proof.review_token,
+                            },
+                        );
+                        if (!receipt || receipt.operation_id !== row.proof.operation_id)
+                            throw Object.assign(new Error("Unconfirmed result"), { status: 0 });
+                        row.saved = true;
+                        row.uncertain = false;
+                        row.feedback.textContent = "Posted";
+                        progress.value++;
+                    } catch (error) {
+                        failure(row, error, true);
+                        if (!row.uncertain) row.proof = null;
+                        announcement.textContent = `${batch.filter((row) => row.saved).length} of ${batch.length} grades confirmed posted. Posting stopped; later rows were not sent. Check the highlighted row.`;
+                        return;
+                    }
+                }
+                announcement.textContent = `${batch.length} ${batch.length === 1 ? "grade" : "grades"} confirmed posted. Refresh the roster to check for other ungraded students.`;
+            } finally {
+                session.busy = false;
+                if (alive()) update();
+            }
+        }
+        filters.addEventListener("submit", (event) => {
+            event.preventDefault();
+            if (!canLeave()) return;
+            task(async () => {
+                if (await load("", search.value.trim())) previousCursors = [];
+                update();
+            });
+        });
+        await load();
+    }
     return {
         assignment: (id, section, back) => open(id, section, back),
         attendance: (section, back) => open(null, section, back, true),
+        finalGrades,
         canLeave,
     };
 };

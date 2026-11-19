@@ -168,6 +168,8 @@ final readonly class SisGradebookController
                 $f->optionalText("effective_on", 10),
                 $f->boolean("grade_evidence"),
                 $f->optionalText("coursework_revision", 64),
+                $f->id('enrollment_id'),
+                $f->boolean('initial_only'),
             ),
         );
     }

@@ -57,6 +57,10 @@ window.createWorkspaceTeaching = function (ui) {
         worksheet ??= window.createTeachingWorksheet(ui);
         return worksheet.attendance(row, back);
     };
+    const finalGradeSheet = (row, back, search) => {
+        worksheet ??= window.createTeachingWorksheet(ui);
+        return worksheet.finalGrades(row, back, search);
+    };
 
     async function pages(container, fetchPage, render) {
         let after = "";
@@ -258,6 +262,7 @@ window.createWorkspaceTeaching = function (ui) {
                 "div",
                 { class: "inline-actions mb-3" },
                 button("Take attendance", () => takeAttendance(row, back), "btn-primary"),
+                button("Final-grade worksheet", () => finalGradeSheet(row, back, filters.search)),
                 button("Review ungraded", () => gradeQueue(row, back, filters.search)),
             ),
         );
@@ -588,6 +593,15 @@ window.createWorkspaceTeaching = function (ui) {
             assignment ? { assignment_id: assignment } : {},
         );
         if (!loading.isConnected) return;
+        if (queue && choices.enrollment_id !== student.id) {
+            loading.replaceChildren(
+                identity(),
+                node("p", { role: "status" }, "This registration changed. Refresh the roster before grading this student."),
+                button("Skip student", queue.next),
+                button("Back to roster", back, "btn-link"),
+            );
+            return;
+        }
         if (queue && choices.posted) {
             loading.replaceChildren(
                 identity(),
@@ -843,6 +857,8 @@ window.createWorkspaceTeaching = function (ui) {
                 const payload = {
                     ...formData(form, descriptors),
                     student_id: student.student_id,
+                    enrollment_id: choices.enrollment_id,
+                    initial_only: !choices.posted,
                     version: choices.current_version,
                     ...(assignment ? { assignment_id: assignment } : {}),
                     ...(courseworkRevision ? { coursework_revision: courseworkRevision } : {}),

@@ -1921,10 +1921,29 @@ if (
     throw new RuntimeException("Student grading policy did not resolve privately through the provider.");
 }
 $finalGradeBase = "/sis/sections/" . $gradingSection->id->value . "/final-grades/";
+$initialGradeData = [
+    'student_id' => $gradingStudent->id->value,
+    'grade_id' => $gradeChoices['items'][0]['id'],
+    'version' => 0,
+    'initial_only' => true,
+];
+$initialGradeFacts = $sis->sql->rows('sis_history_events');
+if (
+    $teachingPost($finalGradeBase . 'review/', $initialGradeData)->getStatusCode() !== 422 ||
+    $teachingPost(
+        $finalGradeBase . 'review/',
+        $initialGradeData + ['enrollment_id' => \Domain\Shared\ValueObject\EntityId::generate()->value],
+    )->getStatusCode() !== 409 ||
+    $initialGradeFacts !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('A grade review omitted or ignored the displayed registration.');
+}
 $gradeReviewResponse = $teachingPost($finalGradeBase . "review/", [
     "student_id" => $gradingStudent->id->value,
+    'enrollment_id' => $gradingEnrollment->id->value,
     "grade_id" => $gradeChoices["items"][0]["id"],
     "version" => 0,
+    'initial_only' => true,
 ]);
 $gradeReview = json_decode((string) $gradeReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
@@ -1965,10 +1984,14 @@ if ((int) $gradedCredit["grade_points_milli"] !== 15000) {
 // Browser transport and domain authority are both rechecked for consequential grade changes.
 $gradeCorrectionData = [
     "student_id" => $gradingStudent->id->value,
+    'enrollment_id' => $gradingEnrollment->id->value,
     "grade_id" => $gradeChoices["items"][0]["id"],
     "version" => 1,
     "reason" => "Fictional assessment correction.",
 ];
+if ($teachingPost($finalGradeBase . 'review/', $gradeCorrectionData + ['initial_only' => true])->getStatusCode() !== 409) {
+    throw new RuntimeException('The initial-grade worksheet prepared an amendment.');
+}
 $correctionNoCsrf = new \Qubus\Http\ServerRequest(
     [],
     [],

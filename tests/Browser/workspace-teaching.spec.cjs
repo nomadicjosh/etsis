@@ -135,7 +135,7 @@ test("teaching pages, assignment edits, attendance corrections and explicit rost
     await page.getByLabel("Assignment title").fill("Revised quiz");
     await page.getByLabel("Possible points").fill("12.50");
     await accessible(page);
-    await page.getByRole("button", { name: "Save assignment changes", exact: true }).click();
+    await page.getByRole("button", { name: "Save assignment", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("Revised quiz");
     expect(calls.find((item) => item.path.endsWith("/edit/"))?.data).toMatchObject({
         possible_hundredths: 1250,

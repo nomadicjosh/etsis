@@ -12,6 +12,8 @@ async function fixture(
         holdCommit = false,
         ambiguousProgram = false,
         coursework = false,
+        worksheet = false,
+        changedEnrollment = false,
     } = {},
 ) {
     const section = id(801),
@@ -83,6 +85,10 @@ async function fixture(
             const alreadyPosted = postedDuringReview && student === rows[0].student_id;
             if (alreadyPosted) posted.set(student, "another-authorized-review");
             result = {
+                enrollment_id:
+                    changedEnrollment && student === rows[0].student_id
+                        ? id(999)
+                        : rows.find((row) => row.student_id === student).id,
                 items:
                     noScale && student === rows[1].student_id
                         ? []
@@ -109,7 +115,13 @@ async function fixture(
             };
         } else if (path.endsWith("/final-grades/review/"))
             result = {
-                grade: { code: "P", points_milli: 4000 },
+                student_id: data.student_id,
+                enrollment_id: data.enrollment_id,
+                operation_id: `operation-${data.student_id}`,
+                amendment: false,
+                earlier_history_unknown: data.student_id === rows[0].student_id,
+                effective_at: "2026-08-11",
+                grade: { id: data.grade_id, code: "P", points_milli: 4000 },
                 reason: data.reason,
                 review_token: `fictional-${data.student_id}`,
             };
@@ -125,7 +137,7 @@ async function fixture(
                 });
                 return;
             }
-            result = { recorded: true };
+            result = { recorded: true, operation_id: `operation-${data.student_id}` };
         } else if (path.endsWith("/gradebook-summary/")) {
             await route.fulfill({ status: 422, json: { error: "Fictional unavailable average." } });
             return;
@@ -140,7 +152,9 @@ async function fixture(
         .fill("Example");
     await page.getByRole("button", { name: "Apply filters", exact: true }).click();
     await expect(page.locator('section[aria-label="Section roster"] tbody tr')).toHaveCount(2);
-    await page.getByRole("button", { name: "Review ungraded", exact: true }).click();
+    await page
+        .getByRole("button", { name: worksheet ? "Final-grade worksheet" : "Review ungraded", exact: true })
+        .click();
     return { calls, posted, errors, rows, releaseCommit, section, grade };
 }
 
@@ -280,5 +294,124 @@ test("queue asks for each student's grading pursuit without carrying a prior pro
     await page.getByRole("button", { name: "Skip student", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("End of this pass");
     expect(f.posted.size).toBe(1);
+    expect(f.errors).toEqual([]);
+});
+
+test("the final-grade worksheet reviews a class page before posting and preserves revisions", async ({
+    page,
+}) => {
+    const f = await fixture(page, { worksheet: true, coursework: true });
+    await expect(page.locator("#drawer-title")).toHaveText("Final-grade worksheet");
+    expect(f.calls.filter((call) => call.path.endsWith("/grade-choices/"))).toHaveLength(0);
+    await page.getByRole("button", { name: "Load grade choices", exact: true }).click();
+    const alex = page.getByRole("combobox", { name: "Final grade for Alex Example", exact: true });
+    const jamie = page.getByRole("combobox", { name: "Final grade for Jamie Example", exact: true });
+    await expect(alex).toBeEnabled();
+    await page
+        .getByRole("button", { name: "Use coursework suggestion for Alex Example", exact: true })
+        .click();
+    await jamie.selectOption(f.grade);
+    await page.getByRole("button", { name: "Close record", exact: true }).click();
+    await expect(page.locator("#record-drawer")).toBeVisible();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    await page.getByRole("button", { name: "Review selected", exact: true }).click();
+    await expect(page.getByRole("heading", { name: "Review final grades", exact: true })).toBeFocused();
+    expect(f.posted.size).toBe(0);
+    await expect(page.locator("#drawer-body")).toContainText("Some earlier academic history is unknown.");
+    await expect(page.getByRole("region", { name: "Final-grade confirmations", exact: true })).toContainText(
+        "Jamie Example",
+    );
+    await accessible(page);
+    await page.getByRole("button", { name: "Revise grades", exact: true }).click();
+    await expect(alex).toHaveValue(f.grade);
+    await expect(jamie).toHaveValue(f.grade);
+    await page.getByRole("button", { name: "Review selected", exact: true }).click();
+    await page.getByRole("button", { name: "Post reviewed grades", exact: true }).click();
+    await expect(
+        page.getByRole("progressbar", { name: "Final-grade task progress", exact: true }),
+    ).toHaveAttribute("value", "2");
+    await expect(page.locator("#drawer-body")).toContainText("2 grades confirmed posted");
+    expect(f.posted.size).toBe(2);
+    expect(f.calls.find((call) => call.path.endsWith("/final-grades/review/"))).toMatchObject({
+        csrf: "fictional-test-token",
+        data: {
+            student_id: f.rows[0].student_id,
+            enrollment_id: f.rows[0].id,
+            initial_only: true,
+            grade_id: f.grade,
+            coursework_revision: "fictional-coursework-revision",
+        },
+    });
+    await page.getByRole("button", { name: "Back to roster", exact: true }).click();
+    await expect(page.locator("#drawer-title")).not.toHaveText("Final-grade worksheet");
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test("an interrupted class-grade response retries the same student proof before continuing", async ({
+    page,
+}) => {
+    const f = await fixture(page, { worksheet: true, interruptedCommit: true });
+    await page.getByRole("button", { name: "Load grade choices", exact: true }).click();
+    await page
+        .getByRole("combobox", { name: "Final grade for Alex Example", exact: true })
+        .selectOption(f.grade);
+    await page
+        .getByRole("combobox", { name: "Final grade for Jamie Example", exact: true })
+        .selectOption(f.grade);
+    await page.getByRole("button", { name: "Review selected", exact: true }).click();
+    await page.getByRole("button", { name: "Post reviewed grades", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("The outcome is unknown");
+    await expect(page.getByRole("button", { name: "Discard selections", exact: true })).toBeDisabled();
+    expect(f.calls.filter((call) => call.path.endsWith("/final-grades/commit/"))).toHaveLength(1);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    await page.getByRole("button", { name: "Retry confirmation", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("2 grades confirmed posted");
+    const commits = f.calls.filter((call) => call.path.endsWith("/final-grades/commit/"));
+    expect(commits).toHaveLength(3);
+    expect(commits[0].data).toEqual(commits[1].data);
+    expect(f.posted.size).toBe(2);
+    expect(f.errors).toEqual([]);
+});
+
+test("class grading keeps program choices independent and does not offer corrections for posted records", async ({
+    page,
+}) => {
+    const f = await fixture(page, { worksheet: true, ambiguousProgram: true, postedDuringReview: true });
+    await page.getByRole("button", { name: "Load grade choices", exact: true }).click();
+    await expect(
+        page.getByRole("combobox", { name: "Final grade for Alex Example", exact: true }),
+    ).toBeDisabled();
+    await expect(page.locator("#drawer-body")).toContainText(
+        "Already posted. Use the individual correction workflow",
+    );
+    const pursuit = page.getByRole("combobox", { name: "Program pursuit for Jamie Example", exact: true });
+    await expect(pursuit).toHaveValue("");
+    await pursuit.selectOption(id(832));
+    await page.getByRole("button", { name: "Use program for Jamie Example", exact: true }).click();
+    await page
+        .getByRole("combobox", { name: "Final grade for Jamie Example", exact: true })
+        .selectOption(f.grade);
+    await page.getByRole("button", { name: "Review selected", exact: true }).click();
+    await page.getByRole("button", { name: "Post reviewed grades", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("1 grade confirmed posted");
+    expect(f.calls.filter((call) => call.path.endsWith("/final-grades/review/"))).toHaveLength(1);
+    expect(f.calls.find((call) => call.path.endsWith("/final-grades/review/")).data.assignment_id).toBe(
+        id(832),
+    );
+    expect(f.errors).toEqual([]);
+});
+
+test("an individual queue selection cannot move to a replacement registration while loading choices", async ({
+    page,
+}) => {
+    const f = await fixture(page, { changedEnrollment: true });
+    await expect(page.locator("#drawer-body")).toContainText("This registration changed");
+    await expect(page.getByRole("button", { name: "Review final grade", exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Skip student", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Jamie Example");
+    expect(f.calls.some((call) => call.path.endsWith("/final-grades/review/"))).toBe(false);
     expect(f.errors).toEqual([]);
 });

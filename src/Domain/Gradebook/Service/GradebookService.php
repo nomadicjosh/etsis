@@ -352,8 +352,13 @@ final readonly class GradebookService
         ?string $effective = null,
         bool $gradeEvidence = false,
         ?string $courseworkRevision = null,
+        ?EntityId $expectedEnrollment = null,
+        bool $initialOnly = false,
     ): array {
         $enrollment = $this->gradeEnrollment($student, $section);
+        if ($expectedEnrollment !== null && $expectedEnrollment->value !== $enrollment->id->value) {
+            throw new ConcurrentModificationException('The registration changed. Reload the grading record.');
+        }
         return $this->credits->review(
             $student,
             $section,
@@ -365,6 +370,7 @@ final readonly class GradebookService
             $effective,
             $gradeEvidence,
             $courseworkRevision,
+            $initialOnly,
         );
     }
     /** @return array<string,mixed> */

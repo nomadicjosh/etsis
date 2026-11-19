@@ -39,7 +39,7 @@ test('staff post and reverse payments, grade a roster and save catalog edits', a
         else if (path.endsWith('/reverse/commit/')) { reversed = true; result = { status: 'reversed' }; }
         else if (path === `/sis/ui/context/roster/${section}/`) result = { can_grade: true, items: [{ id: id('08'), student_id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', status: 'A', grade_version: 2, grade_code: null }], next_after: null };
         else if (path === `/sis/ui/context/assignments/${section}/`) result = { items: [], next_after: null };
-        else if (path === `/sis/sections/${section}/students/${student}/grade-choices/`) result = { items:[{id:grade,code:'A',points_milli:4000}], pursuits:[], needs_assignment:false, current_version:2, effective_on_default:'2026-08-10' };
+        else if (path === `/sis/sections/${section}/students/${student}/grade-choices/`) result = { enrollment_id: id('08'), items:[{id:grade,code:'A',points_milli:4000}], pursuits:[], needs_assignment:false, current_version:2, effective_on_default:'2026-08-10' };
         else if(path.endsWith('/final-grades/review/')) result={grade:{code:'A',points_milli:4000},reason:'Initial final grade recorded.',review_token:'fictional-grade-review'};
         else if (path === `/sis/sections/${section}/students/${student}/score-page/`) result = { next_after: null, items: [{ assignment_id: assignment, title: 'Quiz one', possible_hundredths: 1000, earned_hundredths: null, version: 0 }] };
         else if (path === `/sis/sections/${section}/students/${student}/attendance/`) result = { items: [], counts: {}, next_after: null };
@@ -89,7 +89,7 @@ test('staff post and reverse payments, grade a roster and save catalog edits', a
     await page.getByRole('button', { name: 'Enter score', exact: true }).click();
     await page.getByLabel('Points earned').fill('8.25');
     await page.getByRole('button', { name: 'Save score', exact: true }).click();
-    await expect.poll(() => requests.find(item => item.path === `/sis/assignments/${assignment}/scores/`)?.payload).toEqual({ student_id: student, earned_hundredths: 825, version: 0 });
+    await expect.poll(() => requests.find(item => item.path === `/sis/assignments/${assignment}/scores/`)?.payload).toEqual({ student_id: student, earned_hundredths: 825, version: 0, excused: false });
     await page.getByRole('button', { name: 'Record final grade', exact: true }).click();
     await page.getByLabel('Institutional grade').selectOption(grade);
     await page.getByRole('button', { name: 'Review final grade', exact: true }).click();
@@ -97,7 +97,7 @@ test('staff post and reverse payments, grade a roster and save catalog edits', a
     expect(requests.some(item=>item.path.endsWith('/commit/') && item.path.includes('final-grades'))).toBe(false);
     await page.getByRole('button', { name: 'Confirm final grade', exact: true }).click();
     await expect.poll(() => requests.find(item => item.path.endsWith('/final-grades/commit/'))?.payload).toEqual({ student_id: student, review_token:'fictional-grade-review' });
-    expect(requests.find(item=>item.path.endsWith('/final-grades/review/'))?.payload).toMatchObject({student_id:student,grade_id:grade,version:2,effective_on:'2026-08-10'});
+    expect(requests.find(item=>item.path.endsWith('/final-grades/review/'))?.payload).toMatchObject({student_id:student,enrollment_id:id('08'),initial_only:true,grade_id:grade,version:2,effective_on:'2026-08-10'});
     await page.getByRole('button', { name: 'Close record', exact: true }).click();
     await page.locator('.workspace-nav-link[data-workspace="courses"]').click();
     await page.getByRole('button', { name: 'Algebra', exact: true }).click();
@@ -581,7 +581,7 @@ test('final grade selection asks for the student pursuit when grading scales dif
         else if(path==='/sis/ui/data/teaching/')result={items:[{id:section,code:'MATH.101.A',capacity:20}],next_after:null};
         else if(path===`/sis/ui/context/roster/${section}/`)result={can_grade:true,items:[{id:id(6),student_id:student,given_name:'Alex',family_name:'Example',institutional_id:'FICTIONAL',status:'A',grade_code:null,grade_version:0}],next_after:null};
         else if(path.endsWith('/attendance/'))result={items:[],counts:{},next_after:null};
-        else if(path.endsWith('/grade-choices/'))result=data.assignment_id?{items:[{id:grade,code:'A+',points_milli:5000}],pursuits:[],needs_assignment:false,current_version:0,effective_on_default:'2026-08-10'}:{items:[],pursuits:[{id:pursuit,code:'GRAD',title:'Graduate degree'},{id:other,code:'UG',title:'Undergraduate degree'}],needs_assignment:true};
+        else if(path.endsWith('/grade-choices/'))result=data.assignment_id?{enrollment_id:id(6),items:[{id:grade,code:'A+',points_milli:5000}],pursuits:[],needs_assignment:false,current_version:0,effective_on_default:'2026-08-10'}:{items:[],pursuits:[{id:pursuit,code:'GRAD',title:'Graduate degree'},{id:other,code:'UG',title:'Undergraduate degree'}],needs_assignment:true};
         else if(path.endsWith('/final-grades/review/'))result={grade:{code:'A+',points_milli:5000},reason:'Initial final grade recorded.',review_token:'fictional-program-grade'};
         await route.fulfill({json:result,headers:{'Cache-Control':'private, no-store'}});
     });

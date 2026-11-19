@@ -238,6 +238,7 @@ final readonly class InstitutionalCreditLedger
         ?string $effective = null,
         bool $gradeEvidence = false,
         ?string $courseworkRevision = null,
+        bool $initialOnly = false,
     ): array {
         $this->readAuthority($section);
         return $this->transactions->run(function () use (
@@ -251,6 +252,7 @@ final readonly class InstitutionalCreditLedger
             $effective,
             $gradeEvidence,
             $courseworkRevision,
+            $initialOnly,
         ): array {
             $this->records->lockStudent($student);
             $this->records->lockSection($section);
@@ -269,6 +271,11 @@ final readonly class InstitutionalCreditLedger
                 );
             }
             $amend = $withdrawn || new CreditSnapshot($facts)->posted();
+            if ($initialOnly && $amend) {
+                throw new ConcurrentModificationException(
+                    'This record already has a final grade. Use the individual correction workflow.',
+                );
+            }
             if ($root->pendingGradeChange() !== null) {
                 throw new ConcurrentModificationException(
                     "Resolve the pending grade correction before requesting another.",
