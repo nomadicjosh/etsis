@@ -319,6 +319,8 @@ final readonly class RegistrationService
         EntityId $actor,
         bool $byStaff,
         \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
+        ?string $scheduleRevision = null,
+        ?string $prerequisiteRevision = null,
     ): void {
         $student = $this->admissions->student($studentId);
         $person = $this->admissions->person($student->personId);
@@ -340,6 +342,7 @@ final readonly class RegistrationService
             );
         }
         $this->enrollments->verifyExisting($enrollment, $section);
+        $this->credits->verifyOpenEnrollment($enrollment, $budget);
         $assignment = $this->pursuits->activePursuit($studentId);
         $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
         $prerequisites = $this->prerequisites->evaluate($studentId, $assignment, $required, $budget);
@@ -352,12 +355,40 @@ final readonly class RegistrationService
             $prerequisites->isMet(),
             $this->clock->now(),
         );
-        if ($this->schedules->evaluate($studentId, $sectionId)->blocked()) {
+        $schedule = $this->schedules->evaluate($studentId, $sectionId);
+        if (
+            $schedule->blocked() ||
+            ($scheduleRevision !== null && $schedule->revision() !== $scheduleRevision) ||
+            ($prerequisiteRevision !== null && $prerequisites->revision() !== $prerequisiteRevision)
+        ) {
             throw new ConcurrentModificationException(
-                "The published timetable changed before completion. Review it again.",
+                "The reviewed timetable or prerequisite support changed before completion. Review again.",
             );
         }
         $this->verifyAccess($actor, $student, $person->ownerUserId, $byStaff);
+    }
+
+    /** Internal original-attempt verification. The caller authorizes and locks the student.
+     * @return array<string,mixed> */
+    public function verifyChangeSource(
+        EntityId $student,
+        EntityId $enrollment,
+        EntityId $credit,
+        \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
+        bool $removed = false,
+    ): array {
+        $enrolled = $this->enrollments->evaluationFacts($enrollment, $student, $budget);
+        $academic = $this->credits->evaluationFacts($credit, $student, $budget);
+        $facts = $enrolled["facts"];
+        $work = $academic["credit"];
+        if (
+            $work["source_id"] !== $enrollment->value ||
+            $work["status"] !== $facts["status"] ||
+            ($removed && $facts["status"] !== "D")
+        ) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        return ["enrollment" => $enrolled, "academic" => $academic];
     }
 
     private function authorize(

@@ -24,6 +24,40 @@ window.createWorkspaceRegistration = function (ui) {
             table(headers, rows, caption),
         );
     const schedule = window.createRegistrationSchedule({ node });
+    const change = window.createSectionChange({
+        node,
+        request,
+        money,
+        button: (label, action, primary) =>
+            button(label, action, primary ? "btn-primary" : "btn-outline-primary"),
+        open: (title) => openDrawer(title, "REVIEWED SECTION CHANGE"),
+    });
+    async function changeSection(student, from, back) {
+        await change({
+            student,
+            from,
+            baseUrl: "/sis/section-changes/",
+            onBack: back,
+            onComplete: async (result) => {
+                const body = openDrawer("Section changed", "REGISTRATION RECEIPT");
+                body.append(
+                    node(
+                        "p",
+                        { role: "status" },
+                        "The original registration and replacement were saved together.",
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `Account change: ${money(result.financial.net_change_minor, result.financial.currency)}`,
+                    ),
+                    node("p", {}, "Reference: ", node("code", {}, result.change_id)),
+                    button("Back to student", back),
+                );
+                await refreshDirectory();
+            },
+        });
+    }
     async function policy(back = null) {
         const body = openDrawer("Timetable policy", "REGISTRATION SETTINGS");
         const value = await request("/sis/registration-policy/");
@@ -633,5 +667,5 @@ window.createWorkspaceRegistration = function (ui) {
             );
         body.append(nav);
     }
-    return { single, plan, policy, start, history };
+    return { single, plan, changeSection, policy, start, history };
 };

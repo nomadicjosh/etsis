@@ -46,6 +46,15 @@ use Application\Http\Controller\SisRelationalReportController;
 use Application\Http\Controller\SisStudentCatalogController;
 
 return static function (Psr7Router $router): void {
+    $router->post('/sis/section-changes/choices/', [
+        \Application\Http\Controller\SectionChangeController::class, 'staffChoices',
+    ]);
+    $router->post('/sis/section-changes/review/', [
+        \Application\Http\Controller\SectionChangeController::class, 'staffReview',
+    ]);
+    $router->post('/sis/section-changes/commit/', [
+        \Application\Http\Controller\SectionChangeController::class, 'staffCommit',
+    ]);
     $router->post('/sis/registration-plans/review/', [SisRegistrationBatchController::class, 'reviewPlan']);
     $router->post('/sis/registration-plans/commit/', [SisRegistrationBatchController::class, 'commitPlan']);
 

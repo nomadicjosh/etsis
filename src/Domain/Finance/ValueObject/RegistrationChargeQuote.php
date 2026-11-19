@@ -96,6 +96,66 @@ final readonly class RegistrationChargeQuote implements \JsonSerializable
         return $this->summary;
     }
 
+    /** Proposed early-drop course reversal only; no balances, account IDs or unrelated entries leave this value.
+     * @return array<string,mixed> */
+    public function sectionChangeSummary(\Domain\Shared\ValueObject\EntityId $enrollment): array
+    {
+        $account = $this->termQuote->account;
+        $credit = 0;
+        $references = [];
+        foreach ($account?->courseCharges($enrollment) ?? [] as $id) {
+            $entry = $account->entry($id) ?? throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+            if (
+                $entry["type"] !== \Domain\Finance\Enum\EntryType::Charge->value ||
+                $entry["currency"] !== $account->balance()->currency
+            ) {
+                throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+            }
+            $remaining = $entry["remaining_charge_minor"];
+            if ($remaining > Money::MAX_MINOR - $credit) {
+                throw new \InvalidArgumentException(
+                    "The course reversal exceeds its supported amount limit.",
+                );
+            }
+            $credit += $remaining;
+            $references[] = [$id->value, $entry["minor"], $entry["reversed"], $remaining];
+        }
+        $problems = array_values(
+            array_filter(
+                $this->summary["problems"],
+                static fn(string $problem): bool => $problem !==
+                    "The resulting account balance exceeds the supported amount limit.",
+            ),
+        );
+        $newCharges = 0;
+        foreach ($this->summary["items"] as $item) {
+            if ($item["status"] === "new") {
+                if ($item["minor"] > Money::MAX_MINOR - $newCharges) {
+                    $problems[] = "The registration charges exceed the supported amount limit.";
+                    break;
+                }
+                $newCharges += $item["minor"];
+            }
+        }
+        $currency = $this->summary["currency"];
+        $balance = $account?->balance()->minor ?? 0;
+        if ($balance < -Money::MAX_MINOR + $credit) {
+            $problems[] = "The course reversal exceeds the supported account amount limit.";
+        }
+        if ($balance - $credit > Money::MAX_MINOR - $newCharges) {
+            $problems[] = "The resulting account balance exceeds the supported amount limit.";
+        }
+        $newCharges = $problems === [] ? $newCharges : null;
+        return [
+            "currency" => $currency,
+            "credit_minor" => $credit,
+            "new_charge_minor" => $newCharges,
+            "net_change_minor" => $newCharges === null ? null : $newCharges - $credit,
+            "problems" => $problems,
+            "reversal_revision" => hash("sha256", json_encode($references, JSON_THROW_ON_ERROR)),
+        ];
+    }
+
     /** Deduplicate term-wide fees across a working schedule; never changes accepted financial facts.
      * @param array<string,true> $termFees
      * @return array<string,mixed> */

@@ -124,6 +124,15 @@ return static function (Psr7Router $router): void {
         ->map(["POST"], "/portal/api/payments/checkout/", [Payments::class, "checkout"])
         ->name("portal.payments.checkout");
     $router->map(["POST"], "/portal/api/register/", [Portal::class, "register"])->name("portal.register");
+    $router->post('/portal/api/section-changes/choices/', [
+        \Application\Http\Controller\SectionChangeController::class, 'studentChoices',
+    ]);
+    $router->post('/portal/api/section-changes/review/', [
+        \Application\Http\Controller\SectionChangeController::class, 'studentReview',
+    ]);
+    $router->post('/portal/api/section-changes/commit/', [
+        \Application\Http\Controller\SectionChangeController::class, 'studentCommit',
+    ]);
     $router->post('/portal/api/registration-plan/review/', [Portal::class, 'reviewRegistrationPlan']);
     $router->post('/portal/api/registration-plan/commit/', [Portal::class, 'registerPlan']);
     $router->post('/portal/api/registration/review/', [Portal::class, 'reviewRegistration'])

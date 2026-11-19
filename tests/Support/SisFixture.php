@@ -1440,6 +1440,31 @@ final class SisFixture
         return $p;
     }
 
+    public function sectionChanges(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Registration\Service\SectionChangeService {
+        return new \Domain\Registration\Service\SectionChangeService(
+            $this->registration,
+            $this->admissions,
+            $this->registrationBatches(),
+            $this->service,
+            $this->drops,
+            new \Infrastructure\Persistence\Repository\SqlDropPolicyRepository(
+                $this->sql,
+                $this->gradeCatalog(),
+            ),
+            $this->dropPolicies,
+            new \Infrastructure\Persistence\Repository\SqlSectionChangeSearch($this->sql),
+            $this->registrationBilling,
+            new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository($this->sql),
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->clock,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+        );
+    }
+
     public function registrationBatches(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Registration\Repository\RegistrationRepository $repository = null,

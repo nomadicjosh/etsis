@@ -213,3 +213,75 @@ foreach ([true, false] as $staffPlan) {
         throw new RuntimeException('Actual coordinated schedule confirmation or original-result retry failed.');
     }
 }
+
+// Staff and student section changes use the same protected application and atomic drop/add paths.
+foreach ([true, false] as $staffChange) {
+    $sis->access->staff = true;
+    $sis->access->grants = [];
+    $changeOwner = $sis->user();
+    $changeStudent = $sis->student($changeOwner);
+    $from = $sis->section(fee: 1000);
+    $to = $sis->section(fee: 1500);
+    $sis->sql->update("sis_sections", ["course_id" => $from->courseId->value], ["id" => $to->id->value]);
+    $sis->service->register($changeStudent->id, $from->id, true);
+    $sis->access->actor = $changeOwner;
+    $sis->access->staff = $staffChange;
+    $path = $staffChange ? "/sis/section-changes/" : "/portal/api/section-changes/";
+    $input = [
+        "student_id" => $changeStudent->id->value,
+        "from_section_id" => $from->id->value,
+        "to_section_id" => $to->id->value,
+    ];
+    $before = $t->digest();
+    foreach (["choices", "review"] as $action) {
+        $unprotected = new \Qubus\Http\ServerRequest(
+            [],
+            [],
+            "https://campus.example.invalid" . $path . $action . "/",
+            "POST",
+        );
+        if ($app->router->match($unprotected->withParsedBody($input))->getStatusCode() !== 403) {
+            throw new RuntimeException("Section change bypassed framework CSRF protection.");
+        }
+        $response = $teachingPost($path . $action . "/", $input);
+        if (
+            $response->getStatusCode() !== 200 ||
+            !str_contains($response->getHeaderLine("Cache-Control"), "no-store") ||
+            $t->digest() !== $before
+        ) {
+            throw new RuntimeException("Section change review lost its private read-only boundary.");
+        }
+    }
+    $review = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if (!($review["can_confirm"] ?? false)) {
+        throw new RuntimeException("Actual section-change review was not ready.");
+    }
+    $command =
+        $input + array_intersect_key($review, array_flip(["operation_id", "revision", "review_token"]));
+    $unprotected = new \Qubus\Http\ServerRequest(
+        [],
+        [],
+        "https://campus.example.invalid" . $path . "commit/",
+        "POST",
+    );
+    if ($app->router->match($unprotected->withParsedBody($command))->getStatusCode() !== 403) {
+        throw new RuntimeException("Section-change confirmation bypassed CSRF.");
+    }
+    $sis->access->staff = false;
+    $sis->access->actor = $sis->user();
+    if ($teachingPost($path . "commit/", $command)->getStatusCode() !== 403) {
+        throw new RuntimeException("Another user confirmed a section change.");
+    }
+    $sis->access->actor = $changeOwner;
+    $sis->access->staff = $staffChange;
+    $accepted = $teachingPost($path . "commit/", $command);
+    $retried = $teachingPost($path . "commit/", $command);
+    if (
+        $accepted->getStatusCode() !== 200 ||
+        $retried->getStatusCode() !== 200 ||
+        (string) $accepted->getBody() !== (string) $retried->getBody() ||
+        !str_contains($accepted->getHeaderLine("Cache-Control"), "no-store")
+    ) {
+        throw new RuntimeException("Actual section change or accepted-result retry failed.");
+    }
+}

@@ -141,6 +141,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlHiatusImpactRepository::class,
             \Domain\Student\Repository\HiatusRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlHiatusRepository::class,
+            \Domain\Registration\Repository\SectionChangeSearch::class =>
+                \Infrastructure\Persistence\Repository\SqlSectionChangeSearch::class,
             \Domain\Registration\Repository\RegistrationBatchRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository::class,
             \Domain\Transfer\Repository\TransferCatalogRepository::class =>

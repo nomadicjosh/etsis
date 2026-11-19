@@ -1288,6 +1288,22 @@ final readonly class InstitutionalCreditLedger
             "registration_course_version_id" => $root->registrationCourseVersion(),
         ];
     }
+    /** Internal registration completion check; caller owns authorization and student locks. */
+    public function verifyOpenEnrollment(Enrollment $enrollment, HistoryReadBudget $budget): void
+    {
+        $row = $this->records->forEnrollment($enrollment->id) ?? throw new CorruptHistoryException();
+        $facts = $this->auditFacts(new EntityId($row["id"]), $enrollment->studentId, $budget)["credit"];
+        if (
+            $facts["source_id"] !== $enrollment->id->value ||
+            $facts["status"] !== $enrollment->status->value ||
+            $facts["grade_id"] !== null ||
+            $facts["completed_milli"] !== 0 ||
+            $facts["grade_points_milli"] !== 0
+        ) {
+            throw new CorruptHistoryException();
+        }
+    }
+
     /**
      * Caller authorizes owner/assigned faculty/academic reader before requesting curated history.
      * @return array<string,mixed>

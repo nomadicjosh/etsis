@@ -1678,6 +1678,35 @@
         }
     }
 
+    async function changeSection(student, from) {
+        let generation = portalDialogGeneration;
+        const change = window.createSectionChange({
+            node: el,
+            request,
+            money: amount,
+            button,
+            open: (title) => {
+                const body = el('div');
+                dialog(title, body);
+                generation = portalDialogGeneration;
+                return body;
+            },
+            isCurrent: () => !pageLeaving && generation === portalDialogGeneration,
+        });
+        await change({
+            student,
+            from,
+            baseUrl: '/portal/api/section-changes/',
+            onComplete: async () => {
+                bootstrap.Modal.getInstance(one('#campus-dialog')).hide();
+                notice(
+                    'Your section was changed. The original course charges were reversed and replacement charges applied together.',
+                );
+                await renderService();
+            },
+        });
+    }
+
     async function registration(container) {
         if (!me.students.length) {
             container.append(
@@ -1708,7 +1737,7 @@
                                       }[item.status] || item.status,
                                   ),
                                   ['A', 'N'].includes(item.status)
-                                      ? button('Drop / withdraw', async () => {
+                                      ? el('div', { class: 'd-flex flex-wrap gap-2' }, button('Change section', () => changeSection(student.id, item.section_id)), button('Drop / withdraw', async () => {
                                             const plan = await request('/portal/api/drop-review/', 'POST', { student_id: student.id, section_id: item.section_id });
                                             const command = Object.fromEntries(['student_id', 'section_id', 'enrollment_id', 'version', 'operation_id', 'revision', 'effective_on'].map(key => [key, plan[key]]));
                                             let finished = false;
@@ -1727,7 +1756,7 @@
                                                 button('Confirm drop / withdrawal', async () => finish(await request('/portal/api/drop/', 'POST', command)), true),
                                                 button('Check saved drop', async () => finish(await request(`/portal/api/drop-receipts/${plan.operation_id}/`))),
                                                 el('p', { class: 'form-text' }, 'If the connection is interrupted, check the saved drop or retry this same confirmation.'));
-                                        })
+                                        }))
                                       : '—',
                               ]),
                               'Your course registrations',

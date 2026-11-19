@@ -43,6 +43,86 @@ final readonly class RegistrationBatchService
     ) {
     }
 
+    /** Internal section-change assessment. The coordinator owns student/person/section/course locks.
+     * @return array<string,mixed> */
+    public function assessSectionChange(
+        EntityId $student,
+        EntityId $from,
+        EntityId $to,
+        bool $byStaff,
+        \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
+        ?\Domain\Finance\ValueObject\RegistrationChargeQuote &$quote,
+    ): array {
+        $selection = new RegistrationBatchSelection($to, $student);
+        $actor = $this->authorize($selection, $byStaff);
+        $old = $this->repository->enrollment($student, $from);
+        $source = $this->repository->section($from);
+        $target = $this->repository->section($to);
+        if (
+            $from->value === $to->value ||
+            $old === null ||
+            !$old->status->isEnrolled() ||
+            $source->courseId->value !== $target->courseId->value ||
+            $source->termId->value !== $target->termId->value
+        ) {
+            throw new ValidationException([
+                [
+                    "field" => "to_section_id",
+                    "message" => "Choose a different section of the same course and academic term.",
+                ],
+            ]);
+        }
+        $quotes = [];
+        $result = $this->context($selection, $budget, $byStaff, $quotes, replacingSection: $from);
+        $quote = $quotes[$student->value] ?? null;
+        $this->actor($actor, $selection, $byStaff);
+        return $result;
+    }
+
+    /** Internal completion check shared by schedule registration and section changes.
+     * @param array<string,mixed> $expected */
+    public function verifyReviewedSection(
+        EntityId $student,
+        EntityId $section,
+        array $expected,
+        \Domain\Finance\ValueObject\RegistrationChargeQuote $quote,
+        \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
+    ): void {
+        $current = $this->repository->section($section);
+        $course = $this->repository->courseForSection($current);
+        $term = $this->repository->term($current->termId);
+
+        if (
+            $current->termId->value !== $expected["term_id"] ||
+            $course->id->value !== $expected["course_id"] ||
+            $current->publicationVersionId?->value !== $expected["section_version_id"] ||
+            $this->versions->selectionPosition($section) !== $expected["selection_position"] ||
+            $course->publicationVersionId?->value !== $expected["course_version_id"] ||
+            $current->capacity !== $expected["capacity"] ||
+            $course->code !== $expected["course_code"] ||
+            $course->title !== $expected["course_title"] ||
+            $course->creditsMilli !== $expected["credits_milli"] ||
+            $term->dates->start->format("Y-m-d") !== $expected["term_starts_on"] ||
+            $term->dates->end?->format("Y-m-d") !== $expected["term_ends_on"]
+        ) {
+            throw new ConcurrentModificationException(
+                "Section definitions changed before completion. Review again.",
+            );
+        }
+        $fresh = $this->billing->registrationQuote(
+            $student,
+            $current->termId,
+            $current->fee,
+            $course->creditsMilli,
+            $budget,
+        );
+        if ($fresh->definitionFingerprint() !== $quote->definitionFingerprint()) {
+            throw new ConcurrentModificationException(
+                "Registration prices changed before completion. Review again.",
+            );
+        }
+    }
+
     /** Several sections for one student, using the same readiness, pricing, proofs and receipt storage.
      * @return array<string,mixed> */
     public function reviewPlan(RegistrationPlanSelection $selection, bool $byStaff): array
@@ -201,40 +281,19 @@ final readonly class RegistrationBatchService
                     $byStaff,
                     $budget,
                 );
-                $current = $this->repository->section($section);
-                $course = $this->repository->courseForSection($current);
                 $expected = array_values(
                     array_filter(
                         $context["sections"],
                         static fn(array $row): bool => $row["section"]["id"] === $section->value,
                     ),
                 )[0]["section"];
-                if (
-                    $current->termId->value !== $expected["term_id"] ||
-                    $course->id->value !== $expected["course_id"] ||
-                    $current->publicationVersionId?->value !== $expected["section_version_id"] ||
-                    $this->versions->selectionPosition($section) !== $expected["selection_position"] ||
-                    $course->publicationVersionId?->value !== $expected["course_version_id"] ||
-                    $current->capacity !== $expected["capacity"] ||
-                    $course->code !== $expected["course_code"] ||
-                    $course->title !== $expected["course_title"]
-                ) {
-                    throw new ConcurrentModificationException(
-                        "Section definitions changed before completion. Review again.",
-                    );
-                }
-                $fresh = $this->billing->registrationQuote(
+                $this->verifyReviewedSection(
                     $selection->student,
-                    $current->termId,
-                    $current->fee,
-                    $course->creditsMilli,
+                    $section,
+                    $expected,
+                    $quotes[$section->value],
                     $budget,
                 );
-                if ($fresh->definitionFingerprint() !== $quotes[$section->value]->definitionFingerprint()) {
-                    throw new ConcurrentModificationException(
-                        "Registration prices changed before completion. Review again.",
-                    );
-                }
             }
             if ($this->schedules->between($selection->sections) !== $context["planned_schedule"]) {
                 throw new ConcurrentModificationException(
@@ -678,6 +737,7 @@ final readonly class RegistrationBatchService
         bool $byStaff,
         array &$quotes,
         ?RegistrationScheduleRead $scheduleRead = null,
+        ?EntityId $replacingSection = null,
     ): array {
         $section = $this->repository->section($selection->section);
         $course = $this->repository->courseForSection($section);
@@ -711,7 +771,9 @@ final readonly class RegistrationBatchService
             ? null
             : $this->prerequisites->evaluate($id, $assignment, $required, $budget);
             $schedule =
-            $enrollment === null ? $this->schedules->evaluate($id, $section->id, $scheduleRead) : null;
+            $enrollment === null
+            ? $this->schedules->evaluate($id, $section->id, $scheduleRead, $replacingSection)
+            : null;
             $quote =
             $enrollment === null
             ? $this->billing->registrationQuote(
@@ -741,7 +803,7 @@ final readonly class RegistrationBatchService
                 $byStaff,
                 $window->isOpen($now),
                 $section->webRegistration,
-                $this->repository->enrolledCount($id, $section->termId),
+                max(0, $this->repository->enrolledCount($id, $section->termId) - (int) ($replacingSection !== null)),
                 $window->courseLimit,
                 $decision?->isMet() ?? true,
             ) : [];

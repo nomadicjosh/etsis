@@ -292,8 +292,9 @@ window.createWorkspaceOperations = function (ui) {
                     `${item.course_code} · ${item.section_code}`,
                     badge(item.status),
                     ["A", "N"].includes(item.status)
-                        ? button("Drop / withdraw", () =>
-                              ui.courseDrops().review(row.id, item.section_id, back),
+                        ? node("div", { class: "d-flex flex-wrap gap-2" },
+                              button("Change section", () => ui.batchRegistration().changeSection(row.id, item.section_id, back)),
+                              button("Drop / withdraw", () => ui.courseDrops().review(row.id, item.section_id, back)),
                           )
                         : "—",
                 ]),

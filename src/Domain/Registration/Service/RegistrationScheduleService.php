@@ -22,6 +22,7 @@ final readonly class RegistrationScheduleService
         EntityId $student,
         EntityId $section,
         ?RegistrationScheduleRead $read = null,
+        ?EntityId $replacingSection = null,
     ): RegistrationScheduleDecision {
         $read ??= new RegistrationScheduleRead();
         $policy = $this->records->policy();
@@ -34,6 +35,9 @@ final readonly class RegistrationScheduleService
                 $this->limit();
             }
             foreach ($rows as $row) {
+                if ($row["section_id"] === $replacingSection?->value) {
+                    continue;
+                }
                 $id = new EntityId($row["section_id"]);
                 $version = filter_var($row["version"], FILTER_VALIDATE_INT);
                 if ($version === false || $version < 0) {

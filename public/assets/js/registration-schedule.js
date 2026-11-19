@@ -333,3 +333,157 @@ window.createRegistrationPlanReview = function (ui) {
         );
     };
 };
+
+/* Shared add/drop section-change flow. Only the selected target is assessed; no browser history storage. */
+window.createSectionChange = function (ui) {
+    "use strict";
+    const { node, request, money, button, open, isCurrent = () => true } = ui;
+    const presenter = window.createRegistrationSchedule({ node });
+    return async function start({ student, from, baseUrl, onComplete, onBack = null }) {
+        const selection = { student_id: student, from_section_id: from };
+        let searchValue = "";
+        async function choose(after = null) {
+            const body = open("Change section");
+            const busy = node("p", { role: "status" }, "Finding sections of the same course and term…");
+            body.append(busy);
+            const page = await request(`${baseUrl}choices/`, "POST", {
+                ...selection,
+                search: searchValue,
+                after,
+            });
+            if (!body.isConnected || !isCurrent()) return;
+            const inputId = `section-change-search-${from}`;
+            const input = node("input", {
+                id: inputId,
+                type: "search",
+                class: "form-control",
+                maxlength: "80",
+                value: searchValue,
+            });
+            const form = node(
+                "form",
+                { class: "mb-3" },
+                node("label", { for: inputId, class: "form-label" }, "Find a section"),
+                input,
+            );
+            form.append(
+                button("Search", async () => {
+                    searchValue = input.value.trim();
+                    await choose();
+                }),
+            );
+            form.addEventListener("submit", (event) => {
+                event.preventDefault();
+                form.querySelector("button").click();
+            });
+            const list = node(
+                "div",
+                { class: "d-grid gap-2", "aria-label": "Replacement sections" },
+                page.items.map((item) =>
+                    node(
+                        "div",
+                        { class: "border rounded p-3" },
+                        node(
+                            "p",
+                            { class: "mb-2" },
+                            `${item.code} · Capacity ${item.capacity} · Section fee ${money(item.fee_minor, item.currency)}`,
+                        ),
+                        button(`Review ${item.code}`, () => review(item.id)),
+                    ),
+                ),
+            );
+            body.replaceChildren(
+                node("p", {}, `Current section: ${page.from_code}. Add/drop ends ${page.grace_ends_on}.`),
+                node(
+                    "p",
+                    {},
+                    "Review a replacement before changing anything. Eligibility, seats, published meetings and charges are checked together.",
+                ),
+                form,
+                list,
+            );
+            if (!page.items.length)
+                body.append(
+                    node(
+                        "p",
+                        { role: "status" },
+                        "No matching sections. Try another search or contact the registrar.",
+                    ),
+                );
+            if (page.next_after) body.append(button("Next sections", () => choose(page.next_after)));
+            if (after) body.append(button("First page", () => choose()));
+            if (onBack) body.append(button("Back", onBack));
+        }
+        async function review(to) {
+            const body = open("Review section change");
+            body.append(
+                node("p", { role: "status" }, "Checking the replacement and original charge reversal…"),
+                button("Choose another section", () => choose()),
+            );
+            const command = { ...selection, to_section_id: to };
+            const result = await request(`${baseUrl}review/`, "POST", command);
+            if (!body.isConnected || !isCurrent()) return;
+            let completed = false;
+            const pricing = result.financial;
+            body.replaceChildren(
+                node(
+                    "p",
+                    {},
+                    `From ${result.from.code} to ${result.target.section.code}. Effective ${result.from.effective_on}.`,
+                ),
+                presenter.registration(result.target, money),
+                node(
+                    "div",
+                    { class: "alert alert-info" },
+                    node(
+                        "p",
+                        {},
+                        `Original course-charge credit: ${money(pricing.credit_minor, pricing.currency)}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `Replacement charges: ${pricing.new_charge_minor === null ? "Needs review" : money(pricing.new_charge_minor, pricing.currency)}`,
+                    ),
+                    node(
+                        "p",
+                        {},
+                        `Account change: ${pricing.net_change_minor === null ? "Needs review" : money(pricing.net_change_minor, pricing.currency)}`,
+                    ),
+                ),
+                node(
+                    "p",
+                    {},
+                    "One confirmation removes the original current registration and academic credit, reverses its course charges, and registers the replacement. Term-wide fees stay in place. Restricted history is retained. Any account credit is reviewed separately for a cash refund.",
+                ),
+            );
+            const confirm = button(
+                "Confirm section change",
+                async () => {
+                    if (completed) return;
+                    const receipt = await request(`${baseUrl}commit/`, "POST", {
+                        ...command,
+                        operation_id: result.operation_id,
+                        revision: result.revision,
+                        review_token: result.review_token,
+                    });
+                    completed = true;
+                    if (body.isConnected && isCurrent()) await onComplete(receipt);
+                },
+                true,
+            );
+            confirm.disabled = !result.can_confirm;
+            body.append(
+                confirm,
+                button("Refresh review", () => review(to)),
+                button("Choose another section", () => choose()),
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "If the response is interrupted, retry the same confirmation. An accepted request returns its original result and cannot repeat the section change or its charges.",
+                ),
+            );
+        }
+        await choose();
+    };
+};
