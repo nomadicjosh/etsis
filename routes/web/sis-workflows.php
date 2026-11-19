@@ -378,6 +378,18 @@ return static function (Psr7Router $router): void {
         ->name("sis.report.studio.export");
     $router->get('/sis/report-studio/{id}/settings/', [SisRelationalReportController::class, 'settings']);
     $router->post('/sis/report-studio/{id}/settings/', [SisRelationalReportController::class, 'configure']);
+    $router->get('/sis/report-studio/{id}/exports/', [
+        \Application\Http\Controller\SisReportExportController::class, 'latest',
+    ]);
+    $router->post('/sis/report-studio/{id}/exports/', [
+        \Application\Http\Controller\SisReportExportController::class, 'request',
+    ]);
+    $router->post('/sis/report-studio/{id}/exports/{export}/cancel/', [
+        \Application\Http\Controller\SisReportExportController::class, 'cancel',
+    ]);
+    $router->post('/sis/report-studio/{id}/exports/{export}/download/', [
+        \Application\Http\Controller\SisReportExportController::class, 'download',
+    ]);
 
     $router
         ->map(["POST"], "/sis/term-types/", [

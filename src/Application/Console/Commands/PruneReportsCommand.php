@@ -29,6 +29,10 @@ final class PruneReportsCommand extends ConsoleCommand
             return self::INVALID;
         }
         try {
+            $exports = $this->codefy->make(\Domain\Reporting\Service\ReportExportRetention::class)->run(
+                apply: $this->getOptions('apply') === true,
+                limit: (int) $limit,
+            );
             $result = $this->codefy->make(ReportRetention::class)->run(
                 apply: $this->getOptions('apply') === true,
                 limit: (int) $limit
@@ -39,6 +43,7 @@ final class PruneReportsCommand extends ConsoleCommand
         }
         $this->terminalRaw(($result['apply'] ? 'Applied' : 'Preview only') . ': '
             . $result['examined'] . ' eligible reports; ' . $result['removed'] . ' removed.');
+        $this->terminalRaw($exports['examined'] . ' expired exports; ' . $exports['removed'] . ' removed.');
         return self::SUCCESS;
     }
 }

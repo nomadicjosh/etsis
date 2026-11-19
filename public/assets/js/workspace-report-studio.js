@@ -7,7 +7,7 @@ window.createWorkspaceReportStudio = function (ui) {
         dialog = null,
         opener = null,
         releaseScreen = () => {};
-    let lastTrigger = null;
+    let lastTrigger = null, exportTimer = null;
     document.addEventListener(
         "click",
         (event) => {
@@ -85,6 +85,8 @@ window.createWorkspaceReportStudio = function (ui) {
         widgets = [];
     }
     function cleanup(restoreFocus = true) {
+        clearTimeout(exportTimer);
+        exportTimer = null;
         destroyWidgets();
         releaseScreen();
         releaseScreen = () => {};
@@ -2568,6 +2570,121 @@ window.createWorkspaceReportStudio = function (ui) {
             panel.append(node("p", {}, "Executing results requires report-run permission."));
             return;
         }
+        const exports = node("section", { class: "record-section", "aria-label": "Complete report export" });
+        const exportStatus = node("p", { role: "status", "aria-live": "polite" });
+        const exportProgress = node("progress", { class: "w-100", "aria-label": "Complete export preparation", max: "1" });
+        const exportActions = node("div", { class: "inline-actions" });
+        exports.append(node("h3", { class: "h5" }, "Complete export"),
+            node("p", { class: "form-text" }, "Prepare all results in the background, up to 25,000 rows or 16 MiB. You can leave this screen and return. Downloads expire after 24 hours."),
+            exportStatus, exportProgress, exportActions);
+        body.insertBefore(exports, panel);
+        let exportJob = null, exportBusy = false, exportOperation = null, exportGeneration = 0;
+        const prepareExport = button("Prepare CSV", async () => {
+            if (exportBusy) return;
+            exportBusy = true;
+            exportGeneration++;
+            prepareExport.disabled = true;
+            cancelExport.disabled = downloadExport.disabled = true;
+            try {
+                if (!exportOperation) exportOperation = (await request("/sis/ui/operation-id/")).id;
+                const data = await request(`/sis/report-studio/${id}/exports/`, "POST", {
+                    operation_id: exportOperation, version: saved.version,
+                });
+                if (!exports.isConnected) return;
+                exportOperation = null;
+                renderExport(data.export);
+            } catch (error) {
+                if (!exports.isConnected) return;
+                throw error;
+            } finally {
+                exportBusy = false;
+                if (exports.isConnected) {
+                    prepareExport.disabled = ["queued", "running"].includes(exportJob?.status);
+                    cancelExport.disabled = downloadExport.disabled = false;
+                }
+            }
+        }, "btn-primary", () => {
+            prepareExport.disabled = exportBusy || ["queued", "running"].includes(exportJob?.status);
+        });
+        const cancelExport = button("Cancel export", async () => {
+            if (exportBusy) return;
+            exportBusy = true;
+            exportGeneration++;
+            prepareExport.disabled = downloadExport.disabled = true;
+            try {
+                const data = await request(`/sis/report-studio/${id}/exports/${exportJob.id}/cancel/`, "POST", {});
+                if (exports.isConnected) renderExport(data.export);
+            } catch (error) {
+                if (!exports.isConnected) return;
+                throw error;
+            } finally {
+                exportBusy = false;
+                if (exports.isConnected) {
+                    prepareExport.disabled = ["queued", "running"].includes(exportJob?.status);
+                    downloadExport.disabled = false;
+                }
+            }
+        });
+        const downloadExport = button("Download CSV", async () => {
+            try {
+                await requestFile(`/sis/report-studio/${id}/exports/${exportJob.id}/download/`, {}, "report-results.csv",
+                    { maximum: 16 * 1024 * 1024 });
+            } catch (error) {
+                if (!exports.isConnected) return;
+                if ([401, 403, 404].includes(error.status)) {
+                    downloadExport.hidden = cancelExport.hidden = true;
+                    exportStatus.textContent = "This export is no longer available. Reload the report to check access.";
+                }
+                throw error;
+            }
+        });
+        const refreshExport = button("Check status", () => checkExport());
+        exportActions.append(prepareExport, downloadExport, cancelExport, refreshExport);
+        function renderExport(job) {
+            exportGeneration++;
+            clearTimeout(exportTimer);
+            exportJob = job;
+            const pending = ["queued", "running"].includes(job?.status);
+            const messages = {
+                queued: "Queued. The background worker will prepare your export.",
+                running: "Preparing complete results. You may leave this screen; cancellation prevents publication.",
+                ready: `Ready · ${(job?.rows ?? 0).toLocaleString()} rows. Download before ${job?.expires_at ? new Date(job.expires_at).toLocaleString() : "expiry"}.`,
+                failed: "The export could not finish. Check report access and filters, then prepare a new export. No partial download was saved.",
+                cancelled: "Export cancelled. Its download has been removed.",
+            };
+            const message = job ? messages[job.status] || "Export unavailable." : "No current export.";
+            if (exportStatus.textContent !== message) exportStatus.textContent = message;
+            exportProgress.hidden = !pending;
+            prepareExport.disabled = exportBusy || pending;
+            downloadExport.hidden = job?.status !== "ready";
+            cancelExport.hidden = !pending && job?.status !== "ready";
+            refreshExport.hidden = !pending;
+            if (pending) exportTimer = setTimeout(checkExport, 4000);
+        }
+        async function checkExport() {
+            clearTimeout(exportTimer);
+            if (!exports.isConnected || exportBusy) return;
+            const attempt = ++exportGeneration;
+            if (document.hidden) {
+                exportTimer = setTimeout(checkExport, 4000);
+                return;
+            }
+            try {
+                const data = await request(`/sis/report-studio/${id}/exports/`);
+                if (exports.isConnected && attempt === exportGeneration) renderExport(data.export);
+            } catch (error) {
+                if (!exports.isConnected || attempt !== exportGeneration) return;
+                exportProgress.hidden = true;
+                exportStatus.textContent = "Export status is unavailable. Check access or reload this report.";
+                if ([401, 403, 404].includes(error.status)) {
+                    prepareExport.disabled = true;
+                    downloadExport.hidden = cancelExport.hidden = refreshExport.hidden = true;
+                }
+            }
+        }
+        renderExport(null);
+        await checkExport();
+        if (!panel.isConnected) return;
         let resultGeneration = 0;
         const load = async (offset) => {
             const attempt = ++resultGeneration;

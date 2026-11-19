@@ -1,0 +1,67 @@
+<?php
+
+declare(strict_types=1);
+
+// Included by the isolated HTTP bootstrap only. No application .env or real student data.
+$permissions = $app->make(\Domain\Access\Repository\AccessRepository::class);
+$permissions->assign(
+    \Domain\Access\Enum\GrantKind::UserRole,
+    $sis->access->actor,
+    $permissions->roleNamed('super')->id,
+    true
+);
+$sis->student();
+$report = \Domain\Shared\ValueObject\EntityId::generate();
+$app->make(\Domain\Reporting\Service\RelationalReportService::class)->save(
+    $report,
+    \Domain\Shared\ValueObject\EntityId::generate(),
+    -1,
+    'Fictional complete export',
+    [
+        'dataset' => 'students', 'columns' => [
+            ['field' => 'institutional_id', 'label' => 'Student ID', 'aggregate' => 'none'],
+        ], 'joins' => [], 'filters' => null, 'having' => null, 'sort' => [], 'distinct' => false,
+    ]
+);
+$events = $sis->sql->rows('sis_history_events');
+$base = '/sis/report-studio/' . $report->value . '/exports/';
+$id = \Domain\Shared\ValueObject\EntityId::generate();
+$response = $teachingPost($base, ['operation_id' => $id->value, 'version' => 0]);
+$data = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($response->getStatusCode() !== 202 || ($data['export']['status'] ?? null) !== 'queued') {
+    throw new RuntimeException('The private export request did not resolve through the real providers.');
+}
+$test = new \Symfony\Component\Console\Tester\CommandTester($kernel->all()['sis:reports:export']);
+if (
+    $test->execute(['--limit' => '0']) !== 2 || $test->execute([]) !== 0 ||
+    !str_contains($test->getDisplay(), 'Preview only: 1 export jobs; 0 ready; 0 failed.')
+) {
+    throw new RuntimeException('The export command failed its bounded preview-only default.');
+}
+if (
+    $test->execute(['--apply' => true]) !== 0 || !str_contains($test->getDisplay(), '1 ready; 0 failed.') ||
+    str_contains($test->getDisplay(), $report->value) || str_contains($test->getDisplay(), 'Fictional')
+) {
+    throw new RuntimeException('The registered worker failed or exposed private references.');
+}
+$download = $teachingPost($base . $id->value . '/download/', []);
+if (
+    $download->getStatusCode() !== 200 || $download->getHeaderLine('Content-Type') !== 'text/csv; charset=UTF-8' ||
+    !str_contains((string) $download->getBody(), 'Student ID') ||
+    !str_contains($download->getHeaderLine('Content-Disposition'), 'attachment')
+) {
+    throw new RuntimeException('The private complete CSV response lost its transport protections.');
+}
+$cancelled = $teachingPost($base . $id->value . '/cancel/', []);
+if ($cancelled->getStatusCode() !== 200 || $sis->sql->rows('sis_report_export_chunks') !== []) {
+    throw new RuntimeException('Cancelling an export did not remove its private download.');
+}
+$second = \Domain\Shared\ValueObject\EntityId::generate();
+$teachingPost($base, ['operation_id' => $second->value, 'version' => 0]);
+$sis->sql->update('users', ['sign_in_enabled' => 0], ['user_id' => $sis->access->actor->value]);
+if (
+    $test->execute(['--apply' => true]) !== 1 || !str_contains($test->getDisplay(), '0 ready; 1 failed.') ||
+    $sis->sql->rows('sis_report_export_chunks') !== [] || $sis->sql->rows('sis_history_events') !== $events
+) {
+    throw new RuntimeException('Disabled sign-in retained export authority or changed academic history.');
+}

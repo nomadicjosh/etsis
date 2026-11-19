@@ -213,27 +213,7 @@ final readonly class ReportLifecycleService
         }
         $state = $this->storage->get($id) ?? throw new RecordNotFoundException('Static report not found.');
         $manifest = $this->manifest($id, $state);
-        $index = intdiv($offset, 50);
-        $rows = [];
-        if (isset($manifest['pages'][$index])) {
-            $encrypted = $this->storage->page($id, $index) ??
-            throw new \RuntimeException('Static report page is missing.');
-            $packet = $this->cipher->open($encrypted);
-            if (!hash_equals($manifest['pages'][$index], hash('sha256', $packet))) {
-                throw new \RuntimeException('Static report page could not be verified.');
-            }
-            $data = json_decode($packet, true, 12, JSON_THROW_ON_ERROR);
-            if (
-                $data['report_id'] !== $id->value || $data['capture_id'] !== $manifest['capture_id'] ||
-                $data['page'] !== $index || !is_array($data['rows']) ||
-                count($data['rows']) !== min(50, $manifest['row_count'] - $offset)
-            ) {
-                throw new \RuntimeException('Static report page does not match its capture.');
-            }
-            $rows = $data['rows'];
-        } elseif ($offset < $manifest['row_count']) {
-            throw new \RuntimeException('Static report page is missing.');
-        }
+        $rows = new ReportSnapshotReader($this->storage, $this->cipher)->page($id, $manifest, $offset);
         $this->audit->record($actor, 'report.static_read', $id);
         $this->read($id, $actor);
         return ['columns' => $manifest['columns'], 'items' => $rows, 'offset' => $offset,
@@ -316,18 +296,7 @@ final readonly class ReportLifecycleService
      */
     private function manifest(EntityId $id, array $state): array
     {
-        $data = json_decode($this->cipher->open($state['encrypted_manifest'] ?? ''), true, 12, JSON_THROW_ON_ERROR);
-        if (
-            !is_array($data) || ($state['mode'] ?? null) !== 'static' || ($data['report_id'] ?? null) !== $id->value ||
-            ($data['capture_id'] ?? null) !== $state['capture_id'] || !is_array($data['columns'] ?? null) ||
-            !is_int($data['row_count'] ?? null) || $data['row_count'] < 0 || $data['row_count'] > 5000 ||
-            !is_bool($data['grouped'] ?? null) || ($data['captured_at'] ?? null) !== $state['captured_at'] ||
-            !is_int($data['definition_version'] ?? null) ||
-            !is_array($data['pages'] ?? null) || count($data['pages']) !== (int) ceil($data['row_count'] / 50)
-        ) {
-            throw new \RuntimeException('Static report capture could not be verified.');
-        }
-        return $data;
+        return new ReportSnapshotReader($this->storage, $this->cipher)->manifest($id, $state);
     }
     /** @param array<string,mixed> $request
      * @return array<string,mixed>|null

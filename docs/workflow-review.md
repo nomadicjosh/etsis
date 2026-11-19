@@ -126,6 +126,38 @@ php codex sis:reports:prune --apply --limit=50
 
 The maximum batch is 100 reports. Commands print aggregate counts only. If a larger backlog exists, successive hourly batches continue removal; access is blocked from the expiry instant regardless of cleanup timing. The migration uses portable schema definitions compiled against the framework's five supported dialects. Runtime capture and cleanup have been exercised on SQLite; the configured MariaDB connection also passed a bounded, read-only capture check. PostgreSQL, SQL Server and Oracle require deployment integration acceptance before claiming runtime certification.
 
+### Complete report exports
+
+Open a saved **Report Studio** report and choose **Prepare CSV** in **Complete export**. This queues a private export of all matching results, rather than downloading only the visible page. **Export page** remains available for a quick page download. The complete-export panel also works for shared recipients who retain report-run and source-data permissions; creating or changing a report still requires the separate management duty.
+
+The panel shows **Queued**, **Preparing** or **Ready**, with an indeterminate preparation bar, **Check status**, **Cancel export** and **Download CSV**. There is no invented completion percentage. Staff may leave the screen and return to the same report to see their current export. Polling stops when the screen closes and pauses requests while the tab is hidden. Requests retain their operation reference after an uncertain response; repeated clicks reuse an existing queued/running export. Preparing a new export replaces that account's earlier ready download, keeping one downloadable result per report and requester.
+
+Dynamic exports capture current data when the worker runs, using one consistent read transaction for the complete traversal. They preserve the saved definition revision queued by the requester; definition/lifecycle changes require a fresh request. Static exports read the existing authenticated capture, including its original columns and results, without running a live query. An export does not change a dynamic report into a static one, alter its sharing or make an academic decision.
+
+Complete exports are limited to **25,000 rows**, **16 MiB** and a cooperative **30-second** source traversal. The source is paged in at most fifty rows; crypto work and the source callback are included in the deadline checks. Static captures retain their separate 5,000-row/8 MiB limits. An excessive, interrupted or unauthorized export publishes no partial download. Per-query timeouts remain deployment configuration; the cooperative deadline cannot interrupt a query already executing. Large/multi-engine load acceptance remains a release task.
+
+Only the requester can inspect, cancel or download their export, even if another account owns or administers the shared report. Current account enablement, report ownership/sharing, report expiry and every referenced source/field permission are checked before execution, publication and download. Downloads authenticate the complete manifest and every encrypted CSV chunk before sending response bytes, and recheck access/status afterward. Output has formula protection for headers and values, attachment disposition, no-store, nosniff and a sandbox policy. No student rows, SQL, query definitions, error chains or credentials enter queue metadata or worker output. Browser storage is not used.
+
+Result chunks and their scoped manifest remain encrypted in `sis_report_export_chunks` and `sis_report_exports`. Plaintext CSV exists only in bounded worker/download memory, never in a temporary file. These are disposable operational artifacts, not event journals. Request, publication, cancellation and download record metadata-only audits. Cancellation removes any ready output and prevents a running worker from publishing; it does not forcibly interrupt a database query. Work claims use a two-minute lease with at most three interrupted-worker attempts, and a replaced lease cannot publish over the newer worker.
+
+Downloads expire **24 hours after request**, independently of the report's own removal setting. Report expiry, removal or withdrawn sharing blocks export access immediately. The existing hourly `sis:reports:prune` command also removes bounded batches of expired export jobs and encrypted chunks; event, student and financial history remain untouched. An institution's downloaded copies and backups have separate retention obligations.
+
+Migration `20261119000006_CreateSisReportExports` adds the two operational tables. The existing scheduler prepares one queued export per minute, independently of email delivery. Invoke the normal scheduler every minute as documented above. Deployment operators can inspect or process work manually:
+
+```sh
+# Preview pending jobs; no report data is read or exported.
+php codex sis:reports:export --limit=1
+# Prepare one complete export in the background worker.
+php codex sis:reports:export --apply --limit=1
+# Preview/remove expired reports and export artifacts using the existing command.
+php codex sis:reports:prune --limit=50
+php codex sis:reports:prune --apply --limit=50
+```
+
+The worker accepts 1–5 jobs per invocation and prints counts only. Its authority comes from the recorded requester and current database permissions, without creating a login session. Keep the default single-job worker and serialized schedule on small servers. Source consistency is shared with ordinary static captures, and both static page reads and exports share protected-capture validation. There is no second query builder, export permission grant, event stream or recovery queue.
+
+Fictional SQLite checks cover multi-page output, a 5,001-row export, static results after live changes, formula protection, changed definitions/permissions, cancellation, lease replacement/exhaustion, damaged/missing chunks, audit rollback and cleanup during an interrupted capture. Real-provider HTTP/console checks preserve CSRF, private transport and disabled-account enforcement. Browser checks cover navigation, retries, keyboard controls, narrow-screen reflow and accessibility scanning. The two table definitions compile with the framework's five supported dialects. On 2026-11-19, the migration was applied to the configured development MariaDB database and the native worker preview succeeded; the database had no saved reports or export jobs, and all three protected journal checksums remained unchanged. Populated MariaDB export/load acceptance remains separate.
+
 ### Register students selected from a saved report
 
 Open a saved **dynamic Report Studio** report based on **Students & current primary program**, **Student programs & catalog cohorts** or **Academic credits & final grades**, then choose **Use students → Choose students for registration**. The action is available for detail reports with no summarized columns or post-summary conditions. Section reports and summaries remain report results; etSIS does not guess which individual students a headcount represents. Static captures and unsaved drafts do not provide this live handoff. Earlier simple reports can join this workflow by explicitly saving their report settings first.

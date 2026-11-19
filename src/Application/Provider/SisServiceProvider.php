@@ -217,6 +217,10 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Documents\ProtectedTranscriptRenderer::class,
             \Domain\Reporting\Repository\RelationalReportRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlRelationalReportRepository::class,
+            \Domain\Reporting\Repository\ReportExportRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlReportExportRepository::class,
+            \Domain\Reporting\Repository\ReportExportCapture::class =>
+                \Infrastructure\Reporting\SqlReportExportCapture::class,
             \Domain\Reporting\Repository\RelationalReportSource::class =>
                 \Infrastructure\Reporting\SqlRelationalReportSource::class,
             \Domain\Reporting\Repository\ReportLifecycleRepository::class =>

@@ -173,6 +173,7 @@ return [
         \Application\Console\Commands\VerifyHistoryCommand::class,
         \Application\Console\Commands\PruneLoginSessionsCommand::class,
         \Application\Console\Commands\PruneReportsCommand::class,
+        \Application\Console\Commands\ExportReportsCommand::class,
         \Application\Console\Commands\ProcessAdmissionDocumentsCommand::class,
         \Application\Console\Commands\SendAccountSetupCommand::class,
         \Application\Console\Commands\SendCampaignMessagesCommand::class,

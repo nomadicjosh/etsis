@@ -59,6 +59,15 @@ final class ConsoleBootstrapTest extends TestCase
         self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
     }
 
+    public function testReportExportsUseActualProvidersPrivateRoutesCsrfAndBackgroundAuthority(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-report-exports']);
+        $process->setTimeout(12);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testSessionRetentionIsRegisteredPreviewOnlyByDefaultAndBounded(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
