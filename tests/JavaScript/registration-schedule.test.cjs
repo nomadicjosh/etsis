@@ -349,3 +349,26 @@ test("group registration lazily presents each price and carries the reviewed pro
     assert.equal(saved.data.operation_id, "operation");
     assert.equal(saved.data.revision, "revision");
 });
+
+test("prerequisite details render lazily from captured labels and omit private support", () => {
+    const window = {};
+    vm.runInNewContext(presentation, { window });
+    const ui = window.createRegistrationSchedule({ node });
+    const details = ui.prerequisites({ course_statuses: ["met", "missing"] }, [
+        { code: "MATH.101", title: "Fictional <img> algebra" },
+        { code: "ENG.101", title: "Fictional writing" },
+    ]);
+    assert.equal(details.textContent, "Required courses");
+    details.open = true;
+    details.events.toggle();
+    assert.match(details.textContent, /MATH.101.*Verified completed coursework/);
+    assert.match(details.textContent, /ENG.101.*Passing coursework not verified for this pursuit/);
+    assert.equal(
+        walk(details).some((e) => e.tag === "img"),
+        false,
+    );
+    const length = details.textContent.length;
+    details.events.toggle();
+    assert.equal(details.textContent.length, length);
+    assert.equal(ui.prerequisites({ course_statuses: [] }, []), null);
+});

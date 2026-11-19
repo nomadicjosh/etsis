@@ -343,6 +343,10 @@ final readonly class RegistrationBatchService
                 $programs[$program->value] = $program;
             }
         }
+        sort($required, SORT_STRING);
+        $labels = $programs === [] ? [] : $this->repository->courseLabels($required);
+        $prerequisiteCourses = $programs === [] ? [] : array_map(static fn(string $id): array =>
+            $labels[$id] ?? ["code" => null, "title" => null], $required);
         $rules =
         $programs === [] ? [] : $this->billing->rules($section->termId, $budget, array_values($programs));
         foreach ($selection->students as $id) {
@@ -420,6 +424,7 @@ final readonly class RegistrationBatchService
                                 : ($decision->isMet()
                                     ? "met"
                                     : "missing")),
+                    "course_statuses" => $decision?->courseStatuses() ?? [],
                     "missing_count" => $decision?->missingCount(),
                     "revision" => $decision?->revision(),
                 ],
@@ -440,6 +445,7 @@ final readonly class RegistrationBatchService
                 "course_version_id" => $course->publicationVersionId?->value,
                 "course_code" => $course->code,
                 "course_title" => $course->title,
+                "prerequisite_courses" => $prerequisiteCourses,
                 "credits_milli" => $course->creditsMilli,
                 "active" => $section->active && $course->active,
                 "fee_minor" => $section->fee->minor,

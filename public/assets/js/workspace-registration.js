@@ -296,15 +296,20 @@ window.createWorkspaceRegistration = function (ui) {
                     `${student.given_name} ${student.family_name}`,
                     student.institutional_id,
                     student.active ? "Active" : "Inactive",
-                    student.prerequisites?.status === "missing"
-                        ? `Missing ${student.prerequisites.missing_count} ${student.prerequisites.missing_count === 1 ? "prerequisite" : "prerequisites"}`
-                        : {
-                              met: "Verified for this pursuit",
-                              not_required: "No course prerequisites",
-                              not_rechecked: ["A", "N"].includes(student.enrollment_status)
-                                  ? "Existing registration — unchanged"
-                                  : "Not checked — closed enrollment",
-                          }[student.prerequisites?.status] || "Checked on confirmation",
+                    node(
+                        "div",
+                        {},
+                        student.prerequisites?.status === "missing"
+                            ? `Missing ${student.prerequisites.missing_count} ${student.prerequisites.missing_count === 1 ? "prerequisite" : "prerequisites"}`
+                            : {
+                                  met: "Verified for this pursuit",
+                                  not_required: "No course prerequisites",
+                                  not_rechecked: ["A", "N"].includes(student.enrollment_status)
+                                      ? "Existing registration — unchanged"
+                                      : "Not checked — closed enrollment",
+                              }[student.prerequisites?.status] || "Checked on confirmation",
+                        schedule.prerequisites(student.prerequisites, reviewed.section.prerequisite_courses),
+                    ),
                     schedule.text(student.schedule),
                     ["A", "N"].includes(student.enrollment_status)
                         ? "Already enrolled — keep"

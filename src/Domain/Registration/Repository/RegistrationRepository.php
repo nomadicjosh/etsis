@@ -14,6 +14,9 @@ use Domain\Student\Restriction;
 
 interface RegistrationRepository
 {
+    /** @param list<string> $ids
+     * @return array<string,array{code:string,title:string}> */
+    public function courseLabels(array $ids): array;
     public function course(EntityId $id): Course;
     public function section(EntityId $id): Section;
     public function courseForSection(Section $section): Course;

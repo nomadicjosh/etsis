@@ -60,6 +60,35 @@ window.createRegistrationSchedule = function (ui) {
             )
         );
     };
+    function prerequisites(value, courses = []) {
+        if (!courses.length || !value?.course_statuses?.length) return null;
+        const details = node("details", { class: "mb-3" }, node("summary", {}, "Required courses"));
+        let rendered = false;
+        details.addEventListener("toggle", () => {
+            if (!details.open || rendered) return;
+            rendered = true;
+            details.append(
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Current catalog labels. Checks use verified coursework allowed for this program pursuit.",
+                ),
+                node(
+                    "ul",
+                    {},
+                    courses.map((course, position) =>
+                        node(
+                            "li",
+                            {},
+                            `${course.code || "Course label unavailable"}${course.title ? ` · ${course.title}` : ""}: ${value.course_statuses[position] === "met" ? "Verified completed coursework" : "Passing coursework not verified for this pursuit"}`,
+                        ),
+                    ),
+                ),
+            );
+        });
+        return details;
+    }
+
     function charges(value, money) {
         return node(
             "section",
@@ -125,6 +154,7 @@ window.createRegistrationSchedule = function (ui) {
                 {},
                 `Prerequisites: ${{ met: "Verified for this program pursuit", missing: "Required coursework is missing", not_required: "No course prerequisites", not_rechecked: "Not rechecked for this record" }[student.prerequisites.status]}`,
             ),
+            prerequisites(student.prerequisites, review.section.prerequisite_courses),
             student.issues.length
                 ? node(
                       "ul",
@@ -147,5 +177,5 @@ window.createRegistrationSchedule = function (ui) {
             ),
         );
     }
-    return { text, panel, charges, registration, canConfirm };
+    return { text, panel, charges, registration, prerequisites, canConfirm };
 };

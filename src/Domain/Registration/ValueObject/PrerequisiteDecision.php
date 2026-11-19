@@ -37,33 +37,42 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         }
         $courses = $credits = [];
         foreach ($support as $reference) {
-            $keys = ['course_id', 'credit_id', 'origin', 'source_id', 'academic_version',
-                'registration_version', 'pursuit_version'];
+            $keys = [
+                "course_id",
+                "credit_id",
+                "origin",
+                "source_id",
+                "academic_version",
+                "registration_version",
+                "pursuit_version",
+            ];
             if (
-                !is_array($reference) || count($reference) !== count($keys) ||
+                !is_array($reference) ||
+                count($reference) !== count($keys) ||
                 array_diff(array_keys($reference), $keys) !== []
             ) {
                 throw new CorruptHistoryException();
             }
-            foreach (['course_id', 'credit_id', 'source_id'] as $key) {
+            foreach (["course_id", "credit_id", "source_id"] as $key) {
                 self::id($reference[$key]);
             }
             if (
-                !in_array($reference['origin'], ['institutional', 'transfer'], true) ||
-                !in_array($reference['course_id'], $required, true) ||
-                isset($courses[$reference['course_id']]) || isset($credits[$reference['credit_id']])
+                !in_array($reference["origin"], ["institutional", "transfer"], true) ||
+                !in_array($reference["course_id"], $required, true) ||
+                isset($courses[$reference["course_id"]]) ||
+                isset($credits[$reference["credit_id"]])
             ) {
                 throw new CorruptHistoryException();
             }
-            self::version($reference['academic_version'], 1);
-            self::version($reference['pursuit_version'], 1);
-            if ($reference['origin'] === 'institutional') {
-                self::version($reference['registration_version'], 0);
-            } elseif ($reference['registration_version'] !== null) {
+            self::version($reference["academic_version"], 1);
+            self::version($reference["pursuit_version"], 1);
+            if ($reference["origin"] === "institutional") {
+                self::version($reference["registration_version"], 0);
+            } elseif ($reference["registration_version"] !== null) {
                 throw new CorruptHistoryException();
             }
-            $courses[$reference['course_id']] = true;
-            $credits[$reference['credit_id']] = true;
+            $courses[$reference["course_id"]] = true;
+            $credits[$reference["credit_id"]] = true;
         }
         $orderedCourses = array_keys($courses);
         sort($orderedCourses, SORT_STRING);
@@ -78,6 +87,18 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
     public function isMet(): bool
     {
         return count($this->required) === count($this->support);
+    }
+
+    /** Response-local positions match the shared prerequisite list; no supporting record identities.
+     * @return list<string>
+     */
+    public function courseStatuses(): array
+    {
+        $supported = array_fill_keys(array_column($this->support, "course_id"), true);
+        return array_map(
+            static fn(string $id): string => isset($supported[$id]) ? "met" : "missing",
+            $this->required,
+        );
     }
 
     public function missingCount(): int
@@ -97,11 +118,11 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
     public function revision(): string
     {
         $facts = $this->facts();
-        foreach ($facts['support'] as &$reference) {
+        foreach ($facts["support"] as &$reference) {
             ksort($reference, SORT_STRING);
         }
         unset($reference);
-        return hash('sha256', json_encode($facts, JSON_THROW_ON_ERROR));
+        return hash("sha256", json_encode($facts, JSON_THROW_ON_ERROR));
     }
 
     /** Strict recorded-evidence reader; an incomplete decision cannot describe accepted registration.
@@ -111,13 +132,18 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
     {
         if (
             count($facts) !== 3 ||
-            array_diff(array_keys($facts), ['assignment_id', 'required_course_ids', 'support']) !== [] ||
-            !is_array($facts['required_course_ids']) || !is_array($facts['support'])
+            array_diff(array_keys($facts), ["assignment_id", "required_course_ids", "support"]) !== [] ||
+            !is_array($facts["required_course_ids"]) ||
+            !is_array($facts["support"])
         ) {
             throw new CorruptHistoryException();
         }
-        self::id($facts['assignment_id']);
-        $decision = new self(new EntityId($facts['assignment_id']), $facts['required_course_ids'], $facts['support']);
+        self::id($facts["assignment_id"]);
+        $decision = new self(
+            new EntityId($facts["assignment_id"]),
+            $facts["required_course_ids"],
+            $facts["support"],
+        );
         if (!$decision->isMet()) {
             throw new CorruptHistoryException();
         }
@@ -127,8 +153,11 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
     /** @return array<string,mixed> */
     private function facts(): array
     {
-        return ['assignment_id' => $this->assignment->value, 'required_course_ids' => $this->required,
-            'support' => $this->support];
+        return [
+            "assignment_id" => $this->assignment->value,
+            "required_course_ids" => $this->required,
+            "support" => $this->support,
+        ];
     }
 
     private static function id(mixed $value): void
@@ -153,7 +182,7 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
     /** @return array<string,string> */
     public function __debugInfo(): array
     {
-        return ['prerequisites' => '[protected registration evidence]'];
+        return ["prerequisites" => "[protected registration evidence]"];
     }
 
     /** @return array<string,string> */

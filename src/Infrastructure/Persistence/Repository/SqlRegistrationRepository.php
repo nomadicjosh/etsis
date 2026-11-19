@@ -30,6 +30,28 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
     ) {
     }
 
+    public function courseLabels(array $ids): array
+    {
+        if (count($ids) > 100 || !array_is_list($ids)) {
+            throw new \InvalidArgumentException("Use a bounded prerequisite selection.");
+        }
+        if ($ids === []) {
+            return [];
+        }
+        foreach ($ids as $id) {
+            new EntityId($id);
+        }
+        $q = $this->sql->quote(...);
+        $rows = $this->sql->fetch("SELECT " . implode(", ", array_map($q, ["id", "code", "title"])) .
+            " FROM " . $q("sis_courses") . " WHERE " . $q("id") . " IN (" .
+            implode(",", array_fill(0, count($ids), "?")) . ")", $ids, 100);
+        $labels = [];
+        foreach ($rows as $row) {
+            $labels[$row["id"]] = ["code" => $row["code"], "title" => $row["title"]];
+        }
+        return $labels;
+    }
+
     public function course(EntityId $id): Course
     {
         $q = $this->sql->quote(...);

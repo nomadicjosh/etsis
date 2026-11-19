@@ -145,6 +145,14 @@ All new students' preview checks share the existing 400-page/2,000-event academi
 
 This extends the existing acceptance event with explicitly optional historical evidence: earlier events remain valid with unknown references. It adds no event type, schema migration, parallel journal, permission or inferred attribution. The shared journal's operator verifier now resolves both directions of the `work_pursuit` stream mapping, including its protected receipts; the isolated debugger run confirmed the missing `WorkPursuit` aggregate mapping before the repair.
 
+### See which prerequisite courses need attention
+
+Individual staff registration, group registration and student self-service now share **Required courses** details. Each course shows **Verified completed coursework** or **Passing coursework not verified for this pursuit**. A missing result does not claim the student never took the course: earlier-pursuit work, unverified grades or other unavailable support may require registrar review. The existing course-prerequisite contract still requires every listed course.
+
+The shared labels are identified as current catalog labels, not historical course titles. A bounded query loads at most 100 prerequisite identities once for the section; per-student responses contain only compact statuses in that same order. Grade values, supporting credit/source identities and protected evidence remain absent. Details render only when opened, using the already captured response, with no further academic replay or request. Existing registrations are not rechecked or given an invented current checklist.
+
+Receiving-course corrections on transfer awards change current eligibility checks and invalidate pending registration reviews. They do not rewrite prerequisite evidence retained by an earlier accepted registration, and original accepted retries remain unchanged. Changed displayed catalog labels also require a fresh pending review. Preview and checklist inspection append no events, create no charges and change no academic facts. This extension requires no migration or new permission. Fictional validation passed 48 PHP tests and 10 JavaScript tests. A focused single-worker browser check also verified lazy checklist rendering, escaped labels, blocked partial-group submission, narrow-screen behavior and automated accessibility checks. Broader manual accessibility and institution-led acceptance remain separate work.
+
 Full versioned prerequisite/co-requisite expressions, minimum-grade prerequisite policies and complete eligibility-policy publication remain separate roadmap work. The current prerequisite contract requires all listed courses.
 
 ## Accepted server decision order
