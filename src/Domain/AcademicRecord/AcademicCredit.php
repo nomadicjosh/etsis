@@ -12,6 +12,7 @@ use Domain\AcademicRecord\Event\InstitutionalCreditWasDropped;
 use Domain\AcademicRecord\Event\AcademicCompletionWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted;
+use Domain\AcademicRecord\Event\InstitutionalCourseWasCorrected;
 use Domain\AcademicRecord\Event\InstitutionalPostingTermWasCorrected;
 use Domain\AcademicRecord\ValueObject\CreditSnapshot;
 use Domain\AcademicRecord\ValueObject\CreditUnitCorrection;
@@ -38,6 +39,8 @@ final class AcademicCredit extends EventSourcedAggregate
     /** @var array{term_id:string,term_code:string,decision_id:string}|null */
     private ?array $postingTerm = null;
     private ?string $originalCourseVersion = null;
+    private ?string $registrationCourseId = null;
+    private bool $awardedCourseCorrected = false;
     /** @var array<string, array<string, mixed>> */
     private array $gradeChanges = [];
     private ?string $pendingGradeChange = null;
@@ -55,6 +58,7 @@ final class AcademicCredit extends EventSourcedAggregate
                     AcademicCompletionWasRecorded::class,
                     InstitutionalAcademicPeriodWasRecorded::class,
                     InstitutionalCourseWasAccepted::class,
+                    InstitutionalCourseWasCorrected::class,
                     InstitutionalPostingTermWasCorrected::class,
                 ],
                 true,
@@ -85,6 +89,7 @@ final class AcademicCredit extends EventSourcedAggregate
         $this->credit = $p["credit"];
         $this->registrationTermId = $p["credit"]["term_id"];
         $this->originalCourseVersion = $p["credit"]["course_version_id"];
+        $this->registrationCourseId = $p["credit"]["course_id"];
         $this->grade = $p["grade"];
         $this->section = $p["section_id"];
         $this->policies = $p["policies"];
@@ -336,6 +341,43 @@ final class AcademicCredit extends EventSourcedAggregate
         new CreditSnapshot($this->credit);
     }
 
+    public function registrationCourseId(): ?string
+    {
+        return $this->registrationCourseId;
+    }
+
+    public function registrationCourseVersion(): ?string
+    {
+        return $this->originalCourseVersion;
+    }
+
+    public function canCorrectAwardedCourse(): bool
+    {
+        return $this->canCorrectSource() && $this->grade !== null &&
+        $this->credit["grade_id"] !== null && $this->pendingGradeChange === null;
+    }
+
+    public function whenInstitutionalCourseWasCorrected(InstitutionalCourseWasCorrected $event): void
+    {
+        $p = $event->payload();
+        $this->assertNext($p);
+        if (
+            !$this->canCorrectAwardedCourse() ||
+            $p["previous_course_id"] !== $this->credit["course_id"] ||
+            $p["previous_course_version_id"] !== $this->credit["course_version_id"]
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->awardedCourseCorrected = true;
+        $this->credit["course_id"] = $p["course_id"];
+        $this->credit["course_version_id"] = $p["course_version_id"];
+        $this->credit["course_code"] = $p["course_code"];
+        $this->credit["course_title"] = $p["course_title"];
+        ++$this->credit["version"];
+        $this->decision = $p["decision_id"];
+        new CreditSnapshot($this->credit);
+    }
+
     public function whenInstitutionalCourseWasAccepted(InstitutionalCourseWasAccepted $event): void
     {
         $p = $event->payload();
@@ -359,7 +401,8 @@ final class AcademicCredit extends EventSourcedAggregate
     /** Acceptances resolve an unknown inception reference; they never replace known offering facts. */
     public function canAcceptCourse(): bool
     {
-        return $this->originalCourseVersion === null &&
+        return !$this->awardedCourseCorrected && $this->pendingGradeChange === null &&
+        $this->originalCourseVersion === null &&
         $this->sectionVersion === null &&
         ($this->credit === null || $this->canCorrectSource());
     }

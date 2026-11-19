@@ -10,6 +10,7 @@ use Domain\AcademicRecord\Event\InstitutionalCreditWasDropped;
 use Domain\AcademicRecord\Event\AcademicCompletionWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted;
+use Domain\AcademicRecord\Event\InstitutionalCourseWasCorrected;
 use Domain\AcademicRecord\Event\InstitutionalPostingTermWasCorrected;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
@@ -49,6 +50,16 @@ final class AcademicEventSchema
                 "previous_term_code",
                 "term_id",
                 "term_code",
+            ],
+            InstitutionalCourseWasCorrected::class => [
+                "decision_id",
+                "previous_decision_id",
+                "previous_course_id",
+                "course_id",
+                "previous_course_version_id",
+                "course_version_id",
+                "course_code",
+                "course_title",
             ],
             InstitutionalCourseWasAccepted::class => [
                 "decision_id",
@@ -151,7 +162,21 @@ final class AcademicEventSchema
                         self::invalid();
                     }
                 }
-            } elseif ($class === InstitutionalCourseWasAccepted::class) {
+            } elseif (
+                in_array(
+                    $class,
+                    [InstitutionalCourseWasAccepted::class, InstitutionalCourseWasCorrected::class],
+                    true,
+                )
+            ) {
+                if ($class === InstitutionalCourseWasCorrected::class) {
+                    foreach (["previous_course_id", "course_id"] as $key) {
+                        if (!is_string($payload[$key])) {
+                            self::invalid();
+                        }
+                        new EntityId($payload[$key]);
+                    }
+                }
                 foreach (["course_version_id", "previous_course_version_id"] as $key) {
                     if ($key === "previous_course_version_id" && $payload[$key] === null) {
                         continue;

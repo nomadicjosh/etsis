@@ -26,6 +26,7 @@ interface AcademicCreditRepository
         EntityId $credit,
         PublishedCourseDefinition $definition,
         ?EntityId $previous,
+        EntityId $previousCourse,
     ): void;
     /** @return array<string,mixed>|null */
     public function enrollment(EntityId $enrollment): ?array;

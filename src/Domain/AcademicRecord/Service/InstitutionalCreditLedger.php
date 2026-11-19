@@ -226,6 +226,8 @@ final readonly class InstitutionalCreditLedger
                         "id" => $root->pendingGradeChange()["details"]["decision_id"],
                         "status" => "pending",
                     ],
+            "can_correct_course" => $canAmend && $root->canCorrectAwardedCourse() && $this->canCorrectCourse(),
+            "course_id" => $facts["course_id"],
             "can_accept_course" =>
                 $canAmend &&
                 $root->canAcceptCourse() &&
@@ -1254,6 +1256,8 @@ final readonly class InstitutionalCreditLedger
             "academic_on" => $root->academicOn(),
             "retained_term_code" => $root->postingTerm()["term_code"] ?? null,
             "registration_term_id" => $root->registrationTermId() ?? $facts["term_id"],
+            "registration_course_id" => $root->registrationCourseId() ?? $facts["course_id"],
+            "registration_course_version_id" => $root->registrationCourseVersion(),
         ];
     }
     /** Internal verification only; the caller authorizes and locks the student.
@@ -1280,6 +1284,8 @@ final readonly class InstitutionalCreditLedger
             "academic_on" => $root->academicOn(),
             "retained_term_code" => $root->postingTerm()["term_code"] ?? null,
             "registration_term_id" => $root->registrationTermId() ?? $facts["term_id"],
+            "registration_course_id" => $root->registrationCourseId() ?? $facts["course_id"],
+            "registration_course_version_id" => $root->registrationCourseVersion(),
         ];
     }
     /**
@@ -1334,6 +1340,8 @@ final readonly class InstitutionalCreditLedger
                         => "period_recorded",
                     $e instanceof \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted
                         => "course_accepted",
+                    $e instanceof \Domain\AcademicRecord\Event\InstitutionalCourseWasCorrected
+                        => "course_corrected",
                     $e instanceof \Domain\AcademicRecord\Event\InstitutionalPostingTermWasCorrected
                         => "posting_term_corrected",
                     $e instanceof FinalGradeWasDecided => "grade_decided",
@@ -1597,6 +1605,16 @@ final readonly class InstitutionalCreditLedger
             return false;
         }
     }
+    private function canCorrectCourse(): bool
+    {
+        try {
+            $this->access->requirePermission(AcademicCourseService::CORRECTION_PERMISSION);
+            return true;
+        } catch (AccessDeniedException) {
+            return false;
+        }
+    }
+
     private function canCorrectPlacement(): bool
     {
         try {

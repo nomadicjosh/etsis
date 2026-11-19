@@ -172,10 +172,11 @@ final readonly class SqlAcademicCreditRepository implements AcademicCreditReposi
         EntityId $credit,
         PublishedCourseDefinition $definition,
         ?EntityId $previous,
+        EntityId $previousCourse,
     ): void {
         $facts = $this->projection($credit) ?? throw new CorruptHistoryException();
         if (
-            $facts["course_id"] !== $definition->courseId->value ||
+            $facts["course_id"] !== $previousCourse->value ||
             $facts["course_version_id"] !== $previous?->value
         ) {
             throw new CorruptHistoryException();

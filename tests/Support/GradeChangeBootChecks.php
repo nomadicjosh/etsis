@@ -193,14 +193,14 @@ $sourcePublication = $sis->publishCourse($section->courseId);
 $sis->access->staff = false;
 $sis->access->grants = ["sis:gradebook:amend", "sis:student:read", "sis:gradebook:closed"];
 $sourceBase = "/sis/sections/" . $section->id->value . "/students/" . $student->id->value;
-foreach (["course-publication", "academic-dates", "academic-details"] as $sourceKind) {
+foreach (["course-publication", "academic-dates", "academic-details", "course-correction"] as $sourceKind) {
     $sourceCredit = $sis->sql->one("sis_academic_credits", ["source_id" => $enrollment->id->value]);
     $sourceData = [
         "enrollment_id" => $enrollment->id->value,
         "version" => $sourceCredit["version"],
         "reason" => "Fictional withdrawn source evidence.",
     ];
-    if ($sourceKind === "course-publication") {
+    if ($sourceKind === "course-publication" || $sourceKind === "course-correction") {
         $sourceData += ["course_version_id" => $sourcePublication->value, "effective_on" => "2026-09-02"];
     } else {
         $sourceData += ["academic_on" => "2026-08-01", "completed_on" => null];
@@ -233,7 +233,19 @@ foreach (["course-publication", "academic-dates", "academic-details"] as $source
             throw new RuntimeException("An omitted nullable date silently cleared an academic fact.");
         }
     }
-    $sourcePath = $sourceBase . "/" . $sourceKind . "/";
+    if ($sourceKind === "course-correction") {
+        $sis->access->staff = true;
+        $targetCourse = $sis->section()->courseId;
+        $targetVersion = $sis->publishCourse($targetCourse);
+        $sis->access->staff = false;
+        $sourceData["course_id"] = $targetCourse->value;
+        $sourceData["course_version_id"] = $targetVersion->value;
+        if ($teachingPost($sourceBase . "/course-publication/review/", $sourceData)->getStatusCode() !== 403) {
+            throw new RuntimeException("Grade authority bypassed independent awarded-course authority.");
+        }
+        $sis->access->grants[] = "sis:academic:course:amend";
+    }
+    $sourcePath = $sourceBase . "/" . ($sourceKind === "course-correction" ? "course-publication" : $sourceKind) . "/";
     $unprotectedSource = new \Qubus\Http\ServerRequest(
         [],
         [],
@@ -250,6 +262,9 @@ foreach (["course-publication", "academic-dates", "academic-details"] as $source
     $sis->access->grants[] = "sis:gradebook:closed";
     if ($sourceKind === "academic-details") {
         $sis->access->grants[] = "sis:academic:placement:amend";
+    }
+    if ($sourceKind === "course-correction") {
+        $sis->access->grants[] = "sis:academic:course:amend";
     }
     $sourceResponse = $teachingPost($sourcePath . "review/", $sourceData);
     $sourceReview = json_decode((string) $sourceResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
@@ -277,6 +292,9 @@ foreach (["course-publication", "academic-dates", "academic-details"] as $source
     $sis->access->grants[] = "sis:gradebook:closed";
     if ($sourceKind === "academic-details") {
         $sis->access->grants[] = "sis:academic:placement:amend";
+    }
+    if ($sourceKind === "course-correction") {
+        $sis->access->grants[] = "sis:academic:course:amend";
     }
     $sourceSaved = $teachingPost($sourcePath . "commit/", $sourceCommit);
     $sourceRetry = $teachingPost($sourcePath . "commit/", $sourceCommit);

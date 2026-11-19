@@ -594,6 +594,7 @@ final class SisFixture
             $this->dropCipher,
             $this->clock,
             $audit ?? $this->audit,
+            new \Infrastructure\Persistence\Repository\SqlCourseSearchRepository($this->sql),
         );
     }
 

@@ -87,9 +87,9 @@ final readonly class RetainedAttemptReader
             $period = $periods[$reference["section_id"]][$reference["version_id"]];
             $item = $work[$a->id->value];
             if (
-                $period["course_id"] !== $a->courseId->value ||
-                $period["term_id"] !== $item["term_id"] ||
-                $period["course_version_id"] !== $item["course_version_id"]
+                $period["course_id"] !== ($item["registration_course_id"] ?? $a->courseId->value) ||
+                $period["term_id"] !== ($item["registration_term_id"] ?? $item["term_id"]) ||
+                $period["course_version_id"] !== ($item["registration_course_version_id"] ?? $item["course_version_id"])
             ) {
                 throw new CorruptHistoryException();
             }

@@ -179,7 +179,14 @@ final class AcademicPolicyInputsTest extends TestCase
         self::assertSame($before, $f->sql->rows("sis_history_events"));
         $change = new AwardChange("void", null, null, "Fictional duplicate transfer decision.");
         $plan = $t->service()->preview($t->student, $t->award, $change);
-        $t->service()->confirm($t->student, $t->award, EntityId::generate(), $change, $plan["revision"]);
+        $t->service()->confirm(
+            $t->student,
+            $t->award,
+            new EntityId($plan["operation_id"]),
+            $change,
+            $plan["revision"],
+            $plan["review_token"],
+        );
         $result = $evaluator->evaluate($this->inputs($f, $t->student), $policy);
         self::assertSame(0, $result->earnedMilli);
         self::assertSame([], $result->issues);

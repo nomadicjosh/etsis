@@ -344,6 +344,11 @@ final readonly class HistoricalSchemaRegistry
                 "root" => \Domain\AcademicRecord\AcademicCredit::class,
                 "fields" => ["decision_id", "previous_decision_id", "grade", "assignment_id"],
             ],
+            \Domain\AcademicRecord\Event\InstitutionalCourseWasCorrected::class => [
+                'type' => 'academic_credit', 'root' => \Domain\AcademicRecord\AcademicCredit::class,
+                'fields' => ['decision_id', 'previous_decision_id', 'previous_course_id', 'course_id',
+                    'previous_course_version_id', 'course_version_id', 'course_code', 'course_title'],
+            ],
             \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted::class => [
                 'type' => 'academic_credit', 'root' => \Domain\AcademicRecord\AcademicCredit::class,
                 'fields' => ['decision_id', 'previous_decision_id', 'previous_course_version_id', 'course_version_id',
@@ -926,7 +931,8 @@ final readonly class HistoricalSchemaRegistry
                     if (
                         in_array($class, [\Domain\Transfer\Event\TransferCourseWasAccepted::class,
                             \Domain\Transfer\Event\TransferCourseWasReplaced::class,
-                            \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted::class], true) &&
+                            \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted::class,
+                            \Domain\AcademicRecord\Event\InstitutionalCourseWasCorrected::class], true) &&
                         $name === "previous_course_version_id" && $value === null
                     ) {
                         continue;

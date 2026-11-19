@@ -102,6 +102,8 @@ async function fixture(page, options = {}) {
                 can_record_academic_period:
                     !!options.period && !options.readOnly && !options.knownOffering && !options.reconcile,
                 academic_on: academicOn,
+                can_correct_course: !!options.courseCorrection && !options.readOnly,
+                course_id: id(12),
                 can_accept_course: !!options.courseAcceptance && !options.readOnly && !options.reconcile,
                 current_version: version,
                 completed_on: date,
@@ -212,13 +214,18 @@ async function fixture(page, options = {}) {
             version += Number(academicOn !== periodReview) + Number(date !== reviewed);
             academicOn = periodReview;
             date = reviewed;
-        } else if (path.endsWith("/course-publication/choices/"))
+        } else if (path.endsWith("/course-publication/courses/"))
+            result = {
+                items: [{ id: id(data.after ? 15 : 13), code: "ENG.201", title: "Fictional writing" }],
+                next_after: data.after ? null : id(13),
+            };
+        else if (path.endsWith("/course-publication/choices/"))
             result = {
                 items: [
                     {
-                        version_id: id(data.cursor ? 7 : 6),
+                        version_id: id(data.course_id === id(13) ? 14 : data.cursor ? 7 : 6),
                         version: data.cursor ? 2 : 1,
-                        code: "CS.101",
+                        code: data.course_id === id(13) ? "ENG.201" : "CS.101",
                         transcript_title: data.cursor
                             ? "Revised <b>fictional</b> title"
                             : "Retained course title",
@@ -227,7 +234,7 @@ async function fixture(page, options = {}) {
                 next_cursor: data.cursor ? null : "fictional-next",
                 current_version: version,
                 effective_on_default: "2026-08-11",
-                current_course_code: "CS.101",
+                current_course_code: data.course_id === id(13) ? "ENG.201" : "CS.101",
                 current_course_title: "Earlier unknown reference",
             };
         else if (path.endsWith("/course-publication/review/")) {
@@ -238,7 +245,10 @@ async function fixture(page, options = {}) {
                 });
             result = {
                 before: { course_code: "CS.101", course_title: "Earlier unknown reference" },
-                after: { course_code: "CS.101", course_title: "Revised <b>fictional</b> title" },
+                after: {
+                    course_code: data.course_id === id(13) ? "ENG.201" : "CS.101",
+                    course_title: "Revised <b>fictional</b> title",
+                },
                 reason: data.reason,
                 effective_on: data.effective_on,
                 review_token: "fictional-course-review",
@@ -985,5 +995,76 @@ test("stale placement review retains entries and never confirms", async ({ page 
         String(11).padStart(26, "0"),
     );
     expect(f.calls.some((c) => c.path.endsWith("/academic-details/commit/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test("awarded course correction searches identities, preserves the draft and confirms one protected decision", async ({
+    page,
+}) => {
+    const f = await fixture(page, { courseCorrection: true, directCourse: true });
+    const drawer = page.locator("#drawer-body");
+    await expect(drawer).toContainText("does not move registration");
+    await page.getByLabel(/Reason and course-publication evidence/).fill("Fictional <b>source</b> evidence.");
+    await page.getByLabel(/Acceptance effective date/).fill("2026-08-10");
+    await page.getByRole("searchbox", { name: "Find another course", exact: true }).fill("writing");
+    await page.getByRole("button", { name: "Find course", exact: true }).click();
+    await expect(drawer).toContainText("ENG.201");
+    await page.getByRole("button", { name: "More courses", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Use course", exact: true })).toHaveCount(2);
+    await page.getByRole("button", { name: "Use course", exact: true }).first().click();
+    await expect(page.getByLabel(/Reason and course-publication evidence/)).toHaveValue(
+        "Fictional <b>source</b> evidence.",
+    );
+    await expect(page.getByLabel(/Acceptance effective date/)).toHaveValue("2026-08-10");
+    await page
+        .getByRole("combobox", { name: "Accepted course publication", exact: true })
+        .selectOption(String(14).padStart(26, "0"));
+    await page.getByRole("button", { name: "Review course change", exact: true }).click();
+    await expect(drawer).toContainText("ENG.201");
+    await expect(drawer.locator("b")).toHaveCount(0);
+    expect(f.calls.some((c) => c.path.endsWith("/course-publication/commit/"))).toBe(false);
+    await page.getByRole("button", { name: "Revise course change", exact: true }).click();
+    await expect(
+        page.getByRole("combobox", { name: "Accepted course publication", exact: true }),
+    ).toHaveValue(String(14).padStart(26, "0"));
+    await page.getByRole("button", { name: "Review course change", exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const audit = await new AxeBuilder({ page })
+        .include("#drawer-body")
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+    expect(audit.violations).toEqual([]);
+    await page.getByRole("button", { name: "Confirm course change", exact: true }).click();
+    expect(f.calls.find((c) => c.path.endsWith("/course-publication/review/"))).toMatchObject({
+        data: {
+            course_id: String(13).padStart(26, "0"),
+            course_version_id: String(14).padStart(26, "0"),
+            effective_on: "2026-08-10",
+            enrollment_id: f.enrollment,
+            version: 3,
+        },
+        csrf: "fictional-test-token",
+    });
+    expect(f.calls.find((c) => c.path.endsWith("/course-publication/commit/"))).toMatchObject({
+        data: { review_token: "fictional-course-review" },
+        csrf: "fictional-test-token",
+    });
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test("stale awarded course correction preserves the entered values and never confirms", async ({ page }) => {
+    const f = await fixture(page, { courseCorrection: true, directCourse: true, rejectCourse: true });
+    await page
+        .getByRole("combobox", { name: "Accepted course publication", exact: true })
+        .selectOption(String(6).padStart(26, "0"));
+    await page.getByLabel(/Reason and course-publication evidence/).fill("Fictional verification.");
+    await page.getByRole("button", { name: "Review course change", exact: true }).click();
+    await expect(page.getByLabel(/Reason and course-publication evidence/)).toHaveValue(
+        "Fictional verification.",
+    );
+    await expect(page.locator("#drawer-body")).toContainText("The academic record changed");
+    expect(f.calls.some((c) => c.path.endsWith("/course-publication/commit/"))).toBe(false);
     expect(f.errors).toEqual([]);
 });

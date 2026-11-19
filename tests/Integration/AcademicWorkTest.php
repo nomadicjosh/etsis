@@ -171,7 +171,14 @@ final class AcademicWorkTest extends TestCase
         self::assertSame("2026-05-01", $item["completed_on"]);
         $change = new AwardChange("void", null, null, "Fictional duplicate transfer award.");
         $plan = $t->service()->preview($t->student, $t->award, $change);
-        $t->service()->confirm($t->student, $t->award, EntityId::generate(), $change, $plan["revision"]);
+        $t->service()->confirm(
+            $t->student,
+            $t->award,
+            new EntityId($plan["operation_id"]),
+            $change,
+            $plan["revision"],
+            $plan["review_token"],
+        );
         $before = $f->sql->rows("sis_history_events");
         $void = $service->page($t->student, $assignment)["items"][0];
         self::assertSame("V", $void["status"]);

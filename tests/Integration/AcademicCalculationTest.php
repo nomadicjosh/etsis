@@ -622,7 +622,14 @@ final class AcademicCalculationTest extends TestCase
         $s->clock->time = new \DateTimeImmutable("2027-01-10T10:00:00-07:00");
         $change = new \Domain\Transfer\ValueObject\AwardChange("amend", 3000, "B", "Fictional accepted GPA grade.");
         $grade = $t->service()->preview($f->student, $t->award, $change);
-        $t->service()->confirm($f->student, $t->award, EntityId::generate(), $change, $grade["revision"]);
+        $t->service()->confirm(
+            $f->student,
+            $t->award,
+            new EntityId($grade["operation_id"]),
+            $change,
+            $grade["revision"],
+            $grade["review_token"],
+        );
         $calculation = $this->service($f);
         self::assertFalse($calculation->preview($f->student, $f->assignment)["totals"]["gpa_ready"]);
         $first = $t->periods()->review($f->student, $t->award, "2026-01-15", 1, "Fictional earlier sending period.");

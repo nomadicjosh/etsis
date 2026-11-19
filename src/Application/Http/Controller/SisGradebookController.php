@@ -342,6 +342,18 @@ final readonly class SisGradebookController
         );
     }
 
+    public function academicCourseSearch(ServerRequest $request, string $id, string $student): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->courses->search(
+            new EntityId($student),
+            new EntityId($id),
+            $f->id("enrollment_id"),
+            $f->search(),
+            $f->optionalId("after")
+        ));
+    }
+
     public function coursePublications(ServerRequest $request, string $id, string $student): ResponseInterface
     {
         $f = FormInput::from($request);
@@ -351,6 +363,7 @@ final readonly class SisGradebookController
                 new EntityId($id),
                 $f->id("enrollment_id"),
                 $f->optionalText("cursor", 4096),
+                $f->optionalId("course_id"),
             ),
         );
     }
@@ -369,6 +382,7 @@ final readonly class SisGradebookController
                 $f->integer("version", 0),
                 $f->text("effective_on", 10),
                 $f->bodyText("reason"),
+                $f->optionalId("course_id"),
             ),
         );
     }

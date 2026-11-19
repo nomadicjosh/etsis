@@ -735,12 +735,14 @@ window.createWorkspaceTeaching = function (ui) {
             role: "group",
             "aria-label": "Related academic reviews",
         });
-        if (choices.can_accept_course)
+        if (choices.can_accept_course || choices.can_correct_course)
             related.append(
-                button("Review course publication", () =>
-                    coursePublication(sectionRow, student, choices, () =>
-                        recordFinalGrade(sectionRow, student, back, assignment, null, queue),
-                    ),
+                button(
+                    choices.can_correct_course ? "Correct awarded course" : "Review course publication",
+                    () =>
+                        coursePublication(sectionRow, student, choices, () =>
+                            recordFinalGrade(sectionRow, student, back, assignment, null, queue),
+                        ),
                 ),
             );
         if (
@@ -1283,7 +1285,7 @@ window.createWorkspaceTeaching = function (ui) {
         );
         if (!choices.can_amend)
             throw new Error("This review requires current academic-amendment and student-record access.");
-        if (!choices.can_accept_course) {
+        if (!choices.can_accept_course && !choices.can_correct_course) {
             const body = openDrawer("Course publication", "RETAINED ACADEMIC REFERENCE");
             body.append(
                 node(
@@ -1305,12 +1307,23 @@ window.createWorkspaceTeaching = function (ui) {
         await coursePublication(sectionRow, student, choices, back);
     }
 
-    async function coursePublication(sectionRow, student, gradeChoices, back) {
+    async function coursePublication(
+        sectionRow,
+        student,
+        gradeChoices,
+        back,
+        selectedCourse = null,
+        draft = {},
+    ) {
+        const correction = gradeChoices.can_correct_course === true;
+        const targetCourse = selectedCourse || gradeChoices.course_id;
+        const title = correction ? "Correct awarded course" : "Course publication acceptance";
         const base = `/sis/sections/${sectionRow.id}/students/${student.student_id}/course-publication/`;
-        const loading = openDrawer("Course publication acceptance", "REASONED ACADEMIC CORRECTION");
+        const loading = openDrawer(title, "REASONED ACADEMIC CORRECTION");
         loading.append(node("p", { role: "status" }, "Loading course publications…"));
         const choices = await request(base + "choices/", "POST", {
             enrollment_id: gradeChoices.enrollment_id,
+            ...(correction ? { course_id: targetCourse } : {}),
         });
         if (!loading.isConnected) return;
         const identity = () =>
@@ -1319,7 +1332,7 @@ window.createWorkspaceTeaching = function (ui) {
                 ["Institutional ID", student.institutional_id],
                 ["Section", sectionRow.code || sectionRow.course_code || "Selected section"],
             ]);
-        const body = openDrawer("Course publication acceptance", "REASONED ACADEMIC CORRECTION");
+        const body = openDrawer(title, "REASONED ACADEMIC CORRECTION");
         body.append(
             identity(),
             ...(gradeChoices.withdrawal_grade_correction
@@ -1334,12 +1347,14 @@ window.createWorkspaceTeaching = function (ui) {
             node(
                 "p",
                 {},
-                "The registration-time course publication was not recorded. Choose an exact publication of this same course supported by institutional evidence. This records a later acceptance; it does not prove which publication applied at registration. Grades, credits, completion dates and charges stay as recorded.",
+                correction
+                    ? "Correct the academic course or its exact publication using institutional evidence. The original section and offering remain in history. This does not move registration, create another award, change the student's pursuit or recalculate grades, credits, instructional dates or charges. A course correction does not establish reusable equivalence."
+                    : "The registration-time course publication was not recorded. Choose an exact publication of this same course supported by institutional evidence. This records a later acceptance; it does not prove which publication applied at registration. Grades, credits, completion dates and charges stay as recorded.",
             ),
             node("p", {}, `${choices.current_course_code} · ${choices.current_course_title}`),
             button("Back to grade record", back, "btn-link"),
         );
-        if (!choices.items.length) {
+        if (!choices.items.length && !correction) {
             body.append(
                 node(
                     "p",
@@ -1365,6 +1380,8 @@ window.createWorkspaceTeaching = function (ui) {
         ];
         const form = await buildForm(fields, {
             effective_on: choices.effective_on_default,
+            ...draft,
+            course_version_id: "",
         });
         if (!body.isConnected) return;
         form.elements.effective_on.max = choices.effective_on_default;
@@ -1375,6 +1392,7 @@ window.createWorkspaceTeaching = function (ui) {
                 const page = await request(base + "choices/", "POST", {
                     enrollment_id: gradeChoices.enrollment_id,
                     cursor,
+                    ...(correction ? { course_id: targetCourse } : {}),
                 });
                 if (!form.isConnected) return;
                 for (const item of page.items)
@@ -1392,9 +1410,72 @@ window.createWorkspaceTeaching = function (ui) {
         const submit = node(
             "button",
             { type: "submit", class: "btn btn-primary" },
-            "Review course publication acceptance",
+            correction ? "Review course change" : "Review course publication acceptance",
         );
         form.append(submit);
+        if (correction) {
+            const searchForm = await buildForm([["search", "Find another course", "search", "", true]]);
+            if (!body.isConnected) return;
+            searchForm.elements.search.maxLength = 80;
+            const results = node("div", { "aria-live": "polite" });
+            const find = node("button", { type: "submit", class: "btn btn-outline-primary" }, "Find course");
+            searchForm.append(find);
+            let searchAfter = null,
+                query = "",
+                sequence = 0;
+            async function search(append = false) {
+                const current = ++sequence;
+                const page = await request(base + "courses/", "POST", {
+                    enrollment_id: gradeChoices.enrollment_id,
+                    search: query,
+                    ...(append && searchAfter ? { after: searchAfter } : {}),
+                });
+                if (!searchForm.isConnected || current !== sequence) return;
+                if (!append) results.replaceChildren();
+                if (!page.items.length)
+                    results.append(node("p", {}, "No matching courses. Try another code or title."));
+                else
+                    results.append(
+                        grid(
+                            ["Course", "Title", "Action"],
+                            page.items.map((item) => [
+                                item.code,
+                                item.title,
+                                button("Use course", () =>
+                                    coursePublication(
+                                        sectionRow,
+                                        student,
+                                        gradeChoices,
+                                        back,
+                                        item.id,
+                                        formData(form, fields),
+                                    ),
+                                ),
+                            ]),
+                            "Matching courses",
+                        ),
+                    );
+                searchAfter = page.next_after;
+                moreCourses.hidden = !searchAfter;
+            }
+            const moreCourses = button("More courses", () => search(true), "btn-link");
+            moreCourses.hidden = true;
+            searchForm.addEventListener("submit", (event) => {
+                event.preventDefault();
+                if (!searchForm.reportValidity()) return;
+                query = searchForm.elements.search.value.trim();
+                task(() => search(), find);
+            });
+            body.append(searchForm, results, moreCourses);
+            if (!choices.items.length)
+                body.append(
+                    node(
+                        "p",
+                        { role: "status" },
+                        "No publications for this course. Search for another course or ask catalog staff to publish the required definition.",
+                    ),
+                );
+        }
         const introduction = Array.from(body.childNodes);
         body.append(form);
         form.addEventListener("submit", (event) => {
@@ -1406,10 +1487,11 @@ window.createWorkspaceTeaching = function (ui) {
                     ...values,
                     enrollment_id: gradeChoices.enrollment_id,
                     version: choices.current_version,
+                    ...(correction ? { course_id: targetCourse } : {}),
                 });
                 if (!form.isConnected) return;
                 const confirmation = openDrawer(
-                    "Confirm course publication acceptance",
+                    correction ? "Confirm course change" : "Confirm course publication acceptance",
                     "PRESERVE ORIGINAL FACTS",
                 );
                 confirmation.append(
@@ -1424,22 +1506,21 @@ window.createWorkspaceTeaching = function (ui) {
                     node(
                         "p",
                         {},
-                        "The earlier reference remains unknown. Original facts and previous decisions remain in protected history. This changes the current accepted course labels/reference; no grades, credits or charges are recalculated.",
+                        correction
+                            ? "The original course and offering remain in protected history. Current transcript and degree-progress checks will use the corrected awarded course. Earlier issued documents remain unchanged. Grades, credits, pursuit, registration and charges stay as recorded."
+                            : "The earlier reference remains unknown. Original facts and previous decisions remain in protected history. This changes the current accepted course labels/reference; no grades, credits or charges are recalculated.",
                     ),
                     button(
-                        "Change course publication review",
+                        correction ? "Revise course change" : "Change course publication review",
                         () => {
-                            const editor = openDrawer(
-                                "Course publication acceptance",
-                                "REASONED ACADEMIC CORRECTION",
-                            );
+                            const editor = openDrawer(title, "REASONED ACADEMIC CORRECTION");
                             editor.append(...introduction, form);
                             form.elements.course_version_id.focus();
                         },
                         "btn-link",
                     ),
                     button(
-                        "Confirm course publication acceptance",
+                        correction ? "Confirm course change" : "Confirm course publication acceptance",
                         async () => {
                             await request(base + "commit/", "POST", {
                                 review_token: review.review_token,
@@ -1684,9 +1765,10 @@ window.createWorkspaceTeaching = function (ui) {
                                               period_recorded: "Source academic period recorded",
                                               posting_term_corrected: "Academic posting term corrected",
                                               course_accepted: "Course publication accepted",
+                                              course_corrected: "Awarded course corrected",
                                               dropped: "Course dropped",
                                           }[item.action] || "Academic decision",
-                                  item.action === "course_accepted"
+                                  ["course_accepted", "course_corrected"].includes(item.action)
                                       ? `${item.course_code} · ${item.course_title}`
                                       : item.grade_code
                                         ? `${item.grade_code}${item.coursework_summary ? ` · Coursework ${item.coursework_summary.score_display}` : ""}`

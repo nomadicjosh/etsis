@@ -83,6 +83,7 @@ final class EventClassMap
             \Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded::class,
             \Domain\AcademicRecord\Event\InstitutionalPostingTermWasCorrected::class,
             \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted::class,
+            \Domain\AcademicRecord\Event\InstitutionalCourseWasCorrected::class,
             \Domain\AcademicRecord\Event\InstitutionalCreditWasDropped::class,
             \Domain\Gradebook\Event\GradingScaleWasChanged::class,
             \Domain\DegreeAudit\Event\RequirementAdjustmentWasGranted::class,

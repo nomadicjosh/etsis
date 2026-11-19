@@ -5,6 +5,9 @@ declare(strict_types=1);
 // Initial migration seed only. Runtime authorization is database controlled.
 return [
     "permissions" => [
+        "sis:academic:course:amend" => [
+            "description" => "Correct institutional awarded courses and their exact publications.",
+        ],
         "sis:academic:placement:amend" => [
             "description" => "Correct academic posting terms on institutional credits.",
         ],

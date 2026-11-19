@@ -89,3 +89,8 @@ The first vertical slices must prove:
 - Program/cohort and term/level reports reproduce their historical scope after catalog, reporting-group or grading-policy changes. Corrections never invent missing past values; imported unknowns remain explicitly unknown with provenance.
 
 This review intentionally creates no speculative schema or live-data conversion. Field restoration and event-sourcing conversion remain implementation work. No working database or student data was accessed or modified.
+
+
+## Awarded course versus original offering
+
+The [institutional course-correction workflow](academic-credit-history.md#correct-the-awarded-course) now distinguishes the current awarded course/publication from the original registration and offering definition. Its reasoned event preserves both identities in the existing academic-credit stream, updates current academic projections and leaves source instructional dates, grading, quantities, pursuit and charges unchanged. The existing course binding projection is reused. Transcript preparation and prerequisite/degree readers use the accepted corrected award, while repeat chronology verifies the original course, publication and term against the original offering. No current catalog edit can rewrite either accepted definition. Earlier unknown references stay unknown; reopening/reinstatement remains separate work.
