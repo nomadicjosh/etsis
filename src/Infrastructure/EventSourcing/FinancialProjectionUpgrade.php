@@ -26,7 +26,7 @@ final readonly class FinancialProjectionUpgrade
     {
     }
 
-    public function run(string $type): void
+    public function run(string $type, bool $entries = false): void
     {
         $sql = new SqlRecords($this->db);
         $table = match ($type) {
@@ -58,7 +58,7 @@ final readonly class FinancialProjectionUpgrade
             $this->codec,
             new HistoricalSchemaRegistry()
         );
-        $uow->run(function () use ($sql, $history, $records, $table, $type): void {
+        $uow->run(function () use ($sql, $history, $records, $table, $type, $entries): void {
             $budget = new HistoryReadBudget();
             foreach ($records as $row) {
                 $sql->lock($table, $row['id'], 'id');
@@ -95,6 +95,9 @@ final readonly class FinancialProjectionUpgrade
                     throw new CorruptHistoryException();
                 }
                 new SqlAccountBalanceProjection($sql)->initialize($root);
+                if ($entries) {
+                    new \Infrastructure\Projection\SqlAccountEntryProjection($sql)->initialize($root, $events);
+                }
             }
         });
     }

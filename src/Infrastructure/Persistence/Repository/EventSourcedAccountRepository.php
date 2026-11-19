@@ -72,6 +72,9 @@ final readonly class EventSourcedAccountRepository implements AccountRepository
             new \Infrastructure\Projection\SqlAccountBalanceProjection(
                 new \Infrastructure\Persistence\SqlRecords($this->db)
             )->advance($account, $events);
+            new \Infrastructure\Projection\SqlAccountEntryProjection(
+                new \Infrastructure\Persistence\SqlRecords($this->db)
+            )->advance($account, $events);
         });
         $account->clearRecordedEvents();
     }

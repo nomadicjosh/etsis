@@ -176,6 +176,29 @@ window.createWorkspaceReportStudio = function (ui) {
             );
         const templates = node("details", { class: "report-templates" }, node("summary", {}, "Start from a template"));
         const templateGrid = node("div", { class: "report-template-grid" });
+        const postings = catalog.datasets.find(dataset => dataset.id === "postings");
+        if (postings) {
+            const currentPostings = { condition: "AND", rules: [
+                { id: "posting_reversed", operator: "equal", value: false },
+            ] };
+            templateGrid.append(
+                button("Current financial postings", () => edit(postings, {
+                    ...initial(postings), filters: structuredClone(currentPostings),
+                })),
+                button("Payments by billing term", () => edit(postings, {
+                    ...initial(postings),
+                    columns: [
+                        { field: "term_code", label: "Billing term", aggregate: "none" },
+                        { field: "currency", label: "Currency", aggregate: "none" },
+                        { field: "posting_amount", label: "Payments", aggregate: "sum" },
+                    ],
+                    filters: { condition: "AND", rules: [...structuredClone(currentPostings.rules),
+                        { id: "posting_type", operator: "equal", value: "payment" },
+                    ] },
+                })),
+                node("p", { class: "form-text" }, "Posting rows include original and replacement amounts. Exclude reversed postings for current totals. Recorded UTC times are event times, not bank settlement dates; earlier source classifications remain explicit. Amount replacements have their correction event time."),
+            );
+        }
         const meetings = catalog.datasets.find(dataset => dataset.id === "meetings");
         const rooms = catalog.datasets.find(dataset => dataset.id === "rooms");
         const approvedMeetings = { condition: "AND", rules: [
@@ -216,6 +239,17 @@ window.createWorkspaceReportStudio = function (ui) {
         const sections = catalog.datasets.find((item) => item.id === "sections");
         const applications = catalog.datasets.find((item) => item.id === "applications");
         const accounts = catalog.datasets.find((item) => item.id === "accounts");
+        if (accounts?.fields.posting_recorded_at)
+            templateGrid.append(button("Latest payment postings", () => edit(accounts, {
+                ...initial(accounts),
+                columns: ["institutional_id", "full_name", "term_code", "currency", "posting_amount", "posting_recorded_at"]
+                    .map(field => ({ field, label: accounts.fields[field].label, aggregate: "none" })),
+                record_selection: { entry: { date_field: "posting_recorded_at", direction: "latest", ties: "all" } },
+                join_filters: { entry: { condition: "AND", rules: [
+                    { id: "posting_type", operator: "equal", value: "payment" },
+                    { id: "posting_reversed", operator: "equal", value: false },
+                ] } },
+            })));
         if (students?.fields.latest_term_code || sections?.fields.enrollment_id || applications?.fields.submitted_on || accounts?.fields.balance)
             templateGrid.append(node("p", {}, "Choose a starting question, then adjust its fields and filters."));
         if (applications?.fields.submitted_on)
@@ -383,6 +417,7 @@ window.createWorkspaceReportStudio = function (ui) {
     }
     function initial(dataset) {
         const choices = {
+            postings: ["institutional_id", "term_code", "posting_type", "currency", "posting_amount", "posting_reversed", "posting_recorded_at"],
             meetings: ["booking_title", "starts_at", "ends_at", "room_name", "building_name", "booking_status"],
             rooms: ["room_code", "room_name", "building_name", "room_capacity"],
             accounts: ["institutional_id", "full_name", "term_code", "currency", "balance"],
@@ -619,7 +654,7 @@ window.createWorkspaceReportStudio = function (ui) {
                 .map((r) => r.parent)
                 .find((id) => !dataset.relationships[id]) || Object.values(dataset.fields)[0]?.relation;
         const rootLabel =
-            { meeting: "Scheduled meetings", room: "Rooms", account: "Student accounts", application: "Applications", student: "Students", assignment: "Program assignments", credit: "Academic credits", section: "Sections" }[root] ||
+            { entry: "Financial postings", meeting: "Scheduled meetings", room: "Rooms", account: "Student accounts", application: "Applications", student: "Students", assignment: "Program assignments", credit: "Academic credits", section: "Sections" }[root] ||
             "Starting records";
         const relationLabel = (id) => (id === root ? rootLabel : dataset.relationships[id].label);
         const rowScope = id => dataset.relationships[id]?.many

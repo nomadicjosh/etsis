@@ -30,7 +30,11 @@ async function accessible(page) {
 }
 async function fixture(page, options = {}) {
     const calls = [], errors = []; let definition = null, version = 0, name = '', operation = 1;
-    const fields = options.scheduling ? {
+    const fields = options.postings ? {
+        institutional_id: { label: 'Institutional ID', type: 'string', relation: 'identity' },
+        term_code: { label: 'Billing term', type: 'string', relation: 'term' },
+        currency: { label: 'Currency', type: 'string', relation: 'account' },
+    } : options.scheduling ? {
         room_code: { label: 'Room code', type: 'string', relation: 'room' },
         room_name: { label: 'Room name', type: 'string', relation: 'room' },
         building_name: { label: 'Building name', type: 'string', relation: 'building' },
@@ -85,7 +89,24 @@ async function fixture(page, options = {}) {
         enrollment_status: { label: 'Enrollment status', type: 'string', relation: 'enrollment' },
         course_title: { label: 'Course title', type: 'string', relation: 'course' },
     };
-    const dataset = options.scheduling ? {
+    if (options.postings || options.postingLinks) Object.assign(fields, {
+        posting_id: { label: 'Posting reference', type: 'string', relation: 'entry' },
+        posting_type: { label: 'Posting type', type: 'string', relation: 'entry',
+            choices: { charge: 'Charge', payment: 'Payment', refund: 'Refund', charge_credit: 'Charge credit' } },
+        posting_amount: { label: 'Posting amount', type: 'double', relation: 'entry' },
+        posting_reversed: { label: 'Posting reversed', type: 'boolean', relation: 'entry' },
+        posting_recorded_at: { label: 'Posting event recorded UTC', type: 'datetime', relation: 'entry' },
+    });
+    const dataset = options.postings ? {
+        id: 'postings', label: 'Financial postings', description: 'One row per original or replacement posting.', fields,
+        relationships: {
+            account: { label: 'Student accounts', parent: 'entry', many: false },
+            student: { label: 'Student records', parent: 'account', many: false },
+            person: { label: 'Student names', parent: 'student', many: false },
+            identity: { label: 'Institutional IDs', parent: 'person', many: false },
+            term: { label: 'Academic terms', parent: 'account', many: false },
+        },
+    } : options.scheduling ? {
         id: options.scheduling, label: options.scheduling === 'rooms' ? 'Rooms and bookings' : 'Scheduled meetings',
         description: 'Booking occurrences. Times and filters use UTC.', fields,
         relationships: options.scheduling === 'rooms' ? {
@@ -133,6 +154,10 @@ async function fixture(page, options = {}) {
         },
     } : { id: 'sections', label: 'Sections, teaching & enrollment counts', description: 'Explore sections and their registration relationships.', fields,
         relationships: { term: { label: 'Term', parent: 'section', many: false }, course: { label: 'Course', parent: 'section', many: false }, enrollment: { label: 'Enrollment', parent: 'section', many: true } } };
+    if (options.postingLinks) dataset.relationships.entry = {
+        label: 'Financial postings', parent: 'account', many: true,
+        date_fields: { posting_recorded_at: 'Posting event recorded UTC' },
+    };
     const selectionSummary = query => {
         const schema = copiedGraph(dataset, query?.aliases || {});
         return Object.entries(query?.record_selection || {}).map(([relation, selection]) => ({
@@ -165,15 +190,15 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/report-studio/save/') { definition = data.definition; name = data.name; version = data.version + 1; result = { id: data.report_id }; }
         else if (path.endsWith('/preview/') || path.endsWith('/run/')) {
             const query = data.definition || definition;
-            const values = { booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
+            const values = { posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
                 latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
-            const rows = options.scheduling || options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, values[column.field] ?? null]))]
+            const rows = options.postings || options.scheduling || options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, values[column.field] ?? null]))]
                 : data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
             result = { conditional_columns: query.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(query), columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
-                next_offset: options.scheduling || options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
-                grouped: options.scheduling || options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
+                next_offset: options.postings || options.scheduling || options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
+                grouped: options.postings || options.scheduling || options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
         } else if (path.endsWith('/export/')) { await route.fulfill({ body: 'Section,Term,Students\nMATH.101.A,26/FA,8\n', contentType: 'text/csv' }); return; }
         else if (/\/sis\/report-studio\/[^/]+\/$/.test(path)) result = { conditional_columns: definition.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(definition), id: path.split('/').at(-2), name, version, definition, can_manage: !options.recipient };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
@@ -184,6 +209,49 @@ async function fixture(page, options = {}) {
     if (!options.recipient && !options.collapsedTemplates) await page.getByText('Start from a template', { exact: true }).click();
     return { calls, errors, visited };
 }
+
+test('financial posting templates keep reversed originals explicit and summarize payments by currency', async ({ page }) => {
+    const f = await fixture(page, { postings: true });
+    await page.getByRole('button', { name: 'Payments by billing term', exact: true }).click();
+    await page.getByLabel('Report name', { exact: true }).fill('Fictional payment summary');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.columns.map(column => [column.field, column.aggregate])).toEqual([
+        ['term_code', 'none'], ['currency', 'none'], ['posting_amount', 'sum'],
+    ]);
+    expect(query.filters.rules).toEqual([
+        { id: 'posting_reversed', operator: 'equal', value: false },
+        { id: 'posting_type', operator: 'equal', value: 'payment' },
+    ]);
+    await expect(page.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('USD');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(page.getByLabel('Column 3 label', { exact: true })).toHaveValue('Payments');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+test('latest account payments retain candidate filters and explicit timestamp ties after reopening', async ({ page }) => {
+    const f = await fixture(page, { accounts: true, postingLinks: true });
+    await page.getByRole('button', { name: 'Latest payment postings', exact: true }).click();
+    await page.getByLabel('Report name', { exact: true }).fill('Fictional latest payments');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.record_selection.entry).toEqual({ date_field: 'posting_recorded_at', direction: 'latest', ties: 'all' });
+    expect(query.join_filters.entry.rules).toEqual([
+        { id: 'posting_type', operator: 'equal', value: 'payment' },
+        { id: 'posting_reversed', operator: 'equal', value: false },
+    ]);
+    await expect(page.getByRole('complementary', { name: 'Related row selection' })).toContainText('Equal dates are kept');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    const chooser = page.locator('[data-record-selection="entry"]');
+    await chooser.locator('summary').click();
+    await expect(chooser.getByLabel('Financial postings: date', { exact: true })).toHaveValue('posting_recorded_at');
+    expect(f.errors).toEqual([]);
+});
 
 test('conditional summaries edit independently and retain their rules through save and reopening', async ({ page }) => {
     const f = await fixture(page);

@@ -253,7 +253,12 @@ final class FinancialCommandContextTest extends TestCase
         );
         $s->sql->insert('sis_student_accounts', ['id' => (string) $root->aggregateId(),
             'student_id' => $root->studentId()->value, 'term_id' => $root->termId()->value, 'currency' => 'USD']);
-        new \Infrastructure\Projection\SqlAccountBalanceProjection($s->sql)->initialize($root);
+        new \Infrastructure\EventSourcing\FinancialProjectionUpgrade(
+            $s->connection->queryBuilder(),
+            new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                \EventStoreFixture::config($s->connection->queryBuilder())
+            ),
+        )->run('student_account', entries: true);
         $oldEvents = $s->sql->rows('sis_history_events');
         $oldReceipts = $s->sql->rows('sis_history_operations');
         $s->finance()->post(

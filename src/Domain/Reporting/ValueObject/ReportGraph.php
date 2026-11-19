@@ -62,6 +62,10 @@ final class ReportGraph
                     $schema['fields'][$id . '__' . $field] = array_replace($metadata, [
                         'relation' => $mapped[$metadata['relation']], 'copy_group' => $id,
                     ]);
+                    if (isset($metadata['money_grain'])) {
+                        $schema['fields'][$id . '__' . $field]['money_grain'] =
+                        $mapped[$metadata['money_grain']] ?? $metadata['money_grain'];
+                    }
                 }
             }
         }

@@ -139,6 +139,12 @@ final class StudentAccount extends EventSourcedAggregate
         return $this->balance;
     }
 
+    /** Includes retained original and replacement postings, even after reversal. */
+    public function entryCount(): int
+    {
+        return count($this->operations);
+    }
+
     /** @return list<AccountEntry> */
     public function entries(): array
     {

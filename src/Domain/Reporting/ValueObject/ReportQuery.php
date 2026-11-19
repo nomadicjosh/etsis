@@ -173,6 +173,8 @@ final readonly class ReportQuery
             if (isset($column['calculation'])) {
                 if (
                     ($field['currency_field'] ?? null) !== ($other['currency_field'] ?? null)
+                    || ($field['money_grain'] ?? $this->schema['root']) !==
+                        ($other['money_grain'] ?? $this->schema['root'])
                     || !in_array($column['calculation']['operator'], ['+', '-'], true)
                 ) {
                     self::invalid('Combine monetary amounts only with amounts in the same currency and units.');
@@ -220,6 +222,7 @@ final readonly class ReportQuery
                         $r = $this->schema['relationships'][$relation];
                         if (
                             ($r['many'] ?? false) &&
+                            $relation !== ($field['money_grain'] ?? null) &&
                             ($this->definition['record_selection'][$relation]['ties'] ?? null) !== 'one'
                         ) {
                             self::invalid(

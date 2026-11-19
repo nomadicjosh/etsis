@@ -24,6 +24,31 @@ final readonly class SqlRelationalReportSource implements RelationalReportSource
         if ($query->schema['financial_balances'] ?? false) {
             $this->requireCurrentBalances();
         }
+        if ($query->schema['financial_entries'] ?? false) {
+            $this->requireCurrentEntries();
+        }
+    }
+
+    /** Check the atomic posting projection checkpoint, without scanning or decrypting individual events. */
+    private function requireCurrentEntries(): void
+    {
+        $q = $this->sql->quote(...);
+        $c = static fn(string $alias, string $field): string => $q($alias) . '.' . $q($field);
+        $missing = $this->sql->fetch(
+            'SELECT ' . $c('a', 'id') . ' FROM ' . $q('sis_student_accounts') . ' a'
+            . ' LEFT JOIN ' . $q('sis_account_entry_heads') . ' p ON ' . $c('p', 'id') . ' = ' . $c('a', 'id')
+            . ' LEFT JOIN ' . $q('sis_history_streams') . ' h ON ' . $c('h', 'aggregate_id') . ' = ' . $c('a', 'id')
+            . ' AND ' . $c('h', 'stream_type') . ' = ? WHERE ' . $c('p', 'id') . ' IS NULL OR '
+            . $c('h', 'id') . ' IS NULL OR ' . $c('p', 'position') . ' <> ' . $c('h', 'version')
+            . ' OR ' . $c('p', 'entry_count') . ' < 0',
+            ['student_account'],
+            1
+        );
+        if ($missing !== []) {
+            throw new \Domain\Shared\Exception\ValidationException([['field' => 'report',
+                'message' => 'Financial posting reports need verification. No partial report was returned. '
+                    . 'Ask a system administrator to review the posting projection.']]);
+        }
     }
 
     /** One bounded indexed consistency probe, with no payload decryption, replay or write locks. */

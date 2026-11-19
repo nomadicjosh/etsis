@@ -2809,6 +2809,40 @@ foreach (['meetings', 'rooms'] as $scheduleSource) {
     $sis->access->grants = [];
 }
 
+// Posting and account detail summaries share protected endpoints and independent finance authority.
+foreach (['postings', 'accounts'] as $postingSource) {
+    $postingDefinition = [
+        'dataset' => $postingSource,
+        'columns' => [
+            ['field' => 'currency', 'label' => 'Currency', 'aggregate' => 'none'],
+            ['field' => 'posting_amount', 'label' => 'Posting amount', 'aggregate' => 'sum'],
+        ],
+        'filters' => ['condition' => 'AND', 'rules' => [
+            ['id' => 'posting_reversed', 'operator' => 'equal', 'value' => false],
+        ]],
+    ];
+    $postingId = \Domain\Shared\ValueObject\EntityId::generate()->value;
+    $postingPreview = $teachingPost('/sis/report-studio/preview/', ['definition' => $postingDefinition, 'offset' => 0]);
+    $postingSave = $teachingPost('/sis/report-studio/save/', [
+        'report_id' => $postingId, 'operation_id' => $postingId, 'version' => -1,
+        'name' => 'Fictional posting totals', 'definition' => $postingDefinition,
+    ]);
+    $postingCsv = $teachingPost('/sis/report-studio/' . $postingId . '/export/', ['offset' => 0]);
+    if (
+        $postingPreview->getStatusCode() !== 200 || $postingSave->getStatusCode() !== 201 ||
+        $postingCsv->getStatusCode() !== 200 || !str_contains($postingCsv->getHeaderLine('Cache-Control'), 'no-store')
+    ) {
+        throw new RuntimeException('Financial posting reports failed private provider or CSV checks.');
+    }
+    $sis->access->staff = false;
+    $sis->access->grants = ['sis:reporting:run', 'sis:student:read'];
+    if ($teachingPost('/sis/report-studio/' . $postingId . '/run/', ['offset' => 0])->getStatusCode() !== 403) {
+        throw new RuntimeException('Student/reporting authority bypassed posting finance permission.');
+    }
+    $sis->access->staff = true;
+    $sis->access->grants = [];
+}
+
 // Per-column predicates share the existing private save/run/export routes and authorize hidden sources.
 $conditionalDefinition = [
     'dataset' => 'sections',

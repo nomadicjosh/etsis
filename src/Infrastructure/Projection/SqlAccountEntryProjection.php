@@ -1,0 +1,223 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Infrastructure\Projection;
+
+use Brick\Math\BigInteger;
+use Codefy\Domain\EventSourcing\DomainEvent;
+use DateTimeImmutable;
+use DateTimeZone;
+use Domain\Finance\Event\AccountChargeWasCredited;
+use Domain\Finance\Event\AccountEntryWasCorrected;
+use Domain\Finance\Event\AccountEntryWasPosted;
+use Domain\Finance\Event\AccountEntryWasReversed;
+use Domain\Finance\Event\AccountPaymentDetailsWereChanged;
+use Domain\Finance\Event\StudentAccountWasOpened;
+use Domain\Finance\StudentAccount;
+use Domain\Shared\EventSourcing\CorruptHistoryException;
+use Domain\Shared\ValueObject\EntityId;
+use Infrastructure\Persistence\SqlRecords;
+use Tuupola\Base32;
+
+/** Minimized posting read model. The account journal remains authoritative; caller owns the transaction. */
+final readonly class SqlAccountEntryProjection
+{
+    public function __construct(private SqlRecords $sql)
+    {
+    }
+
+    /** @param non-empty-list<DomainEvent> $events */
+    public function advance(#[\SensitiveParameter] StudentAccount $account, #[\SensitiveParameter] array $events): void
+    {
+        $id = (string) $account->aggregateId();
+        $expected = $events[0]->playhead() - 1;
+        $head = $this->sql->current('sis_account_entry_heads', $id);
+        if (
+            ($expected === 0 && $head !== null) ||
+            ($expected > 0 && ($head === null || (int) $head['position'] !== $expected))
+        ) {
+            throw new CorruptHistoryException();
+        }
+        [$created, $affected] = $this->changes($id, $events);
+        foreach ($affected as $operation => $_) {
+            $entry = $account->entry(new EntityId($operation)) ?? throw new CorruptHistoryException();
+            $old = $this->sql->rows(
+                'sis_account_entries',
+                ['account_id' => $id, 'operation_id' => $operation],
+                1,
+            )[0] ?? null;
+            $values = $this->values($id, $entry);
+            if (isset($created[$operation])) {
+                if ($old !== null) {
+                    throw new CorruptHistoryException();
+                }
+                $this->sql->insert('sis_account_entries', $values + $created[$operation]);
+                continue;
+            }
+            if (
+                $old === null || $old['type'] !== $entry['type'] ||
+                (int) $old['amount_minor'] !== $entry['minor'] || $old['currency'] !== $entry['currency'] ||
+                (bool) $old['reversed'] || $old['corrected_by_operation_id'] !== null ||
+                $old['corrects_operation_id'] !== $values['corrects_operation_id'] ||
+                $old['source_operation_id'] !== $values['source_operation_id']
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $this->sql->update('sis_account_entries', $values, ['id' => $old['id']]);
+        }
+        $count = ($head === null ? 0 : (int) $head['entry_count']) + count($created);
+        if ($count !== $account->entryCount()) {
+            throw new CorruptHistoryException();
+        }
+        $values = ['position' => $account->playhead(), 'entry_count' => $count];
+        if ($head === null) {
+            $this->sql->insert('sis_account_entry_heads', ['id' => $id] + $values);
+        } elseif (
+            $this->sql->update(
+                'sis_account_entry_heads',
+                $values,
+                ['id' => $id, 'position' => $expected],
+            ) !== 1
+        ) {
+            throw new CorruptHistoryException();
+        }
+    }
+
+    /** Explicit verified migration only; never called while executing a report.
+     * @param non-empty-list<DomainEvent> $events */
+    public function initialize(
+        #[\SensitiveParameter] StudentAccount $account,
+        #[\SensitiveParameter] array $events,
+    ): void {
+        $id = (string) $account->aggregateId();
+        [$created] = $this->changes($id, $events);
+        $entries = $account->entries();
+        $rows = [];
+        $q = $this->sql->quote(...);
+        do {
+            $page = $this->sql->fetchPage(
+                'SELECT * FROM ' . $q('sis_account_entries')
+                . ' WHERE ' . $q('account_id') . ' = ? ORDER BY ' . $q('id'),
+                [$id],
+                min(1000, 2001 - count($rows)),
+                count($rows)
+            );
+            array_push($rows, ...$page);
+        } while (count($page) === 1000 && count($rows) < 2001);
+        $head = $this->sql->current('sis_account_entry_heads', $id);
+        if (count($entries) > 2000 || count($created) !== count($entries) || count($rows) > 2000) {
+            throw new CorruptHistoryException();
+        }
+        if ($head === null) {
+            if ($rows !== []) {
+                throw new CorruptHistoryException();
+            }
+            foreach ($entries as $entry) {
+                $opening = $created[$entry['operation_id']] ?? throw new CorruptHistoryException();
+                $this->sql->insert('sis_account_entries', $this->values($id, $entry) + $opening);
+            }
+            $this->sql->insert('sis_account_entry_heads', ['id' => $id, 'position' => $account->playhead(),
+                'entry_count' => count($entries)]);
+            return;
+        }
+        if (
+            (int) $head['position'] !== $account->playhead() ||
+            (int) $head['entry_count'] !== count($entries) || count($rows) !== count($entries)
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $rows = array_column($rows, null, 'operation_id');
+        foreach ($entries as $entry) {
+            $expected = $this->values($id, $entry) + $created[$entry['operation_id']];
+            $old = $rows[$entry['operation_id']] ?? throw new CorruptHistoryException();
+            foreach ($expected as $field => $value) {
+                if ($value !== null && is_int($value)) {
+                    $old[$field] = (int) $old[$field];
+                }
+                if ($old[$field] !== $value) {
+                    throw new CorruptHistoryException();
+                }
+            }
+        }
+    }
+
+    /** @param list<DomainEvent> $events
+     * @return array{array<string,array<string,mixed>>,array<string,true>} */
+    private function changes(string $account, #[\SensitiveParameter] array $events): array
+    {
+        if ($events === [] || count($events) > 2000) {
+            throw new CorruptHistoryException();
+        }
+        $created = [];
+        $affected = [];
+        foreach ($events as $event) {
+            if ((string) $event->aggregateId() !== $account) {
+                throw new CorruptHistoryException();
+            }
+            if ($event instanceof StudentAccountWasOpened || $event instanceof AccountPaymentDetailsWereChanged) {
+                continue;
+            }
+            $p = $event->payload();
+            $operation = new EntityId($p['operation_id']);
+            $affected[$operation->value] = true;
+            if ($event instanceof AccountEntryWasReversed) {
+                foreach ($event->metadata()['reversed_credit_ids'] ?? [] as $credit) {
+                    $affected[new EntityId($credit)->value] = true;
+                }
+                continue;
+            }
+            if (
+                !($event instanceof AccountEntryWasPosted) && !($event instanceof AccountChargeWasCredited) &&
+                !($event instanceof AccountEntryWasCorrected)
+            ) {
+                throw new CorruptHistoryException();
+            }
+            if (isset($created[$operation->value])) {
+                throw new CorruptHistoryException();
+            }
+            $created[$operation->value] = [
+                'id' => $this->rowId($account, $operation->value, $event->recordedAt()),
+                'recorded_at' => DateTimeImmutable::createFromInterface($event->recordedAt())
+                    ->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
+                'posted_position' => $event->playhead(),
+                'origin' => match (true) {
+                    $event instanceof AccountEntryWasCorrected => 'staff_correction',
+                    $event instanceof AccountChargeWasCredited => 'charge_credit',
+                    ($event->metadata()['staff_recorded'] ?? null) === true => 'staff',
+                    isset($event->metadata()['registration_price']) => 'registration_rate',
+                    default => 'unclassified',
+                },
+            ];
+            if ($event instanceof AccountEntryWasCorrected) {
+                $affected[new EntityId($p['source_operation_id'])->value] = true;
+            }
+        }
+        return [$created, $affected];
+    }
+
+    /** Stable ULID timestamp/entropy, using the same installed Crockford encoder as EntityId generation. */
+    private function rowId(string $account, string $operation, \DateTimeInterface $recorded): string
+    {
+        $milliseconds = BigInteger::of($recorded->format('Uv'));
+        if ($milliseconds->isNegative() || $milliseconds->isGreaterThan('281474976710655')) {
+            throw new CorruptHistoryException();
+        }
+        $time = str_pad($milliseconds->toBytes(signed: false), 6, "\0", STR_PAD_LEFT);
+        $entropy = substr(hash('sha256', "sis.account-posting\0" . $account . "\0" . $operation, true), 0, 10);
+        $encoder = new Base32(['characters' => Base32::CROCKFORD, 'padding' => false, 'crockford' => true]);
+        return new EntityId(substr($encoder->encode(str_repeat("\0", 4) . $time . $entropy), 6))->value;
+    }
+
+    /** @param array<string,mixed> $entry
+     * @return array<string,mixed> */
+    private function values(string $account, #[\SensitiveParameter] array $entry): array
+    {
+        return ['account_id' => $account, 'operation_id' => $entry['operation_id'], 'type' => $entry['type'],
+            'amount_minor' => $entry['minor'], 'currency' => $entry['currency'], 'reversed' => (int) $entry['reversed'],
+            'effect_minor' => \Domain\Finance\Enum\EntryType::from($entry['type'])->balanceSign() * $entry['minor'],
+            'corrects_operation_id' => $entry['corrects_operation_id'] ?? null,
+            'corrected_by_operation_id' => $entry['corrected_by_operation_id'] ?? null,
+            'source_operation_id' => $entry['source_operation_id'] ?? null];
+    }
+}
