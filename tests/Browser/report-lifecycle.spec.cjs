@@ -44,6 +44,7 @@ async function fixture(page, options = {}) {
 test('owners independently choose static results and automatic removal in accessible report settings', async ({ page }) => {
     const f = await fixture(page);
     const studio = page.locator('dialog.report-studio');
+    await page.getByRole('button', { name: 'Report options', exact: true }).click();
     await studio.getByRole('button', { name: 'Report settings', exact: true }).click();
     await studio.getByRole('radio', { name: 'Static one-time report', exact: true }).check();
     await studio.getByRole('checkbox', { name: /temporary \/ one-off report/ }).check();
@@ -55,13 +56,14 @@ test('owners independently choose static results and automatic removal in access
     await studio.getByRole('button', { name: 'Save report settings', exact: true }).click();
     await expect(studio).toContainText('Static report · 1 captured rows');
     await expect(studio).toContainText('Automatic removal: 2026-12-14');
-    await expect(studio.getByRole('button', { name: 'Edit report in Studio', exact: true })).toHaveCount(0);
-    await expect(studio.getByRole('button', { name: 'Copy report definition', exact: true })).toBeVisible();
+    await expect(studio.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
+    await expect(studio.getByRole('button', { name: 'Make a copy', exact: true })).toBeVisible();
     await expect(studio).toContainText('Fictional-S-1');
     await expect(studio).toContainText('Saved static results · page 1.');
     const save = f.calls.find(c => c.path.endsWith('/settings/') && c.data);
     expect(save.data).toEqual({ operation_id: id(81), version: 0, mode: 'static', expires_after_days: '30' });
     expect(save.csrf).toBe('fictional-test-token');
+    await page.getByRole('button', { name: 'Report options', exact: true }).click();
     await studio.getByRole('button', { name: 'Report settings', exact: true }).click();
     await expect(studio.getByRole('radio', { name: 'Dynamic report', exact: true })).toBeDisabled();
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
@@ -71,6 +73,7 @@ test('owners independently choose static results and automatic removal in access
 test('an interrupted settings save retries the original operation and dynamic reports may also expire', async ({ page }) => {
     const f = await fixture(page, { fail: 500 });
     const studio = page.locator('dialog.report-studio');
+    await page.getByRole('button', { name: 'Report options', exact: true }).click();
     await studio.getByRole('button', { name: 'Report settings', exact: true }).click();
     await studio.getByRole('checkbox', { name: /temporary \/ one-off report/ }).check();
     await studio.getByLabel('Remove after this many days', { exact: true }).fill('7');
@@ -91,6 +94,7 @@ test('an interrupted settings save retries the original operation and dynamic re
 test('conflicts preserve the entered settings and shared recipients cannot alter static results', async ({ page }) => {
     const f = await fixture(page, { fail: 409 });
     const studio = page.locator('dialog.report-studio');
+    await page.getByRole('button', { name: 'Report options', exact: true }).click();
     await studio.getByRole('button', { name: 'Report settings', exact: true }).click();
     await studio.getByRole('radio', { name: 'Static one-time report', exact: true }).check();
     await studio.getByRole('button', { name: 'Save report settings', exact: true }).click();
@@ -104,7 +108,7 @@ test('conflicts preserve the entered settings and shared recipients cannot alter
     const recipient = await fixture(page, { static: true, recipient: true });
     await expect(studio).toContainText('Static report · 1 captured rows');
     await expect(studio.getByRole('button', { name: 'Report settings', exact: true })).toHaveCount(0);
-    await expect(studio.getByRole('button', { name: 'Edit report in Studio', exact: true })).toHaveCount(0);
+    await expect(studio.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
     await expect(studio).toContainText('Fictional-S-1');
     expect(recipient.calls.filter(c => c.path.endsWith('/settings/'))).toEqual([]);
     expect(f.errors.concat(recipient.errors)).toEqual([]);

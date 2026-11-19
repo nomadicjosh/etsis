@@ -694,4 +694,62 @@ final class AccountReportingTest extends TestCase
         $this->expectException(AccessDeniedException::class);
         $service->preview($this->definition(), 0);
     }
+    public function testAnyMatchingRegistrationsKeepFinancialTotalsAtTheAccountAndCurrencyGrain(): void
+    {
+        $s = new SisFixture();
+        $first = $this->account($s, minor: 1200);
+        $second = $this->account($s, minor: 2300);
+        $this->account($s, minor: 7000);
+        $yen = $this->account($s, currency: "JPY", minor: 500);
+        $registrations = [[$first, "A"], [$first, "A"], [$second, "W"], [$second, "W"], [$yen, "A"]];
+        foreach ($registrations as [$account, $status]) {
+            $section = $s->section(fee: 0);
+            $s->sql->insert("sis_enrollments", [
+                "id" => EntityId::generate()->value,
+                "student_id" => $account->studentId()->value,
+                "section_id" => $section->id->value,
+                "term_id" => $s->term->value,
+                "status" => $status,
+                "version" => 0,
+                "registered_at" => "2026-08-10T12:00:00+00:00",
+                "status_at" => "2026-08-10T12:00:00+00:00",
+            ]);
+        }
+        $d = [
+            "dataset" => "accounts",
+            "columns" => [
+                ["field" => "currency", "label" => "Currency", "aggregate" => "none"],
+                ["field" => "balance_minor", "label" => "Balance in minor units", "aggregate" => "sum"],
+            ],
+            "aliases" => ["copy1" => ["relation" => "registration", "label" => "Withdrawn registrations"]],
+            "existence" => [
+                "registration" => [
+                    "mode" => "any",
+                    "filters" => [
+                        "condition" => "AND",
+                        "rules" => [["id" => "registration_status", "operator" => "equal", "value" => "A"]],
+                    ],
+                ],
+                "copy1" => [
+                    "mode" => "any",
+                    "filters" => [
+                        "condition" => "AND",
+                        "rules" => [
+                            ["id" => "copy1__registration_status", "operator" => "equal", "value" => "W"],
+                        ],
+                    ],
+                ],
+            ],
+            "existence_logic" => [
+                "condition" => "OR",
+                "rules" => [["relation" => "registration"], ["relation" => "copy1"]],
+            ],
+        ];
+        $before = $this->journal($s);
+        self::assertSame(
+            [["c0" => "JPY", "c1" => 500], ["c0" => "USD", "c1" => 3500]],
+            $this->service($s)->preview($d, 0)["items"],
+        );
+        self::assertSame($before, $this->journal($s));
+    }
 }

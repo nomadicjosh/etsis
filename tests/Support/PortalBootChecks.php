@@ -2788,6 +2788,14 @@ $studioDefinition = [
     "joins" => [],
     "distinct" => false,
 ];
+// Grouped related-record checks remain ordinary private report configuration, with the same source duties.
+$studioDefinition['existence'] = [
+    'registration' => ['mode' => 'any', 'filters' => null],
+    'registration_term' => ['mode' => 'none', 'filters' => null],
+];
+$studioDefinition['existence_logic'] = ['condition' => 'OR', 'rules' => [
+    ['relation' => 'registration'], ['relation' => 'registration_term'],
+]];
 $studioPreview = $teachingPost("/sis/report-studio/preview/", [
     "definition" => $studioDefinition,
     "offset" => 0,

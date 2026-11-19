@@ -73,9 +73,9 @@ final readonly class ReportSelectCompiler
             $selected[] = $term . " AS " . $q("c" . $i);
         }
         $where = $this->condition($d["filters"] ?? null, $expression, $whereParameters, $s["fields"]);
-        foreach ($d['existence'] ?? [] as $relation => $match) {
-            $condition = $this->existence($relation, $match, $s, $whereParameters);
-            $where = $where === '' ? $condition : '(' . $where . ') AND ' . $condition;
+        $matching = $this->matchingGroup($query->matchingLogic, $d['existence'] ?? [], $s, $whereParameters);
+        if ($matching !== '') {
+            $where = $where === '' ? $matching : '(' . $where . ') AND ' . $matching;
         }
         foreach (array_merge(array_keys($d["joins"] ?? []), array_keys($d["join_filters"] ?? [])) as $name) {
             $used[$name] = true;
@@ -226,6 +226,22 @@ final readonly class ReportSelectCompiler
             . ($divisor ? 10 ** $digits : $digits);
         }
         return $expression . ' ELSE NULL END';
+    }
+
+    /** Validated All/Any groups retain the outer filter and correlated result grain.
+     * @param array<string,mixed> $group
+     * @param array<string,mixed> $matches
+     * @param array<string,mixed> $schema
+     * @param list<scalar|null> $parameters */
+    private function matchingGroup(array $group, array $matches, array $schema, array &$parameters): string
+    {
+        $parts = [];
+        foreach ($group["rules"] as $rule) {
+            $parts[] = isset($rule["condition"])
+            ? $this->matchingGroup($rule, $matches, $schema, $parameters)
+            : $this->existence($rule["relation"], $matches[$rule["relation"]], $schema, $parameters);
+        }
+        return $parts === [] ? "" : "(" . implode(" " . $group["condition"] . " ", $parts) . ")";
     }
 
     /** A correlated condition filters the outer row without adding related rows to its result grain.

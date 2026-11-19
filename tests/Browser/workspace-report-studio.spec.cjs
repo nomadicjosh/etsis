@@ -145,12 +145,13 @@ async function fixture(page, options = {}) {
     await page.goto(options.recipient ? '/admin/report-fixture/' : '/admin/');
     await page.locator(`.workspace-nav-link[data-workspace="${options.recipient ? 'sharedreports' : 'reports'}"]`).click();
     await page.getByRole('button', { name: options.recipient ? name : 'Open Report Studio', exact: true }).click();
+    if (!options.recipient && !options.collapsedTemplates) await page.getByText('Start from a template', { exact: true }).click();
     return { calls, errors, visited };
 }
 
 test('the Students source opens with useful columns and supports preview, save and reopening', async ({ page }) => {
     const f = await fixture(page, { students: true });
-    await page.getByRole('button', { name: 'Explore Students & current primary program', exact: true }).click();
+    await page.getByRole('button', { name: 'Start report: Students & current primary program', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     await expect(studio.locator('.report-local-error')).toBeHidden();
     await expect(studio.getByLabel('Column 1 label', { exact: true })).toHaveValue('Institutional ID');
@@ -158,7 +159,7 @@ test('the Students source opens with useful columns and supports preview, save a
     await expect(studio.getByLabel('Column 3 label', { exact: true })).toHaveValue('Primary program code');
     await expect(studio.getByLabel('Column 4 label', { exact: true })).toHaveValue('Institutional entry term');
     await studio.getByLabel('Report name', { exact: true }).fill('Fictional current students');
-    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
     expect(f.calls.find(call => call.path.endsWith('/preview/')).data.definition).toMatchObject({
         dataset: 'students', columns: [
@@ -168,10 +169,10 @@ test('the Students source opens with useful columns and supports preview, save a
             { field: 'entry_term', aggregate: 'none' },
         ],
     });
-    await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(studio).toContainText('Definition revision 1');
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
-    await studio.getByRole('button', { name: 'Edit report in Studio', exact: true }).click();
+    await studio.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(studio.getByLabel('Report name', { exact: true })).toHaveValue('Fictional current students');
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
@@ -187,10 +188,11 @@ for (const never of [false, true]) {
             : 'Students and their latest registered term', exact: true }).click();
         const studio = page.locator('dialog.report-studio');
         await expect(studio.getByLabel('Column 4 label', { exact: true })).toHaveValue('Latest registered term');
-        await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+        await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
         await expect(studio.getByLabel('Row conditions: field', { exact: true })
             .locator('option[value="latest_term_code"]')).toHaveText('Latest registered term');
-        await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+        await studio.getByRole('button', { name: 'Preview', exact: true }).click();
         await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
         const definition = f.calls.find(call => call.path.endsWith('/preview/')).data.definition;
         expect(definition.joins).toMatchObject({ latest_registration: 'left' });
@@ -212,7 +214,8 @@ test('date conditions use native date inputs and submit typed ranges and date li
     await page.getByRole('button', { name: 'Students and their latest registered term', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     await studio.getByLabel('Report name', { exact: true }).fill('Fictional latest-term dates');
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     const conditions = studio.getByRole('group', { name: 'Row conditions', exact: true });
     await conditions.getByLabel('Row conditions: field', { exact: true }).selectOption('latest_term_starts_on');
     await conditions.getByLabel('Row conditions: comparison', { exact: true }).selectOption('between');
@@ -221,23 +224,25 @@ test('date conditions use native date inputs and submit typed ranges and date li
     await expect(values.first()).toHaveAttribute('type', 'date');
     await values.first().fill('2027-01-01');
     await values.nth(1).fill('2027-06-30');
-    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
     expect(f.calls.find(call => call.path.endsWith('/preview/')).data.definition.filters.rules[0])
         .toMatchObject({ id: 'latest_term_starts_on', operator: 'between', value: ['2027-01-01', '2027-06-30'] });
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     await conditions.getByLabel('Row conditions: comparison', { exact: true }).selectOption('in');
     await expect(values).toHaveCount(1);
     await expect(values).toHaveAttribute('type', 'text');
     await values.fill('2027-01-01,2028-01-01');
-    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
     expect(f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.filters.rules[0])
         .toMatchObject({ id: 'latest_term_starts_on', operator: 'in', value: ['2027-01-01', '2028-01-01'] });
-    await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(studio).toContainText('Definition revision 1');
-    await studio.getByRole('button', { name: 'Edit report in Studio', exact: true }).click();
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await studio.getByRole('button', { name: 'Edit', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     await expect(conditions.getByLabel('Row conditions: value', { exact: true }))
         .toHaveValue('2027-01-01,2028-01-01');
     await expect(studio.locator('.report-local-error')).toBeHidden();
@@ -249,15 +254,16 @@ test('related-record cards preserve same-record conditions, modes and editable s
     await page.getByRole('button', { name: 'Students with active registrations', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     await studio.getByLabel('Report name', { exact: true }).fill('Fictional matching students');
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     const panel = studio.locator('[data-report-match="registration"]');
-    await expect(panel.getByRole('button', { name: 'Has matching records', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(panel.getByRole('button', { name: 'Has a match', exact: true })).toHaveAttribute('aria-pressed', 'true');
     const matching = panel.getByRole('group', { name: 'Matching registrations', exact: true });
     await matching.getByRole('button', { name: 'Add condition', exact: true }).click();
     await matching.getByLabel('Matching registrations: field', { exact: true }).nth(1)
         .selectOption('registration_term_code');
     await matching.getByLabel('Matching registrations: value', { exact: true }).nth(1).fill('26/FA');
-    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
     const preview = f.calls.find(c => c.path.endsWith('/preview/')).data.definition;
     expect(preview.existence.registration).toMatchObject({ mode: 'any', filters: { condition: 'AND', rules: [
@@ -266,28 +272,30 @@ test('related-record cards preserve same-record conditions, modes and editable s
     ] } });
     expect(preview.joins).not.toHaveProperty('registration');
     expect(preview.joins).not.toHaveProperty('registration_term');
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
-    await panel.getByRole('button', { name: 'Has no matching records', exact: true }).click();
-    await expect(panel.getByRole('button', { name: 'Has no matching records', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
+    await panel.getByRole('button', { name: 'No match', exact: true }).click();
+    await expect(panel.getByRole('button', { name: 'No match', exact: true })).toHaveAttribute('aria-pressed', 'true');
     await expect(matching.getByLabel('Matching registrations: value', { exact: true }).nth(1)).toHaveValue('26/FA');
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(studio).toContainText('Definition revision 1');
-    await studio.getByRole('button', { name: 'Edit report in Studio', exact: true }).click();
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
-    await expect(panel.getByRole('button', { name: 'Has no matching records', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await studio.getByLabel('Related record source', { exact: true }).selectOption('latest_registration');
-    await studio.getByRole('button', { name: 'Add related-record condition', exact: true }).click();
+    await studio.getByRole('button', { name: 'Edit', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
+    await expect(panel.getByRole('button', { name: 'No match', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await studio.getByLabel('Record source', { exact: true }).selectOption('latest_registration');
+    await studio.getByRole('button', { name: 'Add match', exact: true }).click();
     const added = studio.locator('[data-report-match="latest_registration"]');
     await expect(added.getByRole('heading', { name: 'Latest registered term', exact: true })).toBeFocused();
     await added.getByRole('button', { name: 'Remove Latest registered term condition', exact: true }).click();
     await expect(added).toHaveCount(0);
-    await expect(studio.getByLabel('Related record source', { exact: true })).toBeFocused();
+    await expect(studio.getByLabel('Record source', { exact: true })).toBeFocused();
     await panel.getByRole('button', { name: 'Remove Registrations condition', exact: true }).click();
     await expect(panel).toHaveCount(0);
-    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
     expect(f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition.existence).toEqual({});
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
@@ -296,44 +304,46 @@ test('related-record cards preserve same-record conditions, modes and editable s
 
 test('staff add named join copies, compare independent terms, save and reopen them without SQL', async ({ page }) => {
     const f = await fixture(page, { students: true });
-    await page.getByRole('button', { name: 'Explore Students & current primary program', exact: true }).click();
+    await page.getByRole('button', { name: 'Start report: Students & current primary program', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     await studio.getByLabel('Report name', { exact: true }).fill('Fictional Fall and Spring comparison');
     await studio.getByRole('button', { name: 'Add another Registrations', exact: true }).click();
     const copy = studio.locator('[data-relation="copy1"]');
     await expect(copy.getByLabel('Name this record copy', { exact: true })).toBeFocused();
     await copy.getByLabel('Name this record copy', { exact: true }).fill('Spring registrations');
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     for (const [source, label, field, value] of [
         ['registration', 'registrations', 'registration_term_code', '26/FA'],
         ['copy1', 'spring registrations', 'copy1__registration_term_code', '27/SP'],
     ]) {
-        await studio.getByLabel('Related record source', { exact: true }).selectOption(source);
-        await studio.getByRole('button', { name: 'Add related-record condition', exact: true }).click();
+        await studio.getByLabel('Record source', { exact: true }).selectOption(source);
+        await studio.getByRole('button', { name: 'Add match', exact: true }).click();
         const panel = studio.locator(`[data-report-match="${source}"]`);
         await panel.getByLabel(`Matching ${label}: field`, { exact: true }).selectOption(field);
         await panel.getByLabel(`Matching ${label}: value`, { exact: true }).fill(value);
     }
-    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
     const query = f.calls.find(c => c.path.endsWith('/preview/')).data.definition;
     expect(query.aliases).toEqual({ copy1: { relation: 'registration', label: 'Spring registrations' } });
     expect(query.existence.copy1.filters.rules[0]).toMatchObject({ id: 'copy1__registration_term_code', value: '27/SP' });
     expect(query.joins).not.toHaveProperty('copy1');
-    await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(studio).toContainText('Definition revision 1');
-    await studio.getByRole('button', { name: 'Edit report in Studio', exact: true }).click();
+    await studio.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(copy.getByLabel('Name this record copy', { exact: true })).toHaveValue('Spring registrations');
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     await expect(studio.locator('[data-report-match="copy1"]').getByLabel('Matching spring registrations: value', { exact: true }))
         .toHaveValue('27/SP');
-    await studio.getByRole('tab', { name: 'Build', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Fields', exact: true }).click();
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await copy.getByRole('button', { name: 'Remove Spring registrations and its fields', exact: true }).click();
     await expect(copy).toHaveCount(0);
-    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
     const removed = f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition;
     expect(removed.aliases).toEqual({});
@@ -344,16 +354,16 @@ test('staff add named join copies, compare independent terms, save and reopen th
 
 test('copied fields become ordinary output columns and removing the copy removes those references', async ({ page }) => {
     const f = await fixture(page, { students: true });
-    await page.getByRole('button', { name: 'Explore Students & current primary program', exact: true }).click();
+    await page.getByRole('button', { name: 'Start report: Students & current primary program', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     await studio.getByRole('button', { name: 'Add another Registrations', exact: true }).click();
     const copy = studio.locator('[data-relation="copy1"]');
     await copy.getByRole('checkbox', { name: 'Registration status', exact: true }).check();
-    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('Alex Example');
     expect(f.calls.find(c => c.path.endsWith('/preview/')).data.definition.columns.at(-1).field)
         .toBe('copy1__registration_status');
-    await studio.getByRole('tab', { name: 'Build', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Fields', exact: true }).click();
     await copy.getByRole('button', { name: 'Remove Registrations 2 and its fields', exact: true }).click();
     await expect(copy).toHaveCount(0);
     await expect(studio.getByLabel('Column 5 label', { exact: true })).toHaveCount(0);
@@ -362,20 +372,21 @@ test('copied fields become ordinary output columns and removing the copy removes
 
 test('admissions opens in the same field and condition builder and saves a configurable outcome report', async ({ page }) => {
     const f = await fixture(page, { applications: true });
-    await page.getByRole('button', { name: 'Explore Applications & admissions', exact: true }).click();
+    await page.getByRole('button', { name: 'Start report: Applications & admissions', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     await expect(studio.getByLabel('Column 2 label', { exact: true })).toHaveValue('Applicant full name');
     await studio.getByLabel('Report name', { exact: true }).fill('Fictional accepted applications');
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     const rows = studio.getByRole('group', { name: 'Row conditions', exact: true });
     await rows.getByLabel('Row conditions: field', { exact: true }).selectOption('status');
     await rows.getByLabel('Row conditions: value', { exact: true }).selectOption('accepted');
-    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('accepted');
     expect(f.calls.find(c => c.path.endsWith('/preview/')).data.definition).toMatchObject({
         dataset: 'applications', filters: { rules: [{ id: 'status', operator: 'equal', value: 'accepted' }] },
     });
-    await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(studio).toContainText('Definition revision 1');
     expect(f.errors).toEqual([]);
 });
@@ -385,7 +396,8 @@ test('readable status choices preserve codes, multiple values and saved custom t
     await page.getByRole('button', { name: 'Students with active registrations', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     await studio.getByLabel('Report name', { exact: true }).fill('Fictional custom status');
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     const matching = studio.getByRole('group', { name: 'Matching registrations', exact: true });
     const comparison = matching.getByLabel('Matching registrations: comparison', { exact: true });
     const value = matching.getByLabel('Matching registrations: value', { exact: true });
@@ -395,16 +407,18 @@ test('readable status choices preserve codes, multiple values and saved custom t
     await value.selectOption({ label: 'Dropped' });
     await comparison.selectOption('in');
     await value.selectOption(['D', 'W']);
-    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     expect(f.calls.find(c => c.path.endsWith('/preview/')).data.definition.existence.registration.filters.rules[0])
         .toMatchObject({ id: 'registration_status', operator: 'in', value: ['D', 'W'] });
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     await comparison.selectOption('contains');
     await value.fill('X');
-    await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(studio).toContainText('Definition revision 1');
-    await studio.getByRole('button', { name: 'Edit report in Studio', exact: true }).click();
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await studio.getByRole('button', { name: 'Edit', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     await expect(value).toHaveValue('X');
     await comparison.selectOption('equal');
     await expect(value).toHaveValue('X');
@@ -420,21 +434,23 @@ test('submission dates use native date conditions and survive save and reopening
     const studio = page.locator('dialog.report-studio');
     await expect(studio.getByLabel('Column 6 label', { exact: true })).toHaveValue('Submitted on');
     await studio.getByLabel('Report name', { exact: true }).fill('Fictional August intake');
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     const rows = studio.getByRole('group', { name: 'Row conditions', exact: true });
     await rows.getByLabel('Row conditions: comparison', { exact: true }).selectOption('between');
     const dates = rows.locator('input[type="date"]');
     await expect(dates).toHaveCount(2);
     await dates.nth(0).fill('2026-08-01');
     await dates.nth(1).fill('2026-08-31');
-    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('2026-08-10');
     const query = f.calls.find(call => call.path.endsWith('/preview/')).data.definition;
     expect(query.filters.rules[0]).toMatchObject({ id: 'submitted_on', operator: 'between', value: ['2026-08-01', '2026-08-31'] });
-    await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(studio).toContainText('Definition revision 1');
-    await studio.getByRole('button', { name: 'Edit report in Studio', exact: true }).click();
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await studio.getByRole('button', { name: 'Edit', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     await expect(studio.locator('input[type="date"]').nth(0)).toHaveValue('2026-08-01');
     await expect(studio.locator('input[type="date"]').nth(1)).toHaveValue('2026-08-31');
     await page.setViewportSize({ width: 375, height: 812 });
@@ -448,7 +464,7 @@ test('unknown submission dates are an explicit missing-date choice, separate fro
     const f = await fixture(page, { applications: true, unknownSubmission: true });
     await expect(page.locator('dialog.report-studio')).toContainText('Earlier unknown dates stay blank');
     await page.getByRole('button', { name: 'Applications with unknown submission dates', exact: true }).click();
-    await page.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
     const query = f.calls.find(call => call.path.endsWith('/preview/')).data.definition;
     expect(query.filters.rules[0]).toMatchObject({ id: 'submitted_on', operator: 'is_null' });
     expect(query.columns.map(c => c.field)).toContain('entry_term');
@@ -462,10 +478,11 @@ test('sections with no active registrations use an absence condition rather than
     const f = await fixture(page);
     await page.getByRole('button', { name: 'Sections with no active registrations', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
-    await studio.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     const panel = studio.locator('[data-report-match="enrollment"]');
-    await expect(panel.getByRole('button', { name: 'Has no matching records', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await expect(panel.getByRole('button', { name: 'No match', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('MATH.101.A');
     const definition = f.calls.find(c => c.path.endsWith('/preview/')).data.definition;
     expect(definition.existence.enrollment).toMatchObject({ mode: 'none', filters: { rules: [
@@ -480,9 +497,10 @@ test('staff build a joined headcount report with visual conditions, live preview
     const f = await fixture(page);
     await page.getByRole('button', { name: 'Section headcounts, including empty sections', exact: true }).click();
     await page.getByLabel('Report name', { exact: true }).fill('Fictional section headcounts');
-    await page.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await page.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     await expect(page.getByRole('group', { name: 'Enrollment conditions', exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('ENG.101.A');
     await expect(page.getByRole('img', { name: /Bar chart/ })).toBeVisible();
     const preview = f.calls.find(call => call.path.endsWith('/preview/'));
@@ -494,17 +512,17 @@ test('staff build a joined headcount report with visual conditions, live preview
     await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
     await page.screenshot({ path: test.info().outputPath('report-studio-mobile.png'), fullPage: true });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.locator('.report-workbench')).toContainText('Definition revision 1');
-    const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export this result page', exact: true }).click();
+    const download = page.waitForEvent('download'); await page.getByRole('button', { name: 'Export page', exact: true }).click();
     expect((await download).suggestedFilename()).toBe('report-studio-page.csv');
-    await page.getByRole('button', { name: 'Edit report in Studio', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.getByLabel('Report name', { exact: true })).toHaveValue('Fictional section headcounts');
     await page.getByLabel('Column 3 label', { exact: true }).fill('Students <img src=x onerror=alert(1)>');
     await page.getByRole('button', { name: /^Column 3 settings:/ }).click();
     await page.getByRole('group', { name: 'Column 3 summary', exact: true }).getByRole('button', { name: 'Count', exact: true }).click();
     await expect(page.locator('.report-workbench img')).toHaveCount(0);
-    await page.getByRole('button', { name: 'Save report definition', exact: true }).click();
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
     await expect(page.locator('.report-workbench')).toContainText('Definition revision 2');
     expect(f.errors).toEqual([]);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
@@ -513,11 +531,12 @@ test('staff build a joined headcount report with visual conditions, live preview
 test('report filters stay in the editor and support nested field comparisons without navigating away', async ({ page }) => {
     const f = await fixture(page);
     await page.getByRole('button', { name: 'Section headcounts, including empty sections', exact: true }).click();
-    await page.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await page.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     const rows = page.getByRole('group', { name: 'Row conditions', exact: true });
     await rows.getByLabel('Row conditions: field', { exact: true }).selectOption('term_code');
     await rows.getByLabel('Row conditions: value', { exact: true }).fill('26/FA');
-    await page.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
     expect(f.calls.find(call => call.path.endsWith('/preview/')).data.definition.filters.rules[0]).toMatchObject({ id: 'term_code', operator: 'equal', value: '26/FA' });
     await expect(page.getByLabel('Row conditions: value', { exact: true })).toHaveValue('26/FA');
     await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
@@ -537,9 +556,10 @@ test('an uncertain save retains exactly the captured definition for a safe retry
     });
     await page.getByRole('button', { name: 'Section headcounts, including empty sections', exact: true }).click();
     await page.getByLabel('Report name', { exact: true }).fill('Fictional retry report');
-    const save = page.getByRole('button', { name: 'Save report definition', exact: true });
+    const save = page.getByRole('button', { name: 'Save', exact: true });
     await save.click();
     await expect(page.getByLabel('Report name', { exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Preview', exact: true })).toBeDisabled();
     await expect(save).toBeEnabled();
     await save.click();
     await expect(page.locator('.report-workbench')).toContainText('Definition revision 1');
@@ -560,7 +580,7 @@ test('an old preview response cannot replace the results after the report draft 
         await route.fallback();
     });
     await page.getByRole('button', { name: 'Section headcounts, including empty sections', exact: true }).click();
-    await page.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
     await pending;
     await page.getByLabel('Column 3 label', { exact: true }).fill('Changed during request');
     release();
@@ -594,7 +614,7 @@ test('the full-width visual map supports field checkboxes, field drops, column r
     await page.mouse.move(box.x + 50, box.y + 20); await page.mouse.down();
     await page.mouse.move(box.x + 110, box.y + 55, { steps: 6 }); await page.mouse.up();
     await expect(page.locator('.report-map-connections path')).toHaveCount(2);
-    await page.getByRole('button', { name: 'Arrange cards', exact: true }).click();
+    await page.getByRole('button', { name: 'Auto arrange', exact: true }).click();
     await workspace.evaluate(element => { element.scrollTop = 0; });
     await page.screenshot({ path: test.info().outputPath('visual-report-builder-desktop.png'), fullPage: true });
     await accessible(page);
@@ -602,7 +622,7 @@ test('the full-width visual map supports field checkboxes, field drops, column r
     await accessible(page);
     await page.screenshot({ path: test.info().outputPath('visual-report-builder-mobile.png'), fullPage: true });
     expect(await workspace.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
-    await page.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Relational report results', exact: true })).toBeVisible();
     expect(f.calls.find(call => call.path.endsWith('/preview/')).data.definition.columns.map(c => c.label)).toEqual(['Academic term', 'Section', 'Term', 'Students', 'Section capacity']);
     await page.keyboard.press('Escape');
@@ -614,15 +634,16 @@ test('the full-width visual map supports field checkboxes, field drops, column r
 test('summary filters and sort priorities follow their columns when a creator changes the output order', async ({ page }) => {
     const f = await fixture(page);
     await page.getByRole('button', { name: 'Section headcounts, including empty sections', exact: true }).click();
-    await page.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await page.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     const totals = page.getByRole('group', { name: 'Summary conditions', exact: true });
     await totals.getByLabel('Summary conditions: field', { exact: true }).selectOption('c2');
     await totals.getByLabel('Summary conditions: comparison', { exact: true }).selectOption('less');
     await totals.getByLabel('Summary conditions: value', { exact: true }).fill('12');
-    await page.getByRole('tab', { name: 'Build', exact: true }).click();
+    await page.getByRole('tab', { name: 'Fields', exact: true }).click();
     await page.getByRole('button', { name: 'Sort column 3: off', exact: true }).click();
     await page.getByRole('button', { name: 'Move column 3 up', exact: true }).click();
-    await page.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
     const query = f.calls.find(call => call.path.endsWith('/preview/')).data.definition;
     expect(query.columns[1].label).toBe('Students');
     expect(query.having.rules[0]).toMatchObject({ id: 'c1', operator: 'less', value: 12 });
@@ -635,17 +656,17 @@ test('a faculty recipient opens a shared report without creator controls and rev
     const viewer = page.locator('.report-workbench');
     await expect(viewer).toContainText('SHARED WITH YOU');
     await expect(page.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('MATH.101.A');
-    await expect(page.getByRole('button', { name: 'Edit report in Studio', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Edit', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Manage report sharing', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Open Report Studio', exact: true })).toHaveCount(0);
     await expect(viewer.locator('input, select')).toHaveCount(0);
     expect(f.visited).not.toContain('/sis/report-studio/catalog/');
     await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
     await page.route('**/sis/report-studio/*/export/', route => route.fulfill({ status: 403, json: { error: 'Access denied.' } }));
-    await page.getByRole('button', { name: 'Export this result page', exact: true }).click();
+    await page.getByRole('button', { name: 'Export page', exact: true }).click();
     await expect(viewer.getByRole('alert')).toContainText('Access denied.');
     await expect(viewer.locator('table')).toHaveCount(0);
-    await expect(page.getByRole('button', { name: 'Export this result page', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Export page', exact: true })).toHaveCount(0);
     expect(f.errors).toEqual([]);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });
@@ -653,18 +674,19 @@ test('a faculty recipient opens a shared report without creator controls and rev
 test('removing a related record also removes its dependent columns, summaries and matching conditions', async ({ page }) => {
     const f = await fixture(page);
     await page.getByRole('button', { name: 'Section headcounts, including empty sections', exact: true }).click();
-    await page.getByRole('tab', { name: 'Conditions', exact: true }).click();
+    await page.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
     const rows = page.getByRole('group', { name: 'Row conditions', exact: true });
     await rows.getByLabel('Row conditions: field', { exact: true }).selectOption('term_code');
     await rows.getByLabel('Row conditions: value', { exact: true }).fill('26/FA');
-    await page.getByRole('tab', { name: 'Build', exact: true }).click();
+    await page.getByRole('tab', { name: 'Fields', exact: true }).click();
     await page.getByRole('button', { name: 'Remove Term and its fields', exact: true }).click();
     await expect(page.locator('[data-relation="term"]')).toHaveCount(0);
     await page.getByRole('button', { name: 'Remove Enrollment and its fields', exact: true }).click();
     await expect(page.locator('[data-relation="enrollment"]')).toHaveCount(0);
     await expect(page.getByLabel('Column 1 label', { exact: true })).toHaveValue('Section');
     await expect(page.getByLabel('Column 2 label', { exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Preview report', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
     const query = f.calls.find(call => call.path.endsWith('/preview/')).data.definition;
     expect(query.joins).toEqual({});
     expect(query.join_filters).toEqual({});
@@ -705,7 +727,7 @@ for (const startingPoint of ['Outstanding student balances', 'Available student 
         const studio = page.locator('dialog.report-studio');
         await expect(studio.locator('.report-local-error')).toBeHidden();
         await expect(studio).toContainText('Keep Currency in the results.');
-        await studio.getByRole('button', { name: 'Preview report', exact: true }).click();
+        await studio.getByRole('button', { name: 'Preview', exact: true }).click();
         await expect(studio.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('USD');
         const query = f.calls.find(call => call.path.endsWith('/preview/')).data.definition;
         expect(query.dataset).toBe('accounts');
@@ -721,7 +743,7 @@ for (const startingPoint of ['Outstanding student balances', 'Available student 
             expect(query.columns.map(column => column.field)).toEqual(['institutional_id', 'full_name', 'term_code', 'currency', 'balance']);
         }
         await studio.getByLabel('Report name', { exact: true }).fill('Fictional account report');
-        await studio.getByRole('button', { name: 'Save report definition', exact: true }).click();
+        await studio.getByRole('button', { name: 'Save', exact: true }).click();
         await expect(studio).toContainText('Definition revision 1');
         await page.setViewportSize({ width: 320, height: 812 });
         await accessible(page);
@@ -731,3 +753,96 @@ for (const startingPoint of ['Outstanding student balances', 'Available student 
         expect(f.errors).toEqual([]);
     });
 }
+
+test('the workspace presents short primary actions and discloses templates and saved options', async ({ page }) => {
+    const f = await fixture(page, { students: true, collapsedTemplates: true });
+    const studio = page.locator('dialog.report-studio');
+    await expect(studio.locator('.report-templates')).not.toHaveAttribute('open');
+    await studio.getByRole('button', { name: 'Start report: Students & current primary program', exact: true }).click();
+    await expect(studio.getByRole('tab', { name: 'Fields', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await expect(studio.locator('.report-editor-actions').getByRole('button', { name: 'Preview', exact: true })).toBeVisible();
+    await expect(studio.getByRole('button', { name: 'Check save', exact: true })).toBeHidden();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await expect(studio.getByRole('heading', { name: 'Summary filters', exact: true })).toHaveCount(0);
+    await expect(studio.locator('.report-advanced-filters')).not.toHaveAttribute('open');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional clear controls');
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
+    await studio.getByRole('button', { name: 'Report options', exact: true }).click();
+    await expect(studio.getByRole('button', { name: 'Share', exact: true })).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(studio).toBeVisible();
+    await expect(studio.getByRole('button', { name: 'Report options', exact: true })).toHaveAttribute('aria-expanded', 'false');
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+test('nested related-record groups support keyboard moves, preserve criteria and reopen after saving', async ({ page }) => {
+    const f = await fixture(page, { students: true });
+    await page.getByRole('button', { name: 'Start report: Students & current primary program', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    for (const source of ['registration', 'program']) {
+        await studio.locator('[data-report-match-picker]').selectOption(source);
+        await studio.getByRole('button', { name: 'Add match', exact: true }).click();
+    }
+    const registered = studio.locator('[data-report-match="registration"]');
+    const criteria = registered.getByRole('group', { name: 'Matching registrations', exact: true });
+    await criteria.getByRole('button', { name: 'Add condition', exact: true }).click();
+    await criteria.getByLabel('Matching registrations: field', { exact: true }).last().selectOption('registration_term_code');
+    await criteria.getByLabel('Matching registrations: value', { exact: true }).last().fill('26/FA');
+    await studio.locator('[data-match-group=""] > .report-match-group-tools').getByRole('button', { name: 'Add group', exact: true }).click();
+    for (const source of ['registration', 'program']) {
+        const card = studio.locator(`[data-report-match="${source}"]`);
+        await card.locator('.report-match-move > summary').click();
+        await card.getByLabel(/Move .* to group/).selectOption('1');
+        await card.getByRole('button', { name: 'Move to group', exact: true }).click();
+    }
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    const definition = f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(definition.existence_logic).toEqual({ condition: 'AND', rules: [{ condition: 'OR', rules: [
+        { relation: 'registration' }, { relation: 'program' },
+    ] }] });
+    expect(definition.existence.registration.filters.rules.some(rule => rule.value === '26/FA')).toBe(true);
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional Any records');
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
+    await studio.getByRole('button', { name: 'Edit', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await expect(studio.getByRole('group', { name: 'Group 1 logic', exact: true }).getByRole('button', { name: 'Any', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await studio.locator('.report-match-group').first().scrollIntoViewIfNeeded();
+    await expect(studio.getByRole('button', { name: 'Preview', exact: true })).toBeInViewport();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await studio.locator('[data-report-match="registration"] .report-match-move > summary').click();
+    await accessible(page);
+    expect(await studio.evaluate(element => element.scrollWidth <= element.clientWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+test('match cards drag into a group and empty groups stop preview without losing filters', async ({ page }) => {
+    const f = await fixture(page, { students: true });
+    await page.getByRole('button', { name: 'Start report: Students & current primary program', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await studio.locator('[data-report-match-picker]').selectOption('registration');
+    await studio.getByRole('button', { name: 'Add match', exact: true }).click();
+    await studio.locator('[data-match-group=""] > .report-match-group-tools').getByRole('button', { name: 'Add group', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    await expect(studio.locator('.report-local-error')).toContainText('empty groups');
+    expect(f.calls.filter(c => c.path.endsWith('/preview/'))).toHaveLength(0);
+    const grip = studio.locator('[data-report-match="registration"] .report-match-grip');
+    await grip.scrollIntoViewIfNeeded();
+    const handle = await grip.boundingBox();
+    await page.mouse.move(handle.x + handle.width / 2, handle.y + handle.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(handle.x + handle.width / 2 + 12, handle.y + handle.height / 2 + 12);
+    const destination = studio.locator('[data-match-group="1"] > .report-match-group-content');
+    await destination.scrollIntoViewIfNeeded();
+    const target = await destination.boundingBox();
+    await page.mouse.move(target.x + target.width / 2, target.y + target.height / 2, { steps: 10 });
+    await page.mouse.up();
+    await expect(studio.locator('[data-match-group="0"] [data-report-match="registration"]')).toBeVisible();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    expect(f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition.existence_logic).toEqual({
+        condition: 'AND', rules: [{ condition: 'OR', rules: [{ relation: 'registration' }] }],
+    });
+    expect(f.errors).toEqual([]);
+});

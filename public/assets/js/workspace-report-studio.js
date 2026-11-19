@@ -92,6 +92,7 @@ window.createWorkspaceReportStudio = function (ui) {
         const previous = dialog;
         dialog = null;
         if (previous) {
+            ui.disposeActionMenus?.(previous);
             previous.close();
             previous.remove();
         }
@@ -161,22 +162,29 @@ window.createWorkspaceReportStudio = function (ui) {
                 node("i", { class: "bi bi-diagram-3", "aria-hidden": "true" }),
                 node("h3", {}, dataset.label),
                 node("p", {}, dataset.description),
-                button(`Explore ${dataset.label}`, () => edit(dataset, initial(dataset)), "btn-primary"),
+                button(`Start report: ${dataset.label}`, () => edit(dataset, initial(dataset)), "btn-primary"),
             );
+            const start = card.querySelector("button");
+            start.setAttribute("aria-label", `Start report: ${dataset.label}`);
+            start.textContent = "Start report";
             cards.append(card);
         });
         if (!catalog.datasets.length)
             surface.append(
                 node("p", {}, "Your account needs an authorized source-data permission before it can build reports."),
             );
+        const templates = node("details", { class: "report-templates" }, node("summary", {}, "Start from a template"));
+        const templateGrid = node("div", { class: "report-template-grid" });
+        templates.append(templateGrid);
+        surface.append(templates);
         const students = catalog.datasets.find((item) => item.id === "students");
         const sections = catalog.datasets.find((item) => item.id === "sections");
         const applications = catalog.datasets.find((item) => item.id === "applications");
         const accounts = catalog.datasets.find((item) => item.id === "accounts");
         if (students?.fields.latest_term_code || sections?.fields.enrollment_id || applications?.fields.submitted_on || accounts?.fields.balance)
-            surface.append(node("h3", {}, "Try a useful starting point"));
+            templateGrid.append(node("p", {}, "Choose a starting question, then adjust its fields and filters."));
         if (applications?.fields.submitted_on)
-            surface.append(
+            templateGrid.append(
                 button("Applications with recorded submission dates", () => edit(applications, {
                     ...initial(applications),
                     filters: { condition: "AND", rules: [
@@ -189,10 +197,10 @@ window.createWorkspaceReportStudio = function (ui) {
                         { id: "submitted_on", operator: "is_null", value: null },
                     ] },
                 })),
-                node("p", { class: "form-text" }, "Submission dates come from recorded submissions, in their original timezone. Earlier unknown dates stay blank. Use Conditions to choose a date range; the intended entry term is a separate field."),
+                node("p", { class: "form-text" }, "Submission dates come from recorded submissions, in their original timezone. Earlier unknown dates stay blank. Use Filters to choose a date range; the intended entry term is a separate field."),
             );
         if (accounts?.fields.balance)
-            surface.append(button("Outstanding student balances", () => edit(accounts, {
+            templateGrid.append(button("Outstanding student balances", () => edit(accounts, {
                 ...initial(accounts),
                 filters: { condition: "AND", rules: [{ id: "balance", operator: "greater", value: 0 }] },
             })), button("Available student credit", () => edit(accounts, {
@@ -225,28 +233,28 @@ window.createWorkspaceReportStudio = function (ui) {
                 sort: [],
                 distinct: false,
             });
-            surface.append(
+            templateGrid.append(
                 button("Students and their latest registered term", () => edit(students, latestDefinition(false))),
                 button("Students with no retained registration", () => edit(students, latestDefinition(true))),
                 node("p", { class: "form-text" }, "Latest term uses academic term dates across all pursuits. Retained late drops and withdrawals count; cancellations and removed early drops do not. This is a reporting view, not an eligibility or coursework-reuse decision."),
             );
         }
         if (students?.fields.registration_status)
-            surface.append(button("Students with active registrations", () => edit(students, {
+            templateGrid.append(button("Students with active registrations", () => edit(students, {
                 ...initial(students),
                 existence: { registration: { mode: "any", filters: { condition: "AND", rules: [
                     { id: "registration_status", operator: "in", value: ["A", "N"] },
                 ] } } },
             })));
         if (sections?.fields.enrollment_status)
-            surface.append(button("Sections with no active registrations", () => edit(sections, {
+            templateGrid.append(button("Sections with no active registrations", () => edit(sections, {
                 ...initial(sections),
                 existence: { enrollment: { mode: "none", filters: { condition: "AND", rules: [
                     { id: "enrollment_status", operator: "in", value: ["A", "N"] },
                 ] } } },
             })));
         if (sections?.fields.enrollment_id)
-            surface.append(
+            templateGrid.append(
                 button("Section headcounts, including empty sections", () =>
                     edit(sections, {
                         dataset: "sections",
@@ -288,7 +296,7 @@ window.createWorkspaceReportStudio = function (ui) {
                 ),
             );
         if (ui.simpleReport)
-            surface.append(
+            templateGrid.append(
                 node(
                     "div",
                     { class: "report-launch-secondary" },
@@ -507,6 +515,7 @@ window.createWorkspaceReportStudio = function (ui) {
         definition.joins ||= {};
         definition.join_filters ||= {};
         definition.existence ||= {};
+        const matchingLogic = window.createReportMatchLogic(definition);
         definition.sort ||= [];
         const root =
             Object.values(dataset.relationships)
@@ -566,13 +575,15 @@ window.createWorkspaceReportStudio = function (ui) {
         });
         const toolbar = node("div", { class: "report-editor-toolbar" }, labeled("Report name", name));
         const actions = node("div", { class: "report-editor-actions" });
-        toolbar.append(actions);
+        const heading = dialog.querySelector(".report-workbench-heading");
+        heading.classList.add("report-editor-heading");
+        heading.insertBefore(actions, heading.lastElementChild);
         const tabs = node("div", { class: "report-view-tabs", role: "tablist", "aria-label": "Report workspace" });
         const panels = {};
         const tabButtons = {};
         [
-            ["design", "Build", "diagram-3"],
-            ["filters", "Conditions", "funnel"],
+            ["design", "Fields", "diagram-3"],
+            ["filters", "Filters", "funnel"],
             ["preview", "Results", "bar-chart-line"],
         ].forEach(([id, title, glyph]) => {
             const tab = button(title, () => selectTab(id), "report-view-tab");
@@ -614,17 +625,17 @@ window.createWorkspaceReportStudio = function (ui) {
         const library = node("aside", { class: "report-library", "aria-label": "Available records and fields" });
         const search = node("input", { class: "form-control", type: "search", placeholder: "Find a record or field…" });
         const libraryRows = node("div", { class: "report-library-rows" });
-        library.append(node("h2", {}, "Your building blocks"), labeled("Find records and fields", search), libraryRows);
+        library.append(node("h2", {}, "Available fields"), labeled("Find records and fields", search), libraryRows);
         const main = node("div", { class: "report-design-main" });
         design.append(library, main);
         panels.design.append(design);
         const mapTools = node(
             "div",
             { class: "report-map-toolbar" },
-            node("div", {}, node("h2", {}, "Connect your records"), node("p", {}, dataset.description),
+            node("div", {}, node("h2", {}, "Record map"), node("p", {}, dataset.description),
                 ...(dataset.id === "accounts" ? [node("p", { class: "form-text" },
                     "Keep Currency in the results. To total balances for students with matching registrations or coursework, use matching-record conditions so each account is counted once.")] : [])),
-            button("Arrange cards", () => {
+            button("Auto arrange", () => {
                 positions.clear();
                 renderMap();
             }),
@@ -1173,6 +1184,7 @@ window.createWorkspaceReportStudio = function (ui) {
                     else match.filters = pruneConditions(match.filters, field => !branch.has(dataset.fields[field].relation));
                 }
             }
+            matchingLogic.normalize();
             branch.forEach((key) => {
                 enabled.delete(key);
                 positions.delete(key);
@@ -1408,7 +1420,7 @@ window.createWorkspaceReportStudio = function (ui) {
                 summaries,
                 node("p", { class: "form-text" }, "When you summarize a column, the other columns group your results."),
             );
-            const duplicate = button("Add a second version of this field", () => addField(column.field));
+            const duplicate = button("Duplicate column", () => addField(column.field));
             inspector.append(duplicate);
             if (["integer", "double"].includes(field.type)) {
                 inspector.append(node("h3", {}, "Calculate with another field"));
@@ -1510,16 +1522,16 @@ window.createWorkspaceReportStudio = function (ui) {
             const rows = node(
                 "section",
                 { class: "report-filter-section" },
-                node("h2", {}, "Choose which records to include"),
+                node("h2", {}, "Row filters"),
                 node("p", {}, "Match all or any conditions. Add groups when your question needs a combination."),
             );
             const totals = node(
                 "section",
                 { class: "report-filter-section" },
-                node("h2", {}, "Refine summarized results"),
+                node("h2", {}, "Summary filters"),
                 node("p", {}, "For example, show only sections with fewer than 12 registrations."),
             );
-            filtersBody.append(rows, totals);
+            filtersBody.append(rows);
             const measures = Object.fromEntries(
                 definition.columns.flatMap((c, i) =>
                     c.aggregate === "none"
@@ -1539,19 +1551,30 @@ window.createWorkspaceReportStudio = function (ui) {
                           ],
                 ),
             );
+            if (Object.keys(measures).length) filtersBody.append(totals);
             let restoring = true;
             const changed = () => {
                 if (!restoring) dirty();
             };
             const next = {
                 rows: conditionBuilder(rows, dataset.fields, definition.filters, "Row conditions", changed),
-                totals: conditionBuilder(totals, measures, definition.having, "Summary conditions", changed),
+                totals: Object.keys(measures).length
+                    ? conditionBuilder(totals, measures, definition.having, "Summary conditions", changed)
+                    : () => null,
                 joins: {},
                 existence: {},
             };
-            const matching = node("section", { class: "report-filter-section" },
-                node("h2", {}, "Filter by related records"),
-                node("p", {}, "Require a matching related record, or exclude records that have one. Each card checks one related record and its details. All added cards must be met; they do not add rows to the report."));
+            matchingLogic.normalize();
+            const matching = node(
+                "section",
+                { class: "report-filter-section" },
+                node("h2", {}, "Related records"),
+                node(
+                    "p",
+                    {},
+                    "Check related records without adding duplicate rows. Combine sources using All or Any groups.",
+                ),
+            );
             filtersBody.append(matching);
             const picker = node("select", { class: "form-select", "data-report-match-picker": "true" });
             for (const [id, relation] of Object.entries(dataset.relationships))
@@ -1561,43 +1584,259 @@ window.createWorkspaceReportStudio = function (ui) {
                 syncFilters(true);
                 readers = null;
                 callback();
+                matchingLogic.normalize();
                 dirty();
                 renderFilters();
                 focus?.();
             };
-            const add = button("Add related-record condition", () => {
+            const focusMatch = (id) =>
+                panels.filters.querySelector(`[data-report-match="${CSS.escape(id)}"] h3`)?.focus();
+            const focusGroup = (path) =>
+                panels.filters.querySelector(`[data-match-group="${path.join(".")}"] h3`)?.focus();
+            const add = button("Add match", () => {
                 if (!picker.value || Object.keys(definition.existence).length >= 6) return;
                 const id = picker.value;
-                mutate(() => { definition.existence[id] = { mode: "any", filters: null }; }, () =>
-                    panels.filters.querySelector(`[data-report-match="${CSS.escape(id)}"] h3`)?.focus());
+                mutate(
+                    () => {
+                        definition.existence[id] = { mode: "any", filters: null };
+                    },
+                    () => focusMatch(id),
+                );
             });
             add.disabled = !picker.options.length || Object.keys(definition.existence).length >= 6;
-            matching.append(labeled("Related record source", picker), add);
-            for (const [id, match] of Object.entries(definition.existence)) {
-                const relation = dataset.relationships[id];
-                const panel = node("section", { class: "record-section", "data-report-match": id },
-                    node("h3", { tabindex: "-1" }, relation.label));
-                const modes = node("div", { class: "inline-actions", role: "group",
-                    "aria-label": `${relation.label} matching requirement` });
-                for (const [mode, title] of [["any", "Has matching records"], ["none", "Has no matching records"]]) {
-                    const control = button(title, () => mutate(() => {
-                        definition.existence[id].mode = mode;
-                    }, () => panels.filters.querySelector(
-                        `[data-report-match="${CSS.escape(id)}"] [data-match-mode="${mode}"]`)?.focus()),
-                    match.mode === mode ? "btn-primary" : "btn-outline-primary");
+            matching.append(node("div", { class: "report-match-add" }, labeled("Record source", picker), add));
+            const groupList = matchingLogic.groups();
+            function renderMatch(id, path) {
+                const relation = dataset.relationships[id],
+                    match = definition.existence[id];
+                const panel = node(
+                    "section",
+                    { class: "report-match-card", "data-report-match": id },
+                    node("h3", { tabindex: "-1" }, relation.label),
+                );
+                const modes = node("div", {
+                    class: "report-match-card-tools",
+                    role: "group",
+                    "aria-label": `${relation.label} matching requirement`,
+                });
+                const grip = button(
+                    `Move ${relation.label} condition`,
+                    () => (moveOptions.open = !moveOptions.open),
+                    "btn-sm btn-light report-match-grip",
+                );
+                grip.replaceChildren(icon("grip-vertical"));
+                grip.title = `Move ${relation.label} condition`;
+                grip.setAttribute("aria-label", `Move ${relation.label} condition`);
+                dragSource(grip, { type: "match", relation: id });
+                modes.append(grip);
+                for (const [mode, title] of [
+                    ["any", "Has a match"],
+                    ["none", "No match"],
+                ]) {
+                    const control = button(
+                        title,
+                        () =>
+                            mutate(
+                                () => {
+                                    definition.existence[id].mode = mode;
+                                },
+                                () =>
+                                    panels.filters
+                                        .querySelector(
+                                            `[data-report-match="${CSS.escape(id)}"] [data-match-mode="${mode}"]`,
+                                        )
+                                        ?.focus(),
+                            ),
+                        match.mode === mode ? "btn-sm btn-primary" : "btn-sm btn-outline-primary",
+                    );
                     control.setAttribute("aria-pressed", String(match.mode === mode));
                     control.dataset.matchMode = mode;
                     modes.append(control);
                 }
-                modes.append(button(`Remove ${relation.label} condition`, () => mutate(() => {
-                    delete definition.existence[id];
-                }, () => panels.filters.querySelector("[data-report-match-picker]")?.focus())));
-                panel.append(modes, node("p", { class: "form-text" },
-                    "Leave the conditions empty to check for any related record. Add conditions to define a matching record. Selected output columns and their relationships remain separate."));
-                matching.append(panel);
-                next.existence[id] = conditionBuilder(panel, matchingFields(id), match.filters,
-                    `Matching ${relation.label.toLowerCase()}`, changed);
+                const remove = button(
+                    `Remove ${relation.label} condition`,
+                    () =>
+                        mutate(
+                            () => {
+                                delete definition.existence[id];
+                            },
+                            () => panels.filters.querySelector("[data-report-match-picker]")?.focus(),
+                        ),
+                    "btn-sm btn-outline-secondary",
+                );
+                remove.replaceChildren(icon("trash"));
+                remove.title = `Remove ${relation.label} condition`;
+                remove.setAttribute("aria-label", `Remove ${relation.label} condition`);
+                modes.append(remove);
+                const moveOptions = node("details", { class: "report-match-move" }, node("summary", {}, "Move"));
+                const destination = node("select", {
+                    class: "form-select form-select-sm",
+                    "aria-label": `Move ${relation.label} to group`,
+                });
+                groupList.forEach((entry, index) =>
+                    destination.append(
+                        node(
+                            "option",
+                            {
+                                value: String(index),
+                                selected: entry.path.join(".") === path.join("."),
+                            },
+                            entry.label,
+                        ),
+                    ),
+                );
+                moveOptions.append(
+                    labeled("Destination group", destination),
+                    button(
+                        "Move to group",
+                        () =>
+                            mutate(
+                                () => matchingLogic.move(id, groupList[Number(destination.value)].path),
+                                () => focusMatch(id),
+                            ),
+                        "btn-sm btn-outline-secondary",
+                    ),
+                );
+                const location = matchingLogic.location(id);
+                for (const [delta, label, glyph] of [
+                    [-1, "up", "arrow-up"],
+                    [1, "down", "arrow-down"],
+                ]) {
+                    const move = button(
+                        `Move ${relation.label} ${label}`,
+                        () =>
+                            mutate(
+                                () => matchingLogic.shift(id, delta),
+                                () => focusMatch(id),
+                            ),
+                        "btn-sm btn-outline-secondary",
+                    );
+                    move.replaceChildren(icon(glyph));
+                    move.setAttribute("aria-label", `Move ${relation.label} ${label}`);
+                    move.title = `Move ${relation.label} ${label}`;
+                    move.disabled =
+                        location.index + delta < 0 || location.index + delta >= location.group.rules.length;
+                    moveOptions.append(move);
+                }
+                panel.append(modes, moveOptions);
+                next.existence[id] = conditionBuilder(
+                    panel,
+                    matchingFields(id),
+                    match.filters,
+                    `Matching ${relation.label.toLowerCase()}`,
+                    changed,
+                );
+                dropTarget(panel, (payload) => {
+                    if (payload.type === "match")
+                        mutate(
+                            () => matchingLogic.move(payload.relation, path, id),
+                            () => focusMatch(payload.relation),
+                        );
+                });
+                return panel;
             }
+            function renderGroup(current, path) {
+                const entry = groupList.find((item) => item.group === current);
+                const group = node(
+                    "section",
+                    { class: "report-match-group", "data-match-group": path.join(".") },
+                    node("h3", { tabindex: "-1" }, entry.label),
+                );
+                const tools = node("div", {
+                    class: "report-match-group-tools",
+                    role: "group",
+                    "aria-label": `${entry.label} logic`,
+                });
+                for (const [value, label] of [
+                    ["AND", "All"],
+                    ["OR", "Any"],
+                ]) {
+                    const toggle = button(
+                        label,
+                        () =>
+                            mutate(
+                                () => (matchingLogic.group(path).condition = value),
+                                () => focusGroup(path),
+                            ),
+                        current.condition === value ? "btn-sm btn-primary" : "btn-sm btn-outline-primary",
+                    );
+                    toggle.setAttribute("aria-pressed", String(current.condition === value));
+                    tools.append(toggle);
+                }
+                if (path.length < 3 && groupList.length < 7)
+                    tools.append(
+                        button(
+                            "Add group",
+                            () =>
+                                mutate(
+                                    () => matchingLogic.addGroup(path),
+                                    () => focusGroup(path),
+                                ),
+                            "btn-sm btn-outline-secondary",
+                        ),
+                    );
+                if (path.length)
+                    tools.append(
+                        button(
+                            current.rules.length ? "Ungroup" : "Remove group",
+                            () =>
+                                mutate(
+                                    () => matchingLogic.ungroup(path),
+                                    () => focusGroup(path.slice(0, -1)),
+                                ),
+                            "btn-sm btn-outline-secondary",
+                        ),
+                    );
+                group.append(
+                    tools,
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        current.condition === "AND"
+                            ? "Every condition in this group must match."
+                            : "At least one condition in this group must match.",
+                    ),
+                );
+                const contents = node("div", { class: "report-match-group-content" });
+                group.append(contents);
+                current.rules.forEach((rule, index) =>
+                    contents.append(
+                        rule.condition ? renderGroup(rule, [...path, index]) : renderMatch(rule.relation, path),
+                    ),
+                );
+                if (!current.rules.length)
+                    contents.append(
+                        node(
+                            "p",
+                            { class: "report-match-empty" },
+                            path.length
+                                ? "Move a condition here, or remove this empty group before previewing."
+                                : "Add a record source above to begin.",
+                        ),
+                    );
+                dropTarget(contents, (payload) => {
+                    if (payload.type === "match")
+                        mutate(
+                            () => matchingLogic.move(payload.relation, path),
+                            () => focusMatch(payload.relation),
+                        );
+                });
+                return group;
+            }
+            matching.append(renderGroup(definition.existence_logic, []));
+            const advanced = node(
+                "details",
+                { class: "report-advanced-filters" },
+                node("summary", {}, "Advanced join filters"),
+            );
+            advanced.append(
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Limit the related rows joined into your output. Use Related records above when you only need to check whether a match exists.",
+                ),
+            );
+            filtersBody.append(advanced);
             Object.entries(dataset.relationships).forEach(([id, relation]) => {
                 const local = Object.fromEntries(fieldsFor(id));
                 if (!enabled.has(id) && !definition.join_filters[id]) return;
@@ -1612,7 +1851,7 @@ window.createWorkspaceReportStudio = function (ui) {
                         "These conditions limit related matches. “Keep all” still includes starting records with no matches.",
                     ),
                 );
-                filtersBody.append(panel);
+                advanced.append(panel);
                 next.joins[id] = conditionBuilder(
                     panel,
                     local,
@@ -1627,6 +1866,8 @@ window.createWorkspaceReportStudio = function (ui) {
         function collect() {
             if (!definition.columns.length) throw new Error("Choose at least one field for your report.");
             syncFilters();
+            matchingLogic.normalize();
+            matchingLogic.assertReady();
             return structuredClone(definition);
         }
         async function showPage(offset = 0) {
@@ -1656,17 +1897,20 @@ window.createWorkspaceReportStudio = function (ui) {
             selectTab("preview");
             status.textContent = "Preview updated. Save the definition when you are ready to share it.";
         }
-        if (can("sis:reporting:run")) actions.append(button("Preview report", () => showPage(), "btn-primary"));
+        if (can("sis:reporting:run")) actions.append(button("Preview", () => showPage(), "btn-primary"));
         if (can("sis:reporting:manage")) {
             const save = button(
-                "Save report definition",
+                "Save",
                 async () => {
                     if (!pending) {
                         if (!name.value.trim()) throw new Error("Give this report a name before saving.");
                         const data = collect(),
                             capturedName = name.value.trim();
                         frozen = true;
-                        frozenState = [...body.querySelectorAll("input, select, button, textarea")].map((control) => [
+                        frozenState = [
+                            ...body.querySelectorAll("input, select, button, textarea"),
+                            ...actions.querySelectorAll("button"),
+                        ].map((control) => [
                             control,
                             control.disabled,
                         ]);
@@ -1688,6 +1932,7 @@ window.createWorkspaceReportStudio = function (ui) {
                             throw error;
                         }
                     }
+                    check.hidden = false;
                     status.textContent = `Saving report. If the connection is interrupted, retry or check the saved report. Reference: ${pending.report_id}`;
                     try {
                         await request("/sis/report-studio/save/", "POST", pending);
@@ -1700,13 +1945,15 @@ window.createWorkspaceReportStudio = function (ui) {
                     }
                     if (surface.isConnected) await record(pending.report_id);
                 },
-                "btn-primary",
+                "btn-outline-primary",
             );
-            const check = button("Check saved report", async () => {
+            const check = button("Check save", async () => {
                 if (!pending) throw new Error("Save this draft before checking its reference.");
                 await record(pending.report_id);
             });
+            check.hidden = true;
             function unlock() {
+                check.hidden = true;
                 frozen = false;
                 frozenState?.forEach(([control, disabled]) => {
                     control.disabled = disabled;
@@ -1782,7 +2029,7 @@ window.createWorkspaceReportStudio = function (ui) {
         panel.append(controls);
         if (result.offset) controls.append(button("Previous result page", () => load(result.offset - 50)));
         if (result.next_offset !== null) controls.append(button("Next result page", () => load(result.next_offset)));
-        if (exportPage) controls.append(button("Export this result page", () => exportPage(result.offset)));
+        if (exportPage) controls.append(button("Export page", () => exportPage(result.offset)));
         panel.append(
             node(
                 "p",
@@ -2011,30 +2258,35 @@ window.createWorkspaceReportStudio = function (ui) {
             ? `Static report · ${saved.lifecycle.row_count} captured rows · ${saved.lifecycle.captured_at}. Results do not refresh from current data.`
             : "Dynamic report · results reflect current data."));
         if (saved.lifecycle?.expires_at) body.append(node("p", {}, `Automatic removal: ${saved.lifecycle.expires_at}.`));
-        if (saved.can_manage) body.append(button("Report settings", () => settings(id)));
+        const recordTools = node("div", { class: "report-saved-tools" });
+        const options = [], studentActions = [];
+        body.append(recordTools);
+        if (saved.can_manage) options.push(button("Report settings", () => settings(id)));
         if (saved.can_manage && !frozen)
-            body.append(
-                button("Edit report in Studio", async () => {
+            recordTools.append(
+                button("Edit", async () => {
                     const catalog = await request("/sis/report-studio/catalog/"),
                         dataset = catalog.datasets.find((d) => d.id === saved.definition.dataset);
                     if (!dataset) throw new Error("This source is no longer available to your account.");
                     await edit(dataset, saved.definition, saved);
                 }),
             );
-        if (saved.can_manage && frozen) body.append(button("Copy report definition", async () => {
+        if (saved.can_manage && frozen) recordTools.append(button("Make a copy", async () => {
             const catalog = await request("/sis/report-studio/catalog/");
             const dataset = catalog.datasets.find(item => item.id === saved.definition.dataset);
             if (!dataset) throw new Error("This source is no longer available to your account.");
             await edit(dataset, saved.definition);
         }));
         if (can("sis:reporting:manage") && saved.can_manage)
-            body.append(button("Manage report sharing", () => ui.sharing(id)));
+            options.push(button("Share", () => ui.sharing(id)));
         if (can("sis:student:read") && can("sis:reporting:run")) {
             for (const [action, workflow] of Object.entries(populationTasks)) {
                 if (saved.student_actions?.includes(action) && workflow.permissions.every(permission => can(permission)))
-                    body.append(button(`Choose students for ${action}`, () => population(id, action)));
+                    studentActions.push(button(`Choose students for ${action}`, () => population(id, action)));
             }
         }
+        if (studentActions.length) recordTools.append(ui.actionMenu("Use students", studentActions));
+        if (options.length) recordTools.append(ui.actionMenu("Report options", options));
         const panel = node("section", {
             class: "record-section report-saved-results",
             "aria-label": "Saved report results",
@@ -2074,10 +2326,7 @@ window.createWorkspaceReportStudio = function (ui) {
                 }
             });
         };
-        body.insertBefore(
-            button(frozen ? "Read saved results" : "Refresh results", () => load(0)),
-            panel,
-        );
+        recordTools.prepend(button(frozen ? "Read results" : "Refresh results", () => load(0), "btn-primary"));
         await load(0);
     }
     return { start, record, settings, cleanup, isOpen: () => !!dialog };

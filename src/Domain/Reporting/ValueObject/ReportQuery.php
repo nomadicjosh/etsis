@@ -13,6 +13,8 @@ final readonly class ReportQuery
     public array $schema;
     /** @var array<string,mixed> */
     private array $baseSchema;
+    /** @var array<string,mixed> */
+    public array $matchingLogic;
     /** @param array<string, mixed> $definition
      * @param array<string, mixed> $schema
      * @param list<string>|null $populationStudents Internal bound restriction, never part of a saved definition.
@@ -116,6 +118,10 @@ final readonly class ReportQuery
             }
             $this->group($match['filters'] ?? null, $this->relatedFields($relation), 0, $count);
         }
+        $this->matchingLogic = ReportMatchLogic::resolve(
+            $definition['existence_logic'] ?? null,
+            array_keys($existence),
+        );
         $measures = [];
         foreach ($columns as $i => $column) {
             if ($column["aggregate"] !== "none") {

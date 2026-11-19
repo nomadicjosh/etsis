@@ -337,4 +337,202 @@ final class ReportRelatedRecordsTest extends TestCase
             StudentPopulationAction::Registration,
         );
     }
+    private function groupedDefinition(): array
+    {
+        $d = $this->definition();
+        $d["aliases"] = [
+            "copy1" => ["relation" => "registration", "label" => "Spring"],
+            "copy2" => ["relation" => "registration", "label" => "Summer"],
+        ];
+        foreach (["copy1" => "27/SP", "copy2" => "27/SU"] as $id => $term) {
+            $d["existence"][$id] = [
+                "mode" => "any",
+                "filters" => $this->group(
+                    $this->rule($id . "__registration_status", ["A", "N"], "in"),
+                    $this->rule($id . "__registration_term_code", $term),
+                ),
+            ];
+        }
+        $d["existence_logic"] = [
+            "condition" => "AND",
+            "rules" => [
+                ["relation" => "registration"],
+                ["condition" => "OR", "rules" => [["relation" => "copy1"], ["relation" => "copy2"]]],
+            ],
+        ];
+        return $d;
+    }
+
+    public function testNestedAllAnyMatchesKeepOuterConditionsAndOneStudentPerRow(): void
+    {
+        $s = new SisFixture();
+        $spring = EntityId::generate();
+        $summer = EntityId::generate();
+        foreach ([$spring->value => "27/SP", $summer->value => "27/SU"] as $id => $code) {
+            $s->sql->insert("sis_terms", [
+                "id" => $id,
+                "code" => $code,
+                "starts_on" => "2027-01-04",
+                "ends_on" => "2027-05-01",
+                "add_drop_ends_on" => "2027-01-14",
+            ]);
+        }
+        $both = $s->student();
+        $alternative = $s->student();
+        $fallOnly = $s->student();
+        $springOnly = $s->student();
+        foreach ([$both, $alternative, $fallOnly] as $student) {
+            $this->row($s, $student->id);
+        }
+        $this->row($s, $both->id, "A", $spring);
+        $this->row($s, $both->id, "N", $spring);
+        $this->row($s, $alternative->id, "A", $summer);
+        $this->row($s, $springOnly->id, "A", $spring);
+        $d = $this->groupedDefinition();
+        $d["filters"] = $this->group($this->rule("active", true));
+        $events = $s->sql->rows("sis_history_events");
+        $expected = [$both->id->value, $alternative->id->value];
+        sort($expected);
+        self::assertSame($expected, array_column($this->service($s)->preview($d, 0)["items"], "c0"));
+        $d["columns"][0]["aggregate"] = "count";
+        self::assertSame([["c0" => 2]], $this->service($s)->preview($d, 0)["items"]);
+        $d["filters"] = $this->group($this->rule("student_id", $fallOnly->id->value));
+        self::assertSame([["c0" => 0]], $this->service($s)->preview($d, 0)["items"]);
+        self::assertSame($events, $s->sql->rows("sis_history_events"));
+    }
+
+    public function testAnySupportsExclusionsWhileDefaultSavedLogicRemainsAll(): void
+    {
+        $s = new SisFixture();
+        $yes = $s->student();
+        $no = $s->student();
+        $this->row($s, $yes->id);
+        $d = $this->definition();
+        $d["existence"]["registered_section"] = ["mode" => "none", "filters" => null];
+        self::assertSame([], $this->service($s)->preview($d, 0)["items"]);
+        $d["existence_logic"] = [
+            "condition" => "OR",
+            "rules" => [["relation" => "registration"], ["relation" => "registered_section"]],
+        ];
+        self::assertCount(2, $this->service($s)->preview($d, 0)["items"]);
+    }
+
+    public function testInvalidGroupsCannotOmitRepeatOrInjectARecordCondition(): void
+    {
+        $schema = AcademicReportSchema::datasets()["students"];
+        $leaf = ["relation" => "registration"];
+        $cases = [
+            ["condition" => "XOR", "rules" => [$leaf]],
+            ["condition" => "OR", "rules" => []],
+            ["condition" => "OR", "rules" => [$leaf, $leaf]],
+            ["condition" => "AND", "rules" => [["relation" => "unknown"]]],
+            ["condition" => "AND", "rules" => [["condition" => "OR", "rules" => []], $leaf]],
+            ["condition" => "AND", "rules" => [$leaf + ["sql" => "1=1"]]],
+            ["condition" => "AND", "rules" => [$leaf], "sql" => "1=1"],
+        ];
+        $deep = $leaf;
+        for ($i = 0; $i < 5; $i++) {
+            $deep = ["condition" => "AND", "rules" => [$deep]];
+        }
+        $cases[] = $deep;
+        foreach ($cases as $case) {
+            $d = $this->definition();
+            $d["existence_logic"] = $case;
+            try {
+                new ReportQuery($d, $schema);
+                self::fail("An invalid match group was accepted.");
+            } catch (ValidationException) {
+                self::assertTrue(true);
+            }
+        }
+        $d = $this->groupedDefinition();
+        $d["existence_logic"]["rules"] = [["relation" => "registration"]];
+        $this->expectException(ValidationException::class);
+        new ReportQuery($d, $schema);
+    }
+
+    public function testHiddenOrBranchPermissionsAreRequiredBeforeExecution(): void
+    {
+        $s = new SisFixture();
+        $schema = AcademicReportSchema::datasets();
+        $schema["students"]["fields"]["registration_term_code"]["permissions"] = ["sis:catalog:manage"];
+        $source = $this->createMock(\Domain\Reporting\Repository\RelationalReportSource::class);
+        $source->method("datasets")->willReturn($schema);
+        $source->expects(self::never())->method("execute");
+        $s->access->staff = false;
+        $s->access->grants = ["sis:reporting:manage", "sis:reporting:run", "sis:student:read"];
+        $d = $this->definition();
+        $d["existence"]["program"] = ["mode" => "any", "filters" => null];
+        $d["existence_logic"] = [
+            "condition" => "OR",
+            "rules" => [["relation" => "program"], ["relation" => "registration"]],
+        ];
+        $this->expectException(AccessDeniedException::class);
+        $this->service($s, $source)->preview($d, 0);
+    }
+
+    public function testGroupedDefinitionSurvivesSaveSharingCaptureAndCurrentPopulationChecks(): void
+    {
+        $s = new SisFixture();
+        $student = $s->student();
+        $this->row($s, $student->id);
+        $d = $this->definition();
+        $d["existence"]["registered_section"] = ["mode" => "none", "filters" => null];
+        $d["existence_logic"] = [
+            "condition" => "OR",
+            "rules" => [["relation" => "registration"], ["relation" => "registered_section"]],
+        ];
+        $service = $this->service($s);
+        $id = EntityId::generate();
+        $service->save($id, $id, -1, "Fictional grouped students", $d);
+        foreach (StudentPopulationAction::cases() as $action) {
+            self::assertCount(1, $service->population($id, 0, $action)["items"]);
+            self::assertSame(
+                $student->id->value,
+                $service->selectStudents($id, [$student->id->value], 0, $action)["items"][0]["id"],
+            );
+        }
+        $reader = $s->user();
+        new SqlReportRepository($s->sql, $s->clock)->share($id, $reader);
+        $s->access->actor = $reader;
+        $s->access->staff = false;
+        $s->access->grants = ["sis:reporting:run", "sis:student:read"];
+        self::assertCount(1, $service->run($id, 0)["items"]);
+        $s->access->staff = true;
+        $owner = $s->sql->rows("sis_reports", ["id" => $id->value])[0]["owner_user_id"];
+        $s->access->actor = new EntityId($owner);
+        $service->configureReport($id, EntityId::generate(), 0, "static", null);
+        $s->sql->execute("DELETE FROM sis_enrollments");
+        self::assertCount(1, $service->run($id, 0)["items"]);
+        self::assertSame($d["existence_logic"], $service->view($id)["definition"]["existence_logic"]);
+    }
+
+    public function testGroupedMatchParametersStayBoundAndOrderedAcrossSupportedDialects(): void
+    {
+        $s = new SisFixture();
+        $d = $this->groupedDefinition();
+        $d["filters"] = $this->group($this->rule("active", true));
+        $typed = new ReportQuery($d, AcademicReportSchema::datasets()["students"]);
+        foreach (["mysql", "pgsql", "sqlite", "sqlsrv", "oci"] as $driver) {
+            $connection = $this->createStub(\Qubus\Expressive\Connection::class);
+            $connection->method("quoteIdentifier")->willReturnCallback(
+                static fn(string $name): string => match ($driver) {
+                    "mysql" => "`" . $name . "`",
+                    "sqlsrv" => "[" . $name . "]",
+                    default => '"' . $name . '"',
+                },
+            );
+            $db = $this->createStub(\Qubus\Expressive\Database::class);
+            $db->method("getConnection")->willReturn($connection);
+            $plan = new ReportSelectCompiler(new \Infrastructure\Persistence\SqlRecords($db))->compile(
+                $typed,
+            );
+            self::assertSame(
+                [1, "A", "N", "2026FA", "A", "N", "27/SP", "A", "N", "27/SU"],
+                $plan["parameters"],
+            );
+            self::assertStringContainsString(" OR EXISTS", $plan["sql"]);
+            self::assertStringNotContainsString("27/SP", $plan["sql"]);
+        }
+    }
 }

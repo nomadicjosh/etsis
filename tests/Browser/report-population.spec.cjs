@@ -80,12 +80,15 @@ async function fixture(page, options = {}) {
             posted: 2, accounts_created: 2, totals: [{ currency: 'USD', minor: 500 }], students: [],
         };
         else if (path === '/sis/registration-batches/review/') result = {
-            operation_id: id(90), revision: 'a'.repeat(64),
+            operation_id: id(90), revision: 'a'.repeat(64), review_token: 'fictional-group-proof',
             section: { id: section, code: 'ENG.201.A', course_code: 'ENG.201', course_title: 'Fictional English',
-                credits_milli: 3000, seats_remaining: 20, fee_minor: 0, currency: 'USD', active: true },
+                credits_milli: 3000, seats_remaining: 20, fee_minor: 0, currency: 'USD', active: true, prerequisite_courses: [],
+                term_starts_on: '2026-08-01', term_ends_on: '2026-12-18' },
             students: data.student_ids.map(student => ({ id: student, institutional_id: students.find(s => s.id === student).institutional_id,
                 given_name: 'Fictional', family_name: 'Student', active: true, enrollment_id: null,
-                prerequisites: { status: 'not_required', missing_count: 0 } })),
+                prerequisites: { status: 'not_required', missing_count: 0, course_statuses: [] }, issues: [], readiness: [],
+                schedule: { status: 'not_fully_checked', blocked: false, conflict_count: 0, unpublished_count: 1, conflicts: [] },
+                charges: { currency: 'USD', total_minor: 0, items: [], problems: [] } })),
         };
         else if (path === '/sis/registration-batches/commit/') result = { batch_id: id(90), section_id: section,
             created: data.student_ids.length, existing: 0, registrations: [] };
@@ -101,6 +104,7 @@ async function fixture(page, options = {}) {
 test('a report shortlist opens the existing registration review with paging, back navigation and explicit confirmation', async ({ page }) => {
     const f = await fixture(page);
     expect(f.calls.some(c => c.path.includes('/population/'))).toBe(false);
+    await page.getByRole('button', { name: 'Use students', exact: true }).click();
     await page.getByRole('button', { name: 'Choose students for registration', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     await studio.getByRole('checkbox', { name: /^Select S-1 / }).check();
@@ -142,6 +146,7 @@ test('a report shortlist opens the existing registration review with paging, bac
 for (const action of ['registration', 'billing', 'messaging']) {
     test(`${action}: a changed definition clears the old shortlist and denied handoff removes cached students`, async ({ page }) => {
         const f = await fixture(page);
+    await page.getByRole('button', { name: 'Use students', exact: true }).click();
         await page.getByRole('button', { name: `Choose students for ${action}`, exact: true }).click();
         const studio = page.locator('dialog.report-studio');
         await studio.getByRole('checkbox').first().check();
@@ -165,6 +170,7 @@ for (const action of ['registration', 'billing', 'messaging']) {
 
 test('the population selector stops at 25 and a report-only recipient has no registration handoff', async ({ page }) => {
     const f = await fixture(page, { many: true });
+    await page.getByRole('button', { name: 'Use students', exact: true }).click();
     await page.getByRole('button', { name: 'Choose students for registration', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     const checks = studio.getByRole('checkbox');
@@ -184,6 +190,7 @@ test('the population selector stops at 25 and a report-only recipient has no reg
 test('a finance report recipient can select students and confirm through the existing billing review without registration duties', async ({ page }) => {
     const f = await fixture(page, { billingOnly: true });
     await expect(page.getByRole('button', { name: 'Choose students for registration', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Use students', exact: true }).click();
     await page.getByRole('button', { name: 'Choose students for billing', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     await studio.getByRole('checkbox', { name: /^Select S-1 / }).check();
@@ -222,6 +229,7 @@ test('a finance report recipient can select students and confirm through the exi
 
 test('changed live billing membership clears the shortlist before any financial review', async ({ page }) => {
     const f = await fixture(page, { billingOnly: true });
+    await page.getByRole('button', { name: 'Use students', exact: true }).click();
     await page.getByRole('button', { name: 'Choose students for billing', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     await studio.getByRole('checkbox').first().check();
@@ -242,6 +250,7 @@ test('a messaging recipient uses the shared composer, explicit recipient queue a
     const f = await fixture(page, { messagingOnly: true });
     for (const action of ['registration', 'billing'])
         await expect(page.getByRole('button', { name: `Choose students for ${action}`, exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Use students', exact: true }).click();
     await page.getByRole('button', { name: 'Choose students for messaging', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     await studio.getByRole('checkbox', { name: /^Select S-1 / }).check();
@@ -293,6 +302,7 @@ test('a messaging recipient uses the shared composer, explicit recipient queue a
 
 test('an unavailable student account stops messaging before any draft is created', async ({ page }) => {
     const f = await fixture(page, { messagingOnly: true });
+    await page.getByRole('button', { name: 'Use students', exact: true }).click();
     await page.getByRole('button', { name: 'Choose students for messaging', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
     await studio.getByRole('checkbox').first().check();

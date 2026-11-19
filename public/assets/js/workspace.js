@@ -294,7 +294,7 @@
     const transferAwardStudio = window.createWorkspaceTransferAwards({ node, request, task, table, recordSummary, actionMenu, buildForm, formData, openDrawer, back: id => transferStudio.record('equivalencies', id) });
     const studentStudio = window.createWorkspaceStudents({ node, request, task, can, actionMenu, recordSummary, messageRecord: operations.messageRecord, disposeActionMenus, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
     relationalStudio = window.createWorkspaceReportStudio({
-        node, request, requestFile, task, can, table, openDrawer,
+        node, request, requestFile, task, can, table, openDrawer, actionMenu, disposeActionMenus,
         closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(),
         registerPopulation: (students, back) => {
             relationalStudio.cleanup(false);
