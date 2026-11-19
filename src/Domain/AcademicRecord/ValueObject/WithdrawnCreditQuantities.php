@@ -21,9 +21,9 @@ final class WithdrawnCreditQuantities
             "expected_grade_points_milli" =>
                 $grade === null
                     ? null
-                    : ($grade["counts_gpa"]
-                        ? intdiv($credit["attempted_milli"] * $grade["points_milli"], 1000)
-                        : 0),
+                    : new GradeSnapshot($grade)->quantities($credit["attempted_milli"], "W")[
+                        "grade_points_milli"
+                    ],
         ];
     }
 

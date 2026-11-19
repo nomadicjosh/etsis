@@ -355,6 +355,7 @@ final readonly class GradebookService
         ?EntityId $expectedEnrollment = null,
         bool $initialOnly = false,
         bool $reconcileQuantities = false,
+        ?int $attemptedMilli = null,
     ): array {
         $enrollment = $this->gradeEnrollment($student, $section);
         if ($expectedEnrollment !== null && $expectedEnrollment->value !== $enrollment->id->value) {
@@ -373,6 +374,7 @@ final readonly class GradebookService
             $courseworkRevision,
             $initialOnly,
             $reconcileQuantities,
+            $attemptedMilli,
         );
     }
     /** @return array<string,mixed> */

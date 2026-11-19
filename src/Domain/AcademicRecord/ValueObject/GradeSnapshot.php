@@ -50,6 +50,25 @@ final readonly class GradeSnapshot
             }
         }
     }
+    /** @return array{attempted_milli:int,completed_milli:int,grade_points_milli:int} */
+    public function quantities(int $attemptedMilli, string $status): array
+    {
+        if (
+            $attemptedMilli < 0 ||
+            $attemptedMilli > 2147483646 ||
+            !in_array($status, ["A", "N", "W"], true)
+        ) {
+            throw new InvalidArgumentException("Use valid institutional credit units and status.");
+        }
+        return [
+            "attempted_milli" => $attemptedMilli,
+            "completed_milli" => $this->facts["passes"] && $status !== "W" ? $attemptedMilli : 0,
+            "grade_points_milli" => $this->facts["counts_gpa"]
+                ? intdiv($attemptedMilli * $this->facts["points_milli"], 1000)
+                : 0,
+        ];
+    }
+
     /** @param array<string,mixed> $row */
     public static function fromRow(array $row): self
     {

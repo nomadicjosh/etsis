@@ -16,6 +16,7 @@ use Domain\AcademicRecord\Event\InstitutionalCreditWasDropped;
 use Domain\AcademicRecord\Repository\AcademicCreditRepository;
 use Domain\AcademicRecord\ValueObject\AcademicCreditId;
 use Domain\AcademicRecord\ValueObject\CreditSnapshot;
+use Domain\AcademicRecord\ValueObject\CreditUnitCorrection;
 use Domain\AcademicRecord\ValueObject\GradeSnapshot;
 use Domain\AcademicRecord\ValueObject\WithdrawnCreditQuantities;
 use Domain\Audit\Repository\AuditTrail;
@@ -192,6 +193,11 @@ final readonly class InstitutionalCreditLedger
             "missing_withdrawal_grade" => $withdrawn && $facts["grade_id"] === null,
             "requires_quantity_reconciliation" => WithdrawnCreditQuantities::requiresReview($facts, $observedGrade),
             "withdrawal_quantities" => $withdrawn ? WithdrawnCreditQuantities::summary($facts, $observedGrade) : null,
+            "current_credit_quantities" => array_intersect_key($facts, array_flip([
+                "attempted_milli", "completed_milli", "grade_points_milli",
+            ])),
+            "can_correct_credit_units" => $canAmend && $observedGrade !== null &&
+                $facts["grade_id"] !== null && $this->canCorrectUnits(),
             "requires_approval" => $this->changes->policy()["mode"] === "approval",
             "pending_grade_change" =>
                 $root->pendingGradeChange() === null
@@ -244,6 +250,7 @@ final readonly class InstitutionalCreditLedger
         ?string $courseworkRevision = null,
         bool $initialOnly = false,
         bool $reconcileQuantities = false,
+        ?int $attemptedMilli = null,
     ): array {
         $this->readAuthority($section);
         return $this->transactions->run(function () use (
@@ -259,6 +266,7 @@ final readonly class InstitutionalCreditLedger
             $courseworkRevision,
             $initialOnly,
             $reconcileQuantities,
+            $attemptedMilli,
         ): array {
             $this->records->lockStudent($student);
             $this->records->lockSection($section);
@@ -287,8 +295,21 @@ final readonly class InstitutionalCreditLedger
                     "Resolve the pending grade correction before requesting another.",
                 );
             }
-            $actor = $this->authority($section, $amend, $withdrawn);
+            $actor = $this->authority($section, $amend, $withdrawn, $attemptedMilli !== null);
             $observedGrade = $this->observedGrade($root, $facts);
+            $units = null;
+            if ($attemptedMilli !== null) {
+                if (
+                    !$amend || $facts["grade_id"] === null || $observedGrade === null ||
+                    $attemptedMilli < 0 || $attemptedMilli > 999999 || $attemptedMilli === $facts["attempted_milli"]
+                ) {
+                    self::invalid(
+                        "attempted_milli",
+                        "Enter different credit units from 0 to 999.999 for a posted grade.",
+                    );
+                }
+                $units = new CreditUnitCorrection($facts["attempted_milli"], $attemptedMilli);
+            }
             $needsReconciliation = WithdrawnCreditQuantities::requiresReview($facts, $observedGrade);
             if ($needsReconciliation !== $reconcileQuantities) {
                 self::invalid("reconcile_withdrawal_quantities", $needsReconciliation
@@ -374,11 +395,19 @@ final readonly class InstitutionalCreditLedger
                 $data["withdrawal_quantity_reconciliation"] = true;
                 $data["withdrawal_quantities"] = WithdrawnCreditQuantities::summary($facts, $selected);
             }
+            if ($units !== null) {
+                $data["credit_unit_correction"] = $units->facts();
+                $data["credit_unit_summary"] = $units->summary($facts, $selected);
+                if ($reconcileQuantities) {
+                    $data["withdrawal_quantities"]["expected_grade_points_milli"] =
+                        $data["credit_unit_summary"]["grade_points_milli"];
+                }
+            }
             if ($evidence !== null) {
                 $data["coursework"] = $evidence->facts;
             }
             $this->actor($actor);
-            $this->authority($section, $amend, $withdrawn);
+            $this->authority($section, $amend, $withdrawn, $units !== null);
             $token = $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR));
             if (strlen($token) > self::REVIEW_TOKEN_LIMIT) {
                 self::invalid(
@@ -410,7 +439,12 @@ final readonly class InstitutionalCreditLedger
         } catch (Throwable) {
             self::invalid("review_token", "Review the final grade again.");
         }
-        $actor = $this->authority($section, $d["amendment"], $d["withdrawal_grade_correction"] ?? false);
+        $actor = $this->authority(
+            $section,
+            $d["amendment"],
+            $d["withdrawal_grade_correction"] ?? false,
+            isset($d["credit_unit_correction"]),
+        );
         if ($actor->value !== $d["actor_id"]) {
             throw new AccessDeniedException("This grade review belongs to another staff member.");
         }
@@ -418,7 +452,12 @@ final readonly class InstitutionalCreditLedger
             $this->records->lockStudent($student);
             $this->records->lockSection($section);
             $this->actor($actor);
-            $this->authority($section, $d["amendment"], $d["withdrawal_grade_correction"] ?? false);
+            $this->authority(
+                $section,
+                $d["amendment"],
+                $d["withdrawal_grade_correction"] ?? false,
+                isset($d["credit_unit_correction"]),
+            );
             $id = new EntityId($d["credit_id"]);
             $root = $this->load($id);
             $op = new EntityId($d["operation_id"]);
@@ -458,6 +497,9 @@ final readonly class InstitutionalCreditLedger
             }
             if ($d["withdrawal_quantity_reconciliation"] ?? false) {
                 $metadata["withdrawal_quantity_reconciliation"] = true;
+            }
+            if (isset($d["credit_unit_correction"])) {
+                $metadata["credit_unit_correction"] = $d["credit_unit_correction"];
             }
             if ($requested) {
                 $payload += [
@@ -616,7 +658,12 @@ final readonly class InstitutionalCreditLedger
                 }
             }
             $this->actor($actor);
-            $this->authority($section, $d["amendment"], $d["withdrawal_grade_correction"] ?? false);
+            $this->authority(
+                $section,
+                $d["amendment"],
+                $d["withdrawal_grade_correction"] ?? false,
+                isset($d["credit_unit_correction"]),
+            );
             return $receipt;
         });
     }
@@ -670,6 +717,7 @@ final readonly class InstitutionalCreditLedger
                 "course_title" => $row["course_title"],
                 "before" => $row["details"]["before_grade"]["code"] ?? "Unknown definition",
                 "proposed" => $row["details"]["grade"]["code"],
+                "credit_unit_correction" => $row["details"]["credit_unit_correction"] ?? null,
             ];
         }
         $this->actor($actor);
@@ -695,10 +743,18 @@ final readonly class InstitutionalCreditLedger
         }
         $withdrawn = $root->gradeChange($id->value)["withdrawn"];
         $reconciliation = $root->gradeChange($id->value)["reconcile_quantities"];
+        $unitCorrection = $root->gradeChange($id->value)["credit_unit_correction"];
         $canApprove = $canReview;
         if ($withdrawn) {
             try {
                 $this->access->requirePermission("sis:gradebook:closed");
+            } catch (AccessDeniedException) {
+                $canApprove = false;
+            }
+        }
+        if ($unitCorrection !== null) {
+            try {
+                $this->access->requirePermission(CreditUnitCorrection::PERMISSION);
             } catch (AccessDeniedException) {
                 $canApprove = false;
             }
@@ -723,6 +779,8 @@ final readonly class InstitutionalCreditLedger
             "missing_withdrawal_grade" => $withdrawn && $request["before_grade"] === null,
             "withdrawal_quantity_reconciliation" => $reconciliation,
             "withdrawal_quantities" => $reconciliation ? $root->gradeChange($id->value)["quantities"] : null,
+            "credit_unit_correction" => $unitCorrection,
+            "credit_unit_summary" => $root->gradeChange($id->value)["credit_unit_summary"],
             "can_approve" => $row["status"] === "pending" && $canApprove && !$stale,
             "can_reject" => $row["status"] === "pending" && $canReview,
             "can_cancel" => $row["status"] === "pending" && $request["actor_id"] === $actor->value,
@@ -741,7 +799,12 @@ final readonly class InstitutionalCreditLedger
             $this->records->lockStudent($student);
             $this->records->lockSection($section);
             [$root, $row] = $this->gradeChangeRecord($id);
-            $actor = $this->resolutionAuthority($row, $outcome, $root->gradeChange($id->value)["withdrawn"]);
+            $actor = $this->resolutionAuthority(
+                $row,
+                $outcome,
+                $root->gradeChange($id->value)["withdrawn"],
+                $root->gradeChange($id->value)["credit_unit_correction"] !== null,
+            );
             if ($row["status"] !== "pending") {
                 throw new ConcurrentModificationException("This grade correction has already been resolved.");
             }
@@ -779,7 +842,12 @@ final readonly class InstitutionalCreditLedger
                 "expires_at" => $this->clock->now()->getTimestamp() + 1200,
             ];
             $this->actor($actor);
-            $this->resolutionAuthority($row, $outcome, $root->gradeChange($id->value)["withdrawn"]);
+            $this->resolutionAuthority(
+                $row,
+                $outcome,
+                $root->gradeChange($id->value)["withdrawn"],
+                $root->gradeChange($id->value)["credit_unit_correction"] !== null,
+            );
             return [
                 "outcome" => $outcome,
                 "reason" => $reason,
@@ -817,6 +885,7 @@ final readonly class InstitutionalCreditLedger
                 $row,
                 $d["outcome"],
                 $root->gradeChange($id->value)["withdrawn"],
+                $root->gradeChange($id->value)["credit_unit_correction"] !== null,
             );
             if (
                 $actor->value !== $d["actor_id"] ||
@@ -897,7 +966,12 @@ final readonly class InstitutionalCreditLedger
                 }
             }
             $this->actor($actor);
-            $this->resolutionAuthority($row, $d["outcome"], $root->gradeChange($id->value)["withdrawn"]);
+            $this->resolutionAuthority(
+                $row,
+                $d["outcome"],
+                $root->gradeChange($id->value)["withdrawn"],
+                $root->gradeChange($id->value)["credit_unit_correction"] !== null,
+            );
             return $receipt;
         });
     }
@@ -909,11 +983,16 @@ final readonly class InstitutionalCreditLedger
         }
         return $actor;
     }
-    private function resolutionAuthority(array $row, string $outcome, bool $withdrawn): EntityId
+    private function resolutionAuthority(array $row, string $outcome, bool $withdrawn, bool $units = false): EntityId
     {
         $actor = $this->gradeChangeAuthority();
         if ($outcome === "approved" && $withdrawn) {
             $this->access->requirePermission("sis:gradebook:closed");
+        }
+        if ($outcome === "approved" && $units) {
+            if ($this->access->requirePermission(CreditUnitCorrection::PERMISSION)->value !== $actor->value) {
+                throw new AccessDeniedException("The academic decision actor changed.");
+            }
         }
         if (!in_array($outcome, ["approved", "rejected", "cancelled"], true)) {
             self::invalid("outcome", "Choose approve, reject or cancel.");
@@ -1187,6 +1266,9 @@ final readonly class InstitutionalCreditLedger
         foreach ($page->events as $stored) {
             $e = $stored->event;
             $p = $e->payload();
+            $unitCorrection = $e instanceof FinalGradeWasDecided ? $e->metaParam("credit_unit_correction", null) :
+            ($e instanceof \Domain\AcademicRecord\Event\GradeChangeWasResolved && $p["outcome"] === "approved"
+            ? $root->gradeChange($p["request_id"])["credit_unit_correction"] : null);
             $reconciled = ($e instanceof FinalGradeWasDecided &&
                 $e->metaParam("withdrawal_quantity_reconciliation", false)) ||
             ($e instanceof \Domain\AcademicRecord\Event\GradeChangeWasResolved &&
@@ -1194,6 +1276,7 @@ final readonly class InstitutionalCreditLedger
             $root->gradeChange($p["request_id"])["reconcile_quantities"]);
             $items[] = [
                 "withdrawal_quantity_reconciled" => $reconciled,
+                "credit_unit_correction" => $unitCorrection,
                 ...($e instanceof FinalGradeWasDecided && $e->metaParam("coursework", null) !== null
                     ? ["coursework_summary" => array_intersect_key(
                         new CourseworkGradeEvidence($e->metaParam("coursework"))->summary(),
@@ -1411,14 +1494,24 @@ final readonly class InstitutionalCreditLedger
             );
         }
     }
-    private function authority(EntityId $section, bool $amendment, bool $withdrawn = false): EntityId
-    {
+    private function authority(
+        EntityId $section,
+        bool $amendment,
+        bool $withdrawn = false,
+        bool $units = false,
+    ): EntityId {
+        $unitActor = $units ? $this->access->requirePermission(CreditUnitCorrection::PERMISSION) : null;
         if ($withdrawn) {
             $this->access->requirePermission("sis:gradebook:closed");
         }
         if ($amendment) {
             $actor = $this->access->requirePermission("sis:gradebook:amend");
-            $this->access->requirePermission("sis:student:read");
+            if (
+                $this->access->requirePermission("sis:student:read")->value !== $actor->value ||
+                ($unitActor !== null && $unitActor->value !== $actor->value)
+            ) {
+                throw new AccessDeniedException("The academic decision actor changed.");
+            }
             return $actor;
         }
         $row = $this->records->section($section);
@@ -1443,6 +1536,15 @@ final readonly class InstitutionalCreditLedger
             if ($withdrawn) {
                 $this->access->requirePermission("sis:gradebook:closed");
             }
+            return true;
+        } catch (AccessDeniedException) {
+            return false;
+        }
+    }
+    private function canCorrectUnits(): bool
+    {
+        try {
+            $this->access->requirePermission(CreditUnitCorrection::PERMISSION);
             return true;
         } catch (AccessDeniedException) {
             return false;

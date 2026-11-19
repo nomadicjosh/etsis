@@ -13,6 +13,8 @@ use Domain\AcademicRecord\Event\AcademicCompletionWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted;
 use Domain\AcademicRecord\ValueObject\CreditSnapshot;
+use Domain\AcademicRecord\ValueObject\CreditUnitCorrection;
+use Domain\AcademicRecord\ValueObject\GradeSnapshot;
 use Domain\AcademicRecord\ValueObject\WithdrawnCreditQuantities;
 use Domain\Gradebook\ValueObject\CourseworkGradeEvidence;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
@@ -108,19 +110,20 @@ final class AcademicCredit extends EventSourcedAggregate
                 throw new CorruptHistoryException();
             }
         }
-        $this->decideGrade($p["grade"], $p["decision_id"]);
+        $units = $this->unitCorrection($event->metaParam("credit_unit_correction", null));
+        $this->decideGrade($p["grade"], $p["decision_id"], $units);
     }
-    private function decideGrade(array $grade, string $decision): void
+    private function decideGrade(array $grade, string $decision, ?CreditUnitCorrection $units = null): void
     {
         $this->grade = $grade;
         $this->credit["grade_id"] = $grade["id"];
-        $this->credit["completed_milli"] =
-        $grade["passes"] && in_array($this->credit["status"], ["A", "N"], true)
-        ? $this->credit["attempted_milli"]
-        : 0;
-        $this->credit["grade_points_milli"] = $grade["counts_gpa"]
-        ? intdiv($this->credit["attempted_milli"] * $grade["points_milli"], 1000)
-        : 0;
+        $this->credit = array_replace(
+            $this->credit,
+            new GradeSnapshot($grade)->quantities(
+                $units?->attemptedMilli ?? $this->credit["attempted_milli"],
+                $this->credit["status"],
+            ),
+        );
         ++$this->credit["version"];
         new CreditSnapshot($this->credit);
         $this->decision = $decision;
@@ -144,6 +147,7 @@ final class AcademicCredit extends EventSourcedAggregate
         ) {
             throw new CorruptHistoryException();
         }
+        $units = $this->unitCorrection($event->metaParam("credit_unit_correction", null));
         $this->pendingGradeChange = $p["decision_id"];
         $this->gradeChanges[$p["decision_id"]] = [
             "details" => $p,
@@ -152,7 +156,14 @@ final class AcademicCredit extends EventSourcedAggregate
             "withdrawn" => $event->metaParam("withdrawal_grade_correction", false),
             "reconcile_quantities" => $event->metaParam("withdrawal_quantity_reconciliation", false),
             "quantities" => WithdrawnCreditQuantities::summary($this->credit, $p["grade"]),
+            "credit_unit_correction" => $units?->facts(),
+            "credit_unit_summary" => $units?->summary($this->credit, $p["grade"]),
         ];
+        if ($units !== null) {
+            $this->gradeChanges[$p["decision_id"]]["details"]["credit_unit_correction"] = $units->facts();
+            $this->gradeChanges[$p["decision_id"]]["quantities"]["expected_grade_points_milli"] =
+            $this->gradeChanges[$p["decision_id"]]["credit_unit_summary"]["grade_points_milli"];
+        }
     }
     public function whenGradeChangeWasResolved(
         \Domain\AcademicRecord\Event\GradeChangeWasResolved $event,
@@ -181,7 +192,8 @@ final class AcademicCredit extends EventSourcedAggregate
             ) {
                 throw new CorruptHistoryException();
             }
-            $this->decideGrade($p["grade"], $p["decision_id"]);
+            $units = $this->unitCorrection($this->gradeChanges[$p["request_id"]]["credit_unit_correction"]);
+            $this->decideGrade($p["grade"], $p["decision_id"], $units);
         }
         $this->gradeChanges[$p["request_id"]]["status"] = $p["outcome"];
         $this->gradeChanges[$p["request_id"]]["version"] = $event->playhead();
@@ -190,6 +202,26 @@ final class AcademicCredit extends EventSourcedAggregate
     public function pendingGradeChange(): ?array
     {
         return $this->pendingGradeChange === null ? null : $this->gradeChanges[$this->pendingGradeChange];
+    }
+    private function unitCorrection(mixed $facts): ?CreditUnitCorrection
+    {
+        if ($facts === null) {
+            return null;
+        }
+        if (
+            !is_array($facts) ||
+            $this->credit === null ||
+            $this->credit["grade_id"] === null ||
+            $this->grade === null ||
+            !in_array($this->credit["status"], ["A", "N", "W"], true)
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $units = CreditUnitCorrection::fromArray($facts);
+        if ($units->previousMilli !== $this->credit["attempted_milli"]) {
+            throw new CorruptHistoryException();
+        }
+        return $units;
     }
     private function allowsGrade(mixed $withdrawn, mixed $reconcileQuantities = false): bool
     {
@@ -204,9 +236,10 @@ final class AcademicCredit extends EventSourcedAggregate
         if (!$withdrawn) {
             return in_array($this->credit["status"], ["A", "N"], true);
         }
-        return $this->credit["status"] === "W" && ($reconcileQuantities ||
-            ($this->credit["completed_milli"] === 0 &&
-                ($this->credit["grade_id"] !== null || $this->credit["grade_points_milli"] === 0)));
+        return $this->credit["status"] === "W" &&
+        ($reconcileQuantities ||
+        ($this->credit["completed_milli"] === 0 &&
+        ($this->credit["grade_id"] !== null || $this->credit["grade_points_milli"] === 0)));
     }
     public function gradeChange(string $id): ?array
     {

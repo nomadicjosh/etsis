@@ -78,6 +78,13 @@ async function fixture(page, options = {}) {
                 missing_withdrawal_grade: !!options.missingGrade,
                 requires_quantity_reconciliation: !!options.reconcile,
                 withdrawal_quantities: options.reconcile ? quantities : null,
+                can_correct_credit_units:
+                    !!options.unitCorrection && !options.readOnly && !options.missingGrade,
+                current_credit_quantities: {
+                    attempted_milli: 3000,
+                    completed_milli: options.withdrawn ? 0 : 3000,
+                    grade_points_milli: options.withdrawn ? 0 : 12000,
+                },
                 pending_grade_change: options.pending ? { id: id(8), status: "pending" } : null,
                 posted: true,
                 can_amend: !options.readOnly,
@@ -104,6 +111,20 @@ async function fixture(page, options = {}) {
                 earlier_history_unknown: true,
                 review_token: `fictional-reconciliation-${gradeReviews}`,
             };
+            if (data.attempted_milli !== undefined) {
+                result.credit_unit_correction = {
+                    previous_attempted_milli: 3000,
+                    attempted_milli: data.attempted_milli,
+                };
+                result.credit_unit_summary = {
+                    previous_attempted_milli: 3000,
+                    previous_completed_milli: options.withdrawn ? 0 : 3000,
+                    previous_grade_points_milli: options.withdrawn ? 0 : 12000,
+                    attempted_milli: data.attempted_milli,
+                    completed_milli: options.withdrawn ? 0 : data.attempted_milli,
+                    grade_points_milli: data.attempted_milli * 4,
+                };
+            }
         } else if (path === `/sis/grade-changes/${id(8)}/`) {
             result = {
                 id: id(8),
@@ -114,13 +135,24 @@ async function fixture(page, options = {}) {
                 grade: { code: "A" },
                 effective_at: "2026-08-11T00:00:00Z",
                 reason: "Fictional protected reconciliation evidence.",
-                withdrawal_grade_correction: true,
-                withdrawal_quantity_reconciliation: true,
+                withdrawal_grade_correction: !!options.withdrawn,
+                withdrawal_quantity_reconciliation: !!options.reconcile,
                 withdrawal_quantities: quantities,
                 can_approve: true,
                 can_reject: true,
                 can_cancel: false,
             };
+            if (options.unitCorrection) {
+                result.credit_unit_correction = { previous_attempted_milli: 3000, attempted_milli: 4500 };
+                result.credit_unit_summary = {
+                    previous_attempted_milli: 3000,
+                    previous_completed_milli: 3000,
+                    previous_grade_points_milli: 12000,
+                    attempted_milli: 4500,
+                    completed_milli: 4500,
+                    grade_points_milli: 18000,
+                };
+            }
         } else if (path.endsWith("/grade-changes/" + id(8) + "/review/")) {
             result = {
                 outcome: data.outcome,
@@ -704,5 +736,118 @@ test("read-only grading context cannot expose the reconciliation controls", asyn
         }),
     ).toHaveCount(0);
     expect(f.calls.some((c) => c.path.endsWith("/final-grades/review/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+for (const withdrawn of [false, true])
+    test(`grade and credit-unit review stays together for ${withdrawn ? "withdrawn" : "active"} work`, async ({
+        page,
+    }) => {
+        const f = await fixture(page, { unitCorrection: true, withdrawn });
+        const drawer = page.locator("#drawer-body");
+        const enabled = page.getByLabel("Correct credit units", { exact: true });
+        const units = page.getByLabel("Corrected attempted credits", { exact: true });
+        await expect(enabled).not.toBeChecked();
+        await expect(units).toBeHidden();
+        await enabled.check();
+        await expect(units).toBeFocused();
+        await units.fill("4.5");
+        await page
+            .getByRole("combobox", { name: "Institutional grade", exact: true })
+            .selectOption("00000000000000000000000004");
+        await page
+            .getByRole("textbox", { name: "Reason for correction", exact: true })
+            .fill("Fictional <b>credit</b> evidence.");
+        await page.getByRole("button", { name: "Review final grade", exact: true }).click();
+        await expect(drawer).toContainText("Reviewed credit units");
+        await expect(drawer).toContainText("3 → 4.5");
+        await expect(drawer).toContainText(withdrawn ? "0 → 0" : "3 → 4.5");
+        await expect(drawer).toContainText("financial adjustment separately");
+        await expect(drawer.locator("b")).toHaveCount(0);
+        expect(f.calls.some((c) => c.path.endsWith("/final-grades/commit/"))).toBe(false);
+        await page.getByRole("button", { name: "Change review", exact: true }).click();
+        await expect(enabled).toBeChecked();
+        await expect(units).toHaveValue("4.5");
+        await expect(page.getByRole("textbox", { name: "Reason for correction", exact: true })).toHaveValue(
+            "Fictional <b>credit</b> evidence.",
+        );
+        await page.setViewportSize({ width: 390, height: 844 });
+        expect(
+            (
+                await new AxeBuilder({ page })
+                    .include("#drawer-body")
+                    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+                    .analyze()
+            ).violations,
+        ).toEqual([]);
+        await page.getByRole("button", { name: "Review final grade", exact: true }).click();
+        expect(
+            (
+                await new AxeBuilder({ page })
+                    .include("#drawer-body")
+                    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+                    .analyze()
+            ).violations,
+        ).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.getByRole("button", { name: "Confirm final grade", exact: true }).click();
+        expect(f.calls.filter((c) => c.path.endsWith("/final-grades/review/"))).toHaveLength(2);
+        expect(f.calls.find((c) => c.path.endsWith("/final-grades/review/"))).toMatchObject({
+            csrf: "fictional-test-token",
+            data: { enrollment_id: f.enrollment, version: 3, attempted_milli: 4500 },
+        });
+        expect(f.calls.filter((c) => c.path.endsWith("/final-grades/commit/"))).toHaveLength(1);
+        expect(
+            f.calls.some((c) => c.path.includes("/accounts/") || c.path.includes("/academic-dates/")),
+        ).toBe(false);
+        expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+        expect(f.errors).toEqual([]);
+    });
+
+test("ordinary grade review omits the disabled credit-unit field", async ({ page }) => {
+    const f = await fixture(page, { unitCorrection: true });
+    await page
+        .getByRole("combobox", { name: "Institutional grade", exact: true })
+        .selectOption("00000000000000000000000004");
+    await page
+        .getByRole("textbox", { name: "Reason for correction", exact: true })
+        .fill("Fictional grade-only correction.");
+    await page.getByRole("button", { name: "Review final grade", exact: true }).click();
+    await expect(
+        page.locator("#drawer-body").getByText("Reviewed credit units", { exact: true }),
+    ).toHaveCount(0);
+    const data = f.calls.find((c) => c.path.endsWith("/final-grades/review/"))?.data;
+    expect(data).toBeDefined();
+    expect(data).not.toHaveProperty("attempted_milli");
+    expect(data).not.toHaveProperty("correct_credit_units");
+    expect(f.errors).toEqual([]);
+});
+
+test("independent review retains grade and unit changes in one confirmation", async ({ page }) => {
+    const f = await fixture(page, { unitCorrection: true, pending: true });
+    await page.getByRole("button", { name: "Review correction", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Reviewed credit units");
+    await expect(page.locator("#drawer-body")).toContainText("3 → 4.5");
+    await page.getByRole("combobox", { name: "Decision", exact: true }).selectOption("approved");
+    await page
+        .getByRole("textbox", { name: "Reason for decision", exact: true })
+        .fill("Fictional independent unit evidence.");
+    await page.getByRole("button", { name: "Review decision", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("3 → 4.5");
+    await expect(page.locator("#drawer-body")).toContainText("12 → 18");
+    expect(f.calls.some((c) => c.path.endsWith("/commit/"))).toBe(false);
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+        (
+            await new AxeBuilder({ page })
+                .include("#drawer-body")
+                .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+                .analyze()
+        ).violations,
+    ).toEqual([]);
+    await page.getByRole("button", { name: "Confirm decision", exact: true }).click();
+    expect(
+        f.calls.filter((c) => c.path.includes("/grade-changes/") && c.path.endsWith("/commit/")),
+    ).toHaveLength(1);
     expect(f.errors).toEqual([]);
 });

@@ -171,6 +171,7 @@ final readonly class SisGradebookController
                 $f->id('enrollment_id'),
                 $f->boolean('initial_only'),
                 $f->boolean('reconcile_withdrawal_quantities'),
+                $f->optionalInteger('attempted_milli'),
             ),
         );
     }

@@ -152,9 +152,17 @@ final readonly class SqlGradeChangeRepository implements GradeChangeRepository
         if (!is_array($row["details"])) {
             throw new CorruptHistoryException();
         }
+        $details = $row["details"];
+        if (array_key_exists("credit_unit_correction", $details)) {
+            if (!is_array($details["credit_unit_correction"])) {
+                throw new CorruptHistoryException();
+            }
+            \Domain\AcademicRecord\ValueObject\CreditUnitCorrection::fromArray($details["credit_unit_correction"]);
+            unset($details["credit_unit_correction"]);
+        }
         GradeChangeSchema::validate(
             \Domain\AcademicRecord\Event\GradeChangeWasRequested::class,
-            $row["details"],
+            $details,
         );
         if (
             $row["id"] !== $row["details"]["decision_id"] ||

@@ -995,6 +995,18 @@ final readonly class HistoricalSchemaRegistry
                     }
                     continue;
                 }
+                if ($name === 'credit_unit_correction') {
+                    if (
+                        !is_array($value) || !in_array($class, [
+                        \Domain\AcademicRecord\Event\FinalGradeWasDecided::class,
+                        \Domain\AcademicRecord\Event\GradeChangeWasRequested::class,
+                        ], true) || isset($metadata['coursework'])
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    \Domain\AcademicRecord\ValueObject\CreditUnitCorrection::fromArray($value);
+                    continue;
+                }
                 if ($name === 'grade_change_policy') {
                     if ($class !== \Domain\AcademicRecord\Event\FinalGradeWasDecided::class || !is_array($value)) {
                         throw new CorruptHistoryException();

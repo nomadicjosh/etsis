@@ -60,6 +60,27 @@ window.createWorkspaceTeaching = function (ui) {
             ]),
         );
     };
+    const unitReview = (summary) =>
+        node(
+            "section",
+            { "aria-label": "Credit-unit correction" },
+            node("h3", { class: "h6" }, "Reviewed credit units"),
+            recordSummary(
+                [
+                    ["Attempted credits", "attempted_milli"],
+                    ["Earned credits", "completed_milli"],
+                    ["GPA quality points", "grade_points_milli"],
+                ].map(([label, key]) => [
+                    label,
+                    `${Number(summary[`previous_${key}`]) / 1000} → ${Number(summary[key]) / 1000}`,
+                ]),
+            ),
+            node(
+                "p",
+                { class: "alert alert-info" },
+                "The original course definition, registration and charges stay unchanged. Review any financial adjustment separately. Earlier academic values remain in history.",
+            ),
+        );
     const grid = (headers, rows, caption) =>
         node(
             "div",
@@ -817,13 +838,49 @@ window.createWorkspaceTeaching = function (ui) {
                 "I verified the withdrawn credit quantities against institutional records",
                 "checkbox",
             ]);
+        if (choices.can_correct_credit_units) {
+            descriptors.push(
+                ["correct_credit_units", "Correct credit units", "checkbox"],
+                ["attempted_milli", "Corrected attempted credits", "credits", "", false],
+            );
+        }
         const form = await buildForm(
             descriptors,
-            { effective_on: choices.effective_on_default, ...(draft || {}) },
+            {
+                effective_on: choices.effective_on_default,
+                ...(draft || {}),
+                attempted_milli:
+                    Number(
+                        draft?.attempted_milli ?? choices.current_credit_quantities?.attempted_milli ?? 0,
+                    ) / 1000,
+            },
             { layout: "final_grade" },
         );
         form.elements.reason.maxLength = 1000;
         form.elements.effective_on.max = choices.effective_on_default;
+        if (choices.can_correct_credit_units) {
+            const changeUnits = form.elements.correct_credit_units,
+                units = form.elements.attempted_milli;
+            units.max = "999.999";
+            units.min = "0";
+            units.step = "0.001";
+            const help = node(
+                "p",
+                { id: "credit-unit-help", class: "form-text" },
+                "Change units only when institutional evidence supports this student's credit correction. The reviewed grade determines earned credit and GPA. Registration, catalog definitions and charges stay unchanged.",
+            );
+            units.setAttribute("aria-describedby", "credit-unit-help");
+            const toggleUnits = (focus = false) => {
+                units.disabled = !changeUnits.checked;
+                units.required = changeUnits.checked;
+                units.parentElement.hidden = !changeUnits.checked;
+                help.hidden = !changeUnits.checked;
+                if (focus && changeUnits.checked) units.focus();
+            };
+            form.append(help);
+            changeUnits.addEventListener("change", () => toggleUnits(true));
+            toggleUnits();
+        }
         if (evidenceNotice) {
             form.elements.grade_evidence.required = true;
             form.elements.grade_evidence.setAttribute("aria-describedby", "grade-evidence-help");
@@ -926,6 +983,8 @@ window.createWorkspaceTeaching = function (ui) {
                     ...(assignment ? { assignment_id: assignment } : {}),
                     ...(courseworkRevision ? { coursework_revision: courseworkRevision } : {}),
                 };
+                if (!form.elements.correct_credit_units?.checked) delete payload.attempted_milli;
+                delete payload.correct_credit_units;
                 const sequence = ++reviewSequence;
                 const review = await request(
                     `/sis/sections/${sectionRow.id}/final-grades/review/`,
@@ -966,6 +1025,7 @@ window.createWorkspaceTeaching = function (ui) {
                         review.withdrawal_quantity_reconciliation
                             ? quantityReview(review.withdrawal_quantities)
                             : null,
+                        review.credit_unit_summary ? unitReview(review.credit_unit_summary) : null,
                         review.requires_approval
                             ? node(
                                   "p",
@@ -1036,7 +1096,11 @@ window.createWorkspaceTeaching = function (ui) {
                           page.items.map((row) => [
                               row.institutional_id || "Unavailable",
                               row.course_code || "Unavailable",
-                              `${row.before} → ${row.proposed}`,
+                              `${row.before} → ${row.proposed}${
+                                  row.credit_unit_correction
+                                      ? ` · Credits ${row.credit_unit_correction.previous_attempted_milli / 1000} → ${row.credit_unit_correction.attempted_milli / 1000}`
+                                      : ""
+                              }`,
                               button("Review request", () => gradeChangeRecord(row.id, gradeChanges)),
                           ]),
                           "Pending grade corrections",
@@ -1128,6 +1192,9 @@ window.createWorkspaceTeaching = function (ui) {
                 quantityReview(record.withdrawal_quantities),
             );
         }
+        if (record.credit_unit_summary) {
+            content.append(unitReview(record.credit_unit_summary));
+        }
         if (record.stale)
             content.append(
                 node(
@@ -1171,6 +1238,9 @@ window.createWorkspaceTeaching = function (ui) {
                     ]),
                     ...(record.withdrawal_quantity_reconciliation && result.outcome === "approved"
                         ? [quantityReview(record.withdrawal_quantities)]
+                        : []),
+                    ...(record.credit_unit_summary && result.outcome === "approved"
+                        ? [unitReview(record.credit_unit_summary)]
                         : []),
                     node(
                         "p",
@@ -1549,31 +1619,35 @@ window.createWorkspaceTeaching = function (ui) {
                                   "Recorded",
                               ],
                               page.items.map((item) => [
-                                  item.withdrawal_quantity_reconciled
-                                      ? "Withdrawn credits reconciled"
-                                      : {
-                                            registration: "Registration accepted",
-                                            observed_existing: "Existing facts observed",
-                                            grade_decided: "Grade decision",
-                                            correction_requested: "Grade correction requested",
-                                            correction_approved: "Grade correction approved",
-                                            correction_rejected: "Grade correction rejected",
-                                            correction_cancelled: "Grade correction cancelled",
-                                            completion_recorded: "Actual completion date recorded",
-                                            period_recorded: "Source academic period recorded",
-                                            course_accepted: "Course publication accepted",
-                                            dropped: "Course dropped",
-                                        }[item.action] || "Academic decision",
+                                  item.credit_unit_correction
+                                      ? "Grade and credit units corrected"
+                                      : item.withdrawal_quantity_reconciled
+                                        ? "Withdrawn credits reconciled"
+                                        : {
+                                              registration: "Registration accepted",
+                                              observed_existing: "Existing facts observed",
+                                              grade_decided: "Grade decision",
+                                              correction_requested: "Grade correction requested",
+                                              correction_approved: "Grade correction approved",
+                                              correction_rejected: "Grade correction rejected",
+                                              correction_cancelled: "Grade correction cancelled",
+                                              completion_recorded: "Actual completion date recorded",
+                                              period_recorded: "Source academic period recorded",
+                                              course_accepted: "Course publication accepted",
+                                              dropped: "Course dropped",
+                                          }[item.action] || "Academic decision",
                                   item.action === "course_accepted"
                                       ? `${item.course_code} · ${item.course_title}`
                                       : item.grade_code
                                         ? `${item.grade_code}${item.coursework_summary ? ` · Coursework ${item.coursework_summary.score_display}` : ""}`
                                         : "—",
-                                  item.action === "completion_recorded"
-                                      ? `${item.previous_completed_on || "Unknown"} → ${item.completed_on || "Unknown"}`
-                                      : item.action === "period_recorded"
-                                        ? `${item.previous_academic_on || "Unknown"} → ${item.academic_on || "Unknown"}`
-                                        : "—",
+                                  item.credit_unit_correction
+                                      ? `${item.credit_unit_correction.previous_attempted_milli / 1000} → ${item.credit_unit_correction.attempted_milli / 1000} credits`
+                                      : item.action === "completion_recorded"
+                                        ? `${item.previous_completed_on || "Unknown"} → ${item.completed_on || "Unknown"}`
+                                        : item.action === "period_recorded"
+                                          ? `${item.previous_academic_on || "Unknown"} → ${item.academic_on || "Unknown"}`
+                                          : "—",
                                   item.effective_at,
                                   item.recorded_at,
                               ]),

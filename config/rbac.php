@@ -41,6 +41,9 @@ return [
         'sis:gradebook:closed' => [
             'description' => 'Correct recorded grades on withdrawn institutional enrollments.',
         ],
+        'sis:academic:credits:amend' => [
+            'description' => 'Approve reasoned institutional credit-unit corrections.',
+        ],
         'sis:academic-work:scope' => ['description' =>
             'Attribute academic work to pursuits and approve or revoke cross-pursuit reuse.'],
         "sis:degree-audit:adjust" => [

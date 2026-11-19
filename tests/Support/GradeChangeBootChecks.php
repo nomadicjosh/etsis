@@ -46,15 +46,20 @@ if ($policy->getStatusCode() !== 200) {
     throw new RuntimeException("The real grade-change policy route failed.");
 }
 $base = "/sis/sections/" . $section->id->value . "/final-grades";
+$unitMoney = $sis->financialEvents();
 $review = $teachingPost($base . "/review/", [
     "student_id" => $student->id->value,
     "enrollment_id" => $enrollment->id->value,
     "grade_id" => $grades["A"],
     "version" => 1,
+    "attempted_milli" => 4000,
     "reason" => "Fictional marking correction.",
 ]);
 $body = json_decode((string) $review->getBody(), true, flags: JSON_THROW_ON_ERROR);
-if ($review->getStatusCode() !== 200 || ($body["requires_approval"] ?? null) !== true) {
+if (
+    $review->getStatusCode() !== 200 || ($body["requires_approval"] ?? null) !== true ||
+    ($body["credit_unit_summary"]["completed_milli"] ?? null) !== 4000
+) {
     throw new RuntimeException("The actual grading route bypassed approval policy.");
 }
 $submitted = $teachingPost($base . "/commit/", [
@@ -64,7 +69,8 @@ $submitted = $teachingPost($base . "/commit/", [
 $receipt = json_decode((string) $submitted->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
     $submitted->getStatusCode() !== 200 ||
-    $sis->sql->rows("sis_academic_credits")[0]["grade_id"] !== $grades["B"]
+    $sis->sql->rows("sis_academic_credits")[0]["grade_id"] !== $grades["B"] ||
+    $sis->sql->rows("sis_academic_credits")[0]["attempted_milli"] !== 3000
 ) {
     throw new RuntimeException("Submitting a correction changed the grade before independent approval.");
 }
@@ -89,6 +95,14 @@ if (
     throw new RuntimeException("Grade amendment implied independent approval.");
 }
 $sis->access->grants[] = "sis:gradebook:approve";
+if (
+    $teachingPost("/sis/grade-changes/" . $id . "/review/", [
+    "outcome" => "approved", "reason" => "Fictional review without the independent credit duty.",
+    ])->getStatusCode() !== 403
+) {
+    throw new RuntimeException("Ordinary grade approval granted credit-unit correction authority.");
+}
+$sis->access->grants[] = "sis:academic:credits:amend";
 $review = $teachingPost("/sis/grade-changes/" . $id . "/review/", [
     "outcome" => "approved",
     "reason" => "Fictional independent review.",
@@ -99,7 +113,11 @@ if (
     $teachingPost("/sis/grade-changes/" . $id . "/commit/", [
         "review_token" => $body["review_token"],
     ])->getStatusCode() !== 200 ||
-    $sis->sql->rows("sis_academic_credits")[0]["grade_id"] !== $grades["A"]
+    $sis->sql->rows("sis_academic_credits")[0]["grade_id"] !== $grades["A"] ||
+    $sis->sql->rows("sis_academic_credits")[0]["attempted_milli"] !== 4000 ||
+    $sis->sql->rows("sis_academic_credits")[0]["completed_milli"] !== 4000 ||
+    $sis->sql->rows("sis_academic_credits")[0]["grade_points_milli"] !== 16000 ||
+    $unitMoney !== $sis->financialEvents()
 ) {
     throw new RuntimeException("The actual grade approval route did not post the reviewed correction.");
 }
