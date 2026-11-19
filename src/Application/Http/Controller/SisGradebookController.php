@@ -17,7 +17,7 @@ final readonly class SisGradebookController
 {
     public function __construct(
         private GradebookService $service,
-        private \Domain\AcademicRecord\Service\AcademicDateService $dates,
+        private \Domain\AcademicRecord\Service\AcademicDetailsService $dates,
         private \Domain\AcademicRecord\Service\AcademicCourseService $courses,
     ) {
     }
@@ -168,10 +168,10 @@ final readonly class SisGradebookController
                 $f->optionalText("effective_on", 10),
                 $f->boolean("grade_evidence"),
                 $f->optionalText("coursework_revision", 64),
-                $f->id('enrollment_id'),
-                $f->boolean('initial_only'),
-                $f->boolean('reconcile_withdrawal_quantities'),
-                $f->optionalInteger('attempted_milli'),
+                $f->id("enrollment_id"),
+                $f->boolean("initial_only"),
+                $f->boolean("reconcile_withdrawal_quantities"),
+                $f->optionalInteger("attempted_milli"),
             ),
         );
     }
@@ -227,6 +227,49 @@ final readonly class SisGradebookController
     {
         return new JsonResponse(
             $this->dates->commitChronology(
+                new EntityId($student),
+                new EntityId($id),
+                FormInput::from($request)->text("review_token", 16384),
+            ),
+        );
+    }
+
+    public function reviewAcademicDetails(
+        ServerRequest $request,
+        string $id,
+        string $student,
+    ): ResponseInterface {
+        $f = FormInput::from($request);
+        $body = $request->getParsedBody();
+        foreach (["academic_on", "completed_on"] as $field) {
+            if (!is_array($body) || !array_key_exists($field, $body)) {
+                throw new \Domain\Shared\Exception\ValidationException([
+                    ["field" => $field, "message" => "Enter the source date or explicitly mark it unknown."],
+                ]);
+            }
+        }
+        return new JsonResponse(
+            $this->dates->reviewDetails(
+                new EntityId($student),
+                new EntityId($id),
+                $f->id("enrollment_id"),
+                $f->optionalText("academic_on", 10),
+                $f->optionalText("completed_on", 10),
+                $f->id("posting_term_id"),
+                $f->integer("version"),
+                $f->bodyText("reason"),
+                $f->text("effective_on", 10),
+            ),
+        );
+    }
+
+    public function commitAcademicDetails(
+        ServerRequest $request,
+        string $id,
+        string $student,
+    ): ResponseInterface {
+        return new JsonResponse(
+            $this->dates->commitDetails(
                 new EntityId($student),
                 new EntityId($id),
                 FormInput::from($request)->text("review_token", 16384),

@@ -827,7 +827,7 @@
             { title: 'Grade decision', fields: ['grade_id', 'effective_on', 'reason'], wide: ['reason'] },
         ],
         academic_date: [
-            { title: 'Academic dates', fields: ['academic_on', 'completed_on', 'reason'], wide: ['reason'] },
+            { title: 'Academic details', fields: ['posting_term_id', 'effective_on', 'academic_on', 'completed_on', 'reason'], wide: ['posting_term_id', 'reason'] },
         ],
         transcript_delivery: [
             { title: 'Delivery evidence', fields: ['delivered_at', 'evidence'], wide: ['evidence'] },

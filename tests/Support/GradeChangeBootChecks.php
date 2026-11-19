@@ -57,7 +57,8 @@ $review = $teachingPost($base . "/review/", [
 ]);
 $body = json_decode((string) $review->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
-    $review->getStatusCode() !== 200 || ($body["requires_approval"] ?? null) !== true ||
+    $review->getStatusCode() !== 200 ||
+    ($body["requires_approval"] ?? null) !== true ||
     ($body["credit_unit_summary"]["completed_milli"] ?? null) !== 4000
 ) {
     throw new RuntimeException("The actual grading route bypassed approval policy.");
@@ -97,7 +98,8 @@ if (
 $sis->access->grants[] = "sis:gradebook:approve";
 if (
     $teachingPost("/sis/grade-changes/" . $id . "/review/", [
-    "outcome" => "approved", "reason" => "Fictional review without the independent credit duty.",
+        "outcome" => "approved",
+        "reason" => "Fictional review without the independent credit duty.",
     ])->getStatusCode() !== 403
 ) {
     throw new RuntimeException("Ordinary grade approval granted credit-unit correction authority.");
@@ -191,7 +193,7 @@ $sourcePublication = $sis->publishCourse($section->courseId);
 $sis->access->staff = false;
 $sis->access->grants = ["sis:gradebook:amend", "sis:student:read", "sis:gradebook:closed"];
 $sourceBase = "/sis/sections/" . $section->id->value . "/students/" . $student->id->value;
-foreach (["course-publication", "academic-dates"] as $sourceKind) {
+foreach (["course-publication", "academic-dates", "academic-details"] as $sourceKind) {
     $sourceCredit = $sis->sql->one("sis_academic_credits", ["source_id" => $enrollment->id->value]);
     $sourceData = [
         "enrollment_id" => $enrollment->id->value,
@@ -213,6 +215,24 @@ foreach (["course-publication", "academic-dates"] as $sourceKind) {
             throw new RuntimeException("A withdrawn record was marked completed through the date route.");
         }
     }
+    if ($sourceKind === "academic-details") {
+        $postingTerm = \Domain\Shared\ValueObject\EntityId::generate()->value;
+        $termFacts = $sis->sql->one("sis_terms", ["id" => $sis->term->value]);
+        $sis->sql->insert(
+            "sis_terms",
+            array_replace($termFacts, ["id" => $postingTerm, "code" => "26/POST"]),
+        );
+        $sourceData += ["posting_term_id" => $postingTerm, "effective_on" => "2026-09-02"];
+        if ($teachingPost($sourceBase . "/academic-details/review/", $sourceData)->getStatusCode() !== 403) {
+            throw new RuntimeException("A posting correction bypassed independent placement authority.");
+        }
+        $sis->access->grants[] = "sis:academic:placement:amend";
+        $missingDate = $sourceData;
+        unset($missingDate["completed_on"]);
+        if ($teachingPost($sourceBase . "/academic-details/review/", $missingDate)->getStatusCode() !== 422) {
+            throw new RuntimeException("An omitted nullable date silently cleared an academic fact.");
+        }
+    }
     $sourcePath = $sourceBase . "/" . $sourceKind . "/";
     $unprotectedSource = new \Qubus\Http\ServerRequest(
         [],
@@ -228,6 +248,9 @@ foreach (["course-publication", "academic-dates"] as $sourceKind) {
         throw new RuntimeException("The source review bypassed closed-record authority.");
     }
     $sis->access->grants[] = "sis:gradebook:closed";
+    if ($sourceKind === "academic-details") {
+        $sis->access->grants[] = "sis:academic:placement:amend";
+    }
     $sourceResponse = $teachingPost($sourcePath . "review/", $sourceData);
     $sourceReview = json_decode((string) $sourceResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
     if (
@@ -252,6 +275,9 @@ foreach (["course-publication", "academic-dates"] as $sourceKind) {
         throw new RuntimeException("Source confirmation ignored revoked closed-record authority.");
     }
     $sis->access->grants[] = "sis:gradebook:closed";
+    if ($sourceKind === "academic-details") {
+        $sis->access->grants[] = "sis:academic:placement:amend";
+    }
     $sourceSaved = $teachingPost($sourcePath . "commit/", $sourceCommit);
     $sourceRetry = $teachingPost($sourcePath . "commit/", $sourceCommit);
     if (

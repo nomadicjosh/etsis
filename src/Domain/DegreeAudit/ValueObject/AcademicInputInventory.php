@@ -36,7 +36,8 @@ final readonly class AcademicInputInventory
                     $this->merge($sources, $origin, self::id($row, "source_id"), [
                         "credit_id" => self::id($row, "id"),
                         "credit_seen" => true,
-                        "term_id" => self::id($row, "term_id"),
+                        "posting_term_id" => self::id($row, "term_id"),
+                        ...$origin === "transfer" ? ["term_id" => self::id($row, "term_id")] : [],
                     ]);
                 } elseif ($kind === "academic") {
                     $this->merge($sources, "institutional", self::id($row, "enrollment_id"), [
@@ -78,6 +79,7 @@ final readonly class AcademicInputInventory
             "credit_id" => null,
             "section_id" => null,
             "term_id" => null,
+            "posting_term_id" => null,
             "credit_seen" => false,
             "academic_seen" => false,
             "registration_seen" => false,

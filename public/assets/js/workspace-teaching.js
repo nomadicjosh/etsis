@@ -746,10 +746,12 @@ window.createWorkspaceTeaching = function (ui) {
         if (
             choices.posted &&
             choices.can_amend &&
-            (!choices.withdrawal_grade_correction || choices.can_record_academic_period)
+            (!choices.withdrawal_grade_correction ||
+                choices.can_record_academic_period ||
+                choices.can_correct_posting_term)
         )
             related.append(
-                button("Review academic dates", () =>
+                button(choices.can_correct_posting_term ? "Academic details" : "Review academic dates", () =>
                     academicDates(sectionRow, student, choices, () =>
                         recordFinalGrade(sectionRow, student, back, assignment, null, queue),
                     ),
@@ -1453,30 +1455,50 @@ window.createWorkspaceTeaching = function (ui) {
 
     async function academicDates(sectionRow, student, choices, back) {
         const withdrawn = choices.withdrawal_grade_correction === true;
-        const loading = openDrawer("Academic dates", "REVIEWED ACADEMIC CORRECTION");
+        const placement = choices.can_correct_posting_term === true;
+        const title = placement ? "Academic details" : "Academic dates";
+        const loading = openDrawer(title, "REVIEWED ACADEMIC CORRECTION");
         loading.append(node("p", { role: "status" }, "Preparing academic dates…"));
         const descriptors = [
+            ...(placement
+                ? [
+                      ["posting_term_id", "Academic posting term", "lookup", "terms"],
+                      ["effective_on", "Correction effective date", "date", "", true],
+                  ]
+                : []),
             ...(choices.can_record_academic_period
                 ? [["academic_on", "Source academic-period start (blank marks unknown)", "date", "", false]]
                 : []),
             ...(!withdrawn
                 ? [["completed_on", "Actual completion date (blank marks unknown)", "date", "", false]]
                 : []),
-            ["reason", "Reason for date change", "textarea", "", true],
+            [
+                "reason",
+                placement ? "Reason for academic correction" : "Reason for date change",
+                "textarea",
+                "",
+                true,
+            ],
         ];
         const form = await buildForm(
             descriptors,
             {
                 academic_on: choices.academic_on || "",
                 completed_on: choices.completed_on || "",
+                posting_term_id: choices.posting_term_id,
+                effective_on: choices.effective_on_default,
             },
             { layout: "academic_date" },
         );
         if (!loading.isConnected) return;
-        for (const name of ["academic_on", "completed_on"]) {
+        for (const name of ["academic_on", "completed_on", "effective_on"]) {
             if (form.elements[name]) form.elements[name].max = choices.effective_on_default;
         }
         form.elements.reason.maxLength = 1000;
+        if (placement && form.elements.posting_term_id.selectedOptions[0]) {
+            form.elements.posting_term_id.selectedOptions[0].textContent =
+                choices.posting_term_code || "Current academic term";
+        }
         const identity = () =>
             recordSummary([
                 ["Student", `${student.given_name} ${student.family_name}`],
@@ -1484,14 +1506,23 @@ window.createWorkspaceTeaching = function (ui) {
                 ["Section", sectionRow.code || sectionRow.course_code || "Selected section"],
             ]);
         function edit() {
-            const body = openDrawer("Academic dates", "REVIEWED ACADEMIC CORRECTION");
+            const body = openDrawer(title, "REVIEWED ACADEMIC CORRECTION");
             body.append(
                 identity(),
+                ...(placement
+                    ? [
+                          node(
+                              "p",
+                              { class: "alert alert-info" },
+                              "The academic posting term controls where this credit appears academically. Correcting it does not move the original registration, billing term, instructional dates or charges. Review source dates separately within this same confirmation.",
+                          ),
+                      ]
+                    : []),
                 node(
                     "p",
                     {},
                     withdrawn
-                        ? "Review this withdrawn attempt's source academic-period start using institutional evidence. The attempt stays withdrawn with no earned credits; it cannot be marked completed here. A blank date explicitly marks the source period unknown."
+                        ? "The attempt stays withdrawn with no earned credits and cannot be marked completed here. Use institutional evidence for any editable source date; a blank editable date explicitly marks that fact unknown."
                         : "Record when this attempt actually completed, including a non-passing attempt. This is separate from instructional end dates, grade posting and correction dates. A blank editable date explicitly marks that fact unknown.",
                 ),
                 node(
@@ -1499,7 +1530,7 @@ window.createWorkspaceTeaching = function (ui) {
                     {},
                     choices.can_record_academic_period
                         ? "For this older attempt, the source academic-period start must come from institutional records. Do not substitute today's term dates or the date a grade was entered. Review both dates together before confirming."
-                        : "Offering dates cannot be changed here. This review updates actual completion only.",
+                        : "Offering dates are retained and cannot be changed here.",
                 ),
                 recordSummary([
                     ...(choices.can_record_academic_period
@@ -1511,7 +1542,11 @@ window.createWorkspaceTeaching = function (ui) {
                 form,
             );
         }
-        const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review dates");
+        const submit = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            placement ? "Review details" : "Review dates",
+        );
         form.append(submit);
         edit();
         let sequence = 0;
@@ -1521,7 +1556,7 @@ window.createWorkspaceTeaching = function (ui) {
             task(async () => {
                 const values = formData(form, descriptors),
                     current = ++sequence;
-                const base = `/sis/sections/${sectionRow.id}/students/${student.student_id}/academic-dates/`;
+                const base = `/sis/sections/${sectionRow.id}/students/${student.student_id}/${placement ? "academic-details" : "academic-dates"}/`;
                 const review = await request(`${base}review/`, "POST", {
                     enrollment_id: choices.enrollment_id,
                     version: choices.current_version,
@@ -1530,15 +1565,27 @@ window.createWorkspaceTeaching = function (ui) {
                         : choices.academic_on || null,
                     completed_on: withdrawn ? choices.completed_on || null : values.completed_on || null,
                     reason: values.reason,
+                    ...(placement
+                        ? { posting_term_id: values.posting_term_id, effective_on: values.effective_on }
+                        : {}),
                 });
                 if (!form.isConnected || current !== sequence) return;
                 const confirmation = openDrawer(
-                    "Confirm academic dates",
+                    placement ? "Confirm academic details" : "Confirm academic dates",
                     "PRESERVE THE ORIGINAL ACADEMIC FACTS",
                 );
                 confirmation.append(
                     identity(),
                     recordSummary([
+                        ...(placement
+                            ? [
+                                  [
+                                      "Academic posting term",
+                                      `${review.previous_posting_term_code_display} → ${review.posting_term_code}`,
+                                  ],
+                                  ["Effective date", values.effective_on],
+                              ]
+                            : []),
                         ...(choices.can_record_academic_period
                             ? [
                                   [
@@ -1560,11 +1607,13 @@ window.createWorkspaceTeaching = function (ui) {
                     node(
                         "p",
                         {},
-                        (withdrawn
-                            ? "Only the source academic period changes. The attempt remains withdrawn with no earned credit. "
-                            : choices.can_record_academic_period
-                              ? "Both dates are confirmed together. "
-                              : "The academic period remains unchanged. ") +
+                        (placement
+                            ? "Academic placement and the reviewed source dates are confirmed together. "
+                            : withdrawn
+                              ? "The attempt remains withdrawn with no earned credit or completion date. "
+                              : choices.can_record_academic_period
+                                ? "Both dates are confirmed together. "
+                                : "The academic period remains unchanged. ") +
                             "Grades, credits, enrollment and charges remain unchanged. Retained repeat policies may use these dates to order attempts. Earlier dates and unknown facts remain in history.",
                     ),
                     node(
@@ -1572,9 +1621,9 @@ window.createWorkspaceTeaching = function (ui) {
                         { class: "form-text" },
                         "This review expires after 20 minutes. Revise and review again if the record changes or the review expires.",
                     ),
-                    button("Revise dates", edit, "btn-link"),
+                    button(placement ? "Revise details" : "Revise dates", edit, "btn-link"),
                     button(
-                        "Confirm dates",
+                        placement ? "Confirm details" : "Confirm dates",
                         async () => {
                             await request(`${base}commit/`, "POST", { review_token: review.review_token });
                             if (confirmation.isConnected) await back();
@@ -1614,7 +1663,7 @@ window.createWorkspaceTeaching = function (ui) {
                               [
                                   "Decision",
                                   "Grade or course",
-                                  "Academic date change",
+                                  "Academic detail change",
                                   "Effective",
                                   "Recorded",
                               ],
@@ -1633,6 +1682,7 @@ window.createWorkspaceTeaching = function (ui) {
                                               correction_cancelled: "Grade correction cancelled",
                                               completion_recorded: "Actual completion date recorded",
                                               period_recorded: "Source academic period recorded",
+                                              posting_term_corrected: "Academic posting term corrected",
                                               course_accepted: "Course publication accepted",
                                               dropped: "Course dropped",
                                           }[item.action] || "Academic decision",
@@ -1641,13 +1691,15 @@ window.createWorkspaceTeaching = function (ui) {
                                       : item.grade_code
                                         ? `${item.grade_code}${item.coursework_summary ? ` · Coursework ${item.coursework_summary.score_display}` : ""}`
                                         : "—",
-                                  item.credit_unit_correction
-                                      ? `${item.credit_unit_correction.previous_attempted_milli / 1000} → ${item.credit_unit_correction.attempted_milli / 1000} credits`
-                                      : item.action === "completion_recorded"
-                                        ? `${item.previous_completed_on || "Unknown"} → ${item.completed_on || "Unknown"}`
-                                        : item.action === "period_recorded"
-                                          ? `${item.previous_academic_on || "Unknown"} → ${item.academic_on || "Unknown"}`
-                                          : "—",
+                                  item.action === "posting_term_corrected"
+                                      ? `${item.previous_posting_term_code || "Earlier label unknown"} → ${item.posting_term_code}`
+                                      : item.credit_unit_correction
+                                        ? `${item.credit_unit_correction.previous_attempted_milli / 1000} → ${item.credit_unit_correction.attempted_milli / 1000} credits`
+                                        : item.action === "completion_recorded"
+                                          ? `${item.previous_completed_on || "Unknown"} → ${item.completed_on || "Unknown"}`
+                                          : item.action === "period_recorded"
+                                            ? `${item.previous_academic_on || "Unknown"} → ${item.academic_on || "Unknown"}`
+                                            : "—",
                                   item.effective_at,
                                   item.recorded_at,
                               ]),

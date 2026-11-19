@@ -5,6 +5,9 @@ declare(strict_types=1);
 // Initial migration seed only. Runtime authorization is database controlled.
 return [
     "permissions" => [
+        "sis:academic:placement:amend" => [
+            "description" => "Correct academic posting terms on institutional credits.",
+        ],
         'sis:registration:policy' => ['description' => 'Configure institutional registration timetable policy.'],
         "sis:admissions:amend" => [
             "description" => "Request corrections and assist with application answer resubmission.",

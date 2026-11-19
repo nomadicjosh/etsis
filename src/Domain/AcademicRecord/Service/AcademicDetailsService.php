@@ -24,8 +24,9 @@ use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use Throwable;
 
-final readonly class AcademicDateService
+final readonly class AcademicDetailsService
 {
+    public const string PLACEMENT_PERMISSION = "sis:academic:placement:amend";
     public function __construct(
         private InstitutionalCreditLedger $credits,
         private AcademicCreditRepository $records,
@@ -86,6 +87,43 @@ final readonly class AcademicDateService
         );
     }
 
+    public function reviewDetails(
+        EntityId $student,
+        EntityId $section,
+        EntityId $enrollment,
+        #[\SensitiveParameter] ?string $academicOn,
+        #[\SensitiveParameter] ?string $completedOn,
+        EntityId $postingTerm,
+        int $version,
+        #[\SensitiveParameter] string $reason,
+        string $effectiveOn,
+    ): array {
+        $this->date($effectiveOn, AcademicDateKind::Completion, "effective_on");
+        return $this->reviewChanges(
+            $student,
+            $section,
+            $enrollment,
+            [
+                "academic_on" => $academicOn,
+                "completed_on" => $completedOn,
+                "posting_term_id" => $postingTerm->value,
+            ],
+            $version,
+            $reason,
+            "academic-details-review",
+            "details",
+            $effectiveOn,
+        );
+    }
+
+    public function commitDetails(
+        EntityId $student,
+        EntityId $section,
+        #[\SensitiveParameter] string $token,
+    ): array {
+        return $this->commitChanges($student, $section, $token, "academic-details-review", "details");
+    }
+
     /** @param array<string,?string> $requested
      * @return array<string,mixed>
      */
@@ -98,10 +136,13 @@ final readonly class AcademicDateService
         #[\SensitiveParameter] string $reason,
         string $tokenKind,
         string $field,
+        ?string $effectiveOn = null,
     ): array {
         $actor = $this->authorize();
         foreach ($requested as $name => $value) {
-            $this->date($value, AcademicDateKind::from($name));
+            if ($name !== "posting_term_id") {
+                $this->date($value, AcademicDateKind::from($name));
+            }
         }
         return $this->transactions->run(function () use (
             $student,
@@ -113,6 +154,7 @@ final readonly class AcademicDateService
             $actor,
             $tokenKind,
             $field,
+            $effectiveOn,
         ): array {
             $this->lock($student, $section, $actor);
             [$id, $root, $facts] = $this->credits->decisionRecord($student, $section, $enrollment);
@@ -124,22 +166,34 @@ final readonly class AcademicDateService
             $this->posted($enrollment, $section, $facts, $root, $requested, $field);
             $changes = [];
             foreach ($requested as $name => $value) {
-                if (AcademicDateKind::from($name)->current($root) !== $value) {
+                $current =
+                    $name === "posting_term_id"
+                        ? $facts["term_id"]
+                        : AcademicDateKind::from($name)->current($root);
+                if ($current !== $value) {
                     $changes[] = $name;
                 }
             }
             if ($changes === []) {
-                self::invalid($field, "Change at least one date, or explicitly clear a known date.");
+                self::invalid(
+                    $field,
+                    "Change at least one academic detail, or explicitly clear a known date.",
+                );
             }
             // Each intermediate event must also describe a valid timeline. Move completion first when
             // the new start is later than the old completion; otherwise moving the start first is safe.
             if (
-                count($changes) === 2 &&
+                in_array("academic_on", $changes, true) &&
+                in_array("completed_on", $changes, true) &&
                 $requested["academic_on"] !== null &&
                 $root->completedOn() !== null &&
                 $requested["academic_on"] > $root->completedOn()
             ) {
-                $changes = ["completed_on", "academic_on"];
+                $changes = [
+                    "completed_on",
+                    "academic_on",
+                    ...array_diff($changes, ["academic_on", "completed_on"]),
+                ];
             }
             $reason = trim($reason);
             if (
@@ -152,9 +206,11 @@ final readonly class AcademicDateService
             }
             $operation = EntityId::generate();
             $now = $this->clock->now();
-            $effectiveDate = in_array("completed_on", $changes, true)
-                ? $requested["completed_on"]
-                : $requested["academic_on"];
+            $effectiveDate =
+                $effectiveOn ??
+                (in_array("completed_on", $changes, true)
+                    ? $requested["completed_on"]
+                    : $requested["academic_on"]);
             $effective =
                 $effectiveDate === null ? $now : new DateTimeImmutable($effectiveDate, $now->getTimezone());
             new EventContext($actor, $effective, $operation, reason: $reason);
@@ -178,12 +234,27 @@ final readonly class AcademicDateService
                     ? $requested["completed_on"]
                     : $root->completedOn(),
                 "changes" => $changes,
-                "following_decision_id" => count($changes) === 2 ? EntityId::generate()->value : null,
+                "following_decision_id" => count($changes) >= 2 ? EntityId::generate()->value : null,
                 "effective_at" => $effective->format(DATE_ATOM),
                 "reason" => $reason,
                 "expires_at" => $now->getTimestamp() + 1200,
             ];
-            $this->sameActor($actor, $facts["status"] === "W");
+            if (count($changes) === 3) {
+                $data["third_decision_id"] = EntityId::generate()->value;
+            }
+            if (array_key_exists("posting_term_id", $requested)) {
+                $target = $this->records->term(new EntityId($requested["posting_term_id"]));
+                $data += [
+                    "previous_posting_term_id" => $facts["term_id"],
+                    "posting_term_id" => $target["id"],
+                    "posting_term_code" => $target["code"],
+                    "previous_term_code" => $root->postingTerm()["term_code"] ?? null,
+                    "previous_posting_term_code_display" =>
+                        $root->postingTerm()["term_code"] ??
+                        $this->records->term(new EntityId($facts["term_id"]))["code"],
+                ];
+            }
+            $this->sameActor($actor, $facts["status"] === "W", in_array("posting_term_id", $changes, true));
             return $data + ["review_token" => $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR))];
         });
     }
@@ -238,7 +309,7 @@ final readonly class AcademicDateService
                 !is_array($changes) ||
                 !array_is_list($changes) ||
                 count($changes) < 1 ||
-                count($changes) > 2 ||
+                count($changes) > ($tokenKind === "academic-details-review" ? 3 : 2) ||
                 count(array_unique($changes)) !== count($changes)
             ) {
                 throw new \InvalidArgumentException();
@@ -246,7 +317,8 @@ final readonly class AcademicDateService
             foreach ($changes as $name) {
                 if (
                     !is_string($name) ||
-                    AcademicDateKind::tryFrom($name) === null ||
+                    (AcademicDateKind::tryFrom($name) === null &&
+                        !($name === "posting_term_id" && $tokenKind === "academic-details-review")) ||
                     !array_key_exists($name, $d) ||
                     !array_key_exists("previous_" . $name, $d)
                 ) {
@@ -259,6 +331,8 @@ final readonly class AcademicDateService
         if ($d["actor_id"] !== $actor->value) {
             throw new AccessDeniedException("This academic-date review belongs to another staff member.");
         }
+        $placement = in_array("posting_term_id", $changes, true);
+        $this->sameActor($actor, placement: $placement);
         return $this->transactions->run(function () use (
             $student,
             $section,
@@ -266,6 +340,7 @@ final readonly class AcademicDateService
             $d,
             $changes,
             $field,
+            $placement,
         ): array {
             $this->lock($student, $section, $actor);
             $enrollment = new EntityId($d["enrollment_id"]);
@@ -277,19 +352,35 @@ final readonly class AcademicDateService
             $events = [];
             $previous = $d["previous_decision_id"];
             foreach ($changes as $index => $name) {
-                $decision = $index === 0 ? $operation->value : $d["following_decision_id"];
-                $events[] = AcademicDateKind::from($name)
-                    ->eventClass()
-                    ::occur(
-                        new AcademicCreditId($id->value),
-                        [
+                $decision = match ($index) {
+                    0 => $operation->value,
+                    1 => $d["following_decision_id"],
+                    2 => $d["third_decision_id"],
+                };
+                $class =
+                    $name === "posting_term_id"
+                        ? \Domain\AcademicRecord\Event\InstitutionalPostingTermWasCorrected::class
+                        : AcademicDateKind::from($name)->eventClass();
+                $payload =
+                    $name === "posting_term_id"
+                        ? [
+                            "decision_id" => $decision,
+                            "previous_decision_id" => $previous,
+                            "previous_term_id" => $d["previous_posting_term_id"],
+                            "previous_term_code" => $d["previous_term_code"],
+                            "term_id" => $d["posting_term_id"],
+                            "term_code" => $d["posting_term_code"],
+                        ]
+                        : [
                             "decision_id" => $decision,
                             "previous_decision_id" => $previous,
                             "previous_" . $name => $d["previous_" . $name],
                             $name => $d[$name],
-                        ],
-                        ["__aggregate_type" => "academic_credit"],
-                    )
+                        ];
+                $events[] = $class
+                    ::occur(new AcademicCreditId($id->value), $payload, [
+                        "__aggregate_type" => "academic_credit",
+                    ])
                     ->withPlayhead($d["expected_version"] + $index + 1);
                 $previous = $decision;
             }
@@ -320,6 +411,25 @@ final readonly class AcademicDateService
                 $requested = array_intersect_key($d, array_flip($changes));
                 $this->posted($enrollment, $section, $facts, $root, $requested, $field);
                 foreach ($changes as $index => $name) {
+                    if ($name === "posting_term_id") {
+                        $this->sameActor($actor, $facts["status"] === "W", true);
+                        $this->date(
+                            substr($d["effective_at"], 0, 10),
+                            AcademicDateKind::Completion,
+                            "effective_on",
+                        );
+                        $target = $this->records->term(new EntityId($d[$name]));
+                        if ($target["code"] !== $d["posting_term_code"]) {
+                            throw new ConcurrentModificationException(
+                                "The posting term changed. Review academic details again.",
+                            );
+                        }
+                        $before = $root->postingTerm();
+                        $root->acceptHistorical($events[$index]);
+                        $this->records->recordPostingTerm($id, $root->postingTerm(), $before);
+                        $this->audit->record($actor, "academic.posting_term_corrected", $id);
+                        continue;
+                    }
                     $kind = AcademicDateKind::from($name);
                     $this->date($d[$name], $kind);
                     $root->acceptHistorical($events[$index]);
@@ -331,7 +441,7 @@ final readonly class AcademicDateService
                     $facts["version"],
                 );
             }
-            $this->sameActor($actor, $facts["status"] === "W");
+            $this->sameActor($actor, $facts["status"] === "W", $placement);
             if ($newDecision && $d["expires_at"] <= $this->clock->now()->getTimestamp()) {
                 throw new ConcurrentModificationException(
                     "The review expired before completion. Review the academic dates again.",
@@ -341,13 +451,16 @@ final readonly class AcademicDateService
         });
     }
 
-    private function date(#[\SensitiveParameter] ?string $date, AcademicDateKind $kind): void
-    {
+    private function date(
+        #[\SensitiveParameter] ?string $date,
+        AcademicDateKind $kind,
+        ?string $field = null,
+    ): void {
         if ($date === null) {
             return;
         }
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/D', $date) !== 1) {
-            self::invalid($kind->value, "Enter a real " . $kind->label() . " no later than today.");
+            self::invalid($field ?? $kind->value, "Enter a real date no later than today.");
         }
         $parsed = DateTimeImmutable::createFromFormat("!Y-m-d", $date);
         if (
@@ -355,7 +468,7 @@ final readonly class AcademicDateService
             $parsed->format("Y-m-d") !== $date ||
             $date > $this->clock->now()->format("Y-m-d")
         ) {
-            self::invalid($kind->value, "Enter a real " . $kind->label() . " no later than today.");
+            self::invalid($field ?? $kind->value, "Enter a real date no later than today.");
         }
     }
 
@@ -385,7 +498,10 @@ final readonly class AcademicDateService
             !$root->canCorrectSource() ||
             $row === null ||
             $row["status"] !== $facts["status"] ||
-            $row["term_id"] !== $facts["term_id"]
+            $row["term_id"] !== ($root->registrationTermId() ?? $facts["term_id"]) ||
+            (isset($requested["posting_term_id"]) &&
+                $requested["posting_term_id"] !== $facts["term_id"] &&
+                $root->pendingGradeChange() !== null)
         ) {
             self::invalid(
                 $field,
@@ -427,21 +543,24 @@ final readonly class AcademicDateService
         }
     }
 
-    private function authorize(bool $withdrawn = false): EntityId
+    private function authorize(bool $withdrawn = false, bool $placement = false): EntityId
     {
         $actor = $this->access->requirePermission("sis:gradebook:amend");
         if (
             $this->access->requirePermission("sis:student:read")->value !== $actor->value ||
-            ($withdrawn && $this->access->requirePermission("sis:gradebook:closed")->value !== $actor->value)
+            ($withdrawn &&
+                $this->access->requirePermission("sis:gradebook:closed")->value !== $actor->value) ||
+            ($placement &&
+                $this->access->requirePermission(self::PLACEMENT_PERMISSION)->value !== $actor->value)
         ) {
             throw new AccessDeniedException("The academic decision actor changed.");
         }
         return $actor;
     }
 
-    private function sameActor(EntityId $actor, bool $withdrawn = false): void
+    private function sameActor(EntityId $actor, bool $withdrawn = false, bool $placement = false): void
     {
-        if ($this->authorize($withdrawn)->value !== $actor->value) {
+        if ($this->authorize($withdrawn, $placement)->value !== $actor->value) {
             throw new AccessDeniedException("The academic decision actor changed.");
         }
     }

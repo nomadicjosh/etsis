@@ -214,7 +214,14 @@ final class AcademicInputVerificationTest extends TestCase
         self::assertSame("TR", $result->items[0]["grade"]["code"]);
         $change = new AwardChange("void", null, null, "Fictional duplicate award.");
         $plan = $t->service()->preview($t->student, $t->award, $change);
-        $t->service()->confirm($t->student, $t->award, EntityId::generate(), $change, $plan["revision"]);
+        $t->service()->confirm(
+            $t->student,
+            $t->award,
+            new EntityId($plan["operation_id"]),
+            $change,
+            $plan["revision"],
+            $plan["review_token"],
+        );
         $result = $service->collect($f->student, $f->assignment);
         self::assertSame(AcademicInputStatus::Verified, $result->status);
         self::assertSame("V", $result->items[0]["status"]);

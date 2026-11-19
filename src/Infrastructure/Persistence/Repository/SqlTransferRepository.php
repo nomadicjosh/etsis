@@ -75,6 +75,16 @@ final readonly class SqlTransferRepository implements TransferRepository
                 $q("grade_code") .
                 ", g." .
                 $q("counts_gpa") .
+                ", COALESCE(pt." .
+                $q("term_code") .
+                ", atp." .
+                $q("code") .
+                ") AS " .
+                $q("term_code") .
+                ", CASE WHEN pt." .
+                $q("id") .
+                " IS NULL THEN 0 ELSE 1 END AS " .
+                $q("term_label_retained") .
                 " FROM " .
                 $q("sis_academic_credits") .
                 " c JOIN " .
@@ -107,6 +117,18 @@ final readonly class SqlTransferRepository implements TransferRepository
                 $q("student_id") .
                 " = c." .
                 $q("student_id") .
+                " LEFT JOIN " .
+                $q("sis_credit_posting_terms") .
+                " pt ON pt." .
+                $q("id") .
+                " = c." .
+                $q("id") .
+                " LEFT JOIN " .
+                $q("sis_terms") .
+                " atp ON atp." .
+                $q("id") .
+                " = c." .
+                $q("term_id") .
                 " WHERE c." .
                 $q("student_id") .
                 " = ? ORDER BY c." .

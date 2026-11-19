@@ -81,6 +81,7 @@ final class EventClassMap
             \Domain\AcademicRecord\Event\GradeChangeWasResolved::class,
             \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded::class,
             \Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded::class,
+            \Domain\AcademicRecord\Event\InstitutionalPostingTermWasCorrected::class,
             \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted::class,
             \Domain\AcademicRecord\Event\InstitutionalCreditWasDropped::class,
             \Domain\Gradebook\Event\GradingScaleWasChanged::class,

@@ -770,11 +770,12 @@ window.createWorkspaceStudents = function (ui) {
                     transcript.append(
                         button("Back to student", back),
                         grid(
-                            ["Course", "Title", "Grade", "Action"],
+                            ["Course", "Title", "Academic term", "Grade", "Action"],
                             (response.rows || response.credits || []).map(
                                 (item) => [
                                     item.course_code,
                                     item.course_title,
+                                    item.term_code || "Unknown",
                                     item.grade_code || "—",
                                     item.credit_type === "transfer" &&
                                     item.source_id &&

@@ -66,6 +66,40 @@ final readonly class SqlAcademicCreditRepository implements AcademicCreditReposi
             ],
         )->facts;
     }
+    public function term(EntityId $term): array
+    {
+        return array_intersect_key(
+            $this->sql->one("sis_terms", ["id" => $term->value]),
+            array_flip(["id", "code"]),
+        );
+    }
+
+    public function postingTerm(EntityId $credit): ?array
+    {
+        $row = $this->sql->rows("sis_credit_posting_terms", ["id" => $credit->value], 1)[0] ?? null;
+        if ($row === null) {
+            return null;
+        }
+        unset($row["id"]);
+        return $row;
+    }
+
+    public function recordPostingTerm(EntityId $credit, array $reference, ?array $previous): void
+    {
+        if ($this->postingTerm($credit) != $previous) {
+            throw new CorruptHistoryException();
+        }
+        if ($previous === null) {
+            $this->sql->insert("sis_credit_posting_terms", ["id" => $credit->value] + $reference);
+        } elseif (
+            $this->sql->update("sis_credit_posting_terms", $reference, [
+                "id" => $credit->value,
+                "decision_id" => $previous["decision_id"],
+            ]) !== 1
+        ) {
+            throw new ConcurrentModificationException("The academic posting term changed.");
+        }
+    }
     public function project(array $facts, EntityId $section, ?int $expectedVersion): void
     {
         $id = new EntityId($facts["id"]);
@@ -74,6 +108,10 @@ final readonly class SqlAcademicCreditRepository implements AcademicCreditReposi
         unset($facts["course_version_id"]);
         if ($facts["status"] === "D") {
             $q = $this->sql->quote(...);
+            $this->sql->execute(
+                "DELETE FROM " . $q("sis_credit_posting_terms") . " WHERE " . $q("id") . " = ?",
+                [$id->value],
+            );
             $this->sql->execute(
                 "DELETE FROM " . $q("sis_credit_course_versions") . " WHERE " . $q("id") . " = ?",
                 [$id->value],

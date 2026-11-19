@@ -154,7 +154,7 @@ final readonly class InstitutionalCreditLedger
             $enrollment,
             $student,
             $section,
-            new EntityId($facts["term_id"]),
+            new EntityId($root->registrationTermId() ?? $facts["term_id"]),
             $withdrawn,
         );
         $policies = $root->policies();
@@ -191,13 +191,33 @@ final readonly class InstitutionalCreditLedger
             "can_amend" => $canAmend,
             "withdrawal_grade_correction" => $withdrawn,
             "missing_withdrawal_grade" => $withdrawn && $facts["grade_id"] === null,
-            "requires_quantity_reconciliation" => WithdrawnCreditQuantities::requiresReview($facts, $observedGrade),
-            "withdrawal_quantities" => $withdrawn ? WithdrawnCreditQuantities::summary($facts, $observedGrade) : null,
-            "current_credit_quantities" => array_intersect_key($facts, array_flip([
-                "attempted_milli", "completed_milli", "grade_points_milli",
-            ])),
-            "can_correct_credit_units" => $canAmend && $observedGrade !== null &&
-                $facts["grade_id"] !== null && $this->canCorrectUnits(),
+            "requires_quantity_reconciliation" => WithdrawnCreditQuantities::requiresReview(
+                $facts,
+                $observedGrade,
+            ),
+            "withdrawal_quantities" => $withdrawn
+                ? WithdrawnCreditQuantities::summary($facts, $observedGrade)
+                : null,
+            "posting_term_id" => $facts["term_id"],
+            "posting_term_code" =>
+                $root->postingTerm()["term_code"] ??
+                $this->records->term(new EntityId($facts["term_id"]))["code"],
+            "can_correct_posting_term" =>
+                $canAmend &&
+                $root->playhead() > 0 &&
+                $root->grade() !== null &&
+                $root->canCorrectSource() &&
+                $root->pendingGradeChange() === null &&
+                $this->canCorrectPlacement(),
+            "current_credit_quantities" => array_intersect_key(
+                $facts,
+                array_flip(["attempted_milli", "completed_milli", "grade_points_milli"]),
+            ),
+            "can_correct_credit_units" =>
+                $canAmend &&
+                $observedGrade !== null &&
+                $facts["grade_id"] !== null &&
+                $this->canCorrectUnits(),
             "requires_approval" => $this->changes->policy()["mode"] === "approval",
             "pending_grade_change" =>
                 $root->pendingGradeChange() === null
@@ -221,10 +241,7 @@ final readonly class InstitutionalCreditLedger
                 $root->playhead() > 0 &&
                 $root->grade() !== null &&
                 $facts["grade_id"] !== null,
-            "current_grade_code" =>
-                $facts["grade_id"] === null
-                    ? null
-                    : $observedGrade["code"],
+            "current_grade_code" => $facts["grade_id"] === null ? null : $observedGrade["code"],
         ];
         if (!$result["posted"] && !$needs && $this->canReadCoursework($section)) {
             $suggestion = $this->coursework->assess($student, $section, $items);
@@ -276,7 +293,7 @@ final readonly class InstitutionalCreditLedger
                 $enrollment,
                 $student,
                 $section,
-                new EntityId($facts["term_id"]),
+                new EntityId($root->registrationTermId() ?? $facts["term_id"]),
                 $withdrawn,
             );
             if ($facts["version"] !== $version) {
@@ -287,7 +304,7 @@ final readonly class InstitutionalCreditLedger
             $amend = $withdrawn || new CreditSnapshot($facts)->posted();
             if ($initialOnly && $amend) {
                 throw new ConcurrentModificationException(
-                    'This record already has a final grade. Use the individual correction workflow.',
+                    "This record already has a final grade. Use the individual correction workflow.",
                 );
             }
             if ($root->pendingGradeChange() !== null) {
@@ -300,8 +317,12 @@ final readonly class InstitutionalCreditLedger
             $units = null;
             if ($attemptedMilli !== null) {
                 if (
-                    !$amend || $facts["grade_id"] === null || $observedGrade === null ||
-                    $attemptedMilli < 0 || $attemptedMilli > 999999 || $attemptedMilli === $facts["attempted_milli"]
+                    !$amend ||
+                    $facts["grade_id"] === null ||
+                    $observedGrade === null ||
+                    $attemptedMilli < 0 ||
+                    $attemptedMilli > 999999 ||
+                    $attemptedMilli === $facts["attempted_milli"]
                 ) {
                     self::invalid(
                         "attempted_milli",
@@ -312,9 +333,12 @@ final readonly class InstitutionalCreditLedger
             }
             $needsReconciliation = WithdrawnCreditQuantities::requiresReview($facts, $observedGrade);
             if ($needsReconciliation !== $reconcileQuantities) {
-                self::invalid("reconcile_withdrawal_quantities", $needsReconciliation
-                    ? "Verify and explicitly confirm reconciliation of this withdrawn record's credit quantities."
-                    : "This record does not need withdrawn-credit reconciliation. Reload its grading record.");
+                self::invalid(
+                    "reconcile_withdrawal_quantities",
+                    $needsReconciliation
+                        ? "Verify and explicitly confirm reconciliation of this withdrawn record's credit quantities."
+                        : "This record does not need withdrawn-credit reconciliation. Reload its grading record.",
+                );
             }
             if ($withdrawn && $facts["grade_id"] === null && !$gradeEvidence) {
                 self::invalid(
@@ -352,7 +376,9 @@ final readonly class InstitutionalCreditLedger
                 $assessment = $this->coursework->assess($student, $section, $available);
                 $evidence = $assessment["evidence"] ?? null;
                 if (
-                    $amend || $evidence === null || $evidence->facts["grade_id"] !== $grade->value ||
+                    $amend ||
+                    $evidence === null ||
+                    $evidence->facts["grade_id"] !== $grade->value ||
                     !hash_equals($evidence->revision(), $courseworkRevision)
                 ) {
                     self::invalid(
@@ -416,8 +442,10 @@ final readonly class InstitutionalCreditLedger
                 );
             }
             unset($data["coursework"]);
-            return $data + ["review_token" => $token,
-                ...($evidence === null ? [] : ["coursework_summary" => $evidence->summary()])];
+            return $data + [
+                "review_token" => $token,
+                ...$evidence === null ? [] : ["coursework_summary" => $evidence->summary()],
+            ];
         });
     }
     /** @return array{operation_id:string,first_version:int,last_version:int,event_ids:list<string>} */
@@ -558,7 +586,7 @@ final readonly class InstitutionalCreditLedger
                     new EntityId($d["enrollment_id"]),
                     $student,
                     $section,
-                    new EntityId($d["before"]["term_id"]),
+                    new EntityId($root->registrationTermId() ?? $d["before"]["term_id"]),
                     $d["withdrawal_grade_correction"] ?? false,
                 );
                 if (!$this->same($current, $d["before"])) {
@@ -597,7 +625,8 @@ final readonly class InstitutionalCreditLedger
                     $assessment = $this->coursework->assess($student, $section, $available);
                     $currentEvidence = $assessment["evidence"] ?? null;
                     if (
-                        $d["amendment"] || $currentEvidence === null ||
+                        $d["amendment"] ||
+                        $currentEvidence === null ||
                         !hash_equals($evidence->revision(), $currentEvidence->revision())
                     ) {
                         throw new ConcurrentModificationException(
@@ -983,8 +1012,12 @@ final readonly class InstitutionalCreditLedger
         }
         return $actor;
     }
-    private function resolutionAuthority(array $row, string $outcome, bool $withdrawn, bool $units = false): EntityId
-    {
+    private function resolutionAuthority(
+        array $row,
+        string $outcome,
+        bool $withdrawn,
+        bool $units = false,
+    ): EntityId {
         $actor = $this->gradeChangeAuthority();
         if ($outcome === "approved" && $withdrawn) {
             $this->access->requirePermission("sis:gradebook:closed");
@@ -1031,7 +1064,7 @@ final readonly class InstitutionalCreditLedger
             new EntityId($row["enrollment_id"]),
             $student,
             new EntityId($row["section_id"]),
-            new EntityId($facts["term_id"]),
+            new EntityId($root->registrationTermId() ?? $facts["term_id"]),
             $root->gradeChange($row["id"])["withdrawn"],
         );
         $available = $this->gradeChoices(
@@ -1219,7 +1252,8 @@ final readonly class InstitutionalCreditLedger
             "section_version_id" => $root->sectionVersion(),
             "completed_on" => $root->completedOn(),
             "academic_on" => $root->academicOn(),
-            "retained_term_code" => null,
+            "retained_term_code" => $root->postingTerm()["term_code"] ?? null,
+            "registration_term_id" => $root->registrationTermId() ?? $facts["term_id"],
         ];
     }
     /** Internal verification only; the caller authorizes and locks the student.
@@ -1244,7 +1278,8 @@ final readonly class InstitutionalCreditLedger
             "section_version_id" => $root->sectionVersion(),
             "completed_on" => $root->completedOn(),
             "academic_on" => $root->academicOn(),
-            "retained_term_code" => null,
+            "retained_term_code" => $root->postingTerm()["term_code"] ?? null,
+            "registration_term_id" => $root->registrationTermId() ?? $facts["term_id"],
         ];
     }
     /**
@@ -1266,22 +1301,30 @@ final readonly class InstitutionalCreditLedger
         foreach ($page->events as $stored) {
             $e = $stored->event;
             $p = $e->payload();
-            $unitCorrection = $e instanceof FinalGradeWasDecided ? $e->metaParam("credit_unit_correction", null) :
-            ($e instanceof \Domain\AcademicRecord\Event\GradeChangeWasResolved && $p["outcome"] === "approved"
-            ? $root->gradeChange($p["request_id"])["credit_unit_correction"] : null);
-            $reconciled = ($e instanceof FinalGradeWasDecided &&
-                $e->metaParam("withdrawal_quantity_reconciliation", false)) ||
+            $unitCorrection =
+            $e instanceof FinalGradeWasDecided
+            ? $e->metaParam("credit_unit_correction", null)
+            : ($e instanceof \Domain\AcademicRecord\Event\GradeChangeWasResolved &&
+                    $p["outcome"] === "approved"
+                        ? $root->gradeChange($p["request_id"])["credit_unit_correction"]
+                        : null);
+            $reconciled =
+            ($e instanceof FinalGradeWasDecided &&
+            $e->metaParam("withdrawal_quantity_reconciliation", false)) ||
             ($e instanceof \Domain\AcademicRecord\Event\GradeChangeWasResolved &&
             $p["outcome"] === "approved" &&
             $root->gradeChange($p["request_id"])["reconcile_quantities"]);
             $items[] = [
                 "withdrawal_quantity_reconciled" => $reconciled,
                 "credit_unit_correction" => $unitCorrection,
-                ...($e instanceof FinalGradeWasDecided && $e->metaParam("coursework", null) !== null
-                    ? ["coursework_summary" => array_intersect_key(
-                        new CourseworkGradeEvidence($e->metaParam("coursework"))->summary(),
-                        array_flip(["score_display", "mode"]),
-                    )] : []),
+                ...$e instanceof FinalGradeWasDecided && $e->metaParam("coursework", null) !== null
+                    ? [
+                        "coursework_summary" => array_intersect_key(
+                            new CourseworkGradeEvidence($e->metaParam("coursework"))->summary(),
+                            array_flip(["score_display", "mode"]),
+                        ),
+                    ]
+                    : [],
                 "version" => $e->playhead(),
                 "action" => match (true) {
                     $e instanceof InstitutionalCreditWasEstablished => $p["provenance"],
@@ -1291,6 +1334,8 @@ final readonly class InstitutionalCreditLedger
                         => "period_recorded",
                     $e instanceof \Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted
                         => "course_accepted",
+                    $e instanceof \Domain\AcademicRecord\Event\InstitutionalPostingTermWasCorrected
+                        => "posting_term_corrected",
                     $e instanceof FinalGradeWasDecided => "grade_decided",
                     $e instanceof \Domain\AcademicRecord\Event\GradeChangeWasRequested
                         => "correction_requested",
@@ -1301,6 +1346,8 @@ final readonly class InstitutionalCreditLedger
                 },
                 "academic_on" => $p["academic_on"] ?? null,
                 "previous_academic_on" => $p["previous_academic_on"] ?? null,
+                "posting_term_code" => $p["term_code"] ?? null,
+                "previous_posting_term_code" => $p["previous_term_code"] ?? null,
                 "course_code" => $p["course_code"] ?? null,
                 "course_title" => $p["course_title"] ?? null,
                 "completed_on" => $p["completed_on"] ?? null,
@@ -1377,7 +1424,7 @@ final readonly class InstitutionalCreditLedger
         $m = $this->records->mapping($id);
         $c = $root->credit();
         if ($c === null) {
-            if ($m !== null) {
+            if ($m !== null || $this->records->postingTerm($id) !== null) {
                 throw new CorruptHistoryException();
             }
             return $root;
@@ -1393,6 +1440,13 @@ final readonly class InstitutionalCreditLedger
         if (
             $this->versions->enrollmentVersion(new EntityId($c["source_id"]))?->value !==
             $root->sectionVersion()
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $posting = $this->records->postingTerm($id);
+        if (
+            ($c["status"] === "D" && $posting !== null) ||
+            ($c["status"] !== "D" && !$this->same($posting, $root->postingTerm()))
         ) {
             throw new CorruptHistoryException();
         }
@@ -1466,8 +1520,10 @@ final readonly class InstitutionalCreditLedger
      */
     private function observedGrade(AcademicCredit $root, array $facts): ?array
     {
-        return $root->grade() ?? ($facts["grade_id"] === null ? null :
-            GradeSnapshot::fromRow($this->grades->snapshot(new EntityId($facts["grade_id"])))->facts);
+        return $root->grade() ??
+        ($facts["grade_id"] === null
+        ? null
+        : GradeSnapshot::fromRow($this->grades->snapshot(new EntityId($facts["grade_id"])))->facts);
     }
     private function gradeEnrollmentScope(
         EntityId $enrollment,
@@ -1536,6 +1592,15 @@ final readonly class InstitutionalCreditLedger
             if ($withdrawn) {
                 $this->access->requirePermission("sis:gradebook:closed");
             }
+            return true;
+        } catch (AccessDeniedException) {
+            return false;
+        }
+    }
+    private function canCorrectPlacement(): bool
+    {
+        try {
+            $this->access->requirePermission("sis:academic:placement:amend");
             return true;
         } catch (AccessDeniedException) {
             return false;

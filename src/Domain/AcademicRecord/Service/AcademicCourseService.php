@@ -344,7 +344,7 @@ final readonly class AcademicCourseService
             $row === null ||
             $row["student_id"] !== $facts["student_id"] ||
             $row["section_id"] !== $section->value ||
-            $row["term_id"] !== $facts["term_id"] ||
+            $row["term_id"] !== ($root->registrationTermId() ?? $facts["term_id"]) ||
             $row["status"] !== $facts["status"]
         ) {
             self::invalid(

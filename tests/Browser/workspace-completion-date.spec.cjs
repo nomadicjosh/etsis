@@ -45,6 +45,14 @@ async function fixture(page, options = {}) {
                 ],
                 next_after: null,
             };
+        else if (path === "/sis/ui/data/terms/")
+            result = {
+                items: [
+                    { id: id(10), code: "26/FA" },
+                    { id: id(11), code: "26/SP" },
+                ],
+                next_after: null,
+            };
         else if (path.endsWith("/record/"))
             result = {
                 given_name: "Alex",
@@ -86,6 +94,9 @@ async function fixture(page, options = {}) {
                     grade_points_milli: options.withdrawn ? 0 : 12000,
                 },
                 pending_grade_change: options.pending ? { id: id(8), status: "pending" } : null,
+                can_correct_posting_term: !!options.placement && !options.readOnly,
+                posting_term_id: id(10),
+                posting_term_code: "26/FA",
                 posted: true,
                 can_amend: !options.readOnly,
                 can_record_academic_period:
@@ -159,6 +170,28 @@ async function fixture(page, options = {}) {
                 reason: data.reason,
                 review_token: "fictional-independent-review",
             };
+        } else if (path.endsWith("/academic-details/review/")) {
+            if (options.reject)
+                return route.fulfill({
+                    status: 409,
+                    json: { error: "The academic record changed. Reload before reviewing." },
+                });
+            reviewed = data.completed_on;
+            periodReview = data.academic_on;
+            result = {
+                previous_academic_on: academicOn,
+                previous_completed_on: date,
+                academic_on: periodReview,
+                completed_on: reviewed,
+                previous_posting_term_code_display: "26/FA",
+                posting_term_code: "26/SP",
+                reason: data.reason,
+                review_token: "fictional-details-review",
+            };
+        } else if (path.endsWith("/academic-details/commit/")) {
+            version++;
+            academicOn = periodReview;
+            date = reviewed;
         } else if (path.endsWith("/academic-dates/review/")) {
             if (options.reject || options.rejectPeriod)
                 return route.fulfill({
@@ -849,5 +882,108 @@ test("independent review retains grade and unit changes in one confirmation", as
     expect(
         f.calls.filter((c) => c.path.includes("/grade-changes/") && c.path.endsWith("/commit/")),
     ).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
+
+test("academic placement and dates share one accessible reviewed correction without calendar inference", async ({
+    page,
+}) => {
+    const f = await fixture(page, { placement: true, period: true });
+    await page.getByRole("button", { name: "Academic details", exact: true }).click();
+    await page
+        .getByRole("combobox", { name: "Academic posting term", exact: true })
+        .selectOption(String(11).padStart(26, "0"));
+    await expect(
+        page.getByLabel("Source academic-period start (blank marks unknown)", { exact: true }),
+    ).toHaveValue("");
+    await expect(
+        page.getByLabel("Actual completion date (blank marks unknown)", { exact: true }),
+    ).toHaveValue("");
+    await page
+        .getByLabel("Source academic-period start (blank marks unknown)", { exact: true })
+        .fill("2026-01-04");
+    await page.getByLabel("Actual completion date (blank marks unknown)", { exact: true }).fill("2026-05-12");
+    await page
+        .getByRole("textbox", { name: "Reason for academic correction", exact: true })
+        .fill("Fictional <b>evidence</b>.");
+    await page.getByRole("button", { name: "Review details", exact: true }).click();
+    const drawer = page.locator("#drawer-body");
+    await expect(drawer).toContainText("26/FA → 26/SP");
+    await expect(drawer).toContainText("Unknown → 2026-05-12");
+    expect(f.calls.some((c) => c.path.endsWith("/academic-details/commit/"))).toBe(false);
+    await expect(drawer.locator("b")).toHaveCount(0);
+    await page.getByRole("button", { name: "Revise details", exact: true }).click();
+    await expect(page.getByRole("combobox", { name: "Academic posting term", exact: true })).toHaveValue(
+        String(11).padStart(26, "0"),
+    );
+    await page.getByRole("button", { name: "Review details", exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const audit = await new AxeBuilder({ page })
+        .include("#drawer-body")
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+    expect(audit.violations).toEqual([]);
+    await page.getByRole("button", { name: "Confirm details", exact: true }).click();
+    await expect.poll(() => f.calls.find((c) => c.path.endsWith("/academic-details/commit/"))).toBeTruthy();
+    expect(f.calls.find((c) => c.path.endsWith("/academic-details/review/"))).toMatchObject({
+        data: {
+            posting_term_id: String(11).padStart(26, "0"),
+            academic_on: "2026-01-04",
+            completed_on: "2026-05-12",
+            effective_on: "2026-08-11",
+            enrollment_id: f.enrollment,
+            version: 3,
+        },
+        csrf: "fictional-test-token",
+    });
+    expect(f.calls.find((c) => c.path.endsWith("/academic-details/commit/"))).toMatchObject({
+        data: { review_token: "fictional-details-review" },
+        csrf: "fictional-test-token",
+    });
+    expect(f.calls.some((c) => c.path.includes("/final-grades/"))).toBe(false);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test("withdrawn placement keeps protected offering dates and omits completion controls", async ({ page }) => {
+    const f = await fixture(page, { placement: true, withdrawn: true, knownOffering: true });
+    await page.getByRole("button", { name: "Academic details", exact: true }).click();
+    await expect(
+        page.getByLabel("Actual completion date (blank marks unknown)", { exact: true }),
+    ).toHaveCount(0);
+    await expect(
+        page.getByLabel("Source academic-period start (blank marks unknown)", { exact: true }),
+    ).toHaveCount(0);
+    await page
+        .getByRole("combobox", { name: "Academic posting term", exact: true })
+        .selectOption(String(11).padStart(26, "0"));
+    await page
+        .getByRole("textbox", { name: "Reason for academic correction", exact: true })
+        .fill("Fictional withdrawn placement evidence.");
+    await page.getByRole("button", { name: "Review details", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("26/FA → 26/SP");
+    expect(f.calls.find((c) => c.path.endsWith("/academic-details/review/"))?.data).toMatchObject({
+        academic_on: null,
+        completed_on: null,
+    });
+    expect(f.errors).toEqual([]);
+});
+
+test("stale placement review retains entries and never confirms", async ({ page }) => {
+    const f = await fixture(page, { placement: true, reject: true });
+    await page.getByRole("button", { name: "Academic details", exact: true }).click();
+    await page
+        .getByRole("combobox", { name: "Academic posting term", exact: true })
+        .selectOption(String(11).padStart(26, "0"));
+    await page
+        .getByRole("textbox", { name: "Reason for academic correction", exact: true })
+        .fill("Fictional placement evidence.");
+    await page.getByRole("button", { name: "Review details", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("The academic record changed");
+    await expect(page.getByRole("combobox", { name: "Academic posting term", exact: true })).toHaveValue(
+        String(11).padStart(26, "0"),
+    );
+    expect(f.calls.some((c) => c.path.endsWith("/academic-details/commit/"))).toBe(false);
     expect(f.errors).toEqual([]);
 });

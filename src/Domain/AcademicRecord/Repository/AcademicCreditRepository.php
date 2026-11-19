@@ -29,6 +29,13 @@ interface AcademicCreditRepository
     ): void;
     /** @return array<string,mixed>|null */
     public function enrollment(EntityId $enrollment): ?array;
+    /** @return array{id:string,code:string} */
+    public function term(EntityId $term): array;
+    /** @return array{term_id:string,term_code:string,decision_id:string}|null */
+    public function postingTerm(EntityId $credit): ?array;
+    /** @param array{term_id:string,term_code:string,decision_id:string} $reference
+     * @param array{term_id:string,term_code:string,decision_id:string}|null $previous */
+    public function recordPostingTerm(EntityId $credit, array $reference, ?array $previous): void;
     public function lockStudent(EntityId $student): void;
     public function lockSection(EntityId $section): void;
 }

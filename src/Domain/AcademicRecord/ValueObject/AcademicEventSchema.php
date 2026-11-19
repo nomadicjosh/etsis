@@ -10,6 +10,7 @@ use Domain\AcademicRecord\Event\InstitutionalCreditWasDropped;
 use Domain\AcademicRecord\Event\AcademicCompletionWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted;
+use Domain\AcademicRecord\Event\InstitutionalPostingTermWasCorrected;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 
@@ -19,8 +20,14 @@ final class AcademicEventSchema
     public static function validate(string $class, array $payload): void
     {
         if (
-            in_array($class, [\Domain\AcademicRecord\Event\GradeChangeWasRequested::class,
-            \Domain\AcademicRecord\Event\GradeChangeWasResolved::class], true)
+            in_array(
+                $class,
+                [
+                    \Domain\AcademicRecord\Event\GradeChangeWasRequested::class,
+                    \Domain\AcademicRecord\Event\GradeChangeWasResolved::class,
+                ],
+                true,
+            )
         ) {
             GradeChangeSchema::validate($class, $payload);
             return;
@@ -35,6 +42,14 @@ final class AcademicEventSchema
                 "grade",
             ],
             FinalGradeWasDecided::class => ["decision_id", "previous_decision_id", "grade", "assignment_id"],
+            InstitutionalPostingTermWasCorrected::class => [
+                "decision_id",
+                "previous_decision_id",
+                "previous_term_id",
+                "previous_term_code",
+                "term_id",
+                "term_code",
+            ],
             InstitutionalCourseWasAccepted::class => [
                 "decision_id",
                 "previous_decision_id",
@@ -55,7 +70,12 @@ final class AcademicEventSchema
                 "previous_completed_on",
                 "completed_on",
             ],
-            InstitutionalCreditWasDropped::class => ["decision_id", "previous_decision_id", "outcome", "grade"],
+            InstitutionalCreditWasDropped::class => [
+                "decision_id",
+                "previous_decision_id",
+                "outcome",
+                "grade",
+            ],
             default => [],
         };
         if (count($payload) !== count($keys) || array_diff(array_keys($payload), $keys) !== []) {
@@ -106,7 +126,32 @@ final class AcademicEventSchema
                 self::invalid();
             }
             new EntityId($payload["previous_decision_id"]);
-            if ($class === InstitutionalCourseWasAccepted::class) {
+            if ($class === InstitutionalPostingTermWasCorrected::class) {
+                foreach (["previous_term_id", "term_id"] as $key) {
+                    if (!is_string($payload[$key])) {
+                        self::invalid();
+                    }
+                    new EntityId($payload[$key]);
+                }
+                if ($payload["previous_term_id"] === $payload["term_id"]) {
+                    self::invalid();
+                }
+                foreach (["previous_term_code", "term_code"] as $key) {
+                    $value = $payload[$key];
+                    if ($key === "previous_term_code" && $value === null) {
+                        continue;
+                    }
+                    if (
+                        !is_string($value) ||
+                        trim($value) === "" ||
+                        mb_strlen($value) > 96 ||
+                        !mb_check_encoding($value, "UTF-8") ||
+                        preg_match('/[\x00-\x1F\x7F]/', $value)
+                    ) {
+                        self::invalid();
+                    }
+                }
+            } elseif ($class === InstitutionalCourseWasAccepted::class) {
                 foreach (["course_version_id", "previous_course_version_id"] as $key) {
                     if ($key === "previous_course_version_id" && $payload[$key] === null) {
                         continue;

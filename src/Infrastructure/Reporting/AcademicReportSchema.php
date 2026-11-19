@@ -36,6 +36,7 @@ final class AcademicReportSchema
                 "sis_courses" => "Courses",
                 "sis_course_descriptions" => "Course descriptions",
                 "sis_credit_course_versions" => "Academic credit course versions",
+                "sis_credit_posting_terms" => "Retained academic placement",
                 "sis_section_course_versions" => "Section course definitions",
                 "sis_course_versions" => "Retained course definitions",
                 "sis_course_version_classes" => "Retained course classifications",
@@ -272,6 +273,9 @@ final class AcademicReportSchema
                     "id",
                 ),
                 "institutional_offering" => $join("sis_academic_credit_streams", "credit", "id", "id"),
+                "posting_reference" => $join("sis_credit_posting_terms", "credit", "id", "id"),
+                "original_enrollment" => $join("sis_enrollments", "institutional_offering", "enrollment_id", "id"),
+                "original_registration_term" => $join("sis_terms", "original_enrollment", "term_id", "id"),
                 "offering_reference" => $join(
                     "sis_enrollment_section_versions",
                     "institutional_offering",
@@ -332,6 +336,18 @@ final class AcademicReportSchema
                     "course_code" => $field("Recorded course code", "string", "credit", "course_code"),
                     "course_title" => $field("Recorded course title", "string", "credit", "course_title"),
                     "term_code" => $field("Academic term", "string", "term", "code"),
+                    "retained_posting_term_code" => $field(
+                        "Retained corrected posting term",
+                        "string",
+                        "posting_reference",
+                        "term_code",
+                    ),
+                    "original_registration_term_code" => $field(
+                        "Original registration term current code",
+                        "string",
+                        "original_registration_term",
+                        "code",
+                    ),
                     "term_starts_on" => $field("Term begins", "date", "term", "starts_on"),
                     "grade_code" => $field("Final grade", "string", "grade", "code"),
                     "grade_scale_version" => $field(

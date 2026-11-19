@@ -50,7 +50,7 @@ final readonly class AcademicInputVerifier
                 $c = $input["credit"];
                 if (
                     $r["id"] !== $source["id"] ||
-                    $r["term_id"] !== $c["term_id"] ||
+                    $r["term_id"] !== ($input["registration_term_id"] ?? $c["term_id"]) ||
                     $r["status"] !== $c["status"] ||
                     ($source["section_id"] !== null && $r["section_id"] !== $source["section_id"]) ||
                     $source["registration_seen"] !== $registration["history_recorded"] ||
@@ -70,7 +70,9 @@ final readonly class AcademicInputVerifier
                 $facts["student_id"] !== $student->value ||
                 $facts["credit_type"] !== $source["origin"] ||
                 $facts["source_id"] !== $source["id"] ||
-                ($source["term_id"] !== null && $facts["term_id"] !== $source["term_id"]) ||
+                ($source["posting_term_id"] !== null && $facts["term_id"] !== $source["posting_term_id"]) ||
+                ($source["term_id"] !== null &&
+                    ($input["registration_term_id"] ?? $facts["term_id"]) !== $source["term_id"]) ||
                 $source["academic_seen"] !== $input["history_recorded"] ||
                 $source["credit_seen"] !== ($facts["status"] !== "D")
             ) {
@@ -85,8 +87,8 @@ final readonly class AcademicInputVerifier
                 "registration_version" => $registration["history_version"] ?? null,
                 "section_id" => $registration["facts"]["section_id"] ?? null,
                 "removed" => $removed,
-                "earlier_history_unknown" => $input["earlier_history_unknown"] ||
-                    ($registration["earlier_history_unknown"] ?? false),
+                "earlier_history_unknown" =>
+                    $input["earlier_history_unknown"] || ($registration["earlier_history_unknown"] ?? false),
             ];
             if (!$removed) {
                 $gaps =

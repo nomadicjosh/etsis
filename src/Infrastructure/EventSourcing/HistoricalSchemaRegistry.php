@@ -353,6 +353,18 @@ final readonly class HistoricalSchemaRegistry
                 'type' => 'academic_credit', 'root' => \Domain\AcademicRecord\AcademicCredit::class,
                 'fields' => ['decision_id', 'previous_decision_id', 'previous_academic_on', 'academic_on'],
             ],
+            \Domain\AcademicRecord\Event\InstitutionalPostingTermWasCorrected::class => [
+                "type" => "academic_credit",
+                "root" => \Domain\AcademicRecord\AcademicCredit::class,
+                "fields" => [
+                    "decision_id",
+                    "previous_decision_id",
+                    "previous_term_id",
+                    "previous_term_code",
+                    "term_id",
+                    "term_code",
+                ],
+            ],
             \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded::class => [
                 "type" => "academic_credit",
                 "root" => \Domain\AcademicRecord\AcademicCredit::class,

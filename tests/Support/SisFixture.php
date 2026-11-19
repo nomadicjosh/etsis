@@ -558,9 +558,9 @@ final class SisFixture
             $requirements, $this->transactions, $this->workPursuits(),
         );
     }
-    public function academicDates(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\AcademicRecord\Service\AcademicDateService
+    public function academicDates(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\AcademicRecord\Service\AcademicDetailsService
     {
-        return new \Domain\AcademicRecord\Service\AcademicDateService(
+        return new \Domain\AcademicRecord\Service\AcademicDetailsService(
             $this->academicCredits(),
             new \Infrastructure\Persistence\Repository\SqlAcademicCreditRepository($this->sql),
             new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
