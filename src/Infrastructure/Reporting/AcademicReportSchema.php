@@ -702,6 +702,7 @@ final class AcademicReportSchema
         $datasets['applications']['fields']['submission_channel']['choices'] = [
             'direct' => 'Direct staff entry', 'form' => 'Application form',
         ];
-        return $datasets;
+        $datasets['sections'] = SchedulingReportSchema::withSectionBookings($datasets['sections']);
+        return $datasets + SchedulingReportSchema::datasets();
     }
 }

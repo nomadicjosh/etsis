@@ -19,7 +19,10 @@ final class ReportRowSelection
         }
         $result = [];
         foreach ($schema["fields"] as $id => $field) {
-            if ($field["type"] !== "date" || isset($field["expression"]) || isset($field["scale"])) {
+            if (
+                !in_array($field["type"], ["date", "datetime"], true) ||
+                isset($field["expression"]) || isset($field["scale"])
+            ) {
                 continue;
             }
             $path = [];

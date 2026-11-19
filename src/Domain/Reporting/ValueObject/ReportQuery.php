@@ -334,6 +334,12 @@ final readonly class ReportQuery
                         self::invalid("Enter an ISO calendar date.");
                     }
                 }
+                if ($type === 'datetime') {
+                    $date = \DateTimeImmutable::createFromFormat('!Y-m-d H:i:s', $value, new \DateTimeZone('UTC'));
+                    if ($date === false || $date->format('Y-m-d H:i:s') !== $value) {
+                        self::invalid('Enter a UTC date and time as YYYY-MM-DD HH:mm:ss.');
+                    }
+                }
             }
         }
     }

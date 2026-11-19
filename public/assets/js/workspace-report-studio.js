@@ -176,6 +176,40 @@ window.createWorkspaceReportStudio = function (ui) {
             );
         const templates = node("details", { class: "report-templates" }, node("summary", {}, "Start from a template"));
         const templateGrid = node("div", { class: "report-template-grid" });
+        const meetings = catalog.datasets.find(dataset => dataset.id === "meetings");
+        const rooms = catalog.datasets.find(dataset => dataset.id === "rooms");
+        const approvedMeetings = { condition: "AND", rules: [
+            { id: "booking_status", operator: "equal", value: "approved" },
+            { id: "cancelled_at", operator: "is_null", value: null },
+        ] };
+        if (meetings) {
+            templateGrid.append(
+                button("Approved meeting schedule", () => edit(meetings, {
+                    ...initial(meetings), filters: structuredClone(approvedMeetings),
+                    sort: [{ column: 1, direction: "asc" }],
+                })),
+                node("p", { class: "form-text" }, "Meeting times and date filters use UTC. Online meetings have no room. Approval and occurrence cancellation are separate; use Filters to choose your time window."),
+            );
+            if (meetings.fields.section_publication_id)
+                templateGrid.append(button("Booked class meetings", () => edit(meetings, {
+                    ...initial(meetings),
+                    columns: ["section_code", "course_title", "term_code", "starts_at", "ends_at", "room_name"]
+                        .map(field => ({ field, label: meetings.fields[field].label, aggregate: "none" })),
+                    filters: { ...structuredClone(approvedMeetings), rules: [
+                        ...structuredClone(approvedMeetings.rules),
+                        { id: "section_publication_id", operator: "is_not_null", value: null },
+                    ] },
+                })));
+        }
+        if (rooms)
+            templateGrid.append(
+                button("Rooms without approved meetings", () => edit(rooms, {
+                    ...initial(rooms), existence: {
+                        meeting: { mode: "none", filters: structuredClone(approvedMeetings) },
+                    },
+                })),
+                node("p", { class: "form-text" }, "This template finds rooms without a retained approved meeting. Add a time window to the matching-record card to narrow the question. It does not certify room availability or account for closures."),
+            );
         templates.append(templateGrid);
         surface.append(templates);
         const students = catalog.datasets.find((item) => item.id === "students");
@@ -336,6 +370,8 @@ window.createWorkspaceReportStudio = function (ui) {
     }
     function initial(dataset) {
         const choices = {
+            meetings: ["booking_title", "starts_at", "ends_at", "room_name", "building_name", "booking_status"],
+            rooms: ["room_code", "room_name", "building_name", "room_capacity"],
             accounts: ["institutional_id", "full_name", "term_code", "currency", "balance"],
             applications: ["institutional_id", "full_name", "program_code", "entry_term", "status", "submitted_on"],
             students: ["institutional_id", "full_name", "program_code", "entry_term"],
@@ -428,6 +464,27 @@ window.createWorkspaceReportStudio = function (ui) {
                         ...(field.type === "date" ? {
                             input: (rule, name) => `<input class="form-control" type="${rule.operator.multiple ? "text" : "date"}" name="${escapeLabel(name)}">`,
                             value_separator: ",",
+                        } : {}),
+                        ...(field.type === "datetime" ? {
+                            input: (rule, name) => `<input class="form-control" data-report-datetime step="1" type="${rule.operator.multiple ? "text" : "datetime-local"}" placeholder="YYYY-MM-DD HH:mm:ss" name="${escapeLabel(name)}">`,
+                            valueGetter: (rule) => {
+                                const inputs = rule.$el.find("[data-report-datetime]").toArray();
+                                const normalize = value => {
+                                    value = value.trim().replace("T", " ");
+                                    return value.length === 16 ? `${value}:00` : value;
+                                };
+                                if (rule.operator.multiple)
+                                    return inputs[0].value.split(",").map(normalize);
+                                const values = inputs.map(input => normalize(input.value));
+                                return rule.operator.nb_inputs === 1 ? values[0] : values;
+                            },
+                            valueSetter: (rule, value) => {
+                                const values = [].concat(value ?? []);
+                                rule.$el.find("[data-report-datetime]").each((i, input) => {
+                                    input.value = rule.operator.multiple
+                                        ? values.join(", ") : String(values[i] ?? "").replace(" ", "T");
+                                }).trigger("change");
+                            },
                         } : {}),
                         operators: [
                             "equal",
@@ -549,7 +606,7 @@ window.createWorkspaceReportStudio = function (ui) {
                 .map((r) => r.parent)
                 .find((id) => !dataset.relationships[id]) || Object.values(dataset.fields)[0]?.relation;
         const rootLabel =
-            { account: "Student accounts", application: "Applications", student: "Students", assignment: "Program assignments", credit: "Academic credits", section: "Sections" }[root] ||
+            { meeting: "Scheduled meetings", room: "Rooms", account: "Student accounts", application: "Applications", student: "Students", assignment: "Program assignments", credit: "Academic credits", section: "Sections" }[root] ||
             "Starting records";
         const relationLabel = (id) => (id === root ? rootLabel : dataset.relationships[id].label);
         const rowScope = id => dataset.relationships[id]?.many

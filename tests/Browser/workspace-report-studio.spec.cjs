@@ -30,7 +30,18 @@ async function accessible(page) {
 }
 async function fixture(page, options = {}) {
     const calls = [], errors = []; let definition = null, version = 0, name = '', operation = 1;
-    const fields = options.accounts ? {
+    const fields = options.scheduling ? {
+        room_code: { label: 'Room code', type: 'string', relation: 'room' },
+        room_name: { label: 'Room name', type: 'string', relation: 'room' },
+        building_name: { label: 'Building name', type: 'string', relation: 'building' },
+        room_capacity: { label: 'Room capacity', type: 'integer', relation: 'room' },
+        booking_title: { label: 'Booking title', type: 'string', relation: 'booking' },
+        booking_status: { label: 'Booking status', type: 'string', relation: 'booking',
+            choices: { approved: 'Approved', requested: 'Requested', cancelled: 'Cancelled' } },
+        starts_at: { label: 'Meeting starts UTC', type: 'datetime', relation: 'meeting' },
+        ends_at: { label: 'Meeting ends UTC', type: 'datetime', relation: 'meeting' },
+        cancelled_at: { label: 'Meeting cancelled UTC', type: 'datetime', relation: 'meeting' },
+    } : options.accounts ? {
         account_id: { label: 'Account reference', type: 'string', relation: 'account' },
         institutional_id: { label: 'Institutional ID', type: 'string', relation: 'identity' },
         full_name: { label: 'Student full name', type: 'string', relation: 'person' },
@@ -74,7 +85,20 @@ async function fixture(page, options = {}) {
         enrollment_status: { label: 'Enrollment status', type: 'string', relation: 'enrollment' },
         course_title: { label: 'Course title', type: 'string', relation: 'course' },
     };
-    const dataset = options.accounts ? {
+    const dataset = options.scheduling ? {
+        id: options.scheduling, label: options.scheduling === 'rooms' ? 'Rooms and bookings' : 'Scheduled meetings',
+        description: 'Booking occurrences. Times and filters use UTC.', fields,
+        relationships: options.scheduling === 'rooms' ? {
+            building: { label: 'Buildings', parent: 'room', many: false },
+            meeting: { label: 'Room meetings', parent: 'room', many: true,
+                date_fields: { starts_at: 'Meeting starts UTC', ends_at: 'Meeting ends UTC' } },
+            booking: { label: 'Bookings', parent: 'meeting', many: false },
+        } : {
+            booking: { label: 'Bookings', parent: 'meeting', many: false },
+            room: { label: 'Rooms', parent: 'meeting', many: false },
+            building: { label: 'Buildings', parent: 'room', many: false },
+        },
+    } : options.accounts ? {
         id: 'accounts', label: 'Student account balances',
         description: 'One row per student and billing term. Currency stays with every amount.', fields,
         relationships: {
@@ -141,15 +165,15 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/report-studio/save/') { definition = data.definition; name = data.name; version = data.version + 1; result = { id: data.report_id }; }
         else if (path.endsWith('/preview/') || path.endsWith('/run/')) {
             const query = data.definition || definition;
-            const values = { account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
+            const values = { booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
                 latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
-            const rows = options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, values[column.field] ?? null]))]
+            const rows = options.scheduling || options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, values[column.field] ?? null]))]
                 : data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
             result = { row_selection: selectionSummary(query), columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
-                next_offset: options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
-                grouped: options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
+                next_offset: options.scheduling || options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
+                grouped: options.scheduling || options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
         } else if (path.endsWith('/export/')) { await route.fulfill({ body: 'Section,Term,Students\nMATH.101.A,26/FA,8\n', contentType: 'text/csv' }); return; }
         else if (/\/sis\/report-studio\/[^/]+\/$/.test(path)) result = { row_selection: selectionSummary(definition), id: path.split('/').at(-2), name, version, definition, can_manage: !options.recipient };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
@@ -160,6 +184,58 @@ async function fixture(page, options = {}) {
     if (!options.recipient && !options.collapsedTemplates) await page.getByText('Start from a template', { exact: true }).click();
     return { calls, errors, visited };
 }
+
+test('scheduled meetings keep UTC timestamp ranges through preview, save and reopening', async ({ page }) => {
+    const f = await fixture(page, { scheduling: 'meetings' });
+    await page.getByRole('button', { name: 'Approved meeting schedule', exact: true }).click();
+    await page.getByLabel('Report name', { exact: true }).fill('Fictional schedule');
+    await page.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
+    const conditions = page.getByRole('group', { name: 'Row conditions', exact: true });
+    await conditions.getByLabel('Row conditions: field', { exact: true }).first().selectOption('starts_at');
+    await conditions.getByLabel('Row conditions: comparison', { exact: true }).first().selectOption('between');
+    const timestamps = conditions.locator('input[type="datetime-local"]');
+    await timestamps.nth(0).fill('2026-11-19T00:00');
+    await timestamps.nth(1).fill('2026-11-19T23:59:59');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.find(call => call.path.endsWith('/preview/')).data.definition;
+    expect(query.filters.rules[0]).toMatchObject({ id: 'starts_at', operator: 'between',
+        value: ['2026-11-19 00:00:00', '2026-11-19 23:59:59'] });
+    await expect(page.getByRole('table', { name: 'Relational report results' })).toContainText('2026-11-19 18:00:00');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.locator('.report-advanced-filters > summary').click();
+    const restored = page.getByRole('group', { name: 'Row conditions', exact: true }).locator('input[type="datetime-local"]');
+    await expect(restored.nth(0)).toHaveValue('2026-11-19T00:00');
+    await expect(restored.nth(1)).toHaveValue('2026-11-19T23:59:59');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+test('rooms without approved meetings use one independent matching card and can choose latest timestamps', async ({ page }) => {
+    const f = await fixture(page, { scheduling: 'rooms' });
+    await page.getByRole('button', { name: 'Rooms without approved meetings', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.find(call => call.path.endsWith('/preview/')).data.definition;
+    expect(query.existence.meeting).toMatchObject({ mode: 'none', filters: { rules: [
+        { id: 'booking_status', operator: 'equal', value: 'approved' },
+        { id: 'cancelled_at', operator: 'is_null' },
+    ] } });
+    await page.getByRole('tab', { name: 'Fields', exact: true }).click();
+    await page.getByRole('button', { name: 'Add Room meetings', exact: true }).click();
+    const chooser = page.locator('[data-record-selection="meeting"]');
+    await chooser.locator('summary').click();
+    await chooser.getByRole('button', { name: 'Latest', exact: true }).click();
+    await expect(chooser.getByLabel('Room meetings: date', { exact: true })).toHaveValue('starts_at');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const latest = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(latest.record_selection.meeting).toEqual({ date_field: 'starts_at', direction: 'latest', ties: 'all' });
+    expect(latest.existence.meeting).toEqual(query.existence.meeting);
+    expect(f.errors).toEqual([]);
+});
 
 test('the Students source opens with useful columns and supports preview, save and reopening', async ({ page }) => {
     const f = await fixture(page, { students: true });

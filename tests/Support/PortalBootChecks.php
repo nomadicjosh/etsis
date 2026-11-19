@@ -2773,6 +2773,42 @@ if ($teachingPost($adjustmentPath . "commit/", $placementCommit)->getStatusCode(
 $sis->access->staff = true;
 $sis->access->grants = [];
 
+// Scheduling uses the same provider, private endpoints, source duties, saves and CSV path.
+foreach (['meetings', 'rooms'] as $scheduleSource) {
+    $scheduleDefinition = [
+        'dataset' => $scheduleSource,
+        'columns' => [
+            ['field' => 'room_name', 'label' => 'Room', 'aggregate' => 'none'],
+            ['field' => 'starts_at', 'label' => 'Starts UTC', 'aggregate' => 'none'],
+        ],
+        'filters' => ['condition' => 'AND', 'rules' => [
+            ['id' => 'starts_at', 'operator' => 'greater_or_equal', 'value' => '2026-01-01 00:00:00'],
+        ]],
+    ];
+    $scheduleId = \Domain\Shared\ValueObject\EntityId::generate()->value;
+    $schedulePreview = $teachingPost('/sis/report-studio/preview/', [
+        'definition' => $scheduleDefinition, 'offset' => 0,
+    ]);
+    $scheduleSave = $teachingPost('/sis/report-studio/save/', [
+        'report_id' => $scheduleId, 'operation_id' => $scheduleId, 'version' => -1,
+        'name' => 'Fictional scheduling source', 'definition' => $scheduleDefinition,
+    ]);
+    $scheduleCsv = $teachingPost('/sis/report-studio/' . $scheduleId . '/export/', ['offset' => 0]);
+    if ($schedulePreview->getStatusCode() !== 200 || $scheduleSave->getStatusCode() !== 201 ||
+        $scheduleCsv->getStatusCode() !== 200 ||
+        !str_contains($scheduleCsv->getHeaderLine('Cache-Control'), 'no-store') ||
+        !str_contains((string) $scheduleCsv->getBody(), 'Starts UTC')) {
+        throw new RuntimeException('The scheduling report did not preserve private provider/CSV behavior.');
+    }
+    $sis->access->staff = false;
+    $sis->access->grants = ['sis:reporting:run', 'sis:reporting:manage', 'sis:catalog:manage'];
+    if ($teachingPost('/sis/report-studio/' . $scheduleId . '/run/', ['offset' => 0])->getStatusCode() !== 403) {
+        throw new RuntimeException('Academic/reporting authority bypassed scheduling source authority.');
+    }
+    $sis->access->staff = true;
+    $sis->access->grants = [];
+}
+
 // Joined Report Studio plans remain typed, private and independently authorized at execution.
 $studioDefinition = [
     "dataset" => "programs",
