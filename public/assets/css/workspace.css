@@ -854,3 +854,7 @@ h3 { font-size: .9rem; font-weight: 650; }
 .report-row-selection-summary { margin: 1rem 0; border-left: 3px solid #4d78a1; background: #f6f9fc; border-radius: .4rem; padding: 1rem; }
 .report-row-selection-summary h3 { margin: 0 0 .5rem; }
 .report-row-selection-summary ul { padding-left: 1.25rem; }
+.report-column-conditions { margin-block: 1rem; padding: 1rem; border: 1px solid #c6d5e3; border-radius: .6rem; background: #f8fafc; }
+.report-column-conditions > summary { color: #244b70; font-weight: 650; cursor: pointer; }
+.report-column-condition-choices { display: flex; flex-wrap: wrap; gap: .4rem; margin-block: .75rem; }
+.report-column-conditions [data-report-column-editor] { margin-top: 1rem; min-width: 0; }

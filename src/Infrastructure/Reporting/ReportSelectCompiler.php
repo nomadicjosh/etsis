@@ -22,6 +22,7 @@ final readonly class ReportSelectCompiler
         $q = $this->sql->quote(...);
         $used = [];
         $parameters = [];
+        $columnParameters = [];
         $whereParameters = [];
         $joinParameters = [];
         $values = [];
@@ -47,6 +48,15 @@ final readonly class ReportSelectCompiler
                 $rowExpression .
                 ($op === "/" ? " * 1.0 / NULLIF(" . $other . ", 0)" : " " . $op . " " . $other) .
                 ")";
+            }
+            $condition = $this->condition(
+                $column['conditions'] ?? null,
+                $expression,
+                $columnParameters,
+                $s['fields'],
+            );
+            if ($condition !== '') {
+                $rowExpression = 'CASE WHEN ' . $condition . ' THEN ' . $rowExpression . ' ELSE NULL END';
             }
             $values[] = $rowExpression . " AS " . $q("v" . $i);
             $term = $q("data") . "." . $q("v" . $i);
@@ -186,7 +196,7 @@ final readonly class ReportSelectCompiler
             $order[] = "CASE WHEN " . $name . " IS NULL THEN 0 ELSE 1 END";
             $order[] = $name . " " . $direction;
         }
-        $parameters = array_merge($joinParameters, $whereParameters, $parameters);
+        $parameters = array_merge($columnParameters, $joinParameters, $whereParameters, $parameters);
         return [
             "sql" =>
                 "SELECT * FROM (" .

@@ -2809,6 +2809,42 @@ foreach (['meetings', 'rooms'] as $scheduleSource) {
     $sis->access->grants = [];
 }
 
+// Per-column predicates share the existing private save/run/export routes and authorize hidden sources.
+$conditionalDefinition = [
+    'dataset' => 'sections',
+    'columns' => [[
+        'field' => 'section_code', 'label' => 'Sections with active registrations', 'aggregate' => 'count_distinct',
+        'conditions' => ['condition' => 'AND', 'rules' => [
+            ['id' => 'enrollment_status', 'operator' => 'in', 'value' => ['A', 'N']],
+        ]],
+    ]],
+];
+$conditionalId = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$conditionalPreview = $teachingPost('/sis/report-studio/preview/', [
+    'definition' => $conditionalDefinition, 'offset' => 0,
+]);
+$conditionalSave = $teachingPost('/sis/report-studio/save/', [
+    'report_id' => $conditionalId, 'operation_id' => $conditionalId, 'version' => -1,
+    'name' => 'Fictional conditional summary', 'definition' => $conditionalDefinition,
+]);
+$conditionalCsv = $teachingPost('/sis/report-studio/' . $conditionalId . '/export/', ['offset' => 0]);
+if (
+    $conditionalPreview->getStatusCode() !== 200 || $conditionalSave->getStatusCode() !== 201 ||
+    $conditionalCsv->getStatusCode() !== 200 ||
+    !str_contains($conditionalCsv->getHeaderLine('Cache-Control'), 'no-store') ||
+    json_decode((string) $conditionalPreview->getBody(), true)['conditional_columns'] !==
+        ['Sections with active registrations']
+) {
+    throw new RuntimeException('Conditional summaries failed the real provider/private CSV boundary.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:reporting:run', 'sis:reporting:manage', 'sis:catalog:manage'];
+if ($teachingPost('/sis/report-studio/' . $conditionalId . '/run/', ['offset' => 0])->getStatusCode() !== 403) {
+    throw new RuntimeException('A conditional summary bypassed hidden student-source permission.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
+
 // Joined Report Studio plans remain typed, private and independently authorized at execution.
 $studioDefinition = [
     "dataset" => "programs",

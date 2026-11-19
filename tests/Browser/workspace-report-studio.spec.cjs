@@ -171,11 +171,11 @@ async function fixture(page, options = {}) {
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
             const rows = options.scheduling || options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, values[column.field] ?? null]))]
                 : data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
-            result = { row_selection: selectionSummary(query), columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
+            result = { conditional_columns: query.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(query), columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
                 next_offset: options.scheduling || options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
                 grouped: options.scheduling || options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
         } else if (path.endsWith('/export/')) { await route.fulfill({ body: 'Section,Term,Students\nMATH.101.A,26/FA,8\n', contentType: 'text/csv' }); return; }
-        else if (/\/sis\/report-studio\/[^/]+\/$/.test(path)) result = { row_selection: selectionSummary(definition), id: path.split('/').at(-2), name, version, definition, can_manage: !options.recipient };
+        else if (/\/sis\/report-studio\/[^/]+\/$/.test(path)) result = { conditional_columns: definition.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(definition), id: path.split('/').at(-2), name, version, definition, can_manage: !options.recipient };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto(options.recipient ? '/admin/report-fixture/' : '/admin/');
@@ -184,6 +184,68 @@ async function fixture(page, options = {}) {
     if (!options.recipient && !options.collapsedTemplates) await page.getByText('Start from a template', { exact: true }).click();
     return { calls, errors, visited };
 }
+
+test('conditional summaries edit independently and retain their rules through save and reopening', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Active and withdrawn registrations', exact: true }).click();
+    await page.getByLabel('Report name', { exact: true }).fill('Fictional registration comparison');
+    await page.getByRole('button', { name: /^Column 2 settings:/ }).click();
+    await page.getByRole('button', { name: 'Edit column conditions', exact: true }).click();
+    const conditions = page.getByRole('group', { name: 'Column conditions', exact: true });
+    await conditions.getByLabel('Column conditions: comparison', { exact: true }).selectOption('equal');
+    await conditions.getByLabel('Column conditions: value', { exact: true }).fill('A');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.columns[1].conditions.rules[0]).toMatchObject({ id: 'enrollment_status', operator: 'equal', value: 'A' });
+    expect(query.columns[2].conditions.rules[0]).toMatchObject({ id: 'enrollment_status', operator: 'equal', value: 'W' });
+    await expect(page.getByRole('complementary', { name: 'Conditional summaries' })).toContainText('Active · Withdrawn');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await expect(page.getByRole('group', { name: 'Column conditions', exact: true })
+        .getByLabel('Column conditions: value', { exact: true })).toHaveValue('A');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+test('duplicating a conditional column preserves its settings and clearing one does not clear the original', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Active and withdrawn registrations', exact: true }).click();
+    await page.getByRole('button', { name: /^Column 2 settings:/ }).click();
+    await page.getByRole('button', { name: 'Duplicate column', exact: true }).click();
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    await page.getByLabel('Column 3 label', { exact: true }).fill('Other active');
+    await page.getByRole('button', { name: /^Column 3 settings:/ }).click();
+    await page.getByRole('button', { name: 'Edit column conditions', exact: true }).click();
+    await page.getByRole('button', { name: 'Clear column conditions', exact: true }).click();
+    await expect(page.locator('[data-report-column-editor] h3')).toBeFocused();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.columns).toHaveLength(4);
+    expect(query.columns[1].conditions.rules[0].value).toEqual(['A', 'N']);
+    expect(query.columns[2].aggregate).toBe('count_distinct');
+    expect(query.columns[2].conditions || null).toBeNull();
+    expect(query.columns[3].conditions.rules[0].value).toBe('W');
+    expect(f.errors).toEqual([]);
+});
+
+test('removing a source removes dependent conditional columns instead of widening their totals', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Section headcounts, including empty sections', exact: true }).click();
+    await page.getByRole('button', { name: /^Column 3 settings:/ }).click();
+    await page.getByRole('button', { name: 'Add column conditions', exact: true }).click();
+    const conditions = page.getByRole('group', { name: 'Column conditions', exact: true });
+    await conditions.getByLabel('Column conditions: field', { exact: true }).selectOption('term_code');
+    await conditions.getByLabel('Column conditions: value', { exact: true }).fill('26/FA');
+    await page.getByRole('tab', { name: 'Fields', exact: true }).click();
+    await page.getByRole('button', { name: 'Remove Term and its fields', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.columns.map(column => column.field)).toEqual(['section_code']);
+    expect(f.errors).toEqual([]);
+});
 
 test('scheduled meetings keep UTC timestamp ranges through preview, save and reopening', async ({ page }) => {
     const f = await fixture(page, { scheduling: 'meetings' });

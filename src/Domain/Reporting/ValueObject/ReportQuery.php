@@ -106,6 +106,16 @@ final readonly class ReportQuery
             $this->group($filter, $local, 0, $count);
         }
         $this->group($definition["filters"] ?? null, $schema["fields"], 0, $count);
+        foreach ($columns as $column) {
+            if (($column['conditions'] ?? null) !== null && $column['aggregate'] === 'none') {
+                self::invalid('Column conditions require a summary such as Count, Sum, Minimum or Maximum.');
+            }
+            $before = $count;
+            $this->group($column['conditions'] ?? null, $schema['fields'], 0, $count);
+            if (($column['conditions'] ?? null) !== null && $before === $count) {
+                self::invalid('Add a column condition or clear the column conditions.');
+            }
+        }
         $existence = $definition['existence'] ?? [];
         if (!is_array($existence) || count($existence) > 6) {
             self::invalid('Choose up to six related-record conditions.');
@@ -201,6 +211,9 @@ final readonly class ReportQuery
                 $collect($this->definition['filters'] ?? null);
                 foreach ($this->definition['join_filters'] ?? [] as $filter) {
                     $collect($filter);
+                }
+                foreach ($columns as $c) {
+                    $collect($c['conditions'] ?? null);
                 }
                 foreach ($relations as $relation) {
                     while ($relation !== $this->schema['root']) {
@@ -416,6 +429,16 @@ final readonly class ReportQuery
         };
     }
 
+    /** @return list<string> */
+    public function conditionalColumns(): array
+    {
+        return array_values(array_map(
+            static fn(array $column): string => $column['label'],
+            array_filter($this->definition['columns'], static fn(array $column): bool =>
+                ($column['conditions'] ?? null) !== null),
+        ));
+    }
+
     /** @return list<array{record:string,date:string,direction:string,ties:string}> */
     public function rowSelectionSummary(): array
     {
@@ -451,6 +474,9 @@ final readonly class ReportQuery
             }
         };
         $collect($this->definition["filters"] ?? null);
+        foreach ($this->definition['columns'] as $column) {
+            $collect($column['conditions'] ?? null);
+        }
         foreach ($this->definition["join_filters"] ?? [] as $group) {
             $collect($group);
         }

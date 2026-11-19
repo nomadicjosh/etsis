@@ -480,6 +480,8 @@ final class AcademicReportSchema
                 "course_code" => $field("Current course code", "string", "course", "code"),
                 "course_title" => $field("Current catalog title", "string", "course", "title"),
                 "term_code" => $field("Academic term", "string", "term", "code"),
+                'term_starts_on' => $field('Academic term starts', 'date', 'term', 'starts_on'),
+                'term_ends_on' => $field('Academic term ends', 'date', 'term', 'ends_on'),
                 "capacity" => $field("Section capacity", "integer", "section", "capacity"),
                 "delivery_mode" => $field("Delivery mode", "string", "delivery", "mode"),
                 "enrollment_id" => $field("Enrollment reference", "string", "enrollment", "id", $studentRead),

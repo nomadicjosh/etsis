@@ -241,6 +241,7 @@ final readonly class RelationalReportService
         $query = $this->query($data);
         return [
             "row_selection" => $query->rowSelectionSummary(),
+            'conditional_columns' => $query->conditionalColumns(),
             "id" => $id->value,
             "name" => $report->name,
             "version" => (int) $record["version"],
@@ -431,6 +432,7 @@ final readonly class RelationalReportService
         $rows = $this->source->execute($query, $offset);
         return [
             "row_selection" => $query->rowSelectionSummary(),
+            'conditional_columns' => $query->conditionalColumns(),
             "columns" => array_map(static fn(array $column): string => $column["label"], $query->definition["columns"]),
             "items" => array_slice($rows, 0, 50),
             "offset" => $offset,

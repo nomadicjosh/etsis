@@ -312,6 +312,19 @@ window.createWorkspaceReportStudio = function (ui) {
                     { id: "enrollment_status", operator: "in", value: ["A", "N"] },
                 ] } } },
             })));
+        if (sections?.fields.enrollment_status && sections.fields.enrollment_id)
+            templateGrid.append(button("Active and withdrawn registrations", () => edit(sections, {
+                ...initial(sections),
+                columns: [
+                    { field: "section_code", label: "Section", aggregate: "none" },
+                    { field: "enrollment_id", label: "Active", aggregate: "count_distinct", conditions: {
+                        condition: "AND", rules: [{ id: "enrollment_status", operator: "in", value: ["A", "N"] }],
+                    } },
+                    { field: "enrollment_id", label: "Withdrawn", aggregate: "count_distinct", conditions: {
+                        condition: "AND", rules: [{ id: "enrollment_status", operator: "equal", value: "W" }],
+                    } },
+                ],
+            })));
         if (sections?.fields.enrollment_id)
             templateGrid.append(
                 button("Section headcounts, including empty sections", () =>
@@ -624,6 +637,7 @@ window.createWorkspaceReportStudio = function (ui) {
             pending = null,
             frozenState = null;
         let selectedColumn = null,
+            conditionalColumn = null,
             activeTab = "design",
             readers = null;
         let graphRevision = 0;
@@ -643,6 +657,7 @@ window.createWorkspaceReportStudio = function (ui) {
         definition.columns.forEach((c) => {
             connect(dataset.fields[c.field].relation);
             if (c.calculation) connect(dataset.fields[c.calculation.field].relation);
+            conditionFields(c.conditions, id => connect(dataset.fields[id].relation));
         });
         Object.keys(definition.joins).forEach(connect);
         Object.keys(definition.record_selection).forEach(connect);
@@ -783,6 +798,11 @@ window.createWorkspaceReportStudio = function (ui) {
         function selectTab(id) {
             if (id === "filters") renderFilters();
             else syncFilters(true);
+            if (id === "design") {
+                renderColumns();
+                renderMap();
+                renderLibrary();
+            }
             activeTab = id;
             Object.entries(tabButtons).forEach(([key, tab]) => {
                 tab.setAttribute("aria-selected", String(key === id));
@@ -909,6 +929,7 @@ window.createWorkspaceReportStudio = function (ui) {
                 return id ? [{ ...s, column: Number(id.slice(1)) }] : [];
             });
             definition.columns = next;
+            if (conditionalColumn && !next.includes(conditionalColumn)) conditionalColumn = null;
             destroyWidgets();
             readers = null;
             panels.filters.replaceChildren();
@@ -1320,7 +1341,8 @@ window.createWorkspaceReportStudio = function (ui) {
                 definition.columns.filter(
                     (column) =>
                         !branch.has(dataset.fields[column.field].relation) &&
-                        (!column.calculation || !branch.has(dataset.fields[column.calculation.field].relation)),
+                        (!column.calculation || !branch.has(dataset.fields[column.calculation.field].relation)) &&
+                        !hasConditionInBranch(column.conditions, branch),
                 ),
             );
             if (removesCopy) {
@@ -1336,6 +1358,11 @@ window.createWorkspaceReportStudio = function (ui) {
                 }
             }
             status.textContent = `${label} and its dependent fields and conditions were removed.`;
+        }
+        function hasConditionInBranch(group, branch) {
+            let found = false;
+            conditionFields(group, id => { if (branch.has(dataset.fields[id].relation)) found = true; });
+            return found;
         }
         let mapLayout = () => {};
         window.addEventListener("resize", () => mapLayout(), { signal: events.signal });
@@ -1405,7 +1432,7 @@ window.createWorkspaceReportStudio = function (ui) {
                         ? `${dataset.fields[column.field].label} ${{ "+": "+", "-": "−", "*": "×", "/": "÷" }[column.calculation.operator]} ${dataset.fields[column.calculation.field].label}`
                         : `${relationLabel(dataset.fields[column.field].relation)} · ${dataset.fields[column.field].label}`,
                 );
-                const mode = button(summaryLabel(column.aggregate), () => inspect(column), "report-summary-button");
+                const mode = button(summaryLabel(column.aggregate) + (column.conditions ? " · Filtered" : ""), () => inspect(column), "report-summary-button");
                 mode.setAttribute("aria-label", `Column ${index + 1} settings: ${summaryLabel(column.aggregate)}`);
                 mode.prepend(icon(column.aggregate === "none" ? "sliders" : "calculator"));
                 const sort = definition.sort.find((s) => s.column === index);
@@ -1527,6 +1554,10 @@ window.createWorkspaceReportStudio = function (ui) {
                     () => {
                         syncFilters(true);
                         column.aggregate = mode;
+                        if (mode === "none") {
+                            delete column.conditions;
+                            if (conditionalColumn === column) conditionalColumn = null;
+                        }
                         definition.having = pruneConditions(definition.having, (id) => id !== `c${index}`);
                         destroyWidgets();
                         readers = null;
@@ -1545,8 +1576,26 @@ window.createWorkspaceReportStudio = function (ui) {
                 summaries,
                 node("p", { class: "form-text" }, "When you summarize a column, the other columns group your results."),
             );
-            const duplicate = button("Duplicate column", () => addField(column.field));
+            const duplicate = button("Duplicate column", () => {
+                if (frozen) return;
+                if (definition.columns.length >= 16) throw new Error("Choose up to 16 report columns.");
+                syncFilters(true);
+                const copy = structuredClone(column);
+                const next = [...definition.columns];
+                next.splice(index + 1, 0, copy);
+                columnChanges(next);
+                inspect(copy);
+            });
+            duplicate.disabled = definition.columns.length >= 16;
             inspector.append(duplicate);
+            if (column.aggregate !== "none") inspector.append(
+                button(column.conditions ? "Edit column conditions" : "Add column conditions", () => {
+                    conditionalColumn = column;
+                    closeInspector();
+                    selectTab("filters");
+                    panels.filters.querySelector('[data-report-column-editor] h3')?.focus();
+                }),
+            );
             if (["integer", "double"].includes(field.type)) {
                 inspector.append(node("h3", {}, "Calculate with another field"));
                 const operations = node("div", {
@@ -1627,6 +1676,10 @@ window.createWorkspaceReportStudio = function (ui) {
         }
         function syncFilters(relaxed = false) {
             if (!readers) return;
+            for (const { column, read } of readers.columns || []) {
+                column.conditions = read(relaxed);
+                conditionFields(column.conditions, id => connect(dataset.fields[id].relation));
+            }
             definition.filters = readers.rows(relaxed);
             definition.having = readers.totals(relaxed);
             definition.join_filters = Object.fromEntries(
@@ -1688,7 +1741,49 @@ window.createWorkspaceReportStudio = function (ui) {
                     : () => null,
                 joins: {},
                 existence: {},
+                columns: [],
             };
+            const summaryColumns = definition.columns.filter(column => column.aggregate !== "none");
+            if (!summaryColumns.includes(conditionalColumn))
+                conditionalColumn = summaryColumns.find(column => column.conditions) || null;
+            if (summaryColumns.length) {
+                const perColumn = node("details", { class: "report-column-conditions", open: !!conditionalColumn },
+                    node("summary", {}, "Column conditions"),
+                    node("p", { class: "form-text" }, "Choose which joined rows each summary includes. Shared row filters apply first. Count returns zero when nothing matches; other summaries stay blank. Related records can repeat values; Count distinct counts each reference once."),
+                );
+                const choices = node("div", { class: "report-column-condition-choices", role: "group", "aria-label": "Choose a summary column" });
+                for (const column of summaryColumns) {
+                    const pick = button(`${definition.columns.indexOf(column) + 1}. ${column.label}` + (column.conditions ? " · Filtered" : ""), () => {
+                        syncFilters(true);
+                        conditionalColumn = column;
+                        renderFilters();
+                        panels.filters.querySelector('[data-report-column-editor] h3')?.focus();
+                    }, column === conditionalColumn ? "btn-sm btn-primary" : "btn-sm btn-outline-primary");
+                    pick.setAttribute("aria-pressed", String(column === conditionalColumn));
+                    choices.append(pick);
+                }
+                perColumn.append(choices);
+                if (conditionalColumn) {
+                    const editor = node("section", { "data-report-column-editor": "true" },
+                        node("h3", { tabindex: "-1" }, conditionalColumn.label),
+                    );
+                    const read = conditionBuilder(editor, dataset.fields, conditionalColumn.conditions,
+                        "Column conditions", changed);
+                    next.columns.push({ column: conditionalColumn, read });
+                    editor.append(button("Clear column conditions", () => {
+                        syncFilters(true);
+                        readers = null;
+                        delete conditionalColumn.conditions;
+                        conditionalColumn = null;
+                        dirty();
+                        renderFilters();
+                        (panels.filters.querySelector('[data-report-column-editor] h3') ||
+                            panels.filters.querySelector('.report-column-conditions > summary'))?.focus();
+                    }));
+                    perColumn.append(editor);
+                }
+                filtersBody.append(perColumn);
+            }
             matchingLogic.normalize();
             const matching = node(
                 "section",
@@ -2092,6 +2187,13 @@ window.createWorkspaceReportStudio = function (ui) {
         renderColumns();
         selectTab("design");
     }
+    function conditionalNote(columns = []) {
+        return columns.length ? node("aside", { class: "report-row-selection-summary", "aria-label": "Conditional summaries" },
+            node("h3", {}, "Filtered summaries"),
+            node("p", {}, columns.join(" · ")),
+            node("p", { class: "form-text" }, "These columns include only rows matching their own conditions. Shared row filters still apply. Counts show zero when nothing matches; other summaries stay blank."),
+        ) : null;
+    }
     function renderResults(panel, result, load, exportPage = null) {
         chart?.destroy();
         chart = null;
@@ -2105,6 +2207,8 @@ window.createWorkspaceReportStudio = function (ui) {
         );
         const selectionNote = rowSelectionUi.describe(result.row_selection);
         if (selectionNote) panel.append(selectionNote);
+        const columnNote = conditionalNote(result.conditional_columns);
+        if (columnNote) panel.append(columnNote);
         if (!result.items.length) panel.append(node("p", {}, result.lifecycle?.mode === "static"
             ? "This static report captured no matching records."
             : "No records match yet. Try refining your conditions."));
@@ -2387,6 +2491,8 @@ window.createWorkspaceReportStudio = function (ui) {
         if (frozen) {
             const selectionNote = rowSelectionUi.describe(saved.row_selection);
             if (selectionNote) body.append(selectionNote);
+            const columnNote = conditionalNote(saved.conditional_columns);
+            if (columnNote) body.append(columnNote);
         }
         if (saved.lifecycle?.expires_at) body.append(node("p", {}, `Automatic removal: ${saved.lifecycle.expires_at}.`));
         const recordTools = node("div", { class: "report-saved-tools" });
