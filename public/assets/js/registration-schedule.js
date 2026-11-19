@@ -60,6 +60,32 @@ window.createRegistrationSchedule = function (ui) {
             )
         );
     };
+    function readiness(checks = []) {
+        if (!checks.length) return null;
+        const details = node("details", { class: "mb-3" }, node("summary", {}, "Registration checks"));
+        let rendered = false;
+        details.addEventListener("toggle", () => {
+            if (!details.open || rendered) return;
+            rendered = true;
+            details.append(
+                node(
+                    "ul",
+                    {},
+                    checks.map((check) =>
+                        node(
+                            "li",
+                            {},
+                            node("strong", {}, `${check.label}: `),
+                            `${check.status === "met" ? "Passed" : check.status === "not_applicable" ? "Not applicable" : "Needs attention"}${check.status === "met" ? "" : `. ${check.message}`}`,
+                            check.next_step ? node("p", { class: "mb-2" }, check.next_step) : null,
+                        ),
+                    ),
+                ),
+            );
+        });
+        return details;
+    }
+
     function prerequisites(value, courses = []) {
         if (!courses.length || !value?.course_statuses?.length) return null;
         const details = node("details", { class: "mb-3" }, node("summary", {}, "Required courses"));
@@ -155,6 +181,7 @@ window.createRegistrationSchedule = function (ui) {
                 `Prerequisites: ${{ met: "Verified for this program pursuit", missing: "Required coursework is missing", not_required: "No course prerequisites", not_rechecked: "Not rechecked for this record" }[student.prerequisites.status]}`,
             ),
             prerequisites(student.prerequisites, review.section.prerequisite_courses),
+            readiness(student.readiness),
             student.issues.length
                 ? node(
                       "ul",
@@ -177,5 +204,5 @@ window.createRegistrationSchedule = function (ui) {
             ),
         );
     }
-    return { text, panel, charges, registration, prerequisites, canConfirm };
+    return { text, panel, charges, registration, prerequisites, readiness, canConfirm };
 };

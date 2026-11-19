@@ -145,6 +145,14 @@ All new students' preview checks share the existing 400-page/2,000-event academi
 
 This extends the existing acceptance event with explicitly optional historical evidence: earlier events remain valid with unknown references. It adds no event type, schema migration, parallel journal, permission or inferred attribution. The shared journal's operator verifier now resolves both directions of the `work_pursuit` stream mapping, including its protected receipts; the isolated debugger run confirmed the missing `WorkPursuit` aggregate mapping before the repair.
 
+### Registration checks and next steps
+
+Student self-service, individual staff entry and group registration now share **Registration checks** details. The current registration policy produces both enforcement errors and these explanations: student activity, prerequisite support, blocking restrictions, self-service dates, section self-service availability and the term course limit. A blocked check includes a practical next step. Missing prerequisite support no longer misleadingly suggests that an otherwise active student is inactive.
+
+Authorized staff registration marks the two self-service availability checks **Not applicable**, following the existing policy. Activity, prerequisite, applicable hold and course-limit checks still apply; this display grants no override permission. Section activity, seat availability, timetable and charge checks remain separate parts of the same review. Passing the six policy checks alone does not establish that registration can be confirmed.
+
+The captured response excludes restriction codes, severity, reasons and source identities. **Registration checks** opens on demand without another database read or replay. Existing enrollment reviews return no invented current readiness checks; their original acceptance evidence and accepted retries remain intact. Policy explanations participate in the existing reviewed-context fingerprint and confirmation remains authoritative. No new policy setting, event type, journal, migration or live-data change is introduced. Validation includes 33 PHP tests, 11 JavaScript tests and a focused single-worker browser check with narrow-screen and automated accessibility checks. Broader manual accessibility review remains separate.
+
 ### See which prerequisite courses need attention
 
 Individual staff registration, group registration and student self-service now share **Required courses** details. Each course shows **Verified completed coursework** or **Passing coursework not verified for this pursuit**. A missing result does not claim the student never took the course: earlier-pursuit work, unverified grades or other unavailable support may require registrar review. The existing course-prerequisite contract still requires every listed course.

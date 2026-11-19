@@ -295,7 +295,12 @@ window.createWorkspaceRegistration = function (ui) {
                 reviewed.students.map((student) => [
                     `${student.given_name} ${student.family_name}`,
                     student.institutional_id,
-                    student.active ? "Active" : "Inactive",
+                    node(
+                        "div",
+                        {},
+                        student.active ? "Active" : "Inactive",
+                        schedule.readiness(student.readiness),
+                    ),
                     node(
                         "div",
                         {},

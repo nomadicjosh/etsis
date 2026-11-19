@@ -382,9 +382,7 @@ final readonly class RegistrationBatchService
             ];
             $now = $this->clock->now();
             $restriction = $this->repository->blockingRestriction($student->personId, $now, $byStaff);
-            $issues =
-            $enrollment === null
-            ? new \Domain\Registration\RegistrationPolicy()->issues(
+            $readiness = $enrollment === null ? new \Domain\Registration\RegistrationPolicy()->checks(
                 $student,
                 $restriction === null ? [] : [$restriction],
                 $now,
@@ -394,14 +392,19 @@ final readonly class RegistrationBatchService
                 $this->repository->enrolledCount($id, $section->termId),
                 $window->courseLimit,
                 $decision?->isMet() ?? true,
-            )
-            : ($enrollment->status->isEnrolled()
-                        ? []
-                        : ["A closed enrollment requires registrar review before re-enrollment."]);
+            ) : [];
+            $issues = array_column(
+                array_filter($readiness, static fn(array $check): bool => $check["status"] === "blocked"),
+                "message",
+            );
+            if ($enrollment !== null && !$enrollment->status->isEnrolled()) {
+                $issues = ["A closed enrollment requires registrar review before re-enrollment."];
+            }
             $students[] = [
                 "charges" => $charges,
                 "pricing_revision" => $quote?->fingerprint(),
                 "issues" => $issues,
+                "readiness" => $readiness,
                 "id" => $id->value,
                 "given_name" => $person->givenName,
                 "family_name" => $person->familyName,

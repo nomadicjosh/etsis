@@ -372,3 +372,26 @@ test("prerequisite details render lazily from captured labels and omit private s
     assert.equal(details.textContent.length, length);
     assert.equal(ui.prerequisites({ course_statuses: [] }, []), null);
 });
+
+test("registration next steps use captured checks and render only when opened", () => {
+    const ui = presenter();
+    const details = ui.readiness([
+        {
+            code: "restrictions",
+            label: "Registration restrictions",
+            status: "blocked",
+            message: "An active restriction prevents registration.",
+            next_step: "Fictional help <img>.",
+        },
+    ]);
+    assert.equal(details.textContent, "Registration checks");
+    details.open = true;
+    details.events.toggle();
+    assert.match(details.textContent, /Needs attention/);
+    assert.match(details.textContent, /Fictional help <img>/);
+    assert.equal(
+        walk(details).some((e) => e.tag === "img"),
+        false,
+    );
+    assert.equal(ui.readiness([]), null);
+});

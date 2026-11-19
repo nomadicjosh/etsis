@@ -85,9 +85,36 @@ async function fixture(page, completedInitially = false, missingPrerequisites = 
                     active: true,
                     enrollment_id: student === first ? id("85") : null,
                     enrollment_status: student === first ? "N" : null,
+                    readiness:
+                        student === first
+                            ? []
+                            : [
+                                  {
+                                      code: "prerequisites",
+                                      label: "Required coursework",
+                                      status: missingPrerequisites ? "blocked" : "met",
+                                      message: missingPrerequisites
+                                          ? "Required coursework has not been verified for this program pursuit."
+                                          : "Check passed.",
+                                      next_step: missingPrerequisites
+                                          ? "Review Required courses with the registrar."
+                                          : null,
+                                  },
+                              ],
                     issues: [],
-                    schedule: { status: "clear", blocked: false, conflict_count: 0, unpublished_count: 0, conflicts: [] },
-                    charges: { total_minor: student === first ? 0 : 1250, currency: "USD", items: [], problems: [] },
+                    schedule: {
+                        status: "clear",
+                        blocked: false,
+                        conflict_count: 0,
+                        unpublished_count: 0,
+                        conflicts: [],
+                    },
+                    charges: {
+                        total_minor: student === first ? 0 : 1250,
+                        currency: "USD",
+                        items: [],
+                        problems: [],
+                    },
                     prerequisites: {
                         status:
                             student === first ? "not_rechecked" : missingPrerequisites ? "missing" : "met",
@@ -245,6 +272,8 @@ test("missing prerequisites are visible before confirmation and cannot submit a 
         "Passing coursework not verified for this pursuit",
     );
     await expect(page.locator("#drawer-body img")).toHaveCount(0);
+    await page.getByText("Registration checks", { exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Review Required courses with the registrar.");
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
     expect(f.sent.some((item) => item.path.endsWith("/commit/"))).toBe(false);
