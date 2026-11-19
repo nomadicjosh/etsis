@@ -78,16 +78,17 @@ final class HistoryVerificationFixture
     public function digest(): string
     {
         $data = [];
-        foreach (
-            [
+        $tables = [
                 "sis_history_events",
                 "sis_history_streams",
                 "sis_history_operations",
                 "sis_student_accounts",
+                'sis_account_balances',
+                'sis_account_entries',
+                'sis_account_entry_heads',
                 "sis_audit",
-            ]
-            as $table
-        ) {
+            ];
+        foreach ($tables as $table) {
             $data[$table] = $this->sis->sql->rows($table);
         }
         return hash("sha256", json_encode($data, JSON_THROW_ON_ERROR));

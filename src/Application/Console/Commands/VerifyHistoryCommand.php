@@ -6,6 +6,8 @@ namespace Application\Console\Commands;
 
 use Codefy\Framework\Application;
 use Codefy\Framework\Console\ConsoleCommand;
+use Domain\Finance\Repository\AccountProjectionVerifier;
+use Domain\Finance\ValueObject\AccountId;
 use Domain\Shared\EventSourcing\HistoricalIntegrityVerifier;
 use Domain\Shared\EventSourcing\HistoryVerificationFailedException;
 use InvalidArgumentException;
@@ -19,9 +21,10 @@ final class VerifyHistoryCommand extends ConsoleCommand
     protected string $description = "Verify protected chains, references and retry receipts in read-only batches.";
     protected array $options = [
         ["streams", null, "required", "Maximum stream chains visited (1–50).", "10"],
-        ["events", null, "required", "Maximum combined event/reference/receipt checks (1–2000).", "500"],
+        ["events", null, "required", "Maximum global checks or selected-account replay events (1–2000).", "500"],
         ["cursor", null, "required", "Protected continuation from an earlier verification batch."],
         ["json", null, "none", "Emit machine-readable counts and a protected continuation cursor."],
+        ['account', null, 'required', 'Verify one financial account and its balance/posting projections; no cursor.'],
     ];
     public function __construct(Application $codefy)
     {
@@ -43,6 +46,13 @@ final class VerifyHistoryCommand extends ConsoleCommand
             if ($cursor !== null && (!is_string($cursor) || $cursor === "" || strlen($cursor) > 32768)) {
                 throw new InvalidArgumentException();
             }
+            $account = $this->getOptions('account');
+            if ($account !== null) {
+                if (!is_string($account) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
+                    throw new InvalidArgumentException();
+                }
+                return $this->account(new AccountId($account), $events, $json);
+            }
             $result = $this->codefy
                 ->make(HistoricalIntegrityVerifier::class)
                 ->verify(cursor: $cursor, streamLimit: $streams, eventLimit: $events);
@@ -50,7 +60,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
             return $this->failure(
                 $json,
                 "invalid_input",
-                "Use --streams=1..50, --events=1..2000 and a valid optional verification cursor.",
+                "Use --streams=1..50, --events=1..2000 and a valid optional verification cursor. "
+                    . 'For one financial account, use --account=ULID with --events and optional --json only.',
                 self::INVALID,
             );
         } catch (HistoryVerificationFailedException $exception) {
@@ -100,6 +111,28 @@ final class VerifyHistoryCommand extends ConsoleCommand
             );
         }
         return $result->complete ? self::SUCCESS : 3;
+    }
+
+    private function account(AccountId $account, int $events, bool $json): int
+    {
+        $result = $this->codefy->make(AccountProjectionVerifier::class)->verify($account, $events);
+        if ($json) {
+            $this->output->writeln(json_encode($result->describe(), JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
+        } else {
+            $this->terminalRaw('Financial account ' . $result->account->value . ': ' . $result->status . '.');
+            $this->terminalRaw('Captured position: ' . ($result->position ?? 'unknown') . '; '
+                . $result->events . ' events checked; ' . ($result->postings ?? 'unknown') . ' expected postings.');
+            if ($result->issues !== []) {
+                $this->terminalRaw('Unverified components: ' . implode(', ', $result->issues) . '.');
+            }
+            $this->terminalRaw('No records were changed. A changed or limited result is not a completed check. '
+                . 'This checks one account and its projections, not external settlement or every retry receipt.');
+        }
+        return match ($result->status) {
+            'verified' => self::SUCCESS,
+            'changed', 'limited' => 3,
+            default => self::FAILURE,
+        };
     }
     private function number(mixed $value, int $maximum): int
     {

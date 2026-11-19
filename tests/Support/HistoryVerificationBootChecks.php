@@ -4,20 +4,101 @@ declare(strict_types=1);
 
 // Runs only in the isolated bootstrap process, without institutional configuration or external services.
 require_once __DIR__ . "/HistoryVerificationFixture.php";
+$bindVerification = static function (HistoryVerificationFixture $fixture) use ($app): void {
+    $app->delegate(\Qubus\Expressive\Connection::class, static fn() => $fixture->sis->connection);
+    $app->delegate(\Qubus\Expressive\Database::class, static fn() => $fixture->sis->connection->queryBuilder());
+    $app->delegate(\Infrastructure\Persistence\SqlRecords::class, static fn() => $fixture->sis->sql);
+    $app->delegate(\Infrastructure\EventSourcing\ProtectedEventCodec::class, static fn() => $fixture->codec);
+    $app->delegate(\Infrastructure\EventSourcing\SqlHistoricalEventStore::class, static fn() => $fixture->store);
+};
 $early = new \Symfony\Component\Console\Tester\CommandTester(
     new \Application\Console\Commands\VerifyHistoryCommand($app),
 );
 if ($early->execute(["--events" => "0"]) !== 2) {
     throw new RuntimeException("Invalid verification options resolved storage.");
 }
+if (($argv[1] ?? '') === 'check-account-projections') {
+    $invalidAccounts = [
+        ['--account' => 'fictional-private-input'],
+        ['--account' => '00000000000000000000000000', '--streams' => '10'],
+        ['--account' => '00000000000000000000000000', '--cursor' => 'fictional-private-input'],
+    ];
+    foreach ($invalidAccounts as $options) {
+        if (
+            $early->execute(['--json' => true] + $options) !== 2 ||
+            str_contains($early->getDisplay(), 'fictional-private-input')
+        ) {
+            throw new RuntimeException('Invalid account-verification input touched storage or leaked input.');
+        }
+    }
+    $f = new HistoryVerificationFixture();
+    $s = $f->sis;
+    $root = \Domain\Finance\StudentAccount::open(
+        new \Domain\Finance\ValueObject\AccountId(),
+        $s->student()->id,
+        $s->term,
+        'USD'
+    );
+    $root->post(
+        \Domain\Shared\ValueObject\EntityId::generate(),
+        \Domain\Finance\Enum\EntryType::Payment,
+        new \Domain\Finance\ValueObject\Money(12345, 'USD'),
+        $s->access->actor
+    );
+    $s->saveAccount($root);
+    $bindVerification($f);
+    $kernel->bootstrap();
+    $commands = $kernel->all();
+    $test = new \Symfony\Component\Console\Tester\CommandTester($commands['sis:history:verify']);
+    $before = $f->digest();
+    $options = ['--account' => (string) $root->aggregateId(), '--json' => true];
+    $s->connection->pdo->exec('PRAGMA query_only = ON');
+    if (
+        $test->execute(['--account' => '00000000000000000000000000', '--json' => true]) !== 1 ||
+        json_decode($test->getDisplay(), true)['issues'] !== ['journal', 'account_identity'] ||
+        $before !== $f->digest()
+    ) {
+        throw new RuntimeException('A missing canonical account was misclassified or changed records.');
+    }
+    if ($test->execute($options) !== 0) {
+        throw new RuntimeException('The actual provider failed a healthy read-only financial check.');
+    }
+    $result = json_decode($test->getDisplay(), true, flags: JSON_THROW_ON_ERROR);
+    if (
+        $result['status'] !== 'verified' || $result['expected_postings'] !== 1 ||
+        $result['events_checked'] !== 2 || $result['records_changed'] !== false ||
+        str_contains($test->getDisplay(), 'USD') || str_contains($test->getDisplay(), 'Fictional attributed')
+    ) {
+        throw new RuntimeException('The account verification result was incorrect or exposed private facts.');
+    }
+    if (
+        $test->execute(['--events' => '1'] + $options) !== 3 ||
+        json_decode($test->getDisplay(), true)['status'] !== 'limited' || $before !== $f->digest()
+    ) {
+        throw new RuntimeException('A limited account check changed records or claimed success.');
+    }
+    $s->connection->pdo->exec('PRAGMA query_only = OFF');
+    $s->sql->update('sis_account_balances', ['balance_minor' => 999], ['id' => (string) $root->aggregateId()]);
+    $before = $f->digest();
+    if (
+        $test->execute($options) !== 1 ||
+        json_decode($test->getDisplay(), true)['issues'] !== ['balance'] || $before !== $f->digest()
+    ) {
+        throw new RuntimeException('The account check did not preserve and report projection disagreement.');
+    }
+    if (
+        $test->execute(['--account' => (string) $root->aggregateId()]) !== 1 ||
+        !str_contains($test->getDisplay(), 'Unverified components: balance') ||
+        str_contains($test->getDisplay(), 'USD')
+    ) {
+        throw new RuntimeException('Text account output was missing or leaked financial facts.');
+    }
+    return;
+}
 $f = new HistoryVerificationFixture();
 $f->stream(3);
 $before = $f->digest();
-$app->delegate(\Qubus\Expressive\Connection::class, static fn() => $f->sis->connection);
-$app->delegate(\Qubus\Expressive\Database::class, static fn() => $f->sis->connection->queryBuilder());
-$app->delegate(\Infrastructure\Persistence\SqlRecords::class, static fn() => $f->sis->sql);
-$app->delegate(\Infrastructure\EventSourcing\ProtectedEventCodec::class, static fn() => $f->codec);
-$app->delegate(\Infrastructure\EventSourcing\SqlHistoricalEventStore::class, static fn() => $f->store);
+$bindVerification($f);
 $kernel->bootstrap();
 $commands = $kernel->all();
 if (!isset($commands["sis:history:verify"])) {
@@ -56,15 +137,13 @@ if (
 if ($before !== $f->digest()) {
     throw new RuntimeException("Read-only verification changed stored facts.");
 }
-foreach (
-    [
+$invalidOptions = [
         ["--streams" => "51"],
         ["--events" => "2001"],
         ["--events" => "fictional-private-input"],
         ["--cursor" => "fictional-private-input"],
-    ]
-    as $options
-) {
+    ];
+foreach ($invalidOptions as $options) {
     if (
         $test->execute(["--json" => true] + $options) !== 2 ||
         str_contains($test->getDisplay(), "fictional-private-input")

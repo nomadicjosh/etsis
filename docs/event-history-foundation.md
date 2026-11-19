@@ -82,7 +82,7 @@ This command reads indexed stream heads and verifies their events through the jo
 
 Finally it traverses all retry receipts, authenticates their encrypted envelopes and verifies the recorded outcome against the exact original event IDs and positions. It authenticates the associated event rows, checks their operation/actor/context bindings and recomputes the original request fingerprint using the same canonical intent calculation as append. This uses retained facts rather than today's mutable catalog or profile values. Unknown framework/legacy actors remain unknown. Extra receipts without a matching head or event batch also fail verification. These receipts support returning the original result when a request is retried; checking them never resubmits that request.
 
-The command supports the shared User, financial, grading and academic streams. It does not invoke aggregate handlers, projectors, notifications or external integrations, and does not change database records. This is deployment-operator maintenance, not work added to ordinary page loads. No migration is required.
+The global chain/reference/receipt mode supports the shared User, financial, grading and academic streams. That mode does not invoke aggregate handlers, projectors, notifications or external integrations, and does not change database records. This is deployment-operator maintenance, not work added to ordinary page loads. No migration is required.
 
 Each invocation visits at most `--streams` chains (default 10, allowed 1–50). `--events` is the shared check budget (default 500, allowed 1–2000): one chain event, one event-reference check or one whole receipt each consumes one unit. Chain and inventory pages contain at most 20 records. The reference inventory reads encrypted event envelopes in primary-key order to obtain their protected operation references; it checks each page's unique head and receipt references with bounded indexed lookups. It does not scan an entire table searching for missing references or output decrypted contents.
 
@@ -107,7 +107,41 @@ Failures expose fixed messages and, when available during chain verification, th
 
 A pass is not a global database snapshot. Each stream is checked through the boundary captured when it is opened; later appends are outside that prefix. Concurrently committed heads, event rows or receipts behind a traversal position can also require a fresh pass. Reference or receipt checks of later appends do not extend a previously captured chain boundary. Previously checked rows changing between batches require a fresh check to detect. Use a quiet maintenance window when assessing a stable dataset.
 
-This stage verifies chains reached through recorded heads, visible event references and retry receipts. It cannot prove archive completeness or detect every valid earlier whole-database restore; for example, deleting an entire stream together with all of its events and receipts requires independent evidence to detect. It does not reconcile projections, replay business decisions, certify legal compliance or establish backup/restore readiness. Independent anchors, verified projection checkpoints and isolated rebuild/restore exercises remain open. Extend this operator tool as those checks become supported, rather than introducing separate recovery screens for each check.
+This stage verifies chains reached through recorded heads, visible event references and retry receipts. It cannot prove archive completeness or detect every valid earlier whole-database restore; for example, deleting an entire stream together with all of its events and receipts requires independent evidence to detect. This global mode does not reconcile projections, replay business decisions, certify legal compliance or establish backup/restore readiness. Selected financial-account comparison is available separately below in the same command. Independent anchors, verified projection checkpoints and isolated rebuild/restore exercises remain open. Extend this operator tool as those checks become supported, rather than introducing separate recovery screens for each check.
+
+## Selected financial account verification
+
+Use the same command to compare **one** student account's identity, balance and posting read models with its authenticated recorded history:
+
+```sh
+ddev codex sis:history:verify --account='<sis_student_accounts.id>' --events=500 --json
+```
+
+The account reference is its internal ULID, not the student's institutional ID. This mode is for trusted deployment operators with access to the application database and history keys. It adds no workspace screen, browser endpoint, migration, event type, repair job or scheduled worker. It cannot be combined with `--streams` or `--cursor`. Invalid references/limits are rejected before resolving storage.
+
+The check authenticates the selected account stream through the existing protected paging API, restores the financial aggregate in memory, and compares its student/term/currency identity with the canonical account row. It compares balance, charge/payment/refund totals and applied position; posting count/checkpoint; every original/replacement posting's stable ULID, operation identity, amount, signed effect, currency, reversal/correction/credit links, origin, recorded time and original sequence. Missing, extra, changed or partially initialized rows are unverified. A missing account never becomes a verified empty ledger.
+
+Comparison shares the deterministic state calculation used by normal projection maintenance and conversion, but invokes only explicit read-only comparison methods. It never calls initialization, posts money, appends events, changes receipts, repairs a row, writes an audit record, sends a message or grants access. Populated tests run with SQLite writes prohibited and compare before/after journal, identity, projection and audit snapshots. Ordinary reports and screens still use indexed projections; this selected replay happens only when the operator invokes it.
+
+The command captures and rechecks the selected stream head and account identity around replay/comparison. If a legitimate concurrent update changes either, the result is **changed**, not a claim of damaged projections. A verified result applies only to the observed position, not to later activity. Unrelated account activity does not invalidate that check. This is an observational check without write locks or a global maintenance lock; it does not freeze the system or supply an independently signed checkpoint.
+
+Selected replay defaults to 500 events and accepts 1–2000. A known longer stream returns **limited** before loading it; no partial comparison is certified. There is also a 4 MiB retained event-payload/metadata allowance and a cooperative five-second work deadline checked between events. Database query timeouts remain deployment configuration; this is not a hard per-query deadline. Posting reads are paged and capped at 2,001 rows to detect an excessive set. Selected mode creates no continuation or persistent snapshot: retry a changed check or deliberately raise the event limit within the maximum; larger histories/byte limits need planned offline verification.
+
+JSON includes only `status`, `scope`, `account_reference`, captured `position`, `events_checked`, `expected_postings`, `issues` and `records_changed: false`. Expected postings describe the reconstructed ledger, not a promise that damaged/missing rows matched; this count stays null when the ledger could not be reconstructed. Output contains no amounts, currency, person values, reasons, receipt details, event contents or upstream error messages. Treat the account reference and operator output as private maintenance information.
+
+| Status / exit | Meaning |
+| --- | --- |
+| `verified` / 0 | The selected journal and current account/projection values matched at the observed position. |
+| `unverified` / 1 | Required evidence was absent, inconsistent or unavailable; no row was repaired. |
+| Invalid input / 2 | Use one canonical account ULID, a supported event limit and optional JSON output. |
+| `changed` / 3 | The selected account changed during the check; rerun against its newer state. |
+| `limited` / 3 | The replay/event-size/work allowance did not permit a completed check. |
+
+Issue codes distinguish `journal`, `account_identity`, `balance`, `postings` and `unavailable`. They identify a component for investigation without printing its private values. Fixing a real financial decision still requires the authorized, attributed correction workflow; fixing a projection requires a deliberately reviewed reconstruction. Do not edit the event journal to make the check pass.
+
+This selected mode does not validate every retry receipt, the whole event inventory, person/student histories, historical archive completeness, external bank settlements or backup/restore readiness. Run the global mode for its independent chain/reference/receipt traversal. Independently protected anchors, other domain projections and isolated rebuild/restore acceptance remain open; event sourcing and this command alone do not establish legal compliance.
+
+On 2026-11-19, the configured DDEV MariaDB application correctly returned an unverified result for a missing account, including a canonical all-numeric ULID. Before/after checksums of the journal, support and financial projection tables were unchanged. That database had no financial accounts; populated comparisons, tampering and concurrent updates were verified with fictional SQLite fixtures, not a populated MariaDB ledger.
 
 ## Verification and next steps
 

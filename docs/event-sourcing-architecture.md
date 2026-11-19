@@ -80,6 +80,8 @@ Billing-rule lookup now uses reconstructible fields in its existing metadata tab
 
 [Financial posting reports](workflow-review.md#financial-posting-reports) now derive minimized original/replacement/reversed posting rows and account-position checkpoints atomically beside balances. They preserve the existing protected journal and receipts, rebuild only from verified recorded events, keep unclassified origins explicit and expose no reasons or receipt details through reporting. Ordinary report reads stay on indexed SQL projections; the shared bounded conversion, rollback and native-development checksum checks do not replace independent operational reconciliation or institutional load acceptance.
 
+[Selected financial-account verification](event-history-foundation.md#selected-financial-account-verification) now extends the existing history command with read-only identity/balance/posting comparisons against bounded authenticated replay. The same deterministic projection calculations serve comparison and conversion, with separate write paths; concurrent commits return an uncompleted changed result. Output is minimized and the check persists no checkpoint, repairs no row and certifies only an observed account position. Other projections, independent integrity evidence and isolated rebuild/restore acceptance remain open.
+
 ## Persistence boundaries
 
 | Context | Target source of truth | Read/edit boundary |

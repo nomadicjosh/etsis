@@ -12,6 +12,17 @@ use PHPUnit\Framework\TestCase;
 
 final class StudentAccountTest extends TestCase
 {
+    public function testCanonicalNumericAccountReferenceIsPreservedAcrossReplay(): void
+    {
+        $id = AccountId::fromString('00000000000000000000000000');
+        $account = StudentAccount::open($id, EntityId::generate(), EntityId::generate(), 'USD');
+        $replayed = StudentAccount::reconstituteFromEventStream(new EventStream(
+            $id, iterator_to_array($account->getRecordedEvents()),
+        ));
+        self::assertSame('00000000000000000000000000', $replayed->aggregateId()->toNative());
+        self::assertTrue($id->equals(AccountId::fromString((string) $id)));
+    }
+
     public function testChargesPaymentsAndRefundsSurviveReplay(): void
     {
         $id = new AccountId();

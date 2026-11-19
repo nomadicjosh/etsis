@@ -134,6 +134,17 @@ final readonly class SqlAccountBalanceProjection
         }
     }
 
+    /** Read-only comparison against the reconstructed account; never initializes or repairs data. */
+    public function verify(#[\SensitiveParameter] StudentAccount $account): void
+    {
+        $row = $this->sql->current('sis_account_balances', (string) $account->aggregateId());
+        foreach ($this->values($account) as $field => $value) {
+            if ($row === null || !isset($row[$field]) || (string) $row[$field] !== (string) $value) {
+                throw new CorruptHistoryException();
+            }
+        }
+    }
+
     /** Explicit migration/rebuild only. A different retained projection must be investigated. */
     public function initialize(StudentAccount $account): void
     {

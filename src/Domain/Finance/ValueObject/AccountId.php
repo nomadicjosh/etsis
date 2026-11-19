@@ -14,7 +14,8 @@ final class AccountId extends Ulid implements AggregateId
     public function __construct(?string $value = null)
     {
         $id = $value === null ? EntityId::generate() : new EntityId($value);
-        parent::__construct($id->value);
+        // EntityId validates the complete canonical form, including valid all-numeric ULIDs.
+        $this->value = $id->value;
     }
 
     public static function fromString(string $value): self

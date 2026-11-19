@@ -93,18 +93,7 @@ final readonly class SqlAccountEntryProjection
         $id = (string) $account->aggregateId();
         [$created] = $this->changes($id, $events);
         $entries = $account->entries();
-        $rows = [];
-        $q = $this->sql->quote(...);
-        do {
-            $page = $this->sql->fetchPage(
-                'SELECT * FROM ' . $q('sis_account_entries')
-                . ' WHERE ' . $q('account_id') . ' = ? ORDER BY ' . $q('id'),
-                [$id],
-                min(1000, 2001 - count($rows)),
-                count($rows)
-            );
-            array_push($rows, ...$page);
-        } while (count($page) === 1000 && count($rows) < 2001);
+        $rows = $this->rows($id);
         $head = $this->sql->current('sis_account_entry_heads', $id);
         if (count($entries) > 2000 || count($created) !== count($entries) || count($rows) > 2000) {
             throw new CorruptHistoryException();
@@ -121,9 +110,41 @@ final readonly class SqlAccountEntryProjection
                 'entry_count' => count($entries)]);
             return;
         }
+        $this->compare($account, $created, $entries, $head, $rows);
+    }
+
+    /** Read-only verification shares the migration's deterministic state builder, never its write path.
+     * @param non-empty-list<DomainEvent> $events */
+    public function verify(
+        #[\SensitiveParameter] StudentAccount $account,
+        #[\SensitiveParameter] array $events,
+    ): void {
+        $id = (string) $account->aggregateId();
+        [$created] = $this->changes($id, $events);
+        $entries = $account->entries();
+        $head = $this->sql->current('sis_account_entry_heads', $id);
+        $rows = $this->rows($id);
+        if ($head === null || count($entries) > 2000 || count($created) !== count($entries)) {
+            throw new CorruptHistoryException();
+        }
+        $this->compare($account, $created, $entries, $head, $rows);
+    }
+
+    /** @param array<string,array<string,mixed>> $created
+     * @param list<array<string,mixed>> $entries
+     * @param array<string,mixed> $head
+     * @param list<array<string,mixed>> $rows */
+    private function compare(
+        #[\SensitiveParameter] StudentAccount $account,
+        #[\SensitiveParameter] array $created,
+        #[\SensitiveParameter] array $entries,
+        array $head,
+        #[\SensitiveParameter] array $rows,
+    ): void {
+        $id = (string) $account->aggregateId();
         if (
-            (int) $head['position'] !== $account->playhead() ||
-            (int) $head['entry_count'] !== count($entries) || count($rows) !== count($entries)
+            (string) ($head['position'] ?? null) !== (string) $account->playhead() ||
+            (string) ($head['entry_count'] ?? null) !== (string) count($entries) || count($rows) !== count($entries)
         ) {
             throw new CorruptHistoryException();
         }
@@ -132,14 +153,39 @@ final readonly class SqlAccountEntryProjection
             $expected = $this->values($id, $entry) + $created[$entry['operation_id']];
             $old = $rows[$entry['operation_id']] ?? throw new CorruptHistoryException();
             foreach ($expected as $field => $value) {
-                if ($value !== null && is_int($value)) {
-                    $old[$field] = (int) $old[$field];
+                if (!array_key_exists($field, $old)) {
+                    throw new CorruptHistoryException();
+                }
+                if (is_int($value)) {
+                    $actual = is_bool($old[$field]) ? (int) $old[$field] : $old[$field];
+                    if ((string) $actual !== (string) $value) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
                 }
                 if ($old[$field] !== $value) {
                     throw new CorruptHistoryException();
                 }
             }
         }
+    }
+
+    /** @return list<array<string,mixed>> */
+    private function rows(string $id): array
+    {
+        $rows = [];
+        $q = $this->sql->quote(...);
+        do {
+            $page = $this->sql->fetchPage(
+                'SELECT * FROM ' . $q('sis_account_entries')
+                . ' WHERE ' . $q('account_id') . ' = ? ORDER BY ' . $q('id'),
+                [$id],
+                min(1000, 2001 - count($rows)),
+                count($rows),
+            );
+            array_push($rows, ...$page);
+        } while (count($page) === 1000 && count($rows) < 2001);
+        return $rows;
     }
 
     /** @param list<DomainEvent> $events
