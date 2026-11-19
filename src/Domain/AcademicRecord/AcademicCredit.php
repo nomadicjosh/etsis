@@ -13,6 +13,7 @@ use Domain\AcademicRecord\Event\AcademicCompletionWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted;
 use Domain\AcademicRecord\ValueObject\CreditSnapshot;
+use Domain\AcademicRecord\ValueObject\WithdrawnCreditQuantities;
 use Domain\Gradebook\ValueObject\CourseworkGradeEvidence;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 
@@ -86,7 +87,10 @@ final class AcademicCredit extends EventSourcedAggregate
         $p = $event->payload();
         $this->assertNext($p);
         if (
-            !$this->allowsGrade($event->metaParam("withdrawal_grade_correction", false)) ||
+            !$this->allowsGrade(
+                $event->metaParam("withdrawal_grade_correction", false),
+                $event->metaParam("withdrawal_quantity_reconciliation", false),
+            ) ||
             $this->pendingGradeChange !== null ||
             $this->credit === null
         ) {
@@ -131,7 +135,10 @@ final class AcademicCredit extends EventSourcedAggregate
             isset($this->gradeChanges[$p["decision_id"]]) ||
             ($this->grade === null && !$event->metaParam("withdrawal_grade_correction", false)) ||
             $this->credit === null ||
-            !$this->allowsGrade($event->metaParam("withdrawal_grade_correction", false)) ||
+            !$this->allowsGrade(
+                $event->metaParam("withdrawal_grade_correction", false),
+                $event->metaParam("withdrawal_quantity_reconciliation", false),
+            ) ||
             $p["credit_version"] !== $this->credit["version"] ||
             $p["before_grade"] != $this->grade
         ) {
@@ -143,6 +150,8 @@ final class AcademicCredit extends EventSourcedAggregate
             "status" => "pending",
             "version" => $event->playhead(),
             "withdrawn" => $event->metaParam("withdrawal_grade_correction", false),
+            "reconcile_quantities" => $event->metaParam("withdrawal_quantity_reconciliation", false),
+            "quantities" => WithdrawnCreditQuantities::summary($this->credit, $p["grade"]),
         ];
     }
     public function whenGradeChangeWasResolved(
@@ -161,7 +170,10 @@ final class AcademicCredit extends EventSourcedAggregate
         if ($p["outcome"] === "approved") {
             if (
                 $this->credit === null ||
-                !$this->allowsGrade($this->gradeChanges[$p["request_id"]]["withdrawn"]) ||
+                !$this->allowsGrade(
+                    $this->gradeChanges[$p["request_id"]]["withdrawn"],
+                    $this->gradeChanges[$p["request_id"]]["reconcile_quantities"],
+                ) ||
                 $this->decision !== $request["previous_decision_id"] ||
                 $this->credit["version"] !== $request["credit_version"] ||
                 $p["grade"] != $request["grade"] ||
@@ -179,16 +191,22 @@ final class AcademicCredit extends EventSourcedAggregate
     {
         return $this->pendingGradeChange === null ? null : $this->gradeChanges[$this->pendingGradeChange];
     }
-    private function allowsGrade(mixed $withdrawn): bool
+    private function allowsGrade(mixed $withdrawn, mixed $reconcileQuantities = false): bool
     {
-        if (!is_bool($withdrawn) || $this->credit === null) {
+        if (
+            !is_bool($withdrawn) ||
+            !is_bool($reconcileQuantities) ||
+            ($reconcileQuantities && !$withdrawn) ||
+            $this->credit === null
+        ) {
             return false;
         }
-        return $withdrawn
-        ? $this->credit["status"] === "W" &&
-        $this->credit["completed_milli"] === 0 &&
-        ($this->credit["grade_id"] !== null || $this->credit["grade_points_milli"] === 0)
-        : in_array($this->credit["status"], ["A", "N"], true);
+        if (!$withdrawn) {
+            return in_array($this->credit["status"], ["A", "N"], true);
+        }
+        return $this->credit["status"] === "W" && ($reconcileQuantities ||
+            ($this->credit["completed_milli"] === 0 &&
+                ($this->credit["grade_id"] !== null || $this->credit["grade_points_milli"] === 0)));
     }
     public function gradeChange(string $id): ?array
     {
@@ -281,13 +299,9 @@ final class AcademicCredit extends EventSourcedAggregate
             return true;
         }
         return $this->credit["status"] === "W" &&
-        $this->credit["completed_milli"] === 0 &&
         $this->grade !== null &&
         $this->grade["id"] === $this->credit["grade_id"] &&
-        $this->credit["grade_points_milli"] ===
-        ($this->grade["counts_gpa"]
-        ? intdiv($this->credit["attempted_milli"] * $this->grade["points_milli"], 1000)
-        : 0) &&
+        !WithdrawnCreditQuantities::requiresReview($this->credit, $this->grade) &&
         $this->pendingGradeChange === null;
     }
 

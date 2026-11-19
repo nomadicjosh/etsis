@@ -481,8 +481,11 @@ final class WithdrawnGradeCorrectionTest extends TestCase
                 ["id" => $id],
             );
             $before = $f->sql->rows("sis_history_events");
+            $choices = $ledger->choices($student->id, $section->id, $enrollment->id);
+            self::assertTrue($choices["requires_quantity_reconciliation"]);
+            self::assertSame($before, $f->sql->rows("sis_history_events"));
             try {
-                $ledger->choices($student->id, $section->id, $enrollment->id);
+                $this->review($fixture);
                 self::fail("Conflicting evidence was silently normalized.");
             } catch (\Domain\Shared\Exception\ValidationException) {
                 self::assertSame($before, $f->sql->rows("sis_history_events"));

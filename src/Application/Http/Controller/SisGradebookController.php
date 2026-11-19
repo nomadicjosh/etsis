@@ -170,6 +170,7 @@ final readonly class SisGradebookController
                 $f->optionalText("coursework_revision", 64),
                 $f->id('enrollment_id'),
                 $f->boolean('initial_only'),
+                $f->boolean('reconcile_withdrawal_quantities'),
             ),
         );
     }

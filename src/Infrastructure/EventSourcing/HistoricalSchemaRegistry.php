@@ -983,6 +983,18 @@ final readonly class HistoricalSchemaRegistry
                     }
                     continue;
                 }
+                if ($name === 'withdrawal_quantity_reconciliation') {
+                    if (
+                        $value !== true || ($metadata['withdrawal_grade_correction'] ?? false) !== true ||
+                        !in_array($class, [
+                            \Domain\AcademicRecord\Event\FinalGradeWasDecided::class,
+                            \Domain\AcademicRecord\Event\GradeChangeWasRequested::class,
+                        ], true)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'grade_change_policy') {
                     if ($class !== \Domain\AcademicRecord\Event\FinalGradeWasDecided::class || !is_array($value)) {
                         throw new CorruptHistoryException();

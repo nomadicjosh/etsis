@@ -35,6 +35,31 @@ window.createWorkspaceTeaching = function (ui) {
         );
     const area = (title) =>
         node("section", { class: "record-section", "aria-label": title }, node("h3", {}, title));
+    const quantityReview = (quantities, reviewed = true) => {
+        const value = (milli) => (milli == null ? "Unknown" : String(Number(milli) / 1000));
+        return node(
+            "section",
+            { "aria-label": "Withdrawn credit quantities" },
+            node(
+                "h3",
+                { class: "h6" },
+                reviewed ? "Reviewed credit quantities" : "Recorded credit quantities",
+            ),
+            recordSummary([
+                ["Attempted credits", value(quantities.attempted_milli)],
+                [
+                    "Earned credits",
+                    reviewed ? `${value(quantities.completed_milli)} → 0` : value(quantities.completed_milli),
+                ],
+                [
+                    "GPA quality points",
+                    reviewed
+                        ? `${value(quantities.grade_points_milli)} → ${value(quantities.expected_grade_points_milli)}`
+                        : value(quantities.grade_points_milli),
+                ],
+            ]),
+        );
+    };
     const grid = (headers, rows, caption) =>
         node(
             "div",
@@ -737,7 +762,9 @@ window.createWorkspaceTeaching = function (ui) {
                 node(
                     "p",
                     { class: "alert alert-info" },
-                    "This corrects the withdrawn grade only. Enrollment stays withdrawn, earned credit stays zero and charges stay unchanged. The selected grade definition determines its GPA treatment.",
+                    choices.requires_quantity_reconciliation
+                        ? "This review also corrects withdrawn-credit quantities. Enrollment stays withdrawn, earned credit is set to zero and charges stay unchanged. The selected grade definition determines its GPA treatment."
+                        : "This corrects the withdrawn grade only. Enrollment stays withdrawn, earned credit stays zero and charges stay unchanged. The selected grade definition determines its GPA treatment.",
                 ),
             );
         const evidenceNotice = choices.missing_withdrawal_grade
@@ -745,6 +772,18 @@ window.createWorkspaceTeaching = function (ui) {
                   "p",
                   { id: "grade-evidence-help", class: "alert alert-warning" },
                   "The earlier withdrawal has no saved grading definition. Verify the grade against institutional records and explain the evidence in your reason. This records a decision now; it does not identify the unknown earlier definition. If no grading policy was retained, the available grades come from the selected current policy.",
+              )
+            : null;
+        const quantityNotice = choices.requires_quantity_reconciliation
+            ? node(
+                  "div",
+                  { id: "withdrawal-quantity-help", class: "alert alert-warning" },
+                  node(
+                      "p",
+                      {},
+                      "The recorded withdrawn-credit quantities need reconciliation. Verify the institutional evidence and select the correct grade. Review will show zero earned credit and GPA quality points calculated from that grade; attempted credits and charges stay unchanged.",
+                  ),
+                  quantityReview(choices.withdrawal_quantities, false),
               )
             : null;
         const descriptors = [
@@ -772,6 +811,12 @@ window.createWorkspaceTeaching = function (ui) {
                 "I verified the grade against institutional records",
                 "checkbox",
             ]);
+        if (quantityNotice)
+            descriptors.push([
+                "reconcile_withdrawal_quantities",
+                "I verified the withdrawn credit quantities against institutional records",
+                "checkbox",
+            ]);
         const form = await buildForm(
             descriptors,
             { effective_on: choices.effective_on_default, ...(draft || {}) },
@@ -783,6 +828,14 @@ window.createWorkspaceTeaching = function (ui) {
             form.elements.grade_evidence.required = true;
             form.elements.grade_evidence.setAttribute("aria-describedby", "grade-evidence-help");
             form.append(evidenceNotice);
+        }
+        if (quantityNotice) {
+            form.elements.reconcile_withdrawal_quantities.required = true;
+            form.elements.reconcile_withdrawal_quantities.setAttribute(
+                "aria-describedby",
+                "withdrawal-quantity-help",
+            );
+            form.append(quantityNotice);
         }
         let courseworkRevision = null;
         if (!choices.posted && choices.coursework) {
@@ -898,7 +951,9 @@ window.createWorkspaceTeaching = function (ui) {
                             ? node(
                                   "p",
                                   { class: "alert alert-info" },
-                                  "Enrollment remains withdrawn. Earned credit remains zero. Charges stay unchanged; the selected grade definition controls GPA treatment.",
+                                  review.withdrawal_quantity_reconciliation
+                                      ? "Enrollment remains withdrawn. Earned credit is set to zero. Charges stay unchanged; the selected grade definition controls GPA treatment."
+                                      : "Enrollment remains withdrawn. Earned credit remains zero. Charges stay unchanged; the selected grade definition controls GPA treatment.",
                               )
                             : null,
                         review.missing_withdrawal_grade
@@ -907,6 +962,9 @@ window.createWorkspaceTeaching = function (ui) {
                                   { class: "alert alert-warning" },
                                   "The earlier grading definition remains unknown. This confirms a new, evidence-reviewed grade decision.",
                               )
+                            : null,
+                        review.withdrawal_quantity_reconciliation
+                            ? quantityReview(review.withdrawal_quantities)
                             : null,
                         review.requires_approval
                             ? node(
@@ -1060,6 +1118,16 @@ window.createWorkspaceTeaching = function (ui) {
                     "No earlier grading definition was saved. Review the requester's evidence and selected grade before approving a new decision. The earlier definition will remain unknown.",
                 ),
             );
+        if (record.withdrawal_quantity_reconciliation) {
+            content.append(
+                node(
+                    "p",
+                    { class: "alert alert-warning" },
+                    "This request also reconciles the recorded withdrawn-credit quantities. Review the evidence and before/after values. Rejection or cancellation preserves the existing quantities; approval records zero earned credit and the selected grade's GPA treatment, with charges unchanged.",
+                ),
+                quantityReview(record.withdrawal_quantities),
+            );
+        }
         if (record.stale)
             content.append(
                 node(
@@ -1097,6 +1165,13 @@ window.createWorkspaceTeaching = function (ui) {
                 if (!form.isConnected || sequence !== reviewSequence) return;
                 const confirmation = openDrawer("Confirm grade decision", "REGISTRAR REVIEW");
                 confirmation.append(
+                    recordSummary([
+                        ["Student ID", record.institutional_id || "Unavailable"],
+                        ["Course", record.course_code || "Unavailable"],
+                    ]),
+                    ...(record.withdrawal_quantity_reconciliation && result.outcome === "approved"
+                        ? [quantityReview(record.withdrawal_quantities)]
+                        : []),
                     node(
                         "p",
                         {},
@@ -1142,8 +1217,15 @@ window.createWorkspaceTeaching = function (ui) {
                 node(
                     "p",
                     {},
-                    "This record has a retained registration-time course or offering publication. The unknown-reference correction cannot replace those facts.",
+                    choices.requires_quantity_reconciliation
+                        ? "Review and reconcile this withdrawn record's credit quantities before reviewing its course publication."
+                        : choices.pending_grade_change
+                          ? "Resolve the pending grade correction before reviewing the course publication."
+                          : "This record has a retained registration-time course or offering publication, or needs verified grade evidence first. The unknown-reference correction cannot replace known facts.",
                 ),
+                ...(choices.requires_quantity_reconciliation
+                    ? [button("Review withdrawn record", () => recordFinalGrade(sectionRow, student, back))]
+                    : []),
                 button("Back to record", back, "btn-link"),
             );
             return;
@@ -1467,19 +1549,21 @@ window.createWorkspaceTeaching = function (ui) {
                                   "Recorded",
                               ],
                               page.items.map((item) => [
-                                  {
-                                      registration: "Registration accepted",
-                                      observed_existing: "Existing facts observed",
-                                      grade_decided: "Grade decision",
-                                      correction_requested: "Grade correction requested",
-                                      correction_approved: "Grade correction approved",
-                                      correction_rejected: "Grade correction rejected",
-                                      correction_cancelled: "Grade correction cancelled",
-                                      completion_recorded: "Actual completion date recorded",
-                                      period_recorded: "Source academic period recorded",
-                                      course_accepted: "Course publication accepted",
-                                      dropped: "Course dropped",
-                                  }[item.action] || "Academic decision",
+                                  item.withdrawal_quantity_reconciled
+                                      ? "Withdrawn credits reconciled"
+                                      : {
+                                            registration: "Registration accepted",
+                                            observed_existing: "Existing facts observed",
+                                            grade_decided: "Grade decision",
+                                            correction_requested: "Grade correction requested",
+                                            correction_approved: "Grade correction approved",
+                                            correction_rejected: "Grade correction rejected",
+                                            correction_cancelled: "Grade correction cancelled",
+                                            completion_recorded: "Actual completion date recorded",
+                                            period_recorded: "Source academic period recorded",
+                                            course_accepted: "Course publication accepted",
+                                            dropped: "Course dropped",
+                                        }[item.action] || "Academic decision",
                                   item.action === "course_accepted"
                                       ? `${item.course_code} · ${item.course_title}`
                                       : item.grade_code

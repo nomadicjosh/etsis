@@ -10,6 +10,14 @@ async function fixture(page, options = {}) {
         errors = [];
     let academicOn = options.knownPeriod ? "2026-01-12" : null;
     let periodReview;
+    const quantities = {
+        attempted_milli: 3000,
+        completed_milli: 1000,
+        grade_points_milli: 9999,
+        expected_completed_milli: 0,
+        expected_grade_points_milli: 12000,
+    };
+    let gradeReviews = 0;
     let date = options.known ? "2026-08-01" : null,
         version = 3,
         reviewed;
@@ -54,10 +62,10 @@ async function fixture(page, options = {}) {
                         section_id: section,
                         course_code: "CS.101",
                         course_title: "Fictional course",
-                        grade_code: options.withdrawn ? "W" : "A",
-                        grade_id: id(4),
-                        completed_milli: options.withdrawn ? 0 : 3000,
-                        grade_points_milli: options.withdrawn ? 0 : 12000,
+                        grade_code: options.missingGrade ? null : options.withdrawn ? "W" : "A",
+                        grade_id: options.missingGrade ? null : id(4),
+                        completed_milli: options.reconcile ? 1000 : options.withdrawn ? 0 : 3000,
+                        grade_points_milli: options.reconcile ? 9999 : options.withdrawn ? 0 : 12000,
                         status: options.withdrawn ? "W" : "A",
                     },
                 ],
@@ -65,13 +73,18 @@ async function fixture(page, options = {}) {
         else if (path.endsWith("/grade-choices/"))
             result = {
                 items: [{ id: id(4), code: "A", points_milli: 4000 }],
-                current_grade_code: options.withdrawn ? "W" : "A",
+                current_grade_code: options.missingGrade ? null : options.withdrawn ? "W" : "A",
                 withdrawal_grade_correction: !!options.withdrawn,
+                missing_withdrawal_grade: !!options.missingGrade,
+                requires_quantity_reconciliation: !!options.reconcile,
+                withdrawal_quantities: options.reconcile ? quantities : null,
+                pending_grade_change: options.pending ? { id: id(8), status: "pending" } : null,
                 posted: true,
                 can_amend: !options.readOnly,
-                can_record_academic_period: !!options.period && !options.readOnly && !options.knownOffering,
+                can_record_academic_period:
+                    !!options.period && !options.readOnly && !options.knownOffering && !options.reconcile,
                 academic_on: academicOn,
-                can_accept_course: !!options.courseAcceptance && !options.readOnly,
+                can_accept_course: !!options.courseAcceptance && !options.readOnly && !options.reconcile,
                 current_version: version,
                 completed_on: date,
                 enrollment_id: enrollment,
@@ -79,7 +92,42 @@ async function fixture(page, options = {}) {
                 needs_assignment: false,
                 pursuits: [],
             };
-        else if (path.endsWith("/academic-dates/review/")) {
+        else if (path.endsWith("/final-grades/review/")) {
+            gradeReviews++;
+            result = {
+                grade: { code: "A", points_milli: 4000 },
+                reason: data.reason,
+                withdrawal_grade_correction: !!options.withdrawn,
+                missing_withdrawal_grade: !!options.missingGrade,
+                withdrawal_quantity_reconciliation: !!options.reconcile,
+                withdrawal_quantities: quantities,
+                earlier_history_unknown: true,
+                review_token: `fictional-reconciliation-${gradeReviews}`,
+            };
+        } else if (path === `/sis/grade-changes/${id(8)}/`) {
+            result = {
+                id: id(8),
+                institutional_id: "FICTIONAL",
+                course_code: "CS.101",
+                status: "pending",
+                before: { code: "W" },
+                grade: { code: "A" },
+                effective_at: "2026-08-11T00:00:00Z",
+                reason: "Fictional protected reconciliation evidence.",
+                withdrawal_grade_correction: true,
+                withdrawal_quantity_reconciliation: true,
+                withdrawal_quantities: quantities,
+                can_approve: true,
+                can_reject: true,
+                can_cancel: false,
+            };
+        } else if (path.endsWith("/grade-changes/" + id(8) + "/review/")) {
+            result = {
+                outcome: data.outcome,
+                reason: data.reason,
+                review_token: "fictional-independent-review",
+            };
+        } else if (path.endsWith("/academic-dates/review/")) {
             if (options.reject || options.rejectPeriod)
                 return route.fulfill({
                     status: 409,
@@ -144,7 +192,11 @@ async function fixture(page, options = {}) {
     else
         await page
             .getByRole("button", {
-                name: options.withdrawn ? "Correct withdrawn grade" : "Review final grade",
+                name: options.missingGrade
+                    ? "Resolve withdrawn grade"
+                    : options.withdrawn
+                      ? "Correct withdrawn grade"
+                      : "Review final grade",
                 exact: true,
             })
             .click();
@@ -523,5 +575,134 @@ test("a withdrawn attempt with a protected offering does not expose a completion
     const f = await fixture(page, { withdrawn: true, period: true, knownOffering: true });
     await expect(page.getByRole("button", { name: "Review academic dates", exact: true })).toHaveCount(0);
     expect(f.calls.some((c) => c.path.includes("/academic-dates/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+for (const missingGrade of [false, true])
+    test(`withdrawn quantity reconciliation requires explicit evidence${missingGrade ? " and a missing-grade confirmation" : ""}`, async ({
+        page,
+    }) => {
+        const f = await fixture(page, { withdrawn: true, reconcile: true, missingGrade });
+        const drawer = page.locator("#drawer-body");
+        await expect(drawer).toContainText("Recorded credit quantities");
+        await expect(drawer).toContainText("Alex Example");
+        await expect(drawer.getByRole("button", { name: "Review academic dates", exact: true })).toHaveCount(
+            0,
+        );
+        await page
+            .getByRole("combobox", { name: "Institutional grade", exact: true })
+            .selectOption("00000000000000000000000004");
+        await page
+            .getByRole("textbox", { name: "Reason for correction", exact: true })
+            .fill("Fictional <b>source</b> evidence.");
+        if (missingGrade)
+            await page
+                .getByLabel("I verified the grade against institutional records", { exact: true })
+                .check();
+        const checkbox = page.getByLabel(
+            "I verified the withdrawn credit quantities against institutional records",
+            { exact: true },
+        );
+        await expect(checkbox).not.toBeChecked();
+        await page.getByRole("button", { name: "Review final grade", exact: true }).click();
+        expect(f.calls.some((c) => c.path.endsWith("/final-grades/review/"))).toBe(false);
+        await checkbox.check();
+        await page.setViewportSize({ width: 390, height: 844 });
+        expect(
+            (
+                await new AxeBuilder({ page })
+                    .include("#drawer-body")
+                    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+                    .analyze()
+            ).violations,
+        ).toEqual([]);
+        await page.getByRole("button", { name: "Review final grade", exact: true }).click();
+        await expect(drawer).toContainText("Reviewed credit quantities");
+        await expect(drawer).toContainText("1 → 0");
+        await expect(drawer).toContainText("9.999 → 12");
+        await expect(drawer.locator("b")).toHaveCount(0);
+        expect(f.calls.some((c) => c.path.endsWith("/final-grades/commit/"))).toBe(false);
+        await page.getByRole("button", { name: "Change review", exact: true }).click();
+        await expect(checkbox).toBeChecked();
+        await expect(page.getByRole("textbox", { name: "Reason for correction", exact: true })).toHaveValue(
+            "Fictional <b>source</b> evidence.",
+        );
+        await expect(drawer).toContainText("Recorded credit quantities");
+        await page.getByRole("button", { name: "Review final grade", exact: true }).click();
+        expect(
+            (
+                await new AxeBuilder({ page })
+                    .include("#drawer-body")
+                    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+                    .analyze()
+            ).violations,
+        ).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        await page.getByRole("button", { name: "Confirm final grade", exact: true }).click();
+        const reviews = f.calls.filter((c) => c.path.endsWith("/final-grades/review/"));
+        expect(reviews).toHaveLength(2);
+        expect(reviews[0]).toMatchObject({
+            csrf: "fictional-test-token",
+            data: {
+                enrollment_id: f.enrollment,
+                version: 3,
+                reconcile_withdrawal_quantities: true,
+                ...(missingGrade ? { grade_evidence: true } : {}),
+            },
+        });
+        expect(f.calls.filter((c) => c.path.endsWith("/final-grades/commit/"))).toHaveLength(1);
+        expect(
+            f.calls.some((c) => c.path.includes("/academic-dates/") || c.path.includes("/accounts/")),
+        ).toBe(false);
+        expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+        expect(f.errors).toEqual([]);
+    });
+
+test("independent registrar review shows the original and reconciled quantities before approval", async ({
+    page,
+}) => {
+    const f = await fixture(page, { withdrawn: true, reconcile: true, pending: true });
+    const drawer = page.locator("#drawer-body");
+    await page.getByRole("button", { name: "Review correction", exact: true }).click();
+    await expect(drawer).toContainText("1 → 0");
+    await expect(drawer).toContainText("9.999 → 12");
+    await page.getByRole("combobox", { name: "Decision", exact: true }).selectOption("approved");
+    await page
+        .getByRole("textbox", { name: "Reason for decision", exact: true })
+        .fill("Fictional independent approval.");
+    await page.getByRole("button", { name: "Review decision", exact: true }).click();
+    await expect(drawer).toContainText("FICTIONAL");
+    await expect(drawer).toContainText("1 → 0");
+    expect(f.calls.some((c) => c.path.endsWith("/commit/"))).toBe(false);
+    await page.getByRole("button", { name: "Change review", exact: true }).click();
+    await expect(page.getByRole("textbox", { name: "Reason for decision", exact: true })).toHaveValue(
+        "Fictional independent approval.",
+    );
+    await page.getByRole("button", { name: "Review decision", exact: true }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+        (
+            await new AxeBuilder({ page })
+                .include("#drawer-body")
+                .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+                .analyze()
+        ).violations,
+    ).toEqual([]);
+    await page.getByRole("button", { name: "Confirm decision", exact: true }).click();
+    expect(
+        f.calls.filter((c) => c.path.includes("/grade-changes/") && c.path.endsWith("/commit/")),
+    ).toHaveLength(1);
+    expect(f.calls.some((c) => c.path.includes("/accounts/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test("read-only grading context cannot expose the reconciliation controls", async ({ page }) => {
+    const f = await fixture(page, { withdrawn: true, reconcile: true, readOnly: true });
+    await expect(
+        page.getByLabel("I verified the withdrawn credit quantities against institutional records", {
+            exact: true,
+        }),
+    ).toHaveCount(0);
+    expect(f.calls.some((c) => c.path.endsWith("/final-grades/review/"))).toBe(false);
     expect(f.errors).toEqual([]);
 });

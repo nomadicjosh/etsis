@@ -828,7 +828,7 @@ window.createWorkspaceStudents = function (ui) {
                                                 ),
                                                 can("sis:gradebook:amend") &&
                                                     can("sis:student:read") &&
-                                                    (item.grade_code ||
+                                                    (item.grade_code || item.status === "W" ||
                                                         can(
                                                             "sis:gradebook:manage",
                                                         )) &&
@@ -836,9 +836,6 @@ window.createWorkspaceStudents = function (ui) {
                                                         item.status,
                                                     ) ||
                                                         (item.status === "W" &&
-                                                            Number(item.completed_milli) === 0 &&
-                                                            (item.grade_id ||
-                                                                Number(item.grade_points_milli) === 0) &&
                                                             can("sis:gradebook:closed")))
                                                     ? button(
                                                           item.status === "W"

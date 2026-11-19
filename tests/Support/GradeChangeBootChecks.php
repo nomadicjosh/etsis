@@ -275,8 +275,8 @@ $sis->sql->insert("sis_academic_credits", [
     "course_code" => "TEST.101",
     "course_title" => "Fictional earlier withdrawal",
     "attempted_milli" => 3000,
-    "completed_milli" => 0,
-    "grade_points_milli" => 0,
+    "completed_milli" => 1000,
+    "grade_points_milli" => 9999,
     "grade_id" => null,
     "status" => "W",
     "version" => 4,
@@ -295,11 +295,17 @@ if ($teachingPost($base . "/review/", $data)->getStatusCode() !== 422) {
     throw new RuntimeException("Missing withdrawal evidence confirmation was not required.");
 }
 $data["grade_evidence"] = true;
+if ($teachingPost($base . "/review/", $data)->getStatusCode() !== 422) {
+    throw new RuntimeException("Grade evidence silently authorized credit-quantity reconciliation.");
+}
+$data["reconcile_withdrawal_quantities"] = true;
 $review = $teachingPost($base . "/review/", $data);
 $body = json_decode((string) $review->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
     $review->getStatusCode() !== 200 ||
     ($body["missing_withdrawal_grade"] ?? null) !== true ||
+    ($body["withdrawal_quantity_reconciliation"] ?? null) !== true ||
+    ($body["withdrawal_quantities"]["expected_grade_points_milli"] ?? null) !== 9000 ||
     ($body["requires_approval"] ?? null) !== true
 ) {
     throw new RuntimeException("The real route did not preserve missing-grade scope and approval policy.");
@@ -311,7 +317,8 @@ $submitted = $teachingPost($base . "/commit/", [
 $receipt = json_decode((string) $submitted->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
     $submitted->getStatusCode() !== 200 ||
-    $sis->sql->one("sis_academic_credits", ["id" => $creditId])["grade_id"] !== null
+    $sis->sql->one("sis_academic_credits", ["id" => $creditId])["grade_id"] !== null ||
+    $sis->sql->one("sis_academic_credits", ["id" => $creditId])["completed_milli"] !== 1000
 ) {
     throw new RuntimeException("Missing-grade submission bypassed independent approval.");
 }
@@ -335,6 +342,7 @@ if (
     $credit["grade_id"] !== $grades["B"] ||
     $credit["status"] !== "W" ||
     $credit["completed_milli"] !== 0 ||
+    $credit["grade_points_milli"] !== 9000 ||
     $preserved !== [$sis->financialEvents(), $sis->sql->rows("sis_enrollments")]
 ) {
     throw new RuntimeException("Resolving the missing grade changed protected withdrawal facts.");

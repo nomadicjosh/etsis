@@ -17,6 +17,7 @@ use Domain\AcademicRecord\Repository\AcademicCreditRepository;
 use Domain\AcademicRecord\ValueObject\AcademicCreditId;
 use Domain\AcademicRecord\ValueObject\CreditSnapshot;
 use Domain\AcademicRecord\ValueObject\GradeSnapshot;
+use Domain\AcademicRecord\ValueObject\WithdrawnCreditQuantities;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\Course;
 use Domain\Communications\Service\MessageCipher;
@@ -147,7 +148,7 @@ final readonly class InstitutionalCreditLedger
     ): array {
         $actor = $this->readAuthority($section);
         [$id, $root, $facts] = $this->source($enrollment, $student, $section);
-        $withdrawn = $this->withdrawn($facts);
+        $withdrawn = $facts["status"] === "W";
         $this->gradeEnrollmentScope(
             $enrollment,
             $student,
@@ -175,6 +176,7 @@ final readonly class InstitutionalCreditLedger
             $items = [];
             $needs = true;
         }
+        $observedGrade = $this->observedGrade($root, $facts);
         $canAmend = $this->canAmend($withdrawn);
         $result = [
             "items" => $items,
@@ -188,6 +190,8 @@ final readonly class InstitutionalCreditLedger
             "can_amend" => $canAmend,
             "withdrawal_grade_correction" => $withdrawn,
             "missing_withdrawal_grade" => $withdrawn && $facts["grade_id"] === null,
+            "requires_quantity_reconciliation" => WithdrawnCreditQuantities::requiresReview($facts, $observedGrade),
+            "withdrawal_quantities" => $withdrawn ? WithdrawnCreditQuantities::summary($facts, $observedGrade) : null,
             "requires_approval" => $this->changes->policy()["mode"] === "approval",
             "pending_grade_change" =>
                 $root->pendingGradeChange() === null
@@ -214,8 +218,7 @@ final readonly class InstitutionalCreditLedger
             "current_grade_code" =>
                 $facts["grade_id"] === null
                     ? null
-                    : $root->grade()["code"] ??
-                        $this->grades->snapshot(new EntityId($facts["grade_id"]))["code"],
+                    : $observedGrade["code"],
         ];
         if (!$result["posted"] && !$needs && $this->canReadCoursework($section)) {
             $suggestion = $this->coursework->assess($student, $section, $items);
@@ -240,6 +243,7 @@ final readonly class InstitutionalCreditLedger
         bool $gradeEvidence = false,
         ?string $courseworkRevision = null,
         bool $initialOnly = false,
+        bool $reconcileQuantities = false,
     ): array {
         $this->readAuthority($section);
         return $this->transactions->run(function () use (
@@ -254,11 +258,12 @@ final readonly class InstitutionalCreditLedger
             $gradeEvidence,
             $courseworkRevision,
             $initialOnly,
+            $reconcileQuantities,
         ): array {
             $this->records->lockStudent($student);
             $this->records->lockSection($section);
             [$id, $root, $facts] = $this->source($enrollment, $student, $section);
-            $withdrawn = $this->withdrawn($facts);
+            $withdrawn = $facts["status"] === "W";
             $this->gradeEnrollmentScope(
                 $enrollment,
                 $student,
@@ -283,6 +288,13 @@ final readonly class InstitutionalCreditLedger
                 );
             }
             $actor = $this->authority($section, $amend, $withdrawn);
+            $observedGrade = $this->observedGrade($root, $facts);
+            $needsReconciliation = WithdrawnCreditQuantities::requiresReview($facts, $observedGrade);
+            if ($needsReconciliation !== $reconcileQuantities) {
+                self::invalid("reconcile_withdrawal_quantities", $needsReconciliation
+                    ? "Verify and explicitly confirm reconciliation of this withdrawn record's credit quantities."
+                    : "This record does not need withdrawn-credit reconciliation. Reload its grading record.");
+            }
             if ($withdrawn && $facts["grade_id"] === null && !$gradeEvidence) {
                 self::invalid(
                     "grade_evidence",
@@ -356,13 +368,12 @@ final readonly class InstitutionalCreditLedger
                 "observed_at" => $this->clock->now()->format(DATE_ATOM),
                 "expires_at" => $this->clock->now()->getTimestamp() + 1200,
                 "earlier_history_unknown" => $baseline || $root->provenance() === "observed_existing",
-                "observed_grade" =>
-                    $root->grade() ??
-                    ($facts["grade_id"] === null
-                        ? null
-                        : GradeSnapshot::fromRow($this->grades->snapshot(new EntityId($facts["grade_id"])))
-                            ->facts),
+                "observed_grade" => $observedGrade,
             ];
+            if ($reconcileQuantities) {
+                $data["withdrawal_quantity_reconciliation"] = true;
+                $data["withdrawal_quantities"] = WithdrawnCreditQuantities::summary($facts, $selected);
+            }
             if ($evidence !== null) {
                 $data["coursework"] = $evidence->facts;
             }
@@ -445,6 +456,9 @@ final readonly class InstitutionalCreditLedger
             if ($d["withdrawal_grade_correction"] ?? false) {
                 $metadata["withdrawal_grade_correction"] = true;
             }
+            if ($d["withdrawal_quantity_reconciliation"] ?? false) {
+                $metadata["withdrawal_quantity_reconciliation"] = true;
+            }
             if ($requested) {
                 $payload += [
                     "actor_id" => $actor->value,
@@ -508,6 +522,14 @@ final readonly class InstitutionalCreditLedger
                 if (!$this->same($current, $d["before"])) {
                     throw new ConcurrentModificationException(
                         "The academic facts changed. Review the grade again.",
+                    );
+                }
+                if (
+                    WithdrawnCreditQuantities::requiresReview($current, $d["observed_grade"]) !==
+                    ($d["withdrawal_quantity_reconciliation"] ?? false)
+                ) {
+                    throw new ConcurrentModificationException(
+                        "Review and explicitly confirm the withdrawn-credit quantities again.",
                     );
                 }
                 $selected = null;
@@ -672,6 +694,7 @@ final readonly class InstitutionalCreditLedger
         } catch (AccessDeniedException) {
         }
         $withdrawn = $root->gradeChange($id->value)["withdrawn"];
+        $reconciliation = $root->gradeChange($id->value)["reconcile_quantities"];
         $canApprove = $canReview;
         if ($withdrawn) {
             try {
@@ -698,6 +721,8 @@ final readonly class InstitutionalCreditLedger
             "stale" => $stale,
             "withdrawal_grade_correction" => $withdrawn,
             "missing_withdrawal_grade" => $withdrawn && $request["before_grade"] === null,
+            "withdrawal_quantity_reconciliation" => $reconciliation,
+            "withdrawal_quantities" => $reconciliation ? $root->gradeChange($id->value)["quantities"] : null,
             "can_approve" => $row["status"] === "pending" && $canApprove && !$stale,
             "can_reject" => $row["status"] === "pending" && $canReview,
             "can_cancel" => $row["status"] === "pending" && $request["actor_id"] === $actor->value,
@@ -1162,7 +1187,13 @@ final readonly class InstitutionalCreditLedger
         foreach ($page->events as $stored) {
             $e = $stored->event;
             $p = $e->payload();
+            $reconciled = ($e instanceof FinalGradeWasDecided &&
+                $e->metaParam("withdrawal_quantity_reconciliation", false)) ||
+            ($e instanceof \Domain\AcademicRecord\Event\GradeChangeWasResolved &&
+            $p["outcome"] === "approved" &&
+            $root->gradeChange($p["request_id"])["reconcile_quantities"]);
             $items[] = [
+                "withdrawal_quantity_reconciled" => $reconciled,
                 ...($e instanceof FinalGradeWasDecided && $e->metaParam("coursework", null) !== null
                     ? ["coursework_summary" => array_intersect_key(
                         new CourseworkGradeEvidence($e->metaParam("coursework"))->summary(),
@@ -1347,21 +1378,13 @@ final readonly class InstitutionalCreditLedger
     {
         return PublishedGradeId::forVersion($correlation, "academic." . $kind . "." . $credit->value);
     }
-    private function withdrawn(array $facts): bool
+    /** @param array<string,mixed> $facts
+     * @return array<string,mixed>|null
+     */
+    private function observedGrade(AcademicCredit $root, array $facts): ?array
     {
-        if ($facts["status"] !== "W") {
-            return false;
-        }
-        if (
-            $facts["completed_milli"] !== 0 ||
-            ($facts["grade_id"] === null && $facts["grade_points_milli"] !== 0)
-        ) {
-            self::invalid(
-                "grade_id",
-                "Resolve this withdrawn record’s inconsistent earned-credit or GPA evidence before correcting it.",
-            );
-        }
-        return true;
+        return $root->grade() ?? ($facts["grade_id"] === null ? null :
+            GradeSnapshot::fromRow($this->grades->snapshot(new EntityId($facts["grade_id"])))->facts);
     }
     private function gradeEnrollmentScope(
         EntityId $enrollment,
