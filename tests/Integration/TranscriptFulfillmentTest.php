@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__) . '/Support/TranscriptFixture.php';
+namespace Tests\Integration;
 
+use DateTimeImmutable;
+use RuntimeException;
+use TranscriptFixture;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -16,10 +19,15 @@ use PHPUnit\Framework\TestCase;
 
 final class TranscriptFulfillmentTest extends TestCase
 {
+    public static function setUpBeforeClass(): void
+    {
+        require_once dirname(__DIR__) . "/Support/TranscriptFixture.php";
+    }
+
     private function renderer(): TranscriptDocumentRenderer
     {
         $stub = $this->createStub(TranscriptDocumentRenderer::class);
-        $stub->method('pdf')->willReturn('%PDF-1.4 Fictional protected transcript');
+        $stub->method("pdf")->willReturn("%PDF-1.4 Fictional protected transcript");
         return $stub;
     }
 
@@ -30,28 +38,59 @@ final class TranscriptFulfillmentTest extends TestCase
         $request = $t->request();
         $service = $t->service();
         $review = $service->review($request);
-        $id = new EntityId($review['operation_id']);
-        self::assertSame('pending', $t->repository->request($request)['status']);
-        $saved = $service->prepare($request, $id, $review['revision'], true, $review['review_token']);
-        self::assertSame($saved, $service->prepare($request, $id, $review['revision'], true, $review['review_token']));
-        self::assertSame('ready', $t->repository->request($request)['status']);
+        $id = new EntityId($review["operation_id"]);
+        self::assertSame("pending", $t->repository->request($request)["status"]);
+        $saved = $service->prepare($request, $id, $review["revision"], true, $review["review_token"]);
+        self::assertSame(
+            $saved,
+            $service->prepare($request, $id, $review["revision"], true, $review["review_token"]),
+        );
+        self::assertSame("ready", $t->repository->request($request)["status"]);
         $pdf = $service->pdf($request, $id);
-        self::assertStringStartsWith('%PDF-', $pdf);
-        self::assertSame($saved['pdf_hash'], hash('sha256', $pdf));
+        self::assertStringStartsWith("%PDF-", $pdf);
+        self::assertSame($saved["pdf_hash"], hash("sha256", $pdf));
         self::assertSame($pdf, $service->pdf($request, $id));
-        $raw = $t->repository->document($id)['encrypted_content'];
-        self::assertStringNotContainsString('Fictional University', $raw);
-        self::assertStringNotContainsString('%PDF-', $raw);
-        self::assertSame([], $f->sql->rows('sis_transcript_deliveries'));
-        $at = $f->clock->now()->modify('-1 minute');
-        $delivery = $service->reviewDelivery($request, $id, 1, $at, 'Fictional pickup receipt 123');
-        $operation = new EntityId($delivery['operation_id']);
-        $delivered = $service->deliver($request, $id, $operation, 1, $at, 'Fictional pickup receipt 123', $delivery['review_token']);
-        self::assertSame($delivered, $service->deliver($request, $id, $operation, 1, $at, 'Fictional pickup receipt 123', $delivery['review_token']));
-        self::assertSame('fulfilled', $t->repository->request($request)['status']);
-        self::assertSame('Fictional pickup receipt 123', $service->view($request, $id)['delivery']['evidence']);
-        self::assertStringNotContainsString('Fictional pickup receipt', json_encode($f->sql->rows('sis_transcript_deliveries')));
-        self::assertStringNotContainsString('Fictional pickup receipt', json_encode($f->sql->rows('sis_audit')));
+        $raw = $t->repository->document($id)["encrypted_content"];
+        self::assertStringNotContainsString("Fictional University", $raw);
+        self::assertStringNotContainsString("%PDF-", $raw);
+        self::assertSame([], $f->sql->rows("sis_transcript_deliveries"));
+        $at = $f->clock->now()->modify("-1 minute");
+        $delivery = $service->reviewDelivery($request, $id, 1, $at, "Fictional pickup receipt 123");
+        $operation = new EntityId($delivery["operation_id"]);
+        $delivered = $service->deliver(
+            $request,
+            $id,
+            $operation,
+            1,
+            $at,
+            "Fictional pickup receipt 123",
+            $delivery["review_token"],
+        );
+        self::assertSame(
+            $delivered,
+            $service->deliver(
+                $request,
+                $id,
+                $operation,
+                1,
+                $at,
+                "Fictional pickup receipt 123",
+                $delivery["review_token"],
+            ),
+        );
+        self::assertSame("fulfilled", $t->repository->request($request)["status"]);
+        self::assertSame(
+            "Fictional pickup receipt 123",
+            $service->view($request, $id)["delivery"]["evidence"],
+        );
+        self::assertStringNotContainsString(
+            "Fictional pickup receipt",
+            json_encode($f->sql->rows("sis_transcript_deliveries")),
+        );
+        self::assertStringNotContainsString(
+            "Fictional pickup receipt",
+            json_encode($f->sql->rows("sis_audit")),
+        );
     }
 
     public function testAcademicChangeInvalidatesPreparationAndDeliveryUntilAnUpdatedRevisionIsPrepared(): void
@@ -61,28 +100,50 @@ final class TranscriptFulfillmentTest extends TestCase
         $request = $t->request();
         $service = $t->service($this->renderer());
         $review = $service->review($request);
-        $id = new EntityId($review['operation_id']);
-        $service->prepare($request, $id, $review['revision'], true, $review['review_token']);
+        $id = new EntityId($review["operation_id"]);
+        $service->prepare($request, $id, $review["revision"], true, $review["review_token"]);
         $originalPdf = $service->pdf($request, $id);
-        $student = $t->repository->request($request)['student_id'];
-        $f->sql->update('sis_academic_credits', ['course_title' => 'Fictional corrected course', 'version' => 1], ['student_id' => $student]);
-        self::assertTrue($service->view($request, $id)['academic_changed']);
+        $student = $t->repository->request($request)["student_id"];
+        $t->postGrade($request);
+        self::assertTrue($service->view($request, $id)["academic_changed"]);
         try {
-            $service->deliver($request, $id, EntityId::generate(), 1, $f->clock->now(), 'Fictional stale delivery', '');
-            self::fail('A stale document was delivered.');
+            $service->deliver(
+                $request,
+                $id,
+                EntityId::generate(),
+                1,
+                $f->clock->now(),
+                "Fictional stale delivery",
+                "",
+            );
+            self::fail("A stale document was delivered.");
         } catch (ConcurrentModificationException) {
-            self::assertSame('ready', $t->repository->request($request)['status']);
+            self::assertSame("ready", $t->repository->request($request)["status"]);
         }
         $fresh = $service->review($request);
-        $replacement = new EntityId($fresh['operation_id']);
-        $service->prepare($request, $replacement, $fresh['revision'], true, $fresh['review_token']);
-        self::assertFalse($service->view($request, $id)['is_latest']);
+        $replacement = new EntityId($fresh["operation_id"]);
+        $service->prepare($request, $replacement, $fresh["revision"], true, $fresh["review_token"]);
+        self::assertFalse($service->view($request, $id)["is_latest"]);
         self::assertSame($originalPdf, $service->pdf($request, $id));
-        self::assertSame('Fictional corrected course', $service->view($request, $replacement)['snapshot']['credits'][0]['course_title']);
-        self::assertCount(2, $f->sql->rows('sis_transcript_documents'));
-        $delivery = $service->reviewDelivery($request, $replacement, 2, $f->clock->now(), 'Fictional corrected delivery');
-        $service->deliver($request, $replacement, new EntityId($delivery['operation_id']), 2, $f->clock->now(), 'Fictional corrected delivery', $delivery['review_token']);
-        self::assertSame('fulfilled', $t->repository->request($request)['status']);
+        self::assertSame("A", $service->view($request, $replacement)["snapshot"]["credits"][0]["grade_code"]);
+        self::assertCount(2, $f->sql->rows("sis_transcript_documents"));
+        $delivery = $service->reviewDelivery(
+            $request,
+            $replacement,
+            2,
+            $f->clock->now(),
+            "Fictional corrected delivery",
+        );
+        $service->deliver(
+            $request,
+            $replacement,
+            new EntityId($delivery["operation_id"]),
+            2,
+            $f->clock->now(),
+            "Fictional corrected delivery",
+            $delivery["review_token"],
+        );
+        self::assertSame("fulfilled", $t->repository->request($request)["status"]);
     }
 
     public function testAChangeDuringPdfRenderingRejectsThePreparedBytesWithoutSavingAPartialDocument(): void
@@ -91,18 +152,26 @@ final class TranscriptFulfillmentTest extends TestCase
         $f = $t->sis;
         $request = $t->request();
         $renderer = $this->createStub(TranscriptDocumentRenderer::class);
-        $renderer->method('pdf')->willReturnCallback(static function (array $snapshot) use ($t, $request): string {
-            $t->sis->sql->update('sis_academic_credits', ['version' => 1], ['student_id' => $t->repository->request($request)['student_id']]);
-            return '%PDF-1.4 Fictional changed during render';
-        });
+        $renderer
+            ->method("pdf")
+            ->willReturnCallback(static function (array $snapshot) use ($t, $request): string {
+                $t->postGrade($request);
+                return "%PDF-1.4 Fictional changed during render";
+            });
         $service = $t->service($renderer);
         $review = $service->review($request);
         try {
-            $service->prepare($request, new EntityId($review['operation_id']), $review['revision'], true, $review['review_token']);
-            self::fail('An unreviewed academic change was saved into a prepared request.');
+            $service->prepare(
+                $request,
+                new EntityId($review["operation_id"]),
+                $review["revision"],
+                true,
+                $review["review_token"],
+            );
+            self::fail("An unreviewed academic change was saved into a prepared request.");
         } catch (ConcurrentModificationException) {
-            self::assertSame('pending', $t->repository->request($request)['status']);
-            self::assertSame([], $f->sql->rows('sis_transcript_documents'));
+            self::assertSame("pending", $t->repository->request($request)["status"]);
+            self::assertSame([], $f->sql->rows("sis_transcript_documents"));
         }
     }
 
@@ -113,25 +182,27 @@ final class TranscriptFulfillmentTest extends TestCase
         $request = $t->request();
         $service = $t->service($this->renderer());
         $review = $service->review($request);
-        $id = new EntityId($review['operation_id']);
-        $service->prepare($request, $id, $review['revision'], true, $review['review_token']);
+        $id = new EntityId($review["operation_id"]);
+        $service->prepare($request, $id, $review["revision"], true, $review["review_token"]);
         $other = $t->request();
         try {
             $service->pdf($other, $id);
-            self::fail('A document moved to another request.');
+            self::fail("A document moved to another request.");
         } catch (RecordNotFoundException) {
             self::assertTrue(true);
         }
         $f->access->staff = false;
-        foreach ([[], ['sis:student:read'], ['sis:transcript:manage']] as $grants) {
+        foreach ([[], ["sis:student:read"], ["sis:transcript:manage"]] as $grants) {
             $f->access->grants = $grants;
-            foreach (['review', 'pdf', 'view', 'current'] as $method) {
+            foreach (["review", "pdf", "view", "current"] as $method) {
                 try {
                     match ($method) {
-                        'review' => $service->review($request), 'pdf' => $service->pdf($request, $id),
-                        'view' => $service->view($request, $id), 'current' => $service->current($request),
+                        "review" => $service->review($request),
+                        "pdf" => $service->pdf($request, $id),
+                        "view" => $service->view($request, $id),
+                        "current" => $service->current($request),
                     };
-                    self::fail('A student owner or insufficient office grant accessed an official document.');
+                    self::fail("A student owner or insufficient office grant accessed an official document.");
                 } catch (AccessDeniedException) {
                     self::assertTrue(true);
                 }
@@ -147,8 +218,14 @@ final class TranscriptFulfillmentTest extends TestCase
         $review = $service->review($request);
         foreach ([false, true] as $confirmed) {
             try {
-                $service->prepare($request, new EntityId($review['operation_id']), $review['revision'], $confirmed, $review['review_token']);
-                self::fail('An unconfigured or unreviewed official document was issued.');
+                $service->prepare(
+                    $request,
+                    new EntityId($review["operation_id"]),
+                    $review["revision"],
+                    $confirmed,
+                    $review["review_token"],
+                );
+                self::fail("An unconfigured or unreviewed official document was issued.");
             } catch (ValidationException) {
                 self::assertNull($t->repository->latest($request));
             }
@@ -160,11 +237,11 @@ final class TranscriptFulfillmentTest extends TestCase
         $t = new TranscriptFixture();
         $f = $t->sis;
         $request = $t->request();
-        $student = new EntityId($t->repository->request($request)['student_id']);
-        $enrollment = $f->sql->rows('sis_enrollments', ['student_id' => $student->value])[0];
-        $grade = new \Domain\Gradebook\GradeDefinition(EntityId::generate(), 'A', 4000, true, true);
+        $student = new EntityId($t->repository->request($request)["student_id"]);
+        $enrollment = $f->sql->rows("sis_enrollments", ["student_id" => $student->value])[0];
+        $grade = new \Domain\Gradebook\GradeDefinition(EntityId::generate(), "A", 4000, true, true);
         $t->campus->sis->legacyGrade($grade);
-        $t->campus->gradebook->finalGrade($student, new EntityId($enrollment['section_id']), $grade->id, 0);
+        $t->campus->gradebook->finalGrade($student, new EntityId($enrollment["section_id"]), $grade->id, 0);
         $progress = $f->section(20, 0);
         $withdrawn = $f->section(20, 0);
         $dropped = $f->section(20, 0);
@@ -172,12 +249,21 @@ final class TranscriptFulfillmentTest extends TestCase
             $f->service->register($student, $section->id);
         }
         $f->service->drop($student, $dropped->id);
-        $f->clock->time = new DateTimeImmutable('2026-08-20T10:00:00-07:00');
+        $f->clock->time = new DateTimeImmutable("2026-08-20T10:00:00-07:00");
+        $f->legacyGrade(new \Domain\Gradebook\GradeDefinition(EntityId::generate(), "W", 0, false, false));
+        $f->publishDropPolicy(
+            $f->term,
+            -1,
+            new \Domain\Registration\ValueObject\DropWindows([["through" => null, "grade_code" => "W"]]),
+        );
         $f->service->drop($student, $withdrawn->id);
-        $review = $t->service($this->renderer())->review($request)['snapshot'];
-        self::assertCount(3, $review['credits']);
-        self::assertSame(['attempted_milli' => 9000, 'completed_milli' => 3000, 'gpa_milli' => 4000], $review['totals']);
-        self::assertContains('W', array_column($review['credits'], 'grade_code'));
+        $review = $t->service($this->renderer())->review($request)["snapshot"];
+        self::assertCount(3, $review["credits"]);
+        self::assertSame(
+            ["attempted_milli" => 9000, "completed_milli" => 3000, "gpa_milli" => 4000],
+            $review["totals"],
+        );
+        self::assertContains("W", array_column($review["credits"], "grade_code"));
     }
 
     public function testOversizedAcademicRecordsFailBeforeRenderingInsteadOfProducingPartialTranscripts(): void
@@ -185,16 +271,19 @@ final class TranscriptFulfillmentTest extends TestCase
         $t = new TranscriptFixture();
         $f = $t->sis;
         $request = $t->request();
-        $student = $t->repository->request($request)['student_id'];
-        $credit = $f->sql->rows('sis_academic_credits', ['student_id' => $student])[0];
+        $student = $t->repository->request($request)["student_id"];
+        $credit = $f->sql->rows("sis_academic_credits", ["student_id" => $student])[0];
         for ($i = 0; $i < 500; ++$i) {
-            $f->sql->insert('sis_academic_credits', array_replace(
-                $credit,
-                ['id' => EntityId::generate()->value, 'source_id' => EntityId::generate()->value]
-            ));
+            $f->sql->insert(
+                "sis_academic_credits",
+                array_replace($credit, [
+                    "id" => EntityId::generate()->value,
+                    "source_id" => EntityId::generate()->value,
+                ]),
+            );
         }
         $renderer = $this->createMock(TranscriptDocumentRenderer::class);
-        $renderer->expects(self::never())->method('pdf');
+        $renderer->expects(self::never())->method("pdf");
         $this->expectException(ValidationException::class);
         $t->service($renderer)->review($request);
     }
@@ -205,32 +294,40 @@ final class TranscriptFulfillmentTest extends TestCase
         $request = $t->request();
         $service = $t->service($this->renderer());
         $review = $service->review($request);
-        $id = new EntityId($review['operation_id']);
-        $service->prepare($request, $id, $review['revision'], true, $review['review_token']);
+        $id = new EntityId($review["operation_id"]);
+        $service->prepare($request, $id, $review["revision"], true, $review["review_token"]);
         $bytes = $service->pdf($request, $id);
         $audit = $this->createStub(AuditTrail::class);
-        $audit->method('record')->willReturnCallback(static function (EntityId $actor, string $action, EntityId $subject): void {
-            if ($action === 'transcript.delivery_recorded') {
-                throw new RuntimeException('Fictional delivery audit failure');
-            }
-        });
-        $delivery = $service->reviewDelivery($request, $id, 1, $t->sis->clock->now(), 'Fictional failed collection');
+        $audit
+            ->method("record")
+            ->willReturnCallback(static function (EntityId $actor, string $action, EntityId $subject): void {
+                if ($action === "transcript.delivery_recorded") {
+                    throw new RuntimeException("Fictional delivery audit failure");
+                }
+            });
+        $delivery = $service->reviewDelivery(
+            $request,
+            $id,
+            1,
+            $t->sis->clock->now(),
+            "Fictional failed collection",
+        );
         try {
             $t->service($this->renderer(), $audit)->deliver(
                 $request,
                 $id,
-                new EntityId($delivery['operation_id']),
+                new EntityId($delivery["operation_id"]),
                 1,
                 $t->sis->clock->now(),
-                'Fictional failed collection',
-                $delivery['review_token'],
+                "Fictional failed collection",
+                $delivery["review_token"],
             );
-            self::fail('Partially audited delivery was marked fulfilled.');
+            self::fail("Partially audited delivery was marked fulfilled.");
         } catch (RuntimeException $error) {
-            self::assertSame('Fictional delivery audit failure', $error->getMessage());
+            self::assertSame("Fictional delivery audit failure", $error->getMessage());
         }
-        self::assertSame('ready', $t->repository->request($request)['status']);
-        self::assertSame([], $t->sis->sql->rows('sis_transcript_deliveries'));
+        self::assertSame("ready", $t->repository->request($request)["status"]);
+        self::assertSame([], $t->sis->sql->rows("sis_transcript_deliveries"));
         self::assertSame($bytes, $service->pdf($request, $id));
     }
 
@@ -239,20 +336,28 @@ final class TranscriptFulfillmentTest extends TestCase
         $t = new TranscriptFixture();
         $request = $t->request();
         $audit = $this->createStub(AuditTrail::class);
-        $audit->method('record')->willReturnCallback(static function (EntityId $actor, string $action, EntityId $subject): void {
-            if ($action === 'transcript.document_prepared') {
-                throw new RuntimeException('Fictional document audit failure');
-            }
-        });
+        $audit
+            ->method("record")
+            ->willReturnCallback(static function (EntityId $actor, string $action, EntityId $subject): void {
+                if ($action === "transcript.document_prepared") {
+                    throw new RuntimeException("Fictional document audit failure");
+                }
+            });
         $service = $t->service($this->renderer(), $audit);
         $review = $service->review($request);
         try {
-            $service->prepare($request, new EntityId($review['operation_id']), $review['revision'], true, $review['review_token']);
-            self::fail('A partially audited document was issued.');
+            $service->prepare(
+                $request,
+                new EntityId($review["operation_id"]),
+                $review["revision"],
+                true,
+                $review["review_token"],
+            );
+            self::fail("A partially audited document was issued.");
         } catch (RuntimeException $error) {
-            self::assertSame('Fictional document audit failure', $error->getMessage());
+            self::assertSame("Fictional document audit failure", $error->getMessage());
         }
         self::assertNull($t->repository->latest($request));
-        self::assertSame('pending', $t->repository->request($request)['status']);
+        self::assertSame("pending", $t->repository->request($request)["status"]);
     }
 }

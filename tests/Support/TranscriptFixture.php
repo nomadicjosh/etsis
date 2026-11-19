@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/CampusFixture.php';
+require_once __DIR__ . "/CampusFixture.php";
 
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Shared\ValueObject\EntityId;
@@ -21,29 +21,63 @@ final class TranscriptFixture
 
     public function __construct()
     {
-        $this->campus = new CampusFixture(); $this->sis = $this->campus->sis;
+        $this->campus = new CampusFixture();
+        $this->sis = $this->campus->sis;
         $this->repository = new SqlTranscriptRepository($this->sis->sql);
     }
 
     public function request(): EntityId
     {
-        $id = EntityId::generate(); $student = $this->sis->student();
+        $id = EntityId::generate();
+        $student = $this->sis->student();
         $this->sis->service->register($student->id, $this->sis->section(20, 0)->id);
         $actor = $this->sis->access->actor;
         $this->sis->access->actor = $this->sis->admissions->person($student->personId)->ownerUserId;
-        try { $this->campus->service->requestTranscript($id, $student->id, 'pickup', ''); }
-        finally { $this->sis->access->actor = $actor; }
+        try {
+            $this->campus->service->requestTranscript($id, $student->id, "pickup", "");
+        } finally {
+            $this->sis->access->actor = $actor;
+        }
         return $id;
     }
 
-    public function service(?TranscriptDocumentRenderer $renderer = null, ?AuditTrail $audit = null,
-        ?TranscriptIssuer $issuer = null, ?\Domain\Transcript\Repository\TranscriptRepository $records = null): TranscriptFulfillmentService
+    /** Genuine academic decision for fictional transcript fixtures. */
+    public function postGrade(EntityId $request): void
     {
+        $student = new EntityId($this->repository->request($request)["student_id"]);
+        $enrollment = $this->sis->sql->rows("sis_enrollments", ["student_id" => $student->value])[0];
+        $grade = new \Domain\Gradebook\GradeDefinition(EntityId::generate(), "A", 4000, true, true);
+        $this->sis->legacyGrade($grade);
+        $credit = $this->sis->sql->one("sis_academic_credits", ["source_id" => $enrollment["id"]]);
+        $this->campus->gradebook->finalGrade(
+            $student,
+            new EntityId($enrollment["section_id"]),
+            $grade->id,
+            (int) $credit["version"],
+            reason: "Fictional reviewed grade.",
+        );
+    }
+
+    public function service(
+        ?TranscriptDocumentRenderer $renderer = null,
+        ?AuditTrail $audit = null,
+        ?TranscriptIssuer $issuer = null,
+        ?\Domain\Transcript\Repository\TranscriptRepository $records = null,
+    ): TranscriptFulfillmentService {
         $f = $this->sis;
-        return new TranscriptFulfillmentService($records ?? $this->repository, $f->admissions,
-            new SqlStudentRecordRepository($f->sql), $renderer ?? new ProtectedTranscriptRenderer(),
-            $issuer ?? new TranscriptIssuer('Fictional University', 'Fictional campus address'),
-            $f->access, $f->transactions, $audit ?? $f->audit, $this->campus->cipher, $f->clock,
-            new \Domain\Shared\Service\ReviewProof($this->campus->cipher, $f->clock));
+        return new TranscriptFulfillmentService(
+            $records ?? $this->repository,
+            $f->admissions,
+            new SqlStudentRecordRepository($f->sql),
+            $renderer ?? new ProtectedTranscriptRenderer(),
+            $issuer ?? new TranscriptIssuer("Fictional University", "Fictional campus address"),
+            $f->access,
+            $f->transactions,
+            $audit ?? $f->audit,
+            $this->campus->cipher,
+            $f->clock,
+            new \Domain\Shared\Service\ReviewProof($this->campus->cipher, $f->clock),
+            $f->inputVerifier(),
+        );
     }
 }

@@ -44,6 +44,9 @@
                 <dt>Catalog year</dt>
                 <dd><?= $escape($document['catalog']['year_code'] ?? 'Catalog needs review') ?></dd>
             </dl>
+            <?php if (($document['academic_verification']['status'] ?? null) === 'history_gaps') : ?>
+                <p>Some earlier academic history was not recorded. Current-state observations are identified; missing earlier decisions remain unknown.</p>
+            <?php endif; ?>
             <div class="scroll" tabindex="0" role="region" aria-label="Academic credit history">
                 <table>
                     <caption>Academic credit history; dropped enrollments are omitted</caption>
@@ -56,19 +59,36 @@
                             <th scope="col">Attempted</th>
                             <th scope="col">Earned</th>
                             <th scope="col">Grade</th>
+                            <th scope="col">Academic dates</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($document['credits'] as $row) : ?>
-                        <tr>
-                            <td><?= $escape($row['term_code']) ?></td>
-                            <td><?= $escape($row['course_code']) ?></td>
-                            <td><?= $escape($row['course_title']) ?></td>
-                            <td><?= $escape($row['credit_type']) ?></td>
-                            <td><?= $credits($row['attempted_milli']) ?></td>
-                            <td><?= $credits($row['completed_milli']) ?></td>
-                            <td><?= $escape($row['grade_code'] ?? 'In progress') ?></td>
-                        </tr>
+                            <tr>
+                                <td><?= $escape($row['term_code']) ?></td>
+                                <td><?= $escape($row['course_code']) ?></td>
+                                <td><?= $escape($row['course_title']) ?></td>
+                                <td><?= $escape($row['credit_type']) ?></td>
+                                <td><?= $credits($row['attempted_milli']) ?></td>
+                                <td><?= $credits($row['completed_milli']) ?></td>
+                                <td><?= $escape($row['grade_code'] ?? 'In progress') ?></td>
+                                <td>
+                                    <div>
+                                        Source period:
+                                        <?= $escape(
+                                            $row['academic_on'] ?? (
+                                                !empty($row['section_version_id']) ? 'Retained by offering' : 'Unknown'
+                                            )
+                                        ) ?>
+                                    </div>
+                                    <div>Completion: <?= $escape($row['completed_on'] ?? 'Not recorded') ?></div>
+                                    <?php if (isset($row['history_recorded']) && !$row['history_recorded']) : ?>
+                                        <div>Observed current facts; earlier decisions unknown.</div>
+                                    <?php elseif (!empty($row['earlier_history_unknown'])) : ?>
+                                        <div>Some earlier decisions are unknown.</div>
+                                    <?php endif; ?>
+                                </td>
+                            </tr>
                         <?php endforeach; ?>
                     </tbody>
                 </table>

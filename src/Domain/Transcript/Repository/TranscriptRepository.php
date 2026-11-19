@@ -13,8 +13,9 @@ interface TranscriptRepository
     public function lockRequest(EntityId $id): void;
     /** @return array<string, mixed> */
     public function request(EntityId $id): array;
-    /** @return list<array<string, mixed>> */
-    public function credits(EntityId $student): array;
+    /** Current calendar labels and ordering only; academic values require ledger verification.
+     * @return list<array{id:string,version:int,term_code:string,term_starts_on:string}> */
+    public function creditLabels(EntityId $student): array;
     /** @return array<string, mixed>|null */
     public function document(EntityId $id): ?array;
     /** @return array<string, mixed>|null */

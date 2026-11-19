@@ -37,26 +37,12 @@ final readonly class SqlTranscriptRepository implements TranscriptRepository
         return $row;
     }
 
-    public function credits(EntityId $student): array
+    public function creditLabels(EntityId $student): array
     {
         $q = $this->sql->quote(...);
         $rows = $this->sql->fetch(
             "SELECT c." .
                 $q("id") .
-                ", c." .
-                $q("course_code") .
-                ", c." .
-                $q("course_title") .
-                ", c." .
-                $q("credit_type") .
-                ", c." .
-                $q("attempted_milli") .
-                ", c." .
-                $q("completed_milli") .
-                ", c." .
-                $q("grade_points_milli") .
-                ", c." .
-                $q("status") .
                 ", c." .
                 $q("version") .
                 ", t." .
@@ -67,12 +53,6 @@ final readonly class SqlTranscriptRepository implements TranscriptRepository
                 $q("starts_on") .
                 " AS " .
                 $q("term_starts_on") .
-                ", g." .
-                $q("code") .
-                " AS " .
-                $q("grade_code") .
-                ", g." .
-                $q("counts_gpa") .
                 " FROM " .
                 $q("sis_academic_credits") .
                 " c JOIN " .
@@ -81,12 +61,6 @@ final readonly class SqlTranscriptRepository implements TranscriptRepository
                 $q("id") .
                 " = c." .
                 $q("term_id") .
-                " LEFT JOIN " .
-                $q("sis_grades") .
-                " g ON g." .
-                $q("id") .
-                " = c." .
-                $q("grade_id") .
                 " WHERE c." .
                 $q("student_id") .
                 " = ? AND c." .
@@ -99,14 +73,7 @@ final readonly class SqlTranscriptRepository implements TranscriptRepository
             501,
         );
         foreach ($rows as &$row) {
-            foreach (["attempted_milli", "completed_milli", "grade_points_milli", "version"] as $field) {
-                $row[$field] = (int) $row[$field];
-            }
-            $row["counts_gpa"] = (bool) ($row["counts_gpa"] ?? false);
-            $row["grade_code"] ??= $row["status"] === "W" ? "W" : null;
-            if ($row["status"] === "V") {
-                $row["grade_code"] = "Voided";
-            }
+            $row["version"] = (int) $row["version"];
         }
         unset($row);
         return $rows;
@@ -122,7 +89,10 @@ final readonly class SqlTranscriptRepository implements TranscriptRepository
         $q = $this->sql->quote(...);
         return $this->sql->fetch(
             "SELECT " .
-                implode(", ", array_map($q, ["id", "request_id", "prepared_version", "created_at", "pdf_hash"])) .
+                implode(
+                    ", ",
+                    array_map($q, ["id", "request_id", "prepared_version", "created_at", "pdf_hash"]),
+                ) .
                 " FROM " .
                 $q("sis_transcript_documents") .
                 " WHERE " .
@@ -160,7 +130,8 @@ final readonly class SqlTranscriptRepository implements TranscriptRepository
 
     public function documentDelivery(EntityId $document): ?array
     {
-        return $this->sql->rows("sis_transcript_deliveries", ["document_id" => $document->value], 1)[0] ?? null;
+        return $this->sql->rows("sis_transcript_deliveries", ["document_id" => $document->value], 1)[0] ??
+        null;
     }
 
     public function addDelivery(EntityId $operation, #[\SensitiveParameter] array $data): void
