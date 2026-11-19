@@ -95,7 +95,8 @@ final class AcademicCredit extends EventSourcedAggregate
         if ($event->metaParam("coursework", null) !== null) {
             $evidence = new CourseworkGradeEvidence($event->metaParam("coursework"));
             if (
-                $this->grade !== null || new CreditSnapshot($this->credit)->posted() ||
+                $this->grade !== null ||
+                new CreditSnapshot($this->credit)->posted() ||
                 $evidence->facts["student_id"] !== $this->credit["student_id"] ||
                 $evidence->facts["section_id"] !== $this->section ||
                 $evidence->facts["grade_id"] !== $p["grade"]["id"]
@@ -224,7 +225,7 @@ final class AcademicCredit extends EventSourcedAggregate
             $this->sectionVersion !== null ||
             $this->grade === null ||
             $this->credit["grade_id"] === null ||
-            !in_array($this->credit["status"], ["A", "N"], true) ||
+            !$this->canCorrectSource() ||
             $p["previous_academic_on"] !== $this->academicOn ||
             ($p["academic_on"] !== null &&
                 $this->completedOn !== null &&
@@ -249,7 +250,7 @@ final class AcademicCredit extends EventSourcedAggregate
         if (
             !$this->canAcceptCourse() ||
             $this->credit === null ||
-            !in_array($this->credit["status"], ["A", "N"], true) ||
+            !$this->canCorrectSource() ||
             $p["previous_course_version_id"] !== $this->credit["course_version_id"]
         ) {
             throw new CorruptHistoryException();
@@ -265,7 +266,29 @@ final class AcademicCredit extends EventSourcedAggregate
     /** Acceptances resolve an unknown inception reference; they never replace known offering facts. */
     public function canAcceptCourse(): bool
     {
-        return $this->originalCourseVersion === null && $this->sectionVersion === null;
+        return $this->originalCourseVersion === null &&
+        $this->sectionVersion === null &&
+        ($this->credit === null || $this->canCorrectSource());
+    }
+
+    /** Source corrections preserve the award; a withdrawn attempt never gains completed credits. */
+    public function canCorrectSource(): bool
+    {
+        if ($this->credit === null) {
+            return false;
+        }
+        if (in_array($this->credit["status"], ["A", "N"], true)) {
+            return true;
+        }
+        return $this->credit["status"] === "W" &&
+        $this->credit["completed_milli"] === 0 &&
+        $this->grade !== null &&
+        $this->grade["id"] === $this->credit["grade_id"] &&
+        $this->credit["grade_points_milli"] ===
+        ($this->grade["counts_gpa"]
+        ? intdiv($this->credit["attempted_milli"] * $this->grade["points_milli"], 1000)
+        : 0) &&
+        $this->pendingGradeChange === null;
     }
 
     public function whenInstitutionalCreditWasDropped(InstitutionalCreditWasDropped $event): void

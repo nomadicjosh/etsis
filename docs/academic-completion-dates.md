@@ -6,6 +6,8 @@ Enter the actual completion date and, for an older attempt without a retained of
 
 This applies to a verified posted grade on an active institutional academic record, including a non-passing attempt. Entering a date cannot turn an ungraded enrollment into completed work, award credits or alter charges. Older records without a verified posted-grade stream must first use the existing grade-history review; this workflow does not fabricate their original completion decision.
 
+A verified **withdrawn** attempt can use this same screen to correct only its source academic-period start when no published offering supplies it. The action additionally requires `sis:gradebook:closed`. It hides the completion-date field and rejects any attempt to set or change completion through either date endpoint. The attempt stays withdrawn with zero earned credit. Resolve missing grade evidence, inconsistent quantities or a pending grade-correction request first. See the [combined academic-source safeguards](academic-credit-history.md#review-a-withdrawn-attempts-academic-sources) for the related course-publication review and retained history.
+
 ## Dates have different meanings
 
 - **Actual completion date:** explicitly confirmed source evidence for this student attempt. It may precede administrative entry into the system. It must be a real date no later than today.
@@ -25,7 +27,7 @@ The academic-work view displays the retained completion date. Curated grade hist
 
 ## Source academic-period start
 
-For an older institutional attempt with no retained published offering, use the same **Review final grade → Review academic dates** screen. The action requires a verified posted grade, an active academic record, `sis:gradebook:amend` and `sis:student:read`. A known published offering keeps its own instructional dates; this action cannot replace them. Untracked records need verified academic history before a date decision can be made.
+For an older institutional attempt with no retained published offering, use the same **Review final grade → Review academic dates** screen. The action requires a verified posted grade, a matching active or withdrawn academic record, `sis:gradebook:amend` and `sis:student:read`, plus `sis:gradebook:closed` for withdrawal. For a withdrawn attempt, open **Correct withdrawn grade → Review academic dates**. A known published offering keeps its own instructional dates; this action cannot replace them. Untracked records need verified academic history before a date decision can be made.
 
 Enter the academic-period start supported by institutional source records, explain the evidence, review and confirm. **Revise dates** preserves the entered values. A blank date explicitly clears a previously known source date; it never substitutes the posting term, current term dates, registration time, grade-posting time or actual completion date. Future/invalid dates are rejected. When both facts are known, the source period cannot start after actual completion; completion corrections must preserve the same constraint.
 

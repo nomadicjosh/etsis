@@ -48,7 +48,7 @@ if ($policy->getStatusCode() !== 200) {
 $base = "/sis/sections/" . $section->id->value . "/final-grades";
 $review = $teachingPost($base . "/review/", [
     "student_id" => $student->id->value,
-    'enrollment_id' => $enrollment->id->value,
+    "enrollment_id" => $enrollment->id->value,
     "grade_id" => $grades["A"],
     "version" => 1,
     "reason" => "Fictional marking correction.",
@@ -120,7 +120,7 @@ $preserved = [$sis->financialEvents(), $sis->sql->rows("sis_enrollments")];
 $sis->access->staff = false;
 $data = [
     "student_id" => $student->id->value,
-    'enrollment_id' => $enrollment->id->value,
+    "enrollment_id" => $enrollment->id->value,
     "grade_id" => $grades["B"],
     "version" => $sis->sql->one("sis_academic_credits", ["source_id" => $enrollment->id->value])["version"],
     "reason" => "Fictional withdrawn-grade review.",
@@ -166,6 +166,89 @@ if (
 ) {
     throw new RuntimeException("The browser workflow changed protected withdrawal facts.");
 }
+// Source corrections share the same withdrawn record and existing private, CSRF-protected routes.
+$sourceGrantsBefore = $sis->access->grants;
+$sis->access->staff = true;
+$sourcePublication = $sis->publishCourse($section->courseId);
+$sis->access->staff = false;
+$sis->access->grants = ["sis:gradebook:amend", "sis:student:read", "sis:gradebook:closed"];
+$sourceBase = "/sis/sections/" . $section->id->value . "/students/" . $student->id->value;
+foreach (["course-publication", "academic-dates"] as $sourceKind) {
+    $sourceCredit = $sis->sql->one("sis_academic_credits", ["source_id" => $enrollment->id->value]);
+    $sourceData = [
+        "enrollment_id" => $enrollment->id->value,
+        "version" => $sourceCredit["version"],
+        "reason" => "Fictional withdrawn source evidence.",
+    ];
+    if ($sourceKind === "course-publication") {
+        $sourceData += ["course_version_id" => $sourcePublication->value, "effective_on" => "2026-09-02"];
+    } else {
+        $sourceData += ["academic_on" => "2026-08-01", "completed_on" => null];
+        if (
+            $teachingPost(
+                $sourceBase . "/academic-dates/review/",
+                array_replace($sourceData, [
+                    "completed_on" => "2026-08-30",
+                ]),
+            )->getStatusCode() !== 422
+        ) {
+            throw new RuntimeException("A withdrawn record was marked completed through the date route.");
+        }
+    }
+    $sourcePath = $sourceBase . "/" . $sourceKind . "/";
+    $unprotectedSource = new \Qubus\Http\ServerRequest(
+        [],
+        [],
+        "https://campus.example.invalid" . $sourcePath . "review/",
+        "POST",
+    );
+    if ($app->router->match($unprotectedSource->withParsedBody($sourceData))->getStatusCode() !== 403) {
+        throw new RuntimeException("A withdrawn source review bypassed CSRF.");
+    }
+    $sis->access->grants = ["sis:gradebook:amend", "sis:student:read"];
+    if ($teachingPost($sourcePath . "review/", $sourceData)->getStatusCode() !== 403) {
+        throw new RuntimeException("The source review bypassed closed-record authority.");
+    }
+    $sis->access->grants[] = "sis:gradebook:closed";
+    $sourceResponse = $teachingPost($sourcePath . "review/", $sourceData);
+    $sourceReview = json_decode((string) $sourceResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if (
+        $sourceResponse->getStatusCode() !== 200 ||
+        !isset($sourceReview["review_token"]) ||
+        !str_contains($sourceResponse->getHeaderLine("Cache-Control"), "no-store")
+    ) {
+        throw new RuntimeException("The withdrawn source review failed its private provider boundary.");
+    }
+    $sourceCommit = ["review_token" => $sourceReview["review_token"]];
+    $unprotectedCommit = new \Qubus\Http\ServerRequest(
+        [],
+        [],
+        "https://campus.example.invalid" . $sourcePath . "commit/",
+        "POST",
+    );
+    if ($app->router->match($unprotectedCommit->withParsedBody($sourceCommit))->getStatusCode() !== 403) {
+        throw new RuntimeException("A withdrawn source confirmation bypassed CSRF.");
+    }
+    $sis->access->grants = ["sis:gradebook:amend", "sis:student:read"];
+    if ($teachingPost($sourcePath . "commit/", $sourceCommit)->getStatusCode() !== 403) {
+        throw new RuntimeException("Source confirmation ignored revoked closed-record authority.");
+    }
+    $sis->access->grants[] = "sis:gradebook:closed";
+    $sourceSaved = $teachingPost($sourcePath . "commit/", $sourceCommit);
+    $sourceRetry = $teachingPost($sourcePath . "commit/", $sourceCommit);
+    if (
+        $sourceSaved->getStatusCode() !== 200 ||
+        $sourceRetry->getStatusCode() !== 200 ||
+        (string) $sourceSaved->getBody() !== (string) $sourceRetry->getBody() ||
+        !str_contains($sourceSaved->getHeaderLine("Cache-Control"), "no-store") ||
+        $preserved !== [$sis->financialEvents(), $sis->sql->rows("sis_enrollments")]
+    ) {
+        throw new RuntimeException(
+            "The withdrawn source confirmation changed protected facts or its retry result.",
+        );
+    }
+}
+$sis->access->grants = $sourceGrantsBefore;
 // Older withdrawn projections may have a W marker without a retained definition.
 $sis->access->staff = true;
 $student = $sis->student($sis->user());
@@ -203,7 +286,7 @@ $preserved = [$sis->financialEvents(), $sis->sql->rows("sis_enrollments")];
 $base = "/sis/sections/" . $section->id->value . "/final-grades";
 $data = [
     "student_id" => $student->id->value,
-    'enrollment_id' => $enrollmentId,
+    "enrollment_id" => $enrollmentId,
     "grade_id" => $grades["B"],
     "version" => 4,
     "reason" => "Fictional institutional records establish B; earlier definition unknown.",

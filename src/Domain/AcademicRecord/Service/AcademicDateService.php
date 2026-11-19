@@ -183,7 +183,7 @@ final readonly class AcademicDateService
                 "reason" => $reason,
                 "expires_at" => $now->getTimestamp() + 1200,
             ];
-            $this->sameActor($actor);
+            $this->sameActor($actor, $facts["status"] === "W");
             return $data + ["review_token" => $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR))];
         });
     }
@@ -331,7 +331,7 @@ final readonly class AcademicDateService
                     $facts["version"],
                 );
             }
-            $this->sameActor($actor);
+            $this->sameActor($actor, $facts["status"] === "W");
             if ($newDecision && $d["expires_at"] <= $this->clock->now()->getTimestamp()) {
                 throw new ConcurrentModificationException(
                     "The review expired before completion. Review the academic dates again.",
@@ -370,6 +370,7 @@ final readonly class AcademicDateService
         array $requested,
         string $field,
     ): void {
+        $this->authorize($facts["status"] === "W");
         $row = $this->records->enrollment($enrollment);
         if (
             $row !== null &&
@@ -381,14 +382,25 @@ final readonly class AcademicDateService
             $root->playhead() < 1 ||
             $root->grade() === null ||
             $facts["grade_id"] === null ||
-            !in_array($facts["status"], ["A", "N"], true) ||
+            !$root->canCorrectSource() ||
             $row === null ||
             $row["status"] !== $facts["status"] ||
             $row["term_id"] !== $facts["term_id"]
         ) {
             self::invalid(
                 $field,
-                "A verified posted grade and active academic record are required. Review the grade history first.",
+                "Use a verified active or withdrawn academic record. " .
+                    "Resolve missing grades, inconsistent quantities or pending grade corrections first.",
+            );
+        }
+        if (
+            $facts["status"] === "W" &&
+            array_key_exists("completed_on", $requested) &&
+            $requested["completed_on"] !== $root->completedOn()
+        ) {
+            self::invalid(
+                "completed_on",
+                "A withdrawn attempt cannot be marked completed. Review only its source academic period.",
             );
         }
         if (
@@ -415,18 +427,21 @@ final readonly class AcademicDateService
         }
     }
 
-    private function authorize(): EntityId
+    private function authorize(bool $withdrawn = false): EntityId
     {
         $actor = $this->access->requirePermission("sis:gradebook:amend");
-        if ($this->access->requirePermission("sis:student:read")->value !== $actor->value) {
+        if (
+            $this->access->requirePermission("sis:student:read")->value !== $actor->value ||
+            ($withdrawn && $this->access->requirePermission("sis:gradebook:closed")->value !== $actor->value)
+        ) {
             throw new AccessDeniedException("The academic decision actor changed.");
         }
         return $actor;
     }
 
-    private function sameActor(EntityId $actor): void
+    private function sameActor(EntityId $actor, bool $withdrawn = false): void
     {
-        if ($this->authorize()->value !== $actor->value) {
+        if ($this->authorize($withdrawn)->value !== $actor->value) {
             throw new AccessDeniedException("The academic decision actor changed.");
         }
     }

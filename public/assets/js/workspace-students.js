@@ -793,11 +793,24 @@ window.createWorkspaceStudents = function (ui) {
                                                 { class: "inline-actions" },
                                                 can("sis:gradebook:amend") &&
                                                     can("sis:student:read") &&
-                                                    ["A", "N"].includes(item.status)
+                                                    (["A", "N"].includes(item.status) ||
+                                                        (item.status === "W" &&
+                                                            item.grade_id &&
+                                                            Number(item.completed_milli) === 0 &&
+                                                            can("sis:gradebook:closed")))
                                                     ? button("Course publication", () =>
                                                           ui.teaching().reviewCoursePublication(
-                                                              { id: item.section_id },
-                                                              { student_id: id },
+                                                              {
+                                                                  id: item.section_id,
+                                                                  code: item.section_code,
+                                                                  course_code: item.course_code,
+                                                              },
+                                                              {
+                                                                  student_id: id,
+                                                                  given_name: record.given_name,
+                                                                  family_name: record.family_name,
+                                                                  institutional_id: record.institutional_id,
+                                                              },
                                                               back,
                                                           ),
                                                       )

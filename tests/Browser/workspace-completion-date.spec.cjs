@@ -54,15 +54,19 @@ async function fixture(page, options = {}) {
                         section_id: section,
                         course_code: "CS.101",
                         course_title: "Fictional course",
-                        grade_code: "A",
-                        status: "A",
+                        grade_code: options.withdrawn ? "W" : "A",
+                        grade_id: id(4),
+                        completed_milli: options.withdrawn ? 0 : 3000,
+                        grade_points_milli: options.withdrawn ? 0 : 12000,
+                        status: options.withdrawn ? "W" : "A",
                     },
                 ],
             };
         else if (path.endsWith("/grade-choices/"))
             result = {
                 items: [{ id: id(4), code: "A", points_milli: 4000 }],
-                current_grade_code: "A",
+                current_grade_code: options.withdrawn ? "W" : "A",
+                withdrawal_grade_correction: !!options.withdrawn,
                 posted: true,
                 can_amend: !options.readOnly,
                 can_record_academic_period: !!options.period && !options.readOnly && !options.knownOffering,
@@ -129,7 +133,7 @@ async function fixture(page, options = {}) {
         } else if (path.endsWith("/course-publication/commit/")) version++;
         await route.fulfill({ json: result, headers: { "Cache-Control": "private, no-store" } });
     });
-    await page.goto("/admin/grade-amend-fixture/");
+    await page.goto(options.withdrawn ? "/admin/closed-grade-fixture/" : "/admin/grade-amend-fixture/");
     await page.locator('.workspace-nav-link[data-workspace="students"]').click();
     await page.locator("#directory-search").fill("a");
     await page.locator("#directory-search").press("Enter");
@@ -137,7 +141,13 @@ async function fixture(page, options = {}) {
     await page.getByRole("button", { name: "View transcript", exact: true }).click();
     if (options.directCourse)
         await page.getByRole("button", { name: "Course publication", exact: true }).click();
-    else await page.getByRole("button", { name: "Review final grade", exact: true }).click();
+    else
+        await page
+            .getByRole("button", {
+                name: options.withdrawn ? "Correct withdrawn grade" : "Review final grade",
+                exact: true,
+            })
+            .click();
     return { calls, errors, student, section, enrollment };
 }
 
@@ -424,3 +434,94 @@ for (const options of [
         expect(f.calls.some((c) => c.path.includes("/academic-dates/"))).toBe(false);
         expect(f.errors).toEqual([]);
     });
+
+test("withdrawn source-period review preserves identity and cannot set a completion date", async ({
+    page,
+}) => {
+    const f = await fixture(page, { withdrawn: true, period: true });
+    const drawer = page.locator("#drawer-body");
+    await page.getByRole("button", { name: "Review academic dates", exact: true }).click();
+    await expect(drawer).toContainText("Alex Example");
+    await expect(drawer).toContainText("FICTIONAL");
+    await expect(drawer).toContainText("cannot be marked completed here");
+    await expect(drawer.locator('[name="completed_on"]')).toHaveCount(0);
+    await page
+        .getByLabel("Source academic-period start (blank marks unknown)", { exact: true })
+        .fill("2026-01-12");
+    await page
+        .getByRole("textbox", { name: "Reason for date change", exact: true })
+        .fill("Fictional source evidence.");
+    await page.getByRole("button", { name: "Review dates", exact: true }).click();
+    await expect(drawer).toContainText("Unknown → 2026-01-12");
+    await expect(drawer).toContainText("remains withdrawn with no earned credit");
+    await expect(drawer.getByText("Actual completion date", { exact: true })).toHaveCount(0);
+    await page.getByRole("button", { name: "Revise dates", exact: true }).click();
+    await expect(
+        page.getByLabel("Source academic-period start (blank marks unknown)", { exact: true }),
+    ).toHaveValue("2026-01-12");
+    await expect(drawer.locator('[name="completed_on"]')).toHaveCount(0);
+    await page.getByRole("button", { name: "Review dates", exact: true }).click();
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(
+        (
+            await new AxeBuilder({ page })
+                .include("#drawer-body")
+                .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+                .analyze()
+        ).violations,
+    ).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole("button", { name: "Confirm dates", exact: true }).click();
+    expect(f.calls.find((c) => c.path.endsWith("/academic-dates/review/"))).toMatchObject({
+        csrf: "fictional-test-token",
+        data: { enrollment_id: f.enrollment, version: 3, academic_on: "2026-01-12", completed_on: null },
+    });
+    expect(f.calls.filter((c) => c.path.endsWith("/academic-dates/commit/"))).toHaveLength(1);
+    expect(f.calls.some((c) => c.path.includes("/final-grades/"))).toBe(false);
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
+});
+
+test("withdrawn course acceptance keeps student context and evidence through repeated revisions", async ({
+    page,
+}) => {
+    const f = await fixture(page, { withdrawn: true, courseAcceptance: true });
+    const drawer = page.locator("#drawer-body");
+    await page.getByRole("button", { name: "Review course publication", exact: true }).click();
+    await expect(drawer).toContainText("This attempt remains withdrawn");
+    await page
+        .getByRole("combobox", { name: "Accepted course publication", exact: true })
+        .selectOption("00000000000000000000000006");
+    await page.getByLabel(/Reason and course-publication evidence/).fill("Fictional <b>source</b> evidence.");
+    for (let revision = 0; revision < 2; revision++) {
+        await page.getByRole("button", { name: "Review course publication acceptance", exact: true }).click();
+        await expect(drawer).toContainText("Alex Example");
+        await expect(drawer).toContainText("FICTIONAL");
+        await expect(drawer.locator("b")).toHaveCount(0);
+        await page.getByRole("button", { name: "Change course publication review", exact: true }).click();
+        await expect(drawer).toContainText("Alex Example");
+        await expect(drawer).toContainText("This attempt remains withdrawn");
+        await expect(page.getByLabel(/Reason and course-publication evidence/)).toHaveValue(
+            "Fictional <b>source</b> evidence.",
+        );
+        await expect(
+            page.getByRole("combobox", { name: "Accepted course publication", exact: true }),
+        ).toBeFocused();
+    }
+    await page.getByRole("button", { name: "Review course publication acceptance", exact: true }).click();
+    await page.getByRole("button", { name: "Confirm course publication acceptance", exact: true }).click();
+    expect(f.calls.filter((c) => c.path.endsWith("/course-publication/commit/"))).toHaveLength(1);
+    expect(
+        f.calls.some((c) => c.path.includes("/final-grades/") || c.path.includes("/academic-dates/")),
+    ).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test("a withdrawn attempt with a protected offering does not expose a completion editor", async ({
+    page,
+}) => {
+    const f = await fixture(page, { withdrawn: true, period: true, knownOffering: true });
+    await expect(page.getByRole("button", { name: "Review academic dates", exact: true })).toHaveCount(0);
+    expect(f.calls.some((c) => c.path.includes("/academic-dates/"))).toBe(false);
+    expect(f.errors).toEqual([]);
+});

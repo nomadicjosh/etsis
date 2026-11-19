@@ -175,6 +175,7 @@ final readonly class InstitutionalCreditLedger
             $items = [];
             $needs = true;
         }
+        $canAmend = $this->canAmend($withdrawn);
         $result = [
             "items" => $items,
             "pursuits" => $pursuits,
@@ -184,7 +185,7 @@ final readonly class InstitutionalCreditLedger
             "enrollment_id" => $enrollment->value,
             "completed_on" => $root->completedOn(),
             "academic_on" => $root->academicOn(),
-            "can_amend" => $this->canAmend(),
+            "can_amend" => $canAmend,
             "withdrawal_grade_correction" => $withdrawn,
             "missing_withdrawal_grade" => $withdrawn && $facts["grade_id"] === null,
             "requires_approval" => $this->changes->policy()["mode"] === "approval",
@@ -196,16 +197,16 @@ final readonly class InstitutionalCreditLedger
                         "status" => "pending",
                     ],
             "can_accept_course" =>
-                !$withdrawn &&
-                $this->canAmend() &&
+                $canAmend &&
                 $root->canAcceptCourse() &&
+                (!$withdrawn || $root->canCorrectSource()) &&
                 ($root->playhead() > 0 || $facts["course_version_id"] === null),
             "course_version_id" => $facts["course_version_id"],
             "history_recorded" => $root->playhead() > 0,
             "posted" => $withdrawn || new CreditSnapshot($facts)->posted(),
             "can_record_academic_period" =>
-                !$withdrawn &&
-                $this->canAmend() &&
+                $canAmend &&
+                $root->canCorrectSource() &&
                 $root->sectionVersion() === null &&
                 $root->playhead() > 0 &&
                 $root->grade() !== null &&
@@ -1411,11 +1412,14 @@ final readonly class InstitutionalCreditLedger
             return $this->authority($section, true);
         }
     }
-    private function canAmend(): bool
+    private function canAmend(bool $withdrawn = false): bool
     {
         try {
             $this->access->requirePermission("sis:gradebook:amend");
             $this->access->requirePermission("sis:student:read");
+            if ($withdrawn) {
+                $this->access->requirePermission("sis:gradebook:closed");
+            }
             return true;
         } catch (AccessDeniedException) {
             return false;
