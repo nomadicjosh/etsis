@@ -92,6 +92,7 @@ final readonly class ReportQuery
         if (!is_bool($definition["distinct"] ?? false)) {
             self::invalid("Use a Boolean distinct choice.");
         }
+        ReportRowSelection::validate($definition['record_selection'] ?? [], $schema);
         $count = 0;
         $joinFilters = $definition["join_filters"] ?? [];
         if (!is_array($joinFilters) || count($joinFilters) > 12) {
@@ -179,7 +180,8 @@ final readonly class ReportQuery
             if ($column['aggregate'] !== 'none') {
                 $relations = array_merge(
                     array_keys($this->definition['joins'] ?? []),
-                    array_keys($this->definition['join_filters'] ?? [])
+                    array_keys($this->definition['join_filters'] ?? []),
+                    array_keys($this->definition['record_selection'] ?? [])
                 );
                 foreach ($columns as $c) {
                     $relations[] = $this->schema['fields'][$c['field']]['relation'];
@@ -203,9 +205,12 @@ final readonly class ReportQuery
                 foreach ($relations as $relation) {
                     while ($relation !== $this->schema['root']) {
                         $r = $this->schema['relationships'][$relation];
-                        if ($r['many'] ?? false) {
+                        if (
+                            ($r['many'] ?? false) &&
+                            ($this->definition['record_selection'][$relation]['ties'] ?? null) !== 'one'
+                        ) {
                             self::invalid(
-                                'Use matching-record conditions to filter related work before totaling money. '
+                                'Choose one related row or use matching-record conditions before totaling money. '
                                 . 'Joining multiple related rows would repeat an account balance.'
                             );
                         }
@@ -405,6 +410,21 @@ final readonly class ReportQuery
         };
     }
 
+    /** @return list<array{record:string,date:string,direction:string,ties:string}> */
+    public function rowSelectionSummary(): array
+    {
+        $result = [];
+        foreach ($this->definition["record_selection"] ?? [] as $relation => $selection) {
+            $result[] = [
+                "record" => $this->schema["relationships"][$relation]["label"],
+                "date" => $this->schema["fields"][$selection["date_field"]]["label"],
+                "direction" => $selection["direction"],
+                "ties" => $selection["ties"],
+            ];
+        }
+        return $result;
+    }
+
     /** @return list<string> */
     public function permissions(): array
     {
@@ -437,6 +457,10 @@ final readonly class ReportQuery
             array_keys($this->definition['existence'] ?? []),
             array_keys($this->definition['aliases'] ?? []),
         );
+        foreach ($this->definition['record_selection'] ?? [] as $selection) {
+            $fields[] = $selection['date_field'];
+        }
+        $relations = array_merge($relations, array_keys($this->definition['record_selection'] ?? []));
         foreach ($fields as $id) {
             $permissions = array_merge($permissions, $this->schema["fields"][$id]["permissions"]);
             $relations[] = $this->schema["fields"][$id]["relation"];

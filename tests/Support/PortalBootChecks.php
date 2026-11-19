@@ -2796,6 +2796,9 @@ $studioDefinition['existence'] = [
 $studioDefinition['existence_logic'] = ['condition' => 'OR', 'rules' => [
     ['relation' => 'registration'], ['relation' => 'registration_term'],
 ]];
+$studioDefinition['record_selection'] = ['registration' => [
+    'date_field' => 'registration_term_starts_on', 'direction' => 'latest', 'ties' => 'one',
+]];
 $studioPreview = $teachingPost("/sis/report-studio/preview/", [
     "definition" => $studioDefinition,
     "offset" => 0,

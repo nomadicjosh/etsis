@@ -14,6 +14,9 @@ function copiedGraph(base, aliases) {
             label: name === copy.relation ? copy.label : `${copy.label} · ${base.relationships[name].label}`,
             copy_of: name, copy_group: key,
         };
+        for (const [name, alias] of Object.entries(mapping)) if (base.relationships[name].date_fields)
+            graph.relationships[alias].date_fields = Object.fromEntries(Object.entries(base.relationships[name].date_fields)
+                .map(([field, label]) => [`${key}__${field}`, label]));
         for (const [name, field] of Object.entries(base.fields))
             if (mapping[field.relation]) graph.fields[`${key}__${name}`] = {
                 ...field, relation: mapping[field.relation], copy_group: key,
@@ -61,6 +64,7 @@ async function fixture(page, options = {}) {
         registration_status: { label: 'Registration status', type: 'string', relation: 'registration',
             choices: { A: 'Registered by staff', N: 'Self-registered', D: 'Dropped', W: 'Withdrawn', C: 'Cancelled' } },
         registration_term_code: { label: 'Registration term', type: 'string', relation: 'registration_term' },
+        registration_term_starts_on: { label: 'Registration term starts', type: 'date', relation: 'registration_term' },
         registration_section_code: { label: 'Registered section code', type: 'string', relation: 'registered_section' },
     } : {
         section_code: { label: 'Section code', type: 'string', relation: 'section' },
@@ -98,12 +102,20 @@ async function fixture(page, options = {}) {
             program: { label: 'Academic programs', parent: 'student', many: false },
             term: { label: 'Academic terms', parent: 'student', many: false },
             latest_registration: { label: 'Latest registered term', parent: 'student', many: false },
-            registration: { label: 'Registrations', parent: 'student', many: true },
+            registration: { label: 'Registrations', parent: 'student', many: true,
+                date_fields: { registration_term_starts_on: 'Registration term starts' } },
             registration_term: { label: 'Registration terms', parent: 'registration', many: false },
             registered_section: { label: 'Registered sections', parent: 'registration', many: false },
         },
     } : { id: 'sections', label: 'Sections, teaching & enrollment counts', description: 'Explore sections and their registration relationships.', fields,
         relationships: { term: { label: 'Term', parent: 'section', many: false }, course: { label: 'Course', parent: 'section', many: false }, enrollment: { label: 'Enrollment', parent: 'section', many: true } } };
+    const selectionSummary = query => {
+        const schema = copiedGraph(dataset, query?.aliases || {});
+        return Object.entries(query?.record_selection || {}).map(([relation, selection]) => ({
+            record: schema.relationships[relation].label, date: schema.fields[selection.date_field].label,
+            direction: selection.direction, ties: selection.ties,
+        }));
+    };
     const visited = [];
     if (options.recipient) {
         name = 'Fictional report from the registrar';
@@ -135,11 +147,11 @@ async function fixture(page, options = {}) {
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
             const rows = options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, values[column.field] ?? null]))]
                 : data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
-            result = { columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
+            result = { row_selection: selectionSummary(query), columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
                 next_offset: options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
                 grouped: options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
         } else if (path.endsWith('/export/')) { await route.fulfill({ body: 'Section,Term,Students\nMATH.101.A,26/FA,8\n', contentType: 'text/csv' }); return; }
-        else if (/\/sis\/report-studio\/[^/]+\/$/.test(path)) result = { id: path.split('/').at(-2), name, version, definition, can_manage: !options.recipient };
+        else if (/\/sis\/report-studio\/[^/]+\/$/.test(path)) result = { row_selection: selectionSummary(definition), id: path.split('/').at(-2), name, version, definition, can_manage: !options.recipient };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto(options.recipient ? '/admin/report-fixture/' : '/admin/');
@@ -844,5 +856,89 @@ test('match cards drag into a group and empty groups stop preview without losing
     expect(f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition.existence_logic).toEqual({
         condition: 'AND', rules: [{ condition: 'OR', rules: [{ relation: 'registration' }] }],
     });
+    expect(f.errors).toEqual([]);
+});
+
+
+test('latest related rows use compact controls, keep ties by default and survive save and reopening', async ({ page }) => {
+    const f = await fixture(page, { students: true });
+    await page.getByRole('button', { name: 'Start report: Students & current primary program', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByRole('button', { name: 'Add Registrations', exact: true }).click();
+    const chooser = studio.locator('[data-record-selection="registration"]');
+    await expect(chooser).not.toHaveAttribute('open');
+    await chooser.locator('summary').click();
+    await chooser.getByRole('button', { name: 'Latest', exact: true }).click();
+    await expect(chooser.getByLabel('Keep equal dates', { exact: true })).toBeChecked();
+    await expect(chooser.getByLabel('Registrations: date', { exact: true })).toHaveValue('registration_term_starts_on');
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    await expect(studio.getByRole('complementary', { name: 'Related row selection' })).toContainText('Equal dates are kept');
+    expect(f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition.record_selection.registration)
+        .toEqual({ date_field: 'registration_term_starts_on', direction: 'latest', ties: 'all' });
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional latest related rows');
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
+    await studio.getByRole('button', { name: 'Edit', exact: true }).click();
+    await chooser.locator('summary').click();
+    await expect(chooser.getByRole('button', { name: 'Latest', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await chooser.getByLabel('Keep equal dates', { exact: true }).uncheck();
+    await expect(chooser).toContainText('does not establish which happened first');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await studio.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    expect(f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition.record_selection.registration.ties).toBe('one');
+    expect(f.errors).toEqual([]);
+});
+
+
+test('record copies keep separate date choices and removing one clears only its selector', async ({ page }) => {
+    const f = await fixture(page, { students: true });
+    await page.getByRole('button', { name: 'Start report: Students & current primary program', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByRole('button', { name: 'Add Registrations', exact: true }).click();
+    const original = studio.locator('[data-record-selection="registration"]');
+    await original.locator('summary').click();
+    await original.getByRole('button', { name: 'Latest', exact: true }).click();
+    await studio.getByRole('button', { name: 'Add another Registrations', exact: true }).click();
+    const copyCard = studio.locator('[data-relation="copy1"]');
+    await copyCard.getByLabel('Name this record copy', { exact: true }).fill('First registration');
+    const copied = studio.locator('[data-record-selection="copy1"]');
+    await copied.locator('summary').click();
+    await copied.getByRole('button', { name: 'Earliest', exact: true }).click();
+    await expect(copied.getByLabel('First registration: date', { exact: true })).toHaveValue('copy1__registration_term_starts_on');
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    let query = f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.record_selection.registration.direction).toBe('latest');
+    expect(query.record_selection.copy1.direction).toBe('earliest');
+    await studio.getByRole('tab', { name: 'Fields', exact: true }).click();
+    await copyCard.getByRole('button', { name: 'Remove First registration and its fields', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    query = f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.record_selection).not.toHaveProperty('copy1');
+    expect(query.record_selection.registration.direction).toBe('latest');
+    expect(f.errors).toEqual([]);
+});
+
+test('a date-selection change invalidates an older in-flight preview', async ({ page }) => {
+    const f = await fixture(page, { students: true });
+    await page.getByRole('button', { name: 'Start report: Students & current primary program', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByRole('button', { name: 'Add Registrations', exact: true }).click();
+    const chooser = studio.locator('[data-record-selection="registration"]');
+    await chooser.locator('summary').click();
+    await chooser.getByRole('button', { name: 'Latest', exact: true }).click();
+    let release, started;
+    const waiting = new Promise(resolve => { release = resolve; });
+    const pending = new Promise(resolve => { started = resolve; });
+    await page.route('**/sis/report-studio/preview/', async route => { started(); await waiting; await route.fallback(); });
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    await pending;
+    await chooser.getByRole('button', { name: 'Earliest', exact: true }).click();
+    release();
+    await expect(studio).toContainText('The draft changed during the preview');
+    await expect(studio.getByRole('tab', { name: 'Fields', exact: true })).toHaveAttribute('aria-selected', 'true');
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    await expect(studio.getByRole('complementary', { name: 'Related row selection' })).toContainText('earliest');
+    expect(f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition.record_selection.registration.direction).toBe('earliest');
     expect(f.errors).toEqual([]);
 });

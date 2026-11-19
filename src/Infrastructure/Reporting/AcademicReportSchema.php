@@ -519,6 +519,7 @@ final class AcademicReportSchema
             'recorded_completed' => $field('Recorded earned credits', 'double', 'academic_credit', 'completed_milli')
                 + ['scale' => 1000],
             'recorded_term_code' => $field('Recorded-credit term', 'string', 'credit_term', 'code'),
+            'recorded_term_starts_on' => $field('Recorded-credit term starts', 'date', 'credit_term', 'starts_on'),
             'recorded_grade_code' => $field('Recorded final grade', 'string', 'credit_grade', 'code'),
         ];
         $applications = [
@@ -572,6 +573,61 @@ final class AcademicReportSchema
             'registration_status', 'registration_section_code', 'registration_term_code', 'registration_term_starts_on',
             'latest_term_id', 'latest_term_code', 'latest_term_starts_on', 'latest_term_ends_on',
         ])) + $academicFields;
+        $studentRelations += [
+            "person_application" => $join("sis_applications", "person", "id", "person_id", [
+                "sis:admissions:manage",
+            ]) + ["many" => true, "label" => "Person’s applications"],
+            "person_application_submission" => $join(
+                "sis_application_intake",
+                "person_application",
+                "id",
+                "id",
+            ),
+            "person_application_term" => $join("sis_terms", "person_application", "entry_term_id", "id"),
+            "person_application_program" => $join("sis_programs", "person_application", "program_id", "id"),
+        ];
+        $studentRelations["person_application"]["label"] = "Person’s applications";
+        $studentRelations["person_application_submission"]["label"] = "Application submissions";
+        $studentRelations["person_application_term"]["label"] = "Application entry terms";
+        $studentRelations["person_application_program"]["label"] = "Application programs";
+        $studentFields += [
+            "person_application_id" => $field(
+                "Related application reference",
+                "string",
+                "person_application",
+                "id",
+            ),
+            "person_application_status" => $field(
+                "Related application status",
+                "string",
+                "person_application",
+                "status",
+            ),
+            "person_application_submitted_on" => $field(
+                "Related application submitted on",
+                "date",
+                "person_application_submission",
+                "submitted_on",
+            ),
+            "person_application_recorded_on" => $field(
+                "Related submission recorded on",
+                "date",
+                "person_application_submission",
+                "recorded_on",
+            ),
+            "person_application_entry_term" => $field(
+                "Related application entry term",
+                "string",
+                "person_application_term",
+                "code",
+            ),
+            "person_application_program_code" => $field(
+                "Related application program",
+                "string",
+                "person_application_program",
+                "code",
+            ),
+        ];
         $withStudentWork = static fn(array $dataset): array => array_replace($dataset, [
             'relationships' => $dataset['relationships'] + $studentRelations,
             'fields' => $dataset['fields'] + $studentFields,
@@ -634,10 +690,15 @@ final class AcademicReportSchema
         }
         unset($dataset);
         $datasets['sections']['fields']['enrollment_status']['choices'] = $registrationChoices;
-        $datasets['applications']['fields']['status']['choices'] = [
+        $applicationChoices = [
             'submitted' => 'Submitted', 'accepted' => 'Accepted', 'rejected' => 'Rejected',
             'withdrawn' => 'Withdrawn', 'matriculated' => 'Matriculated',
         ];
+        $datasets['applications']['fields']['status']['choices'] = $applicationChoices;
+        foreach ($datasets as &$dataset) {
+            $dataset['fields']['person_application_status']['choices'] = $applicationChoices;
+        }
+        unset($dataset);
         $datasets['applications']['fields']['submission_channel']['choices'] = [
             'direct' => 'Direct staff entry', 'form' => 'Application form',
         ];

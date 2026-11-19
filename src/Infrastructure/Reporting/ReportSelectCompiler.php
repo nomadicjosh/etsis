@@ -77,7 +77,12 @@ final readonly class ReportSelectCompiler
         if ($matching !== '') {
             $where = $where === '' ? $matching : '(' . $where . ') AND ' . $matching;
         }
-        foreach (array_merge(array_keys($d["joins"] ?? []), array_keys($d["join_filters"] ?? [])) as $name) {
+        $related = array_merge(
+            array_keys($d["joins"] ?? []),
+            array_keys($d["join_filters"] ?? []),
+            array_keys($d['record_selection'] ?? []),
+        );
+        foreach ($related as $name) {
             $used[$name] = true;
         }
         $joins = [];
@@ -94,8 +99,18 @@ final readonly class ReportSelectCompiler
             $q($name) .
             " ON " .
             $this->relationshipCondition($name, $r);
+            $selection = $d['record_selection'][$name] ?? null;
+            if ($selection !== null) {
+                $joins[$name] .= ' AND ' . $this->selectedRows(
+                    $name,
+                    $selection,
+                    $d['join_filters'][$name] ?? null,
+                    $s,
+                    $joinParameters,
+                );
+            }
             $condition = $this->condition(
-                $d["join_filters"][$name] ?? null,
+                $selection === null ? ($d["join_filters"][$name] ?? null) : null,
                 $expression,
                 $joinParameters,
                 $s["fields"],
@@ -226,6 +241,127 @@ final readonly class ReportSelectCompiler
             . ($divisor ? 10 ** $digits : $digits);
         }
         return $expression . ' ELSE NULL END';
+    }
+
+    /** The complete related row is selected before ordinary output filters; matching cards remain independent.
+     * @param array<string,mixed> $selection
+     * @param array<string,mixed>|null $filters
+     * @param array<string,mixed> $schema
+     * @param list<scalar|null> $parameters */
+    private function selectedRows(
+        string $name,
+        array $selection,
+        ?array $filters,
+        array $schema,
+        array &$parameters,
+    ): string {
+        $q = $this->sql->quote(...);
+        $r = $schema["relationships"][$name];
+        $date = $schema["fields"][$selection["date_field"]];
+        $path = \Domain\Reporting\ValueObject\ReportRowSelection::dates($schema, $name)[
+        $selection["date_field"]
+        ];
+        $candidate = function (
+            string $prefix,
+            string $parent,
+            string $parentColumn
+        ) use (
+            $q,
+            $r,
+            $date,
+            $path,
+            $schema,
+            $name,
+            $filters,
+            &$parameters,
+        ): array {
+            $row = $prefix . "_row";
+            $aliases = [$name => $row];
+            $from = $q($r["table"]) . " " . $q($row);
+            foreach ($path as $i => $step) {
+                $next = $schema["relationships"][$step];
+                $alias = $prefix . "_date_" . $i;
+                $from .=
+                " LEFT JOIN " .
+                $q($next["table"]) .
+                " " .
+                $q($alias) .
+                " ON " .
+                $q($aliases[$next["parent"]]) .
+                "." .
+                $q($next["left"]) .
+                " = " .
+                $q($alias) .
+                "." .
+                $q($next["right"]);
+                $aliases[$step] = $alias;
+            }
+            $expression = function (string $id) use ($schema, $name, $row): string {
+                $field = $schema["fields"][$id];
+                if ($field["relation"] !== $name) {
+                    throw new \LogicException("A selected-row filter must belong to its own related record.");
+                }
+                if (($field["currency_relation"] ?? null) === $name) {
+                    $field["currency_relation"] = $row;
+                }
+                return $this->fieldExpression($field, $row);
+            };
+            $condition = $this->condition($filters, $expression, $parameters, $schema["fields"]);
+            $dateColumn = $q($aliases[$date["relation"]]) . "." . $q($date["column"]);
+            $where =
+            $q($row) .
+            "." .
+            $q($r["right"]) .
+            " = " .
+            $q($parent) .
+            "." .
+            $q($parentColumn) .
+            " AND " .
+            $dateColumn .
+            " IS NOT NULL" .
+            ($condition === "" ? "" : " AND (" . $condition . ")");
+            return [
+                "from" => $from,
+                "where" => $where,
+                "date" => $dateColumn,
+                "id" => $q($row) . "." . $q("id"),
+            ];
+        };
+        $pick = $candidate("pick", $r["parent"], $r["left"]);
+        // Each inner comparison is correlated to its immediate parent, including on Oracle.
+        $rank = $candidate("rank", "pick_row", $r["right"]);
+        $operator = $selection["direction"] === "latest" ? ">" : "<";
+        $better = $rank["date"] . " " . $operator . " " . $pick["date"];
+        if ($selection["ties"] === "one") {
+            $better .=
+            " OR (" .
+            $rank["date"] .
+            " = " .
+            $pick["date"] .
+            " AND " .
+            $rank["id"] .
+            " " .
+            $operator .
+            " " .
+            $pick["id"] .
+            ")";
+        }
+        return $q($name) .
+        "." .
+        $q("id") .
+        " IN (SELECT " .
+        $pick["id"] .
+        " FROM " .
+        $pick["from"] .
+        " WHERE " .
+        $pick["where"] .
+        " AND NOT EXISTS (SELECT 1 FROM " .
+        $rank["from"] .
+        " WHERE " .
+        $rank["where"] .
+        " AND (" .
+        $better .
+        ")))";
     }
 
     /** Validated All/Any groups retain the outer filter and correlated result grain.

@@ -115,6 +115,17 @@ final readonly class RelationalReportService
                 'label' => $relation['label'], 'parent' => $relation['parent'], 'many' => $relation['many'] ?? false,
             ] + array_intersect_key($relation, array_flip(['copy_of', 'copy_group']));
         }
+        $visible = array_replace($dataset, [
+            'fields' => array_intersect_key($dataset['fields'], $fields),
+            'relationships' => array_intersect_key($dataset['relationships'], $relationships),
+        ]);
+        foreach ($relationships as $id => &$relation) {
+            $relation['date_fields'] = [];
+            foreach (\Domain\Reporting\ValueObject\ReportRowSelection::dates($visible, $id) as $field => $path) {
+                $relation['date_fields'][$field] = $fields[$field]['label'];
+            }
+        }
+        unset($relation);
         return ['id' => $dataset['id'], 'label' => $dataset['label'], 'description' => $dataset['description'],
             'fields' => $fields, 'relationships' => $relationships];
     }
@@ -227,8 +238,9 @@ final readonly class RelationalReportService
         }
         $record = $this->definitions->get($id) ?? throw new RecordNotFoundException("Relational report not found.");
         $data = json_decode($this->cipher->open($record["encrypted_content"]), true, 32, JSON_THROW_ON_ERROR);
-        $this->query($data);
+        $query = $this->query($data);
         return [
+            "row_selection" => $query->rowSelectionSummary(),
             "id" => $id->value,
             "name" => $report->name,
             "version" => (int) $record["version"],
@@ -418,6 +430,7 @@ final readonly class RelationalReportService
         }
         $rows = $this->source->execute($query, $offset);
         return [
+            "row_selection" => $query->rowSelectionSummary(),
             "columns" => array_map(static fn(array $column): string => $column["label"], $query->definition["columns"]),
             "items" => array_slice($rows, 0, 50),
             "offset" => $offset,

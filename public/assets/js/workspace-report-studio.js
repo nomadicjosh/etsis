@@ -75,6 +75,7 @@ window.createWorkspaceReportStudio = function (ui) {
                     "'": "&#39;",
                 })[char],
         );
+    const rowSelectionUi = window.createReportRowSelection({ node, button, labeled });
     function destroyWidgets() {
         widgets.forEach((widget) => {
             try {
@@ -239,6 +240,30 @@ window.createWorkspaceReportStudio = function (ui) {
                 node("p", { class: "form-text" }, "Latest term uses academic term dates across all pursuits. Retained late drops and withdrawals count; cancellations and removed early drops do not. This is a reporting view, not an eligibility or coursework-reuse decision."),
             );
         }
+        if (students?.fields.person_application_submitted_on)
+            templateGrid.append(
+                button("Latest student applications", () =>
+                    edit(students, {
+                        ...initial(students),
+                        columns: [
+                            "institutional_id",
+                            "full_name",
+                            "person_application_program_code",
+                            "person_application_status",
+                            "person_application_submitted_on",
+                        ]
+                            .filter((field) => students.fields[field])
+                            .map((field) => ({ field, label: students.fields[field].label, aggregate: "none" })),
+                        record_selection: {
+                            person_application: {
+                                date_field: "person_application_submitted_on",
+                                direction: "latest",
+                                ties: "all",
+                            },
+                        },
+                    }),
+                ),
+            );
         if (students?.fields.registration_status)
             templateGrid.append(button("Students with active registrations", () => edit(students, {
                 ...initial(students),
@@ -515,6 +540,8 @@ window.createWorkspaceReportStudio = function (ui) {
         definition.joins ||= {};
         definition.join_filters ||= {};
         definition.existence ||= {};
+        definition.record_selection ||= {};
+        const rowSelectionOpen = new Set();
         const matchingLogic = window.createReportMatchLogic(definition);
         definition.sort ||= [];
         const root =
@@ -525,6 +552,9 @@ window.createWorkspaceReportStudio = function (ui) {
             { account: "Student accounts", application: "Applications", student: "Students", assignment: "Program assignments", credit: "Academic credits", section: "Sections" }[root] ||
             "Starting records";
         const relationLabel = (id) => (id === root ? rootLabel : dataset.relationships[id].label);
+        const rowScope = id => dataset.relationships[id]?.many
+            ? (definition.record_selection[id]?.ties === "one" ? " · at most one match" : " · may add rows")
+            : "";
         const fieldsFor = (id) => Object.entries(dataset.fields).filter(([, f]) => f.relation === id);
         const matchingFields = (id) => Object.fromEntries(Object.entries(dataset.fields).filter(([, field]) => {
             for (let current = field.relation; current !== root; current = dataset.relationships[current].parent)
@@ -558,6 +588,7 @@ window.createWorkspaceReportStudio = function (ui) {
             if (c.calculation) connect(dataset.fields[c.calculation.field].relation);
         });
         Object.keys(definition.joins).forEach(connect);
+        Object.keys(definition.record_selection).forEach(connect);
         Object.keys(definition.join_filters).forEach(connect);
         Object.keys(definition.aliases).forEach(connect);
         conditionFields(definition.filters, (id) => connect(dataset.fields[id].relation));
@@ -900,7 +931,7 @@ window.createWorkspaceReportStudio = function (ui) {
                     node(
                         "small",
                         {},
-                        `${fields.length} fields${dataset.relationships[id]?.many ? " · may add rows" : ""}`,
+                        `${fields.length} fields${rowScope(id)}`,
                     ),
                 );
                 if (id !== root && !dataset.relationships[id].copy_group) {
@@ -1040,6 +1071,8 @@ window.createWorkspaceReportStudio = function (ui) {
                             handle.replaceChildren(icon("grip-vertical"), title.value);
                             handle.setAttribute("aria-label", `Move ${title.value} card`);
                             card.querySelector(".report-match-options")?.setAttribute("aria-label", `${title.value} matching`);
+                            card.querySelector(".report-row-selection-modes")?.setAttribute("aria-label", `${title.value} row selection`);
+                            card.querySelector('[data-row-control="date"]')?.setAttribute("aria-label", `${title.value}: date`);
                             const remove = cardHeader.querySelector("button.report-icon-button");
                             remove?.setAttribute("aria-label", `Remove ${title.value} and its fields`);
                         });
@@ -1076,10 +1109,38 @@ window.createWorkspaceReportStudio = function (ui) {
                             node(
                                 "p",
                                 { class: "report-card-parent" },
-                                `From ${relationLabel(relation.parent)}${relation.many ? " · multiple matches possible" : ""}`,
+                                `From ${relationLabel(relation.parent)}${rowScope(id)}`,
                             ),
                             modes,
                         );
+                    }
+                    if (id !== root) {
+                        const chooser = rowSelectionUi.card({
+                            id,
+                            metadata: dataset.relationships[id],
+                            value: definition.record_selection[id],
+                            open: rowSelectionOpen.has(id),
+                            onToggle: (opened) => {
+                                if (opened) rowSelectionOpen.add(id);
+                                else rowSelectionOpen.delete(id);
+                                requestAnimationFrame(() => mapLayout());
+                            },
+                            onChange: (value, control) => {
+                                if (frozen) return;
+                                definition.joins[id] ||= "left";
+                                if (value) definition.record_selection[id] = value;
+                                else delete definition.record_selection[id];
+                                rowSelectionOpen.add(id);
+                                dirty();
+                                renderMap();
+                                board
+                                    .querySelector(
+                                        `[data-record-selection="${CSS.escape(id)}"] [data-row-control="${control}"]`,
+                                    )
+                                    ?.focus();
+                            },
+                        });
+                        if (chooser) card.append(chooser);
                     }
                     const list = node("div", { class: "report-card-fields" });
                     fieldsFor(id).forEach(([field]) => {
@@ -1185,11 +1246,18 @@ window.createWorkspaceReportStudio = function (ui) {
                 }
             }
             matchingLogic.normalize();
+            for (const [key, selection] of Object.entries(definition.record_selection)) {
+                if (branch.has(key) || branch.has(dataset.fields[selection.date_field]?.relation)) {
+                    delete definition.record_selection[key];
+                    rowSelectionOpen.delete(key);
+                }
+            }
             branch.forEach((key) => {
                 enabled.delete(key);
                 positions.delete(key);
                 delete definition.joins[key];
                 delete definition.join_filters[key];
+                rowSelectionOpen.delete(key);
             });
             columnChanges(
                 definition.columns.filter(
@@ -1978,6 +2046,8 @@ window.createWorkspaceReportStudio = function (ui) {
                 `${result.items.length} rows on this page${result.next_offset !== null ? "; more are available" : ""}. ${result.lifecycle?.mode === "static" ? "Saved static results" : "Live results"} · page ${result.offset / 50 + 1}.`,
             ),
         );
+        const selectionNote = rowSelectionUi.describe(result.row_selection);
+        if (selectionNote) panel.append(selectionNote);
         if (!result.items.length) panel.append(node("p", {}, result.lifecycle?.mode === "static"
             ? "This static report captured no matching records."
             : "No records match yet. Try refining your conditions."));
@@ -2257,6 +2327,10 @@ window.createWorkspaceReportStudio = function (ui) {
         body.append(node("p", { role: "status" }, frozen
             ? `Static report · ${saved.lifecycle.row_count} captured rows · ${saved.lifecycle.captured_at}. Results do not refresh from current data.`
             : "Dynamic report · results reflect current data."));
+        if (frozen) {
+            const selectionNote = rowSelectionUi.describe(saved.row_selection);
+            if (selectionNote) body.append(selectionNote);
+        }
         if (saved.lifecycle?.expires_at) body.append(node("p", {}, `Automatic removal: ${saved.lifecycle.expires_at}.`));
         const recordTools = node("div", { class: "report-saved-tools" });
         const options = [], studentActions = [];
