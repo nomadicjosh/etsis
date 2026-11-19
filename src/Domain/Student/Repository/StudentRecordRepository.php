@@ -14,8 +14,9 @@ interface StudentRecordRepository
     public function program(EntityId $program): array;
     /** @return array{id: string, code: string} */
     public function term(EntityId $term): array;
-    /** @return array<string, mixed>|null */
-    public function primaryCatalog(EntityId $student): ?array;
+    /** Explicit assignment reads also support verified closed pursuits.
+     * @return array<string, mixed>|null */
+    public function primaryCatalog(EntityId $student, ?EntityId $assignment = null): ?array;
     public function assignment(EntityId $assignment): StudentProgram;
     public function addAssignment(StudentProgram $assignment): void;
     /** @return list<array<string, mixed>> */

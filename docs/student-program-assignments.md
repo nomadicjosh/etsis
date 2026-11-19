@@ -34,6 +34,8 @@ An existing active assignment to the same program blocks another one. A closed a
 
 If Biology is added and later closed, resending the original add confirmation does not add another Biology assignment or reopen it. etsis recognizes the completed request and returns its earlier creation result while the current assignment stays closed. The workspace reloads the current record after confirmation.
 
+The student record, primary-program history, program-status history and transcript preparation can resolve a recorded primary pursuit after it closes. These reads use its exact recorded assignment; they do not require an active pursuit or grant registration eligibility. The workspace labels the closed pursuit and omits actions that require it to be active. Older untracked records can use one unambiguous closed assignment when there is no active assignment to the primary program; multiple closed candidates need review rather than an inferred latest choice. Reading never creates an observation event or reopens a pursuit. This does not implement graduation or institutional-withdrawal decisions.
+
 ## Authorization, storage and checks
 
 Assignment review and confirmation require `sis:registration:manage`; student ownership and `sis:student:read` alone do not grant creation authority. The command locks the student, term and program before reading the decision context and rechecks the staff actor's permission after waiting for those locks. Existing activity, primary-selection and program-status histories are verified where used. Browser mutations retain CSRF protection, private/no-store responses and suppressed debug collection. Review tokens stay in browser memory, with authenticated encryption and student/actor/purpose binding.

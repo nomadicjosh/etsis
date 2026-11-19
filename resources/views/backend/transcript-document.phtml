@@ -47,6 +47,12 @@
             <?php if (($document['academic_verification']['status'] ?? null) === 'history_gaps') : ?>
                 <p>Some earlier academic history was not recorded. Current-state observations are identified; missing earlier decisions remain unknown.</p>
             <?php endif; ?>
+            <?php if (!empty($document['identity_verification']['earlier_history_unknown'])) : ?>
+                <p>Earlier name and ID history was not fully recorded; this document preserves the reviewed profile.</p>
+            <?php endif; ?>
+            <?php if (($document['program_verification']['status'] ?? null) === 'closed') : ?>
+                <p>The primary program pursuit was closed at preparation.</p>
+            <?php endif; ?>
             <div class="scroll" tabindex="0" role="region" aria-label="Academic credit history">
                 <table>
                     <caption>Academic credit history; dropped enrollments are omitted</caption>

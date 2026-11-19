@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Infrastructure\Persistence\Repository;
 
 use Domain\Shared\Exception\ValidationException;
+use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\StudentRecordRepository;
 use Domain\Student\StudentProgram;
@@ -36,56 +37,54 @@ final readonly class SqlStudentRecordRepository implements StudentRecordReposito
         return ["id" => $row["id"], "code" => $row["code"]];
     }
 
-    public function primaryCatalog(EntityId $student): ?array
+    public function primaryCatalog(EntityId $student, ?EntityId $assignment = null): ?array
     {
         $q = $this->sql->quote(...);
-        return $this->sql->fetch(
-            "SELECT c." .
-                $q("id") .
-                ", c." .
-                $q("revision") .
-                ", y." .
-                $q("code") .
-                " AS " .
-                $q("year_code") .
-                " FROM " .
-                $q("sis_students") .
-                " s JOIN " .
-                $q("sis_student_programs") .
-                " a ON a." .
-                $q("student_id") .
-                " = s." .
-                $q("id") .
-                " AND a." .
-                $q("program_id") .
-                " = s." .
-                $q("primary_program_id") .
-                " JOIN " .
-                $q("sis_student_catalogs") .
-                " b ON b." .
-                $q("assignment_id") .
-                " = a." .
-                $q("id") .
-                " JOIN " .
-                $q("sis_program_catalogs") .
-                " c ON c." .
-                $q("id") .
-                " = b." .
-                $q("catalog_id") .
-                " JOIN " .
-                $q("sis_academic_years") .
-                " y ON y." .
-                $q("id") .
-                " = c." .
-                $q("year_id") .
-                " WHERE s." .
-                $q("id") .
-                " = ? AND a." .
-                $q("status") .
-                " = ?",
-            [$student->value, "active"],
+        $columns = [
+            "c." . $q("id"),
+            "c." . $q("revision"),
+            "c." . $q("program_id") . " AS " . $q("catalog_program_id"),
+            "c." . $q("published") . " AS " . $q("catalog_published"),
+            "c." . $q("year_id"),
+            "b." . $q("version") . " AS " . $q("binding_version"),
+            "y." . $q("code") . " AS " . $q("year_code"),
+        ];
+        $rows = $this->sql->fetch(
+            "SELECT " . implode(", ", $columns) .
+                " FROM " . $q("sis_students") . " s" .
+                " JOIN " . $q("sis_student_programs") . " a" .
+                " ON a." . $q("student_id") . " = s." . $q("id") .
+                " AND a." . $q("program_id") . " = s." . $q("primary_program_id") .
+                " JOIN " . $q("sis_student_catalogs") . " b" .
+                " ON b." . $q("assignment_id") . " = a." . $q("id") .
+                " JOIN " . $q("sis_program_catalogs") . " c" .
+                " ON c." . $q("id") . " = b." . $q("catalog_id") .
+                " JOIN " . $q("sis_academic_years") . " y" .
+                " ON y." . $q("id") . " = c." . $q("year_id") .
+                " WHERE s." . $q("id") . " = ? AND a." .
+                $q($assignment === null ? "status" : "id") . " = ?",
+            [$student->value, $assignment?->value ?? "active"],
             1,
-        )[0] ?? null;
+        );
+        $row = $rows[0] ?? null;
+        if ($row !== null) {
+            if (!in_array($row["catalog_published"], [0, 1, "0", "1", false, true], true)) {
+                throw new CorruptHistoryException();
+            }
+            $row["catalog_published"] = (bool) $row["catalog_published"];
+            foreach (["revision" => 1, "binding_version" => 0] as $field => $minimum) {
+                $value = $row[$field];
+                if (
+                    (!is_int($value) &&
+                        (!is_string($value) || preg_match('/^(0|[1-9][0-9]*)$/D', $value) !== 1)) ||
+                    (int) $value < $minimum
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                $row[$field] = (int) $value;
+            }
+        }
+        return $row;
     }
 
     public function assignment(EntityId $assignment): StudentProgram

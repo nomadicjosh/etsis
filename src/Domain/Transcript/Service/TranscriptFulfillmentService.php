@@ -8,8 +8,10 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Audit\Repository\AuditTrail;
+use Domain\Catalog\Service\PublishedProgramReader;
 use Domain\Communications\Service\MessageCipher;
 use Domain\DegreeAudit\Service\AcademicInputVerifier;
+use Domain\Person\Service\ProfileLedger;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\HistoryReadLimitException;
@@ -23,6 +25,7 @@ use Domain\Shared\Service\Clock;
 use Domain\Shared\Service\ReviewProof;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\StudentRecordRepository;
+use Domain\Student\Service\StudentPrimaryProgramLedger;
 use Domain\Transcript\Repository\TranscriptRepository;
 use Domain\Transcript\ValueObject\TranscriptIssuer;
 
@@ -41,6 +44,9 @@ final readonly class TranscriptFulfillmentService
         private Clock $clock,
         private ReviewProof $reviews,
         private AcademicInputVerifier $academicInputs,
+        private ProfileLedger $profiles,
+        private StudentPrimaryProgramLedger $primaryPrograms,
+        private PublishedProgramReader $programDefinitions,
     ) {
     }
 
@@ -612,13 +618,61 @@ final readonly class TranscriptFulfillmentService
             ]);
         }
         try {
-            $verified = $this->academicInputs->verify($student, new HistoryReadBudget());
+            $budget = new HistoryReadBudget();
+            $identity = $this->profiles->coreReference($person, $budget);
+            $primary = $this->primaryPrograms->documentContext($s, $budget);
+            $catalog = $this->students->primaryCatalog($student, new EntityId($primary["assignment_id"]));
+            if (
+                $catalog !== null &&
+                ($catalog["catalog_program_id"] !== $s->programId->value || !$catalog["catalog_published"])
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $cohort = $primary["source"]["cohort"] ?? null;
+            if (
+                $cohort !== null &&
+                ($catalog === null ||
+                    ((int) $catalog["binding_version"] === 0 &&
+                        ($catalog["id"] !== $cohort["catalog_id"] ||
+                            $catalog["year_id"] !== $cohort["year_id"] ||
+                            $catalog["year_code"] !== $cohort["year_code"] ||
+                            (int) $catalog["revision"] !== $cohort["revision"])))
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $definition = null;
+            if ($catalog !== null) {
+                $definition = $this->programDefinitions->version(
+                    $s->programId,
+                    new EntityId($catalog["year_id"]),
+                    new EntityId($catalog["id"]),
+                    $budget,
+                );
+            }
+            if (
+                $definition !== null &&
+                ((int) $catalog["revision"] !== $definition["catalog_revision"] ||
+                    $catalog["year_code"] !== $definition["academic_year_code"])
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $label = $definition["definition"] ?? ($primary["source"] ?? $primary["selection"]);
+            if ($label === null) {
+                $program = $this->students->program($s->programId);
+            } else {
+                $program = [
+                    "id" => $s->programId->value,
+                    "code" => $label["code"] ?? $label["program_code"],
+                    "title" => $label["title"] ?? $label["program_title"],
+                ];
+            }
+            $verified = $this->academicInputs->verify($student, $budget);
         } catch (CorruptHistoryException) {
             throw new ValidationException([
                 [
                     "field" => "academic_history",
                     "message" =>
-                        "The current academic record does not match its recorded history. " .
+                        "The current identity, program or academic record does not match its recorded history. " .
                         "Ask the records office to review it before preparing or releasing a transcript.",
                 ],
             ]);
@@ -720,8 +774,20 @@ final readonly class TranscriptFulfillmentService
                 "name" => trim($person->givenName . " " . $person->familyName),
                 "institutional_id" => $person->institutionalId->value,
             ],
-            "program" => $this->students->program($s->programId),
-            "catalog" => $this->students->primaryCatalog($student),
+            "program" => $program,
+            "catalog" => $catalog,
+            "identity_verification" => $identity,
+            "program_verification" => [
+                "assignment_id" => $primary["assignment_id"],
+                "status" => $primary["status"],
+                "primary_version" => $primary["primary_version"],
+                "assignment_version" => $primary["stream_version"],
+                "earlier_history_unknown" =>
+                    $primary["earlier_history_unknown"] || $primary["primary_earlier_history_unknown"],
+                "labels_retained" => $label !== null,
+                "definition_recorded" => $definition !== null,
+                "definition_version" => $definition["stream_version"] ?? null,
+            ],
             "credits" => $rows,
             "academic_verification" => [
                 "status" => $verified->status->value,

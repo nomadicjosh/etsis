@@ -63,6 +63,7 @@ final readonly class StudentProgramStatusService
             $actor,
         ): array {
             [$s, $p] = $this->lock($student, $id, $actor);
+            $this->primaryPrograms->verify($s);
             if (!hash_equals($this->revision($p), $revision)) {
                 throw new ConcurrentModificationException(
                     "The program assignment changed. Reload it before reviewing.",
@@ -134,6 +135,7 @@ final readonly class StudentProgramStatusService
             if ($receipt !== null) {
                 return $receipt;
             }
+            $this->primaryPrograms->verify($s);
             $version = $this->ledger->verify($assignment);
             if (
                 $p["expires"] < $this->clock->now()->getTimestamp() ||
@@ -158,9 +160,13 @@ final readonly class StudentProgramStatusService
     {
         $actor = $this->access->requirePermission("sis:registration:manage");
         return $this->transactions->run(function () use ($student, $id, $cursor, $actor): array {
-            [, $p] = $this->lock($student, $id, $actor);
+            [$s, $p] = $this->lock($student, $id, $actor);
+            $this->primaryPrograms->documentContext($s, new \Domain\Shared\EventSourcing\HistoryReadBudget());
             $page = $this->ledger->timeline($p, $cursor);
             $this->audit->record($actor, "student.program_status_history_read", $id);
+            if ($this->access->requirePermission("sis:registration:manage")->value !== $actor->value) {
+                throw new AccessDeniedException("The program decision actor changed.");
+            }
             return $page;
         });
     }
@@ -176,7 +182,6 @@ final readonly class StudentProgramStatusService
             throw new RecordNotFoundException("Program assignment not found.");
         }
         $s = $this->admissions->student($student);
-        $this->primaryPrograms->verify($s);
         return [$s, $p];
     }
     private function allowed(Student $student, StudentProgram $p, string $status): void

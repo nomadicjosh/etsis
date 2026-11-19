@@ -21,6 +21,8 @@ use Domain\Shared\EventSourcing\CorruptHistoryException;
 final class ProfileHistory extends EventSourcedAggregate
 {
     private ?Person $person = null;
+    private int $coreVersion = 0;
+    private bool $earlierUnknown = true;
     private ?ContactDetails $contact = null;
     private ?EmergencyContacts $emergency = null;
     private ?EducationBackground $education = null;
@@ -85,6 +87,10 @@ final class ProfileHistory extends EventSourcedAggregate
                 throw new CorruptHistoryException();
             }
         }
+        if ($this->person === null) {
+            $this->earlierUnknown = $p['provenance'] !== 'created';
+        }
+        $this->coreVersion = $e->playhead();
         $this->person = $next;
         $this->operation = $p['operation_id'];
     }
@@ -93,6 +99,14 @@ final class ProfileHistory extends EventSourcedAggregate
         if ($this->person !== null && ProfileFacts::of($this->person) !== ProfileFacts::of($projection)) {
             throw new CorruptHistoryException();
         }
+    }
+    public function coreVersion(): int
+    {
+        return $this->coreVersion;
+    }
+    public function earlierHistoryUnknown(): bool
+    {
+        return $this->earlierUnknown;
     }
     public function person(): ?Person
     {

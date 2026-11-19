@@ -161,6 +161,9 @@ final readonly class StudentPrimaryProgramService
             $s = $this->lock($student, $actor);
             $page = $this->ledger->timeline($s, $cursor);
             $this->audit->record($actor, "student.primary_program_history_read", $student);
+            if ($this->access->requirePermission("sis:registration:manage")->value !== $actor->value) {
+                throw new AccessDeniedException("The primary selection actor changed.");
+            }
             return $page;
         });
     }

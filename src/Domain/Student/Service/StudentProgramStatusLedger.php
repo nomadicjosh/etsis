@@ -44,24 +44,59 @@ final readonly class StudentProgramStatusLedger
         return $this->load($assignment, budget: $budget)["root"]->playhead();
     }
     /** Resolve the exact active pursuit behind the student's primary program pointer. */
-    public function primaryAssignment(\Domain\Student\Student $student): StudentProgram
-    {
+    public function primaryAssignment(
+        \Domain\Student\Student $student,
+        ?HistoryReadBudget $budget = null,
+        bool $allowClosed = false,
+    ): StudentProgram {
+        return $this->primaryContext($student, $budget, $allowClosed)["assignment"];
+    }
+
+    /** One bounded pass resolves identity, source facts and ambiguity together.
+     * @return array{assignment:StudentProgram,context:array<string,mixed>}
+     */
+    public function primaryContext(
+        \Domain\Student\Student $student,
+        ?HistoryReadBudget $budget = null,
+        bool $allowClosed = false,
+    ): array {
+        $budget ??= new HistoryReadBudget();
         $after = null;
-        $found = null;
+        $found = $closed = null;
+        $closedCount = 0;
         do {
             $rows = $this->records->forProgram($student->id, $student->programId, $after);
             foreach ($rows as $p) {
-                $this->verify($p);
+                $candidate = ["assignment" => $p, "context" => $this->documentContext($p, $budget)];
                 if ($p->status === "active") {
                     if ($found !== null) {
                         throw new CorruptHistoryException();
                     }
-                    $found = $p;
+                    $found = $candidate;
+                } else {
+                    $closed = $candidate;
+                    ++$closedCount;
                 }
                 $after = $p->id;
             }
         } while (count($rows) === 50);
-        return $found ?? throw new CorruptHistoryException();
+        return $found ?? ($allowClosed && $closedCount === 1 ? $closed : throw new CorruptHistoryException());
+    }
+    /** Source facts remain available after a pursuit closes; no active-student requirement.
+     * @return array<string,mixed>
+     */
+    public function documentContext(StudentProgram $assignment, HistoryReadBudget $budget): array
+    {
+        $root = $this->load($assignment, budget: $budget)["root"];
+        return [
+            "assignment_id" => $assignment->id->value,
+            "program_id" => $assignment->programId->value,
+            "entry_term_id" => $assignment->entryTermId->value,
+            "status" => $assignment->status,
+            "stream_version" => $root->playhead(),
+            "earlier_history_unknown" => $root->earlierHistoryUnknown(),
+            "source" => $root->assignmentSource(),
+        ];
     }
     /** Current uniqueness checks must not trust a conflicting status on another pursuit. */
     public function assertNoActiveProgram(
@@ -207,14 +242,19 @@ final readonly class StudentProgramStatusLedger
             );
         }
         $previous = new EntityId($root->decision() ?? throw new CorruptHistoryException());
-        $eventClass = $replacement === null ? StudentProgramStatusWasChanged::class : StudentProgramWasReplaced::class;
+        $eventClass = StudentProgramStatusWasChanged::class;
+        $payload = [
+            "decision_id" => $operation->value,
+            "previous_decision_id" => $previous->value,
+            "status" => $status,
+        ];
+        if ($replacement !== null) {
+            $eventClass = StudentProgramWasReplaced::class;
+            $payload["replacement_assignment_id"] = $replacement->value;
+        }
         $event = $eventClass::occur(
             new StudentProgramStatusId($assignment->id->value),
-            [
-                "decision_id" => $operation->value,
-                "previous_decision_id" => $previous->value,
-                "status" => $status,
-            ] + ($replacement === null ? [] : ["replacement_assignment_id" => $replacement->value]),
+            $payload,
             ["__aggregate_type" => "student_program_status"],
         )->withPlayhead($root->playhead() + 1);
         $version = $root->playhead();
@@ -240,8 +280,14 @@ final readonly class StudentProgramStatusLedger
             $observed = $stored->event instanceof StudentProgramWasObserved;
             $assigned = $stored->event instanceof StudentProgramWasAssigned;
             $items[] = [
-                "kind" => $stored->event instanceof StudentProgramWasReplaced
-                    ? "program_change" : ($assigned ? "assignment" : ($observed ? "observation" : "decision")),
+                "kind" =>
+                    $stored->event instanceof StudentProgramWasReplaced
+                        ? "program_change"
+                        : ($assigned
+                            ? "assignment"
+                            : ($observed
+                                ? "observation"
+                                : "decision")),
                 "replacement_assignment_id" => $p["replacement_assignment_id"] ?? null,
                 "status" => $observed || $assigned ? $p["assignment"]["status"] : $p["status"],
                 "effective_at" => $stored->context->effectiveAt?->format(DATE_ATOM),

@@ -55,6 +55,31 @@ window.createWorkspaceTranscripts = function (ui) {
                       "Some earlier academic history was not recorded. Current-state observations are identified; missing decisions have not been reconstructed.",
                   )
                 : null,
+            snapshot.identity_verification?.earlier_history_unknown
+                ? node(
+                      "p",
+                      { class: "form-text" },
+                      "Earlier name and ID history was not fully recorded. This document preserves the profile reviewed at preparation.",
+                  )
+                : null,
+            snapshot.program_verification
+                ? recordSummary([
+                      [
+                          "Program pursuit",
+                          snapshot.program_verification.status === "closed"
+                              ? "Closed at preparation"
+                              : "Active at preparation",
+                      ],
+                      [
+                          "Program evidence",
+                          snapshot.program_verification.definition_recorded
+                              ? "Retained cohort publication"
+                              : snapshot.program_verification.labels_retained
+                                ? "Retained program labels"
+                                : "Observed current labels",
+                      ],
+                  ])
+                : null,
             grid(
                 ["Term", "Course", "Title", "Attempted", "Earned", "Grade", "History"],
                 snapshot.credits.map((row) => [
@@ -261,7 +286,7 @@ window.createWorkspaceTranscripts = function (ui) {
                 node(
                     "p",
                     { class: "alert alert-warning", role: "status" },
-                    "Current academic history could not be verified. The prepared document remains available. Ask the records office to review the current record before preparing or recording delivery.",
+                    "Current identity, program or academic history could not be verified. The prepared document remains available. Ask the records office to review the current record before preparing or recording delivery.",
                 ),
             );
         if (value.academic_changed)

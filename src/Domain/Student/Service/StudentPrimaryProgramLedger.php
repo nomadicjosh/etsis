@@ -81,8 +81,10 @@ final readonly class StudentPrimaryProgramLedger
     /**
      * @throws TypeException
      */
-    public function verify(Student $student, ?\Domain\Shared\EventSourcing\HistoryReadBudget $budget = null): int
-    {
+    public function verify(
+        Student $student,
+        ?\Domain\Shared\EventSourcing\HistoryReadBudget $budget = null,
+    ): int {
         return $this->load($student, budget: $budget)["root"]->playhead();
     }
 
@@ -94,6 +96,24 @@ final readonly class StudentPrimaryProgramLedger
     {
         $root = $this->load($student)["root"];
         return $root->selection() ?? $this->selection($this->statuses->primaryAssignment($student));
+    }
+
+    /** Transcript context may use the exact last-selected pursuit after it closes.
+     * Older observations require an unambiguous matching pursuit rather than a date-based guess.
+     * @return array<string,mixed>
+     */
+    public function documentContext(
+        Student $student,
+        \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
+    ): array {
+        $loaded = $this->load($student, budget: $budget, allowClosed: true);
+        $root = $loaded["root"];
+        $context = $loaded["assignment_context"] ?? throw new CorruptHistoryException();
+        return $context + [
+            "primary_version" => $root->playhead(),
+            "primary_earlier_history_unknown" => $root->earlierHistoryUnknown(),
+            "selection" => $root->selection(),
+        ];
     }
 
     /** @return array<string,mixed> */
@@ -210,7 +230,8 @@ final readonly class StudentPrimaryProgramLedger
      */
     public function timeline(Student $student, ?string $cursor): array
     {
-        $root = $this->load($student)["root"];
+        $loaded = $this->load($student, allowClosed: true);
+        $root = $loaded["root"];
         $page = $this->history->page($this->stream($student->id), $cursor, 10);
         $items = [];
         foreach ($page->events as $stored) {
@@ -232,12 +253,14 @@ final readonly class StudentPrimaryProgramLedger
             "history_recorded" => $root->playhead() > 0,
             "earlier_history_unknown" => $root->earlierHistoryUnknown(),
             "current_selection" =>
-                $root->selection() ?? $this->selection($this->statuses->primaryAssignment($student)),
+                $root->selection() ?? $this->selection(
+                    $this->students->assignment(new EntityId($loaded["assignment_context"]["assignment_id"])),
+                ),
         ];
     }
 
     /**
-     * @return array{root:StudentPrimaryProgram,receipt:?array<string,mixed>}
+     * @return array{root:StudentPrimaryProgram,receipt:?array<string,mixed>,assignment_context:?array<string,mixed>}
      * @throws TypeException
      */
     private function load(
@@ -245,6 +268,7 @@ final readonly class StudentPrimaryProgramLedger
         ?EntityId $operation = null,
         ?EntityId $actor = null,
         ?\Domain\Shared\EventSourcing\HistoryReadBudget $budget = null,
+        bool $allowClosed = false,
     ): array {
         $budget ??= new \Domain\Shared\EventSourcing\HistoryReadBudget();
         $root = StudentPrimaryProgram::root(new StudentPrimaryProgramId($student->id->value));
@@ -272,7 +296,23 @@ final readonly class StudentPrimaryProgramLedger
             $cursor = $page->nextCursor;
         } while ($cursor !== null);
         $m = $this->records->marker($student->id);
-        $p = $this->statuses->primaryAssignment($student);
+        $assignmentContext = null;
+        if ($allowClosed && $root->selection() !== null) {
+            $p = $this->students->assignment(new EntityId($root->selection()["assignment_id"]));
+            $assignmentContext = $this->statuses->documentContext($p, $budget);
+            if (
+                $p->studentId->value !== $student->id->value ||
+                $p->programId->value !== $student->programId->value
+            ) {
+                throw new CorruptHistoryException();
+            }
+        } elseif ($allowClosed) {
+            $candidate = $this->statuses->primaryContext($student, $budget, true);
+            $p = $candidate["assignment"];
+            $assignmentContext = $candidate["context"];
+        } else {
+            $p = $this->statuses->primaryAssignment($student, $budget);
+        }
         if ($root->playhead() === 0) {
             if ($m !== null) {
                 throw new CorruptHistoryException();
@@ -295,7 +335,7 @@ final readonly class StudentPrimaryProgramLedger
                 throw new CorruptHistoryException();
             }
         }
-        return ["root" => $root, "receipt" => $receipt];
+        return ["root" => $root, "receipt" => $receipt, "assignment_context" => $assignmentContext];
     }
 
     /** @return array<string,mixed> */

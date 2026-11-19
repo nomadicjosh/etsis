@@ -78,6 +78,12 @@ final class TranscriptFixture
             $f->clock,
             new \Domain\Shared\Service\ReviewProof($this->campus->cipher, $f->clock),
             $f->inputVerifier(),
+            $f->profileLedger(),
+            $f->primaryProgramLedger(),
+            new \Domain\Catalog\Service\PublishedProgramReader(
+                EventStoreFixture::history($f->connection->queryBuilder()),
+                new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($f->sql),
+            ),
         );
     }
 }

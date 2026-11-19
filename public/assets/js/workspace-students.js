@@ -731,6 +731,9 @@ window.createWorkspaceStudents = function (ui) {
                         ? `${record.primary_program.code} · ${record.primary_program.title}`
                         : "No primary program recorded",
                 ],
+                ...(record.primary_program_status
+                    ? [["Primary pursuit", record.primary_program_status === "closed" ? "Closed" : "Active"]]
+                    : []),
                 ["Institutional entry term", record.entry_term?.code ?? "Not recorded"],
             ]),
         );
@@ -892,10 +895,12 @@ window.createWorkspaceStudents = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
-                "Each program has its own entry term. Assignments take effect now; the institutional entry term stays unchanged. Closing an assignment is not graduation or withdrawal.",
+                record.primary_program_status === "closed"
+                    ? "This primary pursuit is closed. Its history and transcript remain available."
+                    : "Each program has its own entry term. Assignments take effect now; the institutional entry term stays unchanged. Closing an assignment is not graduation or withdrawal.",
             ),
         );
-        if (can("sis:registration:manage"))
+        if (can("sis:registration:manage") && record.primary_program_status !== "closed")
             programs.append(
                 node(
                     "div",
@@ -970,11 +975,14 @@ window.createWorkspaceStudents = function (ui) {
                                           ui.calendar().studentCatalog(id, item.id),
                                       ),
                                   );
-                                  if (!item.is_primary && item.status === "active")
+                                  if (
+                                      record.primary_program_status !== "closed" &&
+                                      !item.is_primary && item.status === "active"
+                                  )
                                       extra.push(
                                           button("Make primary", () => primaryProgram(record, item, back)),
                                       );
-                                  if (!item.is_primary)
+                                  if (record.primary_program_status !== "closed" && !item.is_primary)
                                       extra.push(
                                           button(
                                               item.status === "active"
@@ -1016,7 +1024,10 @@ window.createWorkspaceStudents = function (ui) {
             );
         }
         await load();
-        if (body.isConnected && can("sis:registration:manage"))
+        if (
+            body.isConnected && can("sis:registration:manage") &&
+            record.primary_program_status !== "closed"
+        )
             await registration(body, {
                 id,
                 person_id: record.person_id,

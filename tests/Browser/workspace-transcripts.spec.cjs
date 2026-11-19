@@ -27,6 +27,8 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
             student: { name: "Alex Example", institutional_id: "S-FICTIONAL" },
             program: { code: "BS.CS", title: "Computer Science" },
             issuer: { name: "Fictional University", address: "Fictional campus" },
+            identity_verification: { earlier_history_unknown: academicCheck === "history_gaps" },
+            program_verification: { status: "closed", labels_retained: true, definition_recorded: true },
             academic_verification: { status: academicCheck === "history_gaps" ? "history_gaps" : "verified" },
             credits: [
                 {
@@ -151,13 +153,15 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
         expect(calls.some((call) => call.path.endsWith("/deliver/"))).toBe(false);
         await page.locator("#drawer-body summary").filter({ hasText: "Dates & history" }).click();
         await expect(page.locator("#drawer-body")).toContainText("2026-05-12");
+        await expect(page.locator("#drawer-body")).toContainText("Closed at preparation");
+        await expect(page.locator("#drawer-body")).toContainText("Retained cohort publication");
         if (academicCheck === "history_gaps")
             await expect(page.locator("#drawer-body")).toContainText(
                 "Current-state observations are identified",
             );
         if (academicCheck === "unavailable") {
             await expect(page.locator("#drawer-body")).toContainText(
-                "Current academic history could not be verified",
+                "Current identity, program or academic history could not be verified",
             );
             await expect(page.getByRole("button", { name: "Record delivery", exact: true })).toHaveCount(0);
             await accessible(page);
@@ -211,4 +215,46 @@ test("the issued transcript HTML companion is accessible and reflows on narrow s
     await accessible(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await page.evaluate(() => document.scripts.length)).toBe(0);
+});
+
+test("closed student records keep their primary pursuit and cohort visible", async ({ page }) => {
+    const student = id(11),
+        person = id(12),
+        errors = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.route("**/sis/**", async (route) => {
+        const path = new URL(route.request().url()).pathname;
+        let result = { items: [], next_after: null };
+        const record = {
+            id: student,
+            person_id: person,
+            given_name: "Alex",
+            family_name: "Example",
+            institutional_id: "F-CLOSED",
+            active: false,
+            primary_program: { code: "BA", title: "Fictional retained program" },
+            primary_program_status: "closed",
+            entry_term: { code: "24/FA" },
+            catalog: { year_code: "2024-2025" },
+        };
+        if (path === "/sis/ui/metrics/") result = { cards: [], intake: [], pipeline: [], queue: [] };
+        else if (path === "/sis/ui/data/students/") result = { items: [record], next_after: null };
+        else if (path.endsWith("/record/")) result = record;
+        await route.fulfill({ json: result, headers: { "Cache-Control": "private, no-store" } });
+    });
+    await page.goto("/admin/grade-amend-fixture/");
+    await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await page.locator("#directory-search").fill("Alex");
+    await page.locator("#directory-search").press("Enter");
+    await page.getByRole("button", { name: "Alex Example", exact: true }).click();
+    await expect(page.locator("#drawer-body")).toContainText("Fictional retained program");
+    await expect(page.getByText("Primary pursuit", { exact: true }).locator("..")).toContainText("Closed");
+    await expect(page.getByText("This primary pursuit is closed. Its history and transcript remain available.")).toBeVisible();
+    await expect(page.getByRole("button", { name: "Change program", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Assign an additional program", exact: true })).toHaveCount(0);
+    await expect(page.getByRole("heading", { name: "Register a student", exact: true })).toHaveCount(0);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(errors).toEqual([]);
 });

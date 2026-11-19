@@ -32,7 +32,10 @@ final readonly class StudentRecordService
             $this->records->lock($id);
             $student = $this->read($id);
             $this->activity->verify($student);
-            $this->primaryPrograms->verify($student);
+            $primary = $this->primaryPrograms->documentContext(
+                $student,
+                new \Domain\Shared\EventSourcing\HistoryReadBudget(),
+            );
             $person = $this->admissions->person($student->personId);
 
             return [
@@ -44,7 +47,8 @@ final readonly class StudentRecordService
                 "active" => $student->active,
                 "primary_program" => $this->records->program($student->programId),
                 "entry_term" => $this->records->term($student->entryTermId),
-                "catalog" => $this->records->primaryCatalog($id),
+                "catalog" => $this->records->primaryCatalog($id, new EntityId($primary["assignment_id"])),
+                "primary_program_status" => $primary["status"],
                 "revision" => $this->revision($student),
             ];
         });
@@ -56,7 +60,8 @@ final readonly class StudentRecordService
         return $this->transactions->run(function () use ($id, $after): array {
             $this->records->lock($id);
             $student = $this->read($id);
-            $this->primaryPrograms->verify($student);
+            $budget = new \Domain\Shared\EventSourcing\HistoryReadBudget();
+            $primary = $this->primaryPrograms->documentContext($student, $budget);
             $rows = $this->records->assignments($id, $after, 51);
             $more = count($rows) > 50;
             $rows = array_slice($rows, 0, 50);
@@ -68,11 +73,9 @@ final readonly class StudentRecordService
                     new EntityId($row["entry_term_id"]),
                     $row["status"],
                 );
-                $this->programStatuses->verify($assignment);
+                $this->programStatuses->verify($assignment, $budget);
                 $row["revision"] = $this->programRevision($assignment);
-                $row["is_primary"] =
-                    $assignment->status === "active" &&
-                    $assignment->programId->value === $student->programId->value;
+                $row["is_primary"] = $assignment->id->value === $primary["assignment_id"];
             }
             unset($row);
 

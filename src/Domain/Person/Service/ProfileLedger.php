@@ -22,6 +22,7 @@ use Domain\Person\ValueObject\ProfileFacts;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\HistoryReadLimitException;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -55,6 +56,18 @@ final readonly class ProfileLedger
         $root = $this->load($person->id)['root'];
         $root->verifyPerson($person);
         return $root->playhead();
+    }
+    /** Core identity evidence; separate contact updates do not change this reference.
+     * Calling services authorize and hold the person lock.
+     * @return array{person_id:string,core_version:int,history_recorded:bool,earlier_history_unknown:bool}
+     */
+    public function coreReference(Person $person, HistoryReadBudget $budget): array
+    {
+        $root = $this->load($person->id, budget: $budget)['root'];
+        $root->verifyPerson($person);
+        return ['person_id' => $person->id->value, 'core_version' => $root->coreVersion(),
+            'history_recorded' => $root->coreVersion() > 0,
+            'earlier_history_unknown' => $root->earlierHistoryUnknown()];
     }
     public function receipt(EntityId $person, EntityId $operation, EntityId $actor, string $intent): ?Person
     {
@@ -388,8 +401,10 @@ final readonly class ProfileLedger
         EntityId $id,
         ?EntityId $operation = null,
         ?EntityId $actor = null,
-        ?string $intent = null
+        ?string $intent = null,
+        ?HistoryReadBudget $budget = null
     ): array {
+        $budget ??= new HistoryReadBudget();
         $root = ProfileHistory::root(new PersonProfileId($id->value));
         $receipt = null;
         $contactReceipt = null;
@@ -399,7 +414,7 @@ final readonly class ProfileLedger
         $cursor = null;
         $count = 0;
         do {
-            $page = $this->history->page(new StreamReference($root->aggregateId(), 'person_profile'), $cursor, 20);
+            $page = $budget->page($this->history, new StreamReference($root->aggregateId(), 'person_profile'), $cursor);
             foreach ($page->events as $stored) {
                 if (++$count > self::MAX_EVENTS) {
                     throw new HistoryReadLimitException();
