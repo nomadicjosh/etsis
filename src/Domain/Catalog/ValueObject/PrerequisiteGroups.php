@@ -15,12 +15,18 @@ final readonly class PrerequisiteGroups
     public array $groups;
 
     /** @param list<list<string>> $groups
-     * @param list<int>|null $minimums Absent on earlier one-course choice publications. */
-    public function __construct(array $groups, public ?array $minimums = null)
-    {
+     * @param list<int>|null $minimums Absent on earlier one-course choice publications.
+     * @param list<int|null>|null $minimumGradePointsMilli Absent means passing grade only. */
+    public function __construct(
+        array $groups,
+        public ?array $minimums = null,
+        public ?array $minimumGradePointsMilli = null,
+    ) {
         if (
             !array_is_list($groups) || count($groups) > 100 ||
-            ($minimums !== null && (!array_is_list($minimums) || count($minimums) !== count($groups)))
+            ($minimums !== null && (!array_is_list($minimums) || count($minimums) !== count($groups))) ||
+            ($minimumGradePointsMilli !== null && (!array_is_list($minimumGradePointsMilli) ||
+                count($minimumGradePointsMilli) !== count($groups)))
         ) {
             throw new InvalidArgumentException(
                 'Use up to 100 prerequisite requirements with a matching course minimum.'
@@ -46,6 +52,12 @@ final readonly class PrerequisiteGroups
             ) {
                 throw new InvalidArgumentException(
                     'Use distinct courses within each requirement and a minimum from one to its course count.'
+                );
+            }
+            $floor = $minimumGradePointsMilli[$index] ?? null;
+            if ($floor !== null && (!is_int($floor) || $floor < 0 || $floor > 10000)) {
+                throw new InvalidArgumentException(
+                    'Use optional grade-point thousandths from zero through ten points.'
                 );
             }
             sort($group, SORT_STRING);
@@ -77,22 +89,42 @@ final readonly class PrerequisiteGroups
         return $this->minimums ?? array_fill(0, count($this->groups), 1);
     }
 
-    /** @param list<string> $completed */
-    public function missing(array $completed): int
+    /** @param list<string> $completed
+     * @param array<string,int> $points */
+    public function missing(array $completed, array $points = []): int
     {
         $missing = 0;
         $counts = $this->counts();
         foreach ($this->groups as $index => $group) {
-            $missing += (int) (count(array_intersect($group, $completed)) < $counts[$index]);
+            $missing += (int) (count($this->completedInGroup($index, $completed, $points)) < $counts[$index]);
         }
         return $missing;
+    }
+
+    /** @return list<int|null> */
+    public function gradeFloors(): array
+    {
+        return $this->minimumGradePointsMilli ?? array_fill(0, count($this->groups), null);
+    }
+
+    /** @param list<string> $completed
+     * @param array<string,int> $points Retained per-course grade points, never credit-weighted quality totals.
+     * @return list<string> */
+    public function completedInGroup(int $index, array $completed, array $points = []): array
+    {
+        $floor = $this->minimumGradePointsMilli[$index] ?? null;
+        return array_values(array_filter(
+            array_intersect($this->groups[$index], $completed),
+            static fn(string $course): bool => $floor === null ||
+            (isset($points[$course]) && $points[$course] >= $floor)
+        ));
     }
 
     /** Preserve original minima when cloning or removing an indexed course.
      * @param list<string> $selected */
     public function subset(array $selected): self
     {
-        $groups = $minimums = [];
+        $groups = $minimums = $floors = [];
         $counts = $this->counts();
         foreach ($this->groups as $index => $group) {
             $remaining = array_values(array_intersect($group, $selected));
@@ -107,7 +139,12 @@ final readonly class PrerequisiteGroups
             }
             $groups[] = $remaining;
             $minimums[] = $counts[$index];
+            $floors[] = $this->minimumGradePointsMilli[$index] ?? null;
         }
-        return new self($groups, $this->minimums === null ? null : $minimums);
+        return new self(
+            $groups,
+            $this->minimums === null ? null : $minimums,
+            $this->minimumGradePointsMilli === null ? null : $floors
+        );
     }
 }

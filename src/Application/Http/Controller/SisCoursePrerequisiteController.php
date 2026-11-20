@@ -35,7 +35,8 @@ final readonly class SisCoursePrerequisiteController
             new EntityId($id),
             $f->values('groups', 100),
             $f->text('revision', 64),
-            array_key_exists('minimums', $body) ? $f->values('minimums', 100) : null
+            array_key_exists('minimums', $body) ? $f->values('minimums', 100) : null,
+            array_key_exists('grade_points_milli', $body) ? $f->values('grade_points_milli', 100) : null
         ));
     }
 

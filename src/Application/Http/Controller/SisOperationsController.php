@@ -27,7 +27,7 @@ final readonly class SisOperationsController
                 $context,
                 new EntityId($id),
                 FormInput::from($request)->optionalId("after"),
-                FormInput::from($request)->optionalText("search", 80) ?? "",
+                FormInput::from($request)->search(maximum: 80),
                 FormInput::from($request)->optionalText("grade_status", 16) ?? "all",
             ),
         );
@@ -40,7 +40,7 @@ final readonly class SisOperationsController
             "roster",
             new EntityId($id),
             $f->optionalId("after"),
-            $f->optionalText("search", 80) ?? "",
+            $f->search(maximum: 80),
             $f->optionalText("grade_status", 16) ?? "all",
         );
         $csv = Writer::fromString();

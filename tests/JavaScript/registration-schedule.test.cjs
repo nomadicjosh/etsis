@@ -429,3 +429,18 @@ test("counted prerequisites show distinct-course progress while sharing course l
     assert.equal(walk(details).filter(e => e.tag === "li").length, 2);
     assert.equal((details.textContent.match(/MATH.101/g) || []).length, 2);
 });
+
+test("grade-point prerequisite details distinguish a zero minimum from an absent one", () => {
+    const window = {};
+    vm.runInNewContext(presentation, { window });
+    const ui = window.createRegistrationSchedule({ node });
+    const details = ui.prerequisites({ course_statuses: ["met"], groups: [
+        { positions: [0], met: false, required_count: 1, completed_count: 0, minimum_grade_points_milli: 2675 },
+        { positions: [0], met: true, required_count: 1, completed_count: 1, minimum_grade_points_milli: 0 },
+    ] }, [{ code: "MATH.101", title: "Fictional <script> course" }]);
+    details.open = true; details.events.toggle();
+    assert.match(details.textContent, /Minimum 2.675 grade points per counted course · 0 verified/);
+    assert.match(details.textContent, /Minimum 0 grade points per counted course · 1 verified/);
+    assert.match(details.textContent, /Needs attention/);
+    assert.equal(walk(details).some(e => e.tag === "script"), false);
+});

@@ -45,7 +45,7 @@ async function fixture(page, options = {}) {
             }
             definitionPublished = true; result = { operation_id: operation, last_version: 1 };
         }
-        else if (path.endsWith('/clone/review/')) result = { source: { id: course, code: 'MATH.101', title: 'Algebra', credits_milli: 3000, active: true }, prerequisites: [{ id: prerequisite, code: 'MATH.001', title: 'Foundations', active: true }, ...(options.countedClone ? [{ id: id(7), code: 'MATH.002', title: 'Geometry', active: true }] : [])], ...(options.countedClone ? { prerequisite_groups: [[prerequisite, id(7)]], prerequisite_minimums: [2] } : {}), operation_id: clone, revision: 'a'.repeat(64) };
+        else if (path.endsWith('/clone/review/')) result = { source: { id: course, code: 'MATH.101', title: 'Algebra', credits_milli: 3000, active: true }, prerequisites: [{ id: prerequisite, code: 'MATH.001', title: 'Foundations', active: true }, ...(options.countedClone ? [{ id: id(7), code: 'MATH.002', title: 'Geometry', active: true }] : [])], ...(options.countedClone ? { prerequisite_groups: [[prerequisite, id(7)]], prerequisite_minimums: [2], prerequisite_grade_points_milli: [2675] } : {}), operation_id: clone, revision: 'a'.repeat(64) };
         else if (path.endsWith('/clone/commit/')) result = { id: clone, code: data.code, title: data.title, credits_milli: data.credits_milli, prerequisites_copied: data.prerequisites.length, active: false };
         else if (path === '/sis/catalog/offerings/review/') { rows = data.sections; result = { term: termRow, sections: rows.map(row => ({ ...row, course_code: 'MATH.101', course_title: 'Algebra', faculty_name: null })), operation_id: operation, revision: 'b'.repeat(64) }; }
         else if (path === '/sis/catalog/offerings/save/') { saved = true; result = receipt; }
@@ -459,6 +459,7 @@ test('course cloning keeps the required course count when selecting prerequisite
     await page.getByRole('button', { name: 'Change clone details', exact: true }).click();
     await page.getByLabel('MATH.002 — Geometry', { exact: true }).check();
     await page.getByRole('button', { name: 'Review course clone', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Minimum 2.675 grade points per counted course');
     await expect(page.getByRole('button', { name: 'Save course draft', exact: true })).toBeEnabled();
     await page.getByRole('button', { name: 'Save course draft', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('created as an inactive draft');

@@ -36,6 +36,8 @@ final readonly class PrerequisiteService
         $inputs = $this->pursuits->forPursuit($this->inputs->verify($student, $budget), $student, $assignment, $budget);
         $references = array_column($inputs->references, null, "credit_id");
         $completed = [];
+        $points = [];
+        $withPoints = $groups?->minimumGradePointsMilli !== null;
         foreach ($inputs->items as $work) {
             // Zero-credit passing courses can satisfy a prerequisite. Current rows alone cannot prove a grade.
             if (
@@ -43,9 +45,13 @@ final readonly class PrerequisiteService
                 $work['grade']['passes'] && in_array($work['status'], ['A', 'N'], true)
             ) {
                 $course = $work['course_id'];
+                $gradePoints = $work['grade']['points_milli'];
                 if (
                     !in_array($course, $required, true) ||
-                    (isset($completed[$course]) && strcmp($completed[$course]['credit_id'], $work['id']) < 0)
+                    (isset($completed[$course]) &&
+                        (($withPoints && $points[$course] > $gradePoints) ||
+                        ((!$withPoints || $points[$course] === $gradePoints) &&
+                            strcmp($completed[$course]['credit_id'], $work['id']) < 0)))
                 ) {
                     continue;
                 }
@@ -53,11 +59,13 @@ final readonly class PrerequisiteService
                 if ($ref === null) {
                     throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
                 }
+                $points[$course] = $gradePoints;
                 $completed[$course] = ['course_id' => $course, 'credit_id' => $work['id'],
                     'origin' => $ref['origin'], 'source_id' => $ref['source_id'],
                     'academic_version' => $ref['academic_version'],
                     'registration_version' => $ref['registration_version'],
-                    'pursuit_version' => $ref['pursuit_version']];
+                    'pursuit_version' => $ref['pursuit_version']] +
+                ($withPoints ? ['grade_points_milli' => $gradePoints] : []);
             }
         }
         ksort($completed, SORT_STRING);

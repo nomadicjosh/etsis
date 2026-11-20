@@ -74,11 +74,13 @@ final readonly class CourseDefinition
             }
             $keys[] = 'prerequisite_groups';
         }
-        if (array_key_exists('prerequisite_group_minimums', $data)) {
-            if (!array_key_exists('prerequisite_groups', $data) || !is_array($data['prerequisite_group_minimums'])) {
-                throw new InvalidArgumentException('Prerequisite minima require complete course choice groups.');
+        foreach (['prerequisite_group_minimums', 'prerequisite_grade_points_milli'] as $field) {
+            if (array_key_exists($field, $data)) {
+                if (!array_key_exists('prerequisite_groups', $data) || !is_array($data[$field])) {
+                    throw new InvalidArgumentException('Prerequisite minima require complete course choice groups.');
+                }
+                $keys[] = $field;
             }
-            $keys[] = 'prerequisite_group_minimums';
         }
         if (
             count($data) !== count($keys) ||
@@ -109,7 +111,8 @@ final readonly class CourseDefinition
             array_key_exists("prerequisite_groups", $data) ?
                 new PrerequisiteGroups(
                     $data["prerequisite_groups"],
-                    $data["prerequisite_group_minimums"] ?? null
+                    $data["prerequisite_group_minimums"] ?? null,
+                    $data["prerequisite_grade_points_milli"] ?? null
                 ) : null,
         );
     }
@@ -125,6 +128,8 @@ final readonly class CourseDefinition
         ] + ($this->prerequisiteGroups === null ? [] : ["prerequisite_groups" => $this->prerequisiteGroups->groups]) +
         ($this->prerequisiteGroups?->minimums === null ? [] :
         ['prerequisite_group_minimums' => $this->prerequisiteGroups->minimums]) +
+        ($this->prerequisiteGroups?->minimumGradePointsMilli === null ? [] :
+        ['prerequisite_grade_points_milli' => $this->prerequisiteGroups->minimumGradePointsMilli]) +
         $this->text->describe() + [
             "subject" => $this->subject?->describe(),
             "classifications" => $this->classifications->describe(),

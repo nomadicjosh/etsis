@@ -27,13 +27,22 @@ if ($response->getStatusCode() !== 200 || ($draft['groups'] ?? null) !== []) {
 }
 $groups = [[$first->courseId->value, $alternative->courseId->value, $additional->courseId->value],
     [$alternative->courseId->value]];
-$input = ['groups' => $groups, 'minimums' => [2, 1], 'revision' => $draft['revision']];
+$input = ['groups' => $groups, 'minimums' => [2, 1],
+    'grade_points_milli' => [2675, null], 'revision' => $draft['revision']];
 foreach ([null, [], [0, 1], [4, 1], ['2', 1]] as $invalid) {
     if (
         $teachingPost($base . 'prerequisite-groups/', array_replace($input, ['minimums' => $invalid]))
         ->getStatusCode() !== 422
     ) {
         throw new RuntimeException('Malformed course counts bypassed the actual prerequisite route.');
+    }
+}
+foreach ([null, [], [-1, null], [10001, null], ['2675', null], [2.5, null]] as $invalid) {
+    if (
+        $teachingPost($base . 'prerequisite-groups/', array_replace($input, ['grade_points_milli' => $invalid]))
+        ->getStatusCode() !== 422
+    ) {
+        throw new RuntimeException('Malformed grade minima bypassed the actual prerequisite route.');
     }
 }
 if (
@@ -58,7 +67,8 @@ $review = json_decode((string) $reviewResponse->getBody(), true, flags: JSON_THR
 $expected = new \Domain\Catalog\ValueObject\PrerequisiteGroups($groups, [2, 1])->groups;
 if (
     $reviewResponse->getStatusCode() !== 200 || ($review['definition']['prerequisite_groups'] ?? null) !== $expected ||
-    ($review['definition']['prerequisite_group_minimums'] ?? null) !== [2, 1]
+    ($review['definition']['prerequisite_group_minimums'] ?? null) !== [2, 1] ||
+    ($review['definition']['prerequisite_grade_points_milli'] ?? null) !== [2675, null]
 ) {
     throw new RuntimeException('Course publication omitted the reviewed prerequisite choices.');
 }

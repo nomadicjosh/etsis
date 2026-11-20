@@ -238,6 +238,24 @@ if ($app->router->match($contextRequest)->getStatusCode() !== 403) {
     throw new RuntimeException("A staff context mutation bypassed CSRF.");
 }
 $contextRequest->getBody()->rewind();
+$rosterContext = $contextRequest->withUri(new \Laminas\Diactoros\Uri(
+    "https://campus.example.invalid/sis/ui/context/roster/" . $section["id"] . "/"
+))->withBody(new \Laminas\Diactoros\Stream("php://temp", "w+"));
+$rosterContext->getBody()->write(http_build_query(["_workspace_json" => json_encode([
+    "after" => "", "search" => "", "grade_status" => "all",
+])]));
+$rosterContext->getBody()->rewind();
+if ($app->router->match($rosterContext)->getStatusCode() !== 403) {
+    throw new RuntimeException("An empty-search roster request bypassed CSRF.");
+}
+$rosterContext->getBody()->rewind();
+$rosterResponse = $app->router->match($rosterContext->withHeader("X-CSRF-Token", "fictionalcsrftoken"));
+if (
+    $rosterResponse->getStatusCode() !== 200 ||
+    !str_contains($rosterResponse->getHeaderLine("Cache-Control"), "no-store")
+) {
+    throw new RuntimeException("The section drawer's empty roster search did not resolve privately.");
+}
 $contextResponse = $app->router->match($contextRequest->withHeader("X-CSRF-Token", "fictionalcsrftoken"));
 if (
     $contextResponse->getStatusCode() !== 200 ||
@@ -428,7 +446,8 @@ foreach (["score-page", "attendance"] as $feed) {
         throw new RuntimeException("A bounded teaching read route failed.");
     }
 }
-$export = $teachingPost("/sis/ui/exports/roster/" . $teachingSection->id->value . "/", []);
+$export = $teachingPost("/sis/ui/exports/roster/" . $teachingSection->id->value . "/",
+    ["after" => "", "search" => "", "grade_status" => "all"]);
 if (
     $export->getStatusCode() !== 200 ||
     !str_contains($export->getHeaderLine("Content-Type"), "text/csv") ||

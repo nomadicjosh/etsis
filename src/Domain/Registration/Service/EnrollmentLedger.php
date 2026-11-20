@@ -422,7 +422,9 @@ final readonly class EnrollmentLedger
             $definition->text->transcriptTitle !== $course->publishedTranscriptTitle ||
             $definition->prerequisites !== $course->publishedPrerequisites ||
             $definition->prerequisiteGroups?->groups !== $course->prerequisiteGroups?->groups ||
-            $definition->prerequisiteGroups?->minimums !== $course->prerequisiteGroups?->minimums
+            $definition->prerequisiteGroups?->minimums !== $course->prerequisiteGroups?->minimums ||
+            $definition->prerequisiteGroups?->minimumGradePointsMilli !==
+                $course->prerequisiteGroups?->minimumGradePointsMilli
         ) {
             throw new CorruptHistoryException();
         }

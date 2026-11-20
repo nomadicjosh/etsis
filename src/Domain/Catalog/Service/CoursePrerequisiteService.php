@@ -36,12 +36,18 @@ final readonly class CoursePrerequisiteService
     }
 
     /** @param list<list<string>> $choices
+     * @param list<int|null>|null $gradePointsMilli
      * @param list<int>|null $minimums
      * @return array<string,mixed> */
-    public function save(EntityId $course, array $choices, string $revision, ?array $minimums = null): array
-    {
+    public function save(
+        EntityId $course,
+        array $choices,
+        string $revision,
+        ?array $minimums = null,
+        ?array $gradePointsMilli = null,
+    ): array {
         $actor = $this->authorize();
-        $groups = new PrerequisiteGroups($choices, $minimums);
+        $groups = new PrerequisiteGroups($choices, $minimums, $gradePointsMilli);
         if (in_array($course->value, $groups->courses(), true)) {
             throw new ValidationException([['field' => 'groups', 'message' => 'A course cannot require itself.']]);
         }
@@ -94,7 +100,8 @@ final readonly class CoursePrerequisiteService
         $groups = $this->relationships->prerequisiteGroups($course) ??
         PrerequisiteGroups::all(array_column($courses, 'id'));
         return ['course' => ['id' => $course->value, 'code' => $row['code'], 'title' => $row['title']],
-            'groups' => $groups->groups, 'minimums' => $groups->counts(), 'courses' => $courses];
+            'groups' => $groups->groups, 'minimums' => $groups->counts(),
+            'grade_points_milli' => $groups->gradeFloors(), 'courses' => $courses];
     }
 
     /** @param array<string,mixed> $context */

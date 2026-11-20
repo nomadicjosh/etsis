@@ -404,7 +404,8 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             }
             $workflows->savePrerequisiteGroups($course, new \Domain\Catalog\ValueObject\PrerequisiteGroups(
                 [...$groups->groups, [$required->value]],
-                $groups->minimums === null ? null : [...$groups->minimums, 1]
+                $groups->minimums === null ? null : [...$groups->minimums, 1],
+                $groups->minimumGradePointsMilli === null ? null : [...$groups->minimumGradePointsMilli, null]
             ));
             return;
         }

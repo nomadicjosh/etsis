@@ -66,6 +66,26 @@ final class TeachingWorkflowTest extends TestCase
         );
     }
 
+    public function testSectionDrawerAndRosterExportAcceptTheBrowsersEmptySearch(): void
+    {
+        $f = new SisFixture();
+        $section = $f->section(20, 0, $f->access->actor);
+        $controller = new SisOperationsController($this->operations($f));
+        $request = new ServerRequest([], [], '/sis/ui/context/roster/' . $section->id->value . '/', 'POST')
+            ->withParsedBody(['after' => '', 'search' => '', 'grade_status' => 'all']);
+        $response = $controller->page($request, 'roster', $section->id->value);
+        self::assertSame(200, $response->getStatusCode());
+        self::assertSame([], json_decode((string) $response->getBody(), true)['items']);
+        self::assertSame(200, $controller->rosterCsv($request, $section->id->value)->getStatusCode());
+        self::assertSame(200, $controller->page(
+            $request->withParsedBody(['after' => '']),
+            'assignments',
+            $section->id->value
+        )->getStatusCode());
+        $this->expectException(\InvalidArgumentException::class);
+        $controller->page($request->withParsedBody(['search' => ['invalid']]), 'roster', $section->id->value);
+    }
+
     public function testAssignmentEditsPreserveScoresRejectStaleWritesAndRespectFaculty(): void
     {
         $f = new SisFixture();

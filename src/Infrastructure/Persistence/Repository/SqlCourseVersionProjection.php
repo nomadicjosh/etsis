@@ -52,6 +52,17 @@ final readonly class SqlCourseVersionProjection
                     JSON_THROW_ON_ERROR
                 );
             }
+            if ($r['prerequisite_grade_points'] !== null) {
+                if (strlen($r['prerequisite_grade_points']) > 2048) {
+                    throw new CorruptHistoryException();
+                }
+                $definition['prerequisite_grade_points_milli'] = json_decode(
+                    $r['prerequisite_grade_points'],
+                    true,
+                    4,
+                    JSON_THROW_ON_ERROR
+                );
+            }
             $definition += ["transcript_title" => $r["transcript_title"], "description" => $r["description"]];
             $subject = $this->sql->rows("sis_course_version_subjects", ["id" => $r["id"]], 1)[0] ?? null;
             $definition["subject"] =
@@ -134,6 +145,7 @@ final readonly class SqlCourseVersionProjection
 
     public function retain(PublishedCourseDefinition $definition): void
     {
+        $floors = $definition->definition->prerequisiteGroups?->minimumGradePointsMilli;
         $r = [
             "id" => $definition->versionId->value,
             "course_id" => $definition->courseId->value,
@@ -144,6 +156,7 @@ final readonly class SqlCourseVersionProjection
             "transcript_title" => $definition->definition->text->transcriptTitle,
             "description" => $definition->definition->text->description,
             "prerequisites" => json_encode($definition->definition->prerequisites, JSON_THROW_ON_ERROR),
+            "prerequisite_grade_points" => $floors === null ? null : json_encode($floors, JSON_THROW_ON_ERROR),
             "prerequisite_minimums" => $definition->definition->prerequisiteGroups?->minimums === null ? null :
                 json_encode($definition->definition->prerequisiteGroups->minimums, JSON_THROW_ON_ERROR),
             "prerequisite_groups" => $definition->definition->prerequisiteGroups === null ? null :

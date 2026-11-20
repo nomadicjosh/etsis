@@ -122,7 +122,8 @@ final readonly class CourseCloneService
                     $draft->id,
                     new \Domain\Catalog\ValueObject\PrerequisiteGroups(
                         $context['prerequisite_groups'],
-                        $context['prerequisite_minimums']
+                        $context['prerequisite_minimums'],
+                        $context['prerequisite_grade_points_milli']
                     )->subset($ids)
                 );
             }
@@ -218,6 +219,7 @@ final readonly class CourseCloneService
             "prerequisites" => $prerequisites,
             "prerequisite_groups" => $groups?->groups,
             "prerequisite_minimums" => $groups?->minimums,
+            "prerequisite_grade_points_milli" => $groups?->minimumGradePointsMilli,
         ];
     }
 

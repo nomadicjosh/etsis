@@ -6,15 +6,25 @@ window.createWorkspacePrerequisites = function (ui) {
         type: "button", class: `btn ${style}`, "aria-label": aria,
         onclick: event => task(run, event.currentTarget),
     }, label);
+    const pointText = value => String(value / 1000);
+    function pointValue(value) {
+        if (value === "") return null;
+        if (!/^(?:\d+|\d*\.\d{1,3})$/.test(value)) return NaN;
+        const [whole, fraction = ""] = value.split(".");
+        return Number(whole || "0") * 1000 + Number(fraction.padEnd(3, "0"));
+    }
+    const floors = value => value.grade_points_milli || value.groups.map(() => null);
     async function open(course) {
         const body = openDrawer("Course prerequisites", "ACADEMIC CATALOG");
         const saved = await request(`/sis/courses/${course}/prerequisite-groups/`);
         if (!body.isConnected) return;
-        const state = { groups: saved.groups.map(group => [...group]), minimums: [...saved.minimums],
+        const state = { groups: saved.groups.map(group => [...group]), minimums: [...saved.minimums], grade_points_milli: [...floors(saved)],
             labels: new Map(saved.courses.map(row => [row.id, row])) };
-        const fingerprint = value => JSON.stringify([value.groups, value.minimums]);
+        const fingerprint = value => JSON.stringify([value.groups, value.minimums, floors(value)]);
         const incomplete = () => state.groups.some((group, index) => !group.length ||
-            !Number.isInteger(state.minimums[index]) || state.minimums[index] < 1 || state.minimums[index] > group.length);
+            !Number.isInteger(state.minimums[index]) || state.minimums[index] < 1 || state.minimums[index] > group.length ||
+            (state.grade_points_milli[index] !== null && (!Number.isInteger(state.grade_points_milli[index]) ||
+                state.grade_points_milli[index] < 0 || state.grade_points_milli[index] > 10000)));
         function render(notice = "") {
             const body = openDrawer("Course prerequisites", "EDIT DRAFT → REVIEW PUBLICATION");
             const cards = node("div"), status = node("p", { role: "status", class: "form-text" });
@@ -23,17 +33,18 @@ window.createWorkspacePrerequisites = function (ui) {
                 const submitted = fingerprint(state);
                 const result = await request(`/sis/courses/${course}/prerequisite-groups/`, "POST", {
                     revision: saved.revision, groups: state.groups.map(group => [...group]), minimums: [...state.minimums],
+                    grade_points_milli: [...state.grade_points_milli],
                 });
                 const laterEdits = fingerprint(state) !== submitted;
                 Object.assign(saved, result);
-                if (!laterEdits) { state.groups = result.groups.map(group => [...group]); state.minimums = [...result.minimums]; }
+                if (!laterEdits) { state.groups = result.groups.map(group => [...group]); state.minimums = [...result.minimums]; state.grade_points_milli = [...floors(result)]; }
                 if (body.isConnected) render("Prerequisites saved.");
             }, "btn-primary");
             const publish = button("Review course publication", () =>
                 ui.catalog().publications(course, null, [], render));
             const add = button("Add requirement", () => {
                 if (state.groups.length >= 100) return;
-                state.groups.push([]); state.minimums.push(1); draw();
+                state.groups.push([]); state.minimums.push(1); state.grade_points_milli.push(null); draw();
                 cards.lastElementChild?.querySelector("h3")?.focus();
             });
             function update() {
@@ -42,7 +53,7 @@ window.createWorkspacePrerequisites = function (ui) {
                 save.disabled = !changed || incomplete();
                 publish.disabled = changed || incomplete();
                 add.disabled = state.groups.length >= 100 || total >= 500;
-                status.textContent = incomplete() ? "Every requirement needs courses and a valid required count. Adjust the count, add courses, or remove the requirement."
+                status.textContent = incomplete() ? "Check each required course count and optional grade-point minimum before saving."
                     : changed ? "Save your choices before reviewing publication." : notice || "Saved choices are ready for publication review.";
             }
             function draw() {
@@ -67,12 +78,20 @@ window.createWorkspacePrerequisites = function (ui) {
                         state.minimums[index] = count.value === "" ? null : Number(count.value);
                         describe(); update();
                     });
+                    const floor = node("input", { type: "number", id: `prerequisite-grade-${index}`, class: "form-control",
+                        min: "0", max: "10", step: "0.001", value: state.grade_points_milli[index] === null ? "" : pointText(state.grade_points_milli[index]),
+                        "aria-describedby": `prerequisite-grade-help-${index}` });
+                    floor.addEventListener("input", () => { state.grade_points_milli[index] = pointValue(floor.value); update(); });
                     return node("section", { class: "surface border p-3 mb-3", "aria-label": `Requirement ${index + 1}` }, heading,
                         description, group.length > 1 || state.minimums[index] > 1 ? node("div", { class: "mb-3", style: "max-width: 14rem" },
                             node("label", { for: count.id, class: "form-label" }, "Courses required"), count) : null,
+                        node("div", { class: "mb-3" },
+                            node("label", { for: floor.id, class: "form-label" }, "Minimum grade points"), floor,
+                            node("p", { id: `prerequisite-grade-help-${index}`, class: "form-text" },
+                                "Optional. Leave blank for any passing grade. Use grade points from the grading definitions, not a percentage or GPA total. Applies to each course counted in this requirement.")),
                         list, node("div", { class: "inline-actions" },
                             button("Add course", () => choose(index), "btn-outline-primary", `Add course to requirement ${index + 1}`),
-                            button("Remove requirement", () => { state.groups.splice(index, 1); state.minimums.splice(index, 1); draw(); }, "btn-outline-danger btn-sm",
+                            button("Remove requirement", () => { state.groups.splice(index, 1); state.minimums.splice(index, 1); state.grade_points_milli.splice(index, 1); draw(); }, "btn-outline-danger btn-sm",
                                 `Remove requirement ${index + 1}`)));
                 }));
                 if (!state.groups.length) cards.append(node("p", { class: "alert alert-info" }, "No prerequisite courses are required."));
@@ -128,7 +147,9 @@ window.createWorkspacePrerequisites = function (ui) {
                 const labels = new Map(data.items.map(row => [row.id, `${row.code} · ${row.title}`]));
                 view.append(node("p", { class: "form-text" }, "Current catalog labels; this publication retains the course identities and choice groups."),
                     node("ol", {}, ...groups.map((group, index) => node("li", {}, minimums[index] > 1 ? `At least ${minimums[index]} of: ` : "",
-                        group.map(id => labels.get(id) || "Course label unavailable").join(minimums[index] > 1 ? "; " : " OR ")))));
+                        group.map(id => labels.get(id) || "Course label unavailable").join(minimums[index] > 1 ? "; " : " OR "),
+                        definition.prerequisite_grade_points_milli?.[index] != null
+                            ? ` · Minimum ${pointText(definition.prerequisite_grade_points_milli[index])} grade points per counted course` : ""))));
                 loaded = true;
             }).finally(() => { loading = false; });
         });

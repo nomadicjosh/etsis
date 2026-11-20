@@ -98,6 +98,7 @@ window.createRegistrationSchedule = function (ui) {
                     node("ol", {}, ...value.groups.map(group => node("li", {},
                         node("strong", {}, group.met ? "Met: " : "Needs attention: "),
                         (group.required_count || 1) > 1 ? `At least ${group.required_count} distinct courses required · ${group.completed_count} verified: ` : "",
+                        group.minimum_grade_points_milli != null ? `Minimum ${group.minimum_grade_points_milli / 1000} grade points per counted course · ${group.completed_count} verified: ` : "",
                         group.positions.map(position => {
                             const course = courses[position];
                             return `${course?.code || "Course label unavailable"}${course?.title ? ` · ${course.title}` : ""}`;

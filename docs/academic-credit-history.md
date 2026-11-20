@@ -4,6 +4,8 @@ Institutional credits now have a replayable history from accepted registration t
 
 ## Staff workflow
 
+Opening a section loads its bounded roster with no search required. Empty search values are accepted for roster viewing and CSV export, including the first drawer load and clearing filters; malformed or oversized searches remain rejected. Private authorization and CSRF checks apply to both requests.
+
 Faculty use **My teaching → Section → Grade & attendance → Record final grade**. Select a retained institutional grade, effective date and optional note, then review and explicitly confirm. A dual-degree student with different captured policies requires an explicit program-pursuit choice. Assignments, attendance and assignment scores remain separate from authoritative final-grade decisions.
 
 Authorized records officers use **Students → Student record → View transcript → Review final grade**. A posted grade requires both `sis:gradebook:amend` and `sis:student:read`, with a mandatory correction reason. The correction permission is a separate protected system definition; broad teaching, registration and student-read permissions do not imply it. Assign it deliberately to the appropriate registrar staff. Initial grades require the assigned faculty or `sis:gradebook:manage`; correction permission alone cannot submit an initial grade. Super administrators retain their universal authority.
