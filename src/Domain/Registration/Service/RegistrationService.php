@@ -42,6 +42,7 @@ final readonly class RegistrationService
         private \Domain\AcademicRecord\Service\WorkPursuitService $pursuits,
         private PrerequisiteService $prerequisites,
         private RegistrationScheduleService $schedules,
+        private CoRequisiteService $corequisites,
     ) {
     }
 
@@ -54,6 +55,7 @@ final readonly class RegistrationService
         ?RegistrationScheduleRead $scheduleRead = null,
         ?\Domain\Finance\ValueObject\RegistrationChargeQuote $chargeQuote = null,
         ?RegistrationCourseRead $courseRead = null,
+        ?CoRequisitePlan $corequisitePlan = null,
     ): Enrollment {
         $actor = $this->access->authenticatedUserId();
         $initialStudent = $this->admissions->student($studentId);
@@ -72,6 +74,7 @@ final readonly class RegistrationService
             $scheduleRead,
             $chargeQuote,
             $courseRead,
+            $corequisitePlan,
         ): Enrollment {
             // Eligibility locks follow student, person, section and course order.
             $this->repository->lockStudent($studentId);
@@ -140,6 +143,15 @@ final readonly class RegistrationService
                 $budget,
                 $course->prerequisiteGroups,
             );
+            $corequisites = $this->corequisites->evaluate(
+                $studentId,
+                $assignment,
+                $section->termId,
+                $course->prerequisiteGroups?->corequisites ?? [],
+                $budget,
+                $corequisitePlan,
+            );
+            $this->corequisites->requireMet($corequisites);
             $prerequisitesMet = $prerequisites->isMet();
             $schedule = $this->schedules->evaluate(
                 $studentId,
@@ -168,7 +180,9 @@ final readonly class RegistrationService
                 $now,
             );
             $enrollment = new Enrollment(
-                EntityId::generate(),
+                $corequisitePlan === null ? EntityId::generate() :
+                    new EntityId($corequisitePlan->sections[$sectionId->value]["enrollment_id"] ??
+                        throw new \LogicException("A committed registration plan is required.")),
                 $studentId,
                 $sectionId,
                 $section->termId,
@@ -205,6 +219,7 @@ final readonly class RegistrationService
                 $schedule,
                 $budget,
                 $courseRead,
+                $corequisites,
             );
             $this->credits->open(
                 $enrollment,
@@ -234,6 +249,22 @@ final readonly class RegistrationService
                 $enrollment->id,
             );
             $this->verifyCourseSelection($sectionId, $budget, $courseRead);
+            if ($corequisites !== null) {
+                $freshCorequisites = $this->corequisites->evaluate(
+                    $studentId,
+                    $assignment,
+                    $section->termId,
+                    $course->prerequisiteGroups?->corequisites ?? [],
+                    $budget,
+                    $corequisitePlan,
+                );
+                $this->corequisites->requireMet($freshCorequisites);
+                if ($freshCorequisites->revision() !== $corequisites->revision()) {
+                    throw new ConcurrentModificationException(
+                        "Co-requisite support changed. Review registration again.",
+                    );
+                }
+            }
             // Final checks are part of the same unit of work, including the seat, credit, charge and audit.
             $this->assertEligible(
                 $this->admissions->student($studentId),
@@ -345,6 +376,7 @@ final readonly class RegistrationService
         ?string $scheduleRevision = null,
         ?string $prerequisiteRevision = null,
         ?RegistrationCourseRead $courseRead = null,
+        ?CoRequisitePlan $corequisiteRead = null,
     ): void {
         $student = $this->admissions->student($studentId);
         $person = $this->admissions->person($student->personId);
@@ -377,6 +409,9 @@ final readonly class RegistrationService
             $budget,
             $course->prerequisiteGroups
         );
+        if (($course->prerequisiteGroups?->corequisites ?? []) !== []) {
+            $this->corequisites->verifyAccepted($enrollment, $budget, $corequisiteRead);
+        }
         $this->assertEligible(
             $student,
             $section,

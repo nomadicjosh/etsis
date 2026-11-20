@@ -287,7 +287,7 @@ window.createWorkspaceHiatus = function (ui) {
             node(
                 "p",
                 { class: "form-text" },
-                "Review every proposed action. During drop/add, course records are removed and their original course charges reversed. After drop/add, courses and charges remain with the term’s configured grade. Cash refunds require a separate review. Final grades are protected.",
+                "Review every proposed action. During drop/add, course records are removed and their original course charges reversed. After drop/add, courses and charges remain with the term’s configured grade. Cash refunds require a separate review. Final grades are protected. Co-requisite rules apply to the entire selected course set; keeping a dependent course may prevent dropping its required companion.",
             ),
             node(
                 "div",

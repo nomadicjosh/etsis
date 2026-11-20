@@ -6,8 +6,9 @@ window.createRegistrationDrops = function (ui) {
     const button = (label, run, style = 'btn-outline-primary') => node('button', {
         type: 'button', class: `btn ${style}`, onclick: event => task(run, event.currentTarget),
     }, label);
-    async function start(student, back) {
-        const selected = new Map();
+    async function start(student, back, seed = []) {
+        if (new Set(seed).size > 10) throw new Error('These linked courses exceed the ten-course limit. Ask the registrar to review the full set.');
+        const selected = new Map(seed.map(id => [id, { id, code: "Linked course", course_code: "Selected registration" }]));
         const fingerprint = () => [...selected.keys()].sort().join('|');
         let query = '';
         async function choose(after = null, stack = []) {
@@ -59,17 +60,37 @@ window.createRegistrationDrops = function (ui) {
             update();
             const data = await request(prefix + 'choices/', 'POST', { student_id: student, search: query, ...(after ? { after } : {}) });
             if (!active(body)) return;
-            page = data.items; draw();
+            page = data.items;
+            for (const row of page) if (selected.has(row.id)) selected.set(row.id, row);
+            draw();
             body.append(node('div', { class: 'inline-actions d-flex flex-wrap gap-2 mt-3' },
                 ...(stack.length ? [button('Previous courses', () => choose(stack.at(-1), stack.slice(0, -1)))] : []),
                 ...(data.next_after ? [button('More courses', () => choose(data.next_after, [...stack, after]))] : [])));
         }
         function confirm(plan) {
             const body = open('Review selected drops');
+            const required = [...new Set(plan.courses.flatMap(row => row.corequisites?.required_sections || []))];
+            const blocked = plan.courses.some(row => row.corequisites?.blocked);
+            const warnings = plan.courses.some(row => row.corequisites?.warning);
+            const confirmButton = button('Confirm selected drops', async () => {
+                const saved = await request(prefix + 'commit/', 'POST', command);
+                if (active(body)) receipt(saved);
+            }, 'btn-danger');
+            confirmButton.disabled = blocked;
+            const include = button('Include linked courses', async () => {
+                for (const id of required) if (!selected.has(id)) selected.set(id,
+                    { id, course_code: 'Selected registration', code: 'Linked course' });
+                await choose();
+            }, 'btn-primary');
+            include.disabled = new Set([...selected.keys(), ...required]).size > 10;
             const command = { student_id: student, section_ids: plan.courses.map(row => row.section_id),
                 operation_id: plan.operation_id, revision: plan.revision, review_token: plan.review_token };
             body.append(plan.student ? node('h3', { class: 'h5' }, `${plan.student.given_name} ${plan.student.family_name} · ${plan.student.institutional_id}`) : null,
                 node('p', { class: 'alert alert-info' }, 'All selected drops are saved together. If any course cannot be changed, none of these drops are saved. No cash refund is issued.'),
+                warnings ? node('div', { role: 'status', class: blocked ? 'alert alert-danger' : 'alert alert-warning' },
+                    node('p', {}, blocked ? 'A selected drop would leave a required co-requisite unsupported. Include the linked courses, then review all drops together.' :
+                        'This leaves a required co-requisite unsupported. Institutional policy permits proceeding with this warning.'),
+                    blocked ? include : null, blocked && include.disabled ? node('p', {}, 'This exceeds the ten-course selection limit. Ask the registrar to review these dependencies.') : null) : null,
                 ...plan.courses.map(row => node('section', { class: 'border rounded p-3 mb-3', 'aria-label': row.section_code },
                     node('h3', { class: 'h5' }, `${row.section_code} · ${row.outcome.term_code}`),
                     node('p', {}, `Effective ${row.effective_on}. Drop/add ends ${row.outcome.grace_ends_on}.`),
@@ -79,10 +100,7 @@ window.createRegistrationDrops = function (ui) {
                 node('p', { class: 'form-text' }, 'Reviews expire after 20 minutes. Any account credit is considered separately for a refund; other institutional fees stay unchanged.'),
                 node('div', { class: 'inline-actions d-flex flex-wrap gap-2' },
                     button('Change selection', () => choose()),
-                    button('Confirm selected drops', async () => {
-                        const saved = await request(prefix + 'commit/', 'POST', command);
-                        if (active(body)) receipt(saved);
-                    }, 'btn-danger'),
+                    confirmButton,
                     button('Check saved drops', async () => {
                         const saved = await request(prefix + `receipts/${plan.operation_id}/`);
                         if (active(body)) receipt(saved);

@@ -49,7 +49,7 @@ window.createWorkspaceCatalog = function (ui) {
         const prerequisites = node(
             "fieldset",
             { class: "mb-4" },
-            node("legend", { class: "h5" }, "Prerequisites to copy"),
+            node("legend", { class: "h5" }, "Entry requirements to copy"),
         );
         review.prerequisites.forEach((item) => {
             const id = `clone-prerequisite-${item.id}`;
@@ -70,13 +70,13 @@ window.createWorkspaceCatalog = function (ui) {
                     node(
                         "label",
                         { for: id, class: "form-check-label" },
-                        `${item.code} — ${item.title}${item.active ? "" : " (inactive)"}`,
+                        `${item.code} — ${item.title}${review.corequisites?.includes(item.id) ? " · Co-requisite" : ""}${item.active ? "" : " (inactive)"}`,
                     ),
                 ),
             );
         });
         if (!review.prerequisites.length)
-            prerequisites.append(node("p", {}, "The source has no prerequisites."));
+            prerequisites.append(node("p", {}, "The source has no entry requirements."));
         const save = submit("Review course clone");
         form.append(prerequisites, save);
         form.addEventListener("submit", (event) => {
@@ -91,7 +91,7 @@ window.createWorkspaceCatalog = function (ui) {
             node(
                 "p",
                 {},
-                `Source: ${review.source.code} — ${review.source.title}. Choose a new code and the prerequisites to retain. The new course is inactive until deliberately activated; student records, sections and charges are never copied.`,
+                `Source: ${review.source.code} — ${review.source.title}. Choose a new code and the entry requirements to retain. The new course is inactive until deliberately activated; student records, sections and charges are never copied.`,
             ),
             form,
         );
@@ -119,14 +119,14 @@ window.createWorkspaceCatalog = function (ui) {
             node(
                 "p",
                 {},
-                `${draft.credits_milli / 1000} credits. ${prerequisites.length} prerequisites selected. New status: inactive draft.`,
+                `${draft.credits_milli / 1000} credits. ${prerequisites.length} entry requirement courses selected. New status: inactive draft.`,
             ),
             grid(
-                ["Code", "Prerequisite"],
+                ["Code", "Required course"],
                 review.prerequisites
                     .filter((item) => prerequisites.includes(item.id))
                     .map((item) => [item.code, item.title]),
-                "Selected prerequisites",
+                "Selected entry requirements",
             ),
             review.prerequisite_groups ? node("p", { class: "form-text" },
                 "Choices retained: " + groups.map(group => `${group.minimum > 1 ? `At least ${group.minimum} of: ` : ""}` +
@@ -134,6 +134,9 @@ window.createWorkspaceCatalog = function (ui) {
                         .join(group.minimum > 1 ? "; " : " OR ") +
                     (group.grade === null ? "" : ` · Minimum ${group.grade / 1000} grade points per counted course`)).join(" AND ") +
                     ". Unselected groups are omitted from the cloned draft.") : null,
+            review.corequisites?.some(id => prerequisites.includes(id)) ? node("p", { class: "form-text" },
+                "Co-requisites — all selected courses required: " + review.corequisites.filter(id => prerequisites.includes(id))
+                    .map(id => review.prerequisites.find(row => row.id === id)?.code || "Course").join(", ")) : null,
             invalidChoices ? node("p", { class: "alert alert-warning", role: "status" },
                 "Keep enough courses to meet each retained minimum, or omit that requirement entirely.") : null,
             reference(review.operation_id),
@@ -171,7 +174,7 @@ window.createWorkspaceCatalog = function (ui) {
             node(
                 "p",
                 { role: "status" },
-                `${saved.code} — ${saved.title} was created as an inactive draft with ${saved.prerequisites_copied} prerequisites.`,
+                `${saved.code} — ${saved.title} was created as an inactive draft with ${saved.prerequisites_copied} prerequisites and ${saved.corequisites_copied || 0} co-requisites.`,
             ),
             reference(saved.id),
             button("Open course draft", () => ui.openRecord("courses", saved), "btn-primary"),

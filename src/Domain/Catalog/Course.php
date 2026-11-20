@@ -21,6 +21,9 @@ final readonly class Course
         public ?array $publishedPrerequisites = null,
         public ?\Domain\Catalog\ValueObject\PrerequisiteGroups $prerequisiteGroups = null,
     ) {
+        if (in_array($id->value, $prerequisiteGroups?->references() ?? [], true)) {
+            throw new InvalidArgumentException('A course cannot require itself.');
+        }
         if (($publicationVersionId === null) !== ($publishedPrerequisites === null)) {
             throw new InvalidArgumentException(
                 "A retained course version requires its prerequisite definition.",

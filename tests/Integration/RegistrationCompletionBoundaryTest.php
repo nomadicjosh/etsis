@@ -64,6 +64,7 @@ final class RegistrationCompletionBoundaryTest extends TestCase
             $s->workPursuits(),
             $prerequisites ?? new PrerequisiteService($s->inputVerifier(), $s->workPursuits()),
             $s->schedules(),
+            $s->corequisites(),
         );
     }
 

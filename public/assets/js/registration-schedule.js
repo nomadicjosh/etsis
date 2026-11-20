@@ -54,6 +54,7 @@ window.createRegistrationSchedule = function (ui) {
                 (student) =>
                     !student.issues.length &&
                     student.prerequisites.status !== "missing" &&
+                    student.corequisites?.status !== "missing" &&
                     !student.schedule.blocked &&
                     !student.charges.problems.length &&
                     student.charges.total_minor != null,
@@ -127,6 +128,18 @@ window.createRegistrationSchedule = function (ui) {
         return details;
     }
 
+    function corequisites(value, courses = []) {
+        if (!courses.length || !value?.courses) return null;
+        const meanings = { completed: "Satisfied by qualifying completed coursework — no new registration or charge",
+            concurrent: "Supported by a current registration in this term", planned: "Included in this selected schedule",
+            coordinated: "Registered together", missing: "Select a section of this course for the same term" };
+        return node("section", { class: "border rounded p-3 my-3", "aria-label": "Co-requisite readiness" },
+            node("h4", { class: "h6" }, "Co-requisites"),
+            node("p", { class: "form-text" }, value.prior_completion ?
+                "Qualifying completion in this program pursuit can satisfy these requirements." : "These courses must be taken in the same academic term."),
+            node("ul", { class: "mb-0" }, ...courses.map((course, index) => node("li", {},
+                `${course.code || "Course"}${course.title ? ` · ${course.title}` : ""}: ${meanings[value.courses[index]] || "Not checked"}`))));
+    }
     function charges(value, money) {
         return node(
             "section",
@@ -193,6 +206,7 @@ window.createRegistrationSchedule = function (ui) {
                 `Prerequisites: ${{ met: "Verified for this program pursuit", missing: "Required coursework is missing", not_required: "No course prerequisites", not_rechecked: "Not rechecked for this record" }[student.prerequisites.status]}`,
             ),
             prerequisites(student.prerequisites, review.section.prerequisite_courses),
+            corequisites(student.corequisites, review.section.corequisite_courses),
             readiness(student.readiness),
             student.issues.length
                 ? node(
@@ -300,7 +314,7 @@ window.createRegistrationSchedule = function (ui) {
         );
         return body;
     }
-    return { text, panel, charges, registration, prerequisites, readiness, canConfirm, plan };
+    return { text, panel, charges, registration, prerequisites, corequisites, readiness, canConfirm, plan };
 };
 
 /* The same reviewed confirmation for staff and owned student schedules. Drafts remain in memory. */

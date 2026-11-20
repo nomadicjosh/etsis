@@ -69,23 +69,22 @@ window.createWorkspaceCourseDrops = function (ui) {
             );
             await back();
         };
+        const confirmation = button("Confirm course drop", async () => finish(
+            await request("/sis/registrations/drop/", "POST", command)), true);
+        confirmation.disabled = !!plan.corequisites?.blocked;
+        if (plan.corequisites?.warning) body.append(node("div", {
+            class: plan.corequisites.blocked ? "alert alert-danger" : "alert alert-warning", role: "status",
+        }, node("p", {}, plan.corequisites.blocked
+            ? "This drop would leave a required co-requisite unsupported. Review the linked courses together."
+            : "This drop leaves a co-requisite unsupported. Institutional policy permits proceeding with this warning."),
+        plan.corequisites.blocked ? button("Review linked drops", () => plans.start(student, back,
+            [section, ...plan.corequisites.required_sections]), true) : null));
         body.append(
             node(
                 "div",
                 { class: "d-flex flex-wrap gap-2" },
                 button("Back to student", back),
-                button(
-                    "Confirm course drop",
-                    async () =>
-                        finish(
-                            await request(
-                                "/sis/registrations/drop/",
-                                "POST",
-                                command,
-                            ),
-                        ),
-                    true,
-                ),
+                confirmation,
                 button("Check saved drop", async () =>
                     finish(
                         await request(

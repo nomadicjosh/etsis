@@ -170,3 +170,48 @@ test('a pending drop review cannot replace later choices or enable an empty sele
     await expect(page.locator('#drawer-body')).toContainText('Your selection changed');
     await expect(page.getByRole('button', { name: 'Confirm selected drops', exact: true })).toHaveCount(0);
 });
+
+
+for (const owner of [false, true]) test(`${owner ? 'owner' : 'staff'} deliberately includes linked courses after a blocked co-requisite drop review`, async ({ page }) => {
+    const f = await fixture(page);
+    await page.route(owner ? '**/portal/api/drop-plan/review/' : '**/sis/drop-plans/review/', async route => {
+        const data = JSON.parse(new URLSearchParams(route.request().postData()).get('_workspace_json') || route.request().postData());
+        const blocked = !data.section_ids.includes(id(6));
+        await route.fulfill({ json: { operation_id: operation, revision: 'b'.repeat(64), review_token: 'fictional-linked-drop',
+            student: { given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' },
+            courses: data.section_ids.map(section_id => ({ ...f.plan, section_id, section_code: section_id === section ? 'CHEM.101.A' : 'CHEM.101L.A',
+                corequisites: { blocked, warning: blocked, required_sections: blocked ? [id(6)] : [] } })) } });
+    });
+    if (owner) await page.goto('/portal/student/registration/');
+    else {
+        await page.goto('/admin/');
+        await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+        await page.locator('#directory-search').fill('a'); await page.locator('#directory-search').press('Enter');
+        await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+    }
+    await page.getByRole('button', { name: 'Drop selected courses', exact: true }).click();
+    await page.getByRole('checkbox', { name: /CHEM.101 ·/ }).check();
+    await page.getByRole('button', { name: 'Review selected drops', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm selected drops', exact: true })).toBeDisabled();
+    await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
+    await page.getByRole('button', { name: 'Include linked courses', exact: true }).click();
+    await expect(page.locator(owner ? '#campus-dialog-body' : '#drawer-body')).toContainText('2 of 10 courses selected');
+    await page.getByRole('button', { name: 'Review selected drops', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm selected drops', exact: true })).toBeEnabled();
+    expect(f.sent.filter(call => call.path.endsWith('/commit/'))).toHaveLength(0);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('a blocked individual portal drop opens the linked selection in the same visible dialog', async ({ page }) => {
+    const f = await fixture(page);
+    f.plan.corequisites = { blocked: true, warning: true, required_sections: [id(6)] };
+    await page.goto('/portal/student/registration/');
+    await page.getByRole('button', { name: 'Drop / withdraw', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm drop / withdrawal', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Review linked drops', exact: true }).click();
+    await expect(page.locator('#campus-dialog')).toBeVisible();
+    await expect(page.locator('#campus-dialog-body')).toContainText('2 of 10 courses selected');
+    await expect(page.getByRole('button', { name: 'Review selected drops', exact: true })).toBeEnabled();
+    expect(f.errors).toEqual([]);
+});

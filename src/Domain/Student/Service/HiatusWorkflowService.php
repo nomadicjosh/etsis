@@ -204,6 +204,16 @@ final readonly class HiatusWorkflowService
                     : $context["student"]["active"],
                 "automatic_refund" => false,
             ];
+            $sectionIds = array_map(static fn(EntityId $id): string => $id->value, $impact->sections);
+            $dependencyRead = $sectionIds === [] ? null : $this->drops->dependencies(
+                $hiatus->studentId,
+                $sectionIds,
+                new \Domain\Shared\EventSourcing\HistoryReadBudget(),
+            );
+            if ($dependencyRead?->blocked()) {
+                throw new ValidationException([['field' => 'sections',
+                    'message' => 'Include the linked courses in this plan to avoid an unsupported co-requisite.']]);
+            }
             foreach ($impact->sections as $index => $section) {
                 $row = $courses[$section->value];
                 $enrollment = $this->registration->enrollment(
@@ -222,6 +232,8 @@ final readonly class HiatusWorkflowService
                     $hiatus->studentId,
                     $section,
                     $context["starts_on"],
+                    $sectionIds,
+                    $dependencyRead,
                 );
                 $result["course_changes"][$index]["course_charge"] =
                     $dropped["course_charge"];
@@ -279,6 +291,18 @@ final readonly class HiatusWorkflowService
                 $hiatus->id,
                 $impact->revision,
             );
+            if (
+                $dependencyRead !== null && $this->drops->dependencies(
+                    $hiatus->studentId,
+                    $sectionIds,
+                    new \Domain\Shared\EventSourcing\HistoryReadBudget(),
+                )->revision() !== $dependencyRead->revision()
+            ) {
+                throw new ConcurrentModificationException('Co-requisite support changed. Review this plan again.');
+            }
+            if ($context['corequisite_policy'] !== $this->drops->dependencyPolicy()) {
+                throw new ConcurrentModificationException('Registration policy changed. Review this plan again.');
+            }
             $this->authorize($actor);
             return ["id" => $hiatus->id->value, "impact" => $result];
         });
@@ -412,6 +436,7 @@ final readonly class HiatusWorkflowService
         unset($row);
         return [
             "activity_version" => $activityVersion,
+            "corequisite_policy" => $this->drops->dependencyPolicy(),
             "student" => [
                 "id" => $studentId->value,
                 "given_name" => $person->givenName,

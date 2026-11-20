@@ -47,6 +47,7 @@ final readonly class EnrollmentLedger
         \Domain\Registration\ValueObject\RegistrationScheduleDecision $schedule,
         ?HistoryReadBudget $budget = null,
         ?RegistrationCourseRead $courseRead = null,
+        ?\Domain\Registration\ValueObject\CoRequisiteDecision $corequisites = null,
     ): void {
         $this->actor($actor);
         if (
@@ -88,6 +89,18 @@ final readonly class EnrollmentLedger
             "prerequisite_evidence" => $prerequisites->retained(),
             "schedule_evidence" => $schedule->facts,
         ];
+        $required = $course->prerequisiteGroups?->corequisites ?? [];
+        if (
+            $required !== ($corequisites?->facts['required'] ?? []) ||
+            ($corequisites !== null && ($corequisites->facts['student_id'] !== $enrollment->studentId->value ||
+                $corequisites->facts['term_id'] !== $section->termId->value ||
+                $corequisites->facts['assignment_id'] !== $prerequisites->assignment->value))
+        ) {
+            throw new CorruptHistoryException();
+        }
+        if ($corequisites !== null) {
+            $metadata['corequisite_evidence'] = $corequisites->retained();
+        }
         if ($selected !== null) {
             $metadata["section_version_id"] = $selected->publication->value;
         }
@@ -142,6 +155,7 @@ final readonly class EnrollmentLedger
         array $outcome,
         EventContext $context,
         ?HistoryReadBudget $budget = null,
+        ?\Domain\Registration\ValueObject\CoRequisiteDropDecision $corequisites = null,
     ): void {
         if ($context->actor === null || $context->correlation === null) {
             throw new \InvalidArgumentException(
@@ -203,7 +217,8 @@ final readonly class EnrollmentLedger
                 ],
                 "seat" => $this->nextSeat($section, -1),
             ],
-            ["__aggregate_type" => "enrollment"],
+            ["__aggregate_type" => "enrollment"] + ($corequisites === null ? [] :
+                ['corequisite_drop_evidence' => $corequisites->facts]),
         )->withPlayhead($root->playhead() + 1);
         $this->history->append(
             $this->stream($closed->id),
@@ -298,7 +313,7 @@ final readonly class EnrollmentLedger
                 $root->playhead() === 0 ||
                 $root->provenance() === "observed_existing",
             "history_version" => $root->playhead(),
-        ];
+        ] + ($root->corequisites() === null ? [] : ["corequisites" => $root->corequisites()]);
     }
     private function load(
         EntityId $id,

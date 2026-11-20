@@ -37,7 +37,8 @@ final readonly class CourseCloneService
     public function review(EntityId $source): array
     {
         $this->access->requirePermission("sis:catalog:manage");
-        $routing = array_column($this->operations->prerequisites($source), "id");
+        $routing = $this->operations->prerequisiteGroups($source)?->references() ??
+        array_column($this->operations->prerequisites($source), "id");
         return $this->transactions->run(function () use ($source, $routing): array {
             $this->lock($source, $routing);
             $context = $this->context($source);
@@ -67,7 +68,8 @@ final readonly class CourseCloneService
             "prerequisites" => $ids,
             "revision" => $revision,
         ];
-        $routing = array_column($this->operations->prerequisites($source), "id");
+        $routing = $this->operations->prerequisiteGroups($source)?->references() ??
+        array_column($this->operations->prerequisites($source), "id");
         return $this->transactions->run(function () use (
             $source,
             $draft,
@@ -117,13 +119,15 @@ final readonly class CourseCloneService
             foreach ($ids as $id) {
                 $this->registration->addPrerequisite($draft->id, new EntityId($id));
             }
+            $copiedGroups = null;
             if ($context['prerequisite_groups'] !== null) {
                 $this->operations->savePrerequisiteGroups(
                     $draft->id,
-                    new \Domain\Catalog\ValueObject\PrerequisiteGroups(
+                    $copiedGroups = new \Domain\Catalog\ValueObject\PrerequisiteGroups(
                         $context['prerequisite_groups'],
                         $context['prerequisite_minimums'],
-                        $context['prerequisite_grade_points_milli']
+                        $context['prerequisite_grade_points_milli'],
+                        $context['corequisites']
                     )->subset($ids)
                 );
             }
@@ -134,7 +138,8 @@ final readonly class CourseCloneService
                 "title" => $draft->title,
                 "credits_milli" => $draft->creditsMilli,
                 "active" => false,
-                "prerequisites_copied" => count($ids),
+                "prerequisites_copied" => count($copiedGroups?->courses() ?? $ids),
+                "corequisites_copied" => count($copiedGroups?->corequisites ?? []),
             ];
             $this->operations->record(
                 $draft->id,
@@ -206,6 +211,9 @@ final readonly class CourseCloneService
         }
         $text = $this->catalog->get("courses", $source);
         $groups = $this->operations->prerequisiteGroups($source);
+        if ($groups !== null) {
+            $prerequisites = $this->operations->prerequisiteLabels($groups->references());
+        }
         return [
             "source" => [
                 "id" => $source->value,
@@ -218,6 +226,7 @@ final readonly class CourseCloneService
             ],
             "prerequisites" => $prerequisites,
             "prerequisite_groups" => $groups?->groups,
+            "corequisites" => $groups?->corequisites,
             "prerequisite_minimums" => $groups?->minimums,
             "prerequisite_grade_points_milli" => $groups?->minimumGradePointsMilli,
         ];

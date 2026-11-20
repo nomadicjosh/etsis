@@ -27,6 +27,7 @@ final class EnrollmentHistory extends EventSourcedAggregate
     private ?string $sectionVersion = null;
     private ?\Domain\Registration\ValueObject\PrerequisiteDecision $prerequisites = null;
     private ?\Domain\Registration\ValueObject\RegistrationScheduleDecision $schedule = null;
+    private ?\Domain\Registration\ValueObject\CoRequisiteDecision $corequisites = null;
     public function acceptHistorical(
         #[\SensitiveParameter] DomainEvent $event,
     ): void {
@@ -90,6 +91,20 @@ final class EnrollmentHistory extends EventSourcedAggregate
             }
             $this->schedule = $decision;
         }
+        if (array_key_exists('corequisite_evidence', $event->metadata())) {
+            $evidence = $event->metaParam('corequisite_evidence');
+            if (!is_array($evidence) || $p['provenance'] !== 'registered') {
+                throw new CorruptHistoryException();
+            }
+            $this->corequisites = \Domain\Registration\ValueObject\CoRequisiteDecision::fromRetained($evidence);
+            if (
+                $evidence['student_id'] !== $p['enrollment']['student_id'] ||
+                $evidence['term_id'] !== $p['enrollment']['term_id'] ||
+                $evidence['assignment_id'] !== $this->prerequisites?->assignment->value
+            ) {
+                throw new CorruptHistoryException();
+            }
+        }
         $this->facts = $p["enrollment"];
         $this->source = $p["source"];
         $this->provenance = $p["provenance"];
@@ -110,6 +125,19 @@ final class EnrollmentHistory extends EventSourcedAggregate
                 $p["seat"]["sequence"] <= $this->seat["sequence"])
         ) {
             throw new CorruptHistoryException();
+        }
+        if (array_key_exists('corequisite_drop_evidence', $event->metadata())) {
+            $evidence = $event->metaParam('corequisite_drop_evidence');
+            if (!is_array($evidence)) {
+                throw new CorruptHistoryException();
+            }
+            $drop = new \Domain\Registration\ValueObject\CoRequisiteDropDecision($evidence);
+            if (
+                $drop->blocked() || $evidence['student_id'] !== $this->facts['student_id'] ||
+                !in_array($this->facts['section_id'], $evidence['dropping'], true)
+            ) {
+                throw new CorruptHistoryException();
+            }
         }
         $this->facts = array_replace($this->facts, [
             "status" => $p["status"],
@@ -194,6 +222,12 @@ final class EnrollmentHistory extends EventSourcedAggregate
             "conflict_count" => null,
             "unpublished_count" => null,
         ];
+    }
+
+    /** Restricted dependency evidence for authorized registration commands only. */
+    public function corequisites(): ?array
+    {
+        return $this->corequisites?->facts;
     }
 
     public function sectionVersion(): ?string

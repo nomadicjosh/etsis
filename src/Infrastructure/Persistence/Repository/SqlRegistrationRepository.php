@@ -375,10 +375,13 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
         $workflows = new SqlCatalogWorkflowRepository($this->sql);
         $groups = $workflows->prerequisiteGroups($course);
         if ($groups !== null) {
-            $workflows->savePrerequisiteGroups($course, $groups->subset(array_values(array_diff(
-                $groups->courses(),
-                [$required->value]
-            ))));
+            $remaining = $groups->subset(array_values(array_diff($groups->courses(), [$required->value])));
+            $workflows->savePrerequisiteGroups($course, new \Domain\Catalog\ValueObject\PrerequisiteGroups(
+                $remaining->groups,
+                $remaining->minimums,
+                $remaining->minimumGradePointsMilli,
+                $groups->corequisites,
+            ));
             return;
         }
         $q = $this->sql->quote(...);
@@ -405,7 +408,8 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             $workflows->savePrerequisiteGroups($course, new \Domain\Catalog\ValueObject\PrerequisiteGroups(
                 [...$groups->groups, [$required->value]],
                 $groups->minimums === null ? null : [...$groups->minimums, 1],
-                $groups->minimumGradePointsMilli === null ? null : [...$groups->minimumGradePointsMilli, null]
+                $groups->minimumGradePointsMilli === null ? null : [...$groups->minimumGradePointsMilli, null],
+                $groups->corequisites
             ));
             return;
         }

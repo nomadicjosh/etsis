@@ -348,6 +348,7 @@ final class RestrictionWorkflowTest extends TestCase
             $f->workPursuits(),
             new \Domain\Registration\Service\PrerequisiteService($f->inputVerifier(), $f->workPursuits()),
             $f->schedules(),
+            $f->corequisites(),
         );
         try {
             $service->register($student->id, $section->id, true);

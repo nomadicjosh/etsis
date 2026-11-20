@@ -1756,7 +1756,13 @@
                                                 el('p', {}, plan.outcome.delete_records
                                                     ? 'Your enrollment and academic credit will be removed. The original course charge will be reversed if present. This may leave an account credit; cash refunds require a separate review. Other institutional fees are unchanged.'
                                                     : `Your course stays on your academic record with grade ${plan.outcome.grade_code} and zero earned credits. The original course charge stays payable. GPA treatment: ${plan.outcome.counts_gpa ? 'counts toward GPA under the catalog grade definition' : 'excluded from GPA'}.`),
-                                                button('Confirm drop / withdrawal', async () => finish(await request('/portal/api/drop/', 'POST', command)), true),
+                                                plan.corequisites?.warning ? el('div', { role: 'status', class: plan.corequisites.blocked ? 'alert alert-danger' : 'alert alert-warning' },
+                                                    el('p', {}, plan.corequisites.blocked ? 'This drop leaves a required co-requisite unsupported. Review the linked courses together.' :
+                                                        'This drop leaves a co-requisite unsupported. Institutional policy permits proceeding with this warning.'),
+                                                    plan.corequisites.blocked ? button('Review linked drops', () => {
+                                                        return dropPlans.start(student.id, renderService, [item.section_id, ...plan.corequisites.required_sections]);
+                                                    }, true) : null) : null,
+                                                plan.corequisites?.blocked ? null : button('Confirm drop / withdrawal', async () => finish(await request('/portal/api/drop/', 'POST', command)), true),
                                                 button('Check saved drop', async () => finish(await request(`/portal/api/drop-receipts/${plan.operation_id}/`))),
                                                 el('p', { class: 'form-text' }, 'If the connection is interrupted, check the saved drop or retry this same confirmation.'));
                                         }))

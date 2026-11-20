@@ -108,6 +108,7 @@ final class RegistrationScheduleFixture
             ),
             $f->transactions,
             $f->audit,
+            new \Infrastructure\Persistence\Repository\SqlCoRequisiteRepository($f->sql),
         );
     }
     public function batch(): \Domain\Registration\Service\RegistrationBatchService
@@ -135,6 +136,7 @@ final class RegistrationScheduleFixture
             $f->workPursuits(),
             $f->prerequisites(),
             $f->schedules(),
+            $f->corequisites(),
         );
     }
     public function digest(): string

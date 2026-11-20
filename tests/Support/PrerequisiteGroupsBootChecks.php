@@ -7,6 +7,7 @@ $target = $sis->section(20, 0);
 $first = $sis->section(20, 0);
 $alternative = $sis->section(20, 0);
 $additional = $sis->section(20, 0);
+$corequisite = $sis->section(20, 0);
 $base = '/sis/courses/' . $target->courseId->value . '/';
 $read = static function () use ($app, $get, $base): \Psr\Http\Message\ResponseInterface {
     $response = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
@@ -28,7 +29,8 @@ if ($response->getStatusCode() !== 200 || ($draft['groups'] ?? null) !== []) {
 $groups = [[$first->courseId->value, $alternative->courseId->value, $additional->courseId->value],
     [$alternative->courseId->value]];
 $input = ['groups' => $groups, 'minimums' => [2, 1],
-    'grade_points_milli' => [2675, null], 'revision' => $draft['revision']];
+    'grade_points_milli' => [2675, null], 'corequisites' => [$corequisite->courseId->value],
+    'revision' => $draft['revision']];
 foreach ([null, [], [0, 1], [4, 1], ['2', 1]] as $invalid) {
     if (
         $teachingPost($base . 'prerequisite-groups/', array_replace($input, ['minimums' => $invalid]))
@@ -43,6 +45,17 @@ foreach ([null, [], [-1, null], [10001, null], ['2675', null], [2.5, null]] as $
         ->getStatusCode() !== 422
     ) {
         throw new RuntimeException('Malformed grade minima bypassed the actual prerequisite route.');
+    }
+}
+foreach (
+    [null, 'invalid', [123], [$target->courseId->value],
+    [$corequisite->courseId->value, $corequisite->courseId->value]] as $invalid
+) {
+    if (
+        $teachingPost($base . 'prerequisite-groups/', array_replace($input, ['corequisites' => $invalid]))
+        ->getStatusCode() !== 422
+    ) {
+        throw new RuntimeException('Malformed co-requisites bypassed catalog validation.');
     }
 }
 if (
@@ -68,7 +81,8 @@ $expected = new \Domain\Catalog\ValueObject\PrerequisiteGroups($groups, [2, 1])-
 if (
     $reviewResponse->getStatusCode() !== 200 || ($review['definition']['prerequisite_groups'] ?? null) !== $expected ||
     ($review['definition']['prerequisite_group_minimums'] ?? null) !== [2, 1] ||
-    ($review['definition']['prerequisite_grade_points_milli'] ?? null) !== [2675, null]
+    ($review['definition']['prerequisite_grade_points_milli'] ?? null) !== [2675, null] ||
+    ($review['definition']['corequisites'] ?? null) !== [$corequisite->courseId->value]
 ) {
     throw new RuntimeException('Course publication omitted the reviewed prerequisite choices.');
 }
@@ -83,9 +97,33 @@ $teachingPost('/sis/prerequisite-labels/', ['ids' => [$first->courseId->value]])
 if ($before !== $sis->sql->rows('sis_history_events')) {
     throw new RuntimeException('Reading prerequisite drafts or labels changed history.');
 }
+$policyRead = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/sis/registration-policy/'
+)));
+$policy = json_decode((string) $policyRead->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$policyInput = ['mode' => $policy['mode'], 'revision' => $policy['revision'],
+    'prior_completion' => false, 'drop_mode' => 'warn', 'coreq_revision' => $policy['corequisites']['revision']];
+$policySaved = $teachingPost('/sis/registration-policy/', $policyInput);
+$policyResult = json_decode((string) $policySaved->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $policySaved->getStatusCode() !== 200 || ($policyResult['corequisites']['prior_completion'] ?? null) !== false ||
+    ($policyResult['corequisites']['drop_mode'] ?? null) !== 'warn'
+) {
+    throw new RuntimeException('Registration policy did not resolve its co-requisite settings.');
+}
+$policyInput['revision'] = $policyResult['revision'];
+$policyInput['mode'] = 'warn';
+if (
+    $teachingPost('/sis/registration-policy/', $policyInput)->getStatusCode() !== 409 ||
+    (new \Infrastructure\Persistence\Repository\SqlRegistrationScheduleRepository($sis->sql))->policy()['mode'] !==
+        $policy['mode']
+) {
+    throw new RuntimeException('A stale co-requisite policy left a partial timetable policy write.');
+}
 $sis->access->staff = false;
 $sis->access->grants = ['sis:registration:manage'];
 if (
+    $teachingPost('/sis/registration-policy/', $policyInput)->getStatusCode() !== 403 ||
     $read()->getStatusCode() !== 403 ||
     $teachingPost($base . 'prerequisite-groups/', $input)->getStatusCode() !== 403 ||
     $teachingPost('/sis/prerequisite-labels/', ['ids' => [$first->courseId->value]])->getStatusCode() !== 403

@@ -1208,6 +1208,32 @@ final readonly class HistoricalSchemaRegistry
                 if ($name === "schema_version" && $value === $version) {
                     continue;
                 }
+                if ($name === 'corequisite_evidence') {
+                    if (
+                        $class !== \Domain\Registration\Event\EnrollmentWasEstablished::class ||
+                        $payload['provenance'] !== 'registered' || !is_array($value)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    \Domain\Registration\ValueObject\CoRequisiteDecision::fromRetained($value);
+                    if (
+                        $value['student_id'] !== $payload['enrollment']['student_id'] ||
+                        $value['term_id'] !== $payload['enrollment']['term_id'] ||
+                        $value['assignment_id'] !== ($metadata['prerequisite_evidence']['assignment_id'] ?? null)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
+                if ($name === 'corequisite_drop_evidence') {
+                    if ($class !== \Domain\Registration\Event\EnrollmentWasClosed::class || !is_array($value)) {
+                        throw new CorruptHistoryException();
+                    }
+                    if ((new \Domain\Registration\ValueObject\CoRequisiteDropDecision($value))->blocked()) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'schedule_evidence') {
                     if (
                         $class !== \Domain\Registration\Event\EnrollmentWasEstablished::class

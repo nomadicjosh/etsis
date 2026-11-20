@@ -45,14 +45,16 @@ final readonly class CoursePrerequisiteService
         string $revision,
         ?array $minimums = null,
         ?array $gradePointsMilli = null,
+        ?array $corequisites = null,
     ): array {
         $actor = $this->authorize();
-        $groups = new PrerequisiteGroups($choices, $minimums, $gradePointsMilli);
-        if (in_array($course->value, $groups->courses(), true)) {
+        $groups = new PrerequisiteGroups($choices, $minimums, $gradePointsMilli, $corequisites);
+        if (in_array($course->value, $groups->references(), true)) {
             throw new ValidationException([['field' => 'groups', 'message' => 'A course cannot require itself.']]);
         }
-        $routing = array_unique([$course->value, ...$groups->courses(),
-            ...array_column($this->relationships->prerequisites($course), 'id')]);
+        $routing = array_unique([$course->value, ...$groups->references(),
+            ...($this->relationships->prerequisiteGroups($course)?->references() ??
+            array_column($this->relationships->prerequisites($course), 'id'))]);
         sort($routing, SORT_STRING);
         return $this->transactions->run(function () use ($course, $groups, $revision, $routing, $actor): array {
             foreach ($routing as $id) {
@@ -64,8 +66,8 @@ final readonly class CoursePrerequisiteService
                 throw new ConcurrentModificationException('Reload the prerequisite editor before saving your changes.');
             }
             $previous = array_column($context['courses'], 'id');
-            $labels = $this->relationships->prerequisiteLabels($groups->courses());
-            if (count($labels) !== count($groups->courses())) {
+            $labels = $this->relationships->prerequisiteLabels($groups->references());
+            if (count($labels) !== count($groups->references())) {
                 throw new ValidationException([['field' => 'groups',
                     'message' => 'Choose existing prerequisite courses.']]);
             }
@@ -101,7 +103,8 @@ final readonly class CoursePrerequisiteService
         PrerequisiteGroups::all(array_column($courses, 'id'));
         return ['course' => ['id' => $course->value, 'code' => $row['code'], 'title' => $row['title']],
             'groups' => $groups->groups, 'minimums' => $groups->counts(),
-            'grade_points_milli' => $groups->gradeFloors(), 'courses' => $courses];
+            'grade_points_milli' => $groups->gradeFloors(), 'corequisites' => $groups->corequisites ?? [],
+            'courses' => $this->relationships->prerequisiteLabels($groups->references())];
     }
 
     /** @param array<string,mixed> $context */

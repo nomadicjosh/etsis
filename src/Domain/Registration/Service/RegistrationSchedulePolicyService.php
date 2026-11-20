@@ -21,6 +21,7 @@ final readonly class RegistrationSchedulePolicyService
         private AccessRepository $permissions,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
+        private \Domain\Registration\Repository\CoRequisiteRepository $corequisites,
     ) {
     }
     public function current(): array
@@ -28,27 +29,35 @@ final readonly class RegistrationSchedulePolicyService
         $actor = $this->access->requirePermission("sis:registration:manage");
         $policy = $this->records->policy();
         $this->authorize($actor, false);
-        return $policy;
+        return $policy + ["corequisites" => $this->corequisites->policy()];
     }
-    public function save(string $mode, int $revision): array
+    public function save(string $mode, int $revision, ?array $corequisites = null): array
     {
         $actor = $this->access->requirePermission("sis:registration:policy");
         return $this->transactions->run(function () use (
             $mode,
             $revision,
             $actor,
+            $corequisites,
         ): array {
             $this->permissions->lock();
             $this->records->lockPolicy();
             $this->authorize($actor, true);
             $this->records->savePolicy($mode, $revision);
+            if ($corequisites !== null) {
+                $this->corequisites->savePolicy(
+                    $corequisites['prior_completion'],
+                    $corequisites['drop_mode'],
+                    $corequisites['revision']
+                );
+            }
             $this->audit->record(
                 $actor,
                 "registration.schedule_policy_changed",
                 new EntityId(RegistrationScheduleRepository::POLICY_ID),
             );
             $this->authorize($actor, true);
-            return $this->records->policy();
+            return $this->records->policy() + ["corequisites" => $this->corequisites->policy()];
         });
     }
     private function authorize(EntityId $actor, bool $write): void

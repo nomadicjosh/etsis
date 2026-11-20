@@ -138,6 +138,8 @@ Security, student privacy and historical academic integrity lead continued devel
 
 [Registration history](docs/registration-history.md) now preserves accepted seats, early/late releases and committed section decision order, with registrar-only access to restricted early-drop history. Staff and students can also [review a section change during add/drop](docs/registration-history.md#change-sections-during-adddrop), with the original drop, replacement registration and course-charge changes saved together.
 
+[Co-requisites and linked drops](docs/registration-history.md#co-requisites-and-linked-drops) connect retained course requirements, institutional policy, student/staff schedule plans and atomic companion-course drops. Qualifying prior completion avoids duplicate registration and charges; explicit earlier-pursuit reuse remains required.
+
 The [single protected event store](docs/event-history-foundation.md) serves the framework and domain ports. Its migration converts and verifies existing User/financial events before removing the old event table. Academic writers and richer command attribution still require the documented staged conversion.
 
 Operators can run `ddev codex sis:history:verify` for a bounded, read-only check of protected event chains, event references and retry receipts, including orphan detection and original request-fingerprint verification. [Limits, continuation and exit codes](docs/event-history-foundation.md#read-only-operator-verification) explain its scope; [Selected account verification](docs/event-history-foundation.md#selected-financial-account-verification) adds read-only balance/posting comparison with `--account=ULID`. Other projection domains and verified restores remain subsequent work.

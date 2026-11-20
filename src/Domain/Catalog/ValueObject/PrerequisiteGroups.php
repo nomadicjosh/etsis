@@ -17,10 +17,13 @@ final readonly class PrerequisiteGroups
     /** @param list<list<string>> $groups
      * @param list<int>|null $minimums Absent on earlier one-course choice publications.
      * @param list<int|null>|null $minimumGradePointsMilli Absent means passing grade only. */
+    public ?array $corequisites;
+
     public function __construct(
         array $groups,
         public ?array $minimums = null,
         public ?array $minimumGradePointsMilli = null,
+        ?array $corequisites = null,
     ) {
         if (
             !array_is_list($groups) || count($groups) > 100 ||
@@ -66,7 +69,28 @@ final readonly class PrerequisiteGroups
         if (count($ids) > 500 || count(array_unique($ids)) > 100) {
             throw new InvalidArgumentException('Use up to 100 distinct courses and 500 total prerequisite choices.');
         }
+        if (count(array_unique([...$ids, ...($corequisites ?? [])])) > 100) {
+            throw new InvalidArgumentException('Use up to one hundred distinct course requirements.');
+        }
+        if ($corequisites !== null) {
+            if (
+                !array_is_list($corequisites) || count($corequisites) > 20 ||
+                count(array_unique($corequisites)) !== count($corequisites)
+            ) {
+                throw new InvalidArgumentException('Choose up to twenty distinct co-requisite courses.');
+            }
+            foreach ($corequisites as $id) {
+                if (!is_string($id)) {
+                    throw new InvalidArgumentException('Use co-requisite course identities.');
+                }
+                new EntityId($id);
+            }
+            $sorted = $corequisites;
+            sort($sorted, SORT_STRING);
+            $corequisites = $sorted;
+        }
         $this->groups = $groups;
+        $this->corequisites = $corequisites;
     }
 
     /** @param list<string> $courses */
@@ -79,6 +103,14 @@ final readonly class PrerequisiteGroups
     public function courses(): array
     {
         $ids = array_values(array_unique(array_merge([], ...$this->groups)));
+        sort($ids, SORT_STRING);
+        return $ids;
+    }
+
+    /** @return list<string> */
+    public function references(): array
+    {
+        $ids = array_values(array_unique([...$this->courses(), ...($this->corequisites ?? [])]));
         sort($ids, SORT_STRING);
         return $ids;
     }
@@ -144,7 +176,8 @@ final readonly class PrerequisiteGroups
         return new self(
             $groups,
             $this->minimums === null ? null : $minimums,
-            $this->minimumGradePointsMilli === null ? null : $floors
+            $this->minimumGradePointsMilli === null ? null : $floors,
+            $this->corequisites === null ? null : array_values(array_intersect($this->corequisites, $selected))
         );
     }
 }

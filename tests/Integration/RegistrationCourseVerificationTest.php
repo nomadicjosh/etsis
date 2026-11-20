@@ -74,7 +74,8 @@ final class RegistrationCourseVerificationTest extends TestCase
             $s->primaryProgramLedger(),
             $s->workPursuits(),
             $s->prerequisites(),
-            $s->schedules()
+            $s->schedules(),
+            $s->corequisites(),
         );
     }
 

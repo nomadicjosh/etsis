@@ -59,12 +59,19 @@ window.createWorkspaceRegistration = function (ui) {
         });
     }
     async function policy(back = null) {
-        const body = openDrawer("Timetable policy", "REGISTRATION SETTINGS");
+        const body = openDrawer("Registration policy", "REGISTRATION SETTINGS");
         const value = await request("/sis/registration-policy/");
         if (!body.isConnected) return;
         const choices = ["block — Block confirmed overlaps", "warn — Warn and allow registration"];
-        const form = await buildForm([["mode", "When published meetings overlap", "choice", choices]], {
+        const dropChoices = ["block — Require linked courses to be dropped together", "warn — Warn and allow individual drops"];
+        const form = await buildForm([
+            ["mode", "When published meetings overlap", "choice", choices],
+            ["prior_completion", "Allow qualifying prior completion to satisfy co-requisites", "checkbox"],
+            ["drop_mode", "When a drop leaves a co-requisite unsupported", "choice", dropChoices],
+        ], {
             mode: choices.find((item) => item.startsWith(value.mode)),
+            prior_completion: value.corequisites.prior_completion,
+            drop_mode: dropChoices.find(item => item.startsWith(value.corequisites.drop_mode)),
         });
         if (!body.isConnected) return;
         const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save policy");
@@ -76,6 +83,9 @@ window.createWorkspaceRegistration = function (ui) {
                 await request("/sis/registration-policy/", "POST", {
                     mode: form.elements.mode.value.split(" — ")[0],
                     revision: value.revision,
+                    prior_completion: form.elements.prior_completion.checked,
+                    drop_mode: form.elements.drop_mode.value.split(" — ")[0],
+                    coreq_revision: value.corequisites.revision,
                 });
                 if (body.isConnected) await policy(back);
             }, save);
@@ -84,7 +94,7 @@ window.createWorkspaceRegistration = function (ui) {
             node(
                 "p",
                 {},
-                "Applies to new student, staff and group registrations. Unpublished schedules remain not checked. Existing registrations and charges are unchanged.",
+                "Applies to student and staff registration, including planned schedules. Turn off prior completion to require co-requisites in the same academic term. Accepted registrations retain their original requirement and prior-completion policy; the current drop policy controls whether an unsupported drop is blocked or warned.",
             ),
             form,
             back ? button("Back to registration", back, "btn-link") : null,
@@ -315,7 +325,7 @@ window.createWorkspaceRegistration = function (ui) {
                 button("Find a completed batch", findReceipt, "btn-outline-secondary"),
             );
             if (ui.can?.("sis:registration:policy"))
-                tools.append(button("Timetable policy", () => policy(selection)));
+                tools.append(button("Registration policy", () => policy(selection)));
             body.append(
                 node(
                     "p",
@@ -448,6 +458,7 @@ window.createWorkspaceRegistration = function (ui) {
                                       : "Not checked — closed enrollment",
                               }[student.prerequisites?.status] || "Checked on confirmation",
                         schedule.prerequisites(student.prerequisites, reviewed.section.prerequisite_courses),
+                        schedule.corequisites(student.corequisites, reviewed.section.corequisite_courses),
                     ),
                     schedule.text(student.schedule),
                     ["A", "N"].includes(student.enrollment_status)

@@ -335,6 +335,7 @@ final class SisFixture
             $this->workPursuits(),
             new \Domain\Registration\Service\PrerequisiteService($this->inputVerifier(), $this->workPursuits()),
             $this->schedules(),
+            $this->corequisites(),
         );
         if (!$initialize) {
             $this->term = new EntityId($this->sql->rows("sis_terms", [], 1)[0]["id"]);
@@ -425,6 +426,13 @@ final class SisFixture
         return $this->sql->fetch(
             "SELECT e.* FROM sis_history_events e JOIN sis_history_streams s ON s.id = e.stream_id " .
                 "WHERE s.stream_type IN ('student_account','billing_rule','journal') ORDER BY e.id",
+        );
+    }
+    public function corequisites(): \Domain\Registration\Service\CoRequisiteService
+    {
+        return new \Domain\Registration\Service\CoRequisiteService(
+            new \Infrastructure\Persistence\Repository\SqlCoRequisiteRepository($this->sql),
+            $this->inputVerifier(), $this->workPursuits(), $this->enrollmentLedger(), $this->registration,
         );
     }
     public function enrollmentLedger(): \Domain\Registration\Service\EnrollmentLedger
@@ -879,6 +887,7 @@ final class SisFixture
             $this->enrollmentLedger(),
             new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository($this->sql),
             new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+            $this->corequisites(),
         );
     }
 
@@ -914,6 +923,7 @@ final class SisFixture
                 new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql),
             ),
             new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+            $this->corequisites(),
         );
     }
 
@@ -1489,6 +1499,7 @@ final class SisFixture
             $this->schedules(),
             $this->registrationBilling,
             new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+            $this->corequisites(),
         );
     }
 

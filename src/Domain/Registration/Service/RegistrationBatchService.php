@@ -40,6 +40,7 @@ final readonly class RegistrationBatchService
         private RegistrationScheduleService $schedules,
         private RegistrationBilling $billing,
         private \Domain\Shared\Service\ReviewProof $reviews,
+        private CoRequisiteService $corequisites,
     ) {
     }
 
@@ -230,6 +231,7 @@ final readonly class RegistrationBatchService
             }
             $items = [];
             $courseRead = new RegistrationCourseRead();
+            $corequisitePlan = new CoRequisitePlan($selection, $this->repository, $operation);
             foreach ($selection->sections as $section) {
                 $current = $this->repository->section($section);
                 $course = $this->repository->courseForSection($current);
@@ -252,7 +254,11 @@ final readonly class RegistrationBatchService
                     budget: $budget,
                     chargeQuote: $quote,
                     courseRead: $courseRead,
+                    corequisitePlan: $corequisitePlan,
                 );
+                if ($enrollment->id->value !== $corequisitePlan->sections[$section->value]['enrollment_id']) {
+                    throw new ConcurrentModificationException('A coordinated registration changed before completion.');
+                }
                 $items[] = [
                     "section_id" => $section->value,
                     "enrollment_id" => $enrollment->id->value,
@@ -275,6 +281,7 @@ final readonly class RegistrationBatchService
             );
             $this->audit->record($actor, "registration.plan_completed", $operation);
             // Check every accepted section after the final write/audit, not just the last section.
+            $corequisiteRead = new CoRequisitePlan($selection, $this->repository);
             foreach ($selection->sections as $section) {
                 $this->registration->verifyCompletion(
                     $selection->student,
@@ -283,6 +290,7 @@ final readonly class RegistrationBatchService
                     $byStaff,
                     $budget,
                     courseRead: $courseRead,
+                    corequisiteRead: $corequisiteRead,
                 );
                 $expected = array_values(
                     array_filter(
@@ -372,6 +380,7 @@ final readonly class RegistrationBatchService
     ): array {
         $rows = $issues = $terms = $termFees = $totals = $termCharges = $termCurrencies = [];
         $read = new RegistrationScheduleRead();
+        $corequisitePlan = new CoRequisitePlan($selection, $this->repository);
         foreach ($selection->sections as $section) {
             $childQuotes = [];
             $child = $this->context(
@@ -380,6 +389,7 @@ final readonly class RegistrationBatchService
                 $byStaff,
                 $childQuotes,
                 $read,
+                corequisitePlan: $corequisitePlan,
             );
             $row = $child["students"][0];
             if ($row["enrollment_id"] !== null) {
@@ -392,6 +402,7 @@ final readonly class RegistrationBatchService
                 $row["issues"] !== [] ||
                 $row["schedule"]["blocked"] ||
                 $row["prerequisites"]["status"] === "missing" ||
+                $row["corequisites"]["status"] === "missing" ||
                 $row["charges"]["problems"] !== []
             ) {
                 $issues[] = "A selected section has readiness, timetable or pricing issues.";
@@ -746,6 +757,7 @@ final readonly class RegistrationBatchService
         array &$quotes,
         ?RegistrationScheduleRead $scheduleRead = null,
         ?EntityId $replacingSection = null,
+        ?CoRequisitePlan $corequisitePlan = null,
     ): array {
         $section = $this->repository->section($selection->section);
         $course = $this->repository->courseForSection($section);
@@ -754,6 +766,8 @@ final readonly class RegistrationBatchService
         $term = $this->repository->term($section->termId);
         $scheduleRead ??= new RegistrationScheduleRead();
         $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
+        $corequired = $course->prerequisiteGroups?->corequisites ?? [];
+        $corequisiteLabels = $this->repository->courseLabels($corequired);
         $records = $existing = $programs = [];
         foreach ($selection->students as $id) {
             $records[$id->value] = $this->admissions->student($id);
@@ -778,6 +792,14 @@ final readonly class RegistrationBatchService
             $assignment === null
             ? null
             : $this->prerequisites->evaluate($id, $assignment, $required, $budget, $course->prerequisiteGroups);
+            $corequisite = $assignment === null ? null : $this->corequisites->evaluate(
+                $id,
+                $assignment,
+                $section->termId,
+                $corequired,
+                $budget,
+                $corequisitePlan,
+            );
             $schedule =
             $enrollment === null
             ? $this->schedules->evaluate($id, $section->id, $scheduleRead, $replacingSection)
@@ -819,6 +841,10 @@ final readonly class RegistrationBatchService
                 array_filter($readiness, static fn(array $check): bool => $check["status"] === "blocked"),
                 "message",
             );
+            if ($corequisite !== null && !$corequisite->isMet()) {
+                $issues[] = 'Select the required co-requisite sections together, ' .
+                'or review qualifying completed coursework.';
+            }
             if ($enrollment !== null && !$enrollment->status->isEnrolled()) {
                 $issues = ["A closed enrollment requires registrar review before re-enrollment."];
             }
@@ -840,6 +866,8 @@ final readonly class RegistrationBatchService
                                 "revision" => $schedule->revision(),
                                 "conflicts" => $schedule->facts["conflicts"],
                             ],
+                'corequisites' => $corequisite?->summary() ??
+                    ['status' => $enrollment === null ? 'not_required' : 'not_rechecked'],
                 "prerequisites" => [
                     "status" =>
                         $decision === null
@@ -873,6 +901,8 @@ final readonly class RegistrationBatchService
                 "course_code" => $course->code,
                 "course_title" => $course->title,
                 "prerequisite_courses" => $prerequisiteCourses,
+                'corequisite_courses' => array_map(static fn(string $id): array =>
+                    $corequisiteLabels[$id] ?? ['code' => null, 'title' => null], $corequired),
                 "credits_milli" => $course->creditsMilli,
                 "active" => $section->active && $course->active,
                 "fee_minor" => $section->fee->minor,

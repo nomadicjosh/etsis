@@ -18,6 +18,26 @@ final class EventStoreFixture
     /** @var WeakMap<PDO, Collection>|null */
     private static ?WeakMap $configs = null;
 
+    /** Streaming test fingerprint avoids retaining dozens of complete encrypted event inventories. */
+    public static function historyDigest(SqlRecords $sql): string
+    {
+        $hash = hash_init('sha256');
+        $after = null;
+        do {
+            $rows = $sql->fetch(
+                'SELECT * FROM sis_history_events' .
+                ($after === null ? '' : ' WHERE id > ?') . ' ORDER BY id',
+                $after === null ? [] : [$after],
+                20
+            );
+            foreach ($rows as $row) {
+                hash_update($hash, json_encode($row, JSON_THROW_ON_ERROR) . "\n");
+                $after = $row['id'];
+            }
+        } while (count($rows) === 20);
+        return hash_final($hash);
+    }
+
     public static function config(Database $db): Collection
     {
         self::$configs ??= new WeakMap();

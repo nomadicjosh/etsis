@@ -1948,14 +1948,14 @@ $initialGradeData = [
     'version' => 0,
     'initial_only' => true,
 ];
-$initialGradeFacts = $sis->sql->rows('sis_history_events');
+$initialGradeFacts = EventStoreFixture::historyDigest($sis->sql);
 if (
     $teachingPost($finalGradeBase . 'review/', $initialGradeData)->getStatusCode() !== 422 ||
     $teachingPost(
         $finalGradeBase . 'review/',
         $initialGradeData + ['enrollment_id' => \Domain\Shared\ValueObject\EntityId::generate()->value],
     )->getStatusCode() !== 409 ||
-    $initialGradeFacts !== $sis->sql->rows('sis_history_events')
+    $initialGradeFacts !== EventStoreFixture::historyDigest($sis->sql)
 ) {
     throw new RuntimeException('A grade review omitted or ignored the displayed registration.');
 }
@@ -5210,7 +5210,7 @@ if (
 // The enriched financial directory remains a private, CSRF-protected, read-only query.
 $sis->access->staff = true;
 $sis->access->grants = [];
-$billingDirectoryBefore = $sis->sql->rows('sis_history_events');
+$billingDirectoryBefore = EventStoreFixture::historyDigest($sis->sql);
 $billingDirectoryResponse = $teachingPost('/sis/ui/data/billing/', ['search' => 'Native fictional fee', 'after' => '']);
 $billingDirectoryBody = json_decode((string) $billingDirectoryResponse->getBody(), true);
 $billingDirectoryRow = $billingDirectoryBody['items'][0] ?? [];
@@ -5223,7 +5223,7 @@ if (
     || $billingDirectoryResponse->hasHeader('phpdebugbar-id')
     || !str_contains($billingDirectoryResponse->getHeaderLine('Cache-Control'), 'no-store')
     || str_contains((string) $billingDirectoryResponse->getBody(), 'Native private')
-    || $billingDirectoryBefore !== $sis->sql->rows('sis_history_events')
+    || $billingDirectoryBefore !== EventStoreFixture::historyDigest($sis->sql)
 ) {
     throw new RuntimeException('Billing lookup lost labels, privacy, read-only behavior or native provider wiring.');
 }
@@ -6437,7 +6437,7 @@ $caseworkPath = '/sis/applications/' . $caseworkApplication->value . '/casework/
 $caseworkItem = ['key' => 'transcript', 'label' => 'Previous transcript', 'instructions' => 'Arrange delivery.',
     'needed' => true, 'visible' => true, 'status' => 'pending', 'due_on' => ''];
 $caseworkPrivate = array_replace($caseworkItem, ['key' => 'private_task', 'label' => 'Private staff task', 'visible' => false]);
-$caseworkEvents = $sis->sql->rows('sis_history_events');
+$caseworkEvents = EventStoreFixture::historyDigest($sis->sql);
 $caseworkResponse = $teachingPost($caseworkPath, ['version' => 0, 'claim' => 'me', 'values' => [
     'office' => 'Admissions', 'private_notes' => 'Fictional private case note.',
     'next_step' => 'Arrange delivery through admissions.', 'items' => [$caseworkItem, $caseworkPrivate],
@@ -6475,7 +6475,7 @@ if ($teachingPost($caseworkPath, ['version' => 1, 'claim' => 'me', 'values' => [
 $sis->access->actor = $originalSubmissionActor;
 $sis->access->staff = true;
 if ($app->router->match($caseworkOwnerRequest)->getStatusCode() !== 403
-    || $caseworkEvents !== $sis->sql->rows('sis_history_events')
+    || $caseworkEvents !== EventStoreFixture::historyDigest($sis->sql)
 ) {
     throw new RuntimeException('Working casework overrode portal ownership or wrote academic history.');
 }
@@ -6514,7 +6514,7 @@ $sis->access->actor = $originalSubmissionActor;
 $sis->access->staff = true;
 if (
     $teachingPost($updateReadPath, ['revision' => $updateNotice['revision']])->getStatusCode() !== 403
-    || $caseworkEvents !== $sis->sql->rows('sis_history_events')
+    || $caseworkEvents !== EventStoreFixture::historyDigest($sis->sql)
 ) {
     throw new RuntimeException('Staff authority overrode update ownership or changed academic events.');
 }
@@ -6734,11 +6734,11 @@ $returnResult = json_decode((string) $returnResponse->getBody(), true, flags: JS
 if ($returnResponse->getStatusCode() !== 200 || ($returnResult['status'] ?? null) !== 'submitted') {
     throw new RuntimeException('Returning to review restored an earlier acceptance.');
 }
-$reviewStateBeforeRetry = $sis->sql->rows('sis_history_events');
+$reviewStateBeforeRetry = EventStoreFixture::historyDigest($sis->sql);
 $retryWithdrawal = $teachingPost($reviewStatePath . 'commit/', ['review_token' => $withdrawalPreview['review_token']]);
 if (
     json_decode((string) $retryWithdrawal->getBody(), true, flags: JSON_THROW_ON_ERROR) !== $withdrawalResult
-    || $reviewStateBeforeRetry !== $sis->sql->rows('sis_history_events')
+    || $reviewStateBeforeRetry !== EventStoreFixture::historyDigest($sis->sql)
     || $sis->admissions->application($caseworkApplication)->status->value !== 'submitted'
 ) {
     throw new RuntimeException('An HTTP retry re-applied the original withdrawal after return to review.');
@@ -6835,7 +6835,7 @@ $withdrawalNoCsrf = $post->withUri(new \Laminas\Diactoros\Uri(
 if ($app->router->match($withdrawalNoCsrf)->getStatusCode() !== 403) {
     throw new RuntimeException('An applicant withdrawal request bypassed CSRF.');
 }
-$withdrawalEvents = $sis->sql->rows('sis_history_events');
+$withdrawalEvents = EventStoreFixture::historyDigest($sis->sql);
 $withdrawalReviewResponse = $teachingPost($withdrawalOwnerBase . 'review/', [
     'action' => 'request', 'request_id' => null, 'reason' => 'Fictional private applicant request.',
 ]);
@@ -6849,7 +6849,7 @@ $withdrawalSentResponse = $teachingPost($withdrawalOwnerBase . 'commit/', [
 $withdrawalSent = json_decode((string) $withdrawalSentResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
     $withdrawalSentResponse->getStatusCode() !== 200 || ($withdrawalSent['status'] ?? null) !== 'pending'
-    || $withdrawalEvents !== $sis->sql->rows('sis_history_events')
+    || $withdrawalEvents !== EventStoreFixture::historyDigest($sis->sql)
     || $sis->admissions->application($caseworkApplication)->status->value !== 'accepted'
 ) {
     throw new RuntimeException('A working withdrawal request changed formal application history or failed to save.');
@@ -6899,7 +6899,7 @@ $withdrawalOwnerRead = $app->router->match($get->withUri(new \Laminas\Diactoros\
     'https://campus.example.invalid' . $withdrawalOwnerBase
 )));
 $withdrawalOwnerData = json_decode((string) $withdrawalOwnerRead->getBody(), true, flags: JSON_THROW_ON_ERROR);
-$withdrawalBeforeRetry = $sis->sql->rows('sis_history_events');
+$withdrawalBeforeRetry = EventStoreFixture::historyDigest($sis->sql);
 $withdrawalRetry = $teachingPost(
     $withdrawalOwnerBase . 'commit/',
     ['review_token' => $withdrawalReviewData['review_token']]
@@ -6910,7 +6910,7 @@ if (
     || !str_contains($withdrawalOwnerRead->getHeaderLine('Cache-Control'), 'no-store')
     || $withdrawalOwnerRead->hasHeader('phpdebugbar-id')
     || json_decode((string) $withdrawalRetry->getBody(), true, flags: JSON_THROW_ON_ERROR) !== $withdrawalSent
-    || $withdrawalBeforeRetry !== $sis->sql->rows('sis_history_events')
+    || $withdrawalBeforeRetry !== EventStoreFixture::historyDigest($sis->sql)
 ) {
     throw new RuntimeException(
         'The applicant response or its original retry result lost ownership or historical integrity.'
@@ -6955,12 +6955,12 @@ if ($cohortReviewResponse->getStatusCode() !== 200 ||
 $cohortReviewed = json_decode((string) $cohortReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
 $cohortCommand += ['operation_id' => $cohortReviewed['operation_id'], 'review_token' => $cohortReviewed['review_token']];
 $cohortConfirmed = $teachingPost($cohortPath . 'commit/', $cohortCommand);
-$cohortEvents = $sis->sql->rows('sis_history_events');
+$cohortEvents = EventStoreFixture::historyDigest($sis->sql);
 $cohortRepeated = $teachingPost($cohortPath . 'commit/', $cohortCommand);
 if ($cohortConfirmed->getStatusCode() !== 200 || $cohortRepeated->getStatusCode() !== 200 ||
     (string) $cohortConfirmed->getBody() !== (string) $cohortRepeated->getBody() ||
     !str_contains($cohortConfirmed->getHeaderLine('Cache-Control'), 'no-store') ||
-    $cohortConfirmed->hasHeader('phpdebugbar-id') || $cohortEvents !== $sis->sql->rows('sis_history_events') ||
+    $cohortConfirmed->hasHeader('phpdebugbar-id') || $cohortEvents !== EventStoreFixture::historyDigest($sis->sql) ||
     $sis->sql->one('sis_student_catalogs', ['assignment_id' => $cohortAssignment['id']])['catalog_id'] !==
         $cohortPublication['operation_id']) {
     throw new RuntimeException('Cohort confirmation, current binding or its original retry lost integrity.');

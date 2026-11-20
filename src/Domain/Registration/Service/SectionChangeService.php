@@ -168,6 +168,11 @@ final readonly class SectionChangeService
                 $operation,
                 $drop["revision"],
                 $drop["effective_on"],
+                budget: $budget,
+                replacement: new CoRequisitePlan(new \Domain\Registration\ValueObject\RegistrationPlanSelection(
+                    $selection->student,
+                    $selection->to
+                ), $this->repository),
             );
             $fresh = $this->quote($selection, $budget);
             if (
@@ -183,6 +188,11 @@ final readonly class SectionChangeService
                 budget: $budget,
                 chargeQuote: $fresh,
             );
+            if ($this->drops->dependencies($selection->student, [$selection->from->value], $budget)->blocked()) {
+                throw new ConcurrentModificationException(
+                    'The replacement leaves co-requisites unsupported. Review again.',
+                );
+            }
             $financialRevision = $this->quote($selection, $budget)->fingerprint();
             $result = [
                 "change_id" => $operation->value,
@@ -206,6 +216,15 @@ final readonly class SectionChangeService
                 $this->clock->now()->format(DATE_ATOM),
             );
             $this->audit->record($actor, "registration.section_changed", $operation);
+            $dependencies = $this->drops->dependencies($selection->student, [$selection->from->value], $budget);
+            if (
+                $dependencies->blocked() || $dependencies->summary()['policy_revision'] !==
+                $context['drop']['corequisites']['policy_revision']
+            ) {
+                throw new ConcurrentModificationException(
+                    'Co-requisite support changed before completion. Review again.',
+                );
+            }
             $this->registration->verifyCompletion(
                 $selection->student,
                 $selection->to,
@@ -270,7 +289,18 @@ final readonly class SectionChangeService
         HistoryReadBudget $budget,
         ?RegistrationChargeQuote &$quote,
     ): array {
-        $drop = $this->drops->review($selection->student, $selection->from);
+        $drop = $this->drops->review(
+            $selection->student,
+            $selection->from,
+            budget: $budget,
+            replacement: new CoRequisitePlan(
+                new \Domain\Registration\ValueObject\RegistrationPlanSelection(
+                    $selection->student,
+                    $selection->to
+                ),
+                $this->repository
+            )
+        );
         $this->early($drop);
         unset($drop["operation_id"]);
         $history = $this->registration->verifyChangeSource(
@@ -301,6 +331,7 @@ final readonly class SectionChangeService
         $target["students"][0]["charges"]["problems"] = $financial["problems"];
         $row = $target["students"][0];
         $can =
+        !$drop["corequisites"]["blocked"] &&
         $target["section"]["active"] &&
         $target["section"]["seats_remaining"] > 0 &&
         $row["issues"] === [] &&

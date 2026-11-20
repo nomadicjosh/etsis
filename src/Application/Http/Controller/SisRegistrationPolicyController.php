@@ -28,6 +28,11 @@ final readonly class SisRegistrationPolicyController
             $this->service->save(
                 $input->text("mode", 8),
                 $input->integer("revision", 0, 2000000000),
+                array_key_exists('coreq_revision', (array) $request->getParsedBody()) ? [
+                    'prior_completion' => $input->requiredBoolean('prior_completion'),
+                    'drop_mode' => $input->text('drop_mode', 8),
+                    'revision' => $input->integer('coreq_revision', 0, 2000000000),
+                ] : null,
             ),
         );
     }

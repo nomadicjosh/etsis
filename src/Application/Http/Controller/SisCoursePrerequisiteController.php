@@ -30,13 +30,17 @@ final readonly class SisCoursePrerequisiteController
                 'Provide all prerequisite choices, including an empty list to clear them.'
             );
         }
+        if (array_key_exists('corequisites', $body) && !is_array($body['corequisites'])) {
+            throw new \InvalidArgumentException('Provide a co-requisite course list.');
+        }
         $f = FormInput::from($request);
         return new JsonResponse($this->service->save(
             new EntityId($id),
             $f->values('groups', 100),
             $f->text('revision', 64),
             array_key_exists('minimums', $body) ? $f->values('minimums', 100) : null,
-            array_key_exists('grade_points_milli', $body) ? $f->values('grade_points_milli', 100) : null
+            array_key_exists('grade_points_milli', $body) ? $f->values('grade_points_milli', 100) : null,
+            array_key_exists('corequisites', $body) ? $f->values('corequisites', 20) : null
         ));
     }
 

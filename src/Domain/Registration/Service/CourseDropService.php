@@ -43,6 +43,7 @@ final readonly class CourseDropService
         private EnrollmentLedger $enrollments,
         private \Domain\Registration\Repository\RegistrationBatchRepository $plans,
         private \Domain\Shared\Service\ReviewProof $proofs,
+        private CoRequisiteService $corequisites,
     ) {
     }
 
@@ -89,7 +90,7 @@ final readonly class CourseDropService
                     'institutional_id' => $first['institutional_id']],
                 'courses' => array_map(static fn(array $row): array => array_intersect_key(
                     $row,
-                    array_flip(['section_id', 'section_code', 'effective_on', 'outcome'])
+                    array_flip(['section_id', 'section_code', 'effective_on', 'outcome', 'corequisites'])
                 ), $context['courses'])];
             return $visible + ['operation_id' => $operation->value, 'revision' => $revision,
                 'review_token' => $this->proofs->issue(
@@ -140,9 +141,17 @@ final readonly class CourseDropService
                 return $this->replayPlan($old, $actor, $hash);
             }
             $budget ??= new HistoryReadBudget();
-            $context = $this->planContext($selection, $budget);
+            $dependencyRead = $this->dependencies(
+                $selection->student,
+                array_map(static fn(EntityId $id): string => $id->value, $selection->sections),
+                $budget
+            );
+            $context = $this->planContext($selection, $budget, $dependencyRead);
             if (!hash_equals($this->revision($context), $revision)) {
                 throw new ConcurrentModificationException('The selected drops changed. Review them again.');
+            }
+            foreach ($context['courses'] as $course) {
+                $this->assertDependencies($course['corequisites']);
             }
             $removed = $withdrawn = 0;
             $items = [];
@@ -155,7 +164,9 @@ final readonly class CourseDropService
                     EntityId::generate(),
                     $course['revision'],
                     $course['effective_on'],
-                    budget: $budget
+                    budget: $budget,
+                    dropping: array_map(static fn(EntityId $id): string => $id->value, $selection->sections),
+                    dependencyRead: $dependencyRead,
                 );
                 $removed += (int) $child['academic_records_removed'];
                 $withdrawn += (int) !$child['academic_records_removed'];
@@ -172,6 +183,17 @@ final readonly class CourseDropService
                 $this->clock->now()->format(DATE_ATOM)
             );
             $this->audit->record($actor, 'registration.drop_plan_completed', $operation);
+            $after = $this->dependencies(
+                $selection->student,
+                array_map(static fn(EntityId $id): string => $id->value, $selection->sections),
+                $budget
+            );
+            if ($after->revision() !== $context['courses'][0]['corequisites']['revision']) {
+                throw new ConcurrentModificationException(
+                    'Co-requisite support changed before completion. Review again.',
+                );
+            }
+            $this->assertDependencies($after->summary());
             $this->verifyPlanRouting($selection, $routing);
             $this->authorizePlan($selection->student, $byStaff, $actor);
             $this->planProof($selection, $actor, $operation, $revision, $token, $byStaff, false);
@@ -198,11 +220,23 @@ final readonly class CourseDropService
     /** @return array<string,mixed> */
     private function planContext(
         \Domain\Registration\ValueObject\RegistrationPlanSelection $selection,
-        HistoryReadBudget $budget
+        HistoryReadBudget $budget,
+        ?\Domain\Registration\ValueObject\CoRequisiteDropDecision $dependencyRead = null,
     ): array {
+        $dependencyRead ??= $this->dependencies(
+            $selection->student,
+            array_map(static fn(EntityId $id): string => $id->value, $selection->sections),
+            $budget
+        );
         $courses = [];
         foreach ($selection->sections as $section) {
-            $row = $this->review($selection->student, $section, budget: $budget);
+            $row = $this->review(
+                $selection->student,
+                $section,
+                budget: $budget,
+                dropping: array_map(static fn(EntityId $id): string => $id->value, $selection->sections),
+                dependencyRead: $dependencyRead
+            );
             unset($row['operation_id']);
             $courses[] = $row;
         }
@@ -323,7 +357,10 @@ final readonly class CourseDropService
         EntityId $student,
         EntityId $section,
         ?string $effective = null,
-        ?HistoryReadBudget $budget = null
+        ?HistoryReadBudget $budget = null,
+        array $dropping = [],
+        ?CoRequisitePlan $replacement = null,
+        ?\Domain\Registration\ValueObject\CoRequisiteDropDecision $dependencyRead = null,
     ): array {
         $this->authorize($student);
         if ($effective !== null) {
@@ -331,9 +368,26 @@ final readonly class CourseDropService
         }
         $date = $effective ?? $this->clock->now()->format("Y-m-d");
         $routing = $this->routing($student, $section);
-        return $this->transactions->run(function () use ($student, $section, $date, $routing, $budget): array {
+        return $this->transactions->run(function () use (
+            $student,
+            $section,
+            $date,
+            $routing,
+            $budget,
+            $dropping,
+            $replacement,
+            $dependencyRead,
+        ): array {
             $this->lock($student, $section, $routing);
-            $context = $this->context($student, $section, $date, $budget ?? new HistoryReadBudget());
+            $context = $this->context(
+                $student,
+                $section,
+                $date,
+                $budget ?? new HistoryReadBudget(),
+                $dropping,
+                $replacement,
+                $dependencyRead,
+            );
             return $context + [
                 "operation_id" => EntityId::generate()->value,
                 "revision" => $this->revision($context),
@@ -351,6 +405,9 @@ final readonly class CourseDropService
         string $effective,
         bool $effectiveDated = false,
         ?HistoryReadBudget $budget = null,
+        array $dropping = [],
+        ?CoRequisitePlan $replacement = null,
+        ?\Domain\Registration\ValueObject\CoRequisiteDropDecision $dependencyRead = null,
     ): array {
         $actor = $this->authorize($student);
         if ($effectiveDated) {
@@ -364,6 +421,8 @@ final readonly class CourseDropService
             "revision" => $revision,
             "effective_on" => $effective,
             "effective_dated" => $effectiveDated,
+            "dropping" => $dropping,
+            "replacement" => $replacement?->sections,
         ];
         $hash = hash("sha256", json_encode($request, JSON_THROW_ON_ERROR));
         if (($old = $this->drops->receipt($operation)) !== null) {
@@ -383,6 +442,9 @@ final readonly class CourseDropService
             $hash,
             $routing,
             $budget,
+            $dropping,
+            $replacement,
+            $dependencyRead,
         ): array {
             $this->lock($student, $section, $routing);
             if (($old = $this->drops->receipt($operation)) !== null) {
@@ -400,7 +462,19 @@ final readonly class CourseDropService
                 $this->access->requirePermission('sis:registration:manage');
             }
             $budget ??= new HistoryReadBudget();
-            $context = $this->context($student, $section, $effective, $budget);
+            $dropping = $dropping === [] ? [$section->value] : $dropping;
+            if (!in_array($section->value, $dropping, true)) {
+                throw new \LogicException('The coordinated removal must include this section.');
+            }
+            $context = $this->context(
+                $student,
+                $section,
+                $effective,
+                $budget,
+                $dropping,
+                $replacement,
+                $dependencyRead,
+            );
             if (
                 $context["enrollment_id"] !== $enrollment->value ||
                 $context["version"] !== $version ||
@@ -409,6 +483,11 @@ final readonly class CourseDropService
                 throw new ConcurrentModificationException(
                     "This enrollment or drop policy changed. Review it again.",
                 );
+            }
+            $dependencies = $dependencyRead ?? $this->dependencies($student, $dropping, $budget, $replacement);
+            $this->assertDependencies($dependencies->summary());
+            if ($context['corequisites']['revision'] !== $dependencies->revision()) {
+                throw new ConcurrentModificationException('Co-requisite support changed. Review the drop again.');
             }
             $current =
                 $this->registration->enrollment($student, $section) ??
@@ -437,6 +516,7 @@ final readonly class CourseDropService
                     reason: "Reviewed course drop.",
                 ),
                 $budget,
+                $dependencies->facts['checks'] === [] ? null : $dependencies,
             );
             $reversed =
                 $context["outcome"]["delete_records"] &&
@@ -493,6 +573,16 @@ final readonly class CourseDropService
                 $context["outcome"]["delete_records"] ? "registration.removed" : "registration.withdrawn",
                 $enrollment,
             );
+            // Shared multi-drop checks run once more at the outer completion boundary.
+            if ($dependencyRead === null) {
+                $after = $this->dependencies($student, $dropping, $budget, $replacement);
+                if ($after->revision() !== $dependencies->revision()) {
+                    throw new ConcurrentModificationException(
+                        'Co-requisite support changed before completion. Review again.',
+                    );
+                }
+                $this->assertDependencies($after->summary());
+            }
             if ($this->authorize($student)->value !== $actor->value) {
                 throw new AccessDeniedException('The drop confirmation account changed.');
             }
@@ -541,9 +631,14 @@ final readonly class CourseDropService
         );
     }
     /** @return array<string, mixed> */
-    public function dropEffective(EntityId $student, EntityId $section, string $effective): array
-    {
-        $r = $this->review($student, $section, $effective);
+    public function dropEffective(
+        EntityId $student,
+        EntityId $section,
+        string $effective,
+        array $dropping = [],
+        ?\Domain\Registration\ValueObject\CoRequisiteDropDecision $dependencyRead = null,
+    ): array {
+        $r = $this->review($student, $section, $effective, dropping: $dropping, dependencyRead: $dependencyRead);
         return $this->commit(
             $student,
             $section,
@@ -553,6 +648,8 @@ final readonly class CourseDropService
             $r["revision"],
             $effective,
             true,
+            dropping: $dropping,
+            dependencyRead: $dependencyRead,
         );
     }
     /** @param array<string, mixed> $result */
@@ -594,7 +691,10 @@ final readonly class CourseDropService
         EntityId $student,
         EntityId $section,
         string $effective,
-        HistoryReadBudget $budget
+        HistoryReadBudget $budget,
+        array $dropping = [],
+        ?CoRequisitePlan $replacement = null,
+        ?\Domain\Registration\ValueObject\CoRequisiteDropDecision $dependencyRead = null,
     ): array {
         $e =
         $this->registration->enrollment($student, $section) ??
@@ -655,8 +755,36 @@ final readonly class CourseDropService
             "effective_on" => $effective,
             "timezone" => $now->getTimezone()->getName(),
             "credit" => $credit,
+            "corequisites" => ($dependencyRead ?? $this->dependencies(
+                $student,
+                $dropping === [] ? [$section->value] : $dropping,
+                $budget,
+                $replacement,
+            ))->summary(),
             "outcome" => $this->policy->outcome($e->termId, $effective, $e->studentId, $e->id, $e->sectionId, $budget),
         ];
+    }
+    /** Internal institutional setting for related authorized lifecycle reviews. */
+    public function dependencyPolicy(): array
+    {
+        return $this->corequisites->policy();
+    }
+    /** Internal coordinator guard; callers hold the student lock and authorize every selected mutation. */
+    public function dependencies(
+        EntityId $student,
+        array $sections,
+        HistoryReadBudget $budget,
+        ?CoRequisitePlan $replacement = null
+    ): \Domain\Registration\ValueObject\CoRequisiteDropDecision {
+        return $this->corequisites->dropping($student, $sections, $budget, $replacement);
+    }
+    private function assertDependencies(array $summary): void
+    {
+        if ($summary['blocked']) {
+            throw new ValidationException([['field' => 'corequisites',
+                'message' => 'This drop leaves a required co-requisite unsupported. ' .
+                    'Select the linked courses together.']]);
+        }
     }
     /** @param array<string, mixed> $context */
     private function revision(array $context): string

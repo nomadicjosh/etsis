@@ -444,3 +444,20 @@ test("grade-point prerequisite details distinguish a zero minimum from an absent
     assert.match(details.textContent, /Needs attention/);
     assert.equal(walk(details).some(e => e.tag === "script"), false);
 });
+
+test("co-requisite readiness distinguishes prior completion from selected and missing companions", () => {
+    const ui = presenter(), review = registrationReview({ status: "clear", blocked: false });
+    review.section.corequisite_courses = [{ code: "LAB.101", title: "Fictional <script> lab" }];
+    review.students[0].corequisites = { status: "met", prior_completion: true, courses: ["completed"] };
+    const details = ui.registration(review, (value, currency) => `${value} ${currency}`);
+    assert.match(details.textContent, /no new registration or charge/);
+    assert.equal(walk(details).some(element => element.tag === "script"), false);
+    assert.equal(ui.canConfirm(review), true);
+    review.students[0].corequisites = { status: "missing", prior_completion: false, courses: ["missing"] };
+    assert.equal(ui.canConfirm(review), false);
+    assert.match(ui.corequisites(review.students[0].corequisites, review.section.corequisite_courses).textContent,
+        /same academic term/);
+    review.students[0].corequisites = { status: "met", prior_completion: false, courses: ["planned"] };
+    assert.match(ui.corequisites(review.students[0].corequisites, review.section.corequisite_courses).textContent,
+        /Included in this selected schedule/);
+});
