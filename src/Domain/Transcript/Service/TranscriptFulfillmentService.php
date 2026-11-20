@@ -53,6 +53,7 @@ final readonly class TranscriptFulfillmentService
         private PublishedProgramReader $programDefinitions,
         private TranscriptLayoutCatalog $layouts,
         private TranscriptReleasePolicyRepository $releasePolicies,
+        private TranscriptStandingSource $standing,
     ) {
     }
 
@@ -268,7 +269,7 @@ final readonly class TranscriptFulfillmentService
         }
         $packet = json_encode([
             'revision' => $revision,
-            'academic_revision' => $this->revision($context['snapshot']),
+            'academic_revision' => $this->academicRevision($context['snapshot']),
             'document' => $document,
             'pdf' => base64_encode($pdf),
             'html' => $html,
@@ -397,13 +398,17 @@ final readonly class TranscriptFulfillmentService
             $academicChanged = null;
             if ($verify) {
                 try {
-                    $current = $this->snapshot($routing["student"]);
+                    $current = $this->snapshot(
+                        $routing["student"],
+                        $payload["document"]["standing"]["through"] ?? null,
+                        isset($payload["document"]["standing"]),
+                    );
                 } catch (ValidationException $error) {
                     $verificationFailed = true;
                     throw $error;
                 }
                 $academicCheck = $current["academic_verification"]["status"];
-                $academicChanged = !hash_equals($payload["academic_revision"], $this->revision($current));
+                $academicChanged = !hash_equals($payload["academic_revision"], $this->academicRevision($current));
             }
             $delivery = $this->records->documentDelivery($document);
             $deliveryPayload = $delivery === null ? null : $this->deliveryPayload($delivery);
@@ -651,8 +656,13 @@ final readonly class TranscriptFulfillmentService
     ): array {
         $row = $this->ownedDocument($request, $document);
         $current = $this->records->request($request);
-        $snapshot = $this->snapshot(new EntityId($current["student_id"]));
-        $academic = $this->revision($snapshot);
+        $retained = $this->preparedPayload($row);
+        $snapshot = $this->snapshot(
+            new EntityId($current["student_id"]),
+            $retained["document"]["standing"]["through"] ?? null,
+            isset($retained["document"]["standing"]),
+        );
+        $academic = $this->academicRevision($snapshot);
         if (
             $current["status"] !== ($completed ? "fulfilled" : "ready") ||
             (int) $current["version"] !== $input["version"] + (int) $completed ||
@@ -730,7 +740,7 @@ final readonly class TranscriptFulfillmentService
     }
 
     /** @return array<string, mixed> */
-    private function snapshot(EntityId $student): array
+    private function snapshot(EntityId $student, ?string $standingThrough = null, ?bool $includeStanding = null): array
     {
         $s = $this->admissions->student($student);
         $person = $this->admissions->person($s->personId);
@@ -795,6 +805,13 @@ final readonly class TranscriptFulfillmentService
                 ];
             }
             $verified = $this->academicInputs->verify($student, $budget);
+            $standing = ($includeStanding ?? $this->releasePolicies->current()->includeStanding)
+            ? $this->standing->snapshot(
+                $student,
+                new EntityId($primary["assignment_id"]),
+                $standingThrough ?? $this->clock->now()->format("Y-m-d"),
+            )
+            : null;
         } catch (CorruptHistoryException) {
             throw new ValidationException([
                 [
@@ -927,7 +944,7 @@ final readonly class TranscriptFulfillmentService
                 "completed_milli" => $earned,
                 "gpa_milli" => $gpaCredits === 0 ? null : intdiv($points * 1000, $gpaCredits),
             ],
-        ];
+        ] + ($standing === null ? [] : ['standing' => $standing]);
     }
 
     /** @return array<string, mixed> */
@@ -1057,7 +1074,8 @@ final readonly class TranscriptFulfillmentService
     {
         return new TranscriptReleasePolicy(
             $context['release_policy']['revision'],
-            $context['release_policy']['checks']
+            $context['release_policy']['checks'],
+            $context['release_policy']['include_standing'] ?? false
         );
     }
 
@@ -1098,6 +1116,15 @@ final readonly class TranscriptFulfillmentService
             throw new \RuntimeException('The delivery has no evidence for its institutional checks.');
         }
         return $data + ['release_review' => null];
+    }
+
+    /** Source-version changes alone do not change the printed standing facts at the retained cutoff. */
+    private function academicRevision(#[\SensitiveParameter] array $snapshot): string
+    {
+        if (isset($snapshot['standing'])) {
+            unset($snapshot['standing']['stream_version']);
+        }
+        return $this->revision($snapshot);
     }
 
     /** @param array<string, mixed> $data */

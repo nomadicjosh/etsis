@@ -28,12 +28,16 @@ $app->delegate(
 $policyPath = '/sis/transcript-policy/';
 $policyResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $policyPath)));
 $policy = json_decode((string) $policyResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
-if ($policyResponse->getStatusCode() !== 200 || $policy !== ['revision' => 0, 'checks' => []] ||
-    !str_contains($policyResponse->getHeaderLine('Cache-Control'), 'no-store')) {
+if (
+    $policyResponse->getStatusCode() !== 200 ||
+    $policy !== ['revision' => 0, 'checks' => [], 'include_standing' => false] ||
+    !str_contains($policyResponse->getHeaderLine('Cache-Control'), 'no-store')
+) {
     throw new RuntimeException('The institutional release policy read lost its private provider boundary.');
 }
 $checkId = \Domain\Shared\ValueObject\EntityId::generate()->value;
-$policyCommand = ['revision' => 0, 'checks' => [['id' => $checkId, 'label' => 'Review fictional authorization',
+$policyCommand = ['revision' => 0, 'include_standing' => true, 'checks' => [
+    ['id' => $checkId, 'label' => 'Review fictional authorization',
     'details' => 'Use a fictional office record.', 'stage' => 'both']]];
 if ($teachingPost($policyPath, $policyCommand)->getStatusCode() !== 200 ||
     $teachingPost($policyPath, $policyCommand)->getStatusCode() !== 409) {
@@ -64,6 +68,8 @@ $review = json_decode(
 if (
     $reviewResponse->getStatusCode() !== 200 ||
     !is_string($review["review_token"] ?? null) ||
+    ($review['snapshot']['standing']['periods'] ?? null) !== [] ||
+    ($review['snapshot']['standing']['through'] ?? null) !== $sis->clock->now()->format('Y-m-d') ||
     ($review['layout']['code'] ?? null) !== 'classic-letter' || count($review['layouts'] ?? []) !== 4
 ) {
     throw new RuntimeException(
@@ -177,11 +183,15 @@ if (
 }
 
 $sis->access->grants = ['sis:transcript:manage', 'sis:student:read'];
-if ($teachingPost($policyPath, ['revision' => 1, 'checks' => []])->getStatusCode() !== 403) {
+if (
+    $teachingPost($policyPath, ['revision' => 1, 'checks' => [], 'include_standing' => false])->getStatusCode() !== 403
+) {
     throw new RuntimeException('Ordinary transcript operators changed institutional policy.');
 }
 $sis->access->grants[] = 'sis:transcript:policy';
-if ($teachingPost($policyPath, ['revision' => 1, 'checks' => []])->getStatusCode() !== 200) {
+if (
+    $teachingPost($policyPath, ['revision' => 1, 'checks' => [], 'include_standing' => false])->getStatusCode() !== 200
+) {
     throw new RuntimeException('Explicit policy authority could not update release checks.');
 }
 

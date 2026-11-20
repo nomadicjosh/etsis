@@ -4,7 +4,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const { recordAction } = require('./support/workspace-actions.cjs');
 const id = n => String(n).padStart(26, '0');
 
-test('registrar configures standing and reviews dated decisions with a return from degree progress', async ({ page }) => {
+for (const historical of [false, true]) test(`registrar ${historical ? 'corrects historical standing' : 'configures standing'} and reviews dated decisions with a return from degree progress`, async ({ page }) => {
     const student = id(1), person = id(2), pursuit = id(3), program = id(4), term = id(5);
     const title = 'Fictional <b>Good standing</b>';
     let definitions = [], rows = [], revision = 'a'.repeat(64), sequence = 10;
@@ -28,11 +28,11 @@ test('registrar configures standing and reviews dated decisions with a return fr
             primary_program: { id: program, code: 'BS.CS', title: 'Fictional computing' }, entry_term: { id: term, code: '26/FA' }, revision: 'student-revision' };
         else if (path === `/sis/students/${student}/programs/`) result = { items: [{ id: pursuit,
             program_id: program, program_code: 'BS.CS', program_title: 'Fictional computing', term_code: '26/FA',
-            status: 'active', is_primary: true }], next_after: null };
+            status: historical ? 'closed' : 'active', is_primary: true }], next_after: null };
         else if (path.endsWith('/standing/')) result = { rows, revision, editable: true, known_history: !!rows.length,
-            program: { id: program, code: 'BS.CS', title: 'Fictional computing' }, status: 'active' };
+            program: { id: program, code: 'BS.CS', title: 'Fictional computing' }, status: historical ? 'closed' : 'active', historical_correction: historical };
         else if (path.endsWith('/standing/review/')) result = { operation_id: id(30), revision: data.revision,
-            rows: data.rows, before: rows, after: data.rows, reason: data.reason, review_token: 'fictional-standing-proof' };
+            rows: data.rows, before: rows, after: data.rows, reason: data.reason, historical_evidence: data.historical_evidence, review_token: 'fictional-standing-proof' };
         else if (path.endsWith('/standing/commit/')) { rows = data.rows; revision = 'b'.repeat(64); result = { status: 'updated' }; }
         else if (path.endsWith('/standing/history/')) result = { items: [{ version: 1, rows, reason: 'Fictional retained decision.', recorded_at: '2026-08-10T17:00:00Z' }], next_cursor: null };
         else if (path.endsWith('/degree-requirements/progress/')) result = { status: 'needs_selection' };
@@ -58,6 +58,11 @@ test('registrar configures standing and reviews dated decisions with a return fr
     await page.getByLabel('Effective from', { exact: true }).fill('2026-08-01');
     await page.getByLabel('Policy reference (optional)', { exact: true }).fill('Fictional handbook 2026');
     await page.getByLabel('Reason for change', { exact: true }).fill('Fictional registrar review.');
+    if (historical) {
+        await page.getByRole('button', { name: 'Review changes', exact: true }).click();
+        expect(calls.filter(call => call.path.endsWith('/standing/review/'))).toHaveLength(0);
+        await page.getByLabel('I verified institutional evidence for this historical correction', { exact: true }).check();
+    }
     await page.getByRole('button', { name: 'Degree progress', exact: true }).click();
     await page.getByRole('button', { name: 'Back to academic standing', exact: true }).click();
     await expect(page.getByLabel('Reason for change', { exact: true })).toHaveValue('Fictional registrar review.');
@@ -78,6 +83,7 @@ test('registrar configures standing and reviews dated decisions with a return fr
     await expect(page.locator('#drawer-body b')).toHaveCount(0);
     expect(calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(calls.find(call => call.path.endsWith('/standing/commit/')).data.historical_evidence).toBe(historical);
     expect(errors).toEqual([]);
 });
 

@@ -31,6 +31,10 @@ if ($path === '/fixture/transcript-document/') {
     $transcriptLayout = new \Infrastructure\Documents\RegisteredTranscriptLayouts()->get($_GET['layout'] ?? null);
     echo new \Infrastructure\Documents\ProtectedTranscriptRenderer()->html([
         'presentation' => $transcriptLayout->describe(),
+        'standing' => ['through' => '2026-08-10', 'periods' => [
+            ['code' => 'GOOD', 'title' => 'Fictional <b>Good standing</b>',
+                'starts_on' => '2026-08-01', 'ends_on' => null],
+        ]],
         'issuer' => ['name' => 'Fictional University', 'address' => 'Fictional campus'],
         'student' => ['name' => 'Alex Example', 'institutional_id' => 'S-FICTIONAL'],
         'program' => ['code' => 'BS.CS', 'title' => 'Computer Science'], 'preview' => ($_GET['preview'] ?? '') === '1',

@@ -18,7 +18,7 @@ final readonly class SisTranscriptReleasePolicyController
 
     public function checkId(): ResponseInterface
     {
-        return new JsonResponse(['id' => $this->service->checkId()->value]);
+        return new JsonResponse(["id" => $this->service->checkId()->value]);
     }
 
     public function current(): ResponseInterface
@@ -29,12 +29,18 @@ final readonly class SisTranscriptReleasePolicyController
     public function save(#[\SensitiveParameter] ServerRequest $request): ResponseInterface
     {
         $body = $request->getParsedBody();
-        if (!is_array($body) || !array_key_exists('checks', $body)) {
+        if (!is_array($body) || !array_key_exists("checks", $body)) {
             throw new \InvalidArgumentException(
-                'Supply the release checks, including an explicit empty list to clear them.'
+                "Supply the release checks, including an explicit empty list to clear them.",
             );
         }
         $input = FormInput::from($request);
-        return new JsonResponse($this->service->save($input->integer('revision'), $input->values('checks', 12)));
+        return new JsonResponse(
+            $this->service->save(
+                $input->integer("revision"),
+                $input->values("checks", 12),
+                $input->requiredBoolean("include_standing"),
+            ),
+        );
     }
 }

@@ -52,6 +52,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Student\Event\StudentStandingWasCorrected::class => [
+                'type' => 'student_standing', 'root' => \Domain\Student\StudentStanding::class,
+                'fields' => \Domain\Student\StudentStanding::CORRECTION_FIELDS,
+            ],
             \Domain\Student\Event\StudentStandingWasRecorded::class => [
                 'type' => 'student_standing', 'root' => \Domain\Student\StudentStanding::class,
                 'fields' => \Domain\Student\StudentStanding::FIELDS,
@@ -570,8 +574,14 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
-            if ($class === \Domain\Student\Event\StudentStandingWasRecorded::class) {
-                \Domain\Student\StudentStanding::validate($payload);
+            if (
+                in_array($class, [\Domain\Student\Event\StudentStandingWasRecorded::class,
+                \Domain\Student\Event\StudentStandingWasCorrected::class], true)
+            ) {
+                \Domain\Student\StudentStanding::validate(
+                    $payload,
+                    $class === \Domain\Student\Event\StudentStandingWasCorrected::class,
+                );
                 if ($payload['pursuit_id'] !== (string) $stream->aggregateId) {
                     throw new CorruptHistoryException();
                 }
@@ -948,7 +958,8 @@ final readonly class HistoricalSchemaRegistry
                 // This complete payload is validated by its bounded typed schema above.
                 if (
                     in_array($class, [\Domain\Advising\Event\StudentAdvisorsWereAssigned::class,
-                    \Domain\Student\Event\StudentStandingWasRecorded::class], true)
+                    \Domain\Student\Event\StudentStandingWasRecorded::class,
+                    \Domain\Student\Event\StudentStandingWasCorrected::class], true)
                 ) {
                     continue;
                 }

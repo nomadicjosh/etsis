@@ -6,6 +6,7 @@ namespace Domain\Student;
 
 use Codefy\Domain\Aggregate\EventSourcedAggregate;
 use Domain\Student\Event\StudentStandingWasRecorded;
+use Domain\Student\Event\StudentStandingWasCorrected;
 use Domain\Student\ValueObject\StandingPeriods;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\StoredEvent;
@@ -22,17 +23,20 @@ final class StudentStanding extends EventSourcedAggregate
         "rows",
         "intent",
     ];
+    public const array CORRECTION_FIELDS = [...self::FIELDS, "historical_evidence"];
     private ?string $student = null;
     private ?string $operation = null;
     private array $rows = [];
     private array $receipts = [];
     private array $seen = [];
 
-    public static function validate(#[\SensitiveParameter] array $p): void
+    public static function validate(#[\SensitiveParameter] array $p, bool $correction = false): void
     {
+        $fields = $correction ? self::CORRECTION_FIELDS : self::FIELDS;
         if (
-            count($p) !== count(self::FIELDS) ||
-            array_diff(array_keys($p), self::FIELDS) !== [] ||
+            ($correction && ($p["historical_evidence"] ?? null) !== true) ||
+            count($p) !== count($fields) ||
+            array_diff(array_keys($p), $fields) !== [] ||
             !is_array($p["rows"] ?? null)
         ) {
             throw new CorruptHistoryException();
@@ -62,7 +66,9 @@ final class StudentStanding extends EventSourcedAggregate
     {
         $event = $stored->event;
         if (
-            !($event instanceof StudentStandingWasRecorded) ||
+            !(
+                $event instanceof StudentStandingWasRecorded || $event instanceof StudentStandingWasCorrected
+            ) ||
             !$event->aggregateId()->equals($this->aggregateId()) ||
             $event->playhead() !== $this->playhead() + 1 ||
             $stored->context->origin !== "command" ||
@@ -88,7 +94,15 @@ final class StudentStanding extends EventSourcedAggregate
     }
     public function whenStudentStandingWasRecorded(StudentStandingWasRecorded $event): void
     {
-        self::validate($p = $event->payload());
+        $this->applyPeriods($event->payload(), false);
+    }
+    public function whenStudentStandingWasCorrected(StudentStandingWasCorrected $event): void
+    {
+        $this->applyPeriods($event->payload(), true);
+    }
+    private function applyPeriods(#[\SensitiveParameter] array $p, bool $correction): void
+    {
+        self::validate($p, $correction);
         if (
             $p["pursuit_id"] !== (string) $this->aggregateId() ||
             ($this->student !== null && $p["student_id"] !== $this->student) ||

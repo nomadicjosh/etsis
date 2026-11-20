@@ -13,7 +13,6 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Service\StudentStandingService;
 use Domain\Student\ValueObject\StandingPeriods;
 use Infrastructure\Persistence\Repository\SqlStudentRecordRepository;
-use Infrastructure\Persistence\Repository\SqlStudentStandingRepository;
 use PHPUnit\Framework\TestCase;
 use SisFixture;
 
@@ -29,26 +28,7 @@ final class StudentStandingTest extends TestCase
         ?AuditTrail $audit = null,
         ?AdvisorProgressAccess $advisors = null,
     ): StudentStandingService {
-        $advisors ??= new class implements AdvisorProgressAccess {
-            public function requireAdvisor(EntityId $student, EntityId $pursuit): EntityId
-            {
-                throw new AccessDeniedException();
-            }
-        };
-        return new StudentStandingService(
-            new SqlStudentStandingRepository($s->sql),
-            $s->admissions,
-            new SqlStudentRecordRepository($s->sql),
-            $s->programStatusLedger(),
-            $s->primaryProgramLedger(),
-            \EventStoreFixture::history($s->connection->queryBuilder()),
-            $s->access,
-            $s->transactions,
-            $audit ?? $s->audit,
-            $s->clock,
-            new \Domain\Shared\Service\ReviewProof($s->dropCipher, $s->clock),
-            $advisors,
-        );
+        return $s->standingService($audit, $advisors);
     }
 
     private function pursuit(SisFixture $s, EntityId $student): EntityId
@@ -100,6 +80,7 @@ final class StudentStandingTest extends TestCase
             $review["revision"],
             $review["reason"],
             $review["review_token"],
+            $review["historical_evidence"] ?? false,
         );
     }
 
@@ -211,6 +192,8 @@ final class StudentStandingTest extends TestCase
         $s->clock->time = $s->clock->time->modify("+1 day");
         self::assertSame($receipt, $this->commit($service, $student->id, $p, $first));
         self::assertSame($events, $s->sql->rows("sis_history_events"));
+        $s->access->staff = false;
+        $s->access->grants = [StudentStandingService::MANAGE, "sis:student:read"];
         $view = $service->view($student->id, $p);
         self::assertFalse($view["editable"]);
         self::assertSame("2026-08-09", $view["rows"][0]["ends_on"]);
@@ -509,6 +492,8 @@ final class StudentStandingTest extends TestCase
                 "Fictional registrar program change.",
             );
         $new = $s->programAssignmentService()->changeProgram($student->id, $review["review_token"]);
+        $s->access->staff = false;
+        $s->access->grants = [StudentStandingService::MANAGE, "sis:student:read"];
         self::assertFalse($service->view($student->id, $p)["editable"]);
         self::assertSame([], $service->view($student->id, new EntityId($new["assignment_id"]))["rows"]);
         self::assertSame(1, $this->commit($service, $student->id, $p, $accepted)["version"]);
@@ -516,5 +501,122 @@ final class StudentStandingTest extends TestCase
         $s->access->staff = false;
         self::assertSame("closed", $service->read($student->id, $p)["pursuit_status"]);
         self::assertSame("Good standing", $service->read($student->id, $p)["items"][0]["title"]);
+    }
+
+    public function testClosedCorrectionRequiresIndependentDutyAndRetainsEvidenceAndOriginalFacts(): void
+    {
+        $s = new SisFixture();
+        $student = $s->student();
+        $p = $this->pursuit($s, $student->id);
+        $service = $this->service($s);
+        $d = $service->saveDefinition(null, "GOOD", "Good standing", true, null);
+        $row = $this->row($d);
+        $original = $this->review($service, $student->id, $p, [$row]);
+        $this->commit($service, $student->id, $p, $original);
+        $s->transactions->run(
+            fn() => $s
+                ->programStatusLedger()
+                ->change(
+                    new SqlStudentRecordRepository($s->sql)->assignment($p),
+                    "closed",
+                    EntityId::generate(),
+                    $s->access->actor,
+                    "Fictional pursuit closure.",
+                ),
+        );
+        $row["ends_on"] = "2026-08-09";
+        $s->access->staff = false;
+        $s->access->grants = [StudentStandingService::MANAGE, "sis:student:read"];
+        self::assertFalse($service->view($student->id, $p)["editable"]);
+        try {
+            $service->review(
+                $student->id,
+                $p,
+                [$row],
+                $service->view($student->id, $p)["revision"],
+                "Fictional historical correction.",
+                true,
+            );
+            self::fail("Ordinary standing duty must not permit historical corrections.");
+        } catch (AccessDeniedException) {
+            self::assertSame(1, $s->standingLedger()->load($student->id, $p)->playhead());
+        }
+        $s->access->grants[] = StudentStandingService::CORRECT;
+        self::assertTrue($service->view($student->id, $p)["editable"]);
+        try {
+            $this->review($service, $student->id, $p, [$row]);
+            self::fail("Historical corrections need explicit evidence confirmation.");
+        } catch (ValidationException $error) {
+            self::assertSame("historical_evidence", $error->errors[0]["field"]);
+        }
+        $review = $service->review(
+            $student->id,
+            $p,
+            [$row],
+            $service->view($student->id, $p)["revision"],
+            "Fictional historical correction.",
+            true,
+        );
+        $receipt = $this->commit($service, $student->id, $p, $review);
+        self::assertSame(2, $receipt["version"]);
+        $head = $s->standingLedger()->latest($student->id, $p);
+        self::assertInstanceOf(\Domain\Student\Event\StudentStandingWasCorrected::class, $head->event);
+        self::assertTrue($head->event->payload()["historical_evidence"]);
+        self::assertSame("closed", new SqlStudentRecordRepository($s->sql)->assignment($p)->status);
+        self::assertSame($receipt, $this->commit($service, $student->id, $p, $review));
+        $root = \Domain\Student\StudentStanding::reconstituteFromEventStream(
+            \EventStoreFixture::framework($s->connection->queryBuilder())->getAggregateHistoryFor(
+                new \Domain\Student\ValueObject\StudentStandingId($p->value),
+            ),
+        );
+        self::assertSame("2026-08-09", $root->rows()[0]["ends_on"]);
+        $this->expectException(AccessDeniedException::class);
+        $this->commit($service, $student->id, $p, array_replace($review, ["historical_evidence" => false]));
+    }
+
+    public function testHistoricalCorrectionRollsBackWhenItsSpecificAuthorityIsLostDuringAudit(): void
+    {
+        $s = new SisFixture();
+        $student = $s->student();
+        $p = $this->pursuit($s, $student->id);
+        $service = $this->service($s);
+        $d = $service->saveDefinition(null, "GOOD", "Good standing", true, null);
+        $s->transactions->run(
+            fn() => $s
+                ->programStatusLedger()
+                ->change(
+                    new SqlStudentRecordRepository($s->sql)->assignment($p),
+                    "closed",
+                    EntityId::generate(),
+                    $s->access->actor,
+                    "Fictional pursuit closure.",
+                ),
+        );
+        $s->access->staff = false;
+        $s->access->grants = [
+            StudentStandingService::MANAGE,
+            StudentStandingService::CORRECT,
+            "sis:student:read",
+        ];
+        $review = $service->review(
+            $student->id,
+            $p,
+            [$this->row($d)],
+            $service->view($student->id, $p)["revision"],
+            "Fictional recovered institutional evidence.",
+            true,
+        );
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method("record")->willReturnCallback(static function () use ($s): void {
+            $s->access->grants = [StudentStandingService::MANAGE, "sis:student:read"];
+        });
+        $events = $s->sql->rows("sis_history_events");
+        try {
+            $this->commit($this->service($s, $audit), $student->id, $p, $review);
+            self::fail("Losing historical correction authority must roll back.");
+        } catch (AccessDeniedException) {
+            self::assertSame($events, $s->sql->rows("sis_history_events"));
+            self::assertSame([], $s->sql->rows("sis_student_standing"));
+        }
     }
 }

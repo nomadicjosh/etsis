@@ -27,6 +27,7 @@
             dt { font-weight: bold; }
             dd { margin: 0 0 8px; overflow-wrap: anywhere; }
             footer { margin-top: 18px; font-size: 10px; overflow-wrap: anywhere; }
+            .academic-standing { overflow-wrap: anywhere; word-wrap: break-word; }
             .transcript-classic .issuer { border-bottom: 3px double #526170; text-align: center; }
             .transcript-classic h1, .transcript-classic h2 { font-family: "DejaVu Serif", serif; }
             .transcript-classic h1 { font-size: 25px; }
@@ -91,6 +92,30 @@
                 "closed"
             ): ?>
                 <p>The primary program pursuit was closed at preparation.</p>
+            <?php endif; ?>
+            <?php if (isset($document['standing'])): ?>
+                <section class="academic-standing" aria-labelledby="standing-title">
+                    <h2 id="standing-title">Recorded academic standing</h2>
+                    <p>
+                        Standing under the primary program pursuit at preparation,
+                        with recorded periods starting on or before
+                        <?= $escape($document['standing']['through']) ?>.
+                        Earlier unrecorded standing is not inferred.
+                    </p>
+                    <?php if ($document['standing']['periods'] === []): ?>
+                        <p>No standing is recorded through this date.</p>
+                    <?php else: ?>
+                        <ul>
+                            <?php foreach ($document['standing']['periods'] as $period): ?>
+                                <li>
+                                    <strong><?= $escape($period['code']) ?> · <?= $escape($period['title']) ?></strong>
+                                    — <?= $escape($period['starts_on']) ?> through
+                                    <?= $escape($period['ends_on'] ?? 'No end recorded') ?>.
+                                </li>
+                            <?php endforeach; ?>
+                        </ul>
+                    <?php endif; ?>
+                </section>
             <?php endif; ?>
             <div class="scroll" tabindex="0" role="region" aria-label="Academic credit history">
                 <table>

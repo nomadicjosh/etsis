@@ -44,28 +44,28 @@ final readonly class TranscriptReleasePolicyService
 
     /** @param array<mixed> $checks
      * @return array<string,mixed> */
-    public function save(int $revision, array $checks): array
+    public function save(int $revision, array $checks, bool $includeStanding = false): array
     {
         $actor = $this->authorize(write: true);
-        $next = new TranscriptReleasePolicy($revision + 1, $checks);
+        $next = new TranscriptReleasePolicy($revision + 1, $checks, $includeStanding);
         return $this->transactions->run(function () use ($revision, $next, $actor): array {
             $this->permissions->lock();
             $this->records->lock();
             $this->authorize($actor, true);
             $current = $this->records->current();
             if ($current->revision !== $revision) {
-                throw new ConcurrentModificationException('Reload release-check setup before saving.');
+                throw new ConcurrentModificationException("Reload release-check setup before saving.");
             }
             $this->records->assertCurrent($current);
-            if ($current->checks === $next->checks) {
+            if ($current->checks === $next->checks && $current->includeStanding === $next->includeStanding) {
                 $this->authorize($actor, true);
                 return $current->describe();
             }
             $this->records->save($next, $revision);
             $this->audit->record(
                 $actor,
-                'transcript.release_policy_changed',
-                new EntityId(TranscriptReleasePolicyRepository::POLICY_ID)
+                "transcript.release_policy_changed",
+                new EntityId(TranscriptReleasePolicyRepository::POLICY_ID),
             );
             $this->authorize($actor, true);
             $this->records->assertCurrent($next);
@@ -75,13 +75,13 @@ final readonly class TranscriptReleasePolicyService
 
     private function authorize(?EntityId $expected = null, bool $write = false): EntityId
     {
-        $actor = $this->access->requirePermission('sis:transcript:manage');
+        $actor = $this->access->requirePermission("sis:transcript:manage");
         if (
-            $this->access->requirePermission('sis:student:read')->value !== $actor->value ||
-            ($write && $this->access->requirePermission('sis:transcript:policy')->value !== $actor->value) ||
+            $this->access->requirePermission("sis:student:read")->value !== $actor->value ||
+            ($write && $this->access->requirePermission("sis:transcript:policy")->value !== $actor->value) ||
             ($expected !== null && $actor->value !== $expected->value)
         ) {
-            throw new AccessDeniedException('Transcript policy authority changed.');
+            throw new AccessDeniedException("Transcript policy authority changed.");
         }
         return $actor;
     }

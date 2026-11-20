@@ -64,6 +64,7 @@ final class TranscriptFixture
         ?TranscriptIssuer $issuer = null,
         ?\Domain\Transcript\Repository\TranscriptRepository $records = null,
         ?\Domain\Transcript\Service\TranscriptLayoutCatalog $layouts = null,
+        ?\Domain\Transcript\Service\TranscriptStandingSource $standing = null,
     ): TranscriptFulfillmentService {
         $f = $this->sis;
         return new TranscriptFulfillmentService(
@@ -87,6 +88,7 @@ final class TranscriptFixture
             ),
             $layouts ?? new \Infrastructure\Documents\RegisteredTranscriptLayouts(),
             new \Infrastructure\Persistence\Repository\SqlTranscriptReleasePolicyRepository($f->sql, $this->campus->cipher),
+            $standing ?? $f->standingLedger(),
         );
     }
 }

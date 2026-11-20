@@ -67,6 +67,7 @@ final readonly class SisStudentStandingController
                 $f->values("rows", 50),
                 $f->text("revision", 64),
                 $f->bodyText("reason"),
+                $f->boolean("historical_evidence"),
             ),
         );
     }
@@ -86,6 +87,7 @@ final readonly class SisStudentStandingController
                 $f->text("revision", 64),
                 $f->bodyText("reason"),
                 $f->bodyText("review_token"),
+                $f->boolean("historical_evidence"),
             ),
         );
     }

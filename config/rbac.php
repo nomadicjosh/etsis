@@ -5,6 +5,7 @@ declare(strict_types=1);
 // Initial migration seed only. Runtime authorization is database controlled.
 return [
     "permissions" => [
+        "sis:standing:correct" => ["description" => "Correct recorded academic standing on closed pursuits."],
         "sis:standing:configure" => ["description" => "Maintain institutional academic standing labels."],
         "sis:standing:manage" => ["description" => "Review dated student academic standing decisions."],
         "sis:advising:manage" => ["description" => "Review dated student advisor assignments."],

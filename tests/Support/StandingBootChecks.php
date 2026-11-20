@@ -102,3 +102,67 @@ if (
 ) {
     throw new RuntimeException("Standing private reads bypassed scope or changed academic history.");
 }
+
+$sis->access->actor = $advisingActor;
+$sis->access->staff = true;
+$standingPursuitId = new \Domain\Shared\ValueObject\EntityId($advisingPursuit);
+$sis->transactions->run(
+    fn() => $sis
+        ->programStatusLedger()
+        ->change(
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($sis->sql)->assignment(
+                $standingPursuitId,
+            ),
+            "closed",
+            \Domain\Shared\ValueObject\EntityId::generate(),
+            $sis->access->actor,
+            "Fictional pursuit closure.",
+        ),
+);
+$standingClosedResponse = $app->router->match(
+    $get->withUri(new \Laminas\Diactoros\Uri("https://campus.example.invalid" . $standingBase)),
+);
+$standingClosed = json_decode((string) $standingClosedResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $standingClosedResponse->getStatusCode() !== 200 ||
+    !($standingClosed["historical_correction"] ?? false)
+) {
+    throw new RuntimeException("The closed-pursuit editor lost its explicit correction context.");
+}
+$standingRow["ends_on"] = "2026-08-09";
+$standingCorrectionInput = [
+    "rows" => [$standingRow],
+    "revision" => $standingClosed["revision"],
+    "reason" => "Fictional reviewed historical evidence.",
+];
+if ($teachingPost($standingBase . "review/", $standingCorrectionInput)->getStatusCode() !== 422) {
+    throw new RuntimeException("Historical evidence was not required.");
+}
+$standingCorrectionResponse = $teachingPost(
+    $standingBase . "review/",
+    $standingCorrectionInput + ["historical_evidence" => true],
+);
+$standingCorrectionProof = json_decode(
+    (string) $standingCorrectionResponse->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+if (
+    $standingCorrectionResponse->getStatusCode() !== 200 ||
+    !($standingCorrectionProof["historical_evidence"] ?? false)
+) {
+    throw new RuntimeException("The historical evidence review failed.");
+}
+$standingCorrectionCommand = array_intersect_key(
+    $standingCorrectionProof,
+    array_flip(["rows", "revision", "reason", "operation_id", "review_token", "historical_evidence"]),
+);
+if (
+    $teachingPost($standingBase . "commit/", $standingCorrectionCommand)->getStatusCode() !== 200 ||
+    $teachingPost(
+        $standingBase . "commit/",
+        array_replace($standingCorrectionCommand, ["historical_evidence" => false]),
+    )->getStatusCode() !== 403
+) {
+    throw new RuntimeException("The historical correction failed or its evidence could be changed on retry.");
+}

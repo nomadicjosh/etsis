@@ -63,18 +63,21 @@ window.createWorkspaceTranscripts = function (ui) {
         return node("section", { class: "record-section", "aria-label": title },
             node("h3", { class: "h5" }, title),
             node("p", { class: "form-text" }, `Setup revision ${evidence.revision} · Confirmed ${evidence.confirmed_at}`),
+            node("p", { class: "form-text" }, evidence.include_standing ? "Academic standing selected in this institutional setup." : "Academic standing not selected in this institutional setup."),
             evidence.checks.length ? node("ul", {}, ...evidence.checks.map((check) =>
                 node("li", {}, node("strong", {}, check.label), check.details ? ` — ${check.details}` : "")))
                 : node("p", {}, "No additional institutional checks applied."));
     }
     async function policy() {
-        const body = openDrawer("Transcript release checks", "INSTITUTIONAL SETUP");
+        const body = openDrawer("Transcript setup", "INSTITUTIONAL SETUP");
         const saved = await request("/sis/transcript-policy/");
         if (!body.isConnected) return;
+        const standing = node("input", { id: "transcript-standing", type: "checkbox", class: "form-check-input",
+            checked: saved.include_standing === true });
         const list = node("div");
         let rows = [], adding = false;
         const status = node("p", { class: "form-text", role: "status" });
-        const save = button("Save checks", async () => {
+        const save = button("Save setup", async () => {
             const checks = rows.map((row) => ({ id: row.id, label: row.label.value.trim(),
                 details: row.details.value.trim(), stage: row.stage.value }));
             if (checks.some((check) => !check.label)) {
@@ -82,7 +85,7 @@ window.createWorkspaceTranscripts = function (ui) {
                 rows.find((row) => !row.label.value.trim())?.label.focus();
                 return;
             }
-            await request("/sis/transcript-policy/", "POST", { revision: saved.revision, checks });
+            await request("/sis/transcript-policy/", "POST", { revision: saved.revision, checks, include_standing: standing.checked });
             if (!body.isConnected) return;
             await policy();
         }, "btn-primary", update);
@@ -122,7 +125,11 @@ window.createWorkspaceTranscripts = function (ui) {
             update();
             if (focus) label.focus();
         }
-        body.append(node("p", {}, "Set the confirmations your office requires before preparation, delivery, or both. " +
+        body.append(node("h3", { class: "h5" }, "Transcript content"),
+            node("div", { class: "form-check mb-3" }, standing, node("label", { for: standing.id, class: "form-check-label" },
+                "Include recorded academic standing")),
+            node("p", { class: "form-text" }, "Off by default. When enabled, new transcripts include retained standing labels and dates under the selected primary pursuit, through preparation day. Staff reasons and policy references stay private. Issued originals do not change."),
+            node("h3", { class: "h5" }, "Release checks"), node("p", {}, "Set the confirmations your office requires before preparation, delivery, or both. " +
             "These are staff checks; they do not automatically block transcripts based on balances or registration holds."),
             node("p", { class: "form-text" }, "Changes apply to new confirmations. Earlier documents and confirmations retain their original checks. " +
                 "If setup changes while you edit, reload it before saving again."), status, list,
@@ -175,6 +182,12 @@ window.createWorkspaceTranscripts = function (ui) {
                       ],
                   ])
                 : null,
+            snapshot.standing ? node("section", { class: "record-section", "aria-label": "Transcript academic standing" },
+                node("h3", { class: "h5" }, "Recorded academic standing"),
+                node("p", { class: "form-text" }, `Selected primary pursuit · Recorded periods through ${snapshot.standing.through}. Earlier unrecorded standing is not inferred.`),
+                snapshot.standing.periods.length ? node("ul", {}, ...snapshot.standing.periods.map(row => node("li", { class: "text-break" },
+                    `${row.code} · ${row.title} · ${row.starts_on} through ${row.ends_on || "open"}`)))
+                    : node("p", {}, "No standing is recorded through this date.")) : null,
             grid(
                 ["Term", "Course", "Title", "Attempted", "Earned", "Grade", "History"],
                 snapshot.credits.map((row) => [

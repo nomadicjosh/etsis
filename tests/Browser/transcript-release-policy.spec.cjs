@@ -4,7 +4,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
 
 test('release check setup preserves stale edits, supports keyboard use and keeps retained artifacts outside setup', async ({ page }) => {
-    let policy = { revision: 0, checks: [] }, reject = true, sequence = 10;
+    let policy = { revision: 0, checks: [], include_standing: false }, reject = true, sequence = 10;
     const calls = [], errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
@@ -17,7 +17,7 @@ test('release check setup preserves stale edits, supports keyboard use and keeps
                 reject = false;
                 return route.fulfill({ status: 409, json: { message: 'Reload release-check setup before saving.' } });
             }
-            if (data) policy = { revision: policy.revision + 1, checks: data.checks };
+            if (data) policy = { revision: policy.revision + 1, checks: data.checks, include_standing: data.include_standing };
             result = policy;
         } else if (path === '/sis/transcript-policy/check-id/') result = { id: id(++sequence) };
         else if (path.startsWith('/sis/ui/data/')) result = { items: [], next_after: null };
@@ -26,7 +26,9 @@ test('release check setup preserves stale edits, supports keyboard use and keeps
     });
     await page.goto('/admin/');
     await page.locator('.workspace-nav-link[data-workspace="transcripts"]').click();
-    await page.getByRole('button', { name: 'Transcript release checks', exact: true }).click();
+    await page.getByRole('button', { name: 'Transcript setup', exact: true }).click();
+    await expect(page.getByLabel('Include recorded academic standing', { exact: true })).not.toBeChecked();
+    await page.getByLabel('Include recorded academic standing', { exact: true }).check();
     await page.getByRole('button', { name: 'Add check', exact: true }).click();
     const title = page.getByLabel('Check title', { exact: true });
     await expect(title).toBeFocused();
@@ -37,22 +39,23 @@ test('release check setup preserves stale edits, supports keyboard use and keeps
     const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(scan.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) }))).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    await page.getByRole('button', { name: 'Save checks', exact: true }).click();
+    await page.getByRole('button', { name: 'Save setup', exact: true }).click();
     await expect(title).toHaveValue('Review release authorization');
     await expect(page.locator('#drawer-body')).toContainText('Setup revision 0');
-    await page.getByRole('button', { name: 'Save checks', exact: true }).click();
+    await page.getByRole('button', { name: 'Save setup', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Setup revision 1');
     await page.getByText('Review release authorization', { exact: true }).click();
     await expect(page.getByLabel('Check title', { exact: true })).toHaveValue('Review release authorization');
     await page.getByRole('button', { name: 'Remove check', exact: true }).click();
     await expect(page.getByLabel('Check title', { exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Save checks', exact: true }).click();
+    await page.getByRole('button', { name: 'Save setup', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Setup revision 2');
     const saves = calls.filter(call => call.path === '/sis/transcript-policy/' && call.data);
     expect(saves[0].data).toEqual(saves[1].data);
     expect(saves[1].data.checks[0]).toEqual({ id: id(11), label: 'Review release authorization',
         details: 'Verify the fictional authorization reference.', stage: 'both' });
-    expect(saves[2].data).toEqual({ revision: 1, checks: [] });
+    expect(saves[2].data).toEqual({ revision: 1, checks: [], include_standing: true });
+    await expect(page.getByLabel('Include recorded academic standing', { exact: true })).toBeChecked();
     expect(calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(calls.some(call => call.path.includes('/documents/'))).toBe(false);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);

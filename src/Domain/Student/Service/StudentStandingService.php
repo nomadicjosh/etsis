@@ -22,6 +22,7 @@ use Domain\Shared\Service\Clock;
 use Domain\Shared\Service\ReviewProof;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Event\StudentStandingWasRecorded;
+use Domain\Student\Event\StudentStandingWasCorrected;
 use Domain\Student\Repository\StudentRecordRepository;
 use Domain\Student\Repository\StudentStandingRepository;
 use Domain\Student\StudentStanding;
@@ -31,6 +32,7 @@ use Domain\Student\ValueObject\StudentStandingId;
 final readonly class StudentStandingService
 {
     public const string MANAGE = "sis:standing:manage";
+    public const string CORRECT = "sis:standing:correct";
     public const string CONFIGURE = "sis:standing:configure";
 
     public function __construct(
@@ -46,6 +48,7 @@ final readonly class StudentStandingService
         private Clock $clock,
         private ReviewProof $proofs,
         private AdvisorProgressAccess $advisors,
+        private StudentStandingLedger $ledger,
     ) {
     }
 
@@ -115,14 +118,15 @@ final readonly class StudentStandingService
     {
         $actor = $this->staff();
         [$s, $p] = $this->scope($student, $pursuit);
-        $root = $this->load($student, $pursuit);
+        $root = $this->ledger->load($student, $pursuit);
         $result = [
             "rows" => $root->rows(),
             "revision" => $this->revision($s, $p, $root),
             "program" => $this->students->program($p->programId),
             "status" => $p->status,
             "known_history" => $root->playhead() > 0,
-            "editable" => $this->isCurrent($s, $p),
+            "editable" => $this->canEdit($s, $p),
+            "historical_correction" => $p->status === "closed",
         ];
         $this->staff($actor);
         return $result;
@@ -134,6 +138,7 @@ final readonly class StudentStandingService
         #[\SensitiveParameter] array $rows,
         string $revision,
         #[\SensitiveParameter] string $reason,
+        bool $historicalEvidence = false,
     ): array {
         $actor = $this->staff();
         $next = $this->validateRows($rows);
@@ -145,11 +150,12 @@ final readonly class StudentStandingService
             $revision,
             $reason,
             $actor,
+            $historicalEvidence,
         ): array {
             $this->students->lock($student);
             [$s, $p] = $this->scope($student, $pursuit);
-            $this->current($s, $p);
-            $root = $this->load($student, $pursuit);
+            $this->writable($s, $p, $historicalEvidence);
+            $root = $this->ledger->load($student, $pursuit);
             $this->unchanged($revision, $s, $p, $root);
             $this->eligible($root->rows(), $next->rows);
             if ($root->rows() === $next->rows) {
@@ -158,7 +164,7 @@ final readonly class StudentStandingService
                 ]);
             }
             $operation = EntityId::generate();
-            $intent = $this->intent($student, $pursuit, $next, $revision, trim($reason));
+            $intent = $this->intent($student, $pursuit, $next, $revision, trim($reason), $historicalEvidence);
             $this->staff($actor);
             return [
                 "operation_id" => $operation->value,
@@ -167,6 +173,7 @@ final readonly class StudentStandingService
                 "before" => $root->rows(),
                 "after" => $next->rows,
                 "reason" => trim($reason),
+                "historical_evidence" => $historicalEvidence,
                 "review_token" => $this->proofs->issue(
                     "standing",
                     "registrar",
@@ -187,11 +194,12 @@ final readonly class StudentStandingService
         string $revision,
         #[\SensitiveParameter] string $reason,
         #[\SensitiveParameter] string $token,
+        bool $historicalEvidence = false,
     ): array {
         $actor = $this->staff();
         $next = $this->validateRows($rows);
         $this->reason($reason);
-        $intent = $this->intent($student, $pursuit, $next, $revision, trim($reason));
+        $intent = $this->intent($student, $pursuit, $next, $revision, trim($reason), $historicalEvidence);
         return $this->transactions->run(function () use (
             $student,
             $pursuit,
@@ -202,10 +210,11 @@ final readonly class StudentStandingService
             $token,
             $actor,
             $intent,
+            $historicalEvidence,
         ): array {
             $this->students->lock($student);
             [$s, $p] = $this->scope($student, $pursuit);
-            $root = $this->load($student, $pursuit);
+            $root = $this->ledger->load($student, $pursuit);
             $receipt = $root->receipt($operation, $actor, $intent);
             $this->proofs->validate(
                 $token,
@@ -221,7 +230,7 @@ final readonly class StudentStandingService
             if ($receipt !== null) {
                 return $receipt;
             }
-            $this->current($s, $p);
+            $this->writable($s, $p, $historicalEvidence);
             $this->unchanged($revision, $s, $p, $root);
             $ids = array_unique(array_column($next->rows, "definition_id"));
             sort($ids, SORT_STRING);
@@ -234,19 +243,25 @@ final readonly class StudentStandingService
                     "Review a changed standing list before confirming.",
                 );
             }
-            $event = StudentStandingWasRecorded::occur(
-                new StudentStandingId($pursuit->value),
-                [
-                    "student_id" => $student->value,
-                    "pursuit_id" => $pursuit->value,
-                    "operation_id" => $operation->value,
-                    "previous_operation_id" => $root->operation(),
-                    "before_hash" => new StandingPeriods($root->rows())->fingerprint(),
-                    "rows" => $next->rows,
-                    "intent" => $intent,
-                ],
-                ["__aggregate_type" => "student_standing"],
-            )->withPlayhead($root->playhead() + 1);
+            $eventClass =
+                $p->status === "closed"
+                    ? StudentStandingWasCorrected::class
+                    : StudentStandingWasRecorded::class;
+            $event = $eventClass
+                ::occur(
+                    new StudentStandingId($pursuit->value),
+                    [
+                        "student_id" => $student->value,
+                        "pursuit_id" => $pursuit->value,
+                        "operation_id" => $operation->value,
+                        "previous_operation_id" => $root->operation(),
+                        "before_hash" => new StandingPeriods($root->rows())->fingerprint(),
+                        "rows" => $next->rows,
+                        "intent" => $intent,
+                    ] + ($p->status === "closed" ? ["historical_evidence" => true] : []),
+                    ["__aggregate_type" => "student_standing"],
+                )
+                ->withPlayhead($root->playhead() + 1);
             $this->history->append(
                 $this->stream($pursuit),
                 $operation,
@@ -255,14 +270,18 @@ final readonly class StudentStandingService
                 [$event],
             );
             $this->records->project($student, $pursuit, $next->rows);
-            $this->audit->record($actor, "student.standing_recorded", $student);
+            $this->audit->record(
+                $actor,
+                $p->status === "closed" ? "student.standing_corrected" : "student.standing_recorded",
+                $student,
+            );
             $this->staff($actor);
             [$s, $p] = $this->scope($student, $pursuit);
-            $this->current($s, $p);
+            $this->writable($s, $p, $historicalEvidence);
             $this->unchanged($revision, $s, $p, $root);
             $this->proofs->validate($token, "standing", "registrar", $pursuit, $actor, $operation, $intent);
             $this->eligible($root->rows(), $next->rows);
-            $verified = $this->latest($student, $pursuit);
+            $verified = $this->ledger->latest($student, $pursuit);
             if ($verified === null || $verified->event->payload()["operation_id"] !== $operation->value) {
                 throw new CorruptHistoryException();
             }
@@ -277,7 +296,7 @@ final readonly class StudentStandingService
         $actor = $this->reader($student, $pursuit, $advisor);
         [, $p] = $this->scope($student, $pursuit);
         $this->programs->verify($p);
-        $latest = $this->latest($student, $pursuit);
+        $latest = $this->ledger->latest($student, $pursuit);
         $rows = $latest === null ? [] : new StandingPeriods($latest->event->payload()["rows"])->rows;
         $result = [
             "items" => array_map(
@@ -307,11 +326,18 @@ final readonly class StudentStandingService
         $page = $this->history->page($this->stream($pursuit), $cursor, 20);
         $items = [];
         foreach ($page->events as $stored) {
-            StudentStanding::validate($data = $stored->event->payload());
+            StudentStanding::validate(
+                $data = $stored->event->payload(),
+                $stored->event instanceof StudentStandingWasCorrected,
+            );
             if ($data["student_id"] !== $student->value) {
                 throw new CorruptHistoryException();
             }
             $items[] = [
+                "kind" =>
+                    $stored->event instanceof StudentStandingWasCorrected
+                        ? "historical_correction"
+                        : "determination",
                 "version" => $stored->event->playhead(),
                 "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
                 "reason" => $stored->context->reason,
@@ -364,52 +390,6 @@ final readonly class StudentStandingService
         }
     }
 
-    private function latest(EntityId $student, EntityId $pursuit): ?\Domain\Shared\EventSourcing\StoredEvent
-    {
-        $latest = $this->history->latest($this->stream($pursuit));
-        $expected = [];
-        if ($latest !== null) {
-            StudentStanding::validate($data = $latest->event->payload());
-            if (
-                $data["student_id"] !== $student->value ||
-                $data["pursuit_id"] !== $pursuit->value ||
-                $latest->context->origin !== "command" ||
-                $latest->context->actor === null ||
-                $latest->context->reason === null ||
-                $latest->context->effectiveAt === null ||
-                $latest->context->correlation?->value !== $data["operation_id"]
-            ) {
-                throw new CorruptHistoryException();
-            }
-            $expected = new StandingPeriods($data["rows"])->rows;
-        }
-        if ($expected !== $this->records->rows($student, $pursuit)) {
-            throw new CorruptHistoryException();
-        }
-        return $latest;
-    }
-
-    private function load(EntityId $student, EntityId $pursuit): StudentStanding
-    {
-        $root = StudentStanding::root(new StudentStandingId($pursuit->value));
-        $budget = new HistoryReadBudget();
-        $cursor = null;
-        do {
-            $page = $budget->page($this->history, $this->stream($pursuit), $cursor);
-            foreach ($page->events as $stored) {
-                if ($stored->event->payload()["student_id"] !== $student->value) {
-                    throw new CorruptHistoryException();
-                }
-                $root->accept($stored);
-            }
-            $cursor = $page->nextCursor;
-        } while ($cursor !== null);
-        if ($root->rows() !== $this->records->rows($student, $pursuit)) {
-            throw new CorruptHistoryException();
-        }
-        return $root;
-    }
-
     private function scope(EntityId $student, EntityId $pursuit): array
     {
         $s = $this->admissions->student($student);
@@ -438,12 +418,41 @@ final readonly class StudentStandingService
         }
     }
 
-    private function isCurrent(
+    private function writable(
         \Domain\Student\Student $student,
         \Domain\Student\StudentProgram $pursuit,
-    ): bool {
-        try {
+        bool $historicalEvidence,
+    ): void {
+        if ($pursuit->status !== "closed") {
             $this->current($student, $pursuit);
+            if ($historicalEvidence) {
+                throw new ValidationException([
+                    [
+                        "field" => "historical_evidence",
+                        "message" => "Review the current active pursuit as a new determination.",
+                    ],
+                ]);
+            }
+            return;
+        }
+        $this->authorize(self::CORRECT);
+        $budget = new HistoryReadBudget();
+        $this->programs->verify($pursuit, $budget);
+        $this->primary->documentContext($student, $budget);
+        if (!$historicalEvidence) {
+            throw new ValidationException([
+                [
+                    "field" => "historical_evidence",
+                    "message" => "Confirm institutional evidence for this historical correction.",
+                ],
+            ]);
+        }
+    }
+
+    private function canEdit(\Domain\Student\Student $student, \Domain\Student\StudentProgram $pursuit): bool
+    {
+        try {
+            $this->writable($student, $pursuit, $pursuit->status === "closed");
             return true;
         } catch (AccessDeniedException) {
             return false;
@@ -554,11 +563,19 @@ final readonly class StudentStandingService
         StandingPeriods $next,
         string $revision,
         #[\SensitiveParameter] string $reason,
+        bool $historicalEvidence,
     ): string {
         return hash(
             "sha256",
             json_encode(
-                [$student->value, $pursuit->value, $revision, $next->rows, $reason],
+                [
+                    $student->value,
+                    $pursuit->value,
+                    $revision,
+                    $next->rows,
+                    $reason,
+                    ...$historicalEvidence ? ["historical_evidence_confirmed"] : [],
+                ],
                 JSON_THROW_ON_ERROR,
             ),
         );

@@ -73,7 +73,7 @@ final class TranscriptReleasePolicyTest extends TestCase
     {
         $t = new TranscriptFixture();
         $setup = $this->policyService($t);
-        self::assertSame(['revision' => 0, 'checks' => []], $setup->current());
+        self::assertSame(['revision' => 0, 'checks' => [], 'include_standing' => false], $setup->current());
         $history = $t->sis->sql->rows('sis_history_events');
         $check = $this->check();
         $policy = $setup->save(0, [$check]);

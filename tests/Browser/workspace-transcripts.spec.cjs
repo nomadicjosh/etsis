@@ -36,6 +36,7 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
             identity_verification: { earlier_history_unknown: academicCheck === "history_gaps" },
             program_verification: { status: "closed", labels_retained: true, definition_recorded: true },
             academic_verification: { status: academicCheck === "history_gaps" ? "history_gaps" : "verified" },
+            standing: { through: "2026-08-10", periods: [{ code: "GOOD", title: "Retained <b>Standing</b>", starts_on: "2026-08-01", ends_on: null }] },
             credits: [
                 {
                     history_recorded: true,
@@ -147,6 +148,8 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
         await page.getByRole("button", { name: "Review preparation", exact: true }).click();
         await expect(page.getByRole("button", { name: "Prepare transcript", exact: true })).toBeDisabled();
         await expect(page.getByText("GPA", { exact: true }).locator("..").locator("dd")).toHaveText("4.000");
+        await expect(page.getByRole("region", { name: "Transcript academic standing", exact: true })).toContainText("Retained <b>Standing</b>");
+        await expect(page.locator("#drawer-body b")).toHaveCount(0);
         await expect(page.locator("#drawer-body script")).toHaveCount(0);
         expect(calls.some((call) => call.path.endsWith("/prepare/"))).toBe(false);
         await page.setViewportSize({ width: 375, height: 812 });
@@ -227,6 +230,8 @@ test("the issued transcript HTML companion is accessible and reflows on narrow s
         page.getByRole("heading", { name: "Official academic transcript", exact: true }),
     ).toBeVisible();
     await expect(page.getByRole("table")).toContainText("MATH.101");
+    await expect(page.getByRole("region", { name: "Recorded academic standing", exact: true })).toContainText("Fictional <b>Good standing</b>");
+    await expect(page.locator(".academic-standing b")).toHaveCount(0);
     await accessible(page);
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);

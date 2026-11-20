@@ -58,7 +58,7 @@ window.createWorkspaceStanding = function (ui) {
         const base = `/sis/students/${student}/programs/${pursuit}/standing/`;
         const saved = await request(base);
         if (!loading.isConnected) return;
-        let rows = saved.rows.map(row => ({ ...row })), reason = "";
+        let rows = saved.rows.map(row => ({ ...row })), reason = "", historicalEvidence = false;
         async function choose(existing = null) {
             await definitions(render, async value => {
                 const chosen = { definition_id: value.id, code: value.code, title: value.title };
@@ -96,7 +96,13 @@ window.createWorkspaceStanding = function (ui) {
             const narrative = node("textarea", { id: "standing-reason", class: "form-control", rows: "3", required: true, maxlength: "10000", disabled: !saved.editable });
             narrative.value = reason;
             narrative.addEventListener("input", () => { reason = narrative.value; });
-            form.append(cards, field("Reason for change", narrative), node("div", { class: "inline-actions" },
+            const evidence = node("input", { id: "standing-historical-evidence", type: "checkbox", class: "form-check-input",
+                required: !!saved.historical_correction, disabled: !saved.editable, checked: historicalEvidence });
+            evidence.addEventListener("change", () => { historicalEvidence = evidence.checked; });
+            form.append(cards, field("Reason for change", narrative),
+                saved.historical_correction ? node("div", { class: "form-check mb-3" }, evidence,
+                    node("label", { for: evidence.id, class: "form-check-label" }, "I verified institutional evidence for this historical correction")) : null,
+                node("div", { class: "inline-actions" },
                 saved.editable && rows.length < 50 ? button("Add period", () => choose()) : null, review,
                 button("Degree progress", () => ui.degreeAudit().studentProgress(student, pursuit, render, "Back to academic standing")),
                 can("sis:standing:configure") ? button("Definitions", () => definitions(render)) : null,
@@ -104,17 +110,17 @@ window.createWorkspaceStanding = function (ui) {
                 back ? button("Back to programs", back, "btn-link") : null));
             form.addEventListener("submit", event => { event.preventDefault(); task(async () => {
                 if (!form.reportValidity()) return;
-                const draft = JSON.stringify([facts(rows), reason]);
-                const result = await request(base + "review/", "POST", { rows: facts(rows), revision: saved.revision, reason });
+                const draft = JSON.stringify([facts(rows), reason, historicalEvidence]);
+                const result = await request(base + "review/", "POST", { rows: facts(rows), revision: saved.revision, reason, historical_evidence: historicalEvidence });
                 if (!body.isConnected) return;
-                if (draft !== JSON.stringify([facts(rows), reason])) {
+                if (draft !== JSON.stringify([facts(rows), reason, historicalEvidence])) {
                     body.prepend(node("p", { class: "alert alert-info", role: "status" }, "Your draft changed. Review the current draft again.")); return;
                 }
                 confirm(result);
             }, review); });
             body.append(node("h3", { class: "h5" }, `${saved.program.code} · ${saved.program.title}`),
                 node("p", {}, "Record the institution's determination and inclusive dates. Standing periods cannot overlap. This does not change registration, GPA, holds or graduation."),
-                node("p", { class: "form-text" }, saved.editable ? "Keep earlier periods when recording the next standing. Removing a period records a correction; earlier decisions remain in protected history."
+                node("p", { class: "form-text" }, saved.historical_correction && saved.editable ? "Correct only the standing recorded under this closed pursuit. Confirm institutional evidence and review the full change. This does not reopen the pursuit or change current-program standing." : saved.editable ? "Keep earlier periods when recording the next standing. Removing a period records a correction; earlier decisions remain in protected history."
                     : "This is a historical pursuit. Its standing remains retained; new decisions belong to the current primary pursuit."), form);
             update();
         }
@@ -123,10 +129,11 @@ window.createWorkspaceStanding = function (ui) {
         function confirm(data) {
             const body = openDrawer("Review academic standing", "CONFIRM");
             body.append(node("h3", { class: "h5" }, "Before"), list(data.before), node("h3", { class: "h5" }, "After"), list(data.after),
-                node("p", { class: "text-break" }, data.reason), node("p", { class: "form-text" }, "Students and current assigned advisors see the accepted label and dates. Staff reasons and policy references remain private."),
+                node("p", { class: "text-break" }, data.reason),
+                data.historical_evidence ? node("p", { class: "alert alert-info" }, "Historical correction: institutional evidence confirmed. The pursuit remains closed and earlier decisions stay retained.") : null, node("p", { class: "form-text" }, "Students and current assigned advisors see the accepted label and dates. Staff reasons and policy references remain private."),
                 node("div", { class: "inline-actions" }, button("Confirm changes", async () => {
                     await request(base + "commit/", "POST", { rows: data.rows, revision: data.revision, reason: data.reason,
-                        operation_id: data.operation_id, review_token: data.review_token });
+                        operation_id: data.operation_id, review_token: data.review_token, historical_evidence: data.historical_evidence === true });
                     if (body.isConnected) await open(student, pursuit, back);
                 }, "btn-primary"), button("Keep editing", render, "btn-link")));
         }
@@ -135,7 +142,7 @@ window.createWorkspaceStanding = function (ui) {
             const page = await request(base + "history/", "POST", { ...(cursor ? { cursor } : {}) });
             if (!body.isConnected) return;
             for (const item of page.items) body.append(node("article", { class: "surface p-3 mb-3" },
-                node("h3", { class: "h6" }, `Decision ${item.version} · ${item.recorded_at}`), list(item.rows), node("p", { class: "text-break" }, item.reason)));
+                node("h3", { class: "h6" }, `${item.kind === "historical_correction" ? "Historical correction" : "Decision"} ${item.version} · ${item.recorded_at}`), list(item.rows), node("p", { class: "text-break" }, item.reason)));
             if (!page.items.length) body.append(node("p", {}, "No standing decisions have been recorded."));
             body.append(node("div", { class: "inline-actions" },
                 ...(stack.length ? [button("Previous history", () => history(stack.at(-1), stack.slice(0, -1)))] : []),
