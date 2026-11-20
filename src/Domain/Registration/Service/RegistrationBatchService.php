@@ -769,7 +769,7 @@ final readonly class RegistrationBatchService
             $decision =
             $assignment === null
             ? null
-            : $this->prerequisites->evaluate($id, $assignment, $required, $budget);
+            : $this->prerequisites->evaluate($id, $assignment, $required, $budget, $course->prerequisiteGroups);
             $schedule =
             $enrollment === null
             ? $this->schedules->evaluate($id, $section->id, $scheduleRead, $replacingSection)
@@ -842,6 +842,7 @@ final readonly class RegistrationBatchService
                                     ? "met"
                                     : "missing")),
                     "course_statuses" => $decision?->courseStatuses() ?? [],
+                    "groups" => $decision?->groupStatuses(),
                     "missing_count" => $decision?->missingCount(),
                     "revision" => $decision?->revision(),
                 ],

@@ -93,6 +93,16 @@ window.createRegistrationSchedule = function (ui) {
         details.addEventListener("toggle", () => {
             if (!details.open || rendered) return;
             rendered = true;
+            if (value.groups) {
+                details.append(node("p", { class: "form-text" }, "Complete one course from every requirement. Labels are from the current catalog; checks use verified coursework allowed for this program pursuit."),
+                    node("ol", {}, ...value.groups.map(group => node("li", {},
+                        node("strong", {}, group.met ? "Met: " : "Needs attention: "),
+                        group.positions.map(position => {
+                            const course = courses[position];
+                            return `${course?.code || "Course label unavailable"}${course?.title ? ` · ${course.title}` : ""}`;
+                        }).join(" OR ")))));
+                return;
+            }
             details.append(
                 node(
                     "p",

@@ -123,6 +123,10 @@ window.createWorkspaceCatalog = function (ui) {
                     .map((item) => [item.code, item.title]),
                 "Selected prerequisites",
             ),
+            review.prerequisite_groups ? node("p", { class: "form-text" },
+                "Choices retained: " + review.prerequisite_groups.map(group => group.filter(id => prerequisites.includes(id))
+                    .map(id => review.prerequisites.find(row => row.id === id)?.code || "Course")
+                    .join(" OR ")).filter(Boolean).join(" AND ") + ". Unselected groups are omitted from the cloned draft.") : null,
             reference(review.operation_id),
             node(
                 "p",
@@ -1004,7 +1008,8 @@ window.createWorkspaceCatalog = function (ui) {
                 node(
                     "dd",
                     {},
-                    definition.prerequisites.length ? definition.prerequisites.join(", ") : "None",
+                    definition.prerequisite_groups ? ui.prerequisites().describe(definition) :
+                        definition.prerequisites.length ? definition.prerequisites.join(", ") : "None",
                 ),
             ),
         );

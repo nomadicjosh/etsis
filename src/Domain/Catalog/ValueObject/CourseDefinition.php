@@ -19,6 +19,7 @@ final readonly class CourseDefinition
         public CourseText $text = new CourseText(),
         public ?SubjectSnapshot $subject = null,
         public CourseClassifications $classifications = new CourseClassifications(),
+        public ?PrerequisiteGroups $prerequisiteGroups = null,
     ) {
         if (
             trim($code) === "" ||
@@ -46,6 +47,9 @@ final readonly class CourseDefinition
                 "Course prerequisite identities must be distinct and ordered.",
             );
         }
+        if ($prerequisiteGroups !== null && $prerequisiteGroups->courses() !== $prerequisites) {
+            throw new InvalidArgumentException("Prerequisite choices must match their course references.");
+        }
         foreach ($prerequisites as $id) {
             new EntityId($id);
         }
@@ -64,6 +68,12 @@ final readonly class CourseDefinition
             "subject",
             "classifications",
         ];
+        if (array_key_exists('prerequisite_groups', $data)) {
+            if (!is_array($data['prerequisite_groups'])) {
+                throw new InvalidArgumentException('Use complete prerequisite choice groups.');
+            }
+            $keys[] = 'prerequisite_groups';
+        }
         if (
             count($data) !== count($keys) ||
             array_diff(array_keys($data), $keys) !== [] ||
@@ -90,6 +100,8 @@ final readonly class CourseDefinition
             CourseText::fromArray($data),
             $data["subject"] === null ? null : SubjectSnapshot::fromArray($data["subject"]),
             CourseClassifications::fromArray($data["classifications"]),
+            array_key_exists("prerequisite_groups", $data) ?
+                new PrerequisiteGroups($data["prerequisite_groups"]) : null,
         );
     }
 
@@ -101,7 +113,7 @@ final readonly class CourseDefinition
             "title" => $this->title,
             "credits_milli" => $this->creditsMilli,
             "prerequisites" => $this->prerequisites,
-        ] +
+        ] + ($this->prerequisiteGroups === null ? [] : ["prerequisite_groups" => $this->prerequisiteGroups->groups]) +
         $this->text->describe() + [
             "subject" => $this->subject?->describe(),
             "classifications" => $this->classifications->describe(),

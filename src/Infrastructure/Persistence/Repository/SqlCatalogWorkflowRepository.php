@@ -8,6 +8,7 @@ use Domain\Catalog\Repository\CatalogWorkflowRepository;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\ValueObject\EntityId;
+use Domain\Catalog\ValueObject\PrerequisiteGroups;
 use Infrastructure\Persistence\SqlRecords;
 use InvalidArgumentException;
 use PDOException;
@@ -54,6 +55,60 @@ final readonly class SqlCatalogWorkflowRepository implements CatalogWorkflowRepo
             ],
             $rows,
         );
+    }
+
+    public function prerequisiteGroups(EntityId $course): ?PrerequisiteGroups
+    {
+        $row = $this->sql->rows('sis_course_prerequisite_groups', ['id' => $course->value], 1)[0] ?? null;
+        if ($row === null) {
+            return null;
+        }
+        if (!is_string($row['groups_json']) || strlen($row['groups_json']) > 16384) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        $groups = new PrerequisiteGroups(
+            json_decode($row['groups_json'], true, 8, JSON_THROW_ON_ERROR)
+        );
+        if ($groups->courses() !== array_column($this->prerequisites($course), 'id')) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        return $groups;
+    }
+
+    public function savePrerequisiteGroups(EntityId $course, PrerequisiteGroups $groups): void
+    {
+        $this->sql->execute('DELETE FROM ' . $this->sql->quote('sis_prerequisites') . ' WHERE ' .
+            $this->sql->quote('course_id') . ' = ?', [$course->value]);
+        foreach ($groups->courses() as $id) {
+            $this->sql->insert('sis_prerequisites', ['id' => EntityId::generate()->value,
+                'course_id' => $course->value, 'required_course_id' => $id]);
+        }
+        $data = ['groups_json' => json_encode($groups->groups, JSON_THROW_ON_ERROR)];
+        if ($this->sql->rows('sis_course_prerequisite_groups', ['id' => $course->value], 1) === []) {
+            $this->sql->insert('sis_course_prerequisite_groups', ['id' => $course->value] + $data);
+        } else {
+            $this->sql->update('sis_course_prerequisite_groups', $data, ['id' => $course->value]);
+        }
+    }
+
+    public function prerequisiteLabels(array $ids): array
+    {
+        if (!array_is_list($ids) || count($ids) > 100) {
+            throw new InvalidArgumentException('Use a bounded prerequisite course selection.');
+        }
+        if ($ids === []) {
+            return [];
+        }
+        foreach ($ids as $id) {
+            if (!is_string($id)) {
+                throw new InvalidArgumentException('Use course identities for prerequisite labels.');
+            }
+            new EntityId($id);
+        }
+        $q = $this->sql->quote(...);
+        return $this->sql->fetch('SELECT ' . implode(', ', array_map($q, ['id', 'code', 'title', 'active'])) .
+            ' FROM ' . $q('sis_courses') . ' WHERE ' . $q('id') . ' IN (' .
+            implode(',', array_fill(0, count($ids), '?')) . ') ORDER BY ' . $q('id'), $ids, 100);
     }
 
     public function operation(EntityId $id): ?array

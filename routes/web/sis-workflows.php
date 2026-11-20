@@ -8,6 +8,7 @@ use Application\Http\Controller\SisRequirementAdjustmentController;
 use Application\Http\Controller\SisCourseGroupController;
 use Application\Http\Controller\SisRegistrationController;
 use Application\Http\Controller\SisCoursePublicationController;
+use Application\Http\Controller\SisCoursePrerequisiteController;
 use Application\Http\Controller\SisCourseTextController;
 use Application\Http\Controller\SisCourseAssistanceController;
 use Application\Http\Controller\SisSectionAssistanceController;
@@ -47,6 +48,9 @@ use Application\Http\Controller\SisRelationalReportController;
 use Application\Http\Controller\SisStudentCatalogController;
 
 return static function (Psr7Router $router): void {
+    $router->get('/sis/courses/{id}/prerequisite-groups/', [SisCoursePrerequisiteController::class, 'current']);
+    $router->post('/sis/courses/{id}/prerequisite-groups/', [SisCoursePrerequisiteController::class, 'save']);
+    $router->post('/sis/prerequisite-labels/', [SisCoursePrerequisiteController::class, 'labels']);
     $router->post('/sis/section-changes/choices/', [
         \Application\Http\Controller\SectionChangeController::class, 'staffChoices',
     ]);

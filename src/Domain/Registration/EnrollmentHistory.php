@@ -161,7 +161,9 @@ final class EnrollmentHistory extends EventSourcedAggregate
     {
         return $this->provenance;
     }
-    /** @return array{status:string,required_course_count:?int,supporting_record_count:?int} */
+    /** @return array{
+     * status:string,required_course_count:?int,supporting_record_count:?int,requirement_group_count?:int
+     * } */
     public function prerequisiteSummary(): array
     {
         return [
@@ -179,7 +181,8 @@ final class EnrollmentHistory extends EventSourcedAggregate
                 $this->prerequisites === null
                     ? null
                     : count($this->prerequisites->support),
-        ];
+        ] + ($this->prerequisites?->groups === null ? [] :
+            ["requirement_group_count" => count($this->prerequisites->groups->groups)]);
     }
 
     public function scheduleSummary(): array

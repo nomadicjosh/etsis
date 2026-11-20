@@ -395,3 +395,19 @@ test("registration next steps use captured checks and render only when opened", 
     );
     assert.equal(ui.readiness([]), null);
 });
+
+test("prerequisite alternatives are explained as one requirement rather than separate missing courses", () => {
+    const window = {};
+    vm.runInNewContext(presentation, { window });
+    const ui = window.createRegistrationSchedule({ node });
+    const details = ui.prerequisites({ course_statuses: ["met", "missing", "met"], groups: [
+        { positions: [0, 1], met: true }, { positions: [2], met: true },
+    ] }, [{ code: "MATH.101", title: "Algebra <b>fictional</b>" },
+        { code: "MATH.110", title: "Foundations" }, { code: "ENG.101", title: "Writing" }]);
+    details.open = true;
+    details.events.toggle();
+    assert.match(details.textContent, /MATH.101.*OR MATH.110/);
+    assert.equal(walk(details).filter(e => e.tag === "li").length, 2);
+    assert.equal(details.textContent.includes("Needs attention"), false);
+    assert.equal(walk(details).some(e => e.tag === "b"), false);
+});

@@ -117,6 +117,12 @@ final readonly class CourseCloneService
             foreach ($ids as $id) {
                 $this->registration->addPrerequisite($draft->id, new EntityId($id));
             }
+            if ($context['prerequisite_groups'] !== null) {
+                $this->operations->savePrerequisiteGroups(
+                    $draft->id,
+                    new \Domain\Catalog\ValueObject\PrerequisiteGroups($context['prerequisite_groups'])->subset($ids)
+                );
+            }
             $result = [
                 "id" => $draft->id->value,
                 "source_id" => $source->value,
@@ -206,6 +212,7 @@ final readonly class CourseCloneService
                 "description" => $text["description"],
             ],
             "prerequisites" => $prerequisites,
+            "prerequisite_groups" => $this->operations->prerequisiteGroups($source)?->groups,
         ];
     }
 

@@ -102,6 +102,15 @@ final class ConsoleBootstrapTest extends TestCase
         self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
     }
 
+    public function testPrerequisiteGroupsUseActualProvidersPrivateRoutesAndCsrf(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-prerequisite-groups']);
+        $process->setTimeout(10);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testProgramClassificationRoutesUseActualProvidersCsrfAndPrivatePublicationHistory(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',

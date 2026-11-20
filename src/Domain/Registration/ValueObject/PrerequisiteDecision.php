@@ -22,6 +22,7 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         public EntityId $assignment,
         array $required,
         #[\SensitiveParameter] array $support,
+        public ?\Domain\Catalog\ValueObject\PrerequisiteGroups $groups = null,
     ) {
         if (!array_is_list($required) || count($required) > 100 || !array_is_list($support)) {
             throw new CorruptHistoryException();
@@ -79,6 +80,9 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         if ($orderedCourses !== array_keys($courses)) {
             throw new CorruptHistoryException();
         }
+        if ($groups !== null && $groups->courses() !== $required) {
+            throw new CorruptHistoryException();
+        }
         $this->required = $required;
         /** @var list<array<string,mixed>> $support */
         $this->support = $support;
@@ -86,7 +90,7 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
 
     public function isMet(): bool
     {
-        return count($this->required) === count($this->support);
+        return $this->missingCount() === 0;
     }
 
     /** Response-local positions match the shared prerequisite list; no supporting record identities.
@@ -101,9 +105,25 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         );
     }
 
+    /** Safe response-local course positions, with no supporting academic identities.
+     * @return list<array{positions:list<int>,met:bool}>|null */
+    public function groupStatuses(): ?array
+    {
+        if ($this->groups === null) {
+            return null;
+        }
+        $positions = array_flip($this->required);
+        $supported = array_column($this->support, 'course_id');
+        return array_map(static fn(array $group): array => [
+            'positions' => array_map(static fn(string $id): int => $positions[$id], $group),
+            'met' => array_intersect($group, $supported) !== [],
+        ], $this->groups->groups);
+    }
+
     public function missingCount(): int
     {
-        return count($this->required) - count($this->support);
+        return $this->groups === null ? count($this->required) - count($this->support) :
+        $this->groups->missing(array_column($this->support, 'course_id'));
     }
 
     /** @return array<string,mixed> */
@@ -130,20 +150,28 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
      */
     public static function fromRetained(#[\SensitiveParameter] array $facts): self
     {
+        $keys = ["assignment_id", "required_course_ids", "support", "requirement_groups"];
         if (
-            count($facts) !== 3 ||
-            array_diff(array_keys($facts), ["assignment_id", "required_course_ids", "support"]) !== [] ||
+            count($facts) !== (array_key_exists("requirement_groups", $facts) ? 4 : 3) ||
+            array_diff(array_keys($facts), $keys) !== [] ||
             !is_array($facts["required_course_ids"]) ||
-            !is_array($facts["support"])
+            !is_array($facts["support"]) ||
+            (array_key_exists("requirement_groups", $facts) && !is_array($facts["requirement_groups"]))
         ) {
             throw new CorruptHistoryException();
         }
         self::id($facts["assignment_id"]);
-        $decision = new self(
-            new EntityId($facts["assignment_id"]),
-            $facts["required_course_ids"],
-            $facts["support"],
-        );
+        try {
+            $decision = new self(
+                new EntityId($facts["assignment_id"]),
+                $facts["required_course_ids"],
+                $facts["support"],
+                array_key_exists('requirement_groups', $facts) ?
+                    new \Domain\Catalog\ValueObject\PrerequisiteGroups($facts['requirement_groups']) : null,
+            );
+        } catch (\InvalidArgumentException) {
+            throw new CorruptHistoryException();
+        }
         if (!$decision->isMet()) {
             throw new CorruptHistoryException();
         }
@@ -157,7 +185,7 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
             "assignment_id" => $this->assignment->value,
             "required_course_ids" => $this->required,
             "support" => $this->support,
-        ];
+        ] + ($this->groups === null ? [] : ["requirement_groups" => $this->groups->groups]);
     }
 
     private static function id(mixed $value): void

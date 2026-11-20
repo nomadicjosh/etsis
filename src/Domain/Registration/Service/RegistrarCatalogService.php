@@ -65,6 +65,9 @@ final readonly class RegistrarCatalogService
             }
             $this->repository->addPrerequisite($course, $required);
             $this->audit->record($actor, 'course.prerequisite_added', $course);
+            if ($this->access->requirePermission('sis:catalog:manage')->value !== $actor->value) {
+                throw new \Domain\Shared\Exception\AccessDeniedException('The catalog staff account changed.');
+            }
         });
     }
 
@@ -79,6 +82,9 @@ final readonly class RegistrarCatalogService
             }
             $this->repository->removePrerequisite($course, $required);
             $this->audit->record($actor, 'course.prerequisite_removed', $course);
+            if ($this->access->requirePermission('sis:catalog:manage')->value !== $actor->value) {
+                throw new \Domain\Shared\Exception\AccessDeniedException('The catalog staff account changed.');
+            }
         });
     }
 }

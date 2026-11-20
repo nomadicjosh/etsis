@@ -132,6 +132,7 @@ final readonly class RegistrationService
                 $assignment,
                 $required,
                 $budget,
+                $course->prerequisiteGroups,
             );
             $prerequisitesMet = $prerequisites->isMet();
             $schedule = $this->schedules->evaluate(
@@ -345,7 +346,13 @@ final readonly class RegistrationService
         $this->credits->verifyOpenEnrollment($enrollment, $budget);
         $assignment = $this->pursuits->activePursuit($studentId);
         $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
-        $prerequisites = $this->prerequisites->evaluate($studentId, $assignment, $required, $budget);
+        $prerequisites = $this->prerequisites->evaluate(
+            $studentId,
+            $assignment,
+            $required,
+            $budget,
+            $course->prerequisiteGroups
+        );
         $this->assertEligible(
             $student,
             $section,

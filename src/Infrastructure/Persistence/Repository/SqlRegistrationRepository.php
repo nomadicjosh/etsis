@@ -89,7 +89,15 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
         $current = $this->course($section->courseId);
         $bound = new SqlSectionCourseBindingRepository($this->sql)->bound($section->id);
         if ($bound === null) {
-            return $current;
+            return new Course(
+                $current->id,
+                $current->code,
+                $current->title,
+                $current->creditsMilli,
+                $current->active,
+                $current->publishedTranscriptTitle,
+                prerequisiteGroups: new SqlCatalogWorkflowRepository($this->sql)->prerequisiteGroups($current->id),
+            );
         }
         return new Course(
             $bound->courseId,
@@ -100,6 +108,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             $bound->definition->text->transcriptTitle,
             $bound->versionId,
             $bound->definition->prerequisites,
+            $bound->definition->prerequisiteGroups,
         );
     }
 
@@ -363,6 +372,15 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
 
     public function removePrerequisite(EntityId $course, EntityId $required): void
     {
+        $workflows = new SqlCatalogWorkflowRepository($this->sql);
+        $groups = $workflows->prerequisiteGroups($course);
+        if ($groups !== null) {
+            $workflows->savePrerequisiteGroups($course, $groups->subset(array_values(array_diff(
+                $groups->courses(),
+                [$required->value]
+            ))));
+            return;
+        }
         $q = $this->sql->quote(...);
         $this->sql->execute(
             "DELETE FROM " .
@@ -378,6 +396,17 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
 
     public function addPrerequisite(EntityId $course, EntityId $required): void
     {
+        $workflows = new SqlCatalogWorkflowRepository($this->sql);
+        $groups = $workflows->prerequisiteGroups($course);
+        if ($groups !== null) {
+            if (in_array($required->value, $groups->courses(), true)) {
+                return;
+            }
+            $workflows->savePrerequisiteGroups($course, new \Domain\Catalog\ValueObject\PrerequisiteGroups(
+                [...$groups->groups, [$required->value]]
+            ));
+            return;
+        }
         $this->sql->insert("sis_prerequisites", [
             "id" => EntityId::generate()->value,
             "course_id" => $course->value,

@@ -2449,45 +2449,9 @@ window.createWorkspaceOperations = function (ui) {
         }
         if (sectionName === "courses" && can("sis:catalog:manage")) {
             const panel = section("Prerequisites");
+            panel.append(node("p", { class: "form-text" }, "Set required courses and alternatives together, then publish the reviewed choices."),
+                button("Edit prerequisites", () => ui.prerequisites().open(row.id)));
             body.append(panel);
-            await paged(panel, "prerequisites", row.id, (rows) =>
-                scrollTable(
-                    ["Required course", "Action"],
-                    rows.map((item) => [
-                        `${item.code} · ${item.title}`,
-                        button("Remove prerequisite", () =>
-                            flow(
-                                "Confirm prerequisite removal",
-                                [],
-                                `/sis/courses/${row.id}/prerequisites/${item.required_course_id}/remove/`,
-                                null,
-                                () => openRecord(sectionName, row),
-                                {},
-                                "This changes eligibility for future registrations. Existing academic credits remain unchanged.",
-                            ),
-                        ),
-                    ]),
-                    "Course prerequisites",
-                ),
-            );
-            panel.append(
-                button("Add prerequisite", () =>
-                    flow(
-                        "Add prerequisite",
-                        [
-                            [
-                                "required_course_id",
-                                "Required course",
-                                "lookup",
-                                "courses",
-                            ],
-                        ],
-                        `/sis/courses/${row.id}/prerequisites/`,
-                        null,
-                        () => openRecord(sectionName, row),
-                    ),
-                ),
-            );
         }
     }
     return {

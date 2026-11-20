@@ -301,6 +301,7 @@ final readonly class CoursePublicationService
             CourseText::fromArray($row),
             $this->subjects->course($course),
             $this->classifications->course($course),
+            $this->relationships->prerequisiteGroups($course),
         );
     }
 }

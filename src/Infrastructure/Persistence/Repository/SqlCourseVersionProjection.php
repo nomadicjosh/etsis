@@ -30,6 +30,17 @@ final readonly class SqlCourseVersionProjection
             if ((int) $r["schema_version"] !== 1) {
                 throw new CorruptHistoryException();
             }
+            if ($r['prerequisite_groups'] !== null) {
+                if (strlen($r['prerequisite_groups']) > 16384) {
+                    throw new CorruptHistoryException();
+                }
+                $definition['prerequisite_groups'] = json_decode(
+                    $r['prerequisite_groups'],
+                    true,
+                    8,
+                    JSON_THROW_ON_ERROR
+                );
+            }
             $definition += ["transcript_title" => $r["transcript_title"], "description" => $r["description"]];
             $subject = $this->sql->rows("sis_course_version_subjects", ["id" => $r["id"]], 1)[0] ?? null;
             $definition["subject"] =
@@ -122,6 +133,8 @@ final readonly class SqlCourseVersionProjection
             "transcript_title" => $definition->definition->text->transcriptTitle,
             "description" => $definition->definition->text->description,
             "prerequisites" => json_encode($definition->definition->prerequisites, JSON_THROW_ON_ERROR),
+            "prerequisite_groups" => $definition->definition->prerequisiteGroups === null ? null :
+                json_encode($definition->definition->prerequisiteGroups->groups, JSON_THROW_ON_ERROR),
         ];
         $old = $this->sql->rows("sis_course_versions", ["id" => $definition->versionId->value], 1)[0] ?? null;
         if ($old === null) {

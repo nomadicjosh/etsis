@@ -23,9 +23,10 @@ final readonly class PrerequisiteService
         EntityId $assignment,
         array $required,
         ?HistoryReadBudget $budget = null,
+        ?\Domain\Catalog\ValueObject\PrerequisiteGroups $groups = null,
     ): PrerequisiteDecision {
         if ($required === []) {
-            return new PrerequisiteDecision($assignment, [], []);
+            return new PrerequisiteDecision($assignment, [], [], $groups);
         }
         if (count($required) > 100 || count(array_unique($required)) !== count($required)) {
             throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
@@ -60,6 +61,6 @@ final readonly class PrerequisiteService
             }
         }
         ksort($completed, SORT_STRING);
-        return new PrerequisiteDecision($assignment, $required, array_values($completed));
+        return new PrerequisiteDecision($assignment, $required, array_values($completed), $groups);
     }
 }

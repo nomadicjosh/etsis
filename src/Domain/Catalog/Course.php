@@ -19,6 +19,7 @@ final readonly class Course
         public ?string $publishedTranscriptTitle = null,
         public ?EntityId $publicationVersionId = null,
         public ?array $publishedPrerequisites = null,
+        public ?\Domain\Catalog\ValueObject\PrerequisiteGroups $prerequisiteGroups = null,
     ) {
         if (($publicationVersionId === null) !== ($publishedPrerequisites === null)) {
             throw new InvalidArgumentException(
@@ -31,6 +32,7 @@ final readonly class Course
                 $title,
                 $creditsMilli,
                 $publishedPrerequisites,
+                prerequisiteGroups: $prerequisiteGroups,
             );
         }
         if (
