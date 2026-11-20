@@ -1,6 +1,6 @@
 # Published program details
 
-A program has one working definition and explicitly published catalog revisions for existing academic years. Each publication retains its code, title, plain-text description, department, academic level, offered degree/award, specialization choices and selection policy. Later draft edits and reference-library renames do not replace those facts.
+A program has one working definition and explicitly published catalog revisions for existing academic years. Each publication retains its code, title, plain-text description, department, academic level, offered degree/award, optional school/college and field of study, specialization choices and selection policy. Later draft edits and reference-library renames do not replace those facts.
 
 The [degree-audit builder](degree-audit-builder.md) separately publishes course/group requirements and policies. Program publication is not a graduation decision and does not automatically assign or replace a student's degree-audit requirements.
 
@@ -8,7 +8,7 @@ The [degree-audit builder](degree-audit-builder.md) separately publishes course/
 
 1. Set up [term types and academic years](academic-calendar-setup.md). Terms identify the academic year of matriculation; there is no separate catalog-year entry form.
 2. Open **Academic catalog → Programs → a program → Program details & publications**.
-3. Edit the code, title and description together. Choose the department, academic level and award from searchable libraries. Add a degree or certificate directly from the award chooser, or use **Degrees & awards** in the catalog toolbar.
+3. Edit the code, title and description together. Choose the department, academic level, award, optional school/college and field of study from searchable libraries. Add a degree or certificate directly from the award chooser, or use **Degrees & awards** in the catalog toolbar.
 4. Save once. Unsaved text and classification choices survive returning from a chooser or publication history. Publication stays disabled while changes are unsaved. Codes allow up to 80 letters/digits/dots/underscores/hyphens, titles up to 191 characters and plain-text descriptions up to 10,000 characters.
 5. Choose **Publish for an academic year**, enter a reason and choose an existing academic year. Searches accept a blank value and use bounded pages. Choosing a year preserves the reason.
 6. Choose **Review program publication**. Inspect the year, proposed catalog revision, program text, classifications and specialization choices/policy. **Revise program publication** preserves the year/reason; **Refresh program review** prepares a fresh review. An unconfirmed review expires after 20 minutes.
@@ -19,6 +19,20 @@ For example, publish a B.A. definition for **2022-2023**, then a revised definit
 Publishing another revision for the same year changes the default for subsequent assignments into that year. It does not move existing students. Retrying an earlier accepted confirmation returns its original receipt after later publications, edits or expiry, without restoring the earlier default.
 
 An existing student's exceptional curriculum change uses the registrar's [reviewed cohort workflow](student-program-assignments.md#review-a-cohort-change). Publication never initiates that change. The decision preserves both references in the student's existing pursuit stream; selected degree and specialization requirements require their own deliberate review.
+
+## Schools, colleges and fields of study
+
+Open **Academic catalog → Curriculum → Schools & fields** to maintain the two optional reference libraries. A school may be called a school, college or faculty by the institution. A field of study is an institution-managed program classification: for example, a CIP or ISCED code and its title. No national code list is seeded, fetched, inferred from the program code or asserted to be officially valid. Staff enter the code and label the institution has selected.
+
+Both libraries reuse the existing classification editor: codes up to 40 characters, names up to 191, searchable fifty-record pages, optimistic edits and retirement instead of deletion. Codes can contain dots, slashes, underscores and hyphens. Entries are independent of departments and do not establish a school/department hierarchy, permissions, grading scales or degree requirements.
+
+Choose **School/college** and **Field of study** in **Program details** alongside the existing text and classifications. Pickers preserve all unsaved choices and program text, and can add a reference without leaving the workflow. Clear a choice to leave it unspecified. A retired reference may remain on a program that already uses it, but cannot be newly assigned. Save the draft once, then use the existing academic-year publication review. Any changed code, title, selection or classification label makes an earlier unconfirmed review stale. Earlier accepted retries keep their original result.
+
+New publications retain each selected reference's identity, code and title, including explicit blank choices. Later library renames, retirements or draft edits cannot relabel an existing student's selected cohort. Earlier genuine publications that did not capture these fields retain that exact absence and show **Not recorded in this publication**; no current reference is substituted. A retained projection carries whether these two fields were captured, and verification rejects inconsistent or invented values. The current domain model reads both known and unrecorded historical facts without numbered model wrappers or rewritten events.
+
+Report Studio's **Student programs & catalog cohorts** dataset includes the retained school/college and field-of-study codes/names, plus **Program school and field of study recorded**. It reuses the existing single publication join: a student keeps the classifications of the program publication selected for that pursuit, and reports do not replay streams or join today's library. A missing publication remains missing; a false recorded flag identifies an earlier publication without these captured fields. Student-record/report permissions still apply.
+
+Migration `20261119000008_AddSisProgramClassifications` adds two nullable draft references with foreign keys, their retained publication labels and the recorded/unknown indicator. It creates no reference entries, roles, grants, event types, journal or historical backfill. SQLite uses nullable inline foreign keys without rebuilding the draft table; the other framework database engines use schema alterations. Isolated tests verify SQLite constraints and retained facts, compile changes for MySQL, PostgreSQL, SQL Server and Oracle, and cover stale reviews, retirement, private/CSRF route boundaries, literal text, historical reports and accessible mobile workflows. The development database contained one existing program draft and no retained program publications before the upgrade. The native MariaDB migration preserved that draft’s original-field digest and all twenty historical events; event, stream-head and operation-table checksums were unchanged. Both new draft foreign keys were verified afterward.
 
 ## Program specialization setup
 

@@ -28,6 +28,8 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
             "department_id" => null,
             "academic_level_id" => null,
             "award_id" => null,
+            "school_id" => null,
+            "field_of_study_id" => null,
         ];
     }
 
@@ -71,12 +73,25 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
             }
             $catalog = $this->sql->one("sis_program_catalogs", ["id" => $version->value]);
             $choices = [];
+            $extended = match ($row['school_field_recorded'] ?? null) {
+                true, 1, '1', 't' => true,
+                false, 0, '0', 'f' => false,
+                default => throw new CorruptHistoryException(),
+            };
             foreach (ClassificationKind::programKinds() as $kind) {
                 $id = $row[$kind->value . "_id"];
                 $code = $row[$kind->value . "_code"];
                 $title = $row[$kind->value . "_title"];
                 if ($id === null && ($code !== null || $title !== null)) {
                     throw new CorruptHistoryException();
+                }
+                if (
+                    !$extended && in_array($kind, [ClassificationKind::School, ClassificationKind::FieldOfStudy], true)
+                ) {
+                    if ($id !== null || $code !== null || $title !== null) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
                 }
                 $choices[$kind->value] =
                 $id === null ? null : ["id" => $id, "code" => $code, "title" => $title];
@@ -141,8 +156,12 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
             "academic_year_code" => $yearCode,
             "stream_version" => $position,
             "description" => $definition->description,
+            "school_field_recorded" => (int) $definition->classifications->schoolAndFieldRecorded,
         ];
-        foreach ($definition->classifications->describe() as $kind => $value) {
+        $values = $definition->classifications->describe();
+        foreach (ClassificationKind::programKinds() as $category) {
+            $kind = $category->value;
+            $value = $values[$kind] ?? null;
             $row[$kind . "_id"] = $value["id"] ?? null;
             $row[$kind . "_code"] = $value["code"] ?? null;
             $row[$kind . "_title"] = $value["title"] ?? null;
@@ -160,6 +179,7 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
             $this->sql->insert("sis_program_catalog_details", $row);
         } else {
             $old["stream_version"] = (int) $old["stream_version"];
+            $old["school_field_recorded"] = (int) $old["school_field_recorded"];
             if (ProtectedEventCodec::canonical($old) !== ProtectedEventCodec::canonical($row)) {
                 throw new CorruptHistoryException();
             }

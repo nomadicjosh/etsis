@@ -3,6 +3,16 @@ window.createWorkspaceClassifications = function (ui) {
     "use strict";
     const { node, request, task, buildForm, formData, openDrawer } = ui;
     const kinds = {
+        school: {
+            singular: "School/college",
+            plural: "Schools & colleges",
+            detail: "An optional school, college or faculty offering a program. Assign it explicitly; it is not inferred from the department.",
+        },
+        field_of_study: {
+            singular: "Field of study",
+            plural: "Fields of study",
+            detail: "Institution-defined program classifications, such as CIP or ISCED codes. Enter the code and label your institution uses; no national code list is assumed.",
+        },
         department: {
             singular: "Department",
             plural: "Departments",
@@ -56,6 +66,9 @@ window.createWorkspaceClassifications = function (ui) {
     ) {
         const category = kinds[kind];
         const sectionKind = ["instructional_method", "campus"].includes(kind);
+        const extendedProgramKind = ["school", "field_of_study"].includes(kind);
+        const visibleKinds = sectionKind ? ["instructional_method", "campus"] : extendedProgramKind
+            ? ["school", "field_of_study"] : ["department", "academic_level", "course_level", "award"];
         const data = await request(
             `/sis/catalog/classifications/${kind}/page/`,
             "POST",
@@ -69,8 +82,8 @@ window.createWorkspaceClassifications = function (ui) {
                 ? `Choose ${category.singular.toLowerCase()}`
                 : sectionKind
                   ? category.plural
-                  : kind === "award"
-                    ? "Degrees & awards"
+                  : extendedProgramKind ? "Schools & fields" : kind === "award"
+                    ? category.plural
                     : "Departments & levels",
             "ACADEMIC CATALOG",
         );
@@ -82,9 +95,7 @@ window.createWorkspaceClassifications = function (ui) {
             });
             Object.entries(kinds)
                 .filter(
-                    ([key]) =>
-                        ["instructional_method", "campus"].includes(key) ===
-                        sectionKind,
+                    ([key]) => visibleKinds.includes(key),
                 )
                 .forEach(([key, value]) => {
                     const tab = button(

@@ -56,8 +56,9 @@ final readonly class ProgramPublicationService
      */
     public function draft(EntityId $program): array
     {
-        $this->access->requirePermission("sis:catalog:manage");
+        $actor = $this->access->requirePermission("sis:catalog:manage");
         $definition = $this->definition($program)->describe();
+        $this->authorize($actor);
         return ["id" => $program->value, "definition" => $definition, "revision" => $this->hash($definition)];
     }
 
@@ -71,9 +72,12 @@ final readonly class ProgramPublicationService
         ?EntityId $academicLevel,
         ?EntityId $award,
         string $revision,
+        ?EntityId $school = null,
+        ?EntityId $fieldOfStudy = null,
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
-        $choices = ["department" => $department, "academic_level" => $academicLevel, "award" => $award];
+        $choices = ["department" => $department, "academic_level" => $academicLevel, "award" => $award,
+            "school" => $school, "field_of_study" => $fieldOfStudy];
         return $this->transactions->run(function () use (
             $program,
             $code,
@@ -120,6 +124,7 @@ final readonly class ProgramPublicationService
             ]);
             $this->details->saveDraft($program, $definition->description, $choices);
             $this->audit->record($actor, "program.details_saved", $program);
+            $this->authorize($actor);
             return $this->draft($program);
         });
     }

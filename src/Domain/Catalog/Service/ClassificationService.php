@@ -32,11 +32,12 @@ final readonly class ClassificationService
     /** @return array<string, mixed> */
     public function page(ClassificationKind $kind, string $search = "", ?EntityId $after = null): array
     {
-        $this->access->requirePermission("sis:catalog:manage");
+        $actor = $this->access->requirePermission("sis:catalog:manage");
         if (mb_strlen($search) > 100) {
             throw new InvalidArgumentException("Use a shorter classification search.");
         }
         $rows = $this->classifications->page($kind, trim($search), $after);
+        $this->authorize($actor);
         return [
             "items" => array_map(
                 fn(array $row): array => $row + ["revision" => $this->rowRevision($row)],
@@ -84,6 +85,7 @@ final readonly class ClassificationService
                 $value->id,
             );
             $row = $this->classifications->get($value->id);
+            $this->authorize($actor);
             return $row + ["revision" => $this->rowRevision($row)];
         });
     }

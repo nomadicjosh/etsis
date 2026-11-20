@@ -12,6 +12,8 @@ enum ClassificationKind: string
     case Award = "award";
     case InstructionalMethod = "instructional_method";
     case Campus = "campus";
+    case School = "school";
+    case FieldOfStudy = "field_of_study";
 
     /** @return list<self> */
     public static function courseKinds(): array
@@ -22,6 +24,6 @@ enum ClassificationKind: string
     /** @return list<self> */
     public static function programKinds(): array
     {
-        return [self::Department, self::AcademicLevel, self::Award];
+        return [self::Department, self::AcademicLevel, self::Award, self::School, self::FieldOfStudy];
     }
 }

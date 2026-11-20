@@ -118,3 +118,28 @@ test('classification searches can be cleared and retired entries cannot be chose
     expect(f.calls.some(call => call.path.endsWith('/department/page/') && call.data.search === '')).toBe(true);
     expect(f.errors).toEqual([]);
 });
+
+test('school and field libraries share setup without adding course classification fields', async ({ page }) => {
+    const f = await fixture(page);
+    await workspaceTool(page, 'Schools & fields');
+    await expect(page.getByRole('group', { name: 'Classification category', exact: true })
+        .getByRole('button')).toHaveCount(2);
+    await add(page, 'School/college', 'ARTS', 'College of Arts <b>fictional</b>');
+    await expect(page.locator('#drawer-body')).toContainText('College of Arts <b>fictional</b>');
+    await page.getByRole('button', { name: 'Fields of study', exact: true }).click();
+    await add(page, 'Field of study', '11.0701', 'Fictional Computer Science');
+    await page.getByLabel('Find fields of study', { exact: true }).fill('11.0701');
+    await page.getByRole('button', { name: 'Search classifications', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional Computer Science');
+    await page.setViewportSize({ width: 375, height: 812 });
+    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(scan.violations.map(v => v.id)).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.locator('#drawer-body b,#drawer-body script').count()).toBe(0);
+    expect(f.calls.filter(call => call.path.endsWith('/save/')).map(call => call.path)).toEqual([
+        '/sis/catalog/classifications/school/save/', '/sis/catalog/classifications/field_of_study/save/',
+    ]);
+    expect(f.calls.every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});

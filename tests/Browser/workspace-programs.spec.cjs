@@ -4,10 +4,12 @@ const id = number => `01K000000000000000000000${String(number).padStart(2, '0')}
 
 async function fixture(page, options = {}) {
     const calls = [], errors = [], publications = [];
-    let definition = { code: 'BSCS', title: 'Computer Science', description: options.description || null, classifications: { department: null, academic_level: null, award: null } };
+    let definition = { code: 'BSCS', title: 'Computer Science', description: options.description || null, classifications: { department: null, academic_level: null, award: null, school: null, field_of_study: null } };
     const rows = [
         { id: id(3), kind: 'department', code: 'SCI', title: 'Sciences', active: true },
         { id: id(4), kind: 'academic_level', code: 'UG', title: 'Undergraduate', active: true },
+        { id: id(7), kind: 'school', code: 'ARTS', title: 'College of Arts <b>fictional</b>', active: true },
+        { id: id(8), kind: 'field_of_study', code: '11.0701', title: 'Computer Science', active: true },
         { id: id(5), kind: 'award', code: 'BA', title: 'Bachelor of Arts <script>fictional</script>', active: true },
     ];
     let reviews = 0, accepted = null;
@@ -26,7 +28,7 @@ async function fixture(page, options = {}) {
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/data/programs/') result = { items: [{ id: id(1), code: definition.code, title: definition.title }], next_after: null };
         else if (path === `/sis/programs/${id(1)}/details/`) {
-            if (data) definition = { code: data.code, title: data.title, description: data.description, classifications: Object.fromEntries(['department', 'academic_level', 'award'].map(kind => {
+            if (data) definition = { code: data.code, title: data.title, description: data.description, classifications: Object.fromEntries(['department', 'academic_level', 'award', 'school', 'field_of_study'].map(kind => {
                 const row = rows.find(row => row.id === data[`${kind}_id`]);
                 return [kind, row ? { id: row.id, code: row.code, title: row.title } : null];
             })) };
@@ -94,7 +96,7 @@ test('program details and classifications are edited together and explicitly rev
     const f = await fixture(page);
     await page.getByRole('textbox', { name: 'Program title', exact: true }).fill('Fictional Science');
     await page.getByRole('textbox', { name: 'Program description', exact: true }).fill('A fictional description <img src=x onerror=alert(1)>');
-    for (const [category, code] of [['department', 'SCI'], ['academic level', 'UG'], ['award', 'BA']]) {
+    for (const [category, code] of [['department', 'SCI'], ['academic level', 'UG'], ['award', 'BA'], ['school/college', 'ARTS'], ['field of study', '11.0701']]) {
         await page.getByRole('button', { name: `Choose ${category}`, exact: true }).click();
         await page.getByRole('button', { name: `Choose ${code}`, exact: true }).click();
     }
@@ -111,6 +113,8 @@ test('program details and classifications are edited together and explicitly rev
     await page.getByRole('button', { name: 'Review program publication', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('2024-2025 · Catalog revision 1');
     await expect(page.locator('#drawer-body')).toContainText('BA — Bachelor of Arts <script>fictional</script>');
+    await expect(page.locator('#drawer-body')).toContainText('ARTS — College of Arts <b>fictional</b>');
+    await expect(page.locator('#drawer-body')).toContainText('11.0701 — Computer Science');
     await page.getByRole('button', { name: 'Revise program publication', exact: true }).click();
     await expect(page.getByLabel('Reason for program publication', { exact: true })).toHaveValue('Fictional reviewed 2024 requirements context');
     await page.getByRole('button', { name: 'Review program publication', exact: true }).click();
@@ -124,6 +128,8 @@ test('program details and classifications are edited together and explicitly rev
     await page.getByRole('button', { name: 'Published program details', exact: true }).click();
     await page.getByText('2024-2025 · Revision 1 · Fictional Science', { exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Sciences');
+    await expect(page.locator('#drawer-body')).toContainText('ARTS — College of Arts <b>fictional</b>');
+    expect(f.calls.find(call => call.path.endsWith('/details/')).data).toMatchObject({ school_id: id(7), field_of_study_id: id(8) });
     expect(await page.locator('#drawer-body img, #drawer-body script').count()).toBe(0);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);

@@ -33,7 +33,7 @@ try {
             'credits_milli' => 3000], JSON_THROW_ON_ERROR)];
     }
     if (in_array(($argv[1] ?? ''), [
-        'check-portal', 'check-admission-readiness', 'check-drop-policy', 'check-hiatus-history', 'check-transcript-reviews', 'check-registration-schedule', 'check-gradebook-calculation', 'check-grade-changes', 'check-section-classifications', 'check-profile-command', 'check-login-sessions',
+        'check-portal', 'check-admission-readiness', 'check-drop-policy', 'check-hiatus-history', 'check-transcript-reviews', 'check-registration-schedule', 'check-gradebook-calculation', 'check-grade-changes', 'check-section-classifications', 'check-program-classifications', 'check-profile-command', 'check-login-sessions',
         'check-moodle-resolution', 'check-course-rules', 'check-degree-trials', 'check-transfer-corrections', 'check-report-exports',
     ], true)) {
         $_SERVER['DOCUMENT_ROOT'] = $fixture . '/public';
@@ -115,6 +115,11 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/AdmissionReadinessBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-program-classifications') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/ProgramClassificationBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-section-classifications') {
             $kernel->bootstrap();

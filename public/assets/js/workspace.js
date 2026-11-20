@@ -536,6 +536,7 @@
                     { label: 'Grading scales', icon: 'clipboard-data', run: () => degreeAuditStudio.gradingScale() },
                     { label: 'Subjects', icon: 'journal-bookmark', run: () => catalogStudio.subjects() },
                     { label: 'Departments & levels', icon: 'diagram-3', run: () => classificationStudio.library() },
+                    { label: 'Schools & fields', icon: 'buildings', run: () => classificationStudio.library('school') },
                     { label: 'Degrees & awards', icon: 'award', run: () => classificationStudio.library('award') },
                     { label: 'Instructional methods', icon: 'easel', run: () => classificationStudio.library('instructional_method') },
                     { label: 'Campuses & sites', icon: 'buildings', run: () => classificationStudio.library('campus') },

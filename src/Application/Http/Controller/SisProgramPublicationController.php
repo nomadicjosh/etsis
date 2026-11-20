@@ -50,6 +50,8 @@ final readonly class SisProgramPublicationController
                 $input->optionalId("academic_level_id"),
                 $input->optionalId("award_id"),
                 $input->text("revision", 64),
+                school: $input->optionalId("school_id"),
+                fieldOfStudy: $input->optionalId("field_of_study_id"),
             ),
         );
     }

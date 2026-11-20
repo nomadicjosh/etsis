@@ -208,6 +208,36 @@ final class AcademicReportSchema
                     "program_definition",
                     "academic_year_code",
                 ),
+                "program_school_code" => $field(
+                    "Program school/college code",
+                    "string",
+                    "program_definition",
+                    "school_code",
+                ),
+                "program_school_title" => $field(
+                    "Program school/college name",
+                    "string",
+                    "program_definition",
+                    "school_title",
+                ),
+                "program_field_of_study_code" => $field(
+                    "Program field of study code",
+                    "string",
+                    "program_definition",
+                    "field_of_study_code",
+                ),
+                "program_field_of_study_title" => $field(
+                    "Program field of study name",
+                    "string",
+                    "program_definition",
+                    "field_of_study_title",
+                ),
+                "program_school_field_recorded" => $field(
+                    "Program school and field of study recorded",
+                    "boolean",
+                    "program_definition",
+                    "school_field_recorded",
+                ),
                 "program_department_code" => $field(
                     "Program department code",
                     "string",

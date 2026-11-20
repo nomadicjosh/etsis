@@ -47,3 +47,5 @@ This stage covers course classification and its retained downstream references. 
 Fictional integration checks cover retained labels after renames/retirement, reports, stale reviews, category/permission boundaries, bounded pages and rollback. Real-provider route checks cover empty searches, typed inputs, CSRF and privacy. Browser checks cover the combined chooser, search clearing, retirement, draft preservation, keyboard saving, literal rendering and accessibility.
 
 Section-specific [instructional methods and campuses/sites](section-publication.md#instructional-methods-and-campuses) use this same reference library and assignment editor. They belong to section setup and are not inferred from a course code or added to the course classification fields.
+
+Program-only [schools/colleges and fields of study](program-publication.md#schools-colleges-and-fields-of-study) reuse this library under **Schools & fields**. They are selected on program drafts and retained with program publications; they are not additional course classifications or inferred department relationships.

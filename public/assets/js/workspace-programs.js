@@ -6,6 +6,8 @@ window.createWorkspacePrograms = function (ui) {
         department: "Department",
         academic_level: "Academic level",
         award: "Award",
+        school: "School/college",
+        field_of_study: "Field of study",
     };
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
@@ -36,7 +38,8 @@ window.createWorkspacePrograms = function (ui) {
                         "div",
                         {},
                         node("dt", {}, label),
-                        node("dd", {}, value ? `${value.code} — ${value.title}` : "Not specified"),
+                        node("dd", {}, value === undefined ? "Not recorded in this publication" :
+                            value ? `${value.code} — ${value.title}` : "Not specified"),
                     );
                 }),
             ),
@@ -138,6 +141,8 @@ window.createWorkspacePrograms = function (ui) {
                         department_id: draft.classifications.department?.id ?? null,
                         academic_level_id: draft.classifications.academic_level?.id ?? null,
                         award_id: draft.classifications.award?.id ?? null,
+                        school_id: draft.classifications.school?.id ?? null,
+                        field_of_study_id: draft.classifications.field_of_study?.id ?? null,
                         revision: current.revision,
                     });
                     await ui.refreshDirectory();
