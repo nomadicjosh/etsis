@@ -411,3 +411,21 @@ test("prerequisite alternatives are explained as one requirement rather than sep
     assert.equal(details.textContent.includes("Needs attention"), false);
     assert.equal(walk(details).some(e => e.tag === "b"), false);
 });
+
+test("counted prerequisites show distinct-course progress while sharing course labels across requirements", () => {
+    const window = {};
+    vm.runInNewContext(presentation, { window });
+    const ui = window.createRegistrationSchedule({ node });
+    const details = ui.prerequisites({ course_statuses: ["met", "missing", "missing"], groups: [
+        { positions: [0, 1, 2], met: false, required_count: 2, completed_count: 1 },
+        { positions: [0], met: true, required_count: 1, completed_count: 1 },
+    ] }, [{ code: "MATH.101", title: "Algebra" }, { code: "MATH.110", title: "Foundations" },
+        { code: "MATH.120", title: "Geometry" }]);
+    details.open = true;
+    details.events.toggle();
+    assert.match(details.textContent, /At least 2 distinct courses required · 1 verified/);
+    assert.match(details.textContent, /Needs attention/);
+    assert.equal(details.textContent.includes(" OR "), false);
+    assert.equal(walk(details).filter(e => e.tag === "li").length, 2);
+    assert.equal((details.textContent.match(/MATH.101/g) || []).length, 2);
+});

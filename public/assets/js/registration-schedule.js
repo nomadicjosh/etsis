@@ -94,13 +94,14 @@ window.createRegistrationSchedule = function (ui) {
             if (!details.open || rendered) return;
             rendered = true;
             if (value.groups) {
-                details.append(node("p", { class: "form-text" }, "Complete one course from every requirement. Labels are from the current catalog; checks use verified coursework allowed for this program pursuit."),
+                details.append(node("p", { class: "form-text" }, "Meet each requirement using verified coursework allowed for this program pursuit. Labels are from the current catalog. A course may satisfy more than one prerequisite requirement."),
                     node("ol", {}, ...value.groups.map(group => node("li", {},
                         node("strong", {}, group.met ? "Met: " : "Needs attention: "),
+                        (group.required_count || 1) > 1 ? `At least ${group.required_count} distinct courses required · ${group.completed_count} verified: ` : "",
                         group.positions.map(position => {
                             const course = courses[position];
                             return `${course?.code || "Course label unavailable"}${course?.title ? ` · ${course.title}` : ""}`;
-                        }).join(" OR ")))));
+                        }).join((group.required_count || 1) > 1 ? "; " : " OR ")))));
                 return;
             }
             details.append(

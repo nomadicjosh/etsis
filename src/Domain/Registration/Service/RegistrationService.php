@@ -127,6 +127,7 @@ final readonly class RegistrationService
                 $studentId,
                 $section->termId,
             );
+            $budget ??= new \Domain\Shared\EventSourcing\HistoryReadBudget();
             $prerequisites = $this->prerequisites->evaluate(
                 $studentId,
                 $assignment,
@@ -197,6 +198,7 @@ final readonly class RegistrationService
                 $actor,
                 $prerequisites,
                 $schedule,
+                $budget,
             );
             $this->credits->open(
                 $enrollment,

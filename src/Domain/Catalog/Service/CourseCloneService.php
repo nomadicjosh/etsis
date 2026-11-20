@@ -120,7 +120,10 @@ final readonly class CourseCloneService
             if ($context['prerequisite_groups'] !== null) {
                 $this->operations->savePrerequisiteGroups(
                     $draft->id,
-                    new \Domain\Catalog\ValueObject\PrerequisiteGroups($context['prerequisite_groups'])->subset($ids)
+                    new \Domain\Catalog\ValueObject\PrerequisiteGroups(
+                        $context['prerequisite_groups'],
+                        $context['prerequisite_minimums']
+                    )->subset($ids)
                 );
             }
             $result = [
@@ -201,6 +204,7 @@ final readonly class CourseCloneService
             ]);
         }
         $text = $this->catalog->get("courses", $source);
+        $groups = $this->operations->prerequisiteGroups($source);
         return [
             "source" => [
                 "id" => $source->value,
@@ -212,7 +216,8 @@ final readonly class CourseCloneService
                 "description" => $text["description"],
             ],
             "prerequisites" => $prerequisites,
-            "prerequisite_groups" => $this->operations->prerequisiteGroups($source)?->groups,
+            "prerequisite_groups" => $groups?->groups,
+            "prerequisite_minimums" => $groups?->minimums,
         ];
     }
 

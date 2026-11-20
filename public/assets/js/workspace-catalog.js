@@ -98,6 +98,11 @@ window.createWorkspaceCatalog = function (ui) {
     }
     function clonePlan(source, review, draft, prerequisites) {
         const body = openDrawer("Review course clone", "DETAILS → REVIEW → SAVE DRAFT");
+        const groups = (review.prerequisite_groups || []).map((group, index) => ({
+            selected: group.filter(id => prerequisites.includes(id)), minimum: review.prerequisite_minimums?.[index] || 1,
+        })).filter(group => group.selected.length);
+        const invalidChoices = groups.some(group => group.selected.length < group.minimum);
+
         body.append(
             button(
                 "Change clone details",
@@ -124,9 +129,12 @@ window.createWorkspaceCatalog = function (ui) {
                 "Selected prerequisites",
             ),
             review.prerequisite_groups ? node("p", { class: "form-text" },
-                "Choices retained: " + review.prerequisite_groups.map(group => group.filter(id => prerequisites.includes(id))
-                    .map(id => review.prerequisites.find(row => row.id === id)?.code || "Course")
-                    .join(" OR ")).filter(Boolean).join(" AND ") + ". Unselected groups are omitted from the cloned draft.") : null,
+                "Choices retained: " + groups.map(group => `${group.minimum > 1 ? `At least ${group.minimum} of: ` : ""}` +
+                    group.selected.map(id => review.prerequisites.find(row => row.id === id)?.code || "Course")
+                        .join(group.minimum > 1 ? "; " : " OR ")).join(" AND ") +
+                    ". Unselected groups are omitted from the cloned draft.") : null,
+            invalidChoices ? node("p", { class: "alert alert-warning", role: "status" },
+                "Keep enough courses to meet each retained minimum, or omit that requirement entirely.") : null,
             reference(review.operation_id),
             node(
                 "p",
@@ -136,7 +144,7 @@ window.createWorkspaceCatalog = function (ui) {
             node(
                 "div",
                 { class: "inline-actions" },
-                button(
+                Object.assign(button(
                     "Save course draft",
                     async () => {
                         const saved = await request(`/sis/courses/${source}/clone/commit/`, "POST", {
@@ -149,7 +157,7 @@ window.createWorkspaceCatalog = function (ui) {
                         await ui.refreshDirectory();
                     },
                     "btn-primary",
-                ),
+                ), { disabled: invalidChoices }),
                 button("Check saved clone", async () =>
                     cloneReceipt(await request(`/sis/catalog/clones/${review.operation_id}/`)),
                 ),

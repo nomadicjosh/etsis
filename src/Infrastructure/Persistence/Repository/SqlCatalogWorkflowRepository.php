@@ -66,9 +66,16 @@ final readonly class SqlCatalogWorkflowRepository implements CatalogWorkflowRepo
         if (!is_string($row['groups_json']) || strlen($row['groups_json']) > 16384) {
             throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
         }
-        $groups = new PrerequisiteGroups(
-            json_decode($row['groups_json'], true, 8, JSON_THROW_ON_ERROR)
-        );
+        if ($row['minimums_json'] !== null && strlen($row['minimums_json']) > 2048) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        $choices = json_decode($row['groups_json'], true, 8, JSON_THROW_ON_ERROR);
+        $minimums = $row['minimums_json'] === null ? null :
+        json_decode($row['minimums_json'], true, 4, JSON_THROW_ON_ERROR);
+        if (!is_array($choices) || ($row['minimums_json'] !== null && !is_array($minimums))) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        $groups = new PrerequisiteGroups($choices, $minimums);
         if ($groups->courses() !== array_column($this->prerequisites($course), 'id')) {
             throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
         }
@@ -83,7 +90,8 @@ final readonly class SqlCatalogWorkflowRepository implements CatalogWorkflowRepo
             $this->sql->insert('sis_prerequisites', ['id' => EntityId::generate()->value,
                 'course_id' => $course->value, 'required_course_id' => $id]);
         }
-        $data = ['groups_json' => json_encode($groups->groups, JSON_THROW_ON_ERROR)];
+        $data = ['groups_json' => json_encode($groups->groups, JSON_THROW_ON_ERROR),
+            'minimums_json' => $groups->minimums === null ? null : json_encode($groups->minimums, JSON_THROW_ON_ERROR)];
         if ($this->sql->rows('sis_course_prerequisite_groups', ['id' => $course->value], 1) === []) {
             $this->sql->insert('sis_course_prerequisite_groups', ['id' => $course->value] + $data);
         } else {

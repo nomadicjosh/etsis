@@ -399,11 +399,12 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
         $workflows = new SqlCatalogWorkflowRepository($this->sql);
         $groups = $workflows->prerequisiteGroups($course);
         if ($groups !== null) {
-            if (in_array($required->value, $groups->courses(), true)) {
+            if (in_array([$required->value], $groups->groups, true)) {
                 return;
             }
             $workflows->savePrerequisiteGroups($course, new \Domain\Catalog\ValueObject\PrerequisiteGroups(
-                [...$groups->groups, [$required->value]]
+                [...$groups->groups, [$required->value]],
+                $groups->minimums === null ? null : [...$groups->minimums, 1]
             ));
             return;
         }

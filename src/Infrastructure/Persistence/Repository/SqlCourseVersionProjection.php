@@ -41,6 +41,17 @@ final readonly class SqlCourseVersionProjection
                     JSON_THROW_ON_ERROR
                 );
             }
+            if ($r['prerequisite_minimums'] !== null) {
+                if (strlen($r['prerequisite_minimums']) > 2048) {
+                    throw new CorruptHistoryException();
+                }
+                $definition['prerequisite_group_minimums'] = json_decode(
+                    $r['prerequisite_minimums'],
+                    true,
+                    4,
+                    JSON_THROW_ON_ERROR
+                );
+            }
             $definition += ["transcript_title" => $r["transcript_title"], "description" => $r["description"]];
             $subject = $this->sql->rows("sis_course_version_subjects", ["id" => $r["id"]], 1)[0] ?? null;
             $definition["subject"] =
@@ -133,6 +144,8 @@ final readonly class SqlCourseVersionProjection
             "transcript_title" => $definition->definition->text->transcriptTitle,
             "description" => $definition->definition->text->description,
             "prerequisites" => json_encode($definition->definition->prerequisites, JSON_THROW_ON_ERROR),
+            "prerequisite_minimums" => $definition->definition->prerequisiteGroups?->minimums === null ? null :
+                json_encode($definition->definition->prerequisiteGroups->minimums, JSON_THROW_ON_ERROR),
             "prerequisite_groups" => $definition->definition->prerequisiteGroups === null ? null :
                 json_encode($definition->definition->prerequisiteGroups->groups, JSON_THROW_ON_ERROR),
         ];

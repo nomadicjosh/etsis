@@ -74,6 +74,12 @@ final readonly class CourseDefinition
             }
             $keys[] = 'prerequisite_groups';
         }
+        if (array_key_exists('prerequisite_group_minimums', $data)) {
+            if (!array_key_exists('prerequisite_groups', $data) || !is_array($data['prerequisite_group_minimums'])) {
+                throw new InvalidArgumentException('Prerequisite minima require complete course choice groups.');
+            }
+            $keys[] = 'prerequisite_group_minimums';
+        }
         if (
             count($data) !== count($keys) ||
             array_diff(array_keys($data), $keys) !== [] ||
@@ -101,7 +107,10 @@ final readonly class CourseDefinition
             $data["subject"] === null ? null : SubjectSnapshot::fromArray($data["subject"]),
             CourseClassifications::fromArray($data["classifications"]),
             array_key_exists("prerequisite_groups", $data) ?
-                new PrerequisiteGroups($data["prerequisite_groups"]) : null,
+                new PrerequisiteGroups(
+                    $data["prerequisite_groups"],
+                    $data["prerequisite_group_minimums"] ?? null
+                ) : null,
         );
     }
 
@@ -114,6 +123,8 @@ final readonly class CourseDefinition
             "credits_milli" => $this->creditsMilli,
             "prerequisites" => $this->prerequisites,
         ] + ($this->prerequisiteGroups === null ? [] : ["prerequisite_groups" => $this->prerequisiteGroups->groups]) +
+        ($this->prerequisiteGroups?->minimums === null ? [] :
+        ['prerequisite_group_minimums' => $this->prerequisiteGroups->minimums]) +
         $this->text->describe() + [
             "subject" => $this->subject?->describe(),
             "classifications" => $this->classifications->describe(),

@@ -77,7 +77,7 @@ final class PrerequisiteGroupsTest extends TestCase
         self::assertSame(1, $groups->missing([$c]));
         self::assertSame(2, $groups->missing([]));
         self::assertSame(0, new PrerequisiteGroups([])->missing([]));
-        foreach ([[[]], [[$a], [$a]], [[$a, $a]], array_fill(0, 101, [$a]), [['not-an-id']]] as $invalid) {
+        foreach ([[[]], [[$a, $a]], array_fill(0, 101, [$a]), [['not-an-id']]] as $invalid) {
             try {
                 new PrerequisiteGroups($invalid);
                 self::fail('Malformed prerequisite groups were accepted.');

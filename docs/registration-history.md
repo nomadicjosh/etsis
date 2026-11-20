@@ -66,6 +66,12 @@ In **Students → Student record → Registration history**, authorized registra
 
 Early add/drop still deletes current enrollment/academic-credit projections and reverses the original course charge. Restricted enrollment and academic events remain. Late drop retains attempted credit, the institution's selected grade/GPA rules and the charge while releasing the seat. Hiatus closures delegate to the same drop service. Previously saved drop/hiatus receipts remain unchanged; their earlier contents are evidence, not a second canonical registration stream. Previously issued transcript documents remain independent retained evidence.
 
+### Counted prerequisite requirements
+
+Prerequisite authoring also supports “at least two of these three courses” and the same course in several requirements. The shared student/staff/group/schedule review shows the minimum and verified distinct-course count for each requirement. Repeated attempts do not count as different courses. Only verified passing work allowed for the current pursuit can qualify. See [Prerequisite choices](course-publication.md#prerequisite-choices) for setup and limits.
+
+The safe response adds `required_count` and `completed_count` alongside each group's existing course positions and status; it does not return supporting academic identities. New accepted evidence retains explicit count lists inside the same protected enrollment event. Older choice evidence without those counts retains its original one-course meaning. Count changes stale pending confirmations; accepted retries preserve their original result. At acceptance, the selected course facts are checked against the protected publication under the existing bounded command allowance. Modified projection counts cannot authorize a weaker registration.
+
 ## Registration completion checks
 
 The same command handles student self-service, individual staff entries and each new registration in a reviewed group. It now checks the trusted actor and required authority again after its academic, financial and audit writes, before returning success. Staff authority is required throughout a staff registration, including when staff register their own student record or enter another student without an explicit browser mode flag. A changed student/person link while waiting for locks stops the request instead of continuing with the former person's hold lock. A changed linked login account during completion also stops the original authorization.
