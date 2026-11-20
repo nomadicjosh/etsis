@@ -226,6 +226,12 @@ final readonly class ReportSelectCompiler
                 default => $given . " || ' ' || " . $family,
             };
         }
+        if (($field['expression'] ?? '') === 'section_enrollment_count') {
+            return new \Infrastructure\Persistence\SectionEnrollmentSql($this->sql)->count($alias);
+        }
+        if (($field['expression'] ?? '') === 'section_below_target') {
+            return new \Infrastructure\Persistence\SectionEnrollmentSql($this->sql)->below($alias);
+        }
         if (($field['expression'] ?? '') === 'account_money') {
             $currency = $q($field['currency_relation']) . '.' . $q('currency');
             // Unknown currency precision is not silently treated as cents.
@@ -508,7 +514,8 @@ final readonly class ReportSelectCompiler
                 }
                 $parameters[] = $value;
             }
-            $placeholder = in_array($fields[$rule["id"]]["type"], ["integer", "double"], true)
+            $placeholder = in_array($fields[$rule["id"]]["type"], ["integer", "double"], true) ||
+            ($fields[$rule["id"]]['expression'] ?? null) === 'section_below_target'
             ? "CAST(? AS DECIMAL(30, 10))"
             : "?";
             $parts[] =

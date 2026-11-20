@@ -294,6 +294,8 @@ final class SisServiceProvider extends CodefyServiceProvider
             \Domain\Shared\Service\Clock::class => \Infrastructure\SystemClock::class,
             \Domain\Registration\Repository\CoRequisiteRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlCoRequisiteRepository::class,
+            \Domain\Registration\Repository\SectionEnrollmentReviewRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlSectionEnrollmentReviewRepository::class,
             \Domain\Registration\Repository\RegistrationWindowRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlRegistrationWindowRepository::class,
             \Domain\Registration\Repository\RegistrationRepository::class =>

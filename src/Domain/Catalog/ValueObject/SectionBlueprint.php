@@ -22,6 +22,7 @@ final readonly class SectionBlueprint
         public Money $fee,
         public DeliveryMode $mode,
         public bool $webRegistration,
+        public int $minimumEnrollment = 0,
     ) {
         $this->code = trim($code);
         if (
@@ -30,7 +31,7 @@ final readonly class SectionBlueprint
             preg_match('/[\x00-\x1F\x7F]/', $code) ||
             $capacity < 1 ||
             $capacity > 100000 ||
-            $fee->minor < 0
+            $fee->minor < 0 || $minimumEnrollment < 0 || $minimumEnrollment > $capacity
         ) {
             throw new ValidationException([
                 ["field" => "sections", "message" => "Use valid section codes, 1–100000 seats and nonnegative fees."],
@@ -50,9 +51,11 @@ final readonly class SectionBlueprint
             $this->webRegistration,
             $this->fee,
             $this->mode,
+            minimumEnrollment: $this->minimumEnrollment,
         );
     }
-    /** @return array{course_id: string, code: string, capacity: int, faculty_user_id: ?string, fee_minor: int, currency: string, delivery_mode: string, web_registration: bool} */
+    /** @return array{course_id:string,code:string,capacity:int,faculty_user_id:?string,
+     * fee_minor:int,currency:string,delivery_mode:string,web_registration:bool,minimum_enrollment?:int} */
     public function describe(): array
     {
         return [
@@ -64,6 +67,6 @@ final readonly class SectionBlueprint
             "currency" => $this->fee->currency,
             "delivery_mode" => $this->mode->value,
             "web_registration" => $this->webRegistration,
-        ];
+        ] + ($this->minimumEnrollment === 0 ? [] : ["minimum_enrollment" => $this->minimumEnrollment]);
     }
 }

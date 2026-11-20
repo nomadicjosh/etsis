@@ -131,6 +131,21 @@ final class OfferingPublicationTest extends TestCase
         self::assertSame([], $f->sql->rows("sis_student_accounts"));
     }
 
+    public function testReviewedEnrollmentTargetsSurviveOfferingPlanActivation(): void
+    {
+        $f = $this->c->sis;
+        $section = $this->plan->sections[0];
+        $f->sql->update('sis_sections', ['minimum_enrollment' => 12], ['id' => $section->id->value]);
+        $review = $this->review();
+        self::assertSame(12, $review['sections'][0]['section_definition']['minimum_enrollment']);
+        $receipt = $this->service->publish($this->id, $review['review_token']);
+        $versions = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql);
+        self::assertSame(12, $versions->selected($section->id)->definition->data['minimum_enrollment']);
+        self::assertSame(12, $f->registration->section($section->id)->minimumEnrollment);
+        self::assertSame([], $f->sql->rows('sis_enrollments'));
+        self::assertSame($receipt, $this->service->publish($this->id, $review['review_token']));
+    }
+
     public function testChosenVersionSurvivesLaterCatalogEditsAndPublicationAndFeedsNewAcademicCredit(): void
     {
         $f = $this->c->sis;

@@ -103,6 +103,7 @@ final readonly class RegistrationBatchService
             $this->versions->selectionPosition($section) !== $expected["selection_position"] ||
             $course->publicationVersionId?->value !== $expected["course_version_id"] ||
             $current->capacity !== $expected["capacity"] ||
+            $current->minimumEnrollment !== $expected["minimum_enrollment"] ||
             $current->webRegistration !== $expected["web_registration"] ||
             $course->code !== $expected["course_code"] ||
             $course->title !== $expected["course_title"] ||
@@ -937,6 +938,7 @@ final readonly class RegistrationBatchService
                 "fee_minor" => $section->fee->minor,
                 "currency" => $section->fee->currency,
                 "capacity" => $section->capacity,
+                "minimum_enrollment" => $section->minimumEnrollment,
                 "seats_remaining" => max(
                     0,
                     $section->capacity - $this->repository->sectionCount($section->id),

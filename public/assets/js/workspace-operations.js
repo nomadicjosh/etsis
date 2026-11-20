@@ -2142,7 +2142,7 @@ window.createWorkspaceOperations = function (ui) {
             ),
         );
     }
-    async function editCatalog(kind, row) {
+    async function editCatalog(kind, row, origin = {}) {
         if (kind === "terms") return ui.calendar().editTerm(row.id);
         const saved = await request(`/sis/ui/catalog/${kind}/${row.id}/`);
         let descriptors = ui.datasets[kind].fields.map((field) => [...field]);
@@ -2170,7 +2170,7 @@ window.createWorkspaceOperations = function (ui) {
                 const fresh = await request(
                     `/sis/ui/catalog/${kind}/${row.id}/`,
                 );
-                await openRecord(kind, fresh);
+                await openRecord(kind, fresh, origin);
             },
             preset,
             "Existing academic credits and posted charges keep their recorded values. Term dates affect future registration decisions. A concurrent edit requires you to reload before saving.",
@@ -2283,7 +2283,8 @@ window.createWorkspaceOperations = function (ui) {
                     [
                         button("Course definition", () => ui.catalog().sectionDefinition(row.id)),
                         button("Method & campus", () => ui.classifications().section(row.id)),
-                        button("Published section details", () => ui.catalog().sectionPublications(row.id)),
+                        button("Published section details", () => ui.catalog().sectionPublications(row.id, null, [], null,
+                            () => openRecord(sectionName, row, origin))),
                         button("Drop policy", () => ui.courseDrops().policy({ id: row.term_id },
                             () => openRecord(sectionName, row), row)),
                     ],
@@ -2301,7 +2302,7 @@ window.createWorkspaceOperations = function (ui) {
         )
             actions.append(
                 button("Edit catalog record", () =>
-                    editCatalog(sectionName, row),
+                    editCatalog(sectionName, row, origin),
                 ),
             );
         if (can("sis:audit:read") && sectionName !== "campaigns")

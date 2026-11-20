@@ -25,6 +25,44 @@ window.createWorkspaceCatalog = function (ui) {
         );
     const submit = (label) => node("button", { type: "submit", class: "btn btn-primary" }, label);
     const reference = (id) => node("p", {}, "Reference: ", node("code", {}, id));
+    async function enrollmentReview(scope = { state: "below", search: "", include_inactive: false }, after = null, stack = []) {
+        const body = openDrawer("Section enrollment targets", "REVIEW OFFERINGS");
+        const view = node("div");
+        body.append(view);
+        const choices = ["below — Below target", "met — Target met", "unset — No target", "all — All sections"];
+        const fields = [["term_id", "Academic term", "lookup", "terms", false],
+            ["state", "Enrollment review", "choice", choices], ["search", "Find a section", "search", "", false],
+            ["include_inactive", "Include inactive sections", "checkbox"]];
+        const form = await buildForm(fields, { ...scope, state: choices.find(value => value.startsWith(scope.state + " — ")) });
+        if (!view.isConnected) return;
+        form.elements.search.maxLength = 80;
+        form.append(submit("Review sections"));
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const next = formData(form, fields);
+                next.state = next.state.split(" — ")[0];
+                await enrollmentReview(next);
+            }, form.querySelector('[type="submit"]'));
+        });
+        view.append(node("p", { class: "form-text" },
+            "Compare current enrollment with each section's planning target. Only active registrations count; drops and withdrawals do not. Targets are advisory and never cancel a section or change a student's registration or bill."), form);
+        const data = await request("/sis/sections/enrollment-review/", "POST", { ...scope, ...(after ? { after } : {}) });
+        if (!view.isConnected) return;
+        const content = data.items.length ? grid(["Section", "Course", "Enrolled", "Current target", "Selected offering"],
+            data.items.map(row => [button(row.code, () => ui.openRecord("sections", row, {
+                back: () => enrollmentReview(scope, after, stack), backLabel: "Back to enrollment targets",
+            })), `${row.course_code} · ${row.course_title}`, `${row.enrolled} of ${row.capacity} seats`,
+                row.minimum_enrollment ? `${row.minimum_enrollment}${row.below_target ? ` · ${row.minimum_enrollment - row.enrolled} needed` : " · Met"}` : "No target",
+                row.published_minimum === null ? "Not recorded" :
+                    `${row.published_minimum || "No target"}${row.target_changed ? " · Draft target changed" : ""}`]), "Section enrollment review")
+            : node("p", { role: "status", class: "alert alert-info" }, "No sections match this review. Choose All sections or another academic term to review their setup.");
+        view.append(content, node("p", { class: "form-text", role: "status" }, `${data.items.length} ${data.items.length === 1 ? "section" : "sections"} on this page. Counts describe current records; selected targets come from retained offering projections. Open a section to review and publish setup changes.`),
+            node("div", { class: "inline-actions" },
+                ...(stack.length ? [button("Previous sections", () => enrollmentReview(scope, stack.at(-1), stack.slice(0, -1)))] : []),
+                ...(data.next_after ? [button("More sections", () => enrollmentReview(scope, data.next_after, [...stack, after]))] : [])));
+    }
     async function clone(source) {
         const review = await request(`/sis/courses/${source}/clone/review/`);
         await cloneDetails(
@@ -214,6 +252,7 @@ window.createWorkspaceCatalog = function (ui) {
             ["course_id", "Course", "lookup", "courses"],
             ["code", "Section code"],
             ["capacity", "Seats", "number"],
+            ["minimum_enrollment", "Minimum enrollment target", "number", "", false],
             ["faculty_user_id", "Faculty account (optional)", "lookup", "faculty", false],
             ["delivery_mode", "Delivery mode", "choice", ui.deliveryModes],
             ["fee_minor", "Section fee", "money"],
@@ -241,6 +280,7 @@ window.createWorkspaceCatalog = function (ui) {
                 const data = formData(form, fields),
                     copy = [...rows];
                 data.faculty_user_id ||= null;
+                if (!data.minimum_enrollment) delete data.minimum_enrollment;
                 data.id = editing === null ? (await request("/sis/ui/operation-id/")).id : rows[editing].id;
                 if (editing === null) copy.push(data);
                 else copy[editing] = data;
@@ -1349,6 +1389,8 @@ window.createWorkspaceCatalog = function (ui) {
             ],
             ["Term", `${definition.term_code}: ${definition.term_starts_on} through ${definition.term_ends_on}`],
             ["Capacity", definition.capacity],
+            ["Minimum enrollment target", definition.minimum_enrollment === undefined ? "Not recorded in this publication"
+                : definition.minimum_enrollment ? `${definition.minimum_enrollment} students` : "No target"],
             ["Student self-registration", typeof definition.web_registration === "boolean"
                 ? (definition.web_registration ? "Allowed" : "Staff registration only") : "Not recorded in this publication"],
             [
@@ -1386,7 +1428,7 @@ window.createWorkspaceCatalog = function (ui) {
         }
         return details;
     }
-    async function sectionPublications(section, cursor = null, stack = [], draft = null) {
+    async function sectionPublications(section, cursor = null, stack = [], draft = null, back = null) {
         const setup = await request(`/sis/sections/${section}/publication/setup/`, "POST", {});
         const page = await request(
             `/sis/sections/${section}/publication/page/`,
@@ -1395,6 +1437,7 @@ window.createWorkspaceCatalog = function (ui) {
         );
         let currentDraft = draft;
         const body = openDrawer("Published section details", "ACADEMIC CATALOG");
+        if (back) body.append(button("Back to section", back, "btn-link"));
         body.append(node("p", {}, `Section: ${setup.section.code}`));
         if (setup.moodle?.linked) body.append(node("p", { role: "status" }, "This section is linked to Moodle. The background worker manages participant access."));
         else if (setup.moodle?.request_state) {
@@ -1515,7 +1558,7 @@ window.createWorkspaceCatalog = function (ui) {
             body.append(node("p", { class: "alert alert-info", role: "status" },
                 `New registrations retain section version ${setup.selected_offering.version}, with instructional dates ${setup.selected_offering.definition.instruction_starts_on} through ${setup.selected_offering.definition.instruction_ends_on}. Later publications do not replace this selection.`));
             body.append(button("Offering selection history", () => offeringSelectionHistory(section,
-                () => sectionPublications(section, cursor, stack, currentDraft))));
+                () => sectionPublications(section, cursor, stack, currentDraft, back))));
         } else if (setup.has_student_records) {
             body.append(node("p", {}, "Initial offering selection requires an empty section. Earlier student records keep their original facts."));
         }
@@ -1607,7 +1650,7 @@ window.createWorkspaceCatalog = function (ui) {
                     }
                     target.append(
                         button("Revise section publication", () =>
-                            sectionPublications(section, cursor, stack, values),
+                            sectionPublications(section, cursor, stack, values, back),
                         ),
                         button(
                             "Publish reviewed section details",
@@ -1628,7 +1671,7 @@ window.createWorkspaceCatalog = function (ui) {
                                     reference(result.operation_id),
                                     button(
                                         "View section publications",
-                                        () => sectionPublications(section),
+                                        () => sectionPublications(section, null, [], null, back),
                                         "btn-primary",
                                     ),
                                 );
@@ -1664,23 +1707,23 @@ window.createWorkspaceCatalog = function (ui) {
                     reference(item.version_id),
                 setup.selected_offering && item.version_id !== setup.selected_offering.version_id
                     ? button("Use this version for future registrations", () => selectOffering(section, item,
-                        () => sectionPublications(section, cursor, stack, currentDraft), "", true))
+                        () => sectionPublications(section, cursor, stack, currentDraft, back), "", true))
                     : !setup.selected_offering && !setup.has_student_records
                         ? button("Use this version for new registrations", () => selectOffering(section, item,
-                            () => sectionPublications(section, cursor, stack, currentDraft))) : null,
+                            () => sectionPublications(section, cursor, stack, currentDraft, back))) : null,
                 ),
             );
         }
         if (stack.length)
             body.append(
                 button("Previous section versions page", () =>
-                    sectionPublications(section, stack.at(-1), stack.slice(0, -1), currentDraft),
+                    sectionPublications(section, stack.at(-1), stack.slice(0, -1), currentDraft, back),
                 ),
             );
         if (page.next_cursor)
             body.append(
                 button("Next section versions page", () =>
-                    sectionPublications(section, page.next_cursor, [...stack, cursor], currentDraft),
+                    sectionPublications(section, page.next_cursor, [...stack, cursor], currentDraft, back),
                 ),
             );
     }
@@ -1799,7 +1842,7 @@ window.createWorkspaceCatalog = function (ui) {
                                 "POST",
                                 { review_token: reviewed.review_token },
                             );
-                            await sectionPublications(section);
+                            await back();
                         },
                         "btn-primary",
                     ),
@@ -1930,5 +1973,5 @@ window.createWorkspaceCatalog = function (ui) {
                 }),
             );
     }
-    return { subjects, courseSubject, clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
+    return { enrollmentReview, subjects, courseSubject, clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
 };

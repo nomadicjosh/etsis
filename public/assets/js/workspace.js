@@ -256,7 +256,7 @@
         courses: { title: 'Academic catalog', description: 'Keep programs, courses, terms and sections in one connected workspace.', icon: 'journal-bookmark', action: 'Add a course', endpoint: '/sis/courses/', permission: 'sis:catalog:manage', fields: [['code', 'Course code'], ['title', 'Course title'], ['credits_milli', 'Credits', 'credits']], columns: [['Course', 'title'], ['Code', 'code'], ['Credits', 'credits_milli'], ['Status', 'active']] },
         programs: { title: 'Academic programs', description: 'Give every academic path a clear home.', icon: 'signpost-split', action: 'Add a program', endpoint: '/sis/programs/', permission: 'sis:catalog:manage', fields: [['code', 'Program code'], ['title', 'Program title']], columns: [['Program', 'title'], ['Code', 'code']] },
         terms: { title: 'Academic terms', description: 'Set the dates once. Keep everyone on the same page.', icon: 'calendar-range', action: 'Add a term', endpoint: '/sis/terms/', permission: 'sis:catalog:manage', fields: [['code', 'Term code'], ['starts_on', 'First day', 'date'], ['ends_on', 'Last day', 'date'], ['add_drop_ends_on', 'Last day to add or drop', 'date']], columns: [['Term', 'code'], ['Name', 'name'], ['Academic year', 'academic_year_code'], ['Category', 'kind'], ['Starts', 'starts_on'], ['Ends', 'ends_on'], ['Add/drop deadline', 'add_drop_ends_on']] },
-        sections: { title: 'Course sections', description: 'Turn your course catalog into a schedule that works.', icon: 'collection', action: 'Offer a section', endpoint: '/sis/sections/', permission: 'sis:catalog:manage', fields: [['course_id', 'Course', 'lookup', 'courses'], ['term_id', 'Term', 'lookup', 'terms'], ['code', 'Section code'], ['capacity', 'Seats', 'number'], ['delivery_mode', 'Delivery mode', 'choice', deliveryModes], ['faculty_user_id', 'Faculty account (optional)', 'lookup', 'faculty', false], ['web_registration', 'Allow student self-registration', 'checkbox'], ['fee_minor', 'Section fee', 'money'], ['currency', 'Currency', 'currency']], columns: [['Section', 'code'], ['Seats', 'capacity'], ['Status', 'active']] },
+        sections: { title: 'Course sections', description: 'Turn your course catalog into a schedule that works.', icon: 'collection', action: 'Offer a section', endpoint: '/sis/sections/', permission: 'sis:catalog:manage', fields: [['course_id', 'Course', 'lookup', 'courses'], ['term_id', 'Term', 'lookup', 'terms'], ['code', 'Section code'], ['capacity', 'Seats', 'number'], ['minimum_enrollment', 'Minimum enrollment target', 'number', '', false], ['delivery_mode', 'Delivery mode', 'choice', deliveryModes], ['faculty_user_id', 'Faculty account (optional)', 'lookup', 'faculty', false], ['web_registration', 'Allow student self-registration', 'checkbox'], ['fee_minor', 'Section fee', 'money'], ['currency', 'Currency', 'currency']], columns: [['Section', 'code'], ['Seats', 'capacity'], ['Status', 'active']] },
         rooms: { title: 'Rooms & spaces', description: 'Make room for classes, meetings, and everything in between.', icon: 'door-open', action: 'Add a room', endpoint: '/sis/rooms/', permission: 'sis:scheduling:manage', fields: [], columns: [['Code', 'code'], ['Room name', 'name'], ['Building', 'building_name'], ['Capacity', 'capacity']] },
         calendar: { title: 'Campus booking calendar', description: 'Find meetings across campus and keep room changes connected.', icon: 'calendar-week', permission: 'sis:scheduling:manage', columns: [] },
         buildings: { title: 'Buildings', description: 'Give every room a clear home on campus.', icon: 'buildings', action: 'Add a building', permission: 'sis:scheduling:manage', columns: [['Code', 'code'], ['Building name', 'name']] },
@@ -530,6 +530,8 @@
             'Review applicant withdrawal requests', 'inbox'));
         if (section === 'applications' && can('sis:admissions:policy')) tools.append(
             tool('Policies', () => peopleStudio.admissionPolicy(), 'Configure admissions policies', 'sliders'));
+        if (section === 'registration' && can('sis:registration:manage')) tools.append(
+            tool('Enrollment targets', () => catalogStudio.enrollmentReview(), 'Review section enrollment targets', 'people'));
         if (family === 'courses' && can('sis:catalog:manage')) {
             tools.append(
                 actionMenu('Curriculum', [
@@ -548,6 +550,7 @@
                 ], { icon: 'calendar3' }),
                 actionMenu('Course offerings', [
                     { label: 'Build course offerings', icon: 'plus-circle', run: () => catalogStudio.start() },
+                    { label: 'Enrollment targets', icon: 'people', run: () => catalogStudio.enrollmentReview() },
                     { label: 'Saved offering plans', icon: 'journals', run: () => catalogStudio.plans() },
                     { label: 'Offering templates', icon: 'layout-text-window', run: () => offeringTemplates.page() },
                 ], { icon: 'journal-richtext' }),
@@ -929,7 +932,7 @@
         sections: [
             {
                 title: 'Course & section',
-                fields: ['course_id', 'term_id', 'code', 'capacity'],
+                fields: ['course_id', 'term_id', 'code', 'capacity', 'minimum_enrollment'],
                 wide: ['course_id', 'term_id'],
             },
             {
@@ -956,7 +959,7 @@
             } else if (type === 'textarea') control = node('textarea', { class: 'form-control', id, name: key, rows: 5, maxlength: 10000, required });
             else if (type === 'checkbox') control = node('input', { class: 'form-check-input', id, name: key, type: 'checkbox' });
             else control = node('input', { class: 'form-control', id, name: key, type: ['credits', 'money', 'hundredths', 'signedmoney'].includes(type) ? 'number' : type === 'signed' ? 'number' : type, required, maxlength: 191, ...(type === 'signed' ? { min: -2000000000, max: 2000000000, step: 1 } : {}), ...(type === 'number' ? { min: 0, max: 100000, step: 1 } : {}), ...(['credits', 'money', 'hundredths', 'signedmoney'].includes(type) ? { min: type === 'signedmoney' ? -1000000 : 0, max: type === 'credits' ? 999 : 1000000, step: type === 'credits' ? '.001' : '.01', value: 0 } : {}) });
-            const limits = { points_milli: [0, 10], severity: [0, 1000], course_limit: [1, 1000], minimum_grade_rank: [0, 10000], grade_rank: [0, 10000], possible_hundredths: [0.01, 10000], bonus_hundredths: [0, 10000], capacity: [1, 100000], amount_minor: [0.01, 1000000] };
+            const limits = { points_milli: [0, 10], severity: [0, 1000], course_limit: [1, 1000], minimum_grade_rank: [0, 10000], grade_rank: [0, 10000], possible_hundredths: [0.01, 10000], bonus_hundredths: [0, 10000], capacity: [1, 100000], minimum_enrollment: [0, 100000], amount_minor: [0.01, 1000000] };
             if (limits[key] && control.type === 'number') [control.min, control.max] = limits[key];
             if (['money', 'signedmoney'].includes(type)) control.dataset.money = key === 'amount_minor' ? 'positive' : type;
             if (preset[key] !== undefined) {
@@ -967,9 +970,20 @@
                 }
             }
             if (type === 'checkbox') container.append(node('div', { class: 'form-check' }, control, fieldLabel)); else container.append(fieldLabel, control);
+            if (key === 'minimum_enrollment') {
+                const help = node('p', { id: `${id}-help`, class: 'form-text' },
+                    'Advisory target. Leave blank or use zero for no target. It cannot exceed section capacity.');
+                control.setAttribute('aria-describedby', help.id); container.append(help);
+            }
             if (type === 'lookup') container.append(searchableLookup(control, source));
             control.addEventListener('input', () => { control.removeAttribute('aria-invalid'); control.classList.remove('is-invalid'); });
             form.append(container);
+        }
+        const enrollmentTarget = form.elements.namedItem('minimum_enrollment');
+        const capacity = form.elements.namedItem('capacity');
+        if (enrollmentTarget && capacity) {
+            const limitTarget = () => { enrollmentTarget.max = capacity.value || '100000'; };
+            capacity.addEventListener('input', limitTarget); limitTarget();
         }
         function updateMoneyControls() {
             const digits = currencyDigits(form.elements.namedItem('currency')?.value || form.dataset.currency || 'USD');
@@ -1137,6 +1151,8 @@
         const body = openDrawer(section === 'campaigns' ? 'Message details' : recordLabel(row), datasets[section]?.title.toUpperCase() || 'RECORD');
         if (section === 'campaigns' && origin.back) body.append(node('button', { type: 'button',
             class: 'btn btn-link mb-3', onclick: () => task(origin.back) }, origin.backLabel));
+        if (section === 'sections' && origin.back) body.append(node('button', { type: 'button',
+            class: 'btn btn-link mb-3', onclick: () => task(origin.back) }, origin.backLabel || 'Back'));
         const details = node('dl', { class: 'detail-list' });
         for (const [key, value] of Object.entries(row)) {
             if (key === 'id' || key.endsWith('_id') || ['given_name', 'family_name'].includes(key)) continue;

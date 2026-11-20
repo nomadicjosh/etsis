@@ -19,7 +19,7 @@ final class OfferingTemplateTest extends TestCase
     private function recipe(CatalogWorkflowFixture $c): OfferingRecipe
     {
         $course = $c->sis->section()->courseId;
-        return new OfferingRecipe(new SectionBlueprint($course, 'MATH.101.A', 30, null, new Money(12500, 'USD'), DeliveryMode::Hybrid, true));
+        return new OfferingRecipe(new SectionBlueprint($course, 'MATH.101.A', 30, null, new Money(12500, 'USD'), DeliveryMode::Hybrid, true, minimumEnrollment: 12));
     }
     private function save(CatalogWorkflowFixture $c, OfferingRecipe $recipe, string $name = 'Fictional fall offerings'): array
     {
@@ -46,6 +46,7 @@ final class OfferingTemplateTest extends TestCase
         self::assertNotSame($a['sections'][0]['id'], $b['sections'][0]['id']);
         self::assertSame($f->term->value, $a['sections'][0]['term_id']);
         self::assertSame('hybrid', $a['sections'][0]['delivery_mode']);
+        self::assertSame(12, $a['sections'][0]['minimum_enrollment']);
         self::assertSame(12500, $a['sections'][0]['fee_minor']);
         self::assertTrue($a['sections'][0]['web_registration']);
         self::assertCount(1, $f->sql->rows('sis_sections')); // Only the preexisting fixture section exists.
@@ -68,6 +69,7 @@ final class OfferingTemplateTest extends TestCase
         $receipt = $c->offerings()->save(new EntityId($review['operation_id']), $plan, $review['revision']);
         $section = $f->registration->section($plan->sections[0]->id);
         self::assertFalse($section->active);
+        self::assertSame(12, $section->minimumEnrollment);
         self::assertFalse($section->webRegistration);
         $publication = $c->publicationReview($c->offerings(), new EntityId($receipt['operation_id']));
         $c->offerings()->publish(new EntityId($receipt['operation_id']), $publication['review_token']);

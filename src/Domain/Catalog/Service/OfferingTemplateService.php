@@ -82,6 +82,7 @@ final readonly class OfferingTemplateService
                     new Money($s["fee_minor"], $s["currency"]),
                     DeliveryMode::parse($s["delivery_mode"]),
                     $s["web_registration"],
+                    $s["minimum_enrollment"] ?? 0,
                 ),
                 $rows,
             ),

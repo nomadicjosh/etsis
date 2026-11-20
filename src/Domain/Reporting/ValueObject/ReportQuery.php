@@ -155,6 +155,58 @@ final readonly class ReportQuery
             }
         }
         $this->validateMoney($columns);
+        $this->validateSectionMetrics($columns);
+    }
+
+    /** Prevent one-to-many joins from multiplying a section's already-counted enrollments/target. */
+    private function validateSectionMetrics(array $columns): void
+    {
+        $totals = array_filter($columns, fn(array $c): bool =>
+            in_array($c['aggregate'], ['sum', 'avg'], true) &&
+            (($this->schema['fields'][$c['field']]['section_metric'] ?? false) ||
+                (isset($c['calculation']) &&
+                    ($this->schema['fields'][$c['calculation']['field']]['section_metric'] ?? false))));
+        if ($totals === []) {
+            return;
+        }
+        $relations = array_merge(
+            array_keys($this->definition['joins'] ?? []),
+            array_keys($this->definition['join_filters'] ?? []),
+            array_keys($this->definition['record_selection'] ?? [])
+        );
+        $collect = function (?array $group) use (&$collect, &$relations): void {
+            foreach ($group['rules'] ?? [] as $rule) {
+                if (isset($rule['condition'])) {
+                    $collect($rule);
+                } else {
+                    $relations[] = $this->schema['fields'][$rule['id']]['relation'];
+                }
+            }
+        };
+        $collect($this->definition['filters'] ?? null);
+        foreach ($this->definition['join_filters'] ?? [] as $filter) {
+            $collect($filter);
+        }
+        foreach ($columns as $column) {
+            $relations[] = $this->schema['fields'][$column['field']]['relation'];
+            if (isset($column['calculation'])) {
+                $relations[] = $this->schema['fields'][$column['calculation']['field']]['relation'];
+            }
+            $collect($column['conditions'] ?? null);
+        }
+        foreach (array_unique($relations) as $relation) {
+            while ($relation !== $this->schema['root']) {
+                $r = $this->schema['relationships'][$relation];
+                if (
+                    ($r['many'] ?? false) &&
+                    ($this->definition['record_selection'][$relation]['ties'] ?? null) !== 'one'
+                ) {
+                    self::invalid('Choose one related row or use matching-record conditions before totaling ' .
+                        'section counts, capacities or targets. Multiple related rows would repeat each section.');
+                }
+                $relation = $r['parent'];
+            }
+        }
     }
 
     /** Currency is a grouping dimension, never a hidden assumption about the institution's default.

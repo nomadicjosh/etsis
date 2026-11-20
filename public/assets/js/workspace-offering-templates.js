@@ -32,6 +32,7 @@ window.createWorkspaceOfferingTemplates = function (ui) {
         "course_id",
         "code",
         "capacity",
+        "minimum_enrollment",
         "faculty_user_id",
         "fee_minor",
         "currency",
@@ -40,7 +41,7 @@ window.createWorkspaceOfferingTemplates = function (ui) {
     ];
     const clean = (row) =>
         Object.fromEntries(
-            keys.map((key) => [
+            keys.filter(key => key !== "minimum_enrollment" || row.minimum_enrollment > 0).map((key) => [
                 key,
                 row[key] ?? (key === "faculty_user_id" ? null : key === "delivery_mode" ? "unspecified" : row[key]),
             ]),
@@ -63,11 +64,12 @@ window.createWorkspaceOfferingTemplates = function (ui) {
         );
     function summary(rows) {
         return grid(
-            ["Section", "Course", "Seats", "Delivery", "Fee", "Faculty"],
+            ["Section", "Course", "Seats", "Target", "Delivery", "Fee", "Faculty"],
             rows.map((row) => [
                 row.code,
                 row.course_title ? `${row.course_code} · ${row.course_title}` : "Course to review",
                 row.capacity,
+                row.minimum_enrollment || "No target",
                 row.delivery_mode.replaceAll("_", " "),
                 money(row.fee_minor, row.currency),
                 row.faculty_name || "Unassigned",

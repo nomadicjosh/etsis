@@ -116,6 +116,7 @@ final readonly class SisOfferingTemplateController
                     "currency",
                     "delivery_mode",
                     "web_registration",
+                    "minimum_enrollment",
                 ]) !== []
             ) {
                 throw new ValidationException([
@@ -135,6 +136,7 @@ final readonly class SisOfferingTemplateController
                 new Money($f->integer("fee_minor"), $f->text("currency", 3)),
                 DeliveryMode::parse($f->text("delivery_mode", 24)),
                 $f->requiredBoolean("web_registration"),
+                $f->optionalInteger("minimum_enrollment") ?? 0,
             );
         }
         return new OfferingRecipe(...$sections);

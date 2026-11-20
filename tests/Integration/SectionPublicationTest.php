@@ -839,6 +839,68 @@ final class SectionPublicationTest extends TestCase
         self::assertSame($new['operation_id'], $versions->enrollmentVersion($next->id)->value);
     }
 
+    public function testEnrollmentTargetsAreAdvisoryAndLaterPublicationsPreserveAcceptedStudentReferences(): void
+    {
+        $f = $this->f;
+        $this->catalog->save('sections', $this->section->id, ['minimum_enrollment' => 12]);
+        [$first, $selection] = $this->selectedOffering();
+        $this->service->select($this->section->id, $selection['review_token']);
+        $student = $f->student();
+        // A target of twelve does not block the first student's ordinary registration.
+        $accepted = $f->service->register($student->id, $this->section->id);
+        $versions = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql);
+        self::assertSame(12, $versions->find(new EntityId($first['operation_id']))->definition->data['minimum_enrollment']);
+        $before = $f->sql->rows('sis_history_events');
+        $this->catalog->save('sections', $this->section->id, ['minimum_enrollment' => 10]);
+        $reviewer = new \Domain\Registration\Service\SectionEnrollmentReviewService(
+            new \Infrastructure\Persistence\Repository\SqlSectionEnrollmentReviewRepository($f->sql), $f->access);
+        $row = $reviewer->page()['items'][0];
+        self::assertSame(12, $row['published_minimum']);
+        self::assertSame(10, $row['minimum_enrollment']);
+        self::assertTrue($row['target_changed']);
+        $nextStudent = $f->student();
+        try {
+            $f->service->register($nextStudent->id, $this->section->id, true);
+            self::fail('An unpublished target change bypassed the selected offering definition.');
+        } catch (\DomainException) {
+            self::assertSame($before, $f->sql->rows('sis_history_events'));
+        }
+        $publication = $this->review();
+        $next = $this->service->publish($this->section->id, $publication['review_token']);
+        $amendments = $this->amendments();
+        $review = $amendments->review($this->section->id, new EntityId($next['operation_id']),
+            'Fictional future offering target.');
+        $amendments->commit($this->section->id, $review['review_token']);
+        $later = $f->service->register($nextStudent->id, $this->section->id, true);
+        self::assertSame($first['operation_id'], $versions->enrollmentVersion($accepted->id)->value);
+        self::assertSame($next['operation_id'], $versions->enrollmentVersion($later->id)->value);
+        self::assertSame($before, array_slice($f->sql->rows('sis_history_events'), 0, count($before)));
+        self::assertSame(10, $versions->find(new EntityId($next['operation_id']))->definition->data['minimum_enrollment']);
+        $report = ['dataset' => 'credits', 'columns' => [
+            ['field' => 'student_id', 'label' => 'Student', 'aggregate' => 'none'],
+            ['field' => 'accepted_minimum_enrollment', 'label' => 'Accepted target', 'aggregate' => 'none'],
+        ], 'joins' => [], 'filters' => null, 'having' => null, 'sort' => []];
+        $rows = new \Infrastructure\Reporting\SqlRelationalReportSource($f->sql)->execute(
+            new \Domain\Reporting\ValueObject\ReportQuery($report,
+                \Infrastructure\Reporting\AcademicReportSchema::datasets()['credits']), 0);
+        self::assertEquals([$student->id->value => 12, $nextStudent->id->value => 10], array_column($rows, 'c1', 'c0'));
+
+    }
+
+    public function testEarlierPublishedTargetsStayAbsentWhenRetainedAndReread(): void
+    {
+        $review = $this->review();
+        $data = $review['definition'];
+        unset($data['minimum_enrollment']);
+        $versions = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql);
+        $reference = new \Domain\Registration\ValueObject\PublishedSectionDefinition($this->section->id,
+            EntityId::generate(), 1, new SectionDefinitionV1($data));
+        $versions->retain($reference);
+        $this->catalog->save('sections', $this->section->id, ['minimum_enrollment' => 12]);
+        self::assertArrayNotHasKey('minimum_enrollment', $versions->find($reference->publication)->definition->data);
+        self::assertNull($this->f->sql->rows('sis_section_versions')[0]['minimum_enrollment']);
+    }
+
     private function selectedOffering(): array
     {
         $review = $this->review();

@@ -773,6 +773,9 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/courses/", [SisRegistrationController::class, "course"])
         ->name("sis.registration.course");
+    $router->map(['POST'], '/sis/sections/enrollment-review/', [
+        \Application\Http\Controller\SisSectionEnrollmentReviewController::class, 'page',
+    ])->name('sis.sections.enrollment-review');
     $router
         ->map(["POST"], "/sis/sections/", [SisRegistrationController::class, "section"])
         ->name("sis.registration.section");

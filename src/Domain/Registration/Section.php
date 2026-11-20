@@ -25,9 +25,13 @@ final readonly class Section
         public ?EntityId $publicationVersionId = null,
         public ?EntityId $instructionalMethodId = null,
         public ?EntityId $campusId = null,
+        public int $minimumEnrollment = 0,
     ) {
         if (trim($code) === '' || strlen($code) > 80 || $capacity < 1 || $capacity > 100000 || $fee->minor < 0) {
             throw new InvalidArgumentException('A section requires a code, positive capacity and nonnegative fees.');
+        }
+        if ($minimumEnrollment < 0 || $minimumEnrollment > $capacity) {
+            throw new InvalidArgumentException('The enrollment target must be between zero and section capacity.');
         }
     }
 }

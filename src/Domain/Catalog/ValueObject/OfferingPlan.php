@@ -44,7 +44,7 @@ final readonly class OfferingPlan
     /**
      * @return list<array{id: string, course_id: string, term_id: string, faculty_user_id: ?string,
      *     code: string, capacity: int, web_registration: bool, fee_minor: int, currency: string,
-     *     delivery_mode: string}>
+     *     delivery_mode: string, minimum_enrollment?: int}>
      */
     public function describe(): array
     {
@@ -60,7 +60,7 @@ final readonly class OfferingPlan
                 "fee_minor" => $s->fee->minor,
                 "currency" => $s->fee->currency,
                 "delivery_mode" => $s->deliveryMode->value,
-            ],
+            ] + ($s->minimumEnrollment === 0 ? [] : ["minimum_enrollment" => $s->minimumEnrollment]),
             $this->sections,
         );
     }

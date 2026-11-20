@@ -62,6 +62,7 @@ final readonly class CatalogEditor
             "code" => $section->code,
             "faculty_user_id" => $section->facultyUserId?->value,
             "capacity" => $section->capacity,
+            "minimum_enrollment" => $section->minimumEnrollment,
             "active" => (int) $section->active,
             "web_registration" => (int) $section->webRegistration,
             "fee_minor" => $section->fee->minor,

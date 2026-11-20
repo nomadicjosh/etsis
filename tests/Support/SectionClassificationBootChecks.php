@@ -3,6 +3,38 @@
 declare(strict_types=1);
 
 // Fictional SQLite, actual providers/router/CSRF/private transport.
+// Connected section creation and private current-enrollment review, through the real provider/router.
+$targetCourse = $sis->section(20, 0);
+$targetInput = ['course_id' => $targetCourse->courseId->value, 'term_id' => $sis->term->value,
+    'code' => 'FICTIONAL.TARGET', 'capacity' => 20, 'minimum_enrollment' => 12,
+    'web_registration' => true, 'fee_minor' => 0, 'currency' => 'USD', 'delivery_mode' => 'online'];
+$targetCreated = $teachingPost('/sis/sections/', $targetInput);
+if ($targetCreated->getStatusCode() !== 201 ||
+    $teachingPost('/sis/sections/', array_replace($targetInput,
+        ['code' => 'FICTIONAL.BADTARGET', 'minimum_enrollment' => 21]))->getStatusCode() !== 422) {
+    throw new RuntimeException('Section target validation did not resolve through its provider.');
+}
+$targetEvents = $sis->sql->rows('sis_history_events');
+$targetScope = ['state' => 'below', 'term_id' => $sis->term->value, 'search' => 'FICTIONAL.TARGET'];
+$targetPage = $teachingPost('/sis/sections/enrollment-review/', $targetScope);
+$targetRows = json_decode((string) $targetPage->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($targetPage->getStatusCode() !== 200 || count($targetRows['items'] ?? []) !== 1 ||
+    $targetRows['items'][0]['minimum_enrollment'] !== 12 || $targetRows['items'][0]['enrolled'] !== 0 ||
+    $sis->sql->rows('sis_history_events') !== $targetEvents) {
+    throw new RuntimeException('The private section-target review lost its actual counts or wrote history.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:registration:manage'];
+if ($teachingPost('/sis/sections/enrollment-review/', $targetScope)->getStatusCode() !== 200) {
+    throw new RuntimeException('Registration duty could not review section enrollment targets.');
+}
+$sis->access->grants = ['sis:student:read'];
+if ($teachingPost('/sis/sections/enrollment-review/', $targetScope)->getStatusCode() !== 403) {
+    throw new RuntimeException('Student-read duty acquired section planning access.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
+
 $classificationSection = $sis->section();
 $classificationBase =
 "/sis/sections/" . $classificationSection->id->value . "/classifications/";

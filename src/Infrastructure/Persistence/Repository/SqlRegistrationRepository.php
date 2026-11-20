@@ -151,6 +151,9 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             new SqlSectionVersionRepository($this->sql)->selected($id)?->publication,
             isset($classes["instructional_method_id"]) ? new EntityId($classes["instructional_method_id"]) : null,
             isset($classes["campus_id"]) ? new EntityId($classes["campus_id"]) : null,
+            $r['minimum_enrollment'] === null ? 0 :
+                (filter_var($r['minimum_enrollment'], FILTER_VALIDATE_INT) === false ?
+                    throw new \Domain\Shared\EventSourcing\CorruptHistoryException() : (int) $r['minimum_enrollment']),
         );
     }
 
@@ -337,6 +340,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 "faculty_user_id" => $section->facultyUserId?->value,
                 "code" => $section->code,
                 "capacity" => $section->capacity,
+                "minimum_enrollment" => $section->minimumEnrollment,
                 "active" => (int) $section->active,
                 "web_registration" => (int) $section->webRegistration,
                 "fee_minor" => $section->fee->minor,

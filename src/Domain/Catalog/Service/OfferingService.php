@@ -101,6 +101,7 @@ final readonly class OfferingService
                         false,
                         $s->fee,
                         $s->deliveryMode,
+                        minimumEnrollment: $s->minimumEnrollment,
                     ),
                 );
                 $this->audit->record($actor, "section.draft_created", $s->id);
@@ -493,6 +494,7 @@ final readonly class OfferingService
                 "code" => $s->code,
                 "delivery_mode" => $s->deliveryMode->value,
                 "capacity" => $s->capacity,
+                "minimum_enrollment" => $s->minimumEnrollment,
                 "faculty_user_id" => $s->facultyUserId?->value,
                 "faculty_name" => $faculty["name"] ?? null,
                 "course_code" => $published?->definition->code ?? $course->code,

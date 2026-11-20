@@ -84,6 +84,7 @@ final readonly class SisCatalogEditorController
                         $f->boolean("web_registration"),
                         new Money($f->integer("fee_minor"), $f->text("currency", 3)),
                         DeliveryMode::parse($f->optionalText("delivery_mode", 24) ?? "unspecified"),
+                        minimumEnrollment: $f->optionalInteger('minimum_enrollment') ?? 0,
                     ),
                     $revision,
                 );

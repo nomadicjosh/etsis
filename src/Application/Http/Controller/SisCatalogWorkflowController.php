@@ -175,6 +175,7 @@ final readonly class SisCatalogWorkflowController
                 \Domain\Registration\Enum\DeliveryMode::parse(
                     $f->optionalText("delivery_mode", 24) ?? "unspecified",
                 ),
+                minimumEnrollment: $f->optionalInteger('minimum_enrollment') ?? 0,
             );
         }
         return new OfferingPlan($term, ...$sections);

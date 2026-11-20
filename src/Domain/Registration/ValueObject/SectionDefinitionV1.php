@@ -32,14 +32,21 @@ final readonly class SectionDefinitionV1
     public function __construct(public array $data)
     {
         if (
-            !in_array(count($data), [count(self::FIELDS), count(self::FIELDS) + 1], true) ||
-            array_diff(array_keys($data), [...self::FIELDS, 'web_registration']) !== [] ||
+            !in_array(count($data), [count(self::FIELDS), count(self::FIELDS) + 1, count(self::FIELDS) + 2], true) ||
+            array_diff(array_keys($data), [...self::FIELDS, 'web_registration', 'minimum_enrollment']) !== [] ||
             array_diff(self::FIELDS, array_keys($data)) !== [] ||
             (array_key_exists('web_registration', $data) && !is_bool($data['web_registration']))
         ) {
             throw new InvalidArgumentException(
                 "A complete section definition is required.",
             );
+        }
+        if (
+            array_key_exists('minimum_enrollment', $data) &&
+            (!is_int($data['minimum_enrollment']) || $data['minimum_enrollment'] < 0 ||
+                $data['minimum_enrollment'] > $data['capacity'])
+        ) {
+            throw new InvalidArgumentException('Use an enrollment target from zero through section capacity.');
         }
         foreach (["course_id", "course_version_id", "term_id"] as $field) {
             if (

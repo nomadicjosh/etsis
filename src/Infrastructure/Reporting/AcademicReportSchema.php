@@ -43,6 +43,8 @@ final class AcademicReportSchema
                 "sis_section_delivery" => "Delivery formats",
                 "sis_section_classifications" => "Current section setup",
                 "sis_section_version_classes" => "Retained offering details",
+                "sis_section_versions" => "Published offering definitions",
+                "sis_section_offering_versions" => "Selected offerings",
                 "sis_catalog_classifications" => "Academic reference definitions",
                 "sis_academic_credit_streams" => "Institutional offering links",
                 "sis_enrollment_section_versions" => "Accepted offering references",
@@ -312,6 +314,12 @@ final class AcademicReportSchema
                     "enrollment_id",
                     "id",
                 ),
+                'accepted_offering_definition' => $join(
+                    'sis_section_versions',
+                    'offering_reference',
+                    'publication_id',
+                    'id'
+                ),
                 "retained_offering" => $join(
                     "sis_section_version_classes",
                     "offering_reference",
@@ -321,6 +329,12 @@ final class AcademicReportSchema
             ],
             "fields" => $personFields +
                 $classificationFields + [
+                    'accepted_minimum_enrollment' => $field(
+                        'Accepted offering enrollment target',
+                        'integer',
+                        'accepted_offering_definition',
+                        'minimum_enrollment'
+                    ),
                     "retained_instructional_method_code" => $field(
                         "Retained instructional method code",
                         "string",
@@ -409,6 +423,13 @@ final class AcademicReportSchema
             "description" => "One row per section; enrollment relationships can expand to registration rows.",
             "permissions" => ["sis:catalog:manage"],
             "relationships" => [
+                'selected_offering' => $join('sis_section_offering_versions', 'section', 'id', 'id'),
+                'selected_offering_definition' => $join(
+                    'sis_section_versions',
+                    'selected_offering',
+                    'publication_id',
+                    'id'
+                ),
                 "course" => $join("sis_courses", "section", "course_id", "id"),
                 "course_text" => $join("sis_course_descriptions", "course", "id", "course_id"),
                 "course_binding" => $join("sis_section_course_versions", "section", "id", "id"),
@@ -512,7 +533,24 @@ final class AcademicReportSchema
                 "term_code" => $field("Academic term", "string", "term", "code"),
                 'term_starts_on' => $field('Academic term starts', 'date', 'term', 'starts_on'),
                 'term_ends_on' => $field('Academic term ends', 'date', 'term', 'ends_on'),
-                "capacity" => $field("Section capacity", "integer", "section", "capacity"),
+                "capacity" => $field("Section capacity", "integer", "section", "capacity") + ["section_metric" => true],
+                'section_active' => $field('Active section', 'boolean', 'section', 'active'),
+                'minimum_enrollment' => $field(
+                    'Current minimum enrollment target',
+                    'integer',
+                    'section',
+                    'minimum_enrollment'
+                ) + ['section_metric' => true],
+                'active_enrollment_count' => $field('Active enrollment count', 'integer', 'section', 'id') +
+                    ['expression' => 'section_enrollment_count', 'section_metric' => true],
+                'below_enrollment_target' => $field('Below current enrollment target', 'boolean', 'section', 'id') +
+                    ['expression' => 'section_below_target'],
+                'selected_minimum_enrollment' => $field(
+                    'Selected offering enrollment target',
+                    'integer',
+                    'selected_offering_definition',
+                    'minimum_enrollment'
+                ) + ['section_metric' => true],
                 "delivery_mode" => $field("Delivery mode", "string", "delivery", "mode"),
                 "enrollment_id" => $field("Enrollment reference", "string", "enrollment", "id", $studentRead),
                 "enrollment_status" => $field(

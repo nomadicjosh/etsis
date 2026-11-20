@@ -439,6 +439,7 @@ final readonly class SectionPublicationService
                         $start,
                         $end,
                         $selected === null || array_key_exists("web_registration", $selected->definition->data),
+                        $selected === null || array_key_exists("minimum_enrollment", $selected->definition->data),
                     );
             if (
                 $course !== null &&
@@ -554,6 +555,7 @@ final readonly class SectionPublicationService
                         $d["instruction_starts_on"],
                         $d["instruction_ends_on"],
                         array_key_exists("web_registration", $d),
+                        array_key_exists("minimum_enrollment", $d),
                     ),
                 ) !== $this->fingerprint($d) ||
                 !$this->matchingClassifications($definition, $row)
@@ -808,6 +810,7 @@ final readonly class SectionPublicationService
                         $d["instruction_starts_on"],
                         $d["instruction_ends_on"],
                         array_key_exists("web_registration", $d),
+                        array_key_exists("minimum_enrollment", $d),
                     ),
                 ) !== $this->fingerprint($d) ||
                 !$this->matchingClassifications($definition, $row)
@@ -1061,6 +1064,7 @@ final readonly class SectionPublicationService
         string $start,
         string $end,
         bool $recordWeb = true,
+        bool $recordMinimum = true,
     ): array {
         return new SectionDefinitionV1([
             "course_id" => $row["course_id"],
@@ -1078,7 +1082,8 @@ final readonly class SectionPublicationService
             "currency" => $row["currency"],
             "instruction_starts_on" => $start,
             "instruction_ends_on" => $end,
-        ] + ($recordWeb ? ["web_registration" => (bool) $row["web_registration"]] : []))->data;
+        ] + ($recordWeb ? ["web_registration" => (bool) $row["web_registration"]] : []) +
+        ($recordMinimum ? ["minimum_enrollment" => (int) ($row["minimum_enrollment"] ?? 0)] : []))->data;
     }
 
     /** @param array<string, mixed> $earlier

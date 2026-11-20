@@ -214,6 +214,9 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 }
                 $facts['web_registration'] = (bool) $value;
             }
+            if ($row['minimum_enrollment'] !== null) {
+                $facts['minimum_enrollment'] = $this->integer($row['minimum_enrollment']);
+            }
             $facts["capacity"] = $this->integer($facts["capacity"]);
             $facts["fee_minor"] = $this->integer($facts["fee_minor"]);
             $schema = $this->integer($row["schema_version"]);
