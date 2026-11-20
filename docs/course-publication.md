@@ -101,7 +101,7 @@ Use **Allow alternative requirements** when completing one route can replace ano
 
 For example, build Requirement 1 with **MATH.101 and MATH.102**, set its **Courses required** to two, and build Requirement 2 with **STAT.201**. Enable alternatives and require **one** requirement. A student qualifies through the two-course mathematics route **or** the statistics route. Requiring two of three requirements is also supported. Each requirement keeps its own optional per-course grade minimum, and a failed/unknown course never becomes passing merely because alternatives are allowed. Existing cross-requirement course reuse still applies; this does not change degree-audit sharing rules.
 
-Co-requisites remain independently required under the institution's existing registration policy. Alternatives do not make a lab optional or treat a simultaneously selected prerequisite as already completed. The current grammar counts course requirements; arbitrary deeper nested expressions and other eligibility inputs remain future work.
+Co-requisites remain independently required under the institution's existing registration policy. Alternatives do not make a lab optional or treat a simultaneously selected prerequisite as already completed. Nested routes are supported below. Other eligibility inputs remain separate policy work.
 
 Removing a requirement does not silently lower an explicit overall minimum. Fix the minimum or restore enough requirements before saving. Explicitly removing all prerequisite requirements clears the overall minimum. Cloning preserves the selected requirements and their minima; it rejects a partial selection that cannot meet them. The older single-reference addition path directs alternative-rule changes to this editor rather than accidentally making a newly added course optional.
 
@@ -127,12 +127,36 @@ Course cloning preserves the original grouping, counts and grade minima for the 
 
 Migration `20261119000009_CreateSisPrerequisiteGroups` adds the course-owned CRUD draft table and nullable retained-projection field. `20261119000010_AddSisPrerequisiteMinimums` adds nullable text fields for the draft and retained count lists. Absence preserves earlier one-course meanings. The flat relationship list is a checked derived index written atomically with the groups; shared courses appear once in that index. No course, enrollment, event, receipt or historical support is backfilled. Schema definitions compile for the five framework database dialects, with isolated SQLite behavior checks. The native MariaDB upgrade to `20261119000010` left the existing publication without inferred counts, preserved its complete earlier course-field digest, and kept all twenty events plus the event/stream-head/operation-table checksums unchanged. Other PDO backends remain subject to framework schema support.
 
-This stage uses retained passing-grade and grade-point definitions. Co-requisites use the separate required-course list described below. Arbitrary nested expressions, equivalence expansion and registrar prerequisite overrides remain separate policy work. No SQL, PHP, scripts or executable predicates are accepted by this editor.
+This stage uses retained passing-grade and grade-point definitions. Co-requisites use the separate required-course list described below. Nested counted expressions are supported below; equivalence expansion and registrar prerequisite overrides remain separate policy work. No SQL, PHP, scripts or executable predicates are accepted by this editor.
 
 Migration `20261119000011_AddSisPrerequisiteGradePoints` adds nullable text fields for draft and retained grade minima. NULL preserves the earlier passing-grade contract without inferred thresholds or support points. The migration does not backfill academic records, publications or events. Its definitions compile for MySQL, PostgreSQL, SQLite, SQL Server and Oracle; SQLite fixtures exercise publication, registration, rollback and replay behavior. The applied native MariaDB upgrade preserved the earlier retained-course digest, all twenty events and the event/stream-head/operation-table checksums; the earlier publication still has NULL grade minima. Multi-engine load/concurrency and independent operational acceptance remain open.
 
 Fictional bounded verification covers a 25-student confirmation with 21 actual course publications: the selected course stream uses two pages total, instead of two pages per student. A separate command reads history afresh. Additional checks cover different publications of one course in a schedule, changed projections after cache population, final-audit rollback, stable lock ordering and partial scans that never enter the verified cache. The invocation-local map is bounded to 100 publications and 100 section selections and uses the existing shared history allowance. It stores no student evidence and is never written to disk or reused between browser requests. This is a targeted replay-count check, not a production capacity benchmark; no schema, journal or historical conversion is added.
 
+
+### Nested prerequisite routes
+
+Use **Edit prerequisites → Arrange rule** when a single overall count cannot express the requirement. For example, **A AND (B OR C)** requires A plus either B or C; completing B and C without A does not qualify.
+
+1. Prepare the numbered requirement cards with their course choices, course counts and optional grade-point minima.
+2. Choose **Arrange rule**. Select B and C within the same branch and choose **Group selected**.
+3. Set that new branch to **Complete any one**, leaving the overall rule at **Complete all**. A branch may instead require a chosen number of its children.
+4. Use the arrow buttons to change the display order with a keyboard or pointer. **Ungroup** deliberately moves a branch's children into its parent; review the resulting rule.
+5. Return to the requirement cards, save, then review and publish the course definition. Publication review displays the same nested rule and numbered course details.
+
+No SQL, executable expressions or new course copies are involved. Co-requisites remain separately required under institutional policy. One qualifying course may satisfy multiple prerequisite blocks, while each block still counts distinct courses and enforces its own grade floor. This does not change degree-audit sharing policies.
+
+Every numbered requirement must appear exactly once in the rule. The server accepts up to five branch levels, 199 total rule items, 100 requirements, 100 distinct courses and 500 course choices. Evaluation visits the bounded rule; it does not enumerate possible course combinations. **Simple rule** deliberately returns the draft to requiring every listed requirement. Remove requirements in that mode, then arrange a new rule if needed. Adding a requirement to a nested rule adds it at the root; review that root count before saving.
+
+Drafts remain revision-checked, audited CRUD. The existing course-publication event retains `prerequisite_rule`, and new accepted enrollment evidence retains `requirement_rule` with its original pursuit-scoped support. Earlier publications without either field preserve their flat counted/all-required meaning. A section's chosen course publication keeps its original rule after draft edits or later course publication. Ordinary lists and searches still use bounded projections; registration commands verify the selected publication and recheck current sources through final confirmation.
+
+Student, staff, grouped registration, schedule plans and section changes use the shared evaluation and readiness view. A nested review marks each branch and requirement **Met** or **Not met**, distinguishing unused alternatives from required missing work without exposing supporting credit identities. Recorded registration summaries identify a satisfied nested rule rather than inventing a flat required-count claim. Existing completed retries retain their original result after later edits. A changed rule invalidates pending reviews, and a final-check failure rolls back seats, academic credit, charges and receipts together.
+
+Cloning retains the full nested structure. Staff may narrow choices within a block if enough courses remain for its count; omitting whole nested blocks is rejected unless all prerequisites are cleared. Restructure the new inactive draft explicitly rather than silently weakening an inherited expression. The older single-reference writer directs nested changes to the full editor.
+
+Migration `20261120000005_AddSisPrerequisiteRules` adds nullable `rule_json` to the existing draft and course-version projections. It creates no event table, new aggregate, historical conversion or inferred rules. Compiler checks cover the five framework dialects; live multi-engine qualification remains separate.
+
+The configured MariaDB upgrade preserved all twenty existing events and the checksums of the event, stream-head and operation tables. Its existing retained course publication still has no nested rule. Fictional-data checks cover nested counts, grade floors, source edits, protected projection verification, original retries, coupled registration/billing rollback and the accessible editor/publication flow.
 
 ### Co-requisites
 

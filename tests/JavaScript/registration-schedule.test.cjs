@@ -491,3 +491,21 @@ test("prerequisite readiness explains alternative requirements without labelling
     assert.match(details.textContent, /Not met:/);
     assert.doesNotMatch(details.textContent, /Meet each requirement/);
 });
+
+test("nested prerequisite readiness shows the qualifying route without a misleading flat count", () => {
+    const view = presenter();
+    const details = view.prerequisites({ course_statuses: ["met", "met", "missing"],
+        group_policy: { rule: { required_count: 2, met: true, children: [
+            { requirement: 0, met: true }, { required_count: 1, met: true, children: [
+                { requirement: 1, met: true }, { requirement: 2, met: false },
+            ] },
+        ] } }, groups: [0, 1, 2].map(i => ({ positions: [i], met: i < 2 })) },
+        ["A", "B", "C"].map(code => ({ code, title: "Fictional course" })));
+    details.open = true;
+    details.events.toggle();
+    assert.match(details.textContent, /Complete all · Met/);
+    assert.match(details.textContent, /Complete any one · Met/);
+    assert.match(details.textContent, /Requirement 3 · Not met/);
+    assert.match(details.textContent, /Unmet alternatives may remain/);
+    assert.doesNotMatch(details.textContent, /undefined|Meet each requirement|Needs attention:/);
+});

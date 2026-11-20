@@ -37,6 +37,12 @@ final readonly class SqlCourseVersionProjection
                 }
                 $definition['prerequisite_requirement_minimum'] = $minimum;
             }
+            if ($r['rule_json'] !== null) {
+                if (!is_string($r['rule_json']) || strlen($r['rule_json']) > 16384) {
+                    throw new CorruptHistoryException();
+                }
+                $definition['prerequisite_rule'] = json_decode($r['rule_json'], true, 16, JSON_THROW_ON_ERROR);
+            }
             if ($r['prerequisite_groups'] !== null) {
                 if (strlen($r['prerequisite_groups']) > 16384) {
                     throw new CorruptHistoryException();
@@ -164,6 +170,8 @@ final readonly class SqlCourseVersionProjection
             "course_id" => $definition->courseId->value,
             "schema_version" => 1,
             "requirement_minimum" => $definition->definition->prerequisiteGroups?->minimumRequirements,
+            'rule_json' => $definition->definition->prerequisiteGroups?->rule === null ? null :
+                json_encode($definition->definition->prerequisiteGroups->rule->definition, JSON_THROW_ON_ERROR),
             "code" => $definition->definition->code,
             "title" => $definition->definition->title,
             "credits_milli" => $definition->definition->creditsMilli,

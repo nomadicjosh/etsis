@@ -389,6 +389,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 $remaining->minimumGradePointsMilli,
                 $groups->corequisites,
                 $remaining->minimumRequirements,
+                $remaining->rule?->definition,
             ));
             return;
         }
@@ -413,7 +414,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             if (in_array([$required->value], $groups->groups, true)) {
                 return;
             }
-            if ($groups->minimumRequirements !== null) {
+            if ($groups->minimumRequirements !== null || $groups->rule !== null) {
                 throw new \Domain\Shared\Exception\ValidationException([['field' => 'prerequisites',
                     'message' => 'Use the prerequisite editor to change alternative requirements.']]);
             }

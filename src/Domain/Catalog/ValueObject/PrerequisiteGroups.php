@@ -8,7 +8,7 @@ use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 
-/** Count qualifying course requirements; absent overall minimum means every requirement. */
+/** Count qualifying course requirements under a flat count or a bounded nested rule. */
 final readonly class PrerequisiteGroups
 {
     /** @var list<list<string>> */
@@ -19,6 +19,7 @@ final readonly class PrerequisiteGroups
      * @param list<int|null>|null $minimumGradePointsMilli Absent means passing grade only.
      * @param int|null $minimumRequirements Absent means every requirement must be met. */
     public ?array $corequisites;
+    public ?PrerequisiteRule $rule;
 
     public function __construct(
         array $groups,
@@ -26,6 +27,7 @@ final readonly class PrerequisiteGroups
         public ?array $minimumGradePointsMilli = null,
         ?array $corequisites = null,
         public ?int $minimumRequirements = null,
+        ?array $rule = null,
     ) {
         if (
             !array_is_list($groups) || count($groups) > 100 ||
@@ -96,6 +98,10 @@ final readonly class PrerequisiteGroups
         }
         $this->groups = $groups;
         $this->corequisites = $corequisites;
+        if ($rule !== null && $minimumRequirements !== null) {
+            throw new InvalidArgumentException('Choose an overall count or a nested rule, not both.');
+        }
+        $this->rule = $rule === null ? null : new PrerequisiteRule($rule, count($groups));
     }
 
     /** @param list<string> $courses */
@@ -131,9 +137,14 @@ final readonly class PrerequisiteGroups
     public function missing(array $completed, array $points = []): int
     {
         $missing = 0;
+        $met = [];
         $counts = $this->counts();
         foreach ($this->groups as $index => $group) {
-            $missing += (int) (count($this->completedInGroup($index, $completed, $points)) < $counts[$index]);
+            $met[$index] = count($this->completedInGroup($index, $completed, $points)) >= $counts[$index];
+            $missing += (int) !$met[$index];
+        }
+        if ($this->rule !== null) {
+            return $this->rule->missing($met);
         }
         return max(0, $this->requiredRequirements() - (count($this->groups) - $missing));
     }
@@ -187,12 +198,18 @@ final readonly class PrerequisiteGroups
             throw new ValidationException([['field' => 'prerequisites',
                 'message' => 'Keep enough prerequisite requirements to meet the retained overall minimum.']]);
         }
+        if ($groups !== [] && $this->rule !== null && count($groups) !== count($this->groups)) {
+            throw new ValidationException([['field' => 'prerequisites',
+                'message' => 'Keep every nested requirement or clear all prerequisites; ' .
+                    'edit the new draft to restructure it.']]);
+        }
         return new self(
             $groups,
             $this->minimums === null ? null : $minimums,
             $this->minimumGradePointsMilli === null ? null : $floors,
             $this->corequisites === null ? null : array_values(array_intersect($this->corequisites, $selected)),
-            $groups === [] ? null : $this->minimumRequirements
+            $groups === [] ? null : $this->minimumRequirements,
+            $groups === [] ? null : $this->rule?->definition
         );
     }
 }

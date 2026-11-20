@@ -141,7 +141,8 @@ window.createWorkspaceCatalog = function (ui) {
         })).filter(group => group.selected.length);
         const overallMinimum = groups.length ? review.prerequisite_requirement_minimum : null;
         const invalidChoices = groups.some(group => group.selected.length < group.minimum) ||
-            (groups.length > 0 && overallMinimum != null && groups.length < overallMinimum);
+            (groups.length > 0 && overallMinimum != null && groups.length < overallMinimum) ||
+            (groups.length > 0 && review.prerequisite_rule && groups.length !== review.prerequisite_groups.length);
 
         body.append(
             button(
@@ -169,11 +170,12 @@ window.createWorkspaceCatalog = function (ui) {
                 "Selected entry requirements",
             ),
             review.prerequisite_groups ? node("p", { class: "form-text" }, !groups.length ? "No prerequisite requirements retained." :
-                `${overallMinimum == null ? "All retained requirements" : `Meet ${overallMinimum} of ${groups.length} retained requirements`}: ` + groups.map(group => `${group.minimum > 1 ? `At least ${group.minimum} of: ` : ""}` +
+                `${review.prerequisite_rule ? "Retained nested rule" : overallMinimum == null ? "All retained requirements" : `Meet ${overallMinimum} of ${groups.length} retained requirements`}: ` + groups.map(group => `${group.minimum > 1 ? `At least ${group.minimum} of: ` : ""}` +
                     group.selected.map(id => review.prerequisites.find(row => row.id === id)?.code || "Course")
                         .join(group.minimum > 1 ? "; " : " OR ") +
                     (group.grade === null ? "" : ` · Minimum ${group.grade / 1000} grade points per counted course`)).join(overallMinimum == null ? " AND " : "; ") +
-                    ". Unselected groups are omitted from the cloned draft.") : null,
+                    (review.prerequisite_rule ? ". Keep every nested requirement or clear all prerequisites; restructure the cloned draft afterwards." : ". Unselected groups are omitted from the cloned draft.")) : null,
+            groups.length && review.prerequisite_rule ? ui.prerequisites().ruleView(review.prerequisite_rule) : null,
             review.corequisites?.some(id => prerequisites.includes(id)) ? node("p", { class: "form-text" },
                 "Co-requisites — all selected courses required: " + review.corequisites.filter(id => prerequisites.includes(id))
                     .map(id => review.prerequisites.find(row => row.id === id)?.code || "Course").join(", ")) : null,

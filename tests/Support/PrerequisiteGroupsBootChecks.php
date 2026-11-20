@@ -32,8 +32,12 @@ $input = ['minimum_requirements' => 1, 'groups' => $groups, 'minimums' => [2, 1]
     'grade_points_milli' => [2675, null], 'corequisites' => [$corequisite->courseId->value],
     'revision' => $draft['revision']];
 foreach ([0, -1, 3, 1.5, [], true] as $invalid) {
-    if ($teachingPost($base . 'prerequisite-groups/', array_replace($input,
-        ['minimum_requirements' => $invalid]))->getStatusCode() !== 422) {
+    if (
+        $teachingPost($base . 'prerequisite-groups/', array_replace(
+            $input,
+            ['minimum_requirements' => $invalid]
+        ))->getStatusCode() !== 422
+    ) {
         throw new RuntimeException('An impossible overall prerequisite count bypassed the private route.');
     }
 }
@@ -103,6 +107,42 @@ $read();
 $teachingPost('/sis/prerequisite-labels/', ['ids' => [$first->courseId->value]]);
 if ($before !== $sis->sql->rows('sis_history_events')) {
     throw new RuntimeException('Reading prerequisite drafts or labels changed history.');
+}
+$currentNested = json_decode((string) $read()->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$nestedRule = ['minimum' => 2, 'children' => [0, ['minimum' => 1, 'children' => [1, 2]]]];
+$nestedInput = array_replace($input, ['revision' => $currentNested['revision'], 'minimum_requirements' => null,
+    'rule' => $nestedRule, 'groups' => [...$groups, [$additional->courseId->value]], 'minimums' => [2, 1, 1],
+    'grade_points_milli' => [2675, null, null]]);
+foreach (
+    [false, 'invalid', [], ['minimum' => 1, 'children' => [0, 1]],
+    ['minimum' => 1, 'children' => [0, 0, 1, 2]]] as $invalidRule
+) {
+    if (
+        $teachingPost($base . 'prerequisite-groups/', array_replace($nestedInput, ['rule' => $invalidRule]))
+        ->getStatusCode() !== 422
+    ) {
+        throw new RuntimeException('Malformed nested prerequisite rules bypassed private input validation.');
+    }
+}
+$nestedSaved = $teachingPost($base . 'prerequisite-groups/', $nestedInput);
+$nestedData = json_decode((string) $nestedSaved->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $nestedSaved->getStatusCode() !== 200 || ($nestedData['rule'] ?? null) !== $nestedRule ||
+    $before !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Saving a nested draft lost its rule or invented a historical decision.');
+}
+$nestedReview = $teachingPost($base . 'publication/review/', ['reason' => 'Fictional nested route approval.']);
+$nestedProof = json_decode((string) $nestedReview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$nestedConfirmed = $teachingPost($base . 'publication/commit/', ['review_token' => $nestedProof['review_token']]);
+if (
+    $nestedReview->getStatusCode() !== 200 ||
+    ($nestedProof['definition']['prerequisite_rule'] ?? null) !== $nestedRule ||
+    $nestedConfirmed->getStatusCode() !== 200 ||
+    (string) $teachingPost($base . 'publication/commit/', ['review_token' => $review['review_token']])->getBody() !==
+        (string) $confirmed->getBody()
+) {
+    throw new RuntimeException('Nested publication or the earlier original receipt changed.');
 }
 $policyRead = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
     'https://campus.example.invalid/sis/registration-policy/'

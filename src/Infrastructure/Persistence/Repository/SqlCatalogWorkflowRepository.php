@@ -98,7 +98,15 @@ final readonly class SqlCatalogWorkflowRepository implements CatalogWorkflowRepo
                 throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
             }
         }
-        $groups = new PrerequisiteGroups($choices, $minimums, $floors, $corequisites, $minimum);
+        $rawRule = $row['rule_json'];
+        if ($rawRule !== null && (!is_string($rawRule) || strlen($rawRule) > 16384)) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        $rule = $rawRule === null ? null : json_decode($rawRule, true, 16, JSON_THROW_ON_ERROR);
+        if ($rawRule !== null && !is_array($rule)) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        $groups = new PrerequisiteGroups($choices, $minimums, $floors, $corequisites, $minimum, $rule);
         if ($groups->courses() !== array_column($this->prerequisites($course), 'id')) {
             throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
         }
@@ -114,6 +122,7 @@ final readonly class SqlCatalogWorkflowRepository implements CatalogWorkflowRepo
                 'course_id' => $course->value, 'required_course_id' => $id]);
         }
         $data = ['requirement_minimum' => $groups->minimumRequirements,
+            'rule_json' => $groups->rule === null ? null : json_encode($groups->rule->definition, JSON_THROW_ON_ERROR),
             'corequisites_json' => $groups->corequisites === null ? null :
             json_encode($groups->corequisites, JSON_THROW_ON_ERROR),
             'grade_points_json' => $groups->minimumGradePointsMilli === null ? null :

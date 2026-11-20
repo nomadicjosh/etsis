@@ -4,6 +4,8 @@ Reviewed 2026-11-08 against the legacy documentation, migration definitions and 
 
 ## Sources and evidence
 
+Nested prerequisite routes now retain their counted expression in the existing course publication and accepted registration evidence. Current drafts, published rules and curated branch-status explanations remain distinct; earlier flat rules are not rewritten. See the [authoring and historical boundaries](course-publication.md#nested-prerequisite-routes).
+
 The existing [legacy inventory](legacy-inventory.json) records 51 documents, six migrations and 207 views. Primary academic sources for this review are:
 
 - [Initial schema](../legacy/code/app/migrations/20160916002812_initial_schema.php), [2017 restructuring](../legacy/code/app/migrations/20170706151405_db_schema_update.php), field/nullability corrections and [STAC/STTR projections](../legacy/code/app/migrations/20170719105649_virtual_stac.php). Repeated table declarations and renamed tables are not separate feature requirements.

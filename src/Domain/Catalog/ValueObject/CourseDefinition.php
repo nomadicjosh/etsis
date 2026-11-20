@@ -74,7 +74,10 @@ final readonly class CourseDefinition
             }
             $keys[] = 'prerequisite_groups';
         }
-        foreach (['prerequisite_group_minimums', 'prerequisite_grade_points_milli', 'corequisites'] as $field) {
+        $groupFields = [
+            'prerequisite_group_minimums', 'prerequisite_grade_points_milli', 'corequisites', 'prerequisite_rule',
+        ];
+        foreach ($groupFields as $field) {
             if (array_key_exists($field, $data)) {
                 if (!array_key_exists('prerequisite_groups', $data) || !is_array($data[$field])) {
                     throw new InvalidArgumentException('Prerequisite minima require complete course choice groups.');
@@ -120,7 +123,8 @@ final readonly class CourseDefinition
                     $data["prerequisite_group_minimums"] ?? null,
                     $data["prerequisite_grade_points_milli"] ?? null,
                     $data["corequisites"] ?? null,
-                    $data["prerequisite_requirement_minimum"] ?? null
+                    $data["prerequisite_requirement_minimum"] ?? null,
+                    $data['prerequisite_rule'] ?? null
                 ) : null,
         );
     }
@@ -142,6 +146,8 @@ final readonly class CourseDefinition
         ['corequisites' => $this->prerequisiteGroups->corequisites]) +
         ($this->prerequisiteGroups?->minimumRequirements === null ? [] :
         ['prerequisite_requirement_minimum' => $this->prerequisiteGroups->minimumRequirements]) +
+        ($this->prerequisiteGroups?->rule === null ? [] :
+        ['prerequisite_rule' => $this->prerequisiteGroups->rule->definition]) +
         $this->text->describe() + [
             "subject" => $this->subject?->describe(),
             "classifications" => $this->classifications->describe(),

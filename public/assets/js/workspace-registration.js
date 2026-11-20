@@ -807,7 +807,9 @@ window.createWorkspaceRegistration = function (ui) {
                     { class: "form-text" },
                     prerequisites?.status === "verified"
                         ? prerequisites.requirement_group_count != null
-                            ? `Prerequisites at acceptance: ${prerequisites.required_group_count ?? prerequisites.requirement_group_count} of ${prerequisites.requirement_group_count} prerequisite requirements satisfied using ${prerequisites.supporting_record_count} verified academic records.`
+                            ? prerequisites.nested_rule
+                                ? `Prerequisites at acceptance: the nested rule across ${prerequisites.requirement_group_count} requirements was satisfied using ${prerequisites.supporting_record_count} verified academic records.`
+                                : `Prerequisites at acceptance: ${prerequisites.required_group_count ?? prerequisites.requirement_group_count} of ${prerequisites.requirement_group_count} prerequisite requirements satisfied using ${prerequisites.supporting_record_count} verified academic records.`
                             : `Prerequisites at acceptance: ${prerequisites.required_course_count} required ${prerequisites.required_course_count === 1 ? "course" : "courses"} matched to ${prerequisites.supporting_record_count} verified academic ${prerequisites.supporting_record_count === 1 ? "record" : "records"}.`
                         : prerequisites?.status === "not_required"
                           ? "No course prerequisites were required at acceptance."

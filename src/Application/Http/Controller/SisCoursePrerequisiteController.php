@@ -33,6 +33,9 @@ final readonly class SisCoursePrerequisiteController
         if (array_key_exists('corequisites', $body) && !is_array($body['corequisites'])) {
             throw new \InvalidArgumentException('Provide a co-requisite course list.');
         }
+        if (isset($body['rule']) && !is_array($body['rule'])) {
+            throw new \InvalidArgumentException('Provide a nested prerequisite rule or clear it explicitly.');
+        }
         $f = FormInput::from($request);
         return new JsonResponse($this->service->save(
             new EntityId($id),
@@ -41,7 +44,8 @@ final readonly class SisCoursePrerequisiteController
             array_key_exists('minimums', $body) ? $f->values('minimums', 100) : null,
             array_key_exists('grade_points_milli', $body) ? $f->values('grade_points_milli', 100) : null,
             array_key_exists('corequisites', $body) ? $f->values('corequisites', 20) : null,
-            $f->optionalInteger('minimum_requirements')
+            $f->optionalInteger('minimum_requirements'),
+            $body['rule'] ?? null
         ));
     }
 
