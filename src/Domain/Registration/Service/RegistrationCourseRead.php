@@ -45,6 +45,8 @@ final class RegistrationCourseRead
             $definition->creditsMilli !== $course->creditsMilli ||
             $definition->text->transcriptTitle !== $course->publishedTranscriptTitle ||
             $definition->prerequisites !== $course->publishedPrerequisites ||
+            $definition->prerequisiteGroups?->minimumRequirements !==
+                $course->prerequisiteGroups?->minimumRequirements ||
             $definition->prerequisiteGroups?->groups !== $course->prerequisiteGroups?->groups ||
             $definition->prerequisiteGroups?->minimums !== $course->prerequisiteGroups?->minimums ||
             $definition->prerequisiteGroups?->corequisites !== $course->prerequisiteGroups?->corequisites ||
@@ -64,6 +66,7 @@ final class RegistrationCourseRead
             $course->id->value, $course->code, $course->title, $course->creditsMilli, $course->active,
             $course->publishedTranscriptTitle, $course->publicationVersionId?->value, $required,
             $course->prerequisiteGroups?->groups, $course->prerequisiteGroups?->minimums,
+            $course->prerequisiteGroups?->minimumRequirements,
             $course->prerequisiteGroups?->minimumGradePointsMilli, $course->prerequisiteGroups?->corequisites,
         ], JSON_THROW_ON_ERROR));
         $old = $this->selections[$section->value] ?? null;

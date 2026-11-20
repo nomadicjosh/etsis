@@ -8,7 +8,7 @@ use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 
-/** Meet each group's distinct-course minimum. Empty groups mean no prerequisites. */
+/** Count qualifying course requirements; absent overall minimum means every requirement. */
 final readonly class PrerequisiteGroups
 {
     /** @var list<list<string>> */
@@ -16,7 +16,8 @@ final readonly class PrerequisiteGroups
 
     /** @param list<list<string>> $groups
      * @param list<int>|null $minimums Absent on earlier one-course choice publications.
-     * @param list<int|null>|null $minimumGradePointsMilli Absent means passing grade only. */
+     * @param list<int|null>|null $minimumGradePointsMilli Absent means passing grade only.
+     * @param int|null $minimumRequirements Absent means every requirement must be met. */
     public ?array $corequisites;
 
     public function __construct(
@@ -24,6 +25,7 @@ final readonly class PrerequisiteGroups
         public ?array $minimums = null,
         public ?array $minimumGradePointsMilli = null,
         ?array $corequisites = null,
+        public ?int $minimumRequirements = null,
     ) {
         if (
             !array_is_list($groups) || count($groups) > 100 ||
@@ -34,6 +36,9 @@ final readonly class PrerequisiteGroups
             throw new InvalidArgumentException(
                 'Use up to 100 prerequisite requirements with a matching course minimum.'
             );
+        }
+        if ($minimumRequirements !== null && ($minimumRequirements < 1 || $minimumRequirements > count($groups))) {
+            throw new InvalidArgumentException('Require at least one and no more than the number of prerequisites.');
         }
         $ids = [];
         foreach ($groups as $index => &$group) {
@@ -130,7 +135,12 @@ final readonly class PrerequisiteGroups
         foreach ($this->groups as $index => $group) {
             $missing += (int) (count($this->completedInGroup($index, $completed, $points)) < $counts[$index]);
         }
-        return $missing;
+        return max(0, $this->requiredRequirements() - (count($this->groups) - $missing));
+    }
+
+    public function requiredRequirements(): int
+    {
+        return $this->minimumRequirements ?? count($this->groups);
     }
 
     /** @return list<int|null> */
@@ -173,11 +183,16 @@ final readonly class PrerequisiteGroups
             $minimums[] = $counts[$index];
             $floors[] = $this->minimumGradePointsMilli[$index] ?? null;
         }
+        if ($groups !== [] && $this->minimumRequirements !== null && count($groups) < $this->minimumRequirements) {
+            throw new ValidationException([['field' => 'prerequisites',
+                'message' => 'Keep enough prerequisite requirements to meet the retained overall minimum.']]);
+        }
         return new self(
             $groups,
             $this->minimums === null ? null : $minimums,
             $this->minimumGradePointsMilli === null ? null : $floors,
-            $this->corequisites === null ? null : array_values(array_intersect($this->corequisites, $selected))
+            $this->corequisites === null ? null : array_values(array_intersect($this->corequisites, $selected)),
+            $groups === [] ? null : $this->minimumRequirements
         );
     }
 }

@@ -101,7 +101,9 @@ window.createWorkspaceCatalog = function (ui) {
         const groups = (review.prerequisite_groups || []).map((group, index) => ({
             selected: group.filter(id => prerequisites.includes(id)), minimum: review.prerequisite_minimums?.[index] || 1, grade: review.prerequisite_grade_points_milli?.[index] ?? null,
         })).filter(group => group.selected.length);
-        const invalidChoices = groups.some(group => group.selected.length < group.minimum);
+        const overallMinimum = groups.length ? review.prerequisite_requirement_minimum : null;
+        const invalidChoices = groups.some(group => group.selected.length < group.minimum) ||
+            (groups.length > 0 && overallMinimum != null && groups.length < overallMinimum);
 
         body.append(
             button(
@@ -128,17 +130,17 @@ window.createWorkspaceCatalog = function (ui) {
                     .map((item) => [item.code, item.title]),
                 "Selected entry requirements",
             ),
-            review.prerequisite_groups ? node("p", { class: "form-text" },
-                "Choices retained: " + groups.map(group => `${group.minimum > 1 ? `At least ${group.minimum} of: ` : ""}` +
+            review.prerequisite_groups ? node("p", { class: "form-text" }, !groups.length ? "No prerequisite requirements retained." :
+                `${overallMinimum == null ? "All retained requirements" : `Meet ${overallMinimum} of ${groups.length} retained requirements`}: ` + groups.map(group => `${group.minimum > 1 ? `At least ${group.minimum} of: ` : ""}` +
                     group.selected.map(id => review.prerequisites.find(row => row.id === id)?.code || "Course")
                         .join(group.minimum > 1 ? "; " : " OR ") +
-                    (group.grade === null ? "" : ` · Minimum ${group.grade / 1000} grade points per counted course`)).join(" AND ") +
+                    (group.grade === null ? "" : ` · Minimum ${group.grade / 1000} grade points per counted course`)).join(overallMinimum == null ? " AND " : "; ") +
                     ". Unselected groups are omitted from the cloned draft.") : null,
             review.corequisites?.some(id => prerequisites.includes(id)) ? node("p", { class: "form-text" },
                 "Co-requisites — all selected courses required: " + review.corequisites.filter(id => prerequisites.includes(id))
                     .map(id => review.prerequisites.find(row => row.id === id)?.code || "Course").join(", ")) : null,
             invalidChoices ? node("p", { class: "alert alert-warning", role: "status" },
-                "Keep enough courses to meet each retained minimum, or omit that requirement entirely.") : null,
+                "Keep enough courses and requirements to meet the retained minima, or omit prerequisite requirements entirely.") : null,
             reference(review.operation_id),
             node(
                 "p",

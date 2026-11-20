@@ -30,6 +30,13 @@ final readonly class SqlCourseVersionProjection
             if ((int) $r["schema_version"] !== 1) {
                 throw new CorruptHistoryException();
             }
+            if ($r['requirement_minimum'] !== null) {
+                $minimum = filter_var($r['requirement_minimum'], FILTER_VALIDATE_INT);
+                if ($minimum === false) {
+                    throw new CorruptHistoryException();
+                }
+                $definition['prerequisite_requirement_minimum'] = $minimum;
+            }
             if ($r['prerequisite_groups'] !== null) {
                 if (strlen($r['prerequisite_groups']) > 16384) {
                     throw new CorruptHistoryException();
@@ -156,6 +163,7 @@ final readonly class SqlCourseVersionProjection
             "id" => $definition->versionId->value,
             "course_id" => $definition->courseId->value,
             "schema_version" => 1,
+            "requirement_minimum" => $definition->definition->prerequisiteGroups?->minimumRequirements,
             "code" => $definition->definition->code,
             "title" => $definition->definition->title,
             "credits_milli" => $definition->definition->creditsMilli,
@@ -176,6 +184,13 @@ final readonly class SqlCourseVersionProjection
         } else {
             $old["schema_version"] = (int) $old["schema_version"];
             $old["credits_milli"] = (int) $old["credits_milli"];
+            if ($old['requirement_minimum'] !== null) {
+                $minimum = filter_var($old['requirement_minimum'], FILTER_VALIDATE_INT);
+                if ($minimum === false) {
+                    throw new CorruptHistoryException();
+                }
+                $old['requirement_minimum'] = $minimum;
+            }
             if (ProtectedEventCodec::canonical($old) !== ProtectedEventCodec::canonical($r)) {
                 throw new CorruptHistoryException();
             }

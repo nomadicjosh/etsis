@@ -89,15 +89,15 @@ window.createRegistrationSchedule = function (ui) {
 
     function prerequisites(value, courses = []) {
         if (!courses.length || !value?.course_statuses?.length) return null;
-        const details = node("details", { class: "mb-3" }, node("summary", {}, "Required courses"));
+        const details = node("details", { class: "mb-3" }, node("summary", {}, value.group_policy?.required_count < value.group_policy?.total_count ? "Prerequisite options" : "Required courses"));
         let rendered = false;
         details.addEventListener("toggle", () => {
             if (!details.open || rendered) return;
             rendered = true;
             if (value.groups) {
-                details.append(node("p", { class: "form-text" }, "Meet each requirement using verified coursework allowed for this program pursuit. Labels are from the current catalog. A course may satisfy more than one prerequisite requirement."),
+                details.append(node("p", { class: "form-text" }, value.group_policy ? `Meet ${value.group_policy.required_count} of ${value.group_policy.total_count} prerequisite requirements; ${value.group_policy.completed_count} verified. Each requirement retains its own course count and grade minimum. Labels are current; only coursework allowed for this program pursuit counts.` : "Meet each requirement using verified coursework allowed for this program pursuit. Labels are from the current catalog. A course may satisfy more than one prerequisite requirement."),
                     node("ol", {}, ...value.groups.map(group => node("li", {},
-                        node("strong", {}, group.met ? "Met: " : "Needs attention: "),
+                        node("strong", {}, group.met ? "Met: " : value.group_policy?.required_count < value.group_policy?.total_count ? "Not met: " : "Needs attention: "),
                         (group.required_count || 1) > 1 ? `At least ${group.required_count} distinct courses required · ${group.completed_count} verified: ` : "",
                         group.minimum_grade_points_milli != null ? `Minimum ${group.minimum_grade_points_milli / 1000} grade points per counted course · ${group.completed_count} verified: ` : "",
                         group.positions.map(position => {

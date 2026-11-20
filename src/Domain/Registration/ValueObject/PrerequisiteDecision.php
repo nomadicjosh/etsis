@@ -141,6 +141,17 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         }, $this->groups->groups, array_keys($this->groups->groups));
     }
 
+    /** Safe counts; supporting academic identities remain protected. */
+    public function groupPolicy(): ?array
+    {
+        if ($this->groups === null) {
+            return null;
+        }
+        return ['required_count' => $this->groups->requiredRequirements(),
+            'total_count' => count($this->groups->groups),
+            'completed_count' => count(array_filter($this->groupStatuses(), static fn(array $g): bool => $g['met']))];
+    }
+
     /** @return list<string> */
     private function qualifying(int $index): array
     {
@@ -203,6 +214,12 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
             }
             $keys[] = 'requirement_grade_points_milli';
         }
+        if (array_key_exists('requirement_minimum', $facts)) {
+            if (!array_key_exists('requirement_groups', $facts) || !is_int($facts['requirement_minimum'])) {
+                throw new CorruptHistoryException();
+            }
+            $keys[] = 'requirement_minimum';
+        }
         if (
             count($facts) !== count($keys) ||
             array_diff(array_keys($facts), $keys) !== [] ||
@@ -222,7 +239,8 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
                     new \Domain\Catalog\ValueObject\PrerequisiteGroups(
                         $facts['requirement_groups'],
                         $facts['requirement_minimums'] ?? null,
-                        $facts['requirement_grade_points_milli'] ?? null
+                        $facts['requirement_grade_points_milli'] ?? null,
+                        minimumRequirements: $facts['requirement_minimum'] ?? null
                     ) : null,
             );
         } catch (\InvalidArgumentException) {
@@ -244,7 +262,9 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         ] + ($this->groups === null ? [] : ['requirement_groups' => $this->groups->groups]) +
         ($this->groups?->minimums === null ? [] : ['requirement_minimums' => $this->groups->minimums]) +
         ($this->groups?->minimumGradePointsMilli === null ? [] :
-        ['requirement_grade_points_milli' => $this->groups->minimumGradePointsMilli]);
+        ['requirement_grade_points_milli' => $this->groups->minimumGradePointsMilli]) +
+        ($this->groups?->minimumRequirements === null ? [] :
+        ['requirement_minimum' => $this->groups->minimumRequirements]);
     }
 
     private static function id(mixed $value): void

@@ -91,7 +91,14 @@ final readonly class SqlCatalogWorkflowRepository implements CatalogWorkflowRepo
         if ($raw !== null && !is_array($corequisites)) {
             throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
         }
-        $groups = new PrerequisiteGroups($choices, $minimums, $floors, $corequisites);
+        $minimum = $row['requirement_minimum'];
+        if ($minimum !== null) {
+            $minimum = filter_var($minimum, FILTER_VALIDATE_INT);
+            if ($minimum === false) {
+                throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+            }
+        }
+        $groups = new PrerequisiteGroups($choices, $minimums, $floors, $corequisites, $minimum);
         if ($groups->courses() !== array_column($this->prerequisites($course), 'id')) {
             throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
         }
@@ -106,7 +113,8 @@ final readonly class SqlCatalogWorkflowRepository implements CatalogWorkflowRepo
             $this->sql->insert('sis_prerequisites', ['id' => EntityId::generate()->value,
                 'course_id' => $course->value, 'required_course_id' => $id]);
         }
-        $data = ['corequisites_json' => $groups->corequisites === null ? null :
+        $data = ['requirement_minimum' => $groups->minimumRequirements,
+            'corequisites_json' => $groups->corequisites === null ? null :
             json_encode($groups->corequisites, JSON_THROW_ON_ERROR),
             'grade_points_json' => $groups->minimumGradePointsMilli === null ? null :
             json_encode($groups->minimumGradePointsMilli, JSON_THROW_ON_ERROR),

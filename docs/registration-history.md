@@ -86,6 +86,10 @@ Prerequisite authoring also supports “at least two of these three courses” a
 
 The safe response adds `required_count` and `completed_count` alongside each group's existing course positions and status; it does not return supporting academic identities. New accepted evidence retains explicit count lists inside the same protected enrollment event. Older choice evidence without those counts retains its original one-course meaning. Count changes stale pending confirmations; accepted retries preserve their original result. At acceptance, the selected course facts are checked against the protected publication under the existing bounded command allowance. Modified projection counts cannot authorize a weaker registration.
 
+### Alternative prerequisite routes
+
+[Course prerequisite authoring](course-publication.md#alternative-prerequisite-requirements) now supports meeting one or a chosen number of course requirements instead of every requirement. Shared student/staff/group/schedule readiness states the overall required/met count, retains each course count and grade floor, and distinguishes an unmet alternative from a mandatory gap. Co-requisites stay independent. Accepted evidence and restricted history preserve the actual rule; later edits do not change earlier enrollments. Cloning and source verification keep the same semantics without additional event streams or academic effects during setup.
+
 ### Minimum grades within prerequisite requirements
 
 Staff may set an optional per-course grade-point minimum for each prerequisite requirement. The registration review shows that minimum and how many distinct courses qualify. Only verified passing institutional/transfer work allowed for the current pursuit is considered; GPA inclusion and credit quantity do not substitute for per-course grade points. A shared course can meet one requirement but fall below another's minimum. Blank thresholds preserve passing-only behavior; an explicit zero still requires a recorded passing grade.

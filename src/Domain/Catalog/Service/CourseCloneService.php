@@ -127,7 +127,8 @@ final readonly class CourseCloneService
                         $context['prerequisite_groups'],
                         $context['prerequisite_minimums'],
                         $context['prerequisite_grade_points_milli'],
-                        $context['corequisites']
+                        $context['corequisites'],
+                        $context['prerequisite_requirement_minimum']
                     )->subset($ids)
                 );
             }
@@ -226,6 +227,7 @@ final readonly class CourseCloneService
             ],
             "prerequisites" => $prerequisites,
             "prerequisite_groups" => $groups?->groups,
+            "prerequisite_requirement_minimum" => $groups?->minimumRequirements,
             "corequisites" => $groups?->corequisites,
             "prerequisite_minimums" => $groups?->minimums,
             "prerequisite_grade_points_milli" => $groups?->minimumGradePointsMilli,

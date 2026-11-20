@@ -18,10 +18,12 @@ window.createWorkspacePrerequisites = function (ui) {
         const body = openDrawer("Course prerequisites", "ACADEMIC CATALOG");
         const saved = await request(`/sis/courses/${course}/prerequisite-groups/`);
         if (!body.isConnected) return;
-        const state = { groups: saved.groups.map(group => [...group]), minimums: [...saved.minimums], grade_points_milli: [...floors(saved)], corequisites: [...(saved.corequisites || [])],
+        const state = { minimum_requirements: saved.minimum_requirements ?? null, groups: saved.groups.map(group => [...group]), minimums: [...saved.minimums], grade_points_milli: [...floors(saved)], corequisites: [...(saved.corequisites || [])],
             labels: new Map(saved.courses.map(row => [row.id, row])) };
-        const fingerprint = value => JSON.stringify([value.groups, value.minimums, floors(value), [...(value.corequisites || [])].sort()]);
-        const incomplete = () => state.groups.some((group, index) => !group.length ||
+        const fingerprint = value => JSON.stringify([value.minimum_requirements ?? null, value.groups, value.minimums, floors(value), [...(value.corequisites || [])].sort()]);
+        const incomplete = () => (state.minimum_requirements !== null &&
+            (!Number.isInteger(state.minimum_requirements) || state.minimum_requirements < 1 ||
+                state.minimum_requirements > state.groups.length)) || state.groups.some((group, index) => !group.length ||
             !Number.isInteger(state.minimums[index]) || state.minimums[index] < 1 || state.minimums[index] > group.length ||
             (state.grade_points_milli[index] !== null && (!Number.isInteger(state.grade_points_milli[index]) ||
                 state.grade_points_milli[index] < 0 || state.grade_points_milli[index] > 10000)));
@@ -33,12 +35,12 @@ window.createWorkspacePrerequisites = function (ui) {
                 if (incomplete()) return;
                 const submitted = fingerprint(state);
                 const result = await request(`/sis/courses/${course}/prerequisite-groups/`, "POST", {
-                    revision: saved.revision, groups: state.groups.map(group => [...group]), minimums: [...state.minimums],
+                    minimum_requirements: state.minimum_requirements, revision: saved.revision, groups: state.groups.map(group => [...group]), minimums: [...state.minimums],
                     grade_points_milli: [...state.grade_points_milli], corequisites: [...state.corequisites].sort(),
                 });
                 const laterEdits = fingerprint(state) !== submitted;
                 Object.assign(saved, result);
-                if (!laterEdits) { state.groups = result.groups.map(group => [...group]); state.minimums = [...result.minimums]; state.grade_points_milli = [...floors(result)]; state.corequisites = [...(result.corequisites || [])]; }
+                if (!laterEdits) { state.minimum_requirements = result.minimum_requirements ?? null; state.groups = result.groups.map(group => [...group]); state.minimums = [...result.minimums]; state.grade_points_milli = [...floors(result)]; state.corequisites = [...(result.corequisites || [])]; }
                 if (body.isConnected) render("Entry requirements saved.");
             }, "btn-primary");
             const publish = button("Review course publication", () =>
@@ -48,13 +50,35 @@ window.createWorkspacePrerequisites = function (ui) {
                 state.groups.push([]); state.minimums.push(1); state.grade_points_milli.push(null); draw();
                 cards.lastElementChild?.querySelector("h3")?.focus();
             });
+            const alternative = node("input", { type: "checkbox", id: "prerequisite-alternatives", class: "form-check-input",
+                checked: state.minimum_requirements !== null });
+            const needed = node("input", { type: "number", id: "prerequisite-required-groups", class: "form-control",
+                min: "1", step: "1", value: state.minimum_requirements ?? 1,
+                "aria-describedby": "prerequisite-overall-help" });
+            const overallText = node("p", { id: "prerequisite-overall-help", class: "form-text", role: "status" });
+            const neededField = node("div", { class: "mb-3", style: "max-width: 15rem" },
+                node("label", { for: needed.id, class: "form-label" }, "Requirements needed"), needed);
+            alternative.addEventListener("change", () => {
+                state.minimum_requirements = alternative.checked ? 1 : null;
+                needed.value = String(state.minimum_requirements ?? 1); update();
+            });
+            needed.addEventListener("input", () => {
+                state.minimum_requirements = needed.value === "" ? NaN : Number(needed.value); update();
+            });
             function update() {
+                alternative.disabled = !state.groups.length;
+                alternative.checked = state.minimum_requirements !== null;
+                neededField.hidden = state.minimum_requirements === null;
+                needed.max = String(state.groups.length);
+                overallText.textContent = state.minimum_requirements === null
+                    ? "Meet every prerequisite requirement below. Co-requisites are always checked separately."
+                    : `Meet at least ${Number.isInteger(state.minimum_requirements) ? state.minimum_requirements : "the chosen number"} of ${state.groups.length} requirements. Each requirement keeps its own course count and grade minimum. Co-requisites remain required.`;
                 const total = state.groups.reduce((count, group) => count + group.length, 0);
                 const changed = fingerprint(state) !== fingerprint(saved);
                 save.disabled = !changed || incomplete();
                 publish.disabled = changed || incomplete();
                 add.disabled = state.groups.length >= 100 || total >= 500;
-                status.textContent = incomplete() ? "Check each required course count and optional grade-point minimum before saving."
+                status.textContent = incomplete() ? "Check the overall requirement count, each course count and optional grade-point minimum before saving."
                     : changed ? "Save your choices before reviewing publication." : notice || "Saved choices are ready for publication review.";
             }
             function draw() {
@@ -92,7 +116,7 @@ window.createWorkspacePrerequisites = function (ui) {
                                 "Optional. Leave blank for any passing grade. Use grade points from the grading definitions, not a percentage or GPA total. Applies to each course counted in this requirement.")),
                         list, node("div", { class: "inline-actions" },
                             button("Add course", () => choose(index), "btn-outline-primary", `Add course to requirement ${index + 1}`),
-                            button("Remove requirement", () => { state.groups.splice(index, 1); state.minimums.splice(index, 1); state.grade_points_milli.splice(index, 1); draw(); }, "btn-outline-danger btn-sm",
+                            button("Remove requirement", () => { state.groups.splice(index, 1); state.minimums.splice(index, 1); state.grade_points_milli.splice(index, 1); if (!state.groups.length) state.minimum_requirements = null; draw(); }, "btn-outline-danger btn-sm",
                                 `Remove requirement ${index + 1}`)));
                 }));
                 corequisiteCards.replaceChildren(node("h3", { class: "h5" }, "Co-requisites"),
@@ -108,9 +132,13 @@ window.createWorkspacePrerequisites = function (ui) {
                 if (!state.groups.length) cards.append(node("p", { class: "alert alert-info" }, "No prerequisite courses are required."));
             }
             body.append(node("h3", { class: "h5" }, `${saved.course.code} · ${saved.course.title}`),
-                node("p", {}, "Meet every requirement. Choose how many distinct courses are needed from each list. A completed course can satisfy more than one prerequisite requirement."),
+                node("p", {}, "Choose the required courses within each requirement, then decide whether all requirements or alternative routes qualify. A completed course can satisfy more than one requirement."),
                 node("p", { class: "form-text" }, "For example: MATH.101 or MATH.110, plus ENG.101. Only verified passing coursework allowed for the student's program pursuit can satisfy these choices. " +
-                    "Draft edits leave earlier publications and student records unchanged."), cards, corequisiteCards, status,
+                    "Draft edits leave earlier publications and student records unchanged."),
+                node("section", { class: "surface border p-3 mb-3", "aria-label": "Overall prerequisite rule" },
+                    node("div", { class: "form-check mb-3" }, alternative,
+                        node("label", { for: alternative.id, class: "form-check-label" }, "Allow alternative requirements")),
+                    neededField, overallText), cards, corequisiteCards, status,
                 node("div", { class: "inline-actions" }, add, save, publish, button("Reload saved choices", () => open(course), "btn-link")));
             draw();
             async function choose(index, search = "", after = null, stack = []) {
@@ -145,10 +173,11 @@ window.createWorkspacePrerequisites = function (ui) {
     }
     function describe(definition) {
         const groups = definition.prerequisite_groups;
+        const required = definition.prerequisite_requirement_minimum;
         const corequisites = definition.corequisites || [];
         if (!groups.length && !corequisites.length) return node("span", {}, "None");
         const minimums = definition.prerequisite_group_minimums || groups.map(() => 1);
-        const view = node("details", {}, node("summary", {}, !groups.length ? `${corequisites.length} co-requisite courses` : minimums.some(count => count > 1)
+        const view = node("details", {}, node("summary", {}, required != null ? `Meet ${required} of ${groups.length} prerequisite requirements` : !groups.length ? `${corequisites.length} co-requisite courses` : minimums.some(count => count > 1)
             ? `Meet the course counts in ${groups.length} requirements` : `Complete one course from each of ${groups.length} requirements`));
         let loading = false, loaded = false;
         view.addEventListener("toggle", () => {

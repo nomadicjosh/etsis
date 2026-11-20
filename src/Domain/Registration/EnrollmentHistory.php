@@ -226,7 +226,8 @@ final class EnrollmentHistory extends EventSourcedAggregate
                     ? null
                     : count($this->prerequisites->support),
         ] + ($this->prerequisites?->groups === null ? [] :
-            ["requirement_group_count" => count($this->prerequisites->groups->groups)]);
+            ["requirement_group_count" => count($this->prerequisites->groups->groups),
+                "required_group_count" => $this->prerequisites->groups->requiredRequirements()]);
     }
 
     public function scheduleSummary(): array

@@ -901,6 +901,7 @@ final readonly class RegistrationBatchService
                                     : "missing")),
                     "course_statuses" => $decision?->courseStatuses() ?? [],
                     "groups" => $decision?->groupStatuses(),
+                    "group_policy" => $decision?->groupPolicy(),
                     "missing_count" => $decision?->missingCount(),
                     "revision" => $decision?->revision(),
                 ],

@@ -3,7 +3,7 @@ const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
 
-for (const counted of [false, true]) test(`staff build ${counted ? 'counted and shared' : 'alternative'} prerequisites, preserve stale edits and review publication`, async ({ page }) => {
+for (const [counted, pathways] of [[false, false], [true, false], [true, true]]) test(`staff build ${pathways ? "alternative pathways with grade minima" : counted ? 'counted and shared' : 'alternative'} prerequisites, preserve stale edits and review publication`, async ({ page }) => {
     const target = { id: id(1), code: 'MATH.201', title: 'Advanced mathematics', credits_milli: 3000, active: true };
     const choices = [
         { id: id(2), code: 'MATH.101', title: 'Algebra <b>fictional</b>', active: true },
@@ -11,11 +11,13 @@ for (const counted of [false, true]) test(`staff build ${counted ? 'counted and 
         { id: id(4), code: 'ENG.101', title: 'Academic writing', active: true },
         { id: id(5), code: 'CHEM.101L', title: 'Fictional laboratory', active: true },
     ];
+    let minimumRequirements = null;
     let gradePoints = [], minimums = [], groups = [], corequisites = [], revision = 'a'.repeat(64), stale = true;
     const calls = [], errors = [];
     page.on('pageerror', error => errors.push(error.message));
     const definition = () => ({ code: target.code, title: target.title, credits_milli: 3000,
         prerequisites: [...new Set(groups.flat())].sort(), prerequisite_group_minimums: minimums, prerequisite_grade_points_milli: gradePoints, prerequisite_groups: groups.map(group => [...group]), corequisites: [...corequisites],
+        ...(minimumRequirements == null ? {} : { prerequisite_requirement_minimum: minimumRequirements }),
         transcript_title: null, description: null, subject: null,
         classifications: { department: null, academic_level: null, course_level: null } });
     await page.route('**/sis/**', async route => {
@@ -30,10 +32,10 @@ for (const counted of [false, true]) test(`staff build ${counted ? 'counted and 
         else if (path.endsWith('/prerequisite-groups/')) {
             if (data && stale) { stale = false; return route.fulfill({ status: 409, json: { error: 'Reload the prerequisite editor before saving your changes.' } }); }
             if (data) {
-                corequisites = [...data.corequisites]; groups = data.groups.map(group => [...group].sort()); minimums = [...data.minimums]; gradePoints = [...data.grade_points_milli]; revision = 'b'.repeat(64);
+                minimumRequirements = data.minimum_requirements ?? null; corequisites = [...data.corequisites]; groups = data.groups.map(group => [...group].sort()); minimums = [...data.minimums]; gradePoints = [...data.grade_points_milli]; revision = 'b'.repeat(64);
                 await page.getByRole('button', { name: 'Add requirement', exact: true }).click();
             }
-            result = { course: target, groups, minimums, grade_points_milli: gradePoints, corequisites, courses: choices.filter(row => [...groups.flat(), ...corequisites].includes(row.id)), revision };
+            result = { course: target, minimum_requirements: minimumRequirements, groups, minimums, grade_points_milli: gradePoints, corequisites, courses: choices.filter(row => [...groups.flat(), ...corequisites].includes(row.id)), revision };
         } else if (path === '/sis/prerequisite-labels/') result = { items: choices.filter(row => data.ids.includes(row.id)) };
         else if (path.endsWith('/publication/page/')) result = { items: [], next_cursor: null };
         else if (path.endsWith('/publication/review/')) result = { expected_version: 0, definition: definition(),
@@ -81,6 +83,13 @@ for (const counted of [false, true]) test(`staff build ${counted ? 'counted and 
     await page.getByRole('button', { name: 'Add co-requisite', exact: true }).click();
     await page.getByRole('button', { name: 'Choose CHEM.101L', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Remove co-requisite CHEM.101L', exact: true })).toBeVisible();
+    if (pathways) {
+        await page.getByLabel('Allow alternative requirements', { exact: true }).check();
+        await page.getByLabel('Requirements needed', { exact: true }).fill('3');
+        await expect(page.getByRole('button', { name: 'Save requirements', exact: true })).toBeDisabled();
+        await page.getByLabel('Requirements needed', { exact: true }).fill('1');
+        await expect(page.getByText(/Meet at least 1 of 2 requirements/)).toBeVisible();
+    }
     await expect(page.getByRole('button', { name: 'Review course publication', exact: true })).toBeDisabled();
     await page.setViewportSize({ width: 375, height: 812 });
     const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
@@ -98,7 +107,7 @@ for (const counted of [false, true]) test(`staff build ${counted ? 'counted and 
     await page.getByRole('button', { name: 'Review course publication', exact: true }).click();
     await page.getByLabel('Reason for publication', { exact: true }).fill('Fictional reviewed prerequisite choices');
     await page.getByRole('button', { name: 'Review current definition', exact: true }).click();
-    await page.getByText(counted ? 'Meet the course counts in 2 requirements' : 'Complete one course from each of 2 requirements', { exact: true }).click();
+    await page.getByText(pathways ? 'Meet 1 of 2 prerequisite requirements' : counted ? 'Meet the course counts in 2 requirements' : 'Complete one course from each of 2 requirements', { exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText(counted ? 'At least 2 of: MATH.101 · Algebra <b>fictional</b>; MATH.110 · Foundations; ENG.101 · Academic writing' : 'MATH.101 · Algebra <b>fictional</b> OR MATH.110 · Foundations');
     await expect(page.locator('#drawer-body')).toContainText('ENG.101 · Academic writing');
     if (counted) await expect(page.locator('#drawer-body')).toContainText('Minimum 2.675 grade points per counted course');
@@ -109,6 +118,7 @@ for (const counted of [false, true]) test(`staff build ${counted ? 'counted and 
     await confirm.focus(); await page.keyboard.press('Enter');
     await expect(page.locator('#drawer-body')).toContainText('published');
     expect(groups).toEqual(counted ? [[id(2), id(3), id(4)], [id(3)]] : [[id(2), id(3)], [id(4)]]);
+    expect(minimumRequirements).toBe(pathways ? 1 : null);
     expect(minimums).toEqual(counted ? [2, 1] : [1, 1]);
     expect(corequisites).toEqual([id(5)]);
     expect(gradePoints).toEqual(counted ? [2675, 0] : [null, null]);

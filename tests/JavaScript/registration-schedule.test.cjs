@@ -478,3 +478,16 @@ test("readiness explains the accepted window and distinguishes published self-re
     assert.match(details, /Published policy verified/);
     assert.match(details, /Staff registration only/);
 });
+
+test("prerequisite readiness explains alternative requirements without labelling every unmet route mandatory", () => {
+    const view = presenter();
+    const details = view.prerequisites({ course_statuses: ["missing", "met"],
+        group_policy: { required_count: 1, total_count: 2, completed_count: 1 },
+        groups: [{ positions: [0], met: false }, { positions: [1], met: true }] },
+        [{ code: "MATH.101", title: "Fictional math" }, { code: "STAT.101", title: "Fictional statistics" }]);
+    details.open = true;
+    details.events.toggle();
+    assert.match(details.textContent, /Meet 1 of 2 prerequisite requirements; 1 verified/);
+    assert.match(details.textContent, /Not met:/);
+    assert.doesNotMatch(details.textContent, /Meet each requirement/);
+});

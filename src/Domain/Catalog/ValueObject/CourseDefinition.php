@@ -82,6 +82,12 @@ final readonly class CourseDefinition
                 $keys[] = $field;
             }
         }
+        if (array_key_exists('prerequisite_requirement_minimum', $data)) {
+            if (!array_key_exists('prerequisite_groups', $data) || !is_int($data['prerequisite_requirement_minimum'])) {
+                throw new InvalidArgumentException('Provide a whole-number prerequisite requirement minimum.');
+            }
+            $keys[] = 'prerequisite_requirement_minimum';
+        }
         if (
             count($data) !== count($keys) ||
             array_diff(array_keys($data), $keys) !== [] ||
@@ -113,7 +119,8 @@ final readonly class CourseDefinition
                     $data["prerequisite_groups"],
                     $data["prerequisite_group_minimums"] ?? null,
                     $data["prerequisite_grade_points_milli"] ?? null,
-                    $data["corequisites"] ?? null
+                    $data["corequisites"] ?? null,
+                    $data["prerequisite_requirement_minimum"] ?? null
                 ) : null,
         );
     }
@@ -133,6 +140,8 @@ final readonly class CourseDefinition
         ['prerequisite_grade_points_milli' => $this->prerequisiteGroups->minimumGradePointsMilli]) +
         ($this->prerequisiteGroups?->corequisites === null ? [] :
         ['corequisites' => $this->prerequisiteGroups->corequisites]) +
+        ($this->prerequisiteGroups?->minimumRequirements === null ? [] :
+        ['prerequisite_requirement_minimum' => $this->prerequisiteGroups->minimumRequirements]) +
         $this->text->describe() + [
             "subject" => $this->subject?->describe(),
             "classifications" => $this->classifications->describe(),

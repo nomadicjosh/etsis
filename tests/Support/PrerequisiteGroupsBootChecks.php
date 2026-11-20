@@ -28,9 +28,15 @@ if ($response->getStatusCode() !== 200 || ($draft['groups'] ?? null) !== []) {
 }
 $groups = [[$first->courseId->value, $alternative->courseId->value, $additional->courseId->value],
     [$alternative->courseId->value]];
-$input = ['groups' => $groups, 'minimums' => [2, 1],
+$input = ['minimum_requirements' => 1, 'groups' => $groups, 'minimums' => [2, 1],
     'grade_points_milli' => [2675, null], 'corequisites' => [$corequisite->courseId->value],
     'revision' => $draft['revision']];
+foreach ([0, -1, 3, 1.5, [], true] as $invalid) {
+    if ($teachingPost($base . 'prerequisite-groups/', array_replace($input,
+        ['minimum_requirements' => $invalid]))->getStatusCode() !== 422) {
+        throw new RuntimeException('An impossible overall prerequisite count bypassed the private route.');
+    }
+}
 foreach ([null, [], [0, 1], [4, 1], ['2', 1]] as $invalid) {
     if (
         $teachingPost($base . 'prerequisite-groups/', array_replace($input, ['minimums' => $invalid]))
@@ -81,6 +87,7 @@ $expected = new \Domain\Catalog\ValueObject\PrerequisiteGroups($groups, [2, 1])-
 if (
     $reviewResponse->getStatusCode() !== 200 || ($review['definition']['prerequisite_groups'] ?? null) !== $expected ||
     ($review['definition']['prerequisite_group_minimums'] ?? null) !== [2, 1] ||
+    ($review['definition']['prerequisite_requirement_minimum'] ?? null) !== 1 ||
     ($review['definition']['prerequisite_grade_points_milli'] ?? null) !== [2675, null] ||
     ($review['definition']['corequisites'] ?? null) !== [$corequisite->courseId->value]
 ) {

@@ -40,7 +40,8 @@ final readonly class SisCoursePrerequisiteController
             $f->text('revision', 64),
             array_key_exists('minimums', $body) ? $f->values('minimums', 100) : null,
             array_key_exists('grade_points_milli', $body) ? $f->values('grade_points_milli', 100) : null,
-            array_key_exists('corequisites', $body) ? $f->values('corequisites', 20) : null
+            array_key_exists('corequisites', $body) ? $f->values('corequisites', 20) : null,
+            $f->optionalInteger('minimum_requirements')
         ));
     }
 
