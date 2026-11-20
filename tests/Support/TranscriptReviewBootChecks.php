@@ -25,6 +25,21 @@ $app->delegate(
         }
     },
 );
+$policyPath = '/sis/transcript-policy/';
+$policyResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $policyPath)));
+$policy = json_decode((string) $policyResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($policyResponse->getStatusCode() !== 200 || $policy !== ['revision' => 0, 'checks' => []] ||
+    !str_contains($policyResponse->getHeaderLine('Cache-Control'), 'no-store')) {
+    throw new RuntimeException('The institutional release policy read lost its private provider boundary.');
+}
+$checkId = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$policyCommand = ['revision' => 0, 'checks' => [['id' => $checkId, 'label' => 'Review fictional authorization',
+    'details' => 'Use a fictional office record.', 'stage' => 'both']]];
+if ($teachingPost($policyPath, $policyCommand)->getStatusCode() !== 200 ||
+    $teachingPost($policyPath, $policyCommand)->getStatusCode() !== 409) {
+    throw new RuntimeException('Release-check setup bypassed its expected revision.');
+}
+$confirmation = ['revision' => 1, 'checks' => [$checkId]];
 $student = $sis->student();
 $sis->service->register($student->id, $sis->section(20, 0)->id);
 $requestId = \Domain\Shared\ValueObject\EntityId::generate();
@@ -86,6 +101,10 @@ if (
     throw new RuntimeException("An unreviewed transcript was prepared.");
 }
 $command["review_token"] = $review["review_token"];
+if ($teachingPost($base . "/prepare/", $command)->getStatusCode() !== 422) {
+    throw new RuntimeException("Preparation bypassed required institutional checks.");
+}
+$command["release_confirmation"] = $confirmation;
 $prepared = $teachingPost($base . "/prepare/", $command);
 $sis->clock->time = $sis->clock->now()->modify("+1 day");
 $retried = $teachingPost($base . "/prepare/", $command);
@@ -103,6 +122,10 @@ $input = [
     "delivered_at" => $sis->clock->now()->format(DATE_ATOM),
     "evidence" => "Fictional private handoff reference",
 ];
+if ($teachingPost($path . "/delivery-review/", $input)->getStatusCode() !== 422) {
+    throw new RuntimeException("Delivery review bypassed required institutional checks.");
+}
+$input["release_confirmation"] = $confirmation;
 $deliveryResponse = $teachingPost($path . "/delivery-review/", $input);
 $delivery = json_decode(
     (string) $deliveryResponse->getBody(),
@@ -151,4 +174,27 @@ if (
     throw new RuntimeException(
         "Transcript office access bypassed the academic-read grant.",
     );
+}
+
+$sis->access->grants = ['sis:transcript:manage', 'sis:student:read'];
+if ($teachingPost($policyPath, ['revision' => 1, 'checks' => []])->getStatusCode() !== 403) {
+    throw new RuntimeException('Ordinary transcript operators changed institutional policy.');
+}
+$sis->access->grants[] = 'sis:transcript:policy';
+if ($teachingPost($policyPath, ['revision' => 1, 'checks' => []])->getStatusCode() !== 200) {
+    throw new RuntimeException('Explicit policy authority could not update release checks.');
+}
+
+$checkResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/sis/transcript-policy/check-id/'
+)));
+$checkResult = json_decode((string) $checkResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($checkResponse->getStatusCode() !== 200 || !is_string($checkResult['id'] ?? null) ||
+    !str_contains($checkResponse->getHeaderLine('Cache-Control'), 'no-store') || $checkResponse->hasHeader('phpdebugbar-id')) {
+    throw new RuntimeException('Transcript setup identities incorrectly required unrelated financial authority.');
+}
+new \Domain\Shared\ValueObject\EntityId($checkResult['id']);
+
+if ($teachingPost($policyPath, ['revision' => 2])->getStatusCode() !== 422) {
+    throw new RuntimeException('Omitting the checks field silently cleared institutional setup.');
 }

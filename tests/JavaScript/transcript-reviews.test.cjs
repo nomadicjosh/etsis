@@ -88,6 +88,7 @@ async function fixture({
             ).toISOString(),
         }),
         request: async (path, method, data) => {
+            if (path === "/sis/transcript-policy/") return { revision: 0, checks: [] };
             sent.push({ path, method, data });
             if (path.endsWith("/fulfillment/"))
                 return {
@@ -102,7 +103,7 @@ async function fixture({
             if (path.endsWith("/review/")) {
                 if (reviewGate) await reviewGate;
                 return {
-                    snapshot,
+                    snapshot, release_policy: { revision: 0, checks: [] },
                     layout: snapshot.presentation, layouts: [snapshot.presentation],
                     operation_id: "document",
                     revision: "revision",
@@ -122,7 +123,7 @@ async function fixture({
                 return {
                     operation_id: "delivery",
                     review_token: "opaque-delivery-proof",
-                    delivery: data,
+                    delivery: data, release_policy: { revision: 0, checks: [] },
                 };
             }
             if (path.endsWith("/deliver/")) {

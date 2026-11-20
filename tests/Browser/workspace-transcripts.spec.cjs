@@ -23,6 +23,10 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
         let status = "pending",
             saved = false,
             evidence = null;
+        const policy = { revision: 3, checks: [
+            { id: id(11), label: "Check release authorization", details: "Use the fictional office reference.", stage: "preparation" },
+            { id: id(12), label: "Verify delivery recipient", details: "Use the institution's approved identity check.", stage: "delivery" },
+        ] };
         const layout = { code: 'classic-letter', label: 'Classic · Letter', paper: 'letter', revision: 'a'.repeat(64) };
         const snapshot = {
             presentation: layout,
@@ -69,6 +73,9 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
                 return;
             }
             let result = {};
+            if (path === "/sis/transcript-policy/") {
+                await route.fulfill({ json: policy }); return;
+            }
             if (path === "/sis/ui/metrics/") result = { cards: [], intake: [], pipeline: [], queue: [] };
             else if (path.startsWith("/sis/ui/data/"))
                 result = {
@@ -99,7 +106,7 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
             else if (path.endsWith("/review/"))
                 result = {
                     layout, layouts: [layout],
-                    snapshot,
+                    snapshot, release_policy: policy,
                     operation_id: document,
                     revision: "f".repeat(64),
                     delivery: "pickup",
@@ -115,7 +122,7 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
                 result = {
                     operation_id: operation,
                     review_token: "fictional-delivery-proof",
-                    delivery: data,
+                    delivery: data, release_policy: policy,
                 };
             else if (path.endsWith("/deliver/")) {
                 status = "fulfilled";
@@ -124,7 +131,7 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
             } else if (path === `/sis/transcript-requests/${request}/documents/${document}/`)
                 result = {
                     ...metadata,
-                    snapshot,
+                    snapshot, release_policy: policy,
                     is_latest: true,
                     academic_check: academicCheck,
                     academic_changed: academicCheck === "unavailable" ? null : false,
@@ -147,6 +154,8 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
         await page
             .getByLabel("I reviewed the academic record and institutional release requirements")
             .check();
+        await expect(page.getByRole("button", { name: "Prepare transcript", exact: true })).toBeDisabled();
+        await page.getByLabel("Check release authorization", { exact: true }).check();
         await page.getByRole("button", { name: "Prepare transcript", exact: true }).click();
         await expect(page.locator("#drawer-body")).toContainText("Prepared at");
         const downloaded = page.waitForEvent("download");
@@ -182,6 +191,8 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
             .getByLabel("Delivery evidence / institutional reference")
             .fill("Fictional pickup evidence <script>example</script>");
         await accessible(page);
+        await expect(page.getByRole("button", { name: "Review delivery", exact: true })).toBeDisabled();
+        await page.getByLabel("Verify delivery recipient", { exact: true }).check();
         await page.getByRole("button", { name: "Review delivery", exact: true }).click();
         expect(calls.some((call) => call.path.endsWith("/deliver/"))).toBe(false);
         await accessible(page);
@@ -195,13 +206,15 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
                 operation_id: document,
                 release_reviewed: true,
                 layout_code: 'classic-letter',
+                release_confirmation: { revision: 3, checks: [id(11)] },
                 revision: "f".repeat(64),
                 review_token: "fictional-preparation-proof",
             },
             csrf: "fictional-test-token",
         });
         expect(calls.find((call) => call.path.endsWith("/deliver/"))).toMatchObject({
-            data: { operation_id: operation, version: 1, review_token: "fictional-delivery-proof" },
+            data: { operation_id: operation, version: 1, review_token: "fictional-delivery-proof",
+                release_confirmation: { revision: 3, checks: [id(12)] } },
             csrf: "fictional-test-token",
         });
         expect(errors).toEqual([]);

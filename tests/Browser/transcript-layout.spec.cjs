@@ -34,6 +34,9 @@ test('staff choose a layout, preview it privately and prepare only the newly ack
         const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
         state.calls.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
         let result = {};
+            if (path === "/sis/transcript-policy/") {
+                await route.fulfill({ json: { revision: 0, checks: [] } }); return;
+            }
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path.startsWith('/sis/ui/data/')) result = { items: [{ id: requestId, student_id: id(3),
             delivery: 'pickup', status: state.saved ? 'ready' : 'pending', version: state.saved ? 1 : 0 }], next_after: null };
@@ -41,7 +44,7 @@ test('staff choose a layout, preview it privately and prepare only the newly ack
             version: state.saved ? 1 : 0, document: state.saved ? metadata : null };
         else if (path.endsWith('/review/')) {
             state.layout = layouts.find(item => item.code === data.layout_code) || layouts[0];
-            result = { snapshot, layout: state.layout, layouts, revision: 'f'.repeat(64), operation_id: id(++state.operation),
+            result = { snapshot, release_policy: { revision: 0, checks: [] }, layout: state.layout, layouts, revision: 'f'.repeat(64), operation_id: id(++state.operation),
                 delivery: 'pickup', review_token: `fictional-${state.layout.code}` };
         } else if (path.endsWith('/preview/')) {
             const html = await page.request.get(`/fixture/transcript-document/?layout=${state.layout.code}&preview=1`);

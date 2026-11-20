@@ -22,6 +22,7 @@ use Application\Http\Controller\SisSectionCourseBindingController;
 use Application\Http\Controller\SisCatalogWorkflowController;
 use Application\Http\Controller\SisFinancialReviewController;
 use Application\Http\Controller\SisTranscriptFulfillmentController;
+use Application\Http\Controller\SisTranscriptReleasePolicyController;
 use Application\Http\Controller\SisRestrictionController;
 use Application\Http\Controller\SisOfficeController;
 use Application\Http\Controller\SisStudentRecordController;
@@ -705,6 +706,9 @@ return static function (Psr7Router $router): void {
             "review",
         ])
         ->name("sis.transcript.fulfillment.review");
+    $router->get('/sis/transcript-policy/check-id/', [SisTranscriptReleasePolicyController::class, 'checkId']);
+    $router->get('/sis/transcript-policy/', [SisTranscriptReleasePolicyController::class, 'current']);
+    $router->post('/sis/transcript-policy/', [SisTranscriptReleasePolicyController::class, 'save']);
     $router->post('/sis/transcript-requests/{id}/preview/', [SisTranscriptFulfillmentController::class, 'preview']);
     $router
         ->map(["POST"], "/sis/transcript-requests/{id}/prepare/", [

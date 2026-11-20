@@ -86,6 +86,7 @@ final class TranscriptFixture
                 new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($f->sql),
             ),
             $layouts ?? new \Infrastructure\Documents\RegisteredTranscriptLayouts(),
+            new \Infrastructure\Persistence\Repository\SqlTranscriptReleasePolicyRepository($f->sql, $this->campus->cipher),
         );
     }
 }

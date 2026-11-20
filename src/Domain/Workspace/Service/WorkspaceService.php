@@ -91,6 +91,7 @@ final readonly class WorkspaceService
         "admin:create:user",
         "admin:edit:user",
         "sis:transcript:manage",
+        "sis:transcript:policy",
         "vihzhuo:manage",
         "sis:degree-audit:assign",
         "sis:degree-audit:adjust",

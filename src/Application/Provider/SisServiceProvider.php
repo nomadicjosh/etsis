@@ -211,6 +211,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Projection\ExpressiveDbalUserProjection::class,
             \Domain\Finance\Repository\FinancialReviewRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlFinancialReviewRepository::class,
+            \Domain\Transcript\Repository\TranscriptReleasePolicyRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlTranscriptReleasePolicyRepository::class,
             \Domain\Transcript\Repository\TranscriptRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlTranscriptRepository::class,
             \Domain\Transcript\Service\TranscriptDocumentRenderer::class =>

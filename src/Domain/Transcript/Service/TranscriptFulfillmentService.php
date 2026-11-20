@@ -27,6 +27,9 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\StudentRecordRepository;
 use Domain\Student\Service\StudentPrimaryProgramLedger;
 use Domain\Transcript\Repository\TranscriptRepository;
+use Domain\Transcript\Repository\TranscriptReleasePolicyRepository;
+use Domain\Transcript\ValueObject\TranscriptReleasePolicy;
+use Domain\Transcript\ValueObject\TranscriptReleaseConfirmation;
 use Domain\Transcript\ValueObject\TranscriptIssuer;
 use Domain\Transcript\ValueObject\TranscriptLayout;
 
@@ -49,6 +52,7 @@ final readonly class TranscriptFulfillmentService
         private StudentPrimaryProgramLedger $primaryPrograms,
         private PublishedProgramReader $programDefinitions,
         private TranscriptLayoutCatalog $layouts,
+        private TranscriptReleasePolicyRepository $releasePolicies,
     ) {
     }
 
@@ -174,6 +178,7 @@ final readonly class TranscriptFulfillmentService
         bool $releaseReviewed,
         #[\SensitiveParameter] string $reviewToken,
         ?string $layoutCode = null,
+        ?TranscriptReleaseConfirmation $release = null,
     ): array {
         $actor = $this->authorize();
         if (!$releaseReviewed) {
@@ -186,7 +191,7 @@ final readonly class TranscriptFulfillmentService
         }
         $existing = $this->records->document($operation);
         if ($existing !== null) {
-            return $this->replay($existing, $request, $actor, $revision, $layoutCode);
+            return $this->replay($existing, $request, $actor, $revision, $layoutCode, $release);
         }
         $this->reviews->validate(
             $reviewToken,
@@ -206,17 +211,19 @@ final readonly class TranscriptFulfillmentService
             $reviewToken,
             $operation,
             $layoutCode,
+            $release,
         ): array {
             $this->lock($request, $routing);
             $this->authorize($actor);
             $existing = $this->records->document($operation);
             if ($existing !== null) {
                 return [
-                    "existing" => $this->replay($existing, $request, $actor, $revision, $layoutCode),
+                    "existing" => $this->replay($existing, $request, $actor, $revision, $layoutCode, $release),
                 ];
             }
             $context = $this->context($request, $layoutCode);
             $this->check($this->revision($context), $revision);
+            $this->policy($context)->confirm("preparation", $release);
             $this->reviews->validate(
                 $reviewToken,
                 "transcript.review",
@@ -266,6 +273,12 @@ final readonly class TranscriptFulfillmentService
             'pdf' => base64_encode($pdf),
             'html' => $html,
             'html_hash' => hash('sha256', $html),
+            'release_review' => $this->policy($context)->evidence(
+                'preparation',
+                $actor,
+                $document['issued_at'],
+                $release
+            ),
         ], JSON_THROW_ON_ERROR);
         if (strlen($packet) > 6 * 1024 * 1024) {
             throw new ValidationException([['field' => 'document',
@@ -287,12 +300,13 @@ final readonly class TranscriptFulfillmentService
             $routing,
             $reviewToken,
             $layoutCode,
+            $release,
         ): array {
             $this->lock($request, $routing);
             $this->authorize($actor);
             $existing = $this->records->document($operation);
             if ($existing !== null) {
-                return $this->replay($existing, $request, $actor, $revision, $layoutCode);
+                return $this->replay($existing, $request, $actor, $revision, $layoutCode, $release);
             }
             $current = $this->context($request, $layoutCode);
             $this->check($this->revision($current), $revision);
@@ -305,6 +319,8 @@ final readonly class TranscriptFulfillmentService
                 $operation,
                 $revision,
             );
+            $this->releasePolicies->assertCurrent($this->policy($context));
+            $this->policy($context)->confirm("preparation", $release);
             $version = $current["request_version"];
             $this->records->addDocument($operation, [
                 "request_id" => $request->value,
@@ -336,6 +352,7 @@ final readonly class TranscriptFulfillmentService
                 $operation,
                 $revision,
             );
+            $this->releasePolicies->assertCurrent($this->policy($context));
             $this->authorize($actor);
             return $this->describe(
                 $this->records->document($operation) ??
@@ -389,12 +406,17 @@ final readonly class TranscriptFulfillmentService
                 $academicChanged = !hash_equals($payload["academic_revision"], $this->revision($current));
             }
             $delivery = $this->records->documentDelivery($document);
+            $deliveryPayload = $delivery === null ? null : $this->deliveryPayload($delivery);
             $result = $this->describe($row) + [
                 "snapshot" => $payload["document"],
                 "academic_check" => $academicCheck,
                 "academic_changed" => $academicChanged,
                 "is_latest" => ($this->records->latest($request)["id"] ?? null) === $document->value,
-                "delivery" => $delivery === null ? null : $this->payload($delivery)["request"],
+                "delivery" => $deliveryPayload["request"] ?? null,
+                "preparation_release" => $payload["release_review"] === null ? null :
+                    TranscriptReleasePolicy::summary($payload["release_review"]),
+                "delivery_release" => ($deliveryPayload["release_review"] ?? null) === null ? null :
+                    TranscriptReleasePolicy::summary($deliveryPayload["release_review"]),
             ];
             $this->audit->record($actor, "transcript.document_read", $document);
             $this->authorize($actor);
@@ -444,9 +466,10 @@ final readonly class TranscriptFulfillmentService
         int $version,
         DateTimeImmutable $on,
         #[\SensitiveParameter] string $evidence,
+        ?TranscriptReleaseConfirmation $release = null,
     ): array {
         $actor = $this->authorize();
-        $input = $this->deliveryInput($request, $document, $version, $on, $evidence);
+        $input = $this->deliveryInput($request, $document, $version, $on, $evidence, $release);
         $routing = $this->routing($request);
         return $this->transactions->run(function () use (
             $request,
@@ -465,6 +488,7 @@ final readonly class TranscriptFulfillmentService
             return [
                 "operation_id" => $operation->value,
                 "delivery" => $input,
+                "release_policy" => $context["release_policy"],
                 "review_token" => $this->reviews->issue(
                     "transcript.review",
                     "deliver",
@@ -486,9 +510,10 @@ final readonly class TranscriptFulfillmentService
         DateTimeImmutable $on,
         #[\SensitiveParameter] string $evidence,
         #[\SensitiveParameter] string $reviewToken,
+        ?TranscriptReleaseConfirmation $release = null,
     ): array {
         $actor = $this->authorize();
-        $input = $this->deliveryInput($request, $document, $version, $on, $evidence);
+        $input = $this->deliveryInput($request, $document, $version, $on, $evidence, $release);
         $routing = $this->routing($request);
         return $this->transactions->run(function () use (
             $request,
@@ -505,11 +530,11 @@ final readonly class TranscriptFulfillmentService
             $this->ownedDocument($request, $document);
             $previous = $this->records->delivery($operation);
             if ($previous !== null) {
-                $data = $this->payload($previous);
+                $data = $this->deliveryPayload($previous);
                 if (
                     $previous["document_id"] !== $document->value ||
                     $previous["actor_id"] !== $actor->value ||
-                    $data["request"] !== $input
+                    ($data["request"] + ["release_confirmation" => null]) !== $input
                 ) {
                     throw new ConcurrentModificationException(
                         "The delivery operation belongs to another request.",
@@ -536,15 +561,24 @@ final readonly class TranscriptFulfillmentService
                 "status" => "fulfilled",
                 "delivered_at" => $input["delivered_at"],
             ];
+            $policy = $this->policy($context);
+            $this->releasePolicies->assertCurrent($policy);
+            $confirmedAt = $this->now();
             $this->records->addDelivery($operation, [
                 "document_id" => $document->value,
                 "actor_id" => $actor->value,
-                "created_at" => $this->now(),
+                "created_at" => $confirmedAt,
                 "encrypted_content" => $this->cipher->seal(
                     json_encode(
                         [
                             "request" => $input,
                             "result" => $result,
+                            "release_review" => $policy->evidence(
+                                "delivery",
+                                $actor,
+                                $confirmedAt,
+                                $this->confirmation($input)
+                            ),
                         ],
                         JSON_THROW_ON_ERROR,
                     ),
@@ -565,6 +599,7 @@ final readonly class TranscriptFulfillmentService
                 $operation,
                 $revision,
             );
+            $this->releasePolicies->assertCurrent($policy);
             $this->authorize($actor);
             return $result;
         });
@@ -577,6 +612,7 @@ final readonly class TranscriptFulfillmentService
         int $version,
         DateTimeImmutable $on,
         #[\SensitiveParameter] string $evidence,
+        ?TranscriptReleaseConfirmation $release = null,
     ): array {
         $reason = trim($evidence);
         if (
@@ -601,6 +637,7 @@ final readonly class TranscriptFulfillmentService
             "version" => $version,
             "delivered_at" => $on->setTimezone(new DateTimeZone("UTC"))->format(DATE_ATOM),
             "evidence" => $reason,
+            "release_confirmation" => $release?->describe(),
         ];
     }
 
@@ -626,8 +663,11 @@ final readonly class TranscriptFulfillmentService
                 "Review the latest academic record and prepare an updated document before recording delivery.",
             );
         }
+        $policy = $this->releasePolicies->current();
+        $policy->confirm("delivery", $this->confirmation($input));
         return [
             "input" => $input,
+            "release_policy" => $policy->describe(),
             "student_id" => $current["student_id"],
             "person_id" => $this->admissions->student(new EntityId($current["student_id"]))->personId->value,
             "academic_revision" => $academic,
@@ -685,6 +725,7 @@ final readonly class TranscriptFulfillmentService
             "recipient_revision" => hash("sha256", $record["encrypted_recipient"]),
             "snapshot" => $this->snapshot(new EntityId($record["student_id"])),
             'layout' => $this->layouts->get($layoutCode)->describe(),
+            'release_policy' => $this->releasePolicies->current()->describe(),
         ];
     }
 
@@ -908,6 +949,7 @@ final readonly class TranscriptFulfillmentService
         EntityId $actor,
         string $revision,
         ?string $layoutCode = null,
+        ?TranscriptReleaseConfirmation $release = null,
     ): array {
         $payload = $this->preparedPayload($row);
         if (
@@ -918,6 +960,13 @@ final readonly class TranscriptFulfillmentService
         ) {
             throw new ConcurrentModificationException(
                 "The preparation operation belongs to another request.",
+            );
+        }
+        if ($payload['release_review'] !== null) {
+            $this->policy(['release_policy' => $payload['release_review']['policy']])->confirm('preparation', $release);
+        } elseif ($release !== null) {
+            throw new ConcurrentModificationException(
+                'This earlier preparation has no retained release-check confirmation.'
             );
         }
         $this->authorize($actor);
@@ -966,12 +1015,15 @@ final readonly class TranscriptFulfillmentService
     private function preparedPayload(#[\SensitiveParameter] array $row): array
     {
         $p = $this->payload($row);
+        // Preserve genuine earlier artifacts; absence means unrecorded, never an inferred confirmation.
+        $hasReleaseReview = array_key_exists('release_review', $p);
         if (
-            count($p) !== 6 || array_diff(
+            count($p) !== ($hasReleaseReview ? 7 : 6) || array_diff(
                 array_keys($p),
-                ['revision', 'academic_revision', 'document', 'pdf', 'html', 'html_hash']
+                ['revision', 'academic_revision', 'document', 'pdf', 'html', 'html_hash', 'release_review']
             ) !== [] ||
-            !is_array($p['document'] ?? null) || ($p['document']['document_id'] ?? null) !== $row['id'] ||
+            ($hasReleaseReview && !is_array($p['release_review'])) || !is_array($p['document'] ?? null) ||
+            ($p['document']['document_id'] ?? null) !== $row['id'] ||
             ($p['document']['issued_at'] ?? null) !== $row['created_at'] ||
             ($p['document']['preview'] ?? null) !== false || !is_array($p['document']['presentation'] ?? null) ||
             !is_string($p['pdf'] ?? null) || strlen($p['pdf']) > 6 * 1024 * 1024 ||
@@ -985,11 +1037,67 @@ final readonly class TranscriptFulfillmentService
                 throw new \RuntimeException('The prepared transcript has invalid integrity references.');
             }
         }
+        if ($hasReleaseReview) {
+            TranscriptReleasePolicy::validateEvidence(
+                $p['release_review'],
+                'preparation',
+                $row['actor_id'],
+                $row['created_at']
+            );
+        }
         TranscriptLayout::fromArray($p['document']['presentation']);
         if (!hash_equals($p['html_hash'], hash('sha256', $p['html']))) {
             throw new \RuntimeException('The stored accessible transcript failed verification.');
         }
-        return $p;
+        return $p + ['release_review' => null];
+    }
+
+    /** @param array<string,mixed> $context */
+    private function policy(array $context): TranscriptReleasePolicy
+    {
+        return new TranscriptReleasePolicy(
+            $context['release_policy']['revision'],
+            $context['release_policy']['checks']
+        );
+    }
+
+    /** @param array<string,mixed> $input */
+    private function confirmation(array $input): ?TranscriptReleaseConfirmation
+    {
+        return ($input['release_confirmation'] ?? null) === null ? null :
+        TranscriptReleaseConfirmation::fromArray($input['release_confirmation']);
+    }
+
+    /** @param array<string,mixed> $row
+     * @return array<string,mixed> */
+    private function deliveryPayload(#[\SensitiveParameter] array $row): array
+    {
+        $data = $this->payload($row);
+        $hasReleaseReview = array_key_exists('release_review', $data);
+        if (
+            count($data) !== ($hasReleaseReview ? 3 : 2) || !is_array($data['request'] ?? null) ||
+            !is_array($data['result'] ?? null) || ($data['request']['document_id'] ?? null) !== $row['document_id'] ||
+            ($data['result']['document_id'] ?? null) !== $row['document_id'] ||
+            ($data['result']['operation_id'] ?? null) !== $row['id'] ||
+            ($hasReleaseReview && !is_array($data['release_review']))
+        ) {
+            throw new \RuntimeException('The retained delivery evidence is invalid.');
+        }
+        if ($hasReleaseReview) {
+            TranscriptReleasePolicy::validateEvidence(
+                $data['release_review'],
+                'delivery',
+                $row['actor_id'],
+                $row['created_at']
+            );
+            $this->policy(['release_policy' => $data['release_review']['policy']])->confirm(
+                'delivery',
+                $this->confirmation($data['request'])
+            );
+        } elseif (($data['request']['release_confirmation'] ?? null) !== null) {
+            throw new \RuntimeException('The delivery has no evidence for its institutional checks.');
+        }
+        return $data + ['release_review' => null];
     }
 
     /** @param array<string, mixed> $data */

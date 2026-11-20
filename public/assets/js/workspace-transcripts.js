@@ -15,13 +15,13 @@ window.createWorkspaceTranscripts = function (ui) {
         openDrawer,
         recordSummary,
     } = ui;
-    const button = (label, callback, style = "btn-outline-primary") =>
+    const button = (label, callback, style = "btn-outline-primary", settled = () => {}) =>
         node(
             "button",
             {
                 type: "button",
                 class: `btn ${style}`,
-                onclick: (event) => task(callback, event.currentTarget),
+                onclick: (event) => Promise.resolve(task(callback, event.currentTarget)).finally(settled),
             },
             label,
         );
@@ -37,6 +37,100 @@ window.createWorkspaceTranscripts = function (ui) {
             table(headers, rows, caption),
         );
     const units = (value) => (value / 1000).toFixed(3);
+    function releaseChecklist(policy, stage, changed = () => {}) {
+        const section = node("fieldset", { class: "record-section" },
+            node("legend", { class: "h5" }, "Institutional release checks"));
+        const checks = policy.checks.filter((check) => check.stage === stage || check.stage === "both");
+        const inputs = checks.map((check) => {
+            const id = `transcript-${stage}-${check.id}`;
+            const input = node("input", { type: "checkbox", class: "form-check-input", id,
+                "aria-describedby": check.details ? `${id}-help` : undefined });
+            input.addEventListener("change", changed);
+            section.append(node("div", { class: "form-check mb-3" }, input,
+                node("label", { for: id, class: "form-check-label fw-semibold" }, check.label),
+                check.details ? node("p", { id: `${id}-help`, class: "form-text mb-0" }, check.details) : null));
+            return { id: check.id, input };
+        });
+        section.append(node("p", { class: "form-text" }, checks.length
+            ? `Confirm each check before continuing. Setup revision ${policy.revision}.`
+            : "No additional checks are configured for this step."));
+        return { section, complete: () => inputs.every(({ input }) => input.checked),
+            confirmation: () => ({ revision: policy.revision,
+                checks: inputs.filter(({ input }) => input.checked).map(({ id }) => id).sort() }) };
+    }
+    function releaseSummary(title, evidence) {
+        if (!evidence) return null;
+        return node("section", { class: "record-section", "aria-label": title },
+            node("h3", { class: "h5" }, title),
+            node("p", { class: "form-text" }, `Setup revision ${evidence.revision} · Confirmed ${evidence.confirmed_at}`),
+            evidence.checks.length ? node("ul", {}, ...evidence.checks.map((check) =>
+                node("li", {}, node("strong", {}, check.label), check.details ? ` — ${check.details}` : "")))
+                : node("p", {}, "No additional institutional checks applied."));
+    }
+    async function policy() {
+        const body = openDrawer("Transcript release checks", "INSTITUTIONAL SETUP");
+        const saved = await request("/sis/transcript-policy/");
+        if (!body.isConnected) return;
+        const list = node("div");
+        let rows = [], adding = false;
+        const status = node("p", { class: "form-text", role: "status" });
+        const save = button("Save checks", async () => {
+            const checks = rows.map((row) => ({ id: row.id, label: row.label.value.trim(),
+                details: row.details.value.trim(), stage: row.stage.value }));
+            if (checks.some((check) => !check.label)) {
+                status.textContent = "Give every check a title before saving.";
+                rows.find((row) => !row.label.value.trim())?.label.focus();
+                return;
+            }
+            await request("/sis/transcript-policy/", "POST", { revision: saved.revision, checks });
+            if (!body.isConnected) return;
+            await policy();
+        }, "btn-primary", update);
+        const add = button("Add check", async () => {
+            if (adding || rows.length >= 12) return;
+            adding = true;
+            try {
+                const operation = await request("/sis/transcript-policy/check-id/");
+                if (body.isConnected && rows.length < 12) {
+                    append({ id: operation.id, label: "", details: "", stage: "preparation" }, true);
+                }
+            } finally { adding = false; update(); }
+        }, "btn-outline-primary", update);
+        function update() {
+            status.textContent = `${rows.length} of 12 checks · Setup revision ${saved.revision}`;
+            add.disabled = adding || rows.length >= 12;
+            save.disabled = adding;
+        }
+        function append(check, focus = false) {
+            const label = node("input", { id: `release-title-${check.id}`, type: "text", class: "form-control",
+                value: check.label, maxlength: "160", required: true });
+            const details = node("textarea", { id: `release-help-${check.id}`, class: "form-control", rows: "3",
+                maxlength: "500", value: check.details });
+            const stage = node("select", { id: `release-stage-${check.id}`, class: "form-select" },
+                node("option", { value: "preparation" }, "Preparation"),
+                node("option", { value: "delivery" }, "Delivery"), node("option", { value: "both" }, "Both steps"));
+            stage.value = check.stage;
+            const title = node("summary", { class: "fw-semibold" }, check.label || "New release check");
+            label.addEventListener("input", () => { title.textContent = label.value.trim() || "New release check"; });
+            const card = node("details", { class: "border rounded p-3 mb-3", open: focus }, title,
+                node("div", { class: "mt-3" }, node("label", { for: label.id, class: "form-label" }, "Check title"), label),
+                node("div", { class: "mt-3" }, node("label", { for: details.id, class: "form-label" }, "Instructions"), details),
+                node("div", { class: "mt-3" }, node("label", { for: stage.id, class: "form-label" }, "Required at"), stage),
+                button("Remove check", () => { rows = rows.filter((row) => row.id !== check.id); card.remove(); update(); }, "btn-outline-danger mt-3"));
+            rows.push({ id: check.id, label, details, stage });
+            list.append(card);
+            update();
+            if (focus) label.focus();
+        }
+        body.append(node("p", {}, "Set the confirmations your office requires before preparation, delivery, or both. " +
+            "These are staff checks; they do not automatically block transcripts based on balances or registration holds."),
+            node("p", { class: "form-text" }, "Changes apply to new confirmations. Earlier documents and confirmations retain their original checks. " +
+                "If setup changes while you edit, reload it before saving again."), status, list,
+            node("div", { class: "inline-actions" }, add, save, button("Reload setup", policy, "btn-link")));
+        saved.checks.forEach((check) => append(check));
+        update();
+    }
+
     function academic(snapshot) {
         return node(
             "section",
@@ -204,13 +298,17 @@ window.createWorkspaceTranscripts = function (ui) {
             id: "transcript-release-reviewed",
             class: "form-check-input",
         });
+        const checklist = releaseChecklist(reviewed.release_policy, "preparation", () => update());
+        const update = () => { prepare.disabled = !consent.checked || !checklist.complete() || !reviewed.snapshot.issuer.name; };
         const prepare = button(
             "Prepare transcript",
             async () => {
+                if (!consent.checked || !checklist.complete()) return;
                 const saved = await request(`/sis/transcript-requests/${id}/prepare/`, "POST", {
                     operation_id: reviewed.operation_id,
                     revision: reviewed.revision,
                     release_reviewed: consent.checked,
+                    release_confirmation: checklist.confirmation(),
                     review_token: reviewed.review_token,
                     layout_code: reviewed.layout.code,
                 });
@@ -219,10 +317,11 @@ window.createWorkspaceTranscripts = function (ui) {
                 await ui.refreshDirectory();
             },
             "btn-primary",
+            update,
         );
         prepare.disabled = true;
         consent.addEventListener("change", () => {
-            prepare.disabled = !consent.checked || !reviewed.snapshot.issuer.name;
+            update();
         });
         const layouts = node("fieldset", { class: "record-section" }, node("legend", { class: "h5" }, "Document layout"));
         layouts.append(node("p", { class: "form-text" },
@@ -265,6 +364,7 @@ window.createWorkspaceTranscripts = function (ui) {
             node("div", { class: "inline-actions" }, previewButton),
             preview,
             academic(reviewed.snapshot),
+            checklist.section,
             !reviewed.snapshot.issuer.name
                 ? node(
                       "p",
@@ -379,7 +479,8 @@ window.createWorkspaceTranscripts = function (ui) {
             actions.append(
                 button("Record delivery", () => delivery(id, documentId, current.version), "btn-primary"),
             );
-        body.append(actions, academic(value.snapshot));
+        body.append(actions, academic(value.snapshot), releaseSummary("Preparation checks", value.preparation_release),
+            releaseSummary("Delivery checks", value.delivery_release));
         if (value.delivery)
             body.append(
                 node(
@@ -401,6 +502,9 @@ window.createWorkspaceTranscripts = function (ui) {
     }
     async function delivery(id, documentId, version, draft = {}) {
         const body = openDrawer("Record transcript delivery", "DETAILS → REVIEW → CONFIRM");
+        const policy = await request("/sis/transcript-policy/");
+        if (!body.isConnected) return;
+        const checklist = releaseChecklist(policy, "delivery", () => { submit.disabled = !checklist.complete(); });
         const fields = [
             ["delivered_at", "Actual delivery time", "datetime-local"],
             ["evidence", "Delivery evidence / institutional reference", "textarea"],
@@ -411,12 +515,13 @@ window.createWorkspaceTranscripts = function (ui) {
         if (!body.isConnected) return;
         const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review delivery");
         form.elements.evidence.maxLength = 2000;
-        form.append(submit);
+        submit.disabled = !checklist.complete();
+        form.append(checklist.section, submit);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
-                if (!form.reportValidity()) return;
-                const data = { ...formData(form, fields), version };
+                if (!form.reportValidity() || !checklist.complete()) return;
+                const data = { ...formData(form, fields), version, release_confirmation: checklist.confirmation() };
                 const entered = {
                     delivered_at: form.elements.delivered_at.value,
                     evidence: form.elements.evidence.value,
@@ -428,7 +533,8 @@ window.createWorkspaceTranscripts = function (ui) {
                 );
                 if (!body.isConnected) return;
                 deliveryPlan(id, documentId, reviewed, entered);
-            }, submit);
+            }, submit).then(() => { submit.disabled = !checklist.complete(); },
+                () => { submit.disabled = !checklist.complete(); });
         });
         body.append(
             node(
@@ -437,6 +543,9 @@ window.createWorkspaceTranscripts = function (ui) {
                 "Record evidence only after actual delivery through the institution's approved process. This screen does not send a document or email.",
             ),
             form,
+            button("Refresh checks", () => delivery(id, documentId, version, {
+                delivered_at: form.elements.delivered_at.value, evidence: form.elements.evidence.value,
+            })),
             button("Back to document", () => document(id, documentId), "btn-link"),
         );
     }
@@ -449,6 +558,9 @@ window.createWorkspaceTranscripts = function (ui) {
             ]),
             node("h3", {}, "Delivery evidence"),
             node("p", { class: "text-break", style: "white-space: pre-wrap" }, reviewed.delivery.evidence),
+            node("h3", { class: "h5" }, "Confirmed release checks"),
+            node("ul", {}, ...reviewed.release_policy.checks.filter((check) => check.stage === "delivery" || check.stage === "both")
+                .map((check) => node("li", {}, check.label))),
             node(
                 "p",
                 { class: "form-text" },
@@ -467,6 +579,7 @@ window.createWorkspaceTranscripts = function (ui) {
                                 version: reviewed.delivery.version,
                                 delivered_at: reviewed.delivery.delivered_at,
                                 evidence: reviewed.delivery.evidence,
+                                release_confirmation: reviewed.delivery.release_confirmation,
                                 operation_id: reviewed.operation_id,
                                 review_token: reviewed.review_token,
                             },
@@ -482,5 +595,5 @@ window.createWorkspaceTranscripts = function (ui) {
             ),
         );
     }
-    return { record };
+    return { record, policy };
 };

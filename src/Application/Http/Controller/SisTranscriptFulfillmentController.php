@@ -7,6 +7,7 @@ namespace Application\Http\Controller;
 use Application\Http\FormInput;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transcript\Service\TranscriptFulfillmentService;
+use Domain\Transcript\ValueObject\TranscriptReleaseConfirmation;
 use Laminas\Diactoros\Response;
 use Laminas\Diactoros\Response\HtmlResponse;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -63,6 +64,7 @@ final readonly class SisTranscriptFulfillmentController
                 $f->requiredBoolean("release_reviewed"),
                 $f->optionalText("review_token", 8192) ?? "",
                 $f->optionalText('layout_code', 40),
+                $this->confirmation($request),
             ),
             201,
         );
@@ -121,6 +123,7 @@ final readonly class SisTranscriptFulfillmentController
                 $f->integer("version"),
                 $f->instant("delivered_at"),
                 $f->bodyText("evidence"),
+                $this->confirmation($request),
             ),
         );
     }
@@ -140,7 +143,22 @@ final readonly class SisTranscriptFulfillmentController
                 $f->instant("delivered_at"),
                 $f->bodyText("evidence"),
                 $f->optionalText("review_token", 8192) ?? "",
+                $this->confirmation($request),
             ),
         );
+    }
+    private function confirmation(#[\SensitiveParameter] ServerRequest $request): ?TranscriptReleaseConfirmation
+    {
+        $body = $request->getParsedBody();
+        if (!is_array($body)) {
+            throw new \InvalidArgumentException('A parsed form body is required.');
+        }
+        if (!array_key_exists('release_confirmation', $body)) {
+            return null;
+        }
+        if (!is_array($body['release_confirmation'])) {
+            throw new \InvalidArgumentException('Review the institutional release checks.');
+        }
+        return TranscriptReleaseConfirmation::fromArray($body['release_confirmation']);
     }
 }
