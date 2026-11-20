@@ -9,18 +9,47 @@ $targetInput = ['course_id' => $targetCourse->courseId->value, 'term_id' => $sis
     'code' => 'FICTIONAL.TARGET', 'capacity' => 20, 'minimum_enrollment' => 12,
     'web_registration' => true, 'fee_minor' => 0, 'currency' => 'USD', 'delivery_mode' => 'online'];
 $targetCreated = $teachingPost('/sis/sections/', $targetInput);
-if ($targetCreated->getStatusCode() !== 201 ||
-    $teachingPost('/sis/sections/', array_replace($targetInput,
-        ['code' => 'FICTIONAL.BADTARGET', 'minimum_enrollment' => 21]))->getStatusCode() !== 422) {
+if (
+    $targetCreated->getStatusCode() !== 201 ||
+    $teachingPost('/sis/sections/', array_replace(
+        $targetInput,
+        ['code' => 'FICTIONAL.BADTARGET', 'minimum_enrollment' => 21]
+    ))->getStatusCode() !== 422
+) {
     throw new RuntimeException('Section target validation did not resolve through its provider.');
 }
 $targetEvents = $sis->sql->rows('sis_history_events');
+// Match the drawer's opening payload and a submitted form with cleared optional filters.
+$emptyTargetScopes = [
+    ['state' => 'below', 'search' => '', 'include_inactive' => false],
+    ['state' => 'below', 'search' => '   ', 'include_inactive' => false, 'term_id' => '', 'after' => ''],
+    ['state' => 'below'],
+];
+foreach ($emptyTargetScopes as $emptyTargetScope) {
+    $emptyTargetPage = $teachingPost('/sis/sections/enrollment-review/', $emptyTargetScope);
+    $emptyTargetRows = json_decode((string) $emptyTargetPage->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if (
+        $emptyTargetPage->getStatusCode() !== 200 ||
+        count($emptyTargetRows['items'] ?? []) !== 1 ||
+        $emptyTargetRows['items'][0]['code'] !== 'FICTIONAL.TARGET'
+    ) {
+        throw new RuntimeException('Enrollment targets rejected an empty optional search.');
+    }
+}
+foreach ([str_repeat('x', 81), "invalid\nsearch", ['invalid']] as $invalidTargetSearch) {
+    $invalidTargetPage = $teachingPost('/sis/sections/enrollment-review/', ['search' => $invalidTargetSearch]);
+    if ($invalidTargetPage->getStatusCode() !== 422) {
+        throw new RuntimeException('Enrollment targets accepted an invalid search.');
+    }
+}
 $targetScope = ['state' => 'below', 'term_id' => $sis->term->value, 'search' => 'FICTIONAL.TARGET'];
 $targetPage = $teachingPost('/sis/sections/enrollment-review/', $targetScope);
 $targetRows = json_decode((string) $targetPage->getBody(), true, flags: JSON_THROW_ON_ERROR);
-if ($targetPage->getStatusCode() !== 200 || count($targetRows['items'] ?? []) !== 1 ||
+if (
+    $targetPage->getStatusCode() !== 200 || count($targetRows['items'] ?? []) !== 1 ||
     $targetRows['items'][0]['minimum_enrollment'] !== 12 || $targetRows['items'][0]['enrolled'] !== 0 ||
-    $sis->sql->rows('sis_history_events') !== $targetEvents) {
+    $sis->sql->rows('sis_history_events') !== $targetEvents
+) {
     throw new RuntimeException('The private section-target review lost its actual counts or wrote history.');
 }
 $sis->access->staff = false;

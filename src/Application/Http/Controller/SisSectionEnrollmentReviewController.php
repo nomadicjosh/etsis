@@ -22,7 +22,7 @@ final readonly class SisSectionEnrollmentReviewController
         return new JsonResponse(
             $this->service->page(
                 $f->optionalText("state", 8) ?? "below",
-                $f->optionalText("search", 80) ?? "",
+                $f->search("search", 80),
                 $f->boolean("include_inactive"),
                 $f->optionalId("term_id"),
                 $f->optionalId("after"),
