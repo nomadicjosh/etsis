@@ -1707,6 +1707,8 @@
         });
     }
 
+    const dropPlans = window.createRegistrationDrops({ node: el, request, task, prefix: '/portal/api/drop-plan/',
+        open: title => { const body = el('div'); dialog(title, body); return body; } });
     async function registration(container) {
         if (!me.students.length) {
             container.append(
@@ -1721,6 +1723,7 @@
             container.append(
                 surface(
                     'Your registered sections',
+                    button('Drop selected courses', () => dropPlans.start(student.id, renderService)),
                     student.enrollments.length
                         ? table(
                               ['Course', 'Section', 'Status', 'Actions'],

@@ -20,7 +20,20 @@ async function fixture(page, late = false) {
         const raw = route.request().postData(); const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
         if (data) sent.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
         let result = {}, status = 200;
-        if (path.endsWith('/drop-review/')) result = plan;
+        if (path.includes('/drop-plans/') || path.includes('/drop-plan/')) {
+            const second = id(6);
+            if (path.endsWith('/choices/')) result = { items: [{ id: data.after ? second : section,
+                code: data.after ? 'CHEM.101L.A' : 'CHEM.101.A', course_code: data.after ? 'CHEM.101L' : 'CHEM.101',
+                course_title: 'Fictional <b>course</b>', term_code: '26/FA' }], next_after: data.after ? null : id(7) };
+            else if (path.endsWith('/review/')) result = { operation_id: operation, revision: 'a'.repeat(64),
+                review_token: 'fictional-drop-plan-proof', student: { given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }, courses: [
+                    { ...plan, section_code: 'CHEM.101.A', outcome: { ...plan.outcome, delete_records: true } },
+                    { ...plan, section_id: second, section_code: 'CHEM.101L.A', outcome: { ...plan.outcome, delete_records: false, grade_code: 'W' } },
+                ] };
+            else if (path.endsWith('/commit/')) { status = 500; result = { error: 'Fictional interrupted confirmation. Check saved drops.' }; }
+            else result = { drop_plan_id: operation, removed: 1, withdrawn: 1, drops: [] };
+        }
+        else if (path.endsWith('/drop-review/')) result = plan;
         else if (path === '/sis/registrations/drop/' || path === '/portal/api/drop/') {
             committed = true; status = 500; result = { error: 'Fictional interrupted connection. Check saved drop.' };
         } else if (path.includes('/course-drops/') || path.includes('/drop-receipts/')) result = receipt;
@@ -96,4 +109,64 @@ for (const late of [false, true]) test(`student reviews ${late ? 'late D with re
     expect(f.sent.every(r => r.csrf === 'fictional-test-token')).toBe(true);
     expect(f.errors).toEqual([]);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+
+for (const owner of [false, true]) test(`${owner ? 'student' : 'staff'} selects courses across pages and confirms one accessible drop plan`, async ({ page }) => {
+    const f = await fixture(page);
+    if (owner) await page.goto('/portal/student/registration/');
+    else {
+        await page.goto('/admin/');
+        await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+        await page.locator('#directory-search').fill('a'); await page.locator('#directory-search').press('Enter');
+        await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+    }
+    await page.getByRole('button', { name: 'Drop selected courses', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Review selected drops', exact: true })).toBeDisabled();
+    const first = page.getByRole('checkbox', { name: /CHEM.101 ·/ });
+    await first.check(); await expect(first).toBeFocused();
+    await page.getByRole('button', { name: 'More courses', exact: true }).click();
+    await page.getByRole('checkbox', { name: /CHEM.101L ·/ }).check();
+    await page.getByRole('button', { name: 'Review selected drops', exact: true }).click();
+    const body = page.locator(owner ? '#campus-dialog-body' : '#drawer-body');
+    await expect(body).toContainText('Reverse the original course charge');
+    await expect(body).toContainText('grade W');
+    await expect(body.locator('b')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Change selection', exact: true }).click();
+    await expect(page.getByRole('checkbox', { name: /CHEM.101 ·/ })).toBeChecked();
+    await expect(body).toContainText('2 of 10 courses selected');
+    await page.getByRole('button', { name: 'Review selected drops', exact: true }).click();
+    await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
+    await page.getByRole('button', { name: 'Confirm selected drops', exact: true }).click();
+    await expect(page.locator(owner ? '#campus-dialog-error' : '#drawer-error')).toContainText('interrupted');
+    await page.getByRole('button', { name: 'Check saved drops', exact: true }).click();
+    await expect(body).toContainText('1 removed during drop/add; 1 withdrawn');
+    const commit = f.sent.filter(call => call.path.endsWith('/commit/'));
+    expect(commit).toHaveLength(1);
+    expect(commit[0].data).toMatchObject({ student_id: student, section_ids: [section, id(6)], review_token: 'fictional-drop-plan-proof' });
+    expect(commit[0].csrf).toBe('fictional-test-token');
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('a pending drop review cannot replace later choices or enable an empty selection', async ({ page }) => {
+    await fixture(page);
+    let release, seen;
+    const blocked = new Promise(resolve => { release = resolve; });
+    const requested = new Promise(resolve => { seen = resolve; });
+    await page.route('**/sis/drop-plans/review/', async route => { seen(); await blocked; await route.fallback(); });
+    await page.goto('/admin/');
+    await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await page.locator('#directory-search').fill('a'); await page.locator('#directory-search').press('Enter');
+    await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+    await page.getByRole('button', { name: 'Drop selected courses', exact: true }).click();
+    await page.getByRole('checkbox', { name: /CHEM.101 ·/ }).check();
+    await page.getByRole('button', { name: 'Review selected drops', exact: true }).click();
+    await requested;
+    await page.getByRole('checkbox', { name: /CHEM.101 ·/ }).uncheck();
+    release();
+    await expect(page.getByRole('button', { name: 'Review selected drops', exact: true })).toBeDisabled();
+    await expect(page.locator('#drawer-body')).toContainText('Your selection changed');
+    await expect(page.getByRole('button', { name: 'Confirm selected drops', exact: true })).toHaveCount(0);
 });

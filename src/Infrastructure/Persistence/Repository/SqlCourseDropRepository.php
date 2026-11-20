@@ -17,6 +17,32 @@ final readonly class SqlCourseDropRepository implements CourseDropRepository
     public function __construct(private SqlRecords $sql)
     {
     }
+    public function choices(EntityId $student, string $search, ?EntityId $after = null): array
+    {
+        $q = $this->sql->quote(...);
+        $where = 'e.' . $q('student_id') . ' = ? AND e.' . $q('status') . " IN ('A','N') AND c." .
+        $q('grade_id') . " IS NULL AND c." . $q('credit_type') . " = 'institutional' AND c." .
+        $q('status') . ' = e.' . $q('status');
+        $params = [$student->value];
+        if ($search !== '') {
+            $pattern = '%' . str_replace(['!', '%', '_'], ['!!', '!%', '!_'], mb_strtolower($search)) . '%';
+            $where .= ' AND (LOWER(c.' . $q('course_code') . ") LIKE ? ESCAPE '!' OR LOWER(c." .
+            $q('course_title') . ") LIKE ? ESCAPE '!' OR LOWER(s." . $q('code') . ") LIKE ? ESCAPE '!')";
+            array_push($params, $pattern, $pattern, $pattern);
+        }
+        if ($after !== null) {
+            $where .= ' AND e.' . $q('id') . ' < ?';
+            $params[] = $after->value;
+        }
+        return $this->sql->fetch('SELECT s.' . $q('id') . ', s.' . $q('code') . ', c.' . $q('course_code') .
+            ', c.' . $q('course_title') . ', t.' . $q('code') . ' AS ' . $q('term_code') . ', e.' . $q('id') .
+            ' AS ' . $q('cursor') . ' FROM ' . $q('sis_enrollments') . ' e JOIN ' . $q('sis_sections') .
+            ' s ON s.' . $q('id') . ' = e.' . $q('section_id') . ' JOIN ' . $q('sis_academic_credits') .
+            ' c ON c.' . $q('source_id') . ' = e.' . $q('id') . ' AND c.' . $q('student_id') . ' = e.' .
+            $q('student_id') . ' JOIN ' . $q('sis_terms') . ' t ON t.' . $q('id') . ' = e.' . $q('term_id') .
+            ' WHERE ' . $where . ' ORDER BY e.' . $q('id') . ' DESC', $params, 21);
+    }
+
     public function credit(Enrollment $enrollment): array
     {
         $r = $this->sql->one("sis_academic_credits", [

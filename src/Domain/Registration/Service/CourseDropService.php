@@ -15,6 +15,7 @@ use Domain\Registration\Repository\CourseDropRepository;
 use Domain\Registration\Repository\DropPolicyRepository;
 use Domain\Registration\Repository\RegistrationRepository;
 use Domain\Shared\EventSourcing\EventContext;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
@@ -40,7 +41,271 @@ final readonly class CourseDropService
         private MessageCipher $cipher,
         private \Domain\AcademicRecord\Service\InstitutionalCreditLedger $credits,
         private EnrollmentLedger $enrollments,
+        private \Domain\Registration\Repository\RegistrationBatchRepository $plans,
+        private \Domain\Shared\Service\ReviewProof $proofs,
     ) {
+    }
+
+    /** Indexed current choices; no history replay, seat changes or charges.
+     * @return array<string,mixed> */
+    public function planChoices(
+        EntityId $student,
+        bool $byStaff,
+        string $search = '',
+        ?EntityId $after = null
+    ): array {
+        $actor = $this->authorizePlan($student, $byStaff);
+        if (
+            !mb_check_encoding($search, 'UTF-8') || mb_strlen($search) > 80 ||
+            preg_match('/[\x00-\x1F\x7F]/', $search)
+        ) {
+            throw new ValidationException([['field' => 'search', 'message' => 'Use up to 80 characters.']]);
+        }
+        $rows = $this->drops->choices($student, trim($search), $after);
+        $this->authorizePlan($student, $byStaff, $actor);
+        return ['items' => array_slice($rows, 0, 20),
+            'next_after' => count($rows) > 20 ? $rows[19]['cursor'] : null];
+    }
+
+    /** One bounded selection; each child keeps its ordinary academic and financial history.
+     * @return array<string,mixed> */
+    public function reviewPlan(
+        \Domain\Registration\ValueObject\RegistrationPlanSelection $selection,
+        bool $byStaff,
+        ?HistoryReadBudget $budget = null,
+    ): array {
+        $actor = $this->authorizePlan($selection->student, $byStaff);
+        $routing = $this->planRouting($selection);
+        return $this->transactions->run(function () use ($selection, $byStaff, $actor, $routing, $budget): array {
+            $this->lockPlan($selection, $routing);
+            $this->authorizePlan($selection->student, $byStaff, $actor);
+            $context = $this->planContext($selection, $budget ?? new HistoryReadBudget());
+            $revision = $this->revision($context);
+            $operation = EntityId::generate();
+            $this->authorizePlan($selection->student, $byStaff, $actor);
+            $first = $context['courses'][0];
+            $visible = ['student_id' => $selection->student->value, 'effective_on' => $context['effective_on'],
+                'student' => ['given_name' => $first['given_name'], 'family_name' => $first['family_name'],
+                    'institutional_id' => $first['institutional_id']],
+                'courses' => array_map(static fn(array $row): array => array_intersect_key(
+                    $row,
+                    array_flip(['section_id', 'section_code', 'effective_on', 'outcome'])
+                ), $context['courses'])];
+            return $visible + ['operation_id' => $operation->value, 'revision' => $revision,
+                'review_token' => $this->proofs->issue(
+                    'course-drop-plan',
+                    $byStaff ? 'staff' : 'student',
+                    $selection->student,
+                    $actor,
+                    $operation,
+                    $revision
+                )];
+        });
+    }
+
+    /** @return array<string,mixed> */
+    public function commitPlan(
+        \Domain\Registration\ValueObject\RegistrationPlanSelection $selection,
+        EntityId $operation,
+        string $revision,
+        #[\SensitiveParameter] string $token,
+        bool $byStaff,
+        ?HistoryReadBudget $budget = null,
+    ): array {
+        $actor = $this->authorizePlan($selection->student, $byStaff);
+        $hash = hash('sha256', 'course-drop-plan:' . $selection->requestHash($revision, $byStaff));
+        $old = $this->plans->receipt($operation);
+        $this->authorizePlan($selection->student, $byStaff, $actor);
+        $this->planProof($selection, $actor, $operation, $revision, $token, $byStaff, $old !== null);
+        if ($old !== null) {
+            return $this->replayPlan($old, $actor, $hash);
+        }
+        $routing = $this->planRouting($selection);
+        return $this->transactions->run(function () use (
+            $selection,
+            $operation,
+            $revision,
+            $token,
+            $byStaff,
+            $actor,
+            $hash,
+            $routing,
+            $budget
+        ): array {
+            $this->lockPlan($selection, $routing);
+            $this->authorizePlan($selection->student, $byStaff, $actor);
+            $old = $this->plans->receipt($operation);
+            $this->planProof($selection, $actor, $operation, $revision, $token, $byStaff, $old !== null);
+            if ($old !== null) {
+                return $this->replayPlan($old, $actor, $hash);
+            }
+            $budget ??= new HistoryReadBudget();
+            $context = $this->planContext($selection, $budget);
+            if (!hash_equals($this->revision($context), $revision)) {
+                throw new ConcurrentModificationException('The selected drops changed. Review them again.');
+            }
+            $removed = $withdrawn = 0;
+            $items = [];
+            foreach ($context['courses'] as $course) {
+                $child = $this->commit(
+                    $selection->student,
+                    new EntityId($course['section_id']),
+                    new EntityId($course['enrollment_id']),
+                    $course['version'],
+                    EntityId::generate(),
+                    $course['revision'],
+                    $course['effective_on'],
+                    budget: $budget
+                );
+                $removed += (int) $child['academic_records_removed'];
+                $withdrawn += (int) !$child['academic_records_removed'];
+                $items[] = ['section_id' => $child['section_id'], 'operation_id' => $child['operation_id']];
+            }
+            $result = ['drop_plan_id' => $operation->value, 'student_id' => $selection->student->value,
+                'removed' => $removed, 'withdrawn' => $withdrawn, 'drops' => $items];
+            $this->plans->save(
+                $operation,
+                $actor,
+                $selection->sections[0],
+                $hash,
+                $result,
+                $this->clock->now()->format(DATE_ATOM)
+            );
+            $this->audit->record($actor, 'registration.drop_plan_completed', $operation);
+            $this->verifyPlanRouting($selection, $routing);
+            $this->authorizePlan($selection->student, $byStaff, $actor);
+            $this->planProof($selection, $actor, $operation, $revision, $token, $byStaff, false);
+            if ($context['effective_on'] !== $this->clock->now()->format('Y-m-d')) {
+                throw new ConcurrentModificationException('The institutional date changed. Review the drops again.');
+            }
+            return $result;
+        });
+    }
+
+    /** @return array<string,mixed> */
+    public function planReceipt(EntityId $operation, bool $byStaff): array
+    {
+        $requestActor = $this->access->authenticatedUserId();
+        $row = $this->plans->receipt($operation) ?? throw new RecordNotFoundException('Drop confirmation not found.');
+        $result = $row['result'];
+        if (!isset($result['drop_plan_id'], $result['student_id'])) {
+            throw new RecordNotFoundException('Drop confirmation not found.');
+        }
+        $actor = $this->authorizePlan(new EntityId($result['student_id']), $byStaff, $requestActor);
+        return $this->replayPlan($row, $actor, $row['request_hash']);
+    }
+
+    /** @return array<string,mixed> */
+    private function planContext(
+        \Domain\Registration\ValueObject\RegistrationPlanSelection $selection,
+        HistoryReadBudget $budget
+    ): array {
+        $courses = [];
+        foreach ($selection->sections as $section) {
+            $row = $this->review($selection->student, $section, budget: $budget);
+            unset($row['operation_id']);
+            $courses[] = $row;
+        }
+        return ['student_id' => $selection->student->value,
+            'effective_on' => $this->clock->now()->format('Y-m-d'), 'courses' => $courses];
+    }
+
+    private function authorizePlan(EntityId $student, bool $byStaff, ?EntityId $expected = null): EntityId
+    {
+        $actor = $this->authorize($student);
+        if ($byStaff) {
+            $this->access->requirePermission('sis:registration:manage');
+        } else {
+            $record = $this->admissions->student($student);
+            if ($this->admissions->person($record->personId)->ownerUserId?->value !== $actor->value) {
+                throw new AccessDeniedException('The student owner must be signed in.');
+            }
+        }
+        if ($expected !== null && $expected->value !== $actor->value) {
+            throw new AccessDeniedException('The drop confirmation account changed.');
+        }
+        return $actor;
+    }
+
+    private function planProof(
+        \Domain\Registration\ValueObject\RegistrationPlanSelection $selection,
+        EntityId $actor,
+        EntityId $operation,
+        string $revision,
+        #[\SensitiveParameter] string $token,
+        bool $byStaff,
+        bool $accepted,
+    ): void {
+        $this->proofs->validate(
+            $token,
+            'course-drop-plan',
+            $byStaff ? 'staff' : 'student',
+            $selection->student,
+            $actor,
+            $operation,
+            $revision,
+            $accepted
+        );
+    }
+
+    /** @return array<string,mixed> */
+    private function replayPlan(array $row, EntityId $actor, string $hash): array
+    {
+        if ($row['actor_id'] !== $actor->value) {
+            throw new AccessDeniedException('This drop confirmation belongs to another account.');
+        }
+        if (!hash_equals($row['request_hash'], $hash) || !isset($row['result']['drop_plan_id'])) {
+            throw new ConcurrentModificationException('This reference belongs to another confirmation.');
+        }
+        return $row['result'];
+    }
+
+    /** @return array<string,mixed> */
+    private function planRouting(\Domain\Registration\ValueObject\RegistrationPlanSelection $selection): array
+    {
+        $person = $this->admissions->student($selection->student)->personId;
+        $courses = $terms = $sections = [];
+        foreach ($selection->sections as $id) {
+            $section = $this->registration->section($id);
+            $courses[$section->courseId->value] = $section->courseId;
+            $terms[$section->termId->value] = $section->termId;
+            $sections[$id->value] = [$section->courseId->value, $section->termId->value];
+        }
+        ksort($courses, SORT_STRING);
+        ksort($terms, SORT_STRING);
+        return ['person' => $person, 'owner' => $this->admissions->person($person)->ownerUserId?->value,
+            'courses' => $courses, 'terms' => $terms, 'sections' => $sections];
+    }
+
+    private function lockPlan(
+        \Domain\Registration\ValueObject\RegistrationPlanSelection $selection,
+        array $routing
+    ): void {
+        $this->registration->lockStudent($selection->student);
+        $this->registration->lockPerson($routing['person']);
+        foreach ($selection->sections as $id) {
+            $this->registration->lockSection($id);
+        }
+        foreach ($routing['courses'] as $id) {
+            $this->registration->lockCourse($id);
+        }
+        foreach ($routing['terms'] as $id) {
+            $this->policies->lockTerm($id);
+        }
+        $this->verifyPlanRouting($selection, $routing);
+    }
+
+    private function verifyPlanRouting(
+        \Domain\Registration\ValueObject\RegistrationPlanSelection $selection,
+        array $routing
+    ): void {
+        $current = $this->planRouting($selection);
+        if (
+            $current['person']->value !== $routing['person']->value || $current['owner'] !== $routing['owner'] ||
+            $current['sections'] !== $routing['sections']
+        ) {
+            throw new ConcurrentModificationException('The student or section links changed. Review the drops again.');
+        }
     }
 
     private function authorize(EntityId $student): EntityId
@@ -54,17 +319,21 @@ final readonly class CourseDropService
         return $actor;
     }
     /** @return array<string, mixed> */
-    public function review(EntityId $student, EntityId $section, ?string $effective = null): array
-    {
+    public function review(
+        EntityId $student,
+        EntityId $section,
+        ?string $effective = null,
+        ?HistoryReadBudget $budget = null
+    ): array {
         $this->authorize($student);
         if ($effective !== null) {
             $this->access->requirePermission("sis:registration:manage");
         }
         $date = $effective ?? $this->clock->now()->format("Y-m-d");
         $routing = $this->routing($student, $section);
-        return $this->transactions->run(function () use ($student, $section, $date, $routing): array {
+        return $this->transactions->run(function () use ($student, $section, $date, $routing, $budget): array {
             $this->lock($student, $section, $routing);
-            $context = $this->context($student, $section, $date);
+            $context = $this->context($student, $section, $date, $budget ?? new HistoryReadBudget());
             return $context + [
                 "operation_id" => EntityId::generate()->value,
                 "revision" => $this->revision($context),
@@ -81,6 +350,7 @@ final readonly class CourseDropService
         string $revision,
         string $effective,
         bool $effectiveDated = false,
+        ?HistoryReadBudget $budget = null,
     ): array {
         $actor = $this->authorize($student);
         if ($effectiveDated) {
@@ -112,6 +382,7 @@ final readonly class CourseDropService
             $actor,
             $hash,
             $routing,
+            $budget,
         ): array {
             $this->lock($student, $section, $routing);
             if (($old = $this->drops->receipt($operation)) !== null) {
@@ -122,7 +393,14 @@ final readonly class CourseDropService
                     "The institutional date changed. Review this drop again.",
                 );
             }
-            $context = $this->context($student, $section, $effective);
+            if ($this->authorize($student)->value !== $actor->value) {
+                throw new AccessDeniedException('The drop confirmation account changed.');
+            }
+            if ($effectiveDated) {
+                $this->access->requirePermission('sis:registration:manage');
+            }
+            $budget ??= new HistoryReadBudget();
+            $context = $this->context($student, $section, $effective, $budget);
             if (
                 $context["enrollment_id"] !== $enrollment->value ||
                 $context["version"] !== $version ||
@@ -146,6 +424,7 @@ final readonly class CourseDropService
                     $operation,
                     reason: "Reviewed course drop.",
                 ),
+                $budget,
             );
             $this->enrollments->close(
                 $closed,
@@ -157,6 +436,7 @@ final readonly class CourseDropService
                     $operation,
                     reason: "Reviewed course drop.",
                 ),
+                $budget,
             );
             $reversed =
                 $context["outcome"]["delete_records"] &&
@@ -213,6 +493,18 @@ final readonly class CourseDropService
                 $context["outcome"]["delete_records"] ? "registration.removed" : "registration.withdrawn",
                 $enrollment,
             );
+            if ($this->authorize($student)->value !== $actor->value) {
+                throw new AccessDeniedException('The drop confirmation account changed.');
+            }
+            if ($effectiveDated) {
+                $this->access->requirePermission('sis:registration:manage');
+            }
+            if (
+                $this->admissions->student($student)->personId->value !== $routing['person']->value ||
+                (!$effectiveDated && $effective !== $this->clock->now()->format('Y-m-d'))
+            ) {
+                throw new ConcurrentModificationException('The student link or drop date changed. Review again.');
+            }
             return $result;
         });
     }
@@ -298,8 +590,12 @@ final readonly class CourseDropService
         $this->authorize($student);
     }
     /** @return array<string, mixed> */
-    private function context(EntityId $student, EntityId $section, string $effective): array
-    {
+    private function context(
+        EntityId $student,
+        EntityId $section,
+        string $effective,
+        HistoryReadBudget $budget
+    ): array {
         $e =
         $this->registration->enrollment($student, $section) ??
         throw new RecordNotFoundException("Enrollment not found.");
@@ -322,7 +618,7 @@ final readonly class CourseDropService
         }
         $credit = $this->drops->credit($e);
         $sectionRecord = $this->registration->section($section);
-        $this->enrollments->verifyExisting($e, $sectionRecord);
+        $this->enrollments->verifyExisting($e, $sectionRecord, $budget);
         if (
             $sectionRecord->termId->value !== $e->termId->value ||
             $credit["course_id"] !== $sectionRecord->courseId->value ||
@@ -359,7 +655,7 @@ final readonly class CourseDropService
             "effective_on" => $effective,
             "timezone" => $now->getTimezone()->getName(),
             "credit" => $credit,
-            "outcome" => $this->policy->outcome($e->termId, $effective, $e->studentId, $e->id, $e->sectionId),
+            "outcome" => $this->policy->outcome($e->termId, $effective, $e->studentId, $e->id, $e->sectionId, $budget),
         ];
     }
     /** @param array<string, mixed> $context */

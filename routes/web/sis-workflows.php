@@ -48,6 +48,11 @@ use Application\Http\Controller\SisRelationalReportController;
 use Application\Http\Controller\SisStudentCatalogController;
 
 return static function (Psr7Router $router): void {
+    $dropPlans = \Application\Http\Controller\SisCourseDropPlanController::class;
+    $router->post('/sis/drop-plans/choices/', [$dropPlans, 'staffChoices']);
+    $router->post('/sis/drop-plans/review/', [$dropPlans, 'staffReview']);
+    $router->post('/sis/drop-plans/commit/', [$dropPlans, 'staffCommit']);
+    $router->get('/sis/drop-plans/receipts/{id}/', [$dropPlans, 'staffReceipt']);
     $router->get('/sis/courses/{id}/prerequisite-groups/', [SisCoursePrerequisiteController::class, 'current']);
     $router->post('/sis/courses/{id}/prerequisite-groups/', [SisCoursePrerequisiteController::class, 'save']);
     $router->post('/sis/prerequisite-labels/', [SisCoursePrerequisiteController::class, 'labels']);

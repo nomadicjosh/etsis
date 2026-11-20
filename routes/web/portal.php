@@ -17,6 +17,11 @@ use Qubus\Routing\Psr7Router;
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
     $revisions = \Application\Http\Controller\ApplicationRevisionController::class;
+    $dropPlans = \Application\Http\Controller\SisCourseDropPlanController::class;
+    $router->post('/portal/api/drop-plan/choices/', [$dropPlans, 'ownerChoices']);
+    $router->post('/portal/api/drop-plan/review/', [$dropPlans, 'ownerReview']);
+    $router->post('/portal/api/drop-plan/commit/', [$dropPlans, 'ownerCommit']);
+    $router->get('/portal/api/drop-plan/receipts/{id}/', [$dropPlans, 'ownerReceipt']);
     $router->map(['GET'], '/portal/api/applications/{id}/answers/', [$revisions, 'mine']);
     $router->map(['POST'], '/portal/api/applications/{id}/answers/review/', [$revisions, 'reviewMine']);
     $router->map(['POST'], '/portal/api/applications/{id}/answers/commit/', [$revisions, 'commitMine']);

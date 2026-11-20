@@ -1140,13 +1140,17 @@ final readonly class InstitutionalCreditLedger
     /** Internal drop command; caller owns registration authorization, effective-date validation and billing.
      * @param array<string,mixed> $outcome
      */
-    public function drop(Enrollment $closed, array $outcome, EventContext $context): void
-    {
+    public function drop(
+        Enrollment $closed,
+        array $outcome,
+        EventContext $context,
+        ?HistoryReadBudget $budget = null
+    ): void {
         if ($context->actor === null || $context->correlation === null) {
             throw new InvalidArgumentException("A trusted drop context is required.");
         }
         $this->actor($context->actor);
-        [$id, $root, $facts] = $this->source($closed->id, $closed->studentId, $closed->sectionId);
+        [$id, $root, $facts] = $this->source($closed->id, $closed->studentId, $closed->sectionId, $budget);
         $op = $this->operation($id, $context->correlation, "drop");
         $base = null;
         if ($root->playhead() === 0) {

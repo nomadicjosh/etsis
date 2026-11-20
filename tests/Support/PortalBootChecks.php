@@ -6965,3 +6965,5 @@ if ($cohortConfirmed->getStatusCode() !== 200 || $cohortRepeated->getStatusCode(
         $cohortPublication['operation_id']) {
     throw new RuntimeException('Cohort confirmation, current binding or its original retry lost integrity.');
 }
+
+require __DIR__ . '/CourseDropPlanBootChecks.php';

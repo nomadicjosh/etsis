@@ -130,8 +130,9 @@ final readonly class EnrollmentLedger
     public function verifyExisting(
         Enrollment $enrollment,
         Section $section,
+        ?HistoryReadBudget $budget = null,
     ): void {
-        $this->load($enrollment->id);
+        $this->load($enrollment->id, $budget);
         $this->head($section);
     }
     /** @param array<string,mixed> $outcome */
@@ -140,6 +141,7 @@ final readonly class EnrollmentLedger
         Section $section,
         array $outcome,
         EventContext $context,
+        ?HistoryReadBudget $budget = null,
     ): void {
         if ($context->actor === null || $context->correlation === null) {
             throw new \InvalidArgumentException(
@@ -147,7 +149,7 @@ final readonly class EnrollmentLedger
             );
         }
         $this->actor($context->actor);
-        $root = $this->load($closed->id);
+        $root = $this->load($closed->id, $budget);
         $before =
         $this->records->current($closed->id) ??
         throw new CorruptHistoryException();

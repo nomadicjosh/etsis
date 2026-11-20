@@ -9,6 +9,8 @@ use Domain\Shared\ValueObject\EntityId;
 
 interface CourseDropRepository
 {
+    /** @return list<array<string,mixed>> */
+    public function choices(EntityId $student, string $search, ?EntityId $after = null): array;
     /** @return array<string, mixed> */
     public function credit(Enrollment $enrollment): array;
     /** @return array<string, mixed>|null */

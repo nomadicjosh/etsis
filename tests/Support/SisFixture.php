@@ -877,6 +877,8 @@ final class SisFixture
             $this->dropCipher,
             $this->academicCredits(),
             $this->enrollmentLedger(),
+            new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository($this->sql),
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
         );
     }
 

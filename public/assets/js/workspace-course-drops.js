@@ -424,5 +424,7 @@ window.createWorkspaceCourseDrops = function (ui) {
         );
         const editor = Array.from(body.childNodes);
     }
-    return { review, policy };
+    const plans = window.createRegistrationDrops({ node, request, task,
+        open: title => openDrawer(title, 'REGISTRATION'), prefix: '/sis/drop-plans/' });
+    return { review, policy, plan: plans.start };
 };

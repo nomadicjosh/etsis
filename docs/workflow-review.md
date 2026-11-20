@@ -682,3 +682,12 @@ Academic-source capture and identity checking change no schema or live instituti
 ## Transfer academic details in one review
 
 **Academic details** combines the local posting term, external completion date and optional sending-period start on an existing award. Staff review the before/after values, an effective date and a reason together, with **Revise details** and **Refresh details** retaining their draft. **Academic history** shares the award's protected journal rather than adding another recovery workflow. Credits, grades, pursuit and charges remain unchanged; corrected chronology feeds the applicable repeat comparison and invalidates stale transcript preparation. Original award requests and accepted confirmations retain their original result. See [the complete workflow](transfer-academic-periods.md).
+
+
+## Approved co-requisite workflow
+
+The institution will choose whether a co-requisite may be satisfied by qualifying prior completion or must be taken in the same academic term. **Prior completion is allowed by default.** Work must belong to the current program pursuit or have explicit registrar-approved reuse. A previously satisfied lab does not need another registration or lab charge merely because the student is registering for its lecture. A stricter same-term policy remains an institutional option.
+
+The institution will also choose the response to dropping a supporting co-requisite. The approved default is to **block an unsupported drop unless the dependent courses are dropped in the same reviewed transaction**. Warnings are an institutional alternative, not a browser bypass. Registration, staff entry, selected schedules, section changes and drops must use the same retained rules and verified pursuit-scoped evidence. Later catalog edits must not silently change earlier course relationships or accepted decisions.
+
+The shared [drop-selected-courses action](registration-history.md#drop-several-courses-together) is implemented for staff and students, retaining separate academic and billing outcomes in one atomic confirmation. Policy configuration, concurrent-registration evidence and dependency enforcement remain pending; the policy choices above are the approved direction, not a claim that co-requisites are already enforced.

@@ -239,6 +239,13 @@ window.createWorkspaceRegistration = function (ui) {
         body.append(form, button("Back to student", back, "btn-link"));
     }
     function receipt(result, again, againLabel = "Start another group") {
+        if (result.drop_plan_id) {
+            const body = openDrawer('Course drops completed', 'REGISTRATION RECEIPT');
+            body.append(node('p', { role: 'status' }, `${result.removed} courses removed; ${result.withdrawn} withdrawn.`),
+                node('p', {}, 'Reference: ', node('code', {}, result.drop_plan_id)), button(againLabel, again, 'btn-primary'));
+            return body;
+        }
+
         const planned = !!result.plan_id;
         const body = openDrawer(planned ? "Schedule registered" : "Batch completed", "REGISTRATION RECEIPT");
         body.append(

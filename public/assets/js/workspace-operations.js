@@ -285,6 +285,7 @@ window.createWorkspaceOperations = function (ui) {
                 ),
                 button("Plan registration", () => ui.batchRegistration().plan(row.id, back, row)),
             );
+        actions.append(button("Drop selected courses", () => ui.courseDrops().plan(row.id, back)));
         await paged(actions, "enrollments", row.id, (rows) =>
             scrollTable(
                 ["Course / section", "Status", "Action"],
