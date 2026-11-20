@@ -53,6 +53,7 @@ final readonly class RegistrationService
         ?\Domain\Shared\EventSourcing\HistoryReadBudget $budget = null,
         ?RegistrationScheduleRead $scheduleRead = null,
         ?\Domain\Finance\ValueObject\RegistrationChargeQuote $chargeQuote = null,
+        ?RegistrationCourseRead $courseRead = null,
     ): Enrollment {
         $actor = $this->access->authenticatedUserId();
         $initialStudent = $this->admissions->student($studentId);
@@ -70,11 +71,14 @@ final readonly class RegistrationService
             $budget,
             $scheduleRead,
             $chargeQuote,
+            $courseRead,
         ): Enrollment {
-            // Acquire all eligibility locks before consistent reads: student, person holds, then section seats.
+            // Eligibility locks follow student, person, section and course order.
             $this->repository->lockStudent($studentId);
             $this->repository->lockPerson($initialStudent->personId);
             $this->repository->lockSection($sectionId);
+            $section = $this->repository->section($sectionId);
+            $this->repository->lockCourse($section->courseId);
             $student = $this->admissions->student($studentId);
             if (
                 $student->personId->value !== $initialStudent->personId->value
@@ -89,9 +93,6 @@ final readonly class RegistrationService
             $this->authorize($actor, $person->ownerUserId, $byStaff);
             $this->activity->verify($student);
             $this->primaryPrograms->verify($student);
-            $section = $this->repository->section($sectionId);
-            $course = $this->repository->courseForSection($section);
-            $window = $this->repository->window($section->termId);
             $existing = $this->repository->enrollment($studentId, $sectionId);
             if ($existing !== null) {
                 if ($existing->status->isEnrolled()) {
@@ -108,6 +109,9 @@ final readonly class RegistrationService
                     "A closed enrollment requires registrar review before re-enrollment.",
                 );
             }
+            $course = $this->repository->courseForSection($section);
+            $window = $this->repository->window($section->termId);
+            $courseRead ??= new RegistrationCourseRead();
             if (
                 !$section->active ||
                 !$course->active ||
@@ -127,6 +131,7 @@ final readonly class RegistrationService
                 $studentId,
                 $section->termId,
             );
+            $courseRead->selection($sectionId, $course, $required);
             $budget ??= new \Domain\Shared\EventSourcing\HistoryReadBudget();
             $prerequisites = $this->prerequisites->evaluate(
                 $studentId,
@@ -199,6 +204,7 @@ final readonly class RegistrationService
                 $prerequisites,
                 $schedule,
                 $budget,
+                $courseRead,
             );
             $this->credits->open(
                 $enrollment,
@@ -227,6 +233,7 @@ final readonly class RegistrationService
                 "registration.created",
                 $enrollment->id,
             );
+            $this->verifyCourseSelection($sectionId, $budget, $courseRead);
             // Final checks are part of the same unit of work, including the seat, credit, charge and audit.
             $this->assertEligible(
                 $this->admissions->student($studentId),
@@ -315,6 +322,19 @@ final readonly class RegistrationService
         });
     }
 
+    /** Internal coordinator check. Caller owns current authorization and the section/course locks. */
+    public function verifyCourseSelection(
+        EntityId $sectionId,
+        \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
+        RegistrationCourseRead $read,
+    ): void {
+        $section = $this->repository->section($sectionId);
+        $course = $this->repository->courseForSection($section);
+        $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
+        $read->selection($sectionId, $course, $required);
+        $this->enrollments->verifyCourse($course, $budget, $read);
+    }
+
     /** Internal completion check for a coordinated registration transaction; never creates or repairs facts. */
     public function verifyCompletion(
         EntityId $studentId,
@@ -324,6 +344,7 @@ final readonly class RegistrationService
         \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
         ?string $scheduleRevision = null,
         ?string $prerequisiteRevision = null,
+        ?RegistrationCourseRead $courseRead = null,
     ): void {
         $student = $this->admissions->student($studentId);
         $person = $this->admissions->person($student->personId);
@@ -344,6 +365,7 @@ final readonly class RegistrationService
                 "The accepted schedule changed before completion. Review it again.",
             );
         }
+        $this->verifyCourseSelection($sectionId, $budget, $courseRead ?? new RegistrationCourseRead());
         $this->enrollments->verifyExisting($enrollment, $section);
         $this->credits->verifyOpenEnrollment($enrollment, $budget);
         $assignment = $this->pursuits->activePursuit($studentId);

@@ -46,6 +46,7 @@ final readonly class EnrollmentLedger
         #[\SensitiveParameter]
         \Domain\Registration\ValueObject\RegistrationScheduleDecision $schedule,
         ?HistoryReadBudget $budget = null,
+        ?RegistrationCourseRead $courseRead = null,
     ): void {
         $this->actor($actor);
         if (
@@ -55,7 +56,7 @@ final readonly class EnrollmentLedger
         ) {
             throw new CorruptHistoryException();
         }
-        $this->verifyCourseDefinition($course, $budget ?? new HistoryReadBudget());
+        $this->verifyCourse($course, $budget ?? new HistoryReadBudget(), $courseRead);
         $selected = SectionOfferingSelection::verify(
             $section->id,
             $this->versions,
@@ -407,27 +408,14 @@ final readonly class EnrollmentLedger
             "capacity" => $section->capacity,
         ];
     }
-    /** Verify the selected course facts before an eligibility projection becomes an accepted decision. */
-    private function verifyCourseDefinition(Course $course, HistoryReadBudget $budget): void
+    /** Internal caller owns current authority and eligibility locks; no history is changed. */
+    public function verifyCourse(Course $course, HistoryReadBudget $budget, ?RegistrationCourseRead $read = null): void
     {
-        if ($course->publicationVersionId === null) {
-            return;
-        }
-        $definition = new \Domain\Catalog\Service\PublishedCourseReader($this->history)
-            ->version($course->id, $course->publicationVersionId, $budget)->definition;
-        if (
-            $definition->code !== $course->code ||
-            $definition->title !== $course->title ||
-            $definition->creditsMilli !== $course->creditsMilli ||
-            $definition->text->transcriptTitle !== $course->publishedTranscriptTitle ||
-            $definition->prerequisites !== $course->publishedPrerequisites ||
-            $definition->prerequisiteGroups?->groups !== $course->prerequisiteGroups?->groups ||
-            $definition->prerequisiteGroups?->minimums !== $course->prerequisiteGroups?->minimums ||
-            $definition->prerequisiteGroups?->minimumGradePointsMilli !==
-                $course->prerequisiteGroups?->minimumGradePointsMilli
-        ) {
-            throw new CorruptHistoryException();
-        }
+        ($read ?? new RegistrationCourseRead())->verify(
+            $course,
+            new \Domain\Catalog\Service\PublishedCourseReader($this->history),
+            $budget
+        );
     }
 
     /** @return array<string,mixed> */

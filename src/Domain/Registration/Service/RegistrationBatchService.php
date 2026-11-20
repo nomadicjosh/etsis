@@ -229,6 +229,7 @@ final readonly class RegistrationBatchService
                 ]);
             }
             $items = [];
+            $courseRead = new RegistrationCourseRead();
             foreach ($selection->sections as $section) {
                 $current = $this->repository->section($section);
                 $course = $this->repository->courseForSection($current);
@@ -250,6 +251,7 @@ final readonly class RegistrationBatchService
                     $byStaff,
                     budget: $budget,
                     chargeQuote: $quote,
+                    courseRead: $courseRead,
                 );
                 $items[] = [
                     "section_id" => $section->value,
@@ -280,6 +282,7 @@ final readonly class RegistrationBatchService
                     $actor,
                     $byStaff,
                     $budget,
+                    courseRead: $courseRead,
                 );
                 $expected = array_values(
                     array_filter(
@@ -559,6 +562,7 @@ final readonly class RegistrationBatchService
             $items = [];
             $created = 0;
             $scheduleRead = new RegistrationScheduleRead();
+            $courseRead = new RegistrationCourseRead();
             foreach ($context["students"] as $row) {
                 if ($row["schedule"]["blocked"]) {
                     throw new ValidationException([
@@ -598,6 +602,7 @@ final readonly class RegistrationBatchService
                         budget: $budget,
                         scheduleRead: $scheduleRead,
                         chargeQuote: $quotes[$row["id"]] ?? null,
+                        courseRead: $courseRead,
                     );
                 } catch (DomainException) {
                     throw new ValidationException([
@@ -635,6 +640,9 @@ final readonly class RegistrationBatchService
                 $this->clock->now()->format("Y-m-d\TH:i:sP"),
             );
             $this->audit->record($actor, "registration.batch_completed", $operation);
+            if ($created > 0) {
+                $this->registration->verifyCourseSelection($selection->section, $budget, $courseRead);
+            }
             $this->actor($actor, $selection, $byStaff);
             $this->reviews->validate(
                 $token,
