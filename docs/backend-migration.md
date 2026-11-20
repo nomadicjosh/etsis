@@ -365,3 +365,6 @@ The [co-requisite workflow](registration-history.md#co-requisites-and-linked-dro
 
 
 [Funding-method reporting](workflow-review.md#funding-method-reports) now bundles receipt-method projection updates, visual payment-source templates and private saved/static/shared/CSV behavior. Current methods follow recorded corrections across amount replacements; originals and protected history remain intact. The nullable projection upgrade derives known methods from verified events without exposing receipt references or creating another financial journal. Further tuition/fee origin distinctions remain open.
+
+
+[Academic advising](academic-advising.md) now connects pursuit-scoped dated advisor decisions, the registrar's reviewed editor, students' advisor display and the advisor's bounded worklist/canonical degree review. Both primary and additional advisors receive current scoped program/progress reads; existing general permissions remain separate. Ending assignments or changing pursuits removes that scoped access, while protected decisions, original receipts and prior program relationships remain retained. Standing/load determinations and appointments remain open.

@@ -5,6 +5,7 @@ declare(strict_types=1);
 // Initial migration seed only. Runtime authorization is database controlled.
 return [
     "permissions" => [
+        "sis:advising:manage" => ["description" => "Review dated student advisor assignments."],
         "sis:academic:course:amend" => [
             "description" => "Correct institutional awarded courses and their exact publications.",
         ],
@@ -94,7 +95,6 @@ return [
                 "sis:person:manage" => ["description" => "Create person records."],
                 "sis:admissions:manage" => ["description" => "Manage admissions and matriculation."],
                 "sis:student:read" => ["description" => "Read student records."],
-                "sis:advising:manage" => ["description" => "Review dated student advisor assignments."],
                 "sis:transcript:manage" => ["description" => "Process official transcript requests."],
             ],
         ],

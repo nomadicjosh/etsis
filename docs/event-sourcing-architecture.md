@@ -218,3 +218,8 @@ The connected staff review and report counts are bounded reads of current regist
 ### Receipt methods in financial read models
 
 [Funding-method reports](workflow-review.md#funding-method-reports) add a minimized enum to the existing posting projection. Receipt-only corrections advance the same account checkpoint and update each original/replacement family member without changing monetary facts. New writes reject known method drift. The existing explicit, bounded financial projection upgrade verifies earlier monetary rows and protected streams before enriching newly nullable method values; unknowns stay unknown. Private receipt references remain protected, reports create no financial events, and the single journal and its recorded facts remain unchanged.
+
+
+### Dated advising and scoped degree reads
+
+[Academic advising](academic-advising.md) records real pursuit-scoped primary/additional advisor decisions in the existing journal and projects only relationship identities, types and dates. Full selected maintenance replay validates lineage/receipts under bounded budgets. The self-contained protected current head and current pursuit/account checks establish read-only advisor access; changing a projection cannot grant access by itself. Program changes preserve old relationships without carrying access into a new pursuit. Registrar maintenance, owner-only student reads and curated advisor degree/program reads keep separate authorization boundaries, including final rechecks and metadata-only access evidence. No raw history, broad StudentAccess permission, financial effect or duplicate person is introduced.

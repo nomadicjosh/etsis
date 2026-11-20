@@ -100,3 +100,8 @@ The [institutional course-correction workflow](academic-credit-history.md#correc
 ### Enrollment-target follow-through
 
 The legacy `minEnroll` planning concern is now implemented at the actual offering: optional current setup, reusable template/plan defaults, immutable section publications, staff enrollment review and current/retained report fields. Zero explicitly means no target in new publications; older missing targets stay unknown. It is advisory and never automatically cancels a class or blocks its first registration. Versioned course defaults, audit enrollment and waitlist allocation remain separate scope. See [minimum enrollment targets](section-publication.md#minimum-enrollment-targets).
+
+
+### Pursuit advisor relationships
+
+The legacy `advisorID` on student academic programs is replaced by [dated primary/additional advisor relationships](academic-advising.md) under the existing pursuit identity. Stable canonical person references support staff/faculty capabilities without duplicating shared profiles. New reasoned decisions preserve earlier dates and assignments; the indexed current relationship table is a projection. Unknown earlier advisors are not inferred. Current scoped advisor degree/program access ends with the relationship or pursuit boundary, and original program histories remain retained.

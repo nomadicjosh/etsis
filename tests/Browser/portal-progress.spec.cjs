@@ -126,6 +126,18 @@ async function accessible(page) {
     expect(scan.violations.map(v=>({id:v.id,targets:v.nodes.map(n=>n.target)}))).toEqual([]);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
 }
+
+test('student sees recorded advisors beside their selected pursuit without staff reasons', async ({page}) => {
+    const f = await fixture(page, { needsSelection:true, advisors:[{id:id(70),advisor_person_id:id(71),
+        role:'primary',starts_on:'2026-08-01',ends_on:null,name:'Fictional <b>Advisor</b>'}] });
+    await page.getByRole('button',{name:'Review progress · BSCS · 26/FA',exact:true}).click();
+    await expect(page.getByRole('region',{name:'Academic advisors',exact:true})).toContainText('Fictional <b>Advisor</b>');
+    await expect(page.getByRole('region',{name:'Academic advisors',exact:true})).toContainText('Primary advisor');
+    await expect(page.locator('#campus-service-content b')).toHaveCount(0);
+    await page.setViewportSize({width:375,height:812});
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});
 test('portal reviews only the selected pursuit on demand and shares local accessible guidance',async({page})=>{
     const f=await fixture(page,{morePrograms:true});
     await expect(page.getByRole('heading',{name:'Degree progress',exact:true})).toBeVisible();

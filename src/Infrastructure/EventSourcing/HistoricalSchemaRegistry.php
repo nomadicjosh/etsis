@@ -568,7 +568,9 @@ final readonly class HistoricalSchemaRegistry
             $definition = $this->definition($class);
             if ($class === \Domain\Advising\Event\StudentAdvisorsWereAssigned::class) {
                 \Domain\Advising\AdvisorHistory::validate($payload);
-                if ($payload['pursuit_id'] !== (string) $stream->aggregateId) throw new CorruptHistoryException();
+                if ($payload['pursuit_id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
             }
             if ($class === \Domain\Registration\Event\RegistrationWindowWasPublished::class) {
                 \Domain\Registration\RegistrationWindowHistory::validate($payload);
