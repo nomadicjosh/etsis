@@ -752,6 +752,7 @@ final class AcademicReportSchema
             'applications' => ['id' => 'applications'] + $withStudentWork($applications),
             'students' => ['id' => 'students'] + $withStudentWork($students),
             "programs" => ["id" => "programs"] + $withStudentWork($program),
+            'standing' => ['id' => 'standing'] + $withStudentWork(StudentStandingReportSchema::dataset()),
             "credits" => ["id" => "credits"] + $withStudentWork($credits),
             "sections" => ["id" => "sections"] + $withStudentWork($sections),
         ];

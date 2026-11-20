@@ -3094,7 +3094,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                               ? "Back to combined progress"
                               : component
                                 ? "Back to specialization requirements"
-                                : "Back to degree requirements",
+                                : (back.returnLabel || "Back to degree requirements"),
                           back,
                       ),
             ),
@@ -6109,6 +6109,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
         launch,
         library,
         studentRequirements,
+        studentProgress: (student, pursuit, back, returnLabel = "Back to student") => {
+            const restore = () => { close(); return back(); };
+            restore.returnLabel = returnLabel;
+            return degreeProgress(`/sis/students/${student}/programs/${pursuit}/degree-requirements/`, restore);
+        },
         reviewEarlierWork: (student, assignment, back) => workPursuits(student, assignment, () => {
             close();
             return back();

@@ -39,6 +39,7 @@ final class EventClassMap
             \Domain\Person\Event\PersonEmergencyContactsWereRecorded::class,
             \Domain\Person\Event\PersonEducationWasRecorded::class,
             \Domain\Person\Event\PersonAddressesWereRecorded::class,
+            \Domain\Student\Event\StudentStandingWasRecorded::class,
             \Domain\Advising\Event\StudentAdvisorsWereAssigned::class,
             \Domain\AcademicRecord\Event\AcademicWorkPursuitWasRecorded::class,
             \Domain\Student\Event\StudentSpecializationRequirementsWereAssigned::class,

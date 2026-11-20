@@ -1074,17 +1074,25 @@
         const search = el("form", { class: "mb-3" }, el("label", { for: input.id }, "Find an advisee by name, ID or program"), input,
             el("button", { type: "submit", class: "campus-button mt-2" }, "Search"));
         const list = el("div", { class: "portal-progress-cards" }), result = el("div", { "aria-live": "polite" });
-        container.append(search, list, result);
+        const standing = el("section", { class: "mb-4", "aria-label": "Academic standing" });
+        container.append(search, list, standing, result);
         let generation = 0;
         async function show(student, pursuit) {
             const current = ++generation;
+            standing.replaceChildren();
             result.replaceChildren(el("p", { role: "status" }, "Reviewing recorded degree progress…"));
             try {
-                const data = await request(`/portal/api/advising/students/${student}/programs/${pursuit}/progress/`, "POST", {});
+                const responses = await Promise.allSettled([
+                    request(`/portal/api/advising/students/${student}/programs/${pursuit}/progress/`, "POST", {}),
+                    request(`/portal/api/advising/students/${student}/programs/${pursuit}/standing/`, "POST", {}),
+                ]);
                 if (pageLeaving || !result.isConnected || current !== generation) return;
-                renderPortalProgress(result, data, () => show(student, pursuit));
+                renderStanding(standing, responses[1].status === "fulfilled" ? responses[1].value : null);
+                if (responses[0].status === "rejected") throw responses[0].reason;
+                renderPortalProgress(result, responses[0].value, () => show(student, pursuit));
             } catch (error) {
                 if (!result.isConnected || current !== generation) return;
+                standing.replaceChildren();
                 result.replaceChildren(el("p", { class: "alert alert-info", role: "status" },
                     "This advising review is unavailable. Check your current assignment or contact the registrar."));
                 throw error;
@@ -1095,7 +1103,7 @@
             const wasConnected = list.isConnected;
             const data = await request("/portal/api/advising/", "POST", { search: input.value, ...(after ? { after } : {}) });
             if (pageLeaving || (wasConnected && !list.isConnected) || serial !== generation) return;
-            if (!append) { list.replaceChildren(); result.replaceChildren(); }
+            if (!append) { list.replaceChildren(); result.replaceChildren(); standing.replaceChildren(); }
             list.querySelector("[data-more-advisees]")?.remove();
             for (const item of data.items) list.append(el("article", { class: "portal-progress-card" },
                 el("h3", {}, item.name), el("p", { class: "campus-muted" }, `${item.institutional_id} · ${item.program.code} · ${item.program.title} · ${item.entry_term.code}`),
@@ -1108,6 +1116,22 @@
         }
         search.addEventListener("submit", event => { event.preventDefault(); task(() => load()); });
         await load();
+    }
+    function renderStanding(container, data) {
+        container.replaceChildren(el("h2", {}, "Academic standing"));
+        if (!data || !Array.isArray(data.items)) {
+            container.append(el("p", {}, "Standing information is unavailable. Contact the registrar.")); return;
+        }
+        const historical = data.pursuit_status === "closed";
+        if (historical) container.append(el("p", { class: "campus-muted" }, "Standing retained for this closed program pursuit."));
+        const current = historical ? data.items : data.items.filter(row => row.starts_on <= data.as_of && (!row.ends_on || row.ends_on >= data.as_of));
+        const card = row => el("article", { class: "portal-progress-card" }, el("h3", {}, row.title),
+            el("p", { class: "campus-muted" }, `${row.code} · ${row.starts_on} through ${row.ends_on || "open"}`));
+        if (!current.length) container.append(el("p", {}, "No academic standing is recorded for this date."));
+        current.forEach(row => container.append(card(row)));
+        const other = data.items.filter(row => !current.includes(row));
+        if (other.length) container.append(el("details", { class: "mt-3" }, el("summary", {}, "Other recorded periods"), ...other.map(card)));
+        container.append(el("p", { class: "campus-muted" }, "Standing is the institution's recorded determination. It does not certify graduation or describe registration holds."));
     }
     function renderAdvisors(container, data) {
         container.replaceChildren(el("h2", {}, "Academic advisors"));
@@ -1141,17 +1165,21 @@
         );
         const choices = el("div", { class: "portal-progress-cards", "aria-label": "Your program pursuits" });
         const result = el("div", { "aria-live": "polite" }), advisors = el("section", { class: "mb-4", "aria-label": "Academic advisors" });
-        container.append(choices, advisors, result);
+        const standing = el("section", { class: "mb-4", "aria-label": "Academic standing" });
+        container.append(choices, advisors, standing, result);
         let generation = 0;
         async function review(student, pursuit) {
             const current = ++generation;
+            advisors.replaceChildren(); standing.replaceChildren();
             result.replaceChildren(el("p", { role: "status" }, "Reviewing your recorded work…"));
             try {
                 const responses = await Promise.allSettled([
                     request(`/portal/api/students/${student}/programs/${pursuit}/degree-progress/`, "POST", {}),
                     request(`/portal/api/students/${student}/programs/${pursuit}/advisors/`, "POST", {}),
+                    request(`/portal/api/students/${student}/programs/${pursuit}/standing/`, "POST", {}),
                 ]);
                 if (pageLeaving || current !== generation || !result.isConnected) return;
+                renderStanding(standing, responses[2].status === "fulfilled" ? responses[2].value : null);
                 if (responses[1].status === "fulfilled") renderAdvisors(advisors, responses[1].value);
                 else advisors.replaceChildren(el("p", {}, "Advisor information is unavailable. Contact the registrar."));
                 if (responses[0].status === "rejected") throw responses[0].reason;

@@ -15,6 +15,7 @@ async function fixture(page,options={}) {
         let data;
         if(path==='/portal/api/me/') data={students:options.noStudent?[]:[{id:student,primary_program_id:program}]};
         else if(path.endsWith('/degree-programs/')) data={items:[{id:body.after?id(44):pursuit,program_code:body.after?'DUAL':'BSCS',program_title:'Computing <script>fictional</script>',term_code:'26/FA',status:'active',catalog_year:'2026-2027'}],next_after:options.morePrograms&&!body.after?pursuit:null};
+        else if(path.endsWith('/standing/')) data={items:options.standing || [],as_of:'2026-08-10'};
         else if(path.endsWith('/advisors/')) data={items:options.advisors || [],pursuit_status:'active',as_of:'2026-08-10'};
         else if(path.endsWith('/degree-progress/')) {
             if (options.delayFirst && path.includes(`/programs/${pursuit}/`)) { markFirst(); await waitFirst; }
@@ -136,6 +137,23 @@ test('student sees recorded advisors beside their selected pursuit without staff
     await expect(page.locator('#campus-service-content b')).toHaveCount(0);
     await page.setViewportSize({width:375,height:812});
     await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+test('student sees retained dated standing beside degree progress without staff policy narratives', async ({page}) => {
+    const f = await fixture(page, { needsSelection:true, standing:[{code:'GOOD', title:'Fictional <b>Standing</b>',
+        starts_on:'2026-08-01', ends_on:null}, {code:'REVIEW', title:'Earlier review', starts_on:'2026-01-01', ends_on:'2026-07-31'}] });
+    expect(f.calls.some(call => call.path.endsWith('/standing/'))).toBe(false);
+    await page.getByRole('button',{name:'Review progress · BSCS · 26/FA',exact:true}).click();
+    const standing = page.getByRole('region',{name:'Academic standing',exact:true});
+    await expect(standing).toContainText('Fictional <b>Standing</b>');
+    await expect(standing.getByText('Earlier review', {exact:true})).toBeHidden();
+    await standing.getByText('Other recorded periods', {exact:true}).click();
+    await expect(standing.getByText('Earlier review', {exact:true})).toBeVisible();
+    await expect(standing.locator('b')).toHaveCount(0);
+    await page.setViewportSize({width:375,height:812});
+    await accessible(page);
+    expect(f.calls.filter(call => call.body).every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
 test('portal reviews only the selected pursuit on demand and shares local accessible guidance',async({page})=>{

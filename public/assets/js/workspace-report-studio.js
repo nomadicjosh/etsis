@@ -445,6 +445,7 @@ window.createWorkspaceReportStudio = function (ui) {
     }
     function initial(dataset) {
         const choices = {
+            standing: ["institutional_id", "full_name", "program_code", "standing_title", "effective_from"],
             postings: ["institutional_id", "term_code", "posting_type", "currency", "posting_amount", "posting_reversed", "posting_recorded_at"],
             meetings: ["booking_title", "starts_at", "ends_at", "room_name", "building_name", "booking_status"],
             rooms: ["room_code", "room_name", "building_name", "room_capacity"],

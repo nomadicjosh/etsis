@@ -105,3 +105,7 @@ The legacy `minEnroll` planning concern is now implemented at the actual offerin
 ### Pursuit advisor relationships
 
 The legacy `advisorID` on student academic programs is replaced by [dated primary/additional advisor relationships](academic-advising.md) under the existing pursuit identity. Stable canonical person references support staff/faculty capabilities without duplicating shared profiles. New reasoned decisions preserve earlier dates and assignments; the indexed current relationship table is a projection. Unknown earlier advisors are not inferred. Current scoped advisor degree/program access ends with the relationship or pursuit boundary, and original program histories remain retained.
+
+### Recorded academic standing
+
+The legacy `stal.acadStanding` now has [institution-defined labels and reviewed dated determinations](academic-standing.md) under the student's existing program pursuit. Accepted labels and periods are retained in the shared journal, with a reconstructible projection for ordinary reporting and verified selected reads. Student/assigned-advisor views withhold staff evidence. Standing does not duplicate GPA/load totals or implicitly change student activity, registration, charges or graduation. Automated institutional rule publications, load determinations and formal transcript annotations remain open.

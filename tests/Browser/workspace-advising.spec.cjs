@@ -81,6 +81,7 @@ test('assigned advisors search their portal worklist and open a private on-deman
         if (path === '/portal/api/advising/') result = { items: [{ student_id: id(1), pursuit_id: id(3),
             name: 'Fictional <b>Learner</b>', institutional_id: 'S-FICTIONAL',
             program: { code: 'BS.CS', title: 'Fictional computing' }, entry_term: { code: '26/FA' } }], next_after: null };
+        else if (path.endsWith('/standing/')) result = { items: [{ code: 'GOOD', title: 'Fictional good standing', starts_on: '2026-08-01', ends_on: null }], as_of: '2026-08-10' };
         else if (path.endsWith('/progress/')) result = { status: 'needs_selection' };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
@@ -92,6 +93,7 @@ test('assigned advisors search their portal worklist and open a private on-deman
     await page.getByRole('button', { name: 'Program and degree progress', exact: true }).click();
     await expect(page.locator('#campus-service-content')).toContainText('degree');
     expect(calls.some(call => call.path.endsWith('/progress/'))).toBe(true);
+    await expect(page.getByRole('region', { name: 'Academic standing', exact: true })).toContainText('Fictional good standing');
     await page.setViewportSize({ width: 375, height: 812 });
     const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(axe.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) }))).toEqual([]);
