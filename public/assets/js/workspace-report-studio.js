@@ -227,6 +227,18 @@ window.createWorkspaceReportStudio = function (ui) {
                 );
             }
         }
+        const programLocations = catalog.datasets.find(dataset => dataset.id === "programs");
+        const campusColumns = ["institutional_id", "full_name", "published_program_title", "catalog_year",
+            "program_campus_title", "current_program_campus_title", "program_campus_recorded"];
+        if (programLocations && campusColumns.every(field => programLocations.fields[field])) {
+            templateGrid.append(
+                button("Program campuses", () => edit(programLocations, {
+                    ...initial(programLocations),
+                    columns: campusColumns.map(field => ({ field, label: programLocations.fields[field].label, aggregate: "none" })),
+                })),
+                node("p", { class: "form-text" }, "Compare the campus retained for each student's program cohort with today's program setup. Each row is a program pursuit. Earlier unknown locations stay distinct from an explicit blank."),
+            );
+        }
         const meetings = catalog.datasets.find(dataset => dataset.id === "meetings");
         const rooms = catalog.datasets.find(dataset => dataset.id === "rooms");
         const approvedMeetings = { condition: "AND", rules: [

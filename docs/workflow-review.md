@@ -713,3 +713,7 @@ The [co-requisite workflow](registration-history.md#co-requisites-and-linked-dro
 ## Enrollment load policies and working reviews
 
 [Enrollment load](enrollment-load.md) keeps institution-defined credit bands separate from standing, GPA and financial-aid decisions. Staff publish a global policy and optional program overrides through one review/publish flow. Students and current advisors can request the same minimal term review from degree progress. A program change uses the current primary program's policy but counts all still-active registrations in that term. Original registered quantities survive catalog, grade and award corrections. No partial total is displayed when history cannot be verified. Official census determinations and retained reporting remain a separate phase.
+
+## Program location setup, publication and reporting
+
+[Optional program campuses/sites](program-publication.md#program-campuses-and-sites) use the existing shared reference chooser and one save/review/publish flow. This avoids a second location library or extra publication screen. A campus is descriptive context, not an automatic restriction on online teaching, admissions or registration. Student cohorts retain their published location; Report Studio's **Program campuses** template compares it with current setup without replacing earlier unknowns. Final publication checks and delayed-response guards protect both accepted history and unfinished editor work.

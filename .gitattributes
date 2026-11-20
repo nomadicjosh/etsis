@@ -4,6 +4,7 @@
 .github         export-ignore
 .gitattributes  export-ignore
 .gitignore      export-ignore
+dist            export-ignore
 docs            export-ignore
 legacy          export-ignore
 tests           export-ignore

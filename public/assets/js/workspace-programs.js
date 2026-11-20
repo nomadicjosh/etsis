@@ -8,6 +8,7 @@ window.createWorkspacePrograms = function (ui) {
         award: "Award",
         school: "School/college",
         field_of_study: "Field of study",
+        campus: "Campus/site",
     };
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
@@ -47,7 +48,9 @@ window.createWorkspacePrograms = function (ui) {
     }
 
     async function open(id, notice = false) {
+        const loading = openDrawer("Program details", "ACADEMIC CATALOG");
         const current = await request(`/sis/programs/${id}/details/`);
+        if (!loading.isConnected) return;
         const draft = {
             ...current.definition,
             classifications: { ...current.definition.classifications },
@@ -70,9 +73,11 @@ window.createWorkspacePrograms = function (ui) {
                 ["description", "Program description", "textarea", "", false],
             ];
             const form = await buildForm(fields, draft, { layout: "programs" });
+            if (!body.isConnected) return;
             form.elements.namedItem("code").maxLength = 80;
             form.elements.namedItem("description").maxLength = 10000;
             const cards = node("div", { class: "row g-3 mb-3" });
+            cards.append(node("p", { class: "form-text" }, "Campus/site is optional program context. It does not restrict admissions, registration or online delivery, and does not reserve a room."));
             const capture = () =>
                 Object.assign(draft, formData(form, fields), {
                     description: form.elements.namedItem("description").value || null,
@@ -143,6 +148,7 @@ window.createWorkspacePrograms = function (ui) {
                         award_id: draft.classifications.award?.id ?? null,
                         school_id: draft.classifications.school?.id ?? null,
                         field_of_study_id: draft.classifications.field_of_study?.id ?? null,
+                        campus_id: draft.classifications.campus?.id ?? null,
                         revision: current.revision,
                     });
                     await ui.refreshDirectory();

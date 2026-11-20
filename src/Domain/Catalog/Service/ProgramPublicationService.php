@@ -21,6 +21,7 @@ use Domain\Communications\Service\MessageCipher;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\StoredEvent;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -74,10 +75,11 @@ final readonly class ProgramPublicationService
         string $revision,
         ?EntityId $school = null,
         ?EntityId $fieldOfStudy = null,
+        ?EntityId $campus = null,
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         $choices = ["department" => $department, "academic_level" => $academicLevel, "award" => $award,
-            "school" => $school, "field_of_study" => $fieldOfStudy];
+            "school" => $school, "field_of_study" => $fieldOfStudy, "campus" => $campus];
         return $this->transactions->run(function () use (
             $program,
             $code,
@@ -284,6 +286,23 @@ final readonly class ProgramPublicationService
             );
             $this->cohorts->publishRelease($operation, $program);
             $this->audit->record($actor, "program.definition_published", $program);
+            $this->authorize($actor);
+            if (
+                $review["expires_at"] <= $this->clock->now()->getTimestamp() ||
+                $this->definition($program)->describe() !== $payload["definition"] ||
+                $this->hash($this->specializations->snapshot($program)->data) !==
+                    $this->hash($payload['specializations']) ||
+                $this->year($year)["code"] !== $payload["academic_year_code"]
+            ) {
+                throw new ConcurrentModificationException(
+                    'Program details changed during publication. Review them again.',
+                );
+            }
+            $head = $this->history->latest($this->stream($program));
+            if ($head === null || $head->event->payload()["version_id"] !== $operation->value) {
+                throw new CorruptHistoryException();
+            }
+            $this->assertCurrent($program, $year, $head);
             return $receipt;
         });
     }
@@ -293,7 +312,7 @@ final readonly class ProgramPublicationService
      */
     public function versions(EntityId $program, ?string $cursor = null): array
     {
-        $this->access->requirePermission("sis:catalog:manage");
+        $actor = $this->access->requirePermission("sis:catalog:manage");
         $this->catalog->get("programs", $program);
         $page = $this->history->page($this->stream($program), $cursor, 20);
         $items = [];
@@ -309,6 +328,7 @@ final readonly class ProgramPublicationService
                 "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
             ];
         }
+        $this->authorize($actor);
         return [
             "items" => $items,
             "next_cursor" => $page->nextCursor,
@@ -322,8 +342,9 @@ final readonly class ProgramPublicationService
         $root = ProgramPublication::root($this->stream($program)->aggregateId);
         $accepted = $latestYear = null;
         $cursor = null;
+        $budget = new HistoryReadBudget();
         do {
-            $page = $this->history->page($this->stream($program), $cursor, 50);
+            $page = $budget->page($this->history, $this->stream($program), $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
                 $payload = $stored->event->payload();

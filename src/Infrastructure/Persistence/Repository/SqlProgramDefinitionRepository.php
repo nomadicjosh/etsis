@@ -30,6 +30,7 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
             "award_id" => null,
             "school_id" => null,
             "field_of_study_id" => null,
+            "campus_id" => null,
         ];
     }
 
@@ -78,6 +79,11 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
                 false, 0, '0', 'f' => false,
                 default => throw new CorruptHistoryException(),
             };
+            $campusRecorded = match ($row['campus_recorded'] ?? null) {
+                true, 1, '1', 't' => true,
+                false, 0, '0', 'f' => false,
+                default => throw new CorruptHistoryException(),
+            };
             foreach (ClassificationKind::programKinds() as $kind) {
                 $id = $row[$kind->value . "_id"];
                 $code = $row[$kind->value . "_code"];
@@ -88,6 +94,12 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
                 if (
                     !$extended && in_array($kind, [ClassificationKind::School, ClassificationKind::FieldOfStudy], true)
                 ) {
+                    if ($id !== null || $code !== null || $title !== null) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
+                if ($kind === ClassificationKind::Campus && !$campusRecorded) {
                     if ($id !== null || $code !== null || $title !== null) {
                         throw new CorruptHistoryException();
                     }
@@ -157,6 +169,7 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
             "stream_version" => $position,
             "description" => $definition->description,
             "school_field_recorded" => (int) $definition->classifications->schoolAndFieldRecorded,
+            "campus_recorded" => (int) $definition->classifications->campusRecorded,
         ];
         $values = $definition->classifications->describe();
         foreach (ClassificationKind::programKinds() as $category) {
@@ -180,6 +193,7 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
         } else {
             $old["stream_version"] = (int) $old["stream_version"];
             $old["school_field_recorded"] = (int) $old["school_field_recorded"];
+            $old["campus_recorded"] = (int) $old["campus_recorded"];
             if (ProtectedEventCodec::canonical($old) !== ProtectedEventCodec::canonical($row)) {
                 throw new CorruptHistoryException();
             }

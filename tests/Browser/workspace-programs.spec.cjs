@@ -4,12 +4,13 @@ const id = number => `01K000000000000000000000${String(number).padStart(2, '0')}
 
 async function fixture(page, options = {}) {
     const calls = [], errors = [], publications = [];
-    let definition = { code: 'BSCS', title: 'Computer Science', description: options.description || null, classifications: { department: null, academic_level: null, award: null, school: null, field_of_study: null } };
+    let definition = { code: 'BSCS', title: 'Computer Science', description: options.description || null, classifications: { department: null, academic_level: null, award: null, school: null, field_of_study: null, campus: null } };
     const rows = [
         { id: id(3), kind: 'department', code: 'SCI', title: 'Sciences', active: true },
         { id: id(4), kind: 'academic_level', code: 'UG', title: 'Undergraduate', active: true },
         { id: id(7), kind: 'school', code: 'ARTS', title: 'College of Arts <b>fictional</b>', active: true },
         { id: id(8), kind: 'field_of_study', code: '11.0701', title: 'Computer Science', active: true },
+        { id: id(9), kind: 'campus', code: 'MAIN', title: 'Fictional Main <b>Campus</b>', active: true },
         { id: id(5), kind: 'award', code: 'BA', title: 'Bachelor of Arts <script>fictional</script>', active: true },
     ];
     let reviews = 0, accepted = null;
@@ -28,7 +29,7 @@ async function fixture(page, options = {}) {
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/data/programs/') result = { items: [{ id: id(1), code: definition.code, title: definition.title }], next_after: null };
         else if (path === `/sis/programs/${id(1)}/details/`) {
-            if (data) definition = { code: data.code, title: data.title, description: data.description, classifications: Object.fromEntries(['department', 'academic_level', 'award', 'school', 'field_of_study'].map(kind => {
+            if (data) definition = { code: data.code, title: data.title, description: data.description, classifications: Object.fromEntries(['department', 'academic_level', 'award', 'school', 'field_of_study', 'campus'].map(kind => {
                 const row = rows.find(row => row.id === data[`${kind}_id`]);
                 return [kind, row ? { id: row.id, code: row.code, title: row.title } : null];
             })) };
@@ -96,7 +97,7 @@ test('program details and classifications are edited together and explicitly rev
     const f = await fixture(page);
     await page.getByRole('textbox', { name: 'Program title', exact: true }).fill('Fictional Science');
     await page.getByRole('textbox', { name: 'Program description', exact: true }).fill('A fictional description <img src=x onerror=alert(1)>');
-    for (const [category, code] of [['department', 'SCI'], ['academic level', 'UG'], ['award', 'BA'], ['school/college', 'ARTS'], ['field of study', '11.0701']]) {
+    for (const [category, code] of [['department', 'SCI'], ['academic level', 'UG'], ['award', 'BA'], ['school/college', 'ARTS'], ['field of study', '11.0701'], ['campus/site', 'MAIN']]) {
         await page.getByRole('button', { name: `Choose ${category}`, exact: true }).click();
         await page.getByRole('button', { name: `Choose ${code}`, exact: true }).click();
     }
@@ -129,7 +130,8 @@ test('program details and classifications are edited together and explicitly rev
     await page.getByText('2024-2025 · Revision 1 · Fictional Science', { exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Sciences');
     await expect(page.locator('#drawer-body')).toContainText('ARTS — College of Arts <b>fictional</b>');
-    expect(f.calls.find(call => call.path.endsWith('/details/')).data).toMatchObject({ school_id: id(7), field_of_study_id: id(8) });
+    await expect(page.locator('#drawer-body')).toContainText('MAIN — Fictional Main <b>Campus</b>');
+    expect(f.calls.find(call => call.path.endsWith('/details/')).data).toMatchObject({ school_id: id(7), field_of_study_id: id(8), campus_id: id(9) });
     expect(await page.locator('#drawer-body img, #drawer-body script').count()).toBe(0);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
@@ -366,5 +368,83 @@ test('catalog staff see institutional boundaries and retain rejected program pol
     await page.setViewportSize({width:375,height:812});await accessible(page);
     expect(f.calls.some(c=>c.path==='/sis/catalog/specialization-policy/')).toBe(false);
     expect(f.calls.filter(c=>c.path.endsWith('/specializations/policy/')).map(c=>c.data.revision)).toEqual([0,0]);
+    expect(f.errors).toEqual([]);
+});
+
+test('program campus report template compares retained cohort and current setup without exposing markup', async ({ page }) => {
+    const calls = [], errors = [];
+    const fields = {
+        institutional_id: ['Institutional ID', 'string', 'identity'],
+        full_name: ['Student full name', 'string', 'person'],
+        published_program_title: ['Published program title', 'string', 'catalog'],
+        catalog_year: ['Matriculation academic year', 'string', 'year'],
+        program_campus_title: ['Published program campus/site name', 'string', 'program_definition'],
+        current_program_campus_title: ['Current program campus/site name', 'string', 'current_campus'],
+        program_campus_recorded: ['Program campus/site recorded', 'boolean', 'program_definition'],
+    };
+    const dataset = { id: 'programs', label: 'Student programs & catalog cohorts', description: 'One row per program pursuit.',
+        fields: Object.fromEntries(Object.entries(fields).map(([key, [label, type, relation]]) => [key, { label, type, relation }])),
+        relationships: { student: { label: 'Student records', parent: 'assignment', many: false },
+            person: { label: 'Student names', parent: 'student', many: false },
+            identity: { label: 'Institutional IDs', parent: 'person', many: false },
+            catalog: { label: 'Assigned catalog', parent: 'assignment', many: false },
+            year: { label: 'Academic year', parent: 'catalog', many: false },
+            program_definition: { label: 'Published program details', parent: 'catalog', many: false },
+            current_campus: { label: 'Current program campus/site', parent: 'assignment', many: false } } };
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/sis/**', async route => {
+        const path = new URL(route.request().url()).pathname, raw = route.request().postData();
+        const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
+        calls.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
+        let result = { items: [], next_after: null };
+        if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+        else if (path === '/sis/report-studio/catalog/') result = { datasets: [dataset] };
+        else if (path === '/sis/report-studio/graph/') result = { dataset };
+        else if (path === '/sis/report-studio/preview/') result = { columns: data.definition.columns.map(c => c.label),
+            items: [{ c0: 'S-FICTIONAL', c1: 'Alex Example', c2: 'Fictional Computing', c3: '2024-2025',
+                c4: 'Original <b>Campus</b>', c5: 'Current Campus', c6: true }], next_offset: null, offset: 0, limit: 50, grouped: false };
+        await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
+    });
+    await page.goto('/admin/');
+    await page.locator('.workspace-nav-link[data-workspace="reports"]').click();
+    await page.getByRole('button', { name: 'Open Report Studio', exact: true }).click();
+    await page.getByText('Start from a template', { exact: true }).click();
+    await page.getByRole('button', { name: 'Program campuses', exact: true }).click();
+    await page.getByLabel('Report name', { exact: true }).fill('Fictional program campuses');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const results = page.getByRole('region', { name: 'Relational report results', exact: true });
+    await expect(results).toContainText('Original <b>Campus</b>');
+    await expect(results).toContainText('Current Campus');
+    await expect(results.locator('b')).toHaveCount(0);
+    const definition = calls.find(c => c.path.endsWith('/preview/')).data.definition;
+    expect(definition.dataset).toBe('programs');
+    expect(definition.columns.map(c => c.field)).toEqual(Object.keys(fields));
+    await accessible(page);
+    expect(calls.filter(c => c.data).every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(errors).toEqual([]);
+});
+
+test('a delayed campus chooser cannot replace a later program draft', async ({ page }) => {
+    const f = await fixture(page);
+    let release, entered;
+    const gate = new Promise(resolve => { release = resolve; });
+    const started = new Promise(resolve => { entered = resolve; });
+    await page.route('**/sis/catalog/classifications/campus/page/', async route => {
+        entered();
+        await gate;
+        await route.fulfill({ json: { items: [{ id: id(9), kind: 'campus', code: 'OLD', title: 'Delayed Campus', active: true }], next_after: null } });
+    });
+    await page.getByRole('button', { name: 'Choose campus/site', exact: true }).click();
+    await started;
+    await page.getByRole('button', { name: 'Close record', exact: true }).click();
+    await expect(page.locator('#record-drawer')).not.toBeVisible();
+    await page.getByRole('button', { name: 'Computer Science', exact: true }).click();
+    await page.getByRole('button', { name: 'Program details & publications', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Program title', exact: true }).fill('Keep this unfinished draft');
+    release();
+    await page.waitForResponse(response => response.url().includes('/classifications/campus/page/'));
+    await expect(page.getByRole('textbox', { name: 'Program title', exact: true })).toHaveValue('Keep this unfinished draft');
+    await expect(page.locator('#drawer-body')).not.toContainText('Delayed Campus');
     expect(f.errors).toEqual([]);
 });

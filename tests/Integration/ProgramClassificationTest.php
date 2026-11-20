@@ -158,7 +158,10 @@ final class ProgramClassificationTest extends TestCase
         self::assertSame($earlier, $old->describe());
         $current = new ProgramClassifications();
         self::assertTrue($current->schoolAndFieldRecorded);
-        self::assertSame($earlier + ['school' => null, 'field_of_study' => null], $current->describe());
+        self::assertSame(
+            $earlier + ['school' => null, 'field_of_study' => null, 'campus' => null],
+            $current->describe(),
+        );
         foreach (
             [$earlier + ['school' => null], $earlier + ['field_of_study' => null],
             $earlier + ['unrecognized' => null]] as $fields
@@ -172,14 +175,23 @@ final class ProgramClassificationTest extends TestCase
         }
     }
 
-    public function testEarlierRetainedProjectionsDoNotInferSchoolsFromCurrentAssignments(): void
+    public static function historicalClassificationShapes(): array
+    {
+        return ['before school fields' => [false], 'school fields without campus' => [true]];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('historicalClassificationShapes')]
+    public function testEarlierRetainedProjectionsDoNotInferSchoolsFromCurrentAssignments(bool $schoolFields): void
     {
         $p = new ProgramPublicationFixture();
         $f = $p->sis;
         $year = $p->calendar->year(2024);
         $review = $p->service->review($f->program, new EntityId($year['id']), 'Fictional earlier publication');
         $values = $review['definition'];
-        unset($values['classifications']['school'], $values['classifications']['field_of_study']);
+        unset($values['classifications']['campus']);
+        if (!$schoolFields) {
+            unset($values['classifications']['school'], $values['classifications']['field_of_study']);
+        }
         $operation = new EntityId($review['operation_id']);
         $payload = ['version_id' => $operation->value] + array_intersect_key($review, array_flip([
             'previous_version_id', 'academic_year_id', 'academic_year_code', 'catalog_revision', 'previous_catalog_id',
@@ -221,7 +233,9 @@ final class ProgramClassificationTest extends TestCase
         $this->assign($p, $school);
         self::assertEquals($values, $p->service->versions($f->program)['items'][0]['definition']);
         self::assertSame($before, $f->sql->rows('sis_history_events'));
-        $f->sql->update('sis_program_catalog_details', ['school_id' => $school['id']], ['id' => $operation->value]);
+        $row = $f->sql->one('sis_program_catalog_details', ['id' => $operation->value]);
+        self::assertSame(0, (int) $row['campus_recorded']);
+        $f->sql->update('sis_program_catalog_details', ['campus_code' => 'INVENTED'], ['id' => $operation->value]);
         $this->expectException(CorruptHistoryException::class);
         new SqlProgramDefinitionRepository($f->sql)->retained($operation);
     }
@@ -314,6 +328,338 @@ final class ProgramClassificationTest extends TestCase
             self::assertStringContainsString('field_of_study_code', $sql);
             self::assertStringContainsString('school_field_recorded', $sql);
             self::assertDoesNotMatchRegularExpression('/DROP |DELETE |UPDATE |INSERT /i', $sql);
+        }
+    }
+    private function campusDraft(ProgramPublicationFixture $p, ?array $campus): array
+    {
+        $draft = $p->service->draft($p->sis->program);
+        return $p->service->save(
+            $p->sis->program,
+            $draft["definition"]["code"],
+            $draft["definition"]["title"],
+            $draft["definition"]["description"],
+            null,
+            null,
+            null,
+            $draft["revision"],
+            campus: $campus === null ? null : new EntityId($campus["id"]),
+        );
+    }
+
+    public function testProgramCampusRetainsCohortLabelsAndReportsCurrentLocationSeparately(): void
+    {
+        $p = new ProgramPublicationFixture();
+        $f = $p->sis;
+        $year = $p->calendar->year(2024);
+        $campus = $this->reference($p, ClassificationKind::Campus, "MAIN", "Fictional Main Campus");
+        $before = $f->sql->rows("sis_history_events");
+        $saved = $this->campusDraft($p, $campus);
+        self::assertSame($before, $f->sql->rows("sis_history_events"));
+        $review = $p->service->review(
+            $f->program,
+            new EntityId($year["id"]),
+            "Fictional program campus approval.",
+        );
+        $receipt = $p->service->publish($f->program, $review["review_token"]);
+        $version = new EntityId($receipt["operation_id"]);
+        $row = $f->sql->one("sis_program_catalog_details", ["id" => $version->value]);
+        self::assertSame(1, (int) $row["campus_recorded"]);
+        self::assertSame("MAIN", $row["campus_code"]);
+        $person = $f->legacyPerson($f->user(), "Fictional", "Student");
+        $application = $f->legacyApplication($person->id, $f->program, new EntityId($year["terms"][0]["id"]));
+        $f->legacyAdmissionDecision($application->id, true);
+        $f->matriculate($application->id);
+        $p->classifications->save(
+            ClassificationKind::Campus,
+            new EntityId($campus["id"]),
+            "NORTH",
+            "Fictional North Campus",
+            false,
+            $campus["revision"],
+        );
+        self::assertSame(
+            $saved["definition"],
+            new SqlProgramDefinitionRepository($f->sql)->retained($version)["definition"],
+        );
+        self::assertSame($receipt, $p->service->publish($f->program, $review["review_token"]));
+        $events = $f->sql->rows("sis_history_events");
+        $source = new SqlRelationalReportSource($f->sql);
+        $query = new \Domain\Reporting\ValueObject\ReportQuery(
+            [
+                "dataset" => "programs",
+                "columns" => array_map(
+                    static fn(string $field): array => [
+                        "field" => $field,
+                        "label" => $field,
+                        "aggregate" => "none",
+                    ],
+                    [
+                        "program_campus_code",
+                        "program_campus_title",
+                        "program_campus_recorded",
+                        "current_program_campus_code",
+                        "current_program_campus_title",
+                    ],
+                ),
+                "filters" => null,
+                "having" => null,
+                "sort" => [],
+            ],
+            $source->datasets()["programs"],
+        );
+        $rows = $source->execute($query, 0);
+        self::assertCount(1, $rows, "The location joins must not multiply student-program rows.");
+        self::assertSame("MAIN", $rows[0]["c0"]);
+        self::assertSame("Fictional Main Campus", $rows[0]["c1"]);
+        self::assertSame(1, (int) $rows[0]["c2"]);
+        self::assertSame("NORTH", $rows[0]["c3"]);
+        self::assertSame("Fictional North Campus", $rows[0]["c4"]);
+        self::assertSame($events, $f->sql->rows("sis_history_events"));
+        $this->campusDraft($p, null);
+        $next = $p->service->review(
+            $f->program,
+            new EntityId($year["id"]),
+            "Fictional online program context.",
+        );
+        $p->service->publish($f->program, $next["review_token"]);
+        self::assertSame(
+            "MAIN",
+            $source->execute($query, 0)[0]["c0"],
+            "A new cohort publication cannot relabel this student.",
+        );
+    }
+
+    public function testCampusMustUseTheSharedCategoryAndRetiredChoicesCannotBeNewlyAssigned(): void
+    {
+        $p = new ProgramPublicationFixture();
+        $campus = $this->reference($p, ClassificationKind::Campus, "MAIN", "Main Campus");
+        $school = $this->reference($p, ClassificationKind::School, "SCI", "School of Science");
+        try {
+            $this->campusDraft($p, $school);
+            self::fail("A school was accepted as a campus.");
+        } catch (ValidationException) {
+            self::assertSame([], $p->sis->sql->rows("sis_program_details"));
+        }
+        $this->campusDraft($p, $campus);
+        $retired = $p->classifications->save(
+            ClassificationKind::Campus,
+            new EntityId($campus["id"]),
+            "MAIN",
+            "Retired Main Campus",
+            false,
+            $campus["revision"],
+        );
+        $this->campusDraft($p, $retired);
+        $this->campusDraft($p, null);
+        $this->expectException(ValidationException::class);
+        $this->campusDraft($p, $retired);
+    }
+
+    public function testOldProgramShapesDoNotInventCampusAndPartialCampusPayloadsAreRejected(): void
+    {
+        $old = [
+            "department" => null,
+            "academic_level" => null,
+            "award" => null,
+            "school" => null,
+            "field_of_study" => null,
+        ];
+        $value = ProgramClassifications::fromArray($old);
+        self::assertFalse($value->campusRecorded);
+        self::assertSame($old, $value->describe());
+        $current = ProgramClassifications::fromArray($old + ["campus" => null]);
+        self::assertTrue($current->campusRecorded);
+        self::assertNull($current->campus);
+        foreach (
+            [
+                $old + ["campus" => "MAIN"],
+                array_diff_key($old, ["school" => true]) + ["campus" => null],
+                array_slice($old, 0, 3, true) + ["campus" => null],
+                $old + ["location" => null],
+            ] as $bad
+        ) {
+            try {
+                ProgramClassifications::fromArray($bad);
+                self::fail("An incomplete or untyped location was accepted.");
+            } catch (\InvalidArgumentException) {
+                self::assertTrue(true);
+            }
+        }
+    }
+
+    public function testStaleCampusRenameCannotPublishAndExplicitBlankIsRetained(): void
+    {
+        $p = new ProgramPublicationFixture();
+        $f = $p->sis;
+        $year = $p->calendar->year(2024);
+        $campus = $this->reference($p, ClassificationKind::Campus, "MAIN", "Main Campus");
+        $this->campusDraft($p, $campus);
+        $review = $p->service->review($f->program, new EntityId($year["id"]), "Fictional campus review.");
+        $p->classifications->save(
+            ClassificationKind::Campus,
+            new EntityId($campus["id"]),
+            "MAIN",
+            "Renamed Campus",
+            true,
+            $campus["revision"],
+        );
+        $events = $f->sql->rows("sis_history_events");
+        try {
+            $p->service->publish($f->program, $review["review_token"]);
+            self::fail("A stale campus was published.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame($events, $f->sql->rows("sis_history_events"));
+        }
+        $this->campusDraft($p, null);
+        $review = $p->service->review(
+            $f->program,
+            new EntityId($year["id"]),
+            "Fictional program without campus.",
+        );
+        $receipt = $p->service->publish($f->program, $review["review_token"]);
+        $retained = $f->sql->one("sis_program_catalog_details", ["id" => $receipt["operation_id"]]);
+        self::assertSame(1, (int) $retained["campus_recorded"]);
+        self::assertNull($retained["campus_id"]);
+        self::assertArrayHasKey(
+            "campus",
+            new SqlProgramDefinitionRepository($f->sql)->retained(new EntityId($receipt["operation_id"]))[
+                "definition"
+            ]["classifications"],
+        );
+    }
+
+    public function testPublicationFinalChecksRollBackChangedCampusSourceAuthorityExpiryAndProjection(): void
+    {
+        foreach (["reference", "authority", "expiry", "projection", "audit"] as $failure) {
+            $p = new ProgramPublicationFixture();
+            $f = $p->sis;
+            $year = $p->calendar->year(2024);
+            $campus = $this->reference($p, ClassificationKind::Campus, "MAIN", "Main Campus");
+            $this->campusDraft($p, $campus);
+            $review = $p->service->review($f->program, new EntityId($year["id"]), "Fictional publication.");
+            $audit = $this->createStub(AuditTrail::class);
+            $audit
+                ->method("record")
+                ->willReturnCallback(static function () use ($f, $failure, $campus, $review): void {
+                    if ($failure === "reference") {
+                        $f->sql->update(
+                            "sis_catalog_classifications",
+                            ["title" => "Changed during acceptance"],
+                            ["id" => $campus["id"]],
+                        );
+                    } elseif ($failure === "authority") {
+                        $f->access->staff = false;
+                    } elseif ($failure === "expiry") {
+                        $f->clock->time = $f->clock->time->modify("+20 minutes");
+                    } elseif ($failure === "projection") {
+                        $f->sql->update(
+                            "sis_program_catalog_details",
+                            ["campus_code" => "UNRECORDED"],
+                            ["id" => $review["operation_id"]],
+                        );
+                    } else {
+                        throw new \RuntimeException("Fictional required-audit failure.");
+                    }
+                });
+            $tables = [
+                "sis_history_events",
+                "sis_history_streams",
+                "sis_history_operations",
+                "sis_program_catalogs",
+                "sis_program_catalog_details",
+                "sis_program_specialization_contexts",
+                "sis_catalog_classifications",
+                "sis_audit",
+            ];
+            $before = array_map($f->sql->rows(...), $tables);
+            try {
+                $p->publisher(audit: $audit)->publish($f->program, $review["review_token"]);
+                self::fail("A failed publication committed.");
+            } catch (\RuntimeException | \InvalidArgumentException $e) {
+                self::assertNotSame("A failed publication committed.", $e->getMessage());
+                self::assertSame($before, array_map($f->sql->rows(...), $tables));
+            }
+        }
+    }
+
+    public function testRecordedCampusProjectionCannotBeReplacedFromCurrentSetup(): void
+    {
+        $p = new ProgramPublicationFixture();
+        $f = $p->sis;
+        $year = $p->calendar->year(2024);
+        $campus = $this->reference($p, ClassificationKind::Campus, "MAIN", "Main Campus");
+        $this->campusDraft($p, $campus);
+        $review = $p->service->review($f->program, new EntityId($year["id"]), "Fictional publication.");
+        $receipt = $p->service->publish($f->program, $review["review_token"]);
+        $f->sql->update(
+            "sis_program_catalog_details",
+            ["campus_id" => null],
+            ["id" => $receipt["operation_id"]],
+        );
+        $this->expectException(CorruptHistoryException::class);
+        new SqlProgramDefinitionRepository($f->sql)->retained(new EntityId($receipt["operation_id"]));
+    }
+
+    public function testCampusMigrationPreservesExistingRowsWithPortableNullableReferencesAndNoBackfill(): void
+    {
+        $p = new ProgramPublicationFixture();
+        $f = $p->sis;
+        $f->sql->insert("sis_program_details", [
+            "id" => $f->program->value,
+            "description" => "Existing draft",
+        ]);
+        $before = $f->sql->one("sis_program_details", ["id" => $f->program->value]);
+        // Running the migration again is harmless and does not overwrite the existing draft.
+        $migration = new \AddSisProgramCampuses("program-classifications");
+        $migration->setObjectMap(
+            new ArrayObject([
+                "phpmig.adapter" => new DbalMigrationAdapter($f->connection, "fixture"),
+            ]),
+        );
+        $migration->up();
+        self::assertSame($before, $f->sql->one("sis_program_details", ["id" => $f->program->value]));
+        $foreign = $f->connection->pdo
+            ->query("PRAGMA foreign_key_list(sis_program_details)")
+            ->fetchAll(\PDO::FETCH_ASSOC);
+        self::assertContains("campus_id", array_column($foreign, "from"));
+        self::assertSame([], $f->sql->rows("sis_history_events"));
+        $changes = [];
+        $schema = $this->createStub(Schema::class);
+        $schema->method("getColumns")->willReturn(["id"]);
+        $schema
+            ->method("alter")
+            ->willReturnCallback(static function (string $table, callable $callback) use (&$changes): void {
+                $definition = new AlterTable($table);
+                $callback($definition);
+                $changes[] = $definition;
+            });
+        $connection = $this->createStub(Connection::class);
+        $pdo = $this->createStub(\PDO::class);
+        $pdo->method("getAttribute")->willReturn("mysql");
+        $connection->method(PropertyHook::get("pdo"))->willReturn($pdo);
+        $connection->method("getSchema")->willReturn($schema);
+        $migration->setObjectMap(
+            new ArrayObject([
+                "phpmig.adapter" => new DbalMigrationAdapter($connection, "fixture"),
+            ]),
+        );
+        $migration->up();
+        self::assertCount(5, $changes);
+        foreach (["MySQL", "PostgreSQL", "SQLServer", "Oracle"] as $driver) {
+            $dialect = $this->createStub(Connection::class);
+            $dialect
+                ->method("quoteIdentifier")
+                ->willReturnCallback(static fn(string $name): string => '"' . $name . '"');
+            $class = "Qubus\\Expressive\\Schema\\Compiler\\" . $driver;
+            $commands = [];
+            foreach ($changes as $change) {
+                array_push($commands, ...new $class($dialect)->alter($change));
+            }
+            $sql = json_encode($commands, JSON_THROW_ON_ERROR);
+            self::assertStringContainsString("campus_id", $sql);
+            self::assertStringContainsString("campus_code", $sql);
+            self::assertStringContainsString("campus_recorded", $sql);
+            self::assertDoesNotMatchRegularExpression("/DROP |DELETE |UPDATE |INSERT /i", $sql);
         }
     }
 }

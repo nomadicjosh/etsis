@@ -4464,7 +4464,11 @@ if (
     $teachingPost($programDetailsBase . "details/", [
         "code" => $programDraft["definition"]["code"], "title" => $programDraft["definition"]["title"],
         "description" => "Fictional published program text", "department_id" => null, "academic_level_id" => null,
-        "school_id" => null, "field_of_study_id" => null, "award_id" => $programAward["id"], "revision" => $programDraft["revision"],
+        "school_id" => null,
+        "field_of_study_id" => null,
+        "campus_id" => null,
+        "award_id" => $programAward["id"],
+        "revision" => $programDraft["revision"],
     ])->getStatusCode() !== 200
 ) {
     throw new RuntimeException("Program details failed to resolve through the private provider/router pipeline.");

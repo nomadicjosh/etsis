@@ -36,7 +36,7 @@ window.createWorkspaceClassifications = function (ui) {
         campus: {
             singular: "Campus/site",
             plural: "Campuses & sites",
-            detail: "An optional academic campus or site. Selecting a campus does not reserve a room; online sections can leave this blank.",
+            detail: "An optional academic campus or site. Programs and sections can share this reference library. Selecting a campus does not reserve a room or restrict online delivery; leave it blank when it does not apply.",
         },
         award: {
             singular: "Award",
@@ -69,14 +69,6 @@ window.createWorkspaceClassifications = function (ui) {
         const extendedProgramKind = ["school", "field_of_study"].includes(kind);
         const visibleKinds = sectionKind ? ["instructional_method", "campus"] : extendedProgramKind
             ? ["school", "field_of_study"] : ["department", "academic_level", "course_level", "award"];
-        const data = await request(
-            `/sis/catalog/classifications/${kind}/page/`,
-            "POST",
-            {
-                search,
-                ...(after ? { after } : {}),
-            },
-        );
         const body = openDrawer(
             choose
                 ? `Choose ${category.singular.toLowerCase()}`
@@ -87,6 +79,15 @@ window.createWorkspaceClassifications = function (ui) {
                     : "Departments & levels",
             "ACADEMIC CATALOG",
         );
+        const data = await request(
+            `/sis/catalog/classifications/${kind}/page/`,
+            "POST",
+            {
+                search,
+                ...(after ? { after } : {}),
+            },
+        );
+        if (!body.isConnected) return;
         if (!choose) {
             const navigation = node("div", {
                 class: "d-flex flex-wrap gap-2 mb-3",

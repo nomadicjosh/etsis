@@ -22,6 +22,8 @@ The functional coverage below does **not** mean these contexts already provide c
 
 [Enrollment load](enrollment-load.md) now bundles institutional/program policy publication and runtime-only staff, student and advisor reviews. All active registrations in the chosen term count after program changes, using original registered quantities; closed attempts and incomplete history cannot inflate or silently reduce a verified total. Official retained/census determinations and reporting remain open.
 
+[Program campuses/sites](program-publication.md#program-campuses-and-sites) now connect the shared reference library, optional draft selection, immutable academic-year publications and cohort-aware reporting. Earlier unknown locations remain unknown, current reference edits do not relabel student bindings, and final publication checks roll back source/authority/expiry/projection failures. The additive migration changes only existing projections, with no event conversion or new journal.
+
 ## Source review and scope decisions
 
 `legacy-inventory.json` records documentation, migration tables/columns, view fields, router declarations, module functions, and source checksums. The review now includes 51 documentation files, six legacy migrations, 207 PHP views, 29 routers, and ten module files. The newly supplied module routers and views resolve the earlier missing-source question; missing behavior may also be reconstructed under the user's instruction.

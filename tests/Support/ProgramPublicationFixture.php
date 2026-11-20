@@ -30,6 +30,7 @@ final class ProgramPublicationFixture
 
     public function publisher(
         ?\Domain\Shared\Persistence\UnitOfWork $transactions = null,
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
     ): \Domain\Catalog\Service\ProgramPublicationService {
         $f = $this->sis;
         return new \Domain\Catalog\Service\ProgramPublicationService(
@@ -49,7 +50,7 @@ final class ProgramPublicationFixture
             ),
             $f->access,
             $transactions ?? $f->transactions,
-            $f->audit,
+            $audit ?? $f->audit,
             $f->dropCipher,
             $f->clock,
             new \Domain\Catalog\Service\SpecializationPolicyService(

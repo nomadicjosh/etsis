@@ -24,6 +24,13 @@ enum ClassificationKind: string
     /** @return list<self> */
     public static function programKinds(): array
     {
-        return [self::Department, self::AcademicLevel, self::Award, self::School, self::FieldOfStudy];
+        return [
+            self::Department,
+            self::AcademicLevel,
+            self::Award,
+            self::School,
+            self::FieldOfStudy,
+            self::Campus,
+        ];
     }
 }

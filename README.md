@@ -142,6 +142,8 @@ Security, student privacy and historical academic integrity lead continued devel
 
 [Enrollment load](docs/enrollment-load.md) now connects reviewed institutional/program credit bands with on-demand staff, student and advisor reviews. Active registrations across program changes use their originally registered credits; drops, unknown history and policy inheritance remain explicit. Official census determinations remain separate roadmap work.
 
+[Program campuses and sites](docs/program-publication.md#program-campuses-and-sites) now share the campus library with sections, retain cohort-specific publication labels and offer a Report Studio comparison with current setup. Program locations remain optional and do not restrict online delivery or registration.
+
 [Co-requisites and linked drops](docs/registration-history.md#co-requisites-and-linked-drops) connect retained course requirements, institutional policy, student/staff schedule plans and atomic companion-course drops. Qualifying prior completion avoids duplicate registration and charges; explicit earlier-pursuit reuse remains required. [Section drop policies](docs/registration-history.md#section-drop-policy-overrides) support short-session overrides and reviewed restoration of term inheritance.
 
 The [single protected event store](docs/event-history-foundation.md) serves the framework and domain ports. Its migration converts and verifies existing User/financial events before removing the old event table. Academic writers and richer command attribution still require the documented staged conversion.

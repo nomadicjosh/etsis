@@ -52,6 +52,7 @@ final readonly class SisProgramPublicationController
                 $input->text("revision", 64),
                 school: $input->optionalId("school_id"),
                 fieldOfStudy: $input->optionalId("field_of_study_id"),
+                campus: $input->optionalId("campus_id"),
             ),
         );
     }
