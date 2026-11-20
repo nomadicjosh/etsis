@@ -138,7 +138,7 @@ Security, student privacy and historical academic integrity lead continued devel
 
 [Registration history](docs/registration-history.md) now preserves accepted seats, early/late releases and committed section decision order, with registrar-only access to restricted early-drop history. Staff and students can also [review a section change during add/drop](docs/registration-history.md#change-sections-during-adddrop), with the original drop, replacement registration and course-charge changes saved together.
 
-[Co-requisites and linked drops](docs/registration-history.md#co-requisites-and-linked-drops) connect retained course requirements, institutional policy, student/staff schedule plans and atomic companion-course drops. Qualifying prior completion avoids duplicate registration and charges; explicit earlier-pursuit reuse remains required.
+[Co-requisites and linked drops](docs/registration-history.md#co-requisites-and-linked-drops) connect retained course requirements, institutional policy, student/staff schedule plans and atomic companion-course drops. Qualifying prior completion avoids duplicate registration and charges; explicit earlier-pursuit reuse remains required. [Section drop policies](docs/registration-history.md#section-drop-policy-overrides) support short-session overrides and reviewed restoration of term inheritance.
 
 The [single protected event store](docs/event-history-foundation.md) serves the framework and domain ports. Its migration converts and verifies existing User/financial events before removing the old event table. Academic writers and richer command attribution still require the documented staged conversion.
 

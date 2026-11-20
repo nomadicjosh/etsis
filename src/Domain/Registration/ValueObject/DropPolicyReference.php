@@ -14,9 +14,10 @@ final class DropPolicyReference
     {
         if (
             !is_array($reference) ||
-            count($reference) !== 4 ||
+            !in_array(count($reference), [4, 5], true) ||
             array_diff(array_keys($reference), [
                 "term_id",
+                "section_id",
                 "publication_id",
                 "version",
                 "definition_hash",
@@ -29,7 +30,10 @@ final class DropPolicyReference
         ) {
             throw new CorruptHistoryException();
         }
-        foreach (["term_id", "publication_id"] as $key) {
+        if (count($reference) === 5 && !is_string($reference['section_id'] ?? null)) {
+            throw new CorruptHistoryException();
+        }
+        foreach (["term_id", "publication_id", ...(count($reference) === 5 ? ['section_id'] : [])] as $key) {
             if (!is_string($reference[$key] ?? null)) {
                 throw new CorruptHistoryException();
             }

@@ -18,13 +18,17 @@ final readonly class SisDropPolicyController
     public function __construct(private DropPolicyService $service)
     {
     }
-    public function show(string $term): ResponseInterface
+    public function show(string $term, ?string $section = null): ResponseInterface
     {
-        return new JsonResponse($this->service->show(new EntityId($term)));
+        return new JsonResponse($this->service->show(
+            new EntityId($term),
+            $section === null ? null : new EntityId($section),
+        ));
     }
     public function review(
         #[\SensitiveParameter] ServerRequest $request,
         string $term,
+        ?string $section = null,
     ): ResponseInterface {
         $body = $request->getParsedBody();
         $windows = is_array($body) ? $body["windows"] ?? null : null;
@@ -36,23 +40,30 @@ final readonly class SisDropPolicyController
                 ],
             ]);
         }
+        $input = FormInput::from($request);
+        $inherit = $section !== null && $input->requiredBoolean('uses_term_policy');
         return new JsonResponse(
             $this->service->review(
                 new EntityId($term),
-                FormInput::from($request)->integer("version", -1),
+                $input->integer("version", -1),
                 new DropWindows($windows),
                 is_string($body["reason"] ?? null) ? $body["reason"] : "",
+                $section === null ? null : new EntityId($section),
+                $section === null || $inherit ? null : $input->text('grace_ends_on', 10),
+                $inherit,
             ),
         );
     }
     public function commit(
         #[\SensitiveParameter] ServerRequest $request,
         string $term,
+        ?string $section = null,
     ): ResponseInterface {
         return new JsonResponse(
             $this->service->commit(
                 new EntityId($term),
                 FormInput::from($request)->text("review_token", 65536),
+                $section === null ? null : new EntityId($section),
             ),
         );
     }
@@ -60,6 +71,7 @@ final readonly class SisDropPolicyController
     public function history(
         ServerRequest $request,
         string $term,
+        ?string $section = null,
     ): ResponseInterface {
         $cursor = $request->getQueryParams()["cursor"] ?? null;
         if (
@@ -71,7 +83,7 @@ final readonly class SisDropPolicyController
             );
         }
         return new JsonResponse(
-            $this->service->history(new EntityId($term), $cursor),
+            $this->service->history(new EntityId($term), $cursor, $section === null ? null : new EntityId($section)),
         );
     }
 }

@@ -5,6 +5,7 @@ const { node, walk } = require('./support/elements.cjs');
 async function fixture({ changed = false, interrupted = false, legacy = false, reviewGate = null } = {}) {
     const window = {};
     vm.runInNewContext(fs.readFileSync('public/assets/js/workspace-course-drops.js', 'utf8'), { window }, { timeout: 500 });
+    vm.runInNewContext(fs.readFileSync('public/assets/js/registration-drops.js', 'utf8'), { window }, { timeout: 500 });
     const body = node('div');
     Object.defineProperty(body, 'childNodes', { get: () => body.children });
     const sent = [], messages = []; let backs = 0, commits = 0;
@@ -83,4 +84,19 @@ test('a delayed review cannot replace a task opened after its drawer was dismiss
     resolveReview(); await pending;
     assert.equal(f.findButton('Publish policy'), undefined);
     assert.equal(f.sent.some(r => r.path.endsWith('commit/')), false);
+});
+
+test('changing fields during a pending review keeps the newer draft and requires another review', async () => {
+    let release;
+    const gate = new Promise(resolve => { release = resolve; });
+    const f = await fixture({ reviewGate: gate });
+    const reason = walk(f.body).find(e => e.tag === 'textarea');
+    reason.value = 'First fictional reason';
+    const review = f.findButton('Review policy');
+    const pending = review.attributes.onclick({ currentTarget: review });
+    reason.value = 'Updated fictional reason';
+    release(); await pending;
+    assert.match(f.body.textContent, /fields changed/);
+    assert.equal(reason.value, 'Updated fictional reason');
+    assert.equal(f.findButton('Publish policy'), undefined);
 });

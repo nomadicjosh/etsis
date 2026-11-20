@@ -290,6 +290,12 @@ return static function (Psr7Router $router): void {
     $router->map(['GET'], '/sis/terms/{term}/drop-policy/history/', [
         \Application\Http\Controller\SisDropPolicyController::class, 'history',
     ])->name('sis.drop.policy.history');
+    foreach (['show' => ['', 'GET'], 'review' => ['review/', 'POST'],
+        'commit' => ['commit/', 'POST'], 'history' => ['history/', 'GET']] as $method => [$suffix, $verb]) {
+        $router->map([$verb], '/sis/terms/{term}/sections/{section}/drop-policy/' . $suffix, [
+            \Application\Http\Controller\SisDropPolicyController::class, $method,
+        ])->name('sis.section.drop.policy.' . $method);
+    }
     $router
         ->map(["GET"], "/sis/students/{student}/transfer-awards/{award}/", [
             \Application\Http\Controller\SisTransferAwardController::class,

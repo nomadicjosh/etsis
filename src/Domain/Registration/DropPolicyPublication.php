@@ -80,7 +80,8 @@ final class DropPolicyPublication extends EventSourcedAggregate
     public function acceptHistorical(DomainEvent $event): void
     {
         if (
-            !($event instanceof DropPolicyWasPublished) ||
+            !($event instanceof DropPolicyWasPublished ||
+                $event instanceof \Domain\Registration\Event\SectionDropPolicyWasPublished) ||
             !$event->aggregateId()->equals($this->aggregateId()) ||
             $event->playhead() !== $this->playhead() + 1
         ) {
@@ -94,9 +95,19 @@ final class DropPolicyPublication extends EventSourcedAggregate
     public function whenDropPolicyWasPublished(
         DropPolicyWasPublished $event,
     ): void {
+        $this->applyPublication($event, false);
+    }
+    public function whenSectionDropPolicyWasPublished(
+        \Domain\Registration\Event\SectionDropPolicyWasPublished $event,
+    ): void {
+        $this->applyPublication($event, true);
+    }
+    private function applyPublication(DomainEvent $event, bool $section): void
+    {
         $p = $event->payload();
         if (
-            $p["definition"]["term_id"] !== (string) $this->aggregateId() ||
+            isset($p['definition']['section_id']) !== $section ||
+            ($p['definition'][$section ? 'section_id' : 'term_id'] ?? null) !== (string) $this->aggregateId() ||
             $p["previous_publication_id"] !==
                 ($this->current["publication_id"] ?? null) ||
             ($this->current !== null &&

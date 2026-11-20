@@ -102,12 +102,14 @@ window.createWorkspaceCourseDrops = function (ui) {
             ),
         );
     }
-    async function policy(term, back) {
-        const path = `/sis/terms/${term.id}/drop-policy/`;
-        const data = await request(path);
-        const drawer = openDrawer("Drop / withdrawal policy", "ACADEMIC TERM");
+    async function policy(term, back, offering = null) {
+        const path = offering ? `/sis/terms/${term.id}/sections/${offering.id}/drop-policy/`
+            : `/sis/terms/${term.id}/drop-policy/`;
+        const drawer = openDrawer("Drop / withdrawal policy", offering ? "COURSE SECTION" : "ACADEMIC TERM");
         const body = node("div");
         drawer.append(body);
+        const data = await request(path);
+        if (body.isConnected === false) return;
         let view = 0;
         let active = true;
         const leave = async () => {
@@ -121,7 +123,8 @@ window.createWorkspaceCourseDrops = function (ui) {
                 node(
                     "p",
                     {},
-                    `Drop/add ends ${definition.grace_ends_on}. Dates use ${definition.timezone}.`,
+                    definition.uses_term_policy ? "Follow the term policy, including later term-policy publications." :
+                        `Drop/add ends ${definition.grace_ends_on}. Dates use ${definition.timezone}.`,
                 ),
                 node(
                     "ul",
@@ -136,7 +139,7 @@ window.createWorkspaceCourseDrops = function (ui) {
                 ),
             );
         body.append(
-            node("h3", {}, data.term.code),
+            node("h3", {}, offering ? `${data.section.code} · ${data.term.code}` : data.term.code),
             node(
                 "p",
                 {},
@@ -148,7 +151,7 @@ window.createWorkspaceCourseDrops = function (ui) {
                 "Use catalog grade codes. Each student's retained grading scale determines GPA treatment. Cutoffs are inclusive; the final period covers all later dates.",
             ),
         );
-        if (data.published)
+        if (data.published && !data.uses_term_policy)
             body.append(
                 node(
                     "section",
@@ -176,7 +179,7 @@ window.createWorkspaceCourseDrops = function (ui) {
                     "The default W marker is excluded from GPA. Publish explicit periods to use catalog grade definitions.",
                 ),
             );
-        else if (!data.published)
+        else if (!data.published && !offering)
             body.append(
                 node(
                     "p",
@@ -184,6 +187,18 @@ window.createWorkspaceCourseDrops = function (ui) {
                     "These previously saved periods have no retained publication. Their earlier approval details are unknown. Publishing retains a new reviewed definition.",
                 ),
             );
+        const source = offering ? node("select", { id: "drop-policy-source", class: "form-select" },
+            node("option", { value: "inherit" }, "Use term policy"),
+            node("option", { value: "override" }, "Override for this section")) : null;
+        if (source) source.value = data.uses_term_policy ? "inherit" : "override";
+        const deadline = offering ? node("input", { id: "section-drop-deadline", type: "date", class: "form-control",
+            value: data.grace_ends_on, required: true }) : null;
+        const inherits = () => !!source && source.value === "inherit";
+        if (offering) body.append(
+            node("div", { class: "mb-3" }, node("label", { for: source.id, class: "form-label" }, "Policy source"), source),
+            node("p", { class: "form-text" }, "An override controls this section's future drops only. Registration dates, teaching dates and completed decisions stay separate."),
+            node("div", { class: "mb-3" }, node("label", { for: deadline.id, class: "form-label" }, "Section drop/add deadline"), deadline),
+        );
         let windows = data.windows.map((w) => ({ ...w }));
         const periods = node("div");
         const status = node("p", { role: "status", "aria-live": "polite" });
@@ -205,6 +220,12 @@ window.createWorkspaceCourseDrops = function (ui) {
             reason,
         );
         let forms = [];
+        const addPeriod = button("Add grade period", () => {
+            if (forms.length >= 12 || inherits()) return;
+            windows = collect();
+            windows.splice(windows.length - 1, 0, { through: "", grade_code: "W" });
+            return render();
+        });
         const collect = () =>
             forms.map((form, i) => ({
                 through:
@@ -253,8 +274,16 @@ window.createWorkspaceCourseDrops = function (ui) {
                     );
                 periods.append(block);
             }
-            status.textContent = `${windows.length} grade period${windows.length === 1 ? "" : "s"}.`;
+            updateSource();
         }
+        function updateSource() {
+            if (deadline) deadline.disabled = inherits();
+            periods.hidden = inherits();
+            addPeriod.disabled = inherits();
+            status.textContent = inherits() ? `Currently follows the term deadline: ${data.grace_ends_on}. Future term-policy updates also apply.`
+                : `${windows.length} grade period${windows.length === 1 ? "" : "s"}.`;
+        }
+        if (source) source.addEventListener("change", updateSource);
         await render();
         const edit = () => {
             view++;
@@ -347,36 +376,32 @@ window.createWorkspaceCourseDrops = function (ui) {
             node(
                 "div",
                 { class: "d-flex flex-wrap gap-2" },
-                button("Add grade period", () => {
-                    if (forms.length >= 12) return;
-                    windows = collect();
-                    windows.splice(windows.length - 1, 0, {
-                        through: "",
-                        grade_code: "W",
-                    });
-                    return render();
-                }),
+                addPeriod,
                 button(
                     "Review policy",
                     async () => {
                         if (
-                            !forms.every((f) => f.reportValidity()) ||
-                            !reason.reportValidity()
+                            (!inherits() && !forms.every((f) => f.reportValidity())) ||
+                            (!inherits() && deadline && !deadline.reportValidity()) || !reason.reportValidity()
                         )
                             return;
                         const currentView = ++view;
                         const reviewedReason = reason.value;
-                        const review = await request(path + "review/", "POST", {
-                            version: data.version,
-                            windows: collect(),
-                            reason: reviewedReason,
-                        });
+                        const input = () => ({ version: data.version, windows: inherits() ? data.windows : collect(),
+                            reason: reason.value, ...(offering ? { uses_term_policy: inherits(),
+                                grace_ends_on: inherits() ? null : deadline.value } : {}) });
+                        const submitted = input();
+                        const review = await request(path + "review/", "POST", submitted);
                         if (
                             !active ||
                             body.isConnected === false ||
                             currentView !== view
                         )
                             return;
+                        if (JSON.stringify(submitted) !== JSON.stringify(input())) {
+                            status.textContent = "Your fields changed. Review the current policy again.";
+                            return;
+                        }
                         const title = heading("Review drop policy");
                         const notes = node(
                             "p",
@@ -406,7 +431,7 @@ window.createWorkspaceCourseDrops = function (ui) {
                                             },
                                         );
                                         saved = true;
-                                        notify("Term drop policy published.");
+                                        notify(offering ? "Section drop policy published." : "Term drop policy published.");
                                         await leave();
                                     },
                                     true,
@@ -418,7 +443,7 @@ window.createWorkspaceCourseDrops = function (ui) {
                     true,
                 ),
                 button("Policy history", history),
-                button("Back to term", leave),
+                button(offering ? "Back to section" : "Back to term", leave),
             ),
         );
         const editor = Array.from(body.childNodes);

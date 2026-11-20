@@ -440,7 +440,10 @@ final class AcademicCredit extends EventSourcedAggregate
         $reference = $event->metaParam("drop_policy", null);
         if ($reference !== null) {
             \Domain\Registration\ValueObject\DropPolicyReference::validate($reference, $o["policy_version"]);
-            if ($reference["term_id"] !== $this->credit["term_id"]) {
+            if (
+                $reference["term_id"] !== $this->credit["term_id"] ||
+                (isset($reference['section_id']) && $reference['section_id'] !== $this->section)
+            ) {
                 throw new CorruptHistoryException();
             }
         }

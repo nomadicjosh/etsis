@@ -42,35 +42,34 @@ final readonly class DropPolicyService
     }
 
     /** @return array<string,mixed> */
-    public function show(EntityId $term): array
+    public function show(EntityId $term, ?EntityId $section = null): array
     {
         $actor = $this->access->requirePermission("sis:catalog:manage");
-        $state = $this->current($term);
-        $row = $state["row"];
-        $calendar = $this->policies->calendar($term);
-        $windows = $row["windows"] ?? [
-            ["through" => null, "grade_code" => "W"],
-        ];
-        $published = $state["event"]["definition"] ?? null;
+        $state = $this->current($term, $section);
+        $own = $state['event']['definition'] ?? null;
+        $inherit = $section !== null && ($own === null || $own['uses_term_policy']);
+        $effective = $inherit ? $this->current($term) : $state;
+        $row = $effective['row'];
+        $published = $effective['event']['definition'] ?? null;
+        $calendar = $this->policies->calendar($term, $section);
+        $windows = $row['windows'] ?? [['through' => null, 'grade_code' => 'W']];
         $result = [
-            "term" => $calendar,
-            "version" => $row["version"] ?? -1,
-            "windows" => $windows,
-            "default_policy" => $row === null,
-            "published" => $published,
-            "calendar_changed" =>
-                $published !== null &&
-                !$this->same(
-                    array_diff_key($published, ["windows" => true]),
-                    $this->calendar($term),
-                ),
-            "grading" => array_map(
-                fn(array $w): ?array => $this->policies->grade(
-                    $w["grade_code"],
-                ),
-                $windows,
+            'term' => $calendar,
+            'version' => $state['row']['version'] ?? -1,
+            'windows' => $windows,
+            'default_policy' => $row === null,
+            'published' => $own,
+            'calendar_changed' => !$inherit && $own !== null && !$this->same(
+                array_diff_key($own, ['windows' => true]),
+                $this->calendar($term, $section, $section === null ? null : $own['grace_ends_on'], false),
             ),
+            'grading' => array_map(fn(array $w): ?array => $this->policies->grade($w['grade_code']), $windows),
         ];
+        if ($section !== null) {
+            $result += ['section' => ['id' => $section->value, 'code' => $calendar['section_code']],
+                'uses_term_policy' => $inherit,
+                'grace_ends_on' => $published['grace_ends_on'] ?? $calendar['add_drop_ends_on']];
+        }
         $this->authorize($actor);
         return $result;
     }
@@ -81,6 +80,9 @@ final readonly class DropPolicyService
         int $version,
         DropWindows $windows,
         #[\SensitiveParameter] string $reason,
+        ?EntityId $section = null,
+        ?string $grace = null,
+        bool $inherit = false,
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         if (
@@ -102,9 +104,12 @@ final readonly class DropPolicyService
             $windows,
             $reason,
             $actor,
+            $section,
+            $grace,
+            $inherit,
         ): array {
-            $this->policies->lockTerm($term);
-            $state = $this->current($term);
+            $this->policies->lockTerm($term, $section);
+            $state = $this->current($term, $section);
             if (
                 $version < -1 ||
                 $version >= 2000000000 ||
@@ -114,7 +119,7 @@ final readonly class DropPolicyService
                     "Reload the drop policy before reviewing.",
                 );
             }
-            $inputs = $this->inputs($term, $windows->windows);
+            $inputs = $this->inputs($term, $windows->windows, $section, $grace, $inherit);
             $this->authorize($actor);
             $data = [
                 "kind" => "term-drop-policy-review",
@@ -129,7 +134,7 @@ final readonly class DropPolicyService
                 "inputs" => $inputs,
                 "reason" => trim($reason),
                 "reviewed_at" => $this->clock->now()->format(DATE_ATOM),
-            ];
+            ] + ($section === null ? [] : ['section_id' => $section->value]);
             return [
                 "definition" => $inputs["definition"],
                 "grading" => $inputs["grading"],
@@ -145,6 +150,7 @@ final readonly class DropPolicyService
     public function commit(
         EntityId $term,
         #[\SensitiveParameter] string $token,
+        ?EntityId $section = null,
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         try {
@@ -160,7 +166,8 @@ final readonly class DropPolicyService
             if (
                 !is_array($data) ||
                 ($data["kind"] ?? null) !== "term-drop-policy-review" ||
-                ($data["term_id"] ?? null) !== $term->value
+                ($data["term_id"] ?? null) !== $term->value ||
+                ($data['section_id'] ?? null) !== $section?->value
             ) {
                 throw new \InvalidArgumentException();
             }
@@ -181,10 +188,11 @@ final readonly class DropPolicyService
             $term,
             $data,
             $actor,
+            $section,
         ): array {
-            $this->policies->lockTerm($term);
-            $current = $this->current($term);
-            $root = $this->replay($term);
+            $this->policies->lockTerm($term, $section);
+            $current = $this->current($term, $section);
+            $root = $this->replay($term, $section);
             if (
                 $root->playhead() !== $current["head"] ||
                 $root->current() !== $current["event"]
@@ -217,6 +225,9 @@ final readonly class DropPolicyService
                 $this->inputs(
                     $term,
                     $data["inputs"]["definition"]["windows"],
+                    $section,
+                    $section === null ? null : $data['inputs']['definition']['grace_ends_on'],
+                    $data['inputs']['definition']['uses_term_policy'] ?? false,
                 ) !== $data["inputs"]
             ) {
                 throw new ConcurrentModificationException(
@@ -240,8 +251,10 @@ final readonly class DropPolicyService
                         array_flip(["version", "windows"]),
                     )
                     : null;
-            $event = DropPolicyWasPublished::occur(
-                new DropPolicyPublicationId($term->value),
+            $eventClass = $section === null ? DropPolicyWasPublished::class :
+                \Domain\Registration\Event\SectionDropPolicyWasPublished::class;
+            $event = $eventClass::occur(
+                new DropPolicyPublicationId(($section ?? $term)->value, $section !== null),
                 [
                     "publication_id" => $op->value,
                     "previous_publication_id" =>
@@ -251,12 +264,12 @@ final readonly class DropPolicyService
                     "observed_previous_policy" => $legacy,
                     "review_hash" => $hash,
                 ],
-                ["__aggregate_type" => "term_drop_policy"],
+                ["__aggregate_type" => $section === null ? "term_drop_policy" : "section_drop_policy"],
             )->withPlayhead($root->playhead() + 1);
             $root->acceptHistorical($event);
             $this->authorize($actor);
             $this->history->append(
-                $this->stream($term),
+                $this->stream($term, $section),
                 $op,
                 $current["head"],
                 new EventContext($actor, $now, $op, reason: $data["reason"]),
@@ -269,13 +282,32 @@ final readonly class DropPolicyService
                 $definition["windows"],
                 $op,
                 array_diff_key($definition, ["windows" => true]),
+                $section,
             );
             $this->audit->record(
                 $actor,
                 "registration.drop_policy_published",
-                $term,
+                $section ?? $term,
             );
             $this->authorize($actor);
+            $after = $this->current($term, $section);
+            $completedAge = $this->clock->now()->getTimestamp() -
+                new DateTimeImmutable($data['reviewed_at'])->getTimestamp();
+            if (
+                !$this->same($after['event'], $root->current()) ||
+                $this->inputs(
+                    $term,
+                    $definition['windows'],
+                    $section,
+                    $section === null ? null : $definition['grace_ends_on'],
+                    $definition['uses_term_policy'] ?? false
+                ) !== $data['inputs'] ||
+                $completedAge < 0 || $completedAge > 1200
+            ) {
+                throw new ConcurrentModificationException(
+                    'The reviewed policy changed before completion. Review again.',
+                );
+            }
             return [
                 "publication_id" => $op->value,
                 "version" => $data["version"] + 1,
@@ -285,11 +317,11 @@ final readonly class DropPolicyService
 
     /** Authorized summaries only; protected reasons/actors and raw envelopes are never returned.
      * @return array<string,mixed> */
-    public function history(EntityId $term, ?string $cursor = null): array
+    public function history(EntityId $term, ?string $cursor = null, ?EntityId $section = null): array
     {
         $actor = $this->access->requirePermission("sis:catalog:manage");
-        $this->policies->calendar($term);
-        $page = $this->history->page($this->stream($term), $cursor, 20);
+        $this->policies->calendar($term, $section);
+        $page = $this->history->page($this->stream($term, $section), $cursor, 20);
         $items = [];
         foreach ($page->events as $stored) {
             $p = $stored->event->payload();
@@ -315,13 +347,18 @@ final readonly class DropPolicyService
         ?EntityId $section = null,
         ?\Domain\Shared\EventSourcing\HistoryReadBudget $budget = null,
     ): array {
-        $state = $this->current($term);
+        if ($section !== null) {
+            $this->policies->calendar($term, $section);
+        }
+        $sectionState = $section === null ? null : $this->current($term, $section);
+        $override = $sectionState !== null && $sectionState['event'] !== null &&
+        !$sectionState['event']['definition']['uses_term_policy'];
+        $state = $override ? $sectionState : $this->current($term);
         $policy = $state["row"];
         $published = $state["event"];
         if (
-            $published !== null &&
-            $published["definition"]["timezone"] !==
-                $this->clock->now()->getTimezone()->getName()
+            $published !== null && ($published['definition']['term_id'] !== $term->value ||
+            $published["definition"]["timezone"] !== $this->clock->now()->getTimezone()->getName())
         ) {
             throw new ValidationException([
                 [
@@ -347,7 +384,7 @@ final readonly class DropPolicyService
                         "definition_hash" => new DropPolicyDefinition(
                             $published["definition"],
                         )->hash(),
-                    ],
+                    ] + ($override ? ['section_id' => $section->value] : []),
         ];
         if ($effective <= $grace) {
             return $base + [
@@ -400,10 +437,10 @@ final readonly class DropPolicyService
     }
 
     /** @return array{row:?array,event:?array,head:int} */
-    private function current(EntityId $term): array
+    private function current(EntityId $term, ?EntityId $section = null): array
     {
-        $row = $this->policies->find($term);
-        $stored = $this->history->latest($this->stream($term));
+        $row = $this->policies->find($term, $section);
+        $stored = $this->history->latest($this->stream($term, $section));
         $p = $stored?->event->payload();
         if ($p === null) {
             if (
@@ -419,7 +456,9 @@ final readonly class DropPolicyService
                 }
             }
         } else {
-            if (!($stored->event instanceof DropPolicyWasPublished)) {
+            $eventClass = $section === null ? DropPolicyWasPublished::class :
+            \Domain\Registration\Event\SectionDropPolicyWasPublished::class;
+            if (!($stored->event instanceof $eventClass)) {
                 throw new CorruptHistoryException();
             }
             $definition = $p["definition"];
@@ -443,64 +482,73 @@ final readonly class DropPolicyService
         ];
     }
 
-    /** @param list<array{through:?string,grade_code:string}> $windows */
-    private function definition(
+    /** @return array<string,mixed> */
+    private function calendar(
         EntityId $term,
-        array $windows,
-    ): DropPolicyDefinition {
-        return new DropPolicyDefinition(
-            $this->calendar($term) + ["windows" => $windows],
-        );
-    }
-
-    /** @return array<string,string> */
-    private function calendar(EntityId $term): array
-    {
-        $calendar = $this->policies->calendar($term);
+        ?EntityId $section = null,
+        ?string $grace = null,
+        bool $inherit = false
+    ): array {
+        $calendar = $this->policies->calendar($term, $section);
         return [
-            "term_id" => $term->value,
-            "term_code" => $calendar["code"],
-            "starts_on" => $calendar["starts_on"],
-            "ends_on" => $calendar["ends_on"],
-            "grace_ends_on" => $calendar["add_drop_ends_on"],
-            "timezone" => $this->clock->now()->getTimezone()->getName(),
-        ];
+            'term_id' => $term->value, 'term_code' => $calendar['code'],
+            'starts_on' => $calendar['starts_on'], 'ends_on' => $calendar['ends_on'],
+            'grace_ends_on' => $grace ?? $calendar['add_drop_ends_on'],
+            'timezone' => $this->clock->now()->getTimezone()->getName(),
+        ] + ($section === null ? [] : ['section_id' => $section->value,
+            'section_code' => $calendar['section_code'], 'uses_term_policy' => $inherit]);
     }
-
     /** @param list<array{through:?string,grade_code:string}> $windows
      * @return array<string,mixed> */
-    private function inputs(EntityId $term, array $windows): array
-    {
-        $windows = new DropWindows($windows)->windows;
-        $calendar = $this->policies->calendar($term);
+    private function inputs(
+        EntityId $term,
+        array $windows,
+        ?EntityId $section = null,
+        ?string $grace = null,
+        bool $inherit = false
+    ): array {
+        if ($section === null && ($grace !== null || $inherit)) {
+            throw new \InvalidArgumentException('Section overrides require a section.');
+        }
+        $inherited = null;
+        if ($inherit) {
+            $state = $this->current($term);
+            $calendar = $state['event']['definition'] ?? $this->calendar($term);
+            $windows = $state['row']['windows'] ?? [['through' => null, 'grade_code' => 'W']];
+            $calendar = array_replace(
+                $this->calendar($term, $section, $calendar['grace_ends_on'], true),
+                array_intersect_key($calendar, array_flip(DropPolicyDefinition::FIELDS))
+            );
+            $inherited = hash('sha256', json_encode($state, JSON_THROW_ON_ERROR));
+        } else {
+            if ($section !== null && $grace === null) {
+                throw new ValidationException([['field' => 'grace_ends_on',
+                    'message' => 'Enter the section drop/add deadline.']]);
+            }
+            $calendar = $this->calendar($term, $section, $grace);
+        }
+        try {
+            $definition = new DropPolicyDefinition($calendar + ['windows' => new DropWindows($windows)->windows]);
+        } catch (\InvalidArgumentException $error) {
+            throw new ValidationException([['field' => 'policy', 'message' => $error->getMessage()]]);
+        }
         $grades = [];
-        foreach ($windows as $window) {
-            $grade = $this->policies->grade($window["grade_code"]);
-            if (
-                ($window["through"] !== null &&
-                    $window["through"] <= $calendar["add_drop_ends_on"]) ||
-                $grade === null
-            ) {
-                throw new ValidationException([
-                    [
-                        "field" => "windows",
-                        "message" =>
-                            "Use cutoffs after the drop/add deadline and existing catalog grade codes.",
-                    ],
-                ]);
+        foreach ($definition->data['windows'] as $window) {
+            $grade = $this->policies->grade($window['grade_code']);
+            if (!$inherit && $grade === null) {
+                throw new ValidationException([['field' => 'windows',
+                    'message' => 'Choose existing catalog grade codes.']]);
             }
             $grades[] = $grade;
         }
-        return [
-            "definition" => $this->definition($term, $windows)->data,
-            "grading" => $grades,
-        ];
+        return ['definition' => $definition->data, 'grading' => $grades] +
+        ($inherit ? ['inherited_revision' => $inherited] : []);
     }
 
-    private function replay(EntityId $term): DropPolicyPublication
+    private function replay(EntityId $term, ?EntityId $section = null): DropPolicyPublication
     {
         $root = DropPolicyPublication::root(
-            new DropPolicyPublicationId($term->value),
+            new DropPolicyPublicationId(($section ?? $term)->value, $section !== null),
         );
         $cursor = null;
         $pages = 0;
@@ -508,7 +556,7 @@ final readonly class DropPolicyService
             if (++$pages > 50) {
                 throw new CorruptHistoryException();
             }
-            $page = $this->history->page($this->stream($term), $cursor, 20);
+            $page = $this->history->page($this->stream($term, $section), $cursor, 20);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event);
             }
@@ -517,11 +565,11 @@ final readonly class DropPolicyService
         return $root;
     }
 
-    private function stream(EntityId $term): StreamReference
+    private function stream(EntityId $term, ?EntityId $section = null): StreamReference
     {
         return new StreamReference(
-            new DropPolicyPublicationId($term->value),
-            "term_drop_policy",
+            new DropPolicyPublicationId(($section ?? $term)->value, $section !== null),
+            $section === null ? "term_drop_policy" : "section_drop_policy",
         );
     }
 

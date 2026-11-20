@@ -2284,6 +2284,8 @@ window.createWorkspaceOperations = function (ui) {
                         button("Course definition", () => ui.catalog().sectionDefinition(row.id)),
                         button("Method & campus", () => ui.classifications().section(row.id)),
                         button("Published section details", () => ui.catalog().sectionPublications(row.id)),
+                        button("Drop policy", () => ui.courseDrops().policy({ id: row.term_id },
+                            () => openRecord(sectionName, row), row)),
                     ],
                 ),
             );

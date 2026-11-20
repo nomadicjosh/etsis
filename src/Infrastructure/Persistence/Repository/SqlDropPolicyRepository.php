@@ -16,21 +16,33 @@ final readonly class SqlDropPolicyRepository implements DropPolicyRepository
         private \Domain\Gradebook\Service\AcademicGradeCatalog $grades,
     ) {
     }
-    public function calendar(EntityId $term): array
+    public function calendar(EntityId $term, ?EntityId $section = null): array
     {
-        return $this->sql->current("sis_terms", $term->value) ??
+        $calendar = $this->sql->current("sis_terms", $term->value) ??
         throw new \Domain\Shared\Exception\RecordNotFoundException();
+        if ($section !== null) {
+            $row = $this->sql->one('sis_sections', ['id' => $section->value]);
+            if ($row['term_id'] !== $term->value) {
+                throw new ConcurrentModificationException('The section term changed. Reload its setup.');
+            }
+            $calendar += ['section_id' => $section->value, 'section_code' => $row['code']];
+        }
+        return $calendar;
     }
-    public function lockTerm(EntityId $term): void
+    public function lockTerm(EntityId $term, ?EntityId $section = null): void
     {
+        if ($section !== null) {
+            $this->sql->lock('sis_sections', $section->value, 'id');
+        }
         $this->sql->lock("sis_terms", $term->value, "id");
+        $this->calendar($term);
     }
-    public function find(EntityId $term): ?array
+    public function find(EntityId $term, ?EntityId $section = null): ?array
     {
         $r = $this->sql->current(
-            "sis_term_drop_policies",
-            $term->value,
-            "term_id",
+            $section === null ? "sis_term_drop_policies" : 'sis_section_drop_policies',
+            ($section ?? $term)->value,
+            $section === null ? "term_id" : 'section_id',
         );
         return $r === null
         ? null
@@ -60,8 +72,12 @@ final readonly class SqlDropPolicyRepository implements DropPolicyRepository
         array $windows,
         EntityId $publication,
         array $calendar,
+        ?EntityId $section = null,
     ): void {
-        $current = $this->find($term);
+        $table = $section === null ? 'sis_term_drop_policies' : 'sis_section_drop_policies';
+        $key = $section === null ? 'term_id' : 'section_id';
+        $id = ($section ?? $term)->value;
+        $current = $this->find($term, $section);
         if (($current["version"] ?? -1) !== $version) {
             throw new ConcurrentModificationException(
                 "Reload the drop policy before saving.",
@@ -75,15 +91,12 @@ final readonly class SqlDropPolicyRepository implements DropPolicyRepository
         ];
         if ($current === null) {
             $this->sql->insert(
-                "sis_term_drop_policies",
-                [
-                    "id" => EntityId::generate()->value,
-                    "term_id" => $term->value,
-                ] + $values,
+                $table,
+                ["id" => EntityId::generate()->value, $key => $id] + $values,
             );
         } elseif (
-            $this->sql->update("sis_term_drop_policies", $values, [
-                "term_id" => $term->value,
+            $this->sql->update($table, $values, [
+                $key => $id,
                 "version" => $version,
             ]) !== 1
         ) {

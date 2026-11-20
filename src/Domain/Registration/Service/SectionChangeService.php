@@ -254,6 +254,7 @@ final readonly class SectionChangeService
                 $this->dropPolicy->outcome(
                     new EntityId($context["target"]["section"]["term_id"]),
                     $drop["effective_on"],
+                    section: $selection->from,
                 ) !== $drop["outcome"] ||
                 $this->quote($selection, $budget)->fingerprint() !== $financialRevision
             ) {

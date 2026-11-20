@@ -215,3 +215,52 @@ test('a blocked individual portal drop opens the linked selection in the same vi
     await expect(page.getByRole('button', { name: 'Review selected drops', exact: true })).toBeEnabled();
     expect(f.errors).toEqual([]);
 });
+
+
+test('catalog staff review a section deadline override and can restore term inheritance without losing drafts', async ({ page }) => {
+    const f = await fixture(page);
+    const base = `/sis/terms/${term}/sections/${section}/drop-policy/`;
+    let inherited = true, version = -1;
+    const requests = [];
+    await page.route('**/sis/**', async route => {
+        const path = new URL(route.request().url()).pathname;
+        const raw = route.request().postData();
+        const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
+        if (path === '/sis/ui/data/sections/') return route.fulfill({ json: { items: [{ id: section,
+            term_id: term, course_id: id(8), code: 'MATH.101.A', course_code: 'MATH.101', term_code: '26/FA',
+            course_title: 'Fictional Algebra', capacity: 20, active: true }], next_after: null } });
+        if (!path.startsWith(base)) return route.fallback();
+        if (data) requests.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
+        const windows = [{ through: null, grade_code: 'W' }];
+        let result = { term: { code: '26/FA', add_drop_ends_on: '2026-08-15' }, section: { id: section, code: 'MATH.101.A' },
+            version, windows, uses_term_policy: inherited, grace_ends_on: '2026-08-15', default_policy: false, published: null };
+        if (path.endsWith('review/')) result = { definition: { section_id: section, uses_term_policy: data.uses_term_policy,
+            grace_ends_on: data.grace_ends_on || '2026-08-15', timezone: 'America/Los_Angeles', windows }, review_token: 'fictional-section-policy' };
+        if (path.endsWith('commit/')) { inherited = !inherited; version++; result = { publication_id: operation, version }; }
+        await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
+    });
+    await page.goto('/admin/');
+    await page.locator('.workspace-nav-link[data-workspace="courses"]').click();
+    await page.getByRole('link', { name: 'Sections', exact: true }).click();
+    await page.getByRole('button', { name: 'MATH.101.A', exact: true }).click();
+    await page.getByRole('button', { name: 'Drop policy', exact: true }).click();
+    await expect(page.getByLabel('Section drop/add deadline')).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Add grade period', exact: true })).toBeDisabled();
+    await page.getByLabel('Policy source', { exact: true }).selectOption('override');
+    await page.getByLabel('Section drop/add deadline').fill('2026-08-09');
+    await page.getByLabel('Reason for policy change').fill('Fictional intensive section');
+    await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
+    await page.getByRole('button', { name: 'Review policy', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Drop/add ends 2026-08-09');
+    await page.getByRole('button', { name: 'Revise', exact: true }).click();
+    await expect(page.getByLabel('Section drop/add deadline')).toHaveValue('2026-08-09');
+    await expect(page.getByLabel('Reason for policy change')).toHaveValue('Fictional intensive section');
+    await page.getByLabel('Policy source', { exact: true }).selectOption('inherit');
+    await page.getByRole('button', { name: 'Review policy', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Follow the term policy');
+    await page.getByRole('button', { name: 'Publish policy', exact: true }).click();
+    await expect(page.locator('#workspace-status')).toContainText('Section drop policy published');
+    expect(requests.filter(item => item.path.endsWith('review/')).map(item => item.data.uses_term_policy)).toEqual([false, true]);
+    expect(requests.every(item => item.csrf === 'fictional-test-token')).toBe(true);
+    expect(f.errors).toEqual([]);
+});

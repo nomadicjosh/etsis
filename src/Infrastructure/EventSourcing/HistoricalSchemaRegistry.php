@@ -56,6 +56,10 @@ final readonly class HistoricalSchemaRegistry
                 'type' => 'hiatus_case', 'root' => \Domain\Student\HiatusCase::class,
                 'fields' => \Domain\Student\ValueObject\HiatusCaseSchema::FIELDS,
             ],
+            \Domain\Registration\Event\SectionDropPolicyWasPublished::class => [
+                'type' => 'section_drop_policy', 'root' => \Domain\Registration\DropPolicyPublication::class,
+                'fields' => \Domain\Registration\DropPolicyPublication::FIELDS,
+            ],
             \Domain\Registration\Event\DropPolicyWasPublished::class => [
                 'type' => 'term_drop_policy', 'root' => \Domain\Registration\DropPolicyPublication::class,
                 'fields' => \Domain\Registration\DropPolicyPublication::FIELDS,
@@ -560,9 +564,16 @@ final readonly class HistoricalSchemaRegistry
                     throw new CorruptHistoryException();
                 }
             }
-            if ($class === \Domain\Registration\Event\DropPolicyWasPublished::class) {
+            if (
+                in_array($class, [\Domain\Registration\Event\DropPolicyWasPublished::class,
+                \Domain\Registration\Event\SectionDropPolicyWasPublished::class], true)
+            ) {
                 \Domain\Registration\DropPolicyPublication::validate($payload);
-                if ($payload['definition']['term_id'] !== (string) $stream->aggregateId) {
+                $section = $class === \Domain\Registration\Event\SectionDropPolicyWasPublished::class;
+                if (
+                    isset($payload['definition']['section_id']) !== $section ||
+                    $payload['definition'][$section ? 'section_id' : 'term_id'] !== (string) $stream->aggregateId
+                ) {
                     throw new CorruptHistoryException();
                 }
             }
@@ -912,7 +923,8 @@ final readonly class HistoricalSchemaRegistry
                         continue;
                     }
                     if (
-                        $class === \Domain\Registration\Event\DropPolicyWasPublished::class
+                        in_array($class, [\Domain\Registration\Event\DropPolicyWasPublished::class,
+                            \Domain\Registration\Event\SectionDropPolicyWasPublished::class], true)
                         && $name === 'previous_publication_id' && $value === null
                     ) {
                         continue;
@@ -1430,6 +1442,9 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Registration\DropPolicyPublication::class =>
+            $id instanceof \Domain\Registration\ValueObject\DropPolicyPublicationId && $id->isSection
+            ? 'section_drop_policy' : 'term_drop_policy',
             \Domain\Student\PersonRestrictions::class => 'person_restrictions',
             \Domain\HumanResources\PositionHistory::class => 'employment_position',
             \Domain\HumanResources\EmploymentTimeline::class => 'employment_lifecycle',
@@ -1471,6 +1486,8 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            'term_drop_policy' => new \Domain\Registration\ValueObject\DropPolicyPublicationId($id),
+            'section_drop_policy' => new \Domain\Registration\ValueObject\DropPolicyPublicationId($id, true),
             'person_restrictions' => new \Domain\Student\ValueObject\PersonRestrictionsId($id),
             'employment_position' => new \Domain\HumanResources\ValueObject\EmployeePositionId($id),
             'employment_lifecycle' => new \Domain\HumanResources\ValueObject\EmploymentTimelineId($id),
