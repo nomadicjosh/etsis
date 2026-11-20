@@ -302,9 +302,10 @@
         buildForm, formData, openDrawer, account: (id, back) => operations.openAccount(id, back) });
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const transferAwardStudio = window.createWorkspaceTransferAwards({ node, request, task, table, recordSummary, actionMenu, buildForm, formData, openDrawer, back: id => transferStudio.record('equivalencies', id) });
+    const enrollmentLoad = window.createWorkspaceEnrollmentLoad({ node, request, task, can, openDrawer });
     const standingStudio = window.createWorkspaceStanding({ node, request, task, can, openDrawer, degreeAudit: () => degreeAuditStudio });
     const advisingStudio = window.createWorkspaceAdvising({ node, request, task, can, openDrawer });
-    const studentStudio = window.createWorkspaceStudents({ standing: () => standingStudio, advising: () => advisingStudio, node, request, task, can, actionMenu, recordSummary, messageRecord: operations.messageRecord, disposeActionMenus, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
+    const studentStudio = window.createWorkspaceStudents({ enrollmentLoad: () => enrollmentLoad, standing: () => standingStudio, advising: () => advisingStudio, node, request, task, can, actionMenu, recordSummary, messageRecord: operations.messageRecord, disposeActionMenus, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
     relationalStudio = window.createWorkspaceReportStudio({
         node, request, requestFile, task, can, table, openDrawer, actionMenu, disposeActionMenus,
         closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(),
@@ -524,6 +525,8 @@
         }, icon(iconName), node('span', {}, label));
         if (section === 'students' && can('sis:gradebook:amend') && can('sis:student:read')) tools.append(
             tool('Grade corrections', () => teachingStudio.gradeChanges(), 'Review requested grade corrections', 'clipboard-check'));
+        if (section === 'students' && can('sis:load:policy')) tools.append(
+            tool('Load policy', () => enrollmentLoad.policy(), 'Configure enrollment load policies', 'sliders'));
         if (section === 'students' && can('sis:standing:configure')) tools.append(
             tool('Standing definitions', () => standingStudio.definitions(), 'Configure academic standing definitions', 'list-check'));
         if (section === 'students' && can('sis:gradebook:policy')) tools.append(

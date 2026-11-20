@@ -110,6 +110,19 @@ return static function (Psr7Router $router): void {
         ->map(["GET"], "/portal/api/campus-news/", [Portal::class, "campusNews"])
         ->name("portal.campus.news");
     $router->map(["GET"], "/portal/api/courses/", [Portal::class, "courses"])->name("portal.catalog");
+    $load = \Application\Http\Controller\SisEnrollmentLoadController::class;
+    $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/load/terms/', [
+        $load, 'ownerTerms',
+    ])->name('owner.load.terms');
+    $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/load/review/', [
+        $load, 'ownerLoad',
+    ])->name('owner.load.review');
+    $router->map(['POST'], '/portal/api/advising/students/{student}/programs/{pursuit}/load/terms/', [
+        $load, 'advisorTerms',
+    ])->name('advisor.load.terms');
+    $router->map(['POST'], '/portal/api/advising/students/{student}/programs/{pursuit}/load/review/', [
+        $load, 'advisorLoad',
+    ])->name('advisor.load.review');
     $standing = \Application\Http\Controller\SisStudentStandingController::class;
     $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/standing/', [
         $standing, 'owner',

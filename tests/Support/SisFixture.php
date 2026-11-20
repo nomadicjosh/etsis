@@ -217,6 +217,47 @@ final class SisFixture
         )->create($code, 'Fictional room', $this->building(), $capacity);
     }
 
+    public function loadPolicies(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Student\Service\EnrollmentLoadPolicyService {
+        return new \Domain\Student\Service\EnrollmentLoadPolicyService(
+            new \Infrastructure\Persistence\Repository\SqlEnrollmentLoadPolicyRepository($this->sql),
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->clock,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+        );
+    }
+
+    public function enrollmentLoad(
+        ?\Domain\Advising\Service\AdvisorProgressAccess $advisors = null,
+    ): \Domain\Student\Service\EnrollmentLoadService {
+        $advisors ??= new class implements \Domain\Advising\Service\AdvisorProgressAccess {
+            public function requireAdvisor(EntityId $student, EntityId $pursuit): EntityId
+            {
+                throw new AccessDeniedException();
+            }
+        };
+        return new \Domain\Student\Service\EnrollmentLoadService(
+            new \Infrastructure\Persistence\Repository\SqlEnrollmentLoadRepository($this->sql),
+            $this->loadPolicies(),
+            $this->admissions,
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->registration,
+            $this->enrollmentLedger(),
+            $this->academicCredits(),
+            $this->programStatusLedger(),
+            $this->primaryProgramLedger(),
+            $advisors,
+            $this->access,
+            $this->transactions,
+            $this->audit,
+            $this->clock,
+        );
+    }
+
     public function standingLedger(): \Domain\Student\Service\StudentStandingLedger
     {
         return new \Domain\Student\Service\StudentStandingLedger(

@@ -775,6 +775,17 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/courses/", [SisRegistrationController::class, "course"])
         ->name("sis.registration.course");
+    $load = \Application\Http\Controller\SisEnrollmentLoadController::class;
+    foreach (['view', 'review', 'publish', 'history', 'programs'] as $method) {
+        $router->map(['POST'], '/sis/enrollment-load/policy/' . $method . '/', [$load, $method])
+            ->name('sis.load.policy.' . $method);
+    }
+    $router->map(['POST'], '/sis/students/{student}/programs/{pursuit}/load/terms/', [
+        $load, 'staffTerms',
+    ])->name('staff.load.terms');
+    $router->map(['POST'], '/sis/students/{student}/programs/{pursuit}/load/review/', [
+        $load, 'staffLoad',
+    ])->name('staff.load.review');
     $standing = \Application\Http\Controller\SisStudentStandingController::class;
     foreach (['definitions', 'choices', 'save'] as $method) {
         $router->map(['POST'], '/sis/academic-standing/' . $method . '/', [$standing, $method])

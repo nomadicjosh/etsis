@@ -36,6 +36,7 @@ final class AcademicCredit extends EventSourcedAggregate
     private ?string $completedOn = null;
     private ?string $academicOn = null;
     private ?string $registrationTermId = null;
+    private ?array $registeredCredits = null;
     /** @var array{term_id:string,term_code:string,decision_id:string}|null */
     private ?array $postingTerm = null;
     private ?string $originalCourseVersion = null;
@@ -84,6 +85,12 @@ final class AcademicCredit extends EventSourcedAggregate
             if ($p["provenance"] !== "registration") {
                 throw new CorruptHistoryException();
             }
+        }
+        if ($p["provenance"] === "registration") {
+            $this->registeredCredits = array_intersect_key(
+                $p["credit"],
+                array_flip(["course_code", "course_title", "attempted_milli"]),
+            );
         }
         $this->provenance = $p["provenance"];
         $this->credit = $p["credit"];
@@ -304,6 +311,11 @@ final class AcademicCredit extends EventSourcedAggregate
     {
         return $this->academicOn;
     }
+    public function registeredCredits(): ?array
+    {
+        return $this->registeredCredits;
+    }
+
     public function registrationTermId(): ?string
     {
         return $this->registrationTermId;

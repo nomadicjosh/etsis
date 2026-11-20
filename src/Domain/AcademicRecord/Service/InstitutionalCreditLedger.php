@@ -1292,6 +1292,34 @@ final readonly class InstitutionalCreditLedger
             "registration_course_version_id" => $root->registrationCourseVersion(),
         ];
     }
+    /**
+     * Current load uses genuinely recorded registration quantities, not corrected award units or today's catalog.
+     * Caller authorizes the student and owns its read transaction/lock.
+     */
+    public function registrationLoadFacts(Enrollment $enrollment, HistoryReadBudget $budget): array
+    {
+        [$id, $root, $facts] = $this->source(
+            $enrollment->id,
+            $enrollment->studentId,
+            $enrollment->sectionId,
+            $budget,
+        );
+        if (
+            $facts["status"] !== $enrollment->status->value ||
+            ($root->registrationTermId() ?? $facts["term_id"]) !== $enrollment->termId->value
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $registered = $root->registeredCredits();
+        return [
+            "credit_id" => $id->value,
+            "credits_milli" => $registered["attempted_milli"] ?? null,
+            "course_code" => $registered["course_code"] ?? $facts["course_code"],
+            "course_title" => $registered["course_title"] ?? $facts["course_title"],
+            "history_version" => $root->playhead(),
+        ];
+    }
+
     /** Internal registration completion check; caller owns authorization and student locks. */
     public function verifyOpenEnrollment(Enrollment $enrollment, HistoryReadBudget $budget): void
     {

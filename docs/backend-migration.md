@@ -20,6 +20,8 @@ The functional coverage below does **not** mean these contexts already provide c
 
 [Registration history](registration-history.md) now retains accepted enrollments and early/late releases, with committed section order, replay-derived enrollment rows and registrar-only history. Request-arrival/waitlist history and complete section/lifecycle versions remain staged work.
 
+[Enrollment load](enrollment-load.md) now bundles institutional/program policy publication and runtime-only staff, student and advisor reviews. All active registrations in the chosen term count after program changes, using original registered quantities; closed attempts and incomplete history cannot inflate or silently reduce a verified total. Official retained/census determinations and reporting remain open.
+
 ## Source review and scope decisions
 
 `legacy-inventory.json` records documentation, migration tables/columns, view fields, router declarations, module functions, and source checksums. The review now includes 51 documentation files, six legacy migrations, 207 PHP views, 29 routers, and ten module files. The newly supplied module routers and views resolve the earlier missing-source question; missing behavior may also be reconstructed under the user's instruction.

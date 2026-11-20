@@ -52,6 +52,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Student\Event\EnrollmentLoadPolicyWasPublished::class => [
+                'type' => 'enrollment_load_policy', 'root' => \Domain\Student\EnrollmentLoadPolicy::class,
+                'fields' => \Domain\Student\EnrollmentLoadPolicy::FIELDS,
+            ],
             \Domain\Student\Event\StudentStandingWasCorrected::class => [
                 'type' => 'student_standing', 'root' => \Domain\Student\StudentStanding::class,
                 'fields' => \Domain\Student\StudentStanding::CORRECTION_FIELDS,
@@ -586,6 +590,15 @@ final readonly class HistoricalSchemaRegistry
                     throw new CorruptHistoryException();
                 }
             }
+            if ($class === \Domain\Student\Event\EnrollmentLoadPolicyWasPublished::class) {
+                \Domain\Student\EnrollmentLoadPolicy::validate($payload);
+                if (
+                    ($payload['program_id'] ?? \Domain\Student\ValueObject\EnrollmentLoadPolicyId::GLOBAL)
+                        !== (string) $stream->aggregateId
+                ) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\Advising\Event\StudentAdvisorsWereAssigned::class) {
                 \Domain\Advising\AdvisorHistory::validate($payload);
                 if ($payload['pursuit_id'] !== (string) $stream->aggregateId) {
@@ -957,7 +970,8 @@ final readonly class HistoricalSchemaRegistry
             foreach ($payload as $name => $value) {
                 // This complete payload is validated by its bounded typed schema above.
                 if (
-                    in_array($class, [\Domain\Advising\Event\StudentAdvisorsWereAssigned::class,
+                    in_array($class, [\Domain\Student\Event\EnrollmentLoadPolicyWasPublished::class,
+                    \Domain\Advising\Event\StudentAdvisorsWereAssigned::class,
                     \Domain\Student\Event\StudentStandingWasRecorded::class,
                     \Domain\Student\Event\StudentStandingWasCorrected::class], true)
                 ) {
@@ -1504,6 +1518,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Student\EnrollmentLoadPolicy::class => 'enrollment_load_policy',
             \Domain\Student\StudentStanding::class => 'student_standing',
             \Domain\Advising\AdvisorHistory::class => 'student_advisors',
             \Domain\Registration\RegistrationWindowHistory::class => 'term_registration_window',
@@ -1551,6 +1566,7 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            'enrollment_load_policy' => new \Domain\Student\ValueObject\EnrollmentLoadPolicyId($id),
             'student_standing' => new \Domain\Student\ValueObject\StudentStandingId($id),
             'student_advisors' => new \Domain\Advising\ValueObject\AdvisorHistoryId($id),
             'term_registration_window' => new \Domain\Registration\ValueObject\RegistrationWindowId($id),

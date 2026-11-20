@@ -1065,6 +1065,14 @@
         return details;
     }
 
+    function enrollmentLoadAction(container, student, pursuit, advisor = false) {
+        const host = el("div");
+        container.append(host);
+        window.createEnrollmentLoadReview({ node: el, request, task: run => run().catch(error => {
+            if (!pageLeaving && host.isConnected) host.replaceChildren(el("p", { role: "status" }, error.message || "The review is unavailable. Contact the registrar."));
+        }) })(host, `/portal/api/${advisor ? "advising/" : ""}students/${student}/programs/${pursuit}/load/`);
+    }
+
     async function advising(container) {
         if (me.students.length) container.append(el("p", {}, "Your academic advisors are shown with each program's degree progress."),
             el("a", { href: "/portal/student/progress/", class: "campus-button secondary" }, "My program and advisors"));
@@ -1090,6 +1098,7 @@
                 renderStanding(standing, responses[1].status === "fulfilled" ? responses[1].value : null);
                 if (responses[0].status === "rejected") throw responses[0].reason;
                 renderPortalProgress(result, responses[0].value, () => show(student, pursuit));
+                enrollmentLoadAction(result, student, pursuit, true);
             } catch (error) {
                 if (!result.isConnected || current !== generation) return;
                 standing.replaceChildren();
@@ -1184,6 +1193,7 @@
                 else advisors.replaceChildren(el("p", {}, "Advisor information is unavailable. Contact the registrar."));
                 if (responses[0].status === "rejected") throw responses[0].reason;
                 renderPortalProgress(result, responses[0].value, () => review(student, pursuit));
+                enrollmentLoadAction(result, student, pursuit);
             } catch (error) {
                 if (pageLeaving || current !== generation || !result.isConnected) return;
                 result.replaceChildren(
