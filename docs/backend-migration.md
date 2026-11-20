@@ -362,3 +362,6 @@ The [co-requisite workflow](registration-history.md#co-requisites-and-linked-dro
 
 
 [Section drop policies](registration-history.md#section-drop-policy-overrides) now connect term inheritance, reviewed per-offering deadlines and late-drop periods, protected publication history and a reasoned return to inheritance. Student/staff, mixed-policy multi-course drops, hiatus closures and section changes use the same resolution path. Applicable policy references stay with academic decisions; later publication never rewrites an earlier grade, charge or receipt. Migration `20261120000001` adds only the current section-policy projection and performs no historical conversion.
+
+
+[Funding-method reporting](workflow-review.md#funding-method-reports) now bundles receipt-method projection updates, visual payment-source templates and private saved/static/shared/CSV behavior. Current methods follow recorded corrections across amount replacements; originals and protected history remain intact. The nullable projection upgrade derives known methods from verified events without exposing receipt references or creating another financial journal. Further tuition/fee origin distinctions remain open.

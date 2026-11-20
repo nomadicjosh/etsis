@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Infrastructure\Reporting;
 
+use Domain\Finance\Enum\PaymentMethod;
+
 final class FinancialReportSchema
 {
     /** @param array<string,array<string,mixed>> $datasets
@@ -21,6 +23,16 @@ final class FinancialReportSchema
                 'charge' => 'Charge', 'payment' => 'Payment', 'refund' => 'Refund', 'charge_credit' => 'Charge credit',
             ]],
             'posting_reversed' => $field('Posting reversed', 'boolean', 'reversed'),
+            'posting_payment_method' => $field('Current receipt method', 'string', 'payment_method') + [
+                'choices' => array_combine(
+                    array_column(PaymentMethod::cases(), 'value'),
+                    array_map(
+                        static fn(PaymentMethod $method): string => $method === PaymentMethod::PayPal ?
+                            'PayPal' : ucwords(str_replace('_', ' ', $method->value)),
+                        PaymentMethod::cases()
+                    ),
+                ),
+            ],
             'posting_recorded_at' => $field('Posting event recorded UTC', 'datetime', 'recorded_at'),
             'posting_position' => $field('Posting account sequence', 'integer', 'posted_position'),
             'posting_origin' => $field('Recorded posting origin', 'string', 'origin') + ['choices' => [

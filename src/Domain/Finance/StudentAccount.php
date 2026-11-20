@@ -809,6 +809,17 @@ final class StudentAccount extends EventSourcedAggregate
         return $root === null ? null : $this->paymentDetails[$root] ?? null;
     }
 
+    /** Original and replacement operations sharing this receipt; no private receipt values.
+     * @return list<string> */
+    public function receiptOperations(EntityId $entry): array
+    {
+        $root = $this->receiptRoots[$entry->value] ?? null;
+        return $root === null ? [] : array_keys(array_filter(
+            $this->receiptRoots,
+            static fn(string $candidate): bool => $candidate === $root
+        ));
+    }
+
     public function assertPaymentDetailsChange(
         EntityId $entry,
         #[\SensitiveParameter] PaymentDetails $details,

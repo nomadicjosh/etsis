@@ -39,20 +39,35 @@ final readonly class SqlAccountEntryProjection
         ) {
             throw new CorruptHistoryException();
         }
-        [$created, $affected] = $this->changes($id, $events);
-        foreach ($affected as $operation => $_) {
+        [$created, $affected, $previousMethods] = $this->changes($account, $events);
+        foreach ($affected as $operation => $moneyChanged) {
             $entry = $account->entry(new EntityId($operation)) ?? throw new CorruptHistoryException();
             $old = $this->sql->rows(
                 'sis_account_entries',
                 ['account_id' => $id, 'operation_id' => $operation],
                 1,
             )[0] ?? null;
-            $values = $this->values($id, $entry);
+            $values = $this->values($account, $entry);
             if (isset($created[$operation])) {
                 if ($old !== null) {
                     throw new CorruptHistoryException();
                 }
                 $this->sql->insert('sis_account_entries', $values + $created[$operation]);
+                continue;
+            }
+            if (
+                $old === null || $old['payment_method'] !== (array_key_exists($operation, $previousMethods) ?
+                $previousMethods[$operation] : $values['payment_method'])
+            ) {
+                throw new CorruptHistoryException();
+            }
+            if (!$moneyChanged) {
+                $this->compareValues($values, $old, ignoreMissingMethod: false, methodOnlyChange: true);
+                $this->sql->update(
+                    'sis_account_entries',
+                    ['payment_method' => $values['payment_method']],
+                    ['id' => $old['id']]
+                );
                 continue;
             }
             if (
@@ -89,9 +104,10 @@ final readonly class SqlAccountEntryProjection
     public function initialize(
         #[\SensitiveParameter] StudentAccount $account,
         #[\SensitiveParameter] array $events,
+        bool $enrichPaymentMethods = false,
     ): void {
         $id = (string) $account->aggregateId();
-        [$created] = $this->changes($id, $events);
+        [$created] = $this->changes($account, $events);
         $entries = $account->entries();
         $rows = $this->rows($id);
         $head = $this->sql->current('sis_account_entry_heads', $id);
@@ -104,13 +120,24 @@ final readonly class SqlAccountEntryProjection
             }
             foreach ($entries as $entry) {
                 $opening = $created[$entry['operation_id']] ?? throw new CorruptHistoryException();
-                $this->sql->insert('sis_account_entries', $this->values($id, $entry) + $opening);
+                $this->sql->insert('sis_account_entries', $this->values($account, $entry) + $opening);
             }
             $this->sql->insert('sis_account_entry_heads', ['id' => $id, 'position' => $account->playhead(),
                 'entry_count' => count($entries)]);
             return;
         }
-        $this->compare($account, $created, $entries, $head, $rows);
+        $this->compare($account, $created, $entries, $head, $rows, $enrichPaymentMethods);
+        if ($enrichPaymentMethods) {
+            foreach ($entries as $entry) {
+                $values = $this->values($account, $entry);
+                $this->sql->update(
+                    'sis_account_entries',
+                    ['payment_method' => $values['payment_method']],
+                    ['account_id' => $id, 'operation_id' => $entry['operation_id']]
+                );
+            }
+            $this->compare($account, $created, $entries, $head, $this->rows($id));
+        }
     }
 
     /** Read-only verification shares the migration's deterministic state builder, never its write path.
@@ -120,7 +147,7 @@ final readonly class SqlAccountEntryProjection
         #[\SensitiveParameter] array $events,
     ): void {
         $id = (string) $account->aggregateId();
-        [$created] = $this->changes($id, $events);
+        [$created] = $this->changes($account, $events);
         $entries = $account->entries();
         $head = $this->sql->current('sis_account_entry_heads', $id);
         $rows = $this->rows($id);
@@ -140,8 +167,8 @@ final readonly class SqlAccountEntryProjection
         #[\SensitiveParameter] array $entries,
         array $head,
         #[\SensitiveParameter] array $rows,
+        bool $enrichPaymentMethods = false,
     ): void {
-        $id = (string) $account->aggregateId();
         if (
             (string) ($head['position'] ?? null) !== (string) $account->playhead() ||
             (string) ($head['entry_count'] ?? null) !== (string) count($entries) || count($rows) !== count($entries)
@@ -150,22 +177,34 @@ final readonly class SqlAccountEntryProjection
         }
         $rows = array_column($rows, null, 'operation_id');
         foreach ($entries as $entry) {
-            $expected = $this->values($id, $entry) + $created[$entry['operation_id']];
+            $expected = $this->values($account, $entry) + $created[$entry['operation_id']];
             $old = $rows[$entry['operation_id']] ?? throw new CorruptHistoryException();
-            foreach ($expected as $field => $value) {
-                if (!array_key_exists($field, $old)) {
+            $this->compareValues($expected, $old, $enrichPaymentMethods);
+        }
+    }
+
+    private function compareValues(
+        #[\SensitiveParameter] array $expected,
+        #[\SensitiveParameter] array $old,
+        bool $ignoreMissingMethod = false,
+        bool $methodOnlyChange = false,
+    ): void {
+        foreach ($expected as $field => $value) {
+            if (!array_key_exists($field, $old)) {
+                throw new CorruptHistoryException();
+            }
+            if ($field === 'payment_method' && ($methodOnlyChange || ($ignoreMissingMethod && $old[$field] === null))) {
+                continue;
+            }
+            if (is_int($value)) {
+                $actual = is_bool($old[$field]) ? (int) $old[$field] : $old[$field];
+                if ((string) $actual !== (string) $value) {
                     throw new CorruptHistoryException();
                 }
-                if (is_int($value)) {
-                    $actual = is_bool($old[$field]) ? (int) $old[$field] : $old[$field];
-                    if ((string) $actual !== (string) $value) {
-                        throw new CorruptHistoryException();
-                    }
-                    continue;
-                }
-                if ($old[$field] !== $value) {
-                    throw new CorruptHistoryException();
-                }
+                continue;
+            }
+            if ($old[$field] !== $value) {
+                throw new CorruptHistoryException();
             }
         }
     }
@@ -189,22 +228,34 @@ final readonly class SqlAccountEntryProjection
     }
 
     /** @param list<DomainEvent> $events
-     * @return array{array<string,array<string,mixed>>,array<string,true>} */
-    private function changes(string $account, #[\SensitiveParameter] array $events): array
-    {
+     * @return array{array<string,array<string,mixed>>,array<string,bool>,array<string,string|null>} */
+    private function changes(
+        #[\SensitiveParameter] StudentAccount $account,
+        #[\SensitiveParameter] array $events,
+    ): array {
         if ($events === [] || count($events) > 2000) {
             throw new CorruptHistoryException();
         }
         $created = [];
         $affected = [];
+        $previousMethods = [];
         foreach ($events as $event) {
-            if ((string) $event->aggregateId() !== $account) {
+            if ((string) $event->aggregateId() !== (string) $account->aggregateId()) {
                 throw new CorruptHistoryException();
             }
-            if ($event instanceof StudentAccountWasOpened || $event instanceof AccountPaymentDetailsWereChanged) {
+            if ($event instanceof StudentAccountWasOpened) {
                 continue;
             }
             $p = $event->payload();
+            if ($event instanceof AccountPaymentDetailsWereChanged) {
+                foreach ($account->receiptOperations(new EntityId($p['entry_operation_id'])) as $operation) {
+                    $affected[$operation] ??= false;
+                    if (!array_key_exists($operation, $previousMethods)) {
+                        $previousMethods[$operation] = $p['previous_details']['method'] ?? null;
+                    }
+                }
+                continue;
+            }
             $operation = new EntityId($p['operation_id']);
             $affected[$operation->value] = true;
             if ($event instanceof AccountEntryWasReversed) {
@@ -223,7 +274,7 @@ final readonly class SqlAccountEntryProjection
                 throw new CorruptHistoryException();
             }
             $created[$operation->value] = [
-                'id' => $this->rowId($account, $operation->value, $event->recordedAt()),
+                'id' => $this->rowId((string) $account->aggregateId(), $operation->value, $event->recordedAt()),
                 'recorded_at' => DateTimeImmutable::createFromInterface($event->recordedAt())
                     ->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
                 'posted_position' => $event->playhead(),
@@ -239,7 +290,7 @@ final readonly class SqlAccountEntryProjection
                 $affected[new EntityId($p['source_operation_id'])->value] = true;
             }
         }
-        return [$created, $affected];
+        return [$created, $affected, $previousMethods];
     }
 
     /** Stable ULID timestamp/entropy, using the same installed Crockford encoder as EntityId generation. */
@@ -257,9 +308,11 @@ final readonly class SqlAccountEntryProjection
 
     /** @param array<string,mixed> $entry
      * @return array<string,mixed> */
-    private function values(string $account, #[\SensitiveParameter] array $entry): array
+    private function values(#[\SensitiveParameter] StudentAccount $account, #[\SensitiveParameter] array $entry): array
     {
-        return ['account_id' => $account, 'operation_id' => $entry['operation_id'], 'type' => $entry['type'],
+        return ['account_id' => (string) $account->aggregateId(), 'operation_id' => $entry['operation_id'],
+            'type' => $entry['type'],
+            'payment_method' => $account->paymentDetails(new EntityId($entry['operation_id']))?->method?->value,
             'amount_minor' => $entry['minor'], 'currency' => $entry['currency'], 'reversed' => (int) $entry['reversed'],
             'effect_minor' => \Domain\Finance\Enum\EntryType::from($entry['type'])->balanceSign() * $entry['minor'],
             'corrects_operation_id' => $entry['corrects_operation_id'] ?? null,

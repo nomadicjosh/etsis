@@ -32,6 +32,7 @@ async function fixture(page, options = {}) {
     const calls = [], errors = []; let definition = null, version = 0, name = '', operation = 1;
     const fields = options.postings ? {
         institutional_id: { label: 'Institutional ID', type: 'string', relation: 'identity' },
+        full_name: { label: 'Student full name', type: 'string', relation: 'person' },
         term_code: { label: 'Billing term', type: 'string', relation: 'term' },
         currency: { label: 'Currency', type: 'string', relation: 'account' },
     } : options.scheduling ? {
@@ -95,6 +96,8 @@ async function fixture(page, options = {}) {
             choices: { charge: 'Charge', payment: 'Payment', refund: 'Refund', charge_credit: 'Charge credit' } },
         posting_amount: { label: 'Posting amount', type: 'double', relation: 'entry' },
         posting_reversed: { label: 'Posting reversed', type: 'boolean', relation: 'entry' },
+        posting_payment_method: { label: 'Current receipt method', type: 'string', relation: 'entry',
+            choices: { cash: 'Cash', check: 'Check', loan: 'Loan', grant: 'Grant', scholarship: 'Scholarship', other: 'Other' } },
         posting_recorded_at: { label: 'Posting event recorded UTC', type: 'datetime', relation: 'entry' },
     });
     const dataset = options.postings ? {
@@ -190,7 +193,7 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/report-studio/save/') { definition = data.definition; name = data.name; version = data.version + 1; result = { id: data.report_id }; }
         else if (path.endsWith('/preview/') || path.endsWith('/run/')) {
             const query = data.definition || definition;
-            const values = { posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
+            const values = { posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
                 latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
@@ -230,6 +233,36 @@ test('financial posting templates keep reversed originals explicit and summarize
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+for (const missing of [false, true]) test(`payment-method template ${missing ? 'finds unclassified receipts' : 'groups current funding sources'} and preserves its saved definition`, async ({ page }) => {
+    const f = await fixture(page, { postings: true });
+    await page.getByRole('button', { name: missing ? 'Missing payment methods' : 'Payments by method', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Preview', exact: true })).toBeEnabled();
+    await page.getByLabel('Report name', { exact: true }).fill('Fictional payment method review');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.filters.rules).toEqual([
+        { id: 'posting_reversed', operator: 'equal', value: false },
+        { id: 'posting_type', operator: 'equal', value: 'payment' },
+        ...(missing ? [{ id: 'posting_payment_method', operator: 'is_null', value: null }] : []),
+    ]);
+    if (!missing) {
+        expect(query.columns.map(column => [column.field, column.aggregate])).toEqual([
+            ['term_code', 'none'], ['currency', 'none'], ['posting_payment_method', 'none'],
+            ['posting_id', 'count'], ['posting_amount', 'sum'],
+        ]);
+        await expect(page.getByRole('region', { name: 'Relational report results', exact: true })).toContainText('scholarship');
+    }
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(page.getByLabel('Column 3 label', { exact: true })).toHaveValue(missing ? 'Billing term' : 'Method');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
 

@@ -57,6 +57,59 @@ if ($cancelled->getStatusCode() !== 200 || $sis->sql->rows('sis_report_export_ch
     throw new RuntimeException('Cancelling an export did not remove its private download.');
 }
 $second = \Domain\Shared\ValueObject\EntityId::generate();
+// The same private report transport carries only the minimized receipt method.
+$fundingAccount = \Domain\Finance\StudentAccount::open(
+    new \Domain\Finance\ValueObject\AccountId(),
+    $sis->student()->id,
+    $sis->term,
+    'USD'
+);
+$fundingAccount->post(
+    \Domain\Shared\ValueObject\EntityId::generate(),
+    \Domain\Finance\Enum\EntryType::Payment,
+    new \Domain\Finance\ValueObject\Money(2500, 'USD'),
+    $sis->access->actor,
+    staffRecorded: true,
+    paymentDetails: new \Domain\Finance\ValueObject\PaymentDetails(
+        \Domain\Finance\Enum\PaymentMethod::Loan,
+        'FICTIONAL-PRIVATE-REFERENCE'
+    )
+);
+$sis->saveAccount($fundingAccount);
+$events = $sis->sql->rows('sis_history_events');
+$fundingDefinition = ['dataset' => 'postings', 'columns' => [
+    ['field' => 'posting_payment_method', 'label' => 'Method', 'aggregate' => 'none'],
+    ['field' => 'currency', 'label' => 'Currency', 'aggregate' => 'none'],
+    ['field' => 'posting_amount', 'label' => 'Payments', 'aggregate' => 'sum'],
+], 'filters' => ['condition' => 'AND', 'rules' => [
+    ['id' => 'posting_type', 'operator' => 'equal', 'value' => 'payment'],
+    ['id' => 'posting_reversed', 'operator' => 'equal', 'value' => false],
+]]];
+$fundingPreview = $teachingPost('/sis/report-studio/preview/', ['definition' => $fundingDefinition, 'offset' => 0]);
+$fundingData = json_decode((string) $fundingPreview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($fundingPreview->getStatusCode() !== 200 || ($fundingData['items'][0]['c0'] ?? null) !== 'loan') {
+    throw new RuntimeException('The private finance report did not resolve its receipt-method projection.');
+}
+$fundingReport = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$fundingSaved = $teachingPost('/sis/report-studio/save/', ['report_id' => $fundingReport,
+    'operation_id' => $fundingReport, 'version' => -1, 'name' => 'Fictional funding methods',
+    'definition' => $fundingDefinition]);
+$fundingCsv = $teachingPost('/sis/report-studio/' . $fundingReport . '/export/', ['offset' => 0]);
+if (
+    $fundingSaved->getStatusCode() !== 201 || $fundingCsv->getStatusCode() !== 200 ||
+    !str_contains((string) $fundingCsv->getBody(), 'loan') ||
+    str_contains((string) $fundingCsv->getBody(), 'FICTIONAL-PRIVATE-REFERENCE') ||
+    $events !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Receipt-method reporting exposed private references or changed financial history.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:reporting:run', 'sis:student:read'];
+if ($teachingPost('/sis/report-studio/' . $fundingReport . '/export/', ['offset' => 0])->getStatusCode() !== 403) {
+    throw new RuntimeException('Receipt-method export bypassed independent finance source permission.');
+}
+$sis->access->staff = true;
+$sis->access->grants = [];
 $teachingPost($base, ['operation_id' => $second->value, 'version' => 0]);
 $sis->sql->update('users', ['sign_in_enabled' => 0], ['user_id' => $sis->access->actor->value]);
 if (

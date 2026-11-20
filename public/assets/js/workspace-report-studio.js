@@ -200,6 +200,32 @@ window.createWorkspaceReportStudio = function (ui) {
                 })),
                 node("p", { class: "form-text" }, "Posting rows include original and replacement amounts. Exclude reversed postings for current totals. Recorded UTC times are event times, not bank settlement dates; earlier source classifications remain explicit. Amount replacements have their correction event time."),
             );
+            if (postings.fields.posting_payment_method) {
+                const payments = { condition: "AND", rules: [...structuredClone(currentPostings.rules),
+                    { id: "posting_type", operator: "equal", value: "payment" },
+                ] };
+                templateGrid.append(
+                    button("Payments by method", () => edit(postings, {
+                        ...initial(postings),
+                        columns: [
+                            { field: "term_code", label: "Billing term", aggregate: "none" },
+                            { field: "currency", label: "Currency", aggregate: "none" },
+                            { field: "posting_payment_method", label: "Method", aggregate: "none" },
+                            { field: "posting_id", label: "Payments recorded", aggregate: "count" },
+                            { field: "posting_amount", label: "Payments", aggregate: "sum" },
+                        ], filters: structuredClone(payments),
+                    })),
+                    button("Missing payment methods", () => edit(postings, {
+                        ...initial(postings),
+                        columns: ["institutional_id", "full_name", "term_code", "currency", "posting_amount", "posting_recorded_at"]
+                            .map(field => ({ field, label: postings.fields[field].label, aggregate: "none" })),
+                        filters: { condition: "AND", rules: [...structuredClone(payments.rules),
+                            { id: "posting_payment_method", operator: "is_null", value: null },
+                        ] },
+                    })),
+                    node("p", { class: "form-text" }, "Receipt methods follow the latest recorded correction. Blank means no method was recorded; Other is a deliberate choice. Refund methods describe the outgoing refund. Receipt references stay in the private account workflow."),
+                );
+            }
         }
         const meetings = catalog.datasets.find(dataset => dataset.id === "meetings");
         const rooms = catalog.datasets.find(dataset => dataset.id === "rooms");
