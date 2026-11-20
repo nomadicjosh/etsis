@@ -456,6 +456,7 @@ final class OfferingPublicationTest extends TestCase
                 $retained->publication->value,
             );
             self::assertSame($review["sections"][$index]["section_definition"], $retained->definition->data);
+            self::assertSame($section->webRegistration, $retained->definition->data["web_registration"]);
             $student = $f->student();
             $enrollment = $f->service->register($student->id, $section->id);
             self::assertSame(
@@ -530,6 +531,9 @@ final class OfferingPublicationTest extends TestCase
         $first = $this->plan->sections[0]->id;
         $binding = $this->c->bindings()->review($first, $this->version, "Earlier binding");
         $this->c->bindings()->commit($first, $binding["review_token"]);
+        // An independently selected publication must agree with the plan's activation choice.
+        $f->sql->update("sis_sections", ["web_registration" => (int) $this->plan->sections[0]->webRegistration],
+            ["id" => $first->value]);
         $sections = $this->c->sectionPublications();
         $review = $sections->review($first, "2026-09-01", "2026-11-30", "Earlier section publication");
         $publication = $sections->publish($first, $review["review_token"]);

@@ -137,6 +137,7 @@ final class RegistrationScheduleFixture
             $f->prerequisites(),
             $f->schedules(),
             $f->corequisites(),
+            $f->windowPolicies(),
         );
     }
     public function digest(): string

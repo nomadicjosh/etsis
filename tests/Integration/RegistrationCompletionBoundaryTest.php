@@ -65,6 +65,7 @@ final class RegistrationCompletionBoundaryTest extends TestCase
             $prerequisites ?? new PrerequisiteService($s->inputVerifier(), $s->workPursuits()),
             $s->schedules(),
             $s->corequisites(),
+            $s->windowPolicies(),
         );
     }
 
@@ -112,6 +113,27 @@ final class RegistrationCompletionBoundaryTest extends TestCase
             $facts[$table] = $s->sql->rows($table);
         }
         return $facts;
+    }
+
+    public function testPolicyPublicationDuringCompletionRollsBackEnrollmentCreditChargeAndTheNestedPolicyChange(): void
+    {
+        $s = new SisFixture();
+        $student = $s->student();
+        $section = $s->section();
+        $window = $s->registration->window($s->term);
+        $pending = $s->windowPolicies()->review($s->term, $window, 0, 'Fictional policy approval.');
+        $before = $this->facts($s);
+        $priorWindow = $s->sql->rows('sis_reg_windows');
+        $audit = $this->audit($s, static function () use ($s, $pending): void {
+            $s->windowPolicies()->publish($s->term, $pending['review_token']);
+        });
+        try {
+            $this->service($s, $audit)->register($student->id, $section->id, true);
+            self::fail('Registration completed against a policy that changed during its final audit.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, $this->facts($s));
+            self::assertSame($priorWindow, $s->sql->rows('sis_reg_windows'));
+        }
     }
 
     public static function staffChannels(): iterable

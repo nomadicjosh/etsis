@@ -1347,6 +1347,8 @@ window.createWorkspaceCatalog = function (ui) {
             ],
             ["Term", `${definition.term_code}: ${definition.term_starts_on} through ${definition.term_ends_on}`],
             ["Capacity", definition.capacity],
+            ["Student self-registration", typeof definition.web_registration === "boolean"
+                ? (definition.web_registration ? "Allowed" : "Staff registration only") : "Not recorded in this publication"],
             [
                 "Delivery",
                 {

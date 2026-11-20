@@ -28,6 +28,7 @@ final class EnrollmentHistory extends EventSourcedAggregate
     private ?\Domain\Registration\ValueObject\PrerequisiteDecision $prerequisites = null;
     private ?\Domain\Registration\ValueObject\RegistrationScheduleDecision $schedule = null;
     private ?\Domain\Registration\ValueObject\CoRequisiteDecision $corequisites = null;
+    private array $registrationWindow = ["status" => "not_recorded"];
     public function acceptHistorical(
         #[\SensitiveParameter] DomainEvent $event,
     ): void {
@@ -104,6 +105,21 @@ final class EnrollmentHistory extends EventSourcedAggregate
             ) {
                 throw new CorruptHistoryException();
             }
+        }
+        if (array_key_exists('registration_window', $event->metadata())) {
+            $reference = $event->metaParam('registration_window');
+            \Domain\Registration\ValueObject\RegistrationWindowDefinition::reference($reference);
+            if ($p['provenance'] !== 'registered' || $reference['term_id'] !== $p['enrollment']['term_id']) {
+                throw new CorruptHistoryException();
+            }
+        }
+        if ($p['provenance'] === 'registered') {
+            $reference = $event->metaParam('registration_window', null);
+            $this->registrationWindow = ['status' => $reference === null ? 'unpublished' : 'published',
+                'version' => $reference['version'] ?? null] + array_intersect_key(
+                    $p['eligibility'],
+                    array_flip(['opens_at', 'closes_at', 'course_limit'])
+                );
         }
         $this->facts = $p["enrollment"];
         $this->source = $p["source"];
@@ -230,6 +246,16 @@ final class EnrollmentHistory extends EventSourcedAggregate
         return $this->corequisites?->facts;
     }
 
+    public function registrationWindowSummary(): array
+    {
+        $summary = $this->registrationWindow;
+        foreach (['opens_at', 'closes_at'] as $key) {
+            if (isset($summary[$key])) {
+                $summary[$key] = str_replace(' ', 'T', $summary[$key]) . 'Z';
+            }
+        }
+        return $summary;
+    }
     public function sectionVersion(): ?string
     {
         return $this->sectionVersion;

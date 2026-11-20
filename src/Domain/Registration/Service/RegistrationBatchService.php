@@ -41,6 +41,7 @@ final readonly class RegistrationBatchService
         private RegistrationBilling $billing,
         private \Domain\Shared\Service\ReviewProof $reviews,
         private CoRequisiteService $corequisites,
+        private RegistrationWindowService $windows,
     ) {
     }
 
@@ -94,12 +95,15 @@ final readonly class RegistrationBatchService
         $term = $this->repository->term($current->termId);
 
         if (
+            $this->windows->checked($current->termId, $this->repository->window($current->termId))->fingerprint() !==
+                $expected['registration_window']['revision'] ||
             $current->termId->value !== $expected["term_id"] ||
             $course->id->value !== $expected["course_id"] ||
             $current->publicationVersionId?->value !== $expected["section_version_id"] ||
             $this->versions->selectionPosition($section) !== $expected["selection_position"] ||
             $course->publicationVersionId?->value !== $expected["course_version_id"] ||
             $current->capacity !== $expected["capacity"] ||
+            $current->webRegistration !== $expected["web_registration"] ||
             $course->code !== $expected["course_code"] ||
             $course->title !== $expected["course_title"] ||
             $course->creditsMilli !== $expected["credits_milli"] ||
@@ -651,6 +655,17 @@ final readonly class RegistrationBatchService
                 $this->clock->now()->format("Y-m-d\TH:i:sP"),
             );
             $this->audit->record($actor, "registration.batch_completed", $operation);
+            if (
+                $created > 0 && $this->windows->checked(
+                    $selectionTerm = new EntityId($context['section']['term_id']),
+                    $this->repository->window($selectionTerm)
+                )->fingerprint() !==
+                $context['section']['registration_window']['revision']
+            ) {
+                throw new ConcurrentModificationException(
+                    'The reviewed registration window changed before completion.',
+                );
+            }
             if ($created > 0) {
                 $this->registration->verifyCourseSelection($selection->section, $budget, $courseRead);
             }
@@ -761,8 +776,9 @@ final readonly class RegistrationBatchService
     ): array {
         $section = $this->repository->section($selection->section);
         $course = $this->repository->courseForSection($section);
+        $selectedOffering = $this->registration->offeringDefinition($section->id);
         $students = [];
-        $window = $this->repository->window($section->termId);
+        $window = $this->windows->checked($section->termId, $this->repository->window($section->termId));
         $term = $this->repository->term($section->termId);
         $scheduleRead ??= new RegistrationScheduleRead();
         $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
@@ -841,6 +857,12 @@ final readonly class RegistrationBatchService
                 array_filter($readiness, static fn(array $check): bool => $check["status"] === "blocked"),
                 "message",
             );
+            if (
+                $enrollment === null && $selectedOffering !== null &&
+                !$selectedOffering->matchesOffering($section, $course)
+            ) {
+                $issues[] = "Review the section's published offering settings before registration.";
+            }
             if ($corequisite !== null && !$corequisite->isMet()) {
                 $issues[] = 'Select the required co-requisite sections together, ' .
                 'or review qualifying completed coursework.';
@@ -900,10 +922,16 @@ final readonly class RegistrationBatchService
                 "course_id" => $course->id->value,
                 "course_code" => $course->code,
                 "course_title" => $course->title,
+                'registration_window' => $window->summary(),
                 "prerequisite_courses" => $prerequisiteCourses,
                 'corequisite_courses' => array_map(static fn(string $id): array =>
                     $corequisiteLabels[$id] ?? ['code' => null, 'title' => null], $corequired),
                 "credits_milli" => $course->creditsMilli,
+                'web_registration' => $section->webRegistration,
+                'self_registration_recorded' => array_key_exists(
+                    'web_registration',
+                    $selectedOffering?->definition->data ?? [],
+                ),
                 "active" => $section->active && $course->active,
                 "fee_minor" => $section->fee->minor,
                 "currency" => $section->fee->currency,

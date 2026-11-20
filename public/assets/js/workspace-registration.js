@@ -58,6 +58,161 @@ window.createWorkspaceRegistration = function (ui) {
             },
         });
     }
+    async function windowPolicy(term, back) {
+        const body = openDrawer("Term registration policy", "DETAILS → REVIEW → PUBLISH");
+        const base = `/sis/terms/${term}/registration-window/`;
+        const saved = await request(base);
+        if (!body.isConnected) return;
+        const local = (value) => {
+            if (!value) return "";
+            const date = new Date(value.replace(" ", "T") + (value.includes("T") ? "" : "Z")),
+                pad = (number) => String(number).padStart(2, "0");
+            return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+        };
+        const fields = [
+            ["opens_at", "Registration opens", "datetime-local"],
+            ["closes_at", "Registration closes", "datetime-local"],
+            ["course_limit", "Maximum registered courses", "number"],
+            ["reason", "Reason for publication", "textarea"],
+        ];
+        const form = await buildForm(fields, {
+            opens_at: local(saved.definition?.opens_at),
+            closes_at: local(saved.definition?.closes_at),
+            course_limit: saved.definition?.course_limit ?? "",
+        });
+        if (!body.isConnected) return;
+        form.elements.opens_at.step = "1";
+        form.elements.closes_at.step = "1";
+        form.elements.course_limit.min = "1";
+        form.elements.course_limit.max = "1000";
+        form.elements.reason.maxLength = 1000;
+        const status = node("p", { role: "status", class: "form-text" });
+        let view = 0;
+        const summary = (definition) =>
+            recordSummary([
+                ["Term", definition.term_code],
+                ["Opens", new Date(definition.opens_at.replace(" ", "T") + "Z").toLocaleString()],
+                ["Closes", new Date(definition.closes_at.replace(" ", "T") + "Z").toLocaleString()],
+                ["Course limit", definition.course_limit],
+                ["Publication timezone", definition.timezone],
+            ]);
+        function edit() {
+            view++;
+            body.replaceChildren(
+                node("h3", { class: "h5" }, saved.term.code),
+                node(
+                    "p",
+                    { class: "form-text" },
+                    `Times use your browser timezone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}. Exact UTC instants are retained. Authorized staff keep their existing registration-window override; course limits still apply.`,
+                ),
+                node(
+                    "p",
+                    { class: "alert alert-info" },
+                    saved.published
+                        ? `Published revision ${saved.version}. New publications govern future registrations; earlier enrollment decisions stay unchanged.`
+                        : "No publication is recorded. Existing setup, if present, has unknown earlier approval history.",
+                ),
+                form,
+                status,
+                button("Policy history", history),
+                button(
+                    "Back to term",
+                    () => {
+                        view++;
+                        return back();
+                    },
+                    "btn-link",
+                ),
+            );
+        }
+        async function history() {
+            const version = ++view;
+            const page = await request(base + "page/", "POST", {});
+            if (!body.isConnected || view !== version) return;
+            const entries = node("div");
+            const add = (data) => {
+                for (const item of data.items)
+                    entries.append(
+                        node(
+                            "section",
+                            { class: "border rounded p-3 mb-3" },
+                            node("h3", { class: "h5" }, `Revision ${item.version}`),
+                            summary(item.definition),
+                            node("p", { class: "form-text" }, `Recorded ${item.recorded_at}`),
+                            item.observed_previous
+                                ? node(
+                                      "p",
+                                      {},
+                                      "Earlier setup was observed here. Its original approval time and author are unknown.",
+                                  )
+                                : null,
+                        ),
+                    );
+            };
+            let cursor = page.next_cursor;
+            const more = button("More history", async () => {
+                const next = await request(base + "page/", "POST", { cursor });
+                if (!body.isConnected || view !== version) return;
+                add(next);
+                cursor = next.next_cursor;
+                more.hidden = !cursor;
+            });
+            more.hidden = !cursor;
+            add(page);
+            body.replaceChildren(
+                node("h3", {}, "Registration policy history"),
+                page.items.length ? entries : node("p", {}, "No published policy history."),
+                more,
+                button("Back to policy", edit),
+            );
+        }
+        const review = node("button", { type: "submit", class: "btn btn-primary" }, "Review policy");
+        form.append(review);
+        form.addEventListener("submit", (event) => {
+            event.preventDefault();
+            task(async () => {
+                if (!form.reportValidity()) return;
+                const version = ++view;
+                const input = () => ({
+                    opens_at: new Date(form.elements.opens_at.value).toISOString().replace(".000Z", "+00:00"),
+                    closes_at: new Date(form.elements.closes_at.value)
+                        .toISOString()
+                        .replace(".000Z", "+00:00"),
+                    course_limit: Number(form.elements.course_limit.value),
+                    reason: form.elements.reason.value,
+                    version: saved.version,
+                });
+                const sent = input();
+                const result = await request(base + "review/", "POST", sent);
+                if (!body.isConnected || view !== version) return;
+                if (JSON.stringify(input()) !== JSON.stringify(sent)) {
+                    status.textContent = "Your fields changed. Review the current values again.";
+                    return;
+                }
+                let accepted = false;
+                body.replaceChildren(
+                    node("h3", {}, "Review registration policy"),
+                    summary(result.definition),
+                    node("p", {}, "Completed registrations and charges keep their original facts."),
+                    node("p", {}, `Reason: ${sent.reason}`),
+                    button("Revise", edit),
+                    button(
+                        "Publish policy",
+                        async () => {
+                            if (accepted) return;
+                            await request(base + "publish/", "POST", {
+                                review_token: result.review_token,
+                            });
+                            accepted = true;
+                            if (body.isConnected && view === version) await back();
+                        },
+                        "btn-primary",
+                    ),
+                );
+            }, review);
+        });
+        edit();
+    }
     async function policy(back = null) {
         const body = openDrawer("Registration policy", "REGISTRATION SETTINGS");
         const value = await request("/sis/registration-policy/");
@@ -633,6 +788,18 @@ window.createWorkspaceRegistration = function (ui) {
                     `Timetable at acceptance: ${schedule.text(record.schedule)}.`,
                 ),
             );
+            const window = record.registration_window;
+            if (window?.opens_at)
+                panel.append(
+                    node(
+                        "p",
+                        { class: "form-text" },
+                        `Accepted registration window: ${new Date(window.opens_at).toLocaleString()} through ${new Date(window.closes_at).toLocaleString()}; maximum ${window.course_limit} courses. ` +
+                            (window.status === "published"
+                                ? `Published revision ${window.version}.`
+                                : "Earlier publication history is not recorded."),
+                    ),
+                );
             const prerequisites = record.prerequisites;
             panel.append(
                 node(
@@ -687,5 +854,5 @@ window.createWorkspaceRegistration = function (ui) {
             );
         body.append(nav);
     }
-    return { single, plan, changeSection, policy, start, history };
+    return { single, plan, changeSection, policy, windowPolicy, start, history };
 };

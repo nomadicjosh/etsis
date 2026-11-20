@@ -2,6 +2,20 @@
 
 Accepted registrations and early/late drops now have their own replayable enrollment history in **`sis_history_events`**. Each enrollment ULID identifies one `EnrollmentHistory` stream. [Academic-credit decisions](academic-credit-history.md) and finance remain separate domain facts, saved in the same transaction. There is one authoritative event table.
 
+## Publish registration windows and course limits
+
+In **Academic catalog → Terms**, open a term and choose **Registration policy**. Set when student registration opens/closes and the maximum number of registered courses. Enter a reason, choose **Review policy**, then **Publish policy**. **Revise** and **Policy history** preserve the unsaved form. Dates in this editor use the browser's stated timezone; the server receives explicit offsets and retains exact UTC instants. The institution timezone is retained with the publication. The closing instant remains inclusive.
+
+Catalog maintenance permission is required for setup, publication and its private history. Registration duty alone does not grant it. Reviews belong to the reviewing account, expire after twenty minutes and become invalid when the term, earlier configuration or policy changes. Confirmation locks the term and atomically appends the protected publication, updates `sis_reg_windows` and writes the required audit. Repeating an accepted confirmation returns its original receipt without replacing a later policy.
+
+Student registration uses the published window and the section's self-registration setting. Authorized staff retain their existing window/self-registration override; the course-count limit applies to both. This is a course-count limit, not a credit-load limit. Individual registration, grouped entry, schedule plans and section replacement share verification. A policy change requires a fresh pending registration review even when its dates and limit happen to be identical. Final checks roll back seats, credit, charges and audit if their reviewed policy changes before completion.
+
+New enrollments retain the actual window dates and limit with their eligibility evidence. If a publication exists, they also retain its exact term/publication/version/hash reference in the same protected journal. Later policy changes leave earlier decisions and charges unchanged. Shared student/staff readiness shows the applicable dates, limit and whether a publication is recorded; restricted registration history shows the originally accepted values. These summaries omit raw event envelopes and protected reasons.
+
+Existing window rows are not converted into invented approvals. The first genuine publication may record the earlier setup as an observation, with its original author/date explicitly unknown. Older enrollment eligibility remains intact. A missing or changed projection for a known publication blocks new registration until repaired; it is never silently treated as unpublished setup.
+
+Migration `20261120000002_AddSisRegistrationPolicyReferences` adds nullable reference columns and the nullable section self-registration fact. It does not rewrite earlier events, settings or publications. The migration has SQLite integration and five supported SQL-dialect compiler coverage; this does not certify every PDO driver or live database engine. Bounded verification on the configured MariaDB database preserved all twenty existing events and the event/stream/operation checksums.
+
 ## Review and publish term drop policies
 
 In **Academic catalog → Terms**, open a term and choose **Drop / withdrawal policy**. Add any dated grade periods and a reason, choose **Review policy**, then **Publish policy**. The review shows the exact deadline, timezone and grade periods being approved. **Revise** keeps entered values. **Policy history** shows retained publications in twenty-entry pages without exposing protected command reasons or raw event envelopes. Catalog-management authority is required; registration authority alone does not permit policy changes or this history.

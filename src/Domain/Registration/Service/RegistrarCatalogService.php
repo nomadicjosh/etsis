@@ -7,7 +7,6 @@ namespace Domain\Registration\Service;
 use DomainException;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\Course;
-use Domain\Registration\RegistrationWindow;
 use Domain\Registration\Repository\RegistrationRepository;
 use Domain\Registration\Section;
 use Domain\Shared\Persistence\UnitOfWork;
@@ -39,15 +38,6 @@ final readonly class RegistrarCatalogService
         $this->transactions->run(function () use ($section, $actor): void {
             $this->repository->addSection($section);
             $this->audit->record($actor, 'section.created', $section->id);
-        });
-    }
-
-    public function configureWindow(EntityId $term, RegistrationWindow $window): void
-    {
-        $actor = $this->access->requirePermission('sis:catalog:manage');
-        $this->transactions->run(function () use ($term, $window, $actor): void {
-            $this->repository->configureWindow($term, $window);
-            $this->audit->record($actor, 'registration.window_changed', $term);
         });
     }
 

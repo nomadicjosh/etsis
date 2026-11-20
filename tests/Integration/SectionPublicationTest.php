@@ -779,6 +779,66 @@ final class SectionPublicationTest extends TestCase
         self::assertSame($before, $this->f->sql->rows('sis_history_events'));
     }
 
+    public function testSelfRegistrationSettingIsRetainedWithThePublishedOffering(): void
+    {
+        [$publication, $review] = $this->selectedOffering();
+        $this->service->select($this->section->id, $review['review_token']);
+        $versions = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql);
+        $selected = $versions->selected($this->section->id);
+        self::assertTrue($selected->definition->data['web_registration']);
+        self::assertSame(1, (int) $this->f->sql->rows('sis_section_versions')[0]['web_registration']);
+        $definition = $selected->definition->data;
+        unset($definition['web_registration']);
+        $earlier = new SectionDefinitionV1($definition);
+        self::assertArrayNotHasKey('web_registration', $earlier->data);
+        self::assertNotEquals($earlier->data, $selected->definition->data);
+        $student = $this->f->student();
+        $accepted = $this->f->service->register($student->id, $this->section->id, true);
+        $this->f->sql->update('sis_sections', ['web_registration' => 0], ['id' => $this->section->id->value]);
+        $before = $this->f->sql->rows('sis_history_events');
+        // Completed decisions remain retrievable without applying today's setting retroactively.
+        self::assertSame($accepted->id->value,
+            $this->f->service->register($student->id, $this->section->id, true)->id->value);
+        $other = $this->f->student();
+        try {
+            $this->f->service->register($other->id, $this->section->id, true);
+            self::fail('An unpublished self-registration change bypassed offering verification.');
+        } catch (\DomainException) {
+            self::assertSame($before, $this->f->sql->rows('sis_history_events'));
+        }
+    }
+
+    public function testReviewedSelfRegistrationAmendmentOnlyChangesNewRegistrations(): void
+    {
+        [$first, $selection] = $this->selectedOffering();
+        $this->service->select($this->section->id, $selection['review_token']);
+        $old = $this->f->student();
+        $accepted = $this->f->service->register($old->id, $this->section->id, true);
+        $this->f->sql->update('sis_sections', ['web_registration' => 0], ['id' => $this->section->id->value]);
+        $publication = $this->review();
+        $new = $this->service->publish($this->section->id, $publication['review_token']);
+        $amendments = $this->amendments();
+        $review = $amendments->review($this->section->id, new EntityId($new['operation_id']),
+            'Fictional change to staff registration only.');
+        $amendments->commit($this->section->id, $review['review_token']);
+        $student = $this->f->student();
+        $actor = $this->f->access->actor;
+        $this->f->access->actor = $this->f->admissions->person($student->personId)->ownerUserId;
+        $this->f->access->staff = false;
+        try {
+            $this->f->service->register($student->id, $this->section->id);
+            self::fail('Self-registration bypassed the new published setting.');
+        } catch (\DomainException) {
+            self::assertCount(1, $this->f->sql->rows('sis_enrollments'));
+        }
+        $this->f->access->actor = $actor;
+        $this->f->access->staff = true;
+        $next = $this->f->service->register($student->id, $this->section->id, true);
+        $versions = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql);
+        self::assertSame($first['operation_id'], $versions->enrollmentVersion($accepted->id)->value);
+        self::assertSame($new['operation_id'], $versions->enrollmentVersion($next->id)->value);
+    }
+
     private function selectedOffering(): array
     {
         $review = $this->review();

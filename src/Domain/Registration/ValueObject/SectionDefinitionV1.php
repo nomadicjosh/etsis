@@ -7,7 +7,7 @@ namespace Domain\Registration\ValueObject;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
 
-/** Frozen publication contract. Changes to its meaning require another schema version. */
+/** One current definition; optional later fields remain absent in earlier retained publications. */
 final readonly class SectionDefinitionV1
 {
     public const array FIELDS = [
@@ -32,8 +32,10 @@ final readonly class SectionDefinitionV1
     public function __construct(public array $data)
     {
         if (
-            count($data) !== count(self::FIELDS) ||
-            array_diff(array_keys($data), self::FIELDS) !== []
+            !in_array(count($data), [count(self::FIELDS), count(self::FIELDS) + 1], true) ||
+            array_diff(array_keys($data), [...self::FIELDS, 'web_registration']) !== [] ||
+            array_diff(self::FIELDS, array_keys($data)) !== [] ||
+            (array_key_exists('web_registration', $data) && !is_bool($data['web_registration']))
         ) {
             throw new InvalidArgumentException(
                 "A complete section definition is required.",

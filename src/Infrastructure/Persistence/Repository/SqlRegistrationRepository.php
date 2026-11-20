@@ -352,6 +352,9 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
 
     public function configureWindow(EntityId $termId, RegistrationWindow $window): void
     {
+        if (($this->sql->current('sis_reg_windows', $termId->value, 'term_id')['publication_id'] ?? null) !== null) {
+            throw new \DomainException('Use the reviewed registration-window publication workflow.');
+        }
         $this->sql->lock("sis_terms", $termId->value, "code");
         $data = [
             "opens_at" => $window->dates->start->setTimezone(new DateTimeZone("UTC"))->format("Y-m-d H:i:s"),

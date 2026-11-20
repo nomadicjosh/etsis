@@ -76,6 +76,7 @@ final class RegistrationCourseVerificationTest extends TestCase
             $s->prerequisites(),
             $s->schedules(),
             $s->corequisites(),
+            $s->windowPolicies(),
         );
     }
 

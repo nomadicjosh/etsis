@@ -2422,33 +2422,8 @@ window.createWorkspaceOperations = function (ui) {
                     "Registration window",
                 ),
             );
-            panel.append(
-                button("Configure registration window", () =>
-                    flow(
-                        "Save registration window",
-                        [
-                            [
-                                "opens_at",
-                                "Registration opens (local time)",
-                                "datetime-local",
-                            ],
-                            [
-                                "closes_at",
-                                "Registration closes (local time)",
-                                "datetime-local",
-                            ],
-                            [
-                                "course_limit",
-                                "Maximum registered courses",
-                                "number",
-                            ],
-                        ],
-                        `/sis/terms/${row.id}/registration-window/`,
-                        null,
-                        () => openRecord(sectionName, row),
-                    ),
-                ),
-            );
+            panel.append(button("Registration policy", () => ui.batchRegistration().windowPolicy(row.id,
+                () => openRecord(sectionName, row))));
         }
         if (sectionName === "courses" && can("sis:catalog:manage")) {
             const panel = section("Prerequisites");

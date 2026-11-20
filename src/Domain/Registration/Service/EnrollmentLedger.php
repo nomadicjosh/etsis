@@ -48,6 +48,7 @@ final readonly class EnrollmentLedger
         ?HistoryReadBudget $budget = null,
         ?RegistrationCourseRead $courseRead = null,
         ?\Domain\Registration\ValueObject\CoRequisiteDecision $corequisites = null,
+        ?\Domain\Registration\RegistrationWindow $window = null,
     ): void {
         $this->actor($actor);
         if (
@@ -58,25 +59,7 @@ final readonly class EnrollmentLedger
             throw new CorruptHistoryException();
         }
         $this->verifyCourse($course, $budget ?? new HistoryReadBudget(), $courseRead);
-        $selected = SectionOfferingSelection::verify(
-            $section->id,
-            $this->versions,
-            $this->history,
-        );
-        if (
-            $selected?->publication->value !==
-            $section->publicationVersionId?->value
-        ) {
-            throw new CorruptHistoryException();
-        }
-        if (
-            $selected !== null &&
-            !$selected->matchesOffering($section, $course)
-        ) {
-            throw new \DomainException(
-                "This offering changed after version selection. Registrar review is required.",
-            );
-        }
+        $selected = $this->verifyOffering($section, $course);
         if (
             $schedule->blocked() ||
             $schedule->facts["student_id"] !== $enrollment->studentId->value ||
@@ -100,6 +83,18 @@ final readonly class EnrollmentLedger
         }
         if ($corequisites !== null) {
             $metadata['corequisite_evidence'] = $corequisites->retained();
+        }
+        if ($window?->reference !== null) {
+            if (
+                $window->reference['term_id'] !== $enrollment->termId->value ||
+                $window->values() != array_intersect_key(
+                    $eligibility,
+                    array_flip(['opens_at', 'closes_at', 'course_limit']),
+                )
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $metadata['registration_window'] = $window->reference;
         }
         if ($selected !== null) {
             $metadata["section_version_id"] = $selected->publication->value;
@@ -278,6 +273,7 @@ final readonly class EnrollmentLedger
             "section_version_id" => $root->sectionVersion(),
             "prerequisites" => $root->prerequisiteSummary(),
             "schedule" => $root->scheduleSummary(),
+            "registration_window" => $root->registrationWindowSummary(),
             "student_id" => $f["student_id"],
             "section_id" => $f["section_id"],
             "section_code" => $s["section_code"],
@@ -425,7 +421,35 @@ final readonly class EnrollmentLedger
             "capacity" => $section->capacity,
         ];
     }
-    /** Internal caller owns current authority and eligibility locks; no history is changed. */
+    /** Internal coordinator read: callers own current student/section authorization. */
+    public function selectedOffering(EntityId $section): ?\Domain\Registration\ValueObject\PublishedSectionDefinition
+    {
+        return SectionOfferingSelection::verify($section, $this->versions, $this->history);
+    }
+
+    /** Internal command check; the coordinator owns authorization and offering locks. */
+    public function verifyOffering(
+        Section $section,
+        Course $course,
+    ): ?\Domain\Registration\ValueObject\PublishedSectionDefinition {
+        $selected = $this->selectedOffering($section->id);
+        if (
+            $selected?->publication->value !==
+            $section->publicationVersionId?->value
+        ) {
+            throw new CorruptHistoryException();
+        }
+        if (
+            $selected !== null &&
+            !$selected->matchesOffering($section, $course)
+        ) {
+            throw new \DomainException(
+                "This offering changed after version selection. Registrar review is required.",
+            );
+        }
+        return $selected;
+    }
+
     public function verifyCourse(Course $course, HistoryReadBudget $budget, ?RegistrationCourseRead $read = null): void
     {
         ($read ?? new RegistrationCourseRead())->verify(

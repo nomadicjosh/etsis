@@ -397,6 +397,7 @@ final class RegistrationPlanTest extends TestCase
             $f->prerequisites(),
             $f->schedules(),
             $f->corequisites(),
+            $f->windowPolicies(),
         );
         try {
             $f->registrationBatches(registration: $core)->commitPlan(

@@ -193,6 +193,27 @@ window.createRegistrationSchedule = function (ui) {
                 {},
                 `Academic term: ${review.section.term_starts_on} through ${review.section.term_ends_on}`,
             ),
+            review.section.registration_window
+                ? node(
+                      "p",
+                      { class: "form-text" },
+                      `Registration window: ${new Date(review.section.registration_window.opens_at).toLocaleString()} through ${new Date(review.section.registration_window.closes_at).toLocaleString()}. ` +
+                          `Maximum ${review.section.registration_window.course_limit} courses. ` +
+                          (review.section.registration_window.published
+                              ? "Published policy verified."
+                              : "Earlier setup; no publication recorded."),
+                  )
+                : null,
+            typeof review.section.web_registration === "boolean"
+                ? node(
+                      "p",
+                      { class: "form-text" },
+                      `Student self-registration: ${review.section.web_registration ? "Allowed" : "Staff registration only"}. ` +
+                          (review.section.self_registration_recorded
+                              ? "Retained in this offering publication."
+                              : "Not recorded in the earlier publication; current setup applies."),
+                  )
+                : null,
             ["A", "N"].includes(student.enrollment_status)
                 ? node(
                       "p",

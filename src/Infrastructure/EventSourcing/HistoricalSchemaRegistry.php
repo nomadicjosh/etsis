@@ -60,6 +60,10 @@ final readonly class HistoricalSchemaRegistry
                 'type' => 'section_drop_policy', 'root' => \Domain\Registration\DropPolicyPublication::class,
                 'fields' => \Domain\Registration\DropPolicyPublication::FIELDS,
             ],
+            \Domain\Registration\Event\RegistrationWindowWasPublished::class => [
+                'type' => 'term_registration_window', 'root' => \Domain\Registration\RegistrationWindowHistory::class,
+                'fields' => \Domain\Registration\RegistrationWindowHistory::FIELDS,
+            ],
             \Domain\Registration\Event\DropPolicyWasPublished::class => [
                 'type' => 'term_drop_policy', 'root' => \Domain\Registration\DropPolicyPublication::class,
                 'fields' => \Domain\Registration\DropPolicyPublication::FIELDS,
@@ -558,6 +562,12 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if ($class === \Domain\Registration\Event\RegistrationWindowWasPublished::class) {
+                \Domain\Registration\RegistrationWindowHistory::validate($payload);
+                if ($payload['definition']['term_id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\Student\Event\HiatusCaseWasRecorded::class) {
                 \Domain\Student\ValueObject\HiatusCaseSchema::validate($payload);
                 if ($payload['facts']['id'] !== (string) $stream->aggregateId) {
@@ -924,7 +934,8 @@ final readonly class HistoricalSchemaRegistry
                     }
                     if (
                         in_array($class, [\Domain\Registration\Event\DropPolicyWasPublished::class,
-                            \Domain\Registration\Event\SectionDropPolicyWasPublished::class], true)
+                            \Domain\Registration\Event\SectionDropPolicyWasPublished::class,
+                            \Domain\Registration\Event\RegistrationWindowWasPublished::class], true)
                         && $name === 'previous_publication_id' && $value === null
                     ) {
                         continue;
@@ -1246,6 +1257,19 @@ final readonly class HistoricalSchemaRegistry
                     }
                     continue;
                 }
+                if ($name === 'registration_window') {
+                    if (
+                        $class !== \Domain\Registration\Event\EnrollmentWasEstablished::class ||
+                        $payload['provenance'] !== 'registered'
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    \Domain\Registration\ValueObject\RegistrationWindowDefinition::reference($value);
+                    if ($value['term_id'] !== $payload['enrollment']['term_id']) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'schedule_evidence') {
                     if (
                         $class !== \Domain\Registration\Event\EnrollmentWasEstablished::class
@@ -1442,6 +1466,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Registration\RegistrationWindowHistory::class => 'term_registration_window',
             \Domain\Registration\DropPolicyPublication::class =>
             $id instanceof \Domain\Registration\ValueObject\DropPolicyPublicationId && $id->isSection
             ? 'section_drop_policy' : 'term_drop_policy',
@@ -1486,6 +1511,7 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            'term_registration_window' => new \Domain\Registration\ValueObject\RegistrationWindowId($id),
             'term_drop_policy' => new \Domain\Registration\ValueObject\DropPolicyPublicationId($id),
             'section_drop_policy' => new \Domain\Registration\ValueObject\DropPolicyPublicationId($id, true),
             'person_restrictions' => new \Domain\Student\ValueObject\PersonRestrictionsId($id),

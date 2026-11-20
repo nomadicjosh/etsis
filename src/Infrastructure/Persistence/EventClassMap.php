@@ -26,6 +26,7 @@ final class EventClassMap
         return [
             \Domain\Student\Event\HiatusCaseWasRecorded::class,
             \Domain\Registration\Event\DropPolicyWasPublished::class,
+            \Domain\Registration\Event\RegistrationWindowWasPublished::class,
             \Domain\Registration\Event\SectionDropPolicyWasPublished::class,
             \Domain\Student\Event\PersonRestrictionsWereRecorded::class,
             \Domain\Student\Event\RestrictionOfficeWasChanged::class,

@@ -207,6 +207,13 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 $row,
                 array_flip(SectionDefinitionV1::FIELDS),
             );
+            if ($row['web_registration'] !== null) {
+                $value = $this->integer($row['web_registration']);
+                if (!in_array($value, [0, 1], true)) {
+                    throw new CorruptHistoryException();
+                }
+                $facts['web_registration'] = (bool) $value;
+            }
             $facts["capacity"] = $this->integer($facts["capacity"]);
             $facts["fee_minor"] = $this->integer($facts["fee_minor"]);
             $schema = $this->integer($row["schema_version"]);
@@ -249,7 +256,9 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 "stream_version" => $definition->position,
                 "schema_version" =>
                     $definition->classifications === null ? 1 : 2,
-            ] + $definition->definition->data,
+            ] + array_diff_key($definition->definition->data, ['web_registration' => true]) +
+                ['web_registration' => array_key_exists('web_registration', $definition->definition->data) ?
+                    (int) $definition->definition->data['web_registration'] : null],
         );
         if ($definition->classifications !== null) {
             $row = ["id" => $definition->publication->value];

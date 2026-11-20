@@ -376,6 +376,7 @@ final readonly class SectionPublicationService
     public function plannedOffering(
         EntityId $section,
         ?PublishedCourseDefinition $course,
+        bool $webRegistration,
         ?string $start = null,
         ?string $end = null,
         bool $requireEmpty = true,
@@ -384,6 +385,7 @@ final readonly class SectionPublicationService
         return $this->transactions->run(function () use (
             $section,
             $course,
+            $webRegistration,
             $start,
             $end,
             $actor,
@@ -425,15 +427,18 @@ final readonly class SectionPublicationService
             ) {
                 throw new CorruptHistoryException();
             }
+            $proposedRow = $row;
+            $proposedRow["web_registration"] = (int) $webRegistration;
             $definition =
                 $course === null
                     ? null
                     : $this->definition(
-                        $row,
+                        $proposedRow,
                         $term,
                         $course->describe(),
                         $start,
                         $end,
+                        $selected === null || array_key_exists("web_registration", $selected->definition->data),
                     );
             if (
                 $course !== null &&
@@ -548,6 +553,7 @@ final readonly class SectionPublicationService
                         $course,
                         $d["instruction_starts_on"],
                         $d["instruction_ends_on"],
+                        array_key_exists("web_registration", $d),
                     ),
                 ) !== $this->fingerprint($d) ||
                 !$this->matchingClassifications($definition, $row)
@@ -801,6 +807,7 @@ final readonly class SectionPublicationService
                         $course,
                         $d["instruction_starts_on"],
                         $d["instruction_ends_on"],
+                        array_key_exists("web_registration", $d),
                     ),
                 ) !== $this->fingerprint($d) ||
                 !$this->matchingClassifications($definition, $row)
@@ -1053,6 +1060,7 @@ final readonly class SectionPublicationService
         array $course,
         string $start,
         string $end,
+        bool $recordWeb = true,
     ): array {
         return new SectionDefinitionV1([
             "course_id" => $row["course_id"],
@@ -1070,7 +1078,7 @@ final readonly class SectionPublicationService
             "currency" => $row["currency"],
             "instruction_starts_on" => $start,
             "instruction_ends_on" => $end,
-        ])->data;
+        ] + ($recordWeb ? ["web_registration" => (bool) $row["web_registration"]] : []))->data;
     }
 
     /** @param array<string, mixed> $earlier

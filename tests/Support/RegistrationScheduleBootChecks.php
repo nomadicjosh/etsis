@@ -2,6 +2,36 @@
 
 declare(strict_types=1);
 
+// Registration policy setup uses the actual provider/router, browser CSRF and private responses.
+$windowBase = '/sis/terms/' . $sis->term->value . '/registration-window/';
+$windowShow = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $windowBase)));
+$windowData = json_decode((string) $windowShow->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($windowShow->getStatusCode() !== 200 || $windowData['published'] !== false ||
+    !str_contains($windowShow->getHeaderLine('Cache-Control'), 'no-store') || $windowShow->hasHeader('phpdebugbar-id')) {
+    throw new RuntimeException('The registration-policy provider lost private unrecorded setup.');
+}
+$windowInput = ['opens_at' => $sis->clock->now()->modify('-1 day')->format(DATE_ATOM),
+    'closes_at' => $sis->clock->now()->modify('+1 day')->format(DATE_ATOM),
+    'course_limit' => 5, 'version' => 0, 'reason' => 'Fictional HTTP calendar approval.'];
+$windowReviewResponse = $teachingPost($windowBase . 'review/', $windowInput);
+$windowReview = json_decode((string) $windowReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($windowReviewResponse->getStatusCode() !== 200 || !isset($windowReview['review_token'])) {
+    throw new RuntimeException('The registration-policy HTTP review failed.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:registration:manage'];
+if ($teachingPost($windowBase . 'publish/', ['review_token' => $windowReview['review_token']])->getStatusCode() !== 403 ||
+    $teachingPost($windowBase . 'page/', [])->getStatusCode() !== 403) {
+    throw new RuntimeException('Registration duty changed or read restricted catalog policy.');
+}
+$sis->access->staff = true;
+$windowPublished = $teachingPost($windowBase . 'publish/', ['review_token' => $windowReview['review_token']]);
+$windowPublishedData = json_decode((string) $windowPublished->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($windowPublished->getStatusCode() !== 200 || $windowPublishedData['version'] !== 1 ||
+    $teachingPost($windowBase . 'page/', [])->getStatusCode() !== 200) {
+    throw new RuntimeException('The reviewed registration policy did not publish through the provider.');
+}
+
 require_once __DIR__ . "/RegistrationScheduleFixture.php";
 $t = new \Tests\Support\RegistrationScheduleFixture($sis);
 $student = $sis->student();

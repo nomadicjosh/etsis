@@ -7,11 +7,9 @@ namespace Application\Http\Controller;
 use Application\Http\FormInput;
 use Domain\Catalog\Course;
 use Domain\Finance\ValueObject\Money;
-use Domain\Registration\RegistrationWindow;
 use Domain\Registration\Section;
 use Domain\Registration\Service\RegistrarCatalogService;
 use Domain\Registration\Service\RegistrationService;
-use Domain\Shared\ValueObject\DateRange;
 use Domain\Shared\ValueObject\EntityId;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
@@ -60,25 +58,6 @@ final readonly class SisRegistrationController
         $this->catalog->offer($section);
 
         return new JsonResponse(["id" => $section->id->value], 201);
-    }
-
-    public function window(
-        ServerRequest $request,
-        string $id,
-    ): ResponseInterface {
-        $f = FormInput::from($request);
-        $this->catalog->configureWindow(
-            new EntityId($id),
-            new RegistrationWindow(
-                new DateRange(
-                    $f->instant("opens_at"),
-                    $f->instant("closes_at"),
-                ),
-                $f->integer("course_limit", 1, 1000),
-            ),
-        );
-
-        return new JsonResponse(["status" => "configured"]);
     }
 
     public function prerequisite(

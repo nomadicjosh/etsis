@@ -43,6 +43,7 @@ final readonly class RegistrationService
         private PrerequisiteService $prerequisites,
         private RegistrationScheduleService $schedules,
         private CoRequisiteService $corequisites,
+        private RegistrationWindowService $windows,
     ) {
     }
 
@@ -113,7 +114,7 @@ final readonly class RegistrationService
                 );
             }
             $course = $this->repository->courseForSection($section);
-            $window = $this->repository->window($section->termId);
+            $window = $this->windows->checked($section->termId, $this->repository->window($section->termId));
             $courseRead ??= new RegistrationCourseRead();
             if (
                 !$section->active ||
@@ -220,6 +221,7 @@ final readonly class RegistrationService
                 $budget,
                 $courseRead,
                 $corequisites,
+                $window,
             );
             $this->credits->open(
                 $enrollment,
@@ -264,6 +266,10 @@ final readonly class RegistrationService
                         "Co-requisite support changed. Review registration again.",
                     );
                 }
+            }
+            $freshWindow = $this->windows->checked($section->termId, $this->repository->window($section->termId));
+            if ($freshWindow->fingerprint() !== $window->fingerprint()) {
+                throw new ConcurrentModificationException('The assessed registration window changed. Review again.');
             }
             // Final checks are part of the same unit of work, including the seat, credit, charge and audit.
             $this->assertEligible(
@@ -353,6 +359,12 @@ final readonly class RegistrationService
         });
     }
 
+    /** Internal coordinator read: callers own current student/section authorization. */
+    public function offeringDefinition(EntityId $section): ?\Domain\Registration\ValueObject\PublishedSectionDefinition
+    {
+        return $this->enrollments->selectedOffering($section);
+    }
+
     /** Internal coordinator check. Caller owns current authorization and the section/course locks. */
     public function verifyCourseSelection(
         EntityId $sectionId,
@@ -362,6 +374,7 @@ final readonly class RegistrationService
         $section = $this->repository->section($sectionId);
         $course = $this->repository->courseForSection($section);
         $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
+        $this->enrollments->verifyOffering($section, $course);
         $read->selection($sectionId, $course, $required);
         $this->enrollments->verifyCourse($course, $budget, $read);
     }
@@ -415,7 +428,7 @@ final readonly class RegistrationService
         $this->assertEligible(
             $student,
             $section,
-            $this->repository->window($section->termId),
+            $this->windows->checked($section->termId, $this->repository->window($section->termId)),
             $byStaff,
             max(0, $this->repository->enrolledCount($studentId, $section->termId) - 1),
             $prerequisites->isMet(),

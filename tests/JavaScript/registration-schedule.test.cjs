@@ -461,3 +461,20 @@ test("co-requisite readiness distinguishes prior completion from selected and mi
     assert.match(ui.corequisites(review.students[0].corequisites, review.section.corequisite_courses).textContent,
         /Included in this selected schedule/);
 });
+
+test("readiness explains the accepted window and distinguishes published self-registration from earlier setup", () => {
+    const review = registrationReview({ status: "clear", blocked: false });
+    review.section.registration_window = {
+        opens_at: "2026-08-01T00:00:00Z",
+        closes_at: "2026-08-31T23:59:00Z",
+        course_limit: 6,
+        published: true,
+    };
+    review.section.web_registration = false;
+    review.section.self_registration_recorded = true;
+    const p = presenter();
+    const details = p.registration(review, (minor, currency) => `${minor} ${currency}`).textContent;
+    assert.match(details, /Maximum 6 courses/);
+    assert.match(details, /Published policy verified/);
+    assert.match(details, /Staff registration only/);
+});

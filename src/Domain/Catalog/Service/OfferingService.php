@@ -295,6 +295,10 @@ final readonly class OfferingService
                     $this->bindingService->commit($sectionId, $binding["review_token"]);
                 }
                 if ($section["selected_offering"] === null) {
+                    // Retain the reviewed activation setting, not the temporarily disabled draft value.
+                    $this->catalog->save("sections", $sectionId, [
+                        "web_registration" => (int) $section["web_registration"],
+                    ]);
                     $publication = $this->sections->review(
                         $sectionId,
                         $section["instruction_starts_on"],
@@ -477,6 +481,7 @@ final readonly class OfferingService
             $offering = $this->sections->plannedOffering(
                 $s->id,
                 $published,
+                $intended["web_registration"],
                 $dates[$s->id->value]["instruction_starts_on"] ?? null,
                 $dates[$s->id->value]["instruction_ends_on"] ?? null,
                 $requireVersions,

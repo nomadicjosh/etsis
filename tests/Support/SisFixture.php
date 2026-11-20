@@ -336,6 +336,7 @@ final class SisFixture
             new \Domain\Registration\Service\PrerequisiteService($this->inputVerifier(), $this->workPursuits()),
             $this->schedules(),
             $this->corequisites(),
+            $this->windowPolicies(),
         );
         if (!$initialize) {
             $this->term = new EntityId($this->sql->rows("sis_terms", [], 1)[0]["id"]);
@@ -426,6 +427,14 @@ final class SisFixture
         return $this->sql->fetch(
             "SELECT e.* FROM sis_history_events e JOIN sis_history_streams s ON s.id = e.stream_id " .
                 "WHERE s.stream_type IN ('student_account','billing_rule','journal') ORDER BY e.id",
+        );
+    }
+    public function windowPolicies(): \Domain\Registration\Service\RegistrationWindowService
+    {
+        return new \Domain\Registration\Service\RegistrationWindowService(
+            new \Infrastructure\Persistence\Repository\SqlRegistrationWindowRepository($this->sql),
+            EventStoreFixture::history($this->connection->queryBuilder()), $this->access, $this->transactions,
+            $this->audit, $this->clock, $this->dropCipher,
         );
     }
     public function corequisites(): \Domain\Registration\Service\CoRequisiteService
@@ -1500,6 +1509,7 @@ final class SisFixture
             $this->registrationBilling,
             new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
             $this->corequisites(),
+            $this->windowPolicies(),
         );
     }
 
