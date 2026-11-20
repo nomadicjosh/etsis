@@ -15,6 +15,7 @@ async function fixture(page,options={}) {
         let data;
         if(path==='/portal/api/me/') data={students:options.noStudent?[]:[{id:student,primary_program_id:program}]};
         else if(path.endsWith('/degree-programs/')) data={items:[{id:body.after?id(44):pursuit,program_code:body.after?'DUAL':'BSCS',program_title:'Computing <script>fictional</script>',term_code:'26/FA',status:'active',catalog_year:'2026-2027'}],next_after:options.morePrograms&&!body.after?pursuit:null};
+        else if(path.endsWith('/advisors/')) data={items:options.advisors || [],pursuit_status:'active',as_of:'2026-08-10'};
         else if(path.endsWith('/degree-progress/')) {
             if (options.delayFirst && path.includes(`/programs/${pursuit}/`)) { markFirst(); await waitFirst; }
             if(options.deny) return route.fulfill({status:403,json:{error:'Access denied.'}});

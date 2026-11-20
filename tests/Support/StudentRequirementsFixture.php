@@ -54,6 +54,7 @@ final class StudentRequirementsFixture
     public function service(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null,
+        ?\Domain\Advising\Service\AdvisorProgressAccess $advisors = null,
     ): StudentRequirementsService {
         $f = $this->f;
         $s = $f->sis;
@@ -72,6 +73,7 @@ final class StudentRequirementsFixture
             $f->catalog->fixture->cipher,
             $s->clock,
             $s->programStatusLedger(),
+            $advisors,
         );
     }
     public function review(string $start = "2026-01-31"): array

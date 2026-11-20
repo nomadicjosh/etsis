@@ -964,6 +964,7 @@ window.createWorkspaceStudents = function (ui) {
                                   class: "program-actions",
                               });
                               const extra = [];
+                              if (can("sis:advising:manage")) extra.push(button("Academic advisors", () => ui.advising().open(id, item.id, back)));
                               if (can("sis:student:read"))
                                   controls.append(
                                       button(

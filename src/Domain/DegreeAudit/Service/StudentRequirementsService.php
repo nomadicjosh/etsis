@@ -49,6 +49,7 @@ final readonly class StudentRequirementsService
         private MessageCipher $cipher,
         private Clock $clock,
         private \Domain\Student\Service\StudentProgramStatusLedger $programs,
+        private ?\Domain\Advising\Service\AdvisorProgressAccess $advisors = null,
     ) {
     }
     /** Authorize the pursuit scope without replaying its selected catalog publications. */
@@ -344,10 +345,17 @@ final readonly class StudentRequirementsService
     ): array {
         $this->access->authenticatedUserId();
         $record = $this->admissions->student($student);
-        $this->access->requireOwnerOrPermission(
-            $this->admissions->person($record->personId)->ownerUserId,
-            "sis:student:read",
-        );
+        try {
+            $this->access->requireOwnerOrPermission(
+                $this->admissions->person($record->personId)->ownerUserId,
+                "sis:student:read",
+            );
+        } catch (\Domain\Shared\Exception\AccessDeniedException $denied) {
+            if ($this->advisors === null) {
+                throw $denied;
+            }
+            $this->advisors->requireAdvisor($student, $assignment);
+        }
         $a = $this->records->assignment($assignment);
         if ($a->studentId->value !== $student->value) {
             throw new RecordNotFoundException("Student program not found.");

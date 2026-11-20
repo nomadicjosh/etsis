@@ -736,6 +736,7 @@ final class SisFixture
     }
     public function specializations(
         \Domain\Shared\EventSourcing\HistoricalEventStore $history,
+        ?\Domain\Advising\Service\AdvisorProgressAccess $advisors = null,
     ): \Domain\Student\Service\StudentSpecializationService {
         return new \Domain\Student\Service\StudentSpecializationService(
             new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
@@ -749,6 +750,7 @@ final class SisFixture
             $history, $this->access, $this->transactions, $this->audit, $this->dropCipher, $this->clock,
             new \Infrastructure\Persistence\Repository\SqlRequirementsRepository($this->sql),
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($history),
+            $advisors,
         );
     }
     public function programStatusService(

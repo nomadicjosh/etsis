@@ -290,8 +290,10 @@ return static function (Psr7Router $router): void {
     $router->map(['GET'], '/sis/terms/{term}/drop-policy/history/', [
         \Application\Http\Controller\SisDropPolicyController::class, 'history',
     ])->name('sis.drop.policy.history');
-    foreach (['show' => ['', 'GET'], 'review' => ['review/', 'POST'],
-        'commit' => ['commit/', 'POST'], 'history' => ['history/', 'GET']] as $method => [$suffix, $verb]) {
+    foreach (
+        ['show' => ['', 'GET'], 'review' => ['review/', 'POST'],
+        'commit' => ['commit/', 'POST'], 'history' => ['history/', 'GET']] as $method => [$suffix, $verb]
+    ) {
         $router->map([$verb], '/sis/terms/{term}/sections/{section}/drop-policy/' . $suffix, [
             \Application\Http\Controller\SisDropPolicyController::class, $method,
         ])->name('sis.section.drop.policy.' . $method);
@@ -773,14 +775,28 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/courses/", [SisRegistrationController::class, "course"])
         ->name("sis.registration.course");
+    $advising = \Application\Http\Controller\SisAdvisingController::class;
+    $router->map(['POST'], '/sis/advisors/candidates/', [$advising, 'candidates'])->name('sis.advisors.candidates');
+    foreach (
+        ['view' => ['', 'GET'], 'review' => ['review/', 'POST'], 'commit' => ['commit/', 'POST'],
+        'timeline' => ['history/', 'POST']] as $method => [$suffix, $verb]
+    ) {
+        $router->map(
+            [$verb],
+            '/sis/students/{student}/programs/{pursuit}/advisors/' . $suffix,
+            [$advising, $method]
+        )->name('sis.advisors.' . $method);
+    }
     $router->map(['POST'], '/sis/sections/enrollment-review/', [
         \Application\Http\Controller\SisSectionEnrollmentReviewController::class, 'page',
     ])->name('sis.sections.enrollment-review');
     $router
         ->map(["POST"], "/sis/sections/", [SisRegistrationController::class, "section"])
         ->name("sis.registration.section");
-    foreach (['show' => ['', 'GET'], 'review' => ['review/', 'POST'],
-        'publish' => ['publish/', 'POST'], 'page' => ['page/', 'POST']] as $method => [$suffix, $verb]) {
+    foreach (
+        ['show' => ['', 'GET'], 'review' => ['review/', 'POST'],
+        'publish' => ['publish/', 'POST'], 'page' => ['page/', 'POST']] as $method => [$suffix, $verb]
+    ) {
         $router->map([$verb], '/sis/terms/{id}/registration-window/' . $suffix, [
             \Application\Http\Controller\SisRegistrationWindowController::class, $method,
         ])->name('sis.registration.window.' . $method);

@@ -94,6 +94,7 @@ return [
                 "sis:person:manage" => ["description" => "Create person records."],
                 "sis:admissions:manage" => ["description" => "Manage admissions and matriculation."],
                 "sis:student:read" => ["description" => "Read student records."],
+                "sis:advising:manage" => ["description" => "Review dated student advisor assignments."],
                 "sis:transcript:manage" => ["description" => "Process official transcript requests."],
             ],
         ],

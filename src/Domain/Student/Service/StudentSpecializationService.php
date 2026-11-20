@@ -52,6 +52,7 @@ final readonly class StudentSpecializationService
         private Clock $clock,
         private RequirementsRepository $templates,
         private PublishedRequirementsReader $requirements,
+        private ?\Domain\Advising\Service\AdvisorProgressAccess $advisors = null,
     ) {
     }
 
@@ -71,10 +72,17 @@ final readonly class StudentSpecializationService
     {
         $current = $this->access->authenticatedUserId();
         $record = $this->admissions->student($student);
-        $this->access->requireOwnerOrPermission(
-            $this->admissions->person($record->personId)->ownerUserId,
-            'sis:student:read',
-        );
+        try {
+            $this->access->requireOwnerOrPermission(
+                $this->admissions->person($record->personId)->ownerUserId,
+                'sis:student:read',
+            );
+        } catch (AccessDeniedException $denied) {
+            if ($this->advisors === null) {
+                throw $denied;
+            }
+            $this->advisors->requireAdvisor($student, $assignment);
+        }
         if ($actor !== null && $actor->value !== $current->value) {
             throw new AccessDeniedException('The progress reader changed.');
         }
