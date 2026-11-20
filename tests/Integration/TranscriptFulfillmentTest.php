@@ -27,6 +27,7 @@ final class TranscriptFulfillmentTest extends TestCase
     private function renderer(): TranscriptDocumentRenderer
     {
         $stub = $this->createStub(TranscriptDocumentRenderer::class);
+        $stub->method("html")->willReturn("<p>Fictional protected transcript</p>");
         $stub->method("pdf")->willReturn("%PDF-1.4 Fictional protected transcript");
         return $stub;
     }
@@ -152,6 +153,7 @@ final class TranscriptFulfillmentTest extends TestCase
         $f = $t->sis;
         $request = $t->request();
         $renderer = $this->createStub(TranscriptDocumentRenderer::class);
+        $renderer->method("html")->willReturn("<p>Fictional protected transcript</p>");
         $renderer
             ->method("pdf")
             ->willReturnCallback(static function (array $snapshot) use ($t, $request): string {

@@ -288,6 +288,7 @@ final class TransferCourseAcceptanceTest extends TestCase
         $student = new EntityId($documents->repository->request($request)["student_id"]);
         $t = new TransferAwardFixture($documents->sis, $documents->campus->cipher, $student);
         $renderer = $this->createStub(\Domain\Transcript\Service\TranscriptDocumentRenderer::class);
+        $renderer->method("html")->willReturn("<p>Fictional protected transcript</p>");
         $renderer->method("pdf")->willReturn("%PDF-1.4 Fictional retained document.");
         $service = $documents->service($renderer);
         $preparation = $service->review($request);

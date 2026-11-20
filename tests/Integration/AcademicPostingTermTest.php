@@ -405,6 +405,7 @@ final class AcademicPostingTermTest extends TestCase
         $enrollment = $f->sql->rows("sis_enrollments", ["student_id" => $student->value])[0];
         $credit = $f->sql->one("sis_academic_credits", ["source_id" => $enrollment["id"]]);
         $renderer = $this->createStub(\Domain\Transcript\Service\TranscriptDocumentRenderer::class);
+        $renderer->method("html")->willReturn("<p>Fictional protected transcript</p>");
         $renderer->method("pdf")->willReturn("%PDF-1.4 Fictional original");
         $renderer->method("html")->willReturn("Fictional transcript");
         $service = $t->service($renderer);

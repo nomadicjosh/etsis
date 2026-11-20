@@ -23,7 +23,9 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
         let status = "pending",
             saved = false,
             evidence = null;
+        const layout = { code: 'classic-letter', label: 'Classic · Letter', paper: 'letter', revision: 'a'.repeat(64) };
         const snapshot = {
+            presentation: layout,
             student: { name: "Alex Example", institutional_id: "S-FICTIONAL" },
             program: { code: "BS.CS", title: "Computer Science" },
             issuer: { name: "Fictional University", address: "Fictional campus" },
@@ -96,6 +98,7 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
                 result = { status, version: saved ? 1 : 0, document: saved ? metadata : null };
             else if (path.endsWith("/review/"))
                 result = {
+                    layout, layouts: [layout],
                     snapshot,
                     operation_id: document,
                     revision: "f".repeat(64),
@@ -191,6 +194,7 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
             data: {
                 operation_id: document,
                 release_reviewed: true,
+                layout_code: 'classic-letter',
                 revision: "f".repeat(64),
                 review_token: "fictional-preparation-proof",
             },

@@ -705,6 +705,7 @@ return static function (Psr7Router $router): void {
             "review",
         ])
         ->name("sis.transcript.fulfillment.review");
+    $router->post('/sis/transcript-requests/{id}/preview/', [SisTranscriptFulfillmentController::class, 'preview']);
     $router
         ->map(["POST"], "/sis/transcript-requests/{id}/prepare/", [
             SisTranscriptFulfillmentController::class,

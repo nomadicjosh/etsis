@@ -10,6 +10,7 @@ async function fixture({
     reviewGate = null,
     deliveryGate = null,
     prepareGate = null,
+    previewGate = null,
 } = {}) {
     const window = {},
         sent = [];
@@ -31,6 +32,7 @@ async function fixture({
         delivery = 0,
         fulfilled = false;
     const snapshot = {
+        presentation: { code: 'classic-letter', label: 'Classic · Letter', paper: 'letter', revision: 'a'.repeat(64) },
         student: { name: "Fictional Student", institutional_id: "EXAMPLE" },
         program: { code: "BA", title: "Fictional Arts" },
         issuer: { name: "Fictional University" },
@@ -57,6 +59,11 @@ async function fixture({
         table: (headers, rows) => node("table", {}, rows),
         recordSummary: (rows) => node("dl", {}, rows),
         refreshDirectory: async () => {},
+        requestHtml: async (path, data) => {
+            sent.push({ path, method: 'POST', data });
+            if (previewGate) await previewGate;
+            return '<p>Fictional private layout preview</p>';
+        },
         task: (run) => {
             pending = Promise.resolve().then(run);
             return pending;
@@ -96,6 +103,7 @@ async function fixture({
                 if (reviewGate) await reviewGate;
                 return {
                     snapshot,
+                    layout: snapshot.presentation, layouts: [snapshot.presentation],
                     operation_id: "document",
                     revision: "revision",
                     review_token: "opaque-preparation-proof",
@@ -129,6 +137,7 @@ async function fixture({
                     snapshot,
                     is_latest: true,
                     academic_changed: false,
+                    academic_check: 'verified',
                     delivery: null,
                 };
             return { status: "pending", delivery: "pickup" };
@@ -284,4 +293,28 @@ test("a preparation accepted after its screen closes does not reopen private aca
         f.sent.some((r) => r.path.includes("/documents/")),
         false,
     );
+});
+test('layout preview is explicit, sandboxed and does not prepare or deliver a document', async () => {
+    const f = await fixture();
+    await f.click('Review preparation');
+    assert.equal(walk(f.body).some(e => e.tag === 'iframe'), false);
+    await f.click('Preview layout');
+    const frame = walk(f.body).find(e => e.tag === 'iframe');
+    assert.equal(frame.attributes.sandbox, '');
+    assert.match(frame.attributes.title, /Classic/);
+    assert.equal(frame.attributes.srcdoc, '<p>Fictional private layout preview</p>');
+    assert.equal(f.sent.some(r => r.path.endsWith('/prepare/') || r.path.endsWith('/deliver/')), false);
+    assert.equal(f.sent.find(r => r.path.endsWith('/preview/')).data.layout_code, 'classic-letter');
+});
+test('closing a preparation discards a delayed private layout preview', async () => {
+    let finish;
+    const gate = new Promise(resolve => { finish = resolve; });
+    const f = await fixture({ previewGate: gate });
+    await f.click('Review preparation');
+    const loading = f.click('Preview layout');
+    await Promise.resolve();
+    f.close();
+    finish();
+    await loading;
+    assert.equal(walk(f.body).some(e => e.tag === 'iframe'), false);
 });

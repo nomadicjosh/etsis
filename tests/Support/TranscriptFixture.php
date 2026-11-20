@@ -63,6 +63,7 @@ final class TranscriptFixture
         ?AuditTrail $audit = null,
         ?TranscriptIssuer $issuer = null,
         ?\Domain\Transcript\Repository\TranscriptRepository $records = null,
+        ?\Domain\Transcript\Service\TranscriptLayoutCatalog $layouts = null,
     ): TranscriptFulfillmentService {
         $f = $this->sis;
         return new TranscriptFulfillmentService(
@@ -84,6 +85,7 @@ final class TranscriptFixture
                 EventStoreFixture::history($f->connection->queryBuilder()),
                 new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($f->sql),
             ),
+            $layouts ?? new \Infrastructure\Documents\RegisteredTranscriptLayouts(),
         );
     }
 }

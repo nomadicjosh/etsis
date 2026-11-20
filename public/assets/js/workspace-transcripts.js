@@ -4,6 +4,7 @@ window.createWorkspaceTranscripts = function (ui) {
     const {
         node,
         request,
+        requestHtml,
         requestFile,
         task,
         can,
@@ -193,9 +194,10 @@ window.createWorkspaceTranscripts = function (ui) {
             ),
         );
     }
-    async function review(id) {
+    async function review(id, layoutCode = null) {
         const body = openDrawer("Review transcript preparation", "ACADEMIC REVIEW → PREPARE PDF");
-        const reviewed = await request(`/sis/transcript-requests/${id}/review/`, "POST", {});
+        const reviewed = await request(`/sis/transcript-requests/${id}/review/`, "POST",
+            layoutCode === null ? {} : { layout_code: layoutCode });
         if (!body.isConnected) return;
         const consent = node("input", {
             type: "checkbox",
@@ -210,6 +212,7 @@ window.createWorkspaceTranscripts = function (ui) {
                     revision: reviewed.revision,
                     release_reviewed: consent.checked,
                     review_token: reviewed.review_token,
+                    layout_code: reviewed.layout.code,
                 });
                 if (!body.isConnected) return;
                 await document(id, saved.id);
@@ -221,12 +224,46 @@ window.createWorkspaceTranscripts = function (ui) {
         consent.addEventListener("change", () => {
             prepare.disabled = !consent.checked || !reviewed.snapshot.issuer.name;
         });
+        const layouts = node("fieldset", { class: "record-section" }, node("legend", { class: "h5" }, "Document layout"));
+        layouts.append(node("p", { class: "form-text" },
+            "Choose a style and paper size. Changing the layout starts a fresh review. Academic values stay the same."));
+        const choices = node("div", { class: "row g-2" });
+        layouts.append(choices);
+        for (const layout of reviewed.layouts) {
+            const selected = layout.code === reviewed.layout.code;
+            const choice = node("input", { type: "radio", class: "form-check-input m-0", name: "transcript-layout",
+                id: `transcript-layout-${layout.code}`, value: layout.code, checked: layout.code === reviewed.layout.code });
+            choice.addEventListener("change", () => {
+                if (choice.checked && body.isConnected) task(() => review(id, layout.code), choice);
+            });
+            choices.append(node("div", { class: "col-sm-6" }, node("label", {
+                for: choice.id, class: `d-flex align-items-center gap-2 border rounded p-3 h-100 ${selected ? "border-primary bg-primary-subtle" : "bg-body"}`,
+            }, choice, node("span", {}, layout.label))));
+        }
+        const preview = node("section", { class: "record-section", "aria-label": "Document layout preview", hidden: true });
+        const previewButton = button("Preview layout", async () => {
+            const html = await requestHtml(`/sis/transcript-requests/${id}/preview/`, {
+                operation_id: reviewed.operation_id, revision: reviewed.revision,
+                review_token: reviewed.review_token, layout_code: reviewed.layout.code,
+            });
+            if (!body.isConnected) return;
+            preview.hidden = false;
+            const heading = node("h3", { class: "h5", tabindex: "-1" }, "Preview only");
+            preview.replaceChildren(heading,
+                node("p", { class: "form-text" }, "This is a layout preview. Preparation and delivery remain separate steps."),
+                node("iframe", { sandbox: "", title: `${reviewed.layout.label} transcript preview`,
+                    srcdoc: html, class: "w-100 border rounded", style: "height: 32rem;", tabindex: "0" }));
+            heading.focus();
+        });
         body.append(
             node(
                 "p",
                 {},
                 `Issuer: ${reviewed.snapshot.issuer.name || "Not configured"}. Intended delivery: ${reviewed.delivery}.`,
             ),
+            layouts,
+            node("div", { class: "inline-actions" }, previewButton),
+            preview,
             academic(reviewed.snapshot),
             !reviewed.snapshot.issuer.name
                 ? node(
@@ -264,7 +301,7 @@ window.createWorkspaceTranscripts = function (ui) {
                 { class: "inline-actions" },
                 prepare,
                 button("Check prepared document", () => document(id, reviewed.operation_id)),
-                button("Refresh review", () => review(id)),
+                button("Refresh review", () => review(id, reviewed.layout.code)),
                 button("Back to request", () => record(id), "btn-link"),
             ),
         );
@@ -278,6 +315,7 @@ window.createWorkspaceTranscripts = function (ui) {
         body.append(
             recordSummary([
                 ["Prepared at", value.created_at],
+                ["Document layout", value.snapshot.presentation.label],
                 ["Document reference", value.id],
             ]),
         );

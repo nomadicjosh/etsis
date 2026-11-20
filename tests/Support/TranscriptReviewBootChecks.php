@@ -48,11 +48,30 @@ $review = json_decode(
 );
 if (
     $reviewResponse->getStatusCode() !== 200 ||
-    !is_string($review["review_token"] ?? null)
+    !is_string($review["review_token"] ?? null) ||
+    ($review['layout']['code'] ?? null) !== 'classic-letter' || count($review['layouts'] ?? []) !== 4
 ) {
     throw new RuntimeException(
         "The actual transcript provider failed to issue a private preparation review.",
     );
+}
+$previewCommand = ['operation_id' => $review['operation_id'], 'revision' => $review['revision'],
+    'review_token' => $review['review_token'], 'layout_code' => $review['layout']['code']];
+$preview = $teachingPost($base . '/preview/', $previewCommand);
+if (
+    $preview->getStatusCode() !== 200 ||
+    !str_starts_with($preview->getHeaderLine('Content-Type'), 'text/html') ||
+    !str_contains($preview->getHeaderLine('Content-Security-Policy'), 'sandbox') ||
+    $sis->sql->rows('sis_transcript_documents') !== []
+) {
+    throw new RuntimeException('The protected layout preview created a document or lost its private transport.');
+}
+if (
+    $teachingPost($base . '/review/', ['layout_code' => 'not-installed'])->getStatusCode() !== 422 ||
+    $teachingPost($base . '/preview/', array_replace($previewCommand, ['layout_code' => 'modern-a4']))
+        ->getStatusCode() !== 409
+) {
+    throw new RuntimeException('Unregistered or unreviewed transcript layouts were accepted.');
 }
 $command = [
     "operation_id" => $review["operation_id"],

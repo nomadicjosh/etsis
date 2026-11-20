@@ -28,10 +28,12 @@ if ($path === '/portal/api/events/') {
 
 if ($path === '/fixture/transcript-document/') {
     header('Cache-Control: private, no-store');
+    $transcriptLayout = new \Infrastructure\Documents\RegisteredTranscriptLayouts()->get($_GET['layout'] ?? null);
     echo new \Infrastructure\Documents\ProtectedTranscriptRenderer()->html([
+        'presentation' => $transcriptLayout->describe(),
         'issuer' => ['name' => 'Fictional University', 'address' => 'Fictional campus'],
         'student' => ['name' => 'Alex Example', 'institutional_id' => 'S-FICTIONAL'],
-        'program' => ['code' => 'BS.CS', 'title' => 'Computer Science'], 'preview' => false,
+        'program' => ['code' => 'BS.CS', 'title' => 'Computer Science'], 'preview' => ($_GET['preview'] ?? '') === '1',
         'document_id' => 'FICTIONAL-REFERENCE', 'issued_at' => '2026-11-07T12:00:00Z',
         'credits' => [['term_code' => '26/FA', 'course_code' => 'MATH.101', 'course_title' => 'Algebra',
             'credit_type' => 'institutional', 'attempted_milli' => 3000, 'completed_milli' => 3000, 'grade_code' => 'A']],

@@ -28,6 +28,7 @@ use Domain\Student\Repository\StudentRecordRepository;
 use Domain\Student\Service\StudentPrimaryProgramLedger;
 use Domain\Transcript\Repository\TranscriptRepository;
 use Domain\Transcript\ValueObject\TranscriptIssuer;
+use Domain\Transcript\ValueObject\TranscriptLayout;
 
 final readonly class TranscriptFulfillmentService
 {
@@ -47,6 +48,7 @@ final readonly class TranscriptFulfillmentService
         private ProfileLedger $profiles,
         private StudentPrimaryProgramLedger $primaryPrograms,
         private PublishedProgramReader $programDefinitions,
+        private TranscriptLayoutCatalog $layouts,
     ) {
     }
 
@@ -63,19 +65,23 @@ final readonly class TranscriptFulfillmentService
     }
 
     /** @return array<string, mixed> */
-    public function review(EntityId $request): array
+    public function review(EntityId $request, ?string $layoutCode = null): array
     {
         $actor = $this->authorize();
         $routing = $this->routing($request);
-        return $this->transactions->run(function () use ($request, $routing, $actor): array {
+        return $this->transactions->run(function () use ($request, $routing, $actor, $layoutCode): array {
             $this->lock($request, $routing);
             $this->authorize($actor);
-            $context = $this->context($request);
+            $context = $this->context($request, $layoutCode);
             $this->audit->record($actor, "transcript.preparation_reviewed", $request);
             $this->authorize($actor);
             $revision = $this->revision($context);
             $operation = EntityId::generate();
             return $context + [
+                'layouts' => array_map(
+                    static fn(TranscriptLayout $layout): array => $layout->describe(),
+                    $this->layouts->available()
+                ),
                 "revision" => $revision,
                 "operation_id" => $operation->value,
                 "review_token" => $this->reviews->issue(
@@ -90,6 +96,76 @@ final readonly class TranscriptFulfillmentService
         });
     }
 
+    /** Private, explicitly requested preview. It neither prepares nor delivers an official document. */
+    public function preview(
+        EntityId $request,
+        EntityId $operation,
+        string $revision,
+        #[\SensitiveParameter] string $reviewToken,
+        ?string $layoutCode = null,
+    ): string {
+        $actor = $this->authorize();
+        $routing = $this->routing($request);
+        $context = $this->transactions->run(function () use (
+            $request,
+            $operation,
+            $revision,
+            $reviewToken,
+            $layoutCode,
+            $actor,
+            $routing
+        ): array {
+            $this->lock($request, $routing);
+            $this->authorize($actor);
+            $this->reviews->validate(
+                $reviewToken,
+                'transcript.review',
+                'prepare',
+                $request,
+                $actor,
+                $operation,
+                $revision
+            );
+            $context = $this->context($request, $layoutCode);
+            $this->check($this->revision($context), $revision);
+            return $context;
+        });
+        $html = $this->renderedHtml($context['snapshot'] + ['presentation' => $context['layout'], 'preview' => true]);
+        $this->transactions->run(function () use (
+            $request,
+            $operation,
+            $revision,
+            $reviewToken,
+            $layoutCode,
+            $actor,
+            $routing
+        ): void {
+            $this->lock($request, $routing);
+            $this->check($this->revision($this->context($request, $layoutCode)), $revision);
+            $this->reviews->validate(
+                $reviewToken,
+                'transcript.review',
+                'prepare',
+                $request,
+                $actor,
+                $operation,
+                $revision
+            );
+            $this->audit->record($actor, 'transcript.preparation_previewed', $request);
+            $this->authorize($actor);
+            $this->reviews->validate(
+                $reviewToken,
+                'transcript.review',
+                'prepare',
+                $request,
+                $actor,
+                $operation,
+                $revision
+            );
+        });
+        return $html;
+    }
+
     /** @return array<string, mixed> */
     public function prepare(
         EntityId $request,
@@ -97,6 +173,7 @@ final readonly class TranscriptFulfillmentService
         string $revision,
         bool $releaseReviewed,
         #[\SensitiveParameter] string $reviewToken,
+        ?string $layoutCode = null,
     ): array {
         $actor = $this->authorize();
         if (!$releaseReviewed) {
@@ -109,7 +186,7 @@ final readonly class TranscriptFulfillmentService
         }
         $existing = $this->records->document($operation);
         if ($existing !== null) {
-            return $this->replay($existing, $request, $actor, $revision);
+            return $this->replay($existing, $request, $actor, $revision, $layoutCode);
         }
         $this->reviews->validate(
             $reviewToken,
@@ -128,16 +205,17 @@ final readonly class TranscriptFulfillmentService
             $revision,
             $reviewToken,
             $operation,
+            $layoutCode,
         ): array {
             $this->lock($request, $routing);
             $this->authorize($actor);
             $existing = $this->records->document($operation);
             if ($existing !== null) {
                 return [
-                    "existing" => $this->replay($existing, $request, $actor, $revision),
+                    "existing" => $this->replay($existing, $request, $actor, $revision, $layoutCode),
                 ];
             }
-            $context = $this->context($request);
+            $context = $this->context($request, $layoutCode);
             $this->check($this->revision($context), $revision);
             $this->reviews->validate(
                 $reviewToken,
@@ -166,10 +244,12 @@ final readonly class TranscriptFulfillmentService
         }
         // Rendering runs outside database locks. A second locked review validates the exact snapshot before saving.
         $document = $context["snapshot"] + [
+            'presentation' => $context['layout'],
             "document_id" => $operation->value,
             "issued_at" => $this->now(),
             "preview" => false,
         ];
+        $html = $this->renderedHtml($document);
         $pdf = $this->renderer->pdf($document);
         if (!str_starts_with($pdf, "%PDF-") || strlen($pdf) > 4 * 1024 * 1024) {
             throw new ValidationException([
@@ -179,6 +259,22 @@ final readonly class TranscriptFulfillmentService
                 ],
             ]);
         }
+        $packet = json_encode([
+            'revision' => $revision,
+            'academic_revision' => $this->revision($context['snapshot']),
+            'document' => $document,
+            'pdf' => base64_encode($pdf),
+            'html' => $html,
+            'html_hash' => hash('sha256', $html),
+        ], JSON_THROW_ON_ERROR);
+        if (strlen($packet) > 6 * 1024 * 1024) {
+            throw new ValidationException([['field' => 'document',
+                'message' => 'The combined transcript exceeds the supported document size.']]);
+        }
+        // Protect the complete artifact before acquiring commit locks; source checks still run after encryption.
+        $encrypted = $this->cipher->seal($packet);
+        $pdfHash = hash('sha256', $pdf);
+        unset($packet, $pdf, $html);
         return $this->transactions->run(function () use (
             $request,
             $operation,
@@ -186,17 +282,19 @@ final readonly class TranscriptFulfillmentService
             $actor,
             $context,
             $document,
-            $pdf,
+            $pdfHash,
+            $encrypted,
             $routing,
             $reviewToken,
+            $layoutCode,
         ): array {
             $this->lock($request, $routing);
             $this->authorize($actor);
             $existing = $this->records->document($operation);
             if ($existing !== null) {
-                return $this->replay($existing, $request, $actor, $revision);
+                return $this->replay($existing, $request, $actor, $revision, $layoutCode);
             }
-            $current = $this->context($request);
+            $current = $this->context($request, $layoutCode);
             $this->check($this->revision($current), $revision);
             $this->reviews->validate(
                 $reviewToken,
@@ -213,22 +311,12 @@ final readonly class TranscriptFulfillmentService
                 "actor_id" => $actor->value,
                 "prepared_version" => $version + 1,
                 "created_at" => $document["issued_at"],
-                "pdf_hash" => hash("sha256", $pdf),
-                "encrypted_content" => $this->cipher->seal(
-                    json_encode(
-                        [
-                            "revision" => $revision,
-                            "academic_revision" => $this->revision($context["snapshot"]),
-                            "document" => $document,
-                            "pdf" => base64_encode($pdf),
-                        ],
-                        JSON_THROW_ON_ERROR,
-                    ),
-                ),
+                "pdf_hash" => $pdfHash,
+                "encrypted_content" => $encrypted,
             ]);
             $this->records->status($request, "ready", $version);
             $this->audit->record($actor, "transcript.document_prepared", $operation);
-            $after = $this->context($request);
+            $after = $this->context($request, $layoutCode);
             if (
                 $after["request_version"] !== $version + 1 ||
                 $this->records->request($request)["status"] !== "ready"
@@ -287,7 +375,7 @@ final readonly class TranscriptFulfillmentService
             $this->lock($request, $routing);
             $this->authorize($actor);
             $row = $this->ownedDocument($request, $document);
-            $payload = $this->payload($row);
+            $payload = $this->preparedPayload($row);
             $academicCheck = "unavailable";
             $academicChanged = null;
             if ($verify) {
@@ -328,7 +416,7 @@ final readonly class TranscriptFulfillmentService
     {
         $actor = $this->authorize();
         $row = $this->ownedDocument($request, $document);
-        $bytes = base64_decode($this->payload($row)["pdf"], true);
+        $bytes = base64_decode($this->preparedPayload($row)["pdf"], true);
         if ($bytes === false || !hash_equals($row["pdf_hash"], hash("sha256", $bytes))) {
             throw new \RuntimeException("The stored transcript document failed verification.");
         }
@@ -341,13 +429,11 @@ final readonly class TranscriptFulfillmentService
     {
         $actor = $this->authorize();
         $row = $this->ownedDocument($request, $document);
-        $snapshot = $this->payload($row)["document"];
+        $payload = $this->preparedPayload($row);
         $this->audit->record($actor, "transcript.document_read", $document);
         $this->authorize($actor);
         // The accessible companion is the protected original, not a new academic verification/release.
-        $html = $this->renderer->html($snapshot);
-        $this->authorize($actor);
-        return $html;
+        return $payload['html'];
     }
 
     /** Review evidence of actual delivery; this does not send the document.
@@ -534,7 +620,7 @@ final readonly class TranscriptFulfillmentService
             $current["status"] !== ($completed ? "fulfilled" : "ready") ||
             (int) $current["version"] !== $input["version"] + (int) $completed ||
             ($this->records->latest($request)["id"] ?? null) !== $document->value ||
-            !hash_equals($this->payload($row)["academic_revision"], $academic)
+            !hash_equals($this->preparedPayload($row)["academic_revision"], $academic)
         ) {
             throw new ConcurrentModificationException(
                 "Review the latest academic record and prepare an updated document before recording delivery.",
@@ -579,7 +665,7 @@ final readonly class TranscriptFulfillmentService
     }
 
     /** @return array<string, mixed> */
-    private function context(EntityId $request): array
+    private function context(EntityId $request, ?string $layoutCode = null): array
     {
         $record = $this->records->request($request);
         if (!in_array($record["status"], ["pending", "ready"], true)) {
@@ -598,6 +684,7 @@ final readonly class TranscriptFulfillmentService
             "delivery" => $record["delivery"],
             "recipient_revision" => hash("sha256", $record["encrypted_recipient"]),
             "snapshot" => $this->snapshot(new EntityId($record["student_id"])),
+            'layout' => $this->layouts->get($layoutCode)->describe(),
         ];
     }
 
@@ -820,11 +907,14 @@ final readonly class TranscriptFulfillmentService
         EntityId $request,
         EntityId $actor,
         string $revision,
+        ?string $layoutCode = null,
     ): array {
+        $payload = $this->preparedPayload($row);
         if (
             $row["request_id"] !== $request->value ||
             $row["actor_id"] !== $actor->value ||
-            $this->payload($row)["revision"] !== $revision
+            $payload["revision"] !== $revision ||
+            ($layoutCode !== null && $payload['document']['presentation']['code'] !== $layoutCode)
         ) {
             throw new ConcurrentModificationException(
                 "The preparation operation belongs to another request.",
@@ -853,7 +943,53 @@ final readonly class TranscriptFulfillmentService
      */
     private function payload(#[\SensitiveParameter] array $row): array
     {
-        return json_decode($this->cipher->open($row["encrypted_content"]), true, 32, JSON_THROW_ON_ERROR);
+        $packet = $this->cipher->open($row['encrypted_content']);
+        if (strlen($packet) > 6 * 1024 * 1024) {
+            throw new \RuntimeException('The stored transcript exceeds its supported artifact size.');
+        }
+        return json_decode($packet, true, 32, JSON_THROW_ON_ERROR);
+    }
+
+    /** @param array<string,mixed> $document */
+    private function renderedHtml(#[\SensitiveParameter] array $document): string
+    {
+        $html = $this->renderer->html($document);
+        if (trim($html) === '' || strlen($html) > 1024 * 1024 || !mb_check_encoding($html, 'UTF-8')) {
+            throw new ValidationException([['field' => 'document',
+                'message' => 'The accessible transcript exceeds its size limit or is invalid.']]);
+        }
+        return $html;
+    }
+
+    /** @param array<string,mixed> $row
+     * @return array<string,mixed> */
+    private function preparedPayload(#[\SensitiveParameter] array $row): array
+    {
+        $p = $this->payload($row);
+        if (
+            count($p) !== 6 || array_diff(
+                array_keys($p),
+                ['revision', 'academic_revision', 'document', 'pdf', 'html', 'html_hash']
+            ) !== [] ||
+            !is_array($p['document'] ?? null) || ($p['document']['document_id'] ?? null) !== $row['id'] ||
+            ($p['document']['issued_at'] ?? null) !== $row['created_at'] ||
+            ($p['document']['preview'] ?? null) !== false || !is_array($p['document']['presentation'] ?? null) ||
+            !is_string($p['pdf'] ?? null) || strlen($p['pdf']) > 6 * 1024 * 1024 ||
+            !is_string($p['html'] ?? null) || trim($p['html']) === '' || strlen($p['html']) > 1024 * 1024 ||
+            !mb_check_encoding($p['html'], 'UTF-8')
+        ) {
+            throw new \RuntimeException('The prepared transcript could not be verified.');
+        }
+        foreach (['revision', 'academic_revision', 'html_hash'] as $key) {
+            if (!is_string($p[$key] ?? null) || preg_match('/^[a-f0-9]{64}$/D', $p[$key]) !== 1) {
+                throw new \RuntimeException('The prepared transcript has invalid integrity references.');
+            }
+        }
+        TranscriptLayout::fromArray($p['document']['presentation']);
+        if (!hash_equals($p['html_hash'], hash('sha256', $p['html']))) {
+            throw new \RuntimeException('The stored accessible transcript failed verification.');
+        }
+        return $p;
     }
 
     /** @param array<string, mixed> $data */

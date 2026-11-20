@@ -25,9 +25,29 @@ final readonly class SisTranscriptFulfillmentController
         return new JsonResponse($this->service->current(new EntityId($id)));
     }
 
-    public function review(string $id): ResponseInterface
+    public function review(#[\SensitiveParameter] ServerRequest $request, string $id): ResponseInterface
     {
-        return new JsonResponse($this->service->review(new EntityId($id)));
+        return new JsonResponse($this->service->review(
+            new EntityId($id),
+            FormInput::from($request)->optionalText('layout_code', 40)
+        ));
+    }
+
+    public function preview(#[\SensitiveParameter] ServerRequest $request, string $id): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new HtmlResponse($this->service->preview(
+            new EntityId($id),
+            $f->id('operation_id'),
+            $f->text('revision', 64),
+            $f->text('review_token', 8192),
+            $f->optionalText('layout_code', 40)
+        ), 200, [
+                'Cache-Control' => 'private, no-store',
+                'Content-Security-Policy' => "sandbox; default-src 'none'; style-src 'unsafe-inline'; "
+                    . "base-uri 'none'; form-action 'none'",
+                'X-Content-Type-Options' => 'nosniff',
+            ]);
     }
 
     public function prepare(
@@ -42,6 +62,7 @@ final readonly class SisTranscriptFulfillmentController
                 $f->text("revision", 64),
                 $f->requiredBoolean("release_reviewed"),
                 $f->optionalText("review_token", 8192) ?? "",
+                $f->optionalText('layout_code', 40),
             ),
             201,
         );
@@ -74,7 +95,7 @@ final readonly class SisTranscriptFulfillmentController
             new EntityId($id),
             new EntityId($document),
         );
-        $response = new Response("php://temp", 200, [
+        $response = new Response("php://memory", 200, [
             "Content-Type" => "application/pdf",
             "Content-Disposition" =>
                 'attachment; filename="transcript-' .

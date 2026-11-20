@@ -540,6 +540,7 @@ final class AwardedCourseCorrectionTest extends TestCase
         $student = new EntityId($t->repository->request($request)["student_id"]);
         $enrollment = $f->sql->rows("sis_enrollments", ["student_id" => $student->value])[0];
         $renderer = $this->createStub(\Domain\Transcript\Service\TranscriptDocumentRenderer::class);
+        $renderer->method("html")->willReturn("<p>Fictional protected transcript</p>");
         $renderer->method("pdf")->willReturn("%PDF-1.4 Fictional original");
         $renderer->method("html")->willReturn("Fictional transcript");
         $service = $t->service($renderer);

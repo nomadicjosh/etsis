@@ -97,6 +97,15 @@
     async function request(path, method = 'GET', data) {
         return jsonResponse(await send(path, method, data));
     }
+    async function requestHtml(path, data) {
+        const response = await send(path, 'POST', data, 'text/html');
+        if (!response.ok) return jsonResponse(response);
+        if (!response.headers.get('Content-Type')?.startsWith('text/html'))
+            throw new Error('The document preview could not be prepared.');
+        const file = await response.blob();
+        if (file.size > 1024 * 1024) throw new Error('The document preview exceeded its permitted size.');
+        return file.text();
+    }
     async function requestFile(path, data, filename = 'section-roster.csv', { type = 'text/csv', maximum = 262144 } = {}) {
         const response = await send(path, 'POST', data, type);
         if (!response.ok) return jsonResponse(response);
@@ -287,7 +296,7 @@
         flow: operations.flow, amounts: hrSetup.amounts, openEmployee: id => employmentStudio.employee(id), notify });
     const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, recordSummary, actionMenu, buildForm, formData, notify, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId), closeDrawer: () => drawer.hide() });
     const importStudio = window.createWorkspaceImports({ node, table, request, notify, number, task, can, recordSummary, subjects: () => catalogStudio.subjects(), classifications: () => classificationStudio.library() });
-    const transcriptStudio = window.createWorkspaceTranscripts({ node, request, requestFile, task, can, recordSummary, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const transcriptStudio = window.createWorkspaceTranscripts({ node, request, requestHtml, requestFile, task, can, recordSummary, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, money,
         buildForm, formData, openDrawer, account: (id, back) => operations.openAccount(id, back) });
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });

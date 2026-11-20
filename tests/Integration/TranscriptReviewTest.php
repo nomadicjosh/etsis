@@ -630,7 +630,7 @@ final class TranscriptReviewTest extends TestCase
         $service->prepare($request, $id, $review["revision"], true, "");
     }
 
-    public function testPrivateReadsRecheckTheStaffActorAfterAuditingAndAccessibleRendering(): void
+    public function testPrivateReadsRecheckTheStaffActorAfterAuditingAndKeepTheStoredAccessibleDocument(): void
     {
         $cases7 = ["view", "pdf", "html"];
         foreach ($cases7 as $method) {
@@ -653,15 +653,9 @@ final class TranscriptReviewTest extends TestCase
         }
         $t = $this->fixture();
         [$request, $id] = $this->prepare($t);
-        $renderer = $this->createStub(TranscriptDocumentRenderer::class);
-        $renderer
-            ->method("html")
-            ->willReturnCallback(static function () use ($t): string {
-                $t->sis->access->actor = $t->sis->user();
-                return "<p>Fictional</p>";
-            });
-        $this->expectException(AccessDeniedException::class);
-        $t->service($renderer)->html($request, $id);
+        $renderer = $this->createMock(TranscriptDocumentRenderer::class);
+        $renderer->expects(self::never())->method('html');
+        self::assertSame('<p>Fictional accessible transcript</p>', $t->service($renderer)->html($request, $id));
     }
 
     public function testSharedProofStillAcceptsTheOriginalHiatusEnvelopeAndSeparatesTranscriptPurposes(): void

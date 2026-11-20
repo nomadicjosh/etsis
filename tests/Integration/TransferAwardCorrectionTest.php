@@ -565,6 +565,7 @@ final class TransferAwardCorrectionTest extends TestCase
         $student = new EntityId($tx->repository->request($request)["student_id"]);
         $t = new TransferAwardFixture($tx->sis, $tx->campus->cipher, $student);
         $renderer = $this->createStub(\Domain\Transcript\Service\TranscriptDocumentRenderer::class);
+        $renderer->method("html")->willReturn("<p>Fictional protected transcript</p>");
         $renderer->method("pdf")->willReturn("%PDF-1.4 Fictional transfer snapshot");
         $documents = $tx->service($renderer);
         $review = $documents->review($request);

@@ -34,6 +34,7 @@ final class TranscriptIdentityProgramTest extends TestCase
     private function service(TranscriptFixture $t): TranscriptFulfillmentService
     {
         $renderer = $this->createStub(TranscriptDocumentRenderer::class);
+        $renderer->method("html")->willReturn("<p>Fictional protected transcript</p>");
         $renderer->method("pdf")->willReturn("%PDF-1.4 Fictional identity and program");
         return $t->service($renderer);
     }

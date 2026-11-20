@@ -318,6 +318,11 @@ final class SisServiceProvider extends CodefyServiceProvider
                 $this->codefy->configContainer->string("transcript.issuer_address", ""),
             );
         });
+        $this->codefy->delegate(\Domain\Transcript\Service\TranscriptLayoutCatalog::class, function () {
+            return new \Infrastructure\Documents\RegisteredTranscriptLayouts(
+                $this->codefy->configContainer->string('transcript.default_layout', 'classic-letter'),
+            );
+        });
         $this->codefy->delegate(\Domain\Student\ValueObject\HiatusPolicy::class, function () {
             return new \Domain\Student\ValueObject\HiatusPolicy(
                 $this->codefy->configContainer->array(

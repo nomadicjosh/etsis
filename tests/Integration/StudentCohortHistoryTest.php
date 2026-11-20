@@ -180,6 +180,7 @@ final class StudentCohortHistoryTest extends TestCase
             $f->access->actor = $actor;
         }
         $renderer = $this->createStub(TranscriptDocumentRenderer::class);
+        $renderer->method("html")->willReturn("<p>Fictional protected transcript</p>");
         $renderer->method("pdf")->willReturn("%PDF-1.4 Fictional cohort document");
         $transcripts = $t->service($renderer);
         $initial = $transcripts->review($request);
