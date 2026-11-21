@@ -141,6 +141,27 @@ return static function (Psr7Router $router): void {
         $standing, 'advisor',
     ])
         ->name('portal.standing.advisor');
+    $checkins = \Application\Http\Controller\AdvisingCheckInController::class;
+    $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/checkins/list/', [
+        $checkins, 'ownerList',
+    ])
+        ->name('owner.checkins.list');
+    $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/checkins/act/', [
+        $checkins, 'ownerAct',
+    ])
+        ->name('owner.checkins.act');
+    $router->map(['POST'], '/portal/api/advising/students/{student}/programs/{pursuit}/checkins/list/', [
+        $checkins, 'advisorList',
+    ])
+        ->name('advisor.checkins.list');
+    $router->map(['POST'], '/portal/api/advising/students/{student}/programs/{pursuit}/checkins/record/', [
+        $checkins, 'advisorRecord',
+    ])
+        ->name('advisor.checkins.record');
+    $router->map(['POST'], '/portal/api/advising/students/{student}/programs/{pursuit}/checkins/act/', [
+        $checkins, 'advisorAct',
+    ])
+        ->name('advisor.checkins.act');
     $advising = \Application\Http\Controller\SisAdvisingController::class;
     $router->map(['POST'], '/portal/api/advising/', [$advising, 'mine'])->name('portal.advising.mine');
     $router->map(

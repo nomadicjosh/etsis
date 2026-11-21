@@ -967,6 +967,7 @@ window.createWorkspaceStudents = function (ui) {
                               if (can("sis:student:read") && can("sis:registration:prerequisite-exception")) extra.push(button("Prerequisite exceptions", () => ui.prerequisitePermissions().open(id, item.id)));
                               if (can("sis:student:read")) extra.push(button("Enrollment load", () => ui.enrollmentLoad().open(id, item.id)));
                               if (can("sis:standing:manage")) extra.push(button("Academic standing", () => ui.standing().open(id, item.id, back)));
+                              if (can("sis:student:read") && can("sis:advising:checkin")) extra.push(button("Advising check-ins", () => ui.advising().checkins(id, item.id, back)));
                               if (can("sis:advising:manage")) extra.push(button("Academic advisors", () => ui.advising().open(id, item.id, back)));
                               if (can("sis:student:read"))
                                   controls.append(

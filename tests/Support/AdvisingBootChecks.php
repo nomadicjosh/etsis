@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 // Fictional SQLite data through real providers, router, private transport and framework CSRF.
-$advisingStudent = $sis->student();
+$advisingStudent = $sis->student($sis->user());
 $advisingPursuit = $sis->sql->rows(
     "sis_student_programs",
     ["student_id" => $advisingStudent->id->value],
@@ -118,3 +118,5 @@ if ($teachingPost($advisingProgressUrl, [])->getStatusCode() !== 403) {
 }
 $sis->access->actor = $advisingActor;
 $sis->access->staff = true;
+
+require __DIR__ . '/AdvisingCheckInBootChecks.php';

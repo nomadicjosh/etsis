@@ -158,7 +158,9 @@ This is an order of emphasis, not a requirement to finish every item in a large 
 - [x] [Read retained load history](enrollment-load.md#recorded-history): bounded staff/owner/advisor pages, historical-pursuit read scope, retained totals and policy context, strict ownership/dated advising authority and restricted registration-source privacy. Connect recording and history to the existing load screen with accessible draft-preserving confirmation.
 - [x] [Report retained enrollment load](enrollment-load.md#reporting): one determination per source row, retained date/program/classification, exact credits, distinct student counts, protected source authority, shared save/static/sharing workflows and source-grain protection against related-row fanout.
 - [ ] Extend retained load decisions to explicit census/backdated determinations, historical policy selection, grandfathering and institutional treatment/correction of registered quantities. Current-term determinations do not reconstruct a census or certify financial-aid eligibility; later determinations are separate facts, not automatic replacements.
-- [ ] Add versioned automatic standing proposals and further institutional annotation selection. Advising appointments/check-ins remain separate from the implemented advisor relationships and degree audits.
+- [x] [Record completed advising check-ins](academic-advising.md#working-check-ins): current primary-pursuit creation, actual held dates, optional due dates, student-visible next steps and encrypted private notes, independent check-in duty, current advisor scope and bounded staff/advisor/student screens.
+- [x] [Connect student follow-up to advising](academic-advising.md#student-follow-up-and-closure): strictly owned responses, attributed staff/advisor closure or cancellation, retained original wording/timestamps/receipts, original-result retries, stale-version checks, account-link privacy, active/finished paging and audit rollback. Keep academic decisions and automatic messaging separate.
+- [ ] Add versioned automatic standing proposals and further institutional annotation selection. Appointment scheduling and automatic advising reminders remain separate from implemented check-ins, advisor relationships and degree audits.
 - [x] [Connect roster search, grading queues and page exports](academic-credit-history.md#find-roster-students-and-unfinished-grading) across teaching and staff section screens: filter names/IDs and active/graded/ungraded projections before paging, preserve applied scope on return/export, withhold grade-derived filters from registration-only users and recheck authority after reads. A guided **Review ungraded** queue now reuses the individual grade editor/confirmation with visible student identity, fresh per-student choices, missing-scale/skip/restart navigation and original-result retries. Academic verification and authorization remain in the existing services; the class worksheet below adds reviewed initial-grade posting.
 - [x] Add [section gradebook calculations](academic-credit-history.md#coursework-averages): default total points, individual assignment weights or category weights, validated 100% totals, explicit ungraded/zero/excluded handling, owner-only portal feedback, stale-setup protection and audited atomic saves. Include searchable paged category membership and shared faculty/student breakdowns, distinguish incomplete category coverage, preserve posted academic grades/events and bound calculation reads to the selected section.
 - [x] Add [category drop-lowest rules](academic-credit-history.md#drop-lowest-scores-within-a-category) to the existing gradebook editor and shared faculty/student feedback: optional bounded counts, exact-percentage ordering, deterministic ties, zero/pending distinctions, at least one retained graded score, clear omitted-score details, private owner reads and atomic audited setup. Preserve recorded scores, posted academic grades/history, credits and finance; add no migration or event stream.
@@ -441,14 +443,13 @@ External student-progress AI remains deferred by project direction; catalog-auth
 **Done when:** the intended release scope is explicit and accepted, recovery is demonstrated, and operational/security/accessibility checks pass. Event sourcing supports evidence; it does not by itself certify legal compliance.
 
 ## 9. Multi-tenancy
-- [ ] One install codebase, multiple tenants
-- [ ] Support subdomain installs
-- [ ] Each subdomain should have its own database
+- [ ] One install codebase, multiple tenants; support subdomain installs; each subdomain should have its own database
 - [ ] Privacy and Security is of the utmost importance; making sure institution data isn't leaking into other institution data; making sure institutions can see other institution's data.
 
 ## 10. Misc.
 - [ ] Gravatar and upload profile image support with cropping
 - [ ] An admin with `super` role can login as/impersonate another user, and return back to themself after
+- [ ] Maintenance mode
 
 ## Next implementation stages
 

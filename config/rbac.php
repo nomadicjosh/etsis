@@ -14,6 +14,7 @@ return [
         "sis:standing:correct" => ["description" => "Correct recorded academic standing on closed pursuits."],
         "sis:standing:configure" => ["description" => "Maintain institutional academic standing labels."],
         "sis:standing:manage" => ["description" => "Review dated student academic standing decisions."],
+        "sis:advising:checkin" => ["description" => "Record advising check-ins and manage student follow-up."],
         "sis:advising:manage" => ["description" => "Review dated student advisor assignments."],
         "sis:academic:course:amend" => [
             "description" => "Correct institutional awarded courses and their exact publications.",

@@ -58,6 +58,7 @@ final readonly class WorkspaceService
         'sis:standing:configure',
         'sis:standing:manage',
         'sis:advising:manage',
+        'sis:advising:checkin',
         'sis:restrictions:manage',
         'sis:restrictions:handoff',
         "sis:moodle:manage",

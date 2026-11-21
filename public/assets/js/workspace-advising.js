@@ -125,5 +125,11 @@ window.createWorkspaceAdvising = function (ui) {
         }
         render();
     }
-    return { open };
+    function checkins(student, pursuit, back) {
+        const body = openDrawer("Advising check-ins", "STUDENT PROGRAM");
+        if (back) body.append(button("Back to programs", back, "btn-link"));
+        window.createAdvisingCheckIns({ node, request }).mount(body,
+            `/sis/students/${student}/programs/${pursuit}/checkins/`);
+    }
+    return { open, checkins };
 };

@@ -1067,6 +1067,17 @@
         return details;
     }
 
+    function checkInAction(container, student, pursuit, advisor = false) {
+        const host = el("div");
+        const open = button("Advising check-ins", () => {
+            if (!container.isConnected) return;
+            open.remove();
+            window.createAdvisingCheckIns({ node: el, request }).mount(host,
+                `/portal/api/${advisor ? "advising/" : ""}students/${student}/programs/${pursuit}/checkins/`, { owner: !advisor, portal: true });
+        }, true);
+        container.append(open, host);
+    }
+
     function enrollmentLoadAction(container, student, pursuit, advisor = false) {
         const host = el("div");
         container.append(host);
@@ -1079,17 +1090,20 @@
         if (me.students.length) container.append(el("p", {}, "Your academic advisors are shown with each program's degree progress."),
             el("a", { href: "/portal/student/progress/", class: "campus-button secondary" }, "My program and advisors"));
         container.append(el("h2", {}, "My advisees"), el("p", { class: "campus-muted" },
-            "Current dated assignments provide read-only access to the student's program and degree progress. Changes belong with the registrar."));
+            "Current dated assignments provide access to program and degree progress. Advisors with check-in permission can record follow-up. Academic changes belong with the registrar."));
         const input = el("input", { id: "advisee-search", type: "search", maxlength: "80", class: "form-control" });
         const search = el("form", { class: "mb-3" }, el("label", { for: input.id }, "Find an advisee by name, ID or program"), input,
             el("button", { type: "submit", class: "campus-button mt-2" }, "Search"));
         const list = el("div", { class: "portal-progress-cards" }), result = el("div", { "aria-live": "polite" });
         const standing = el("section", { class: "mb-4", "aria-label": "Academic standing" });
-        container.append(search, list, standing, result);
+        const checkins = el("section");
+        container.append(search, list, standing, checkins, result);
         let generation = 0;
         async function show(student, pursuit) {
             const current = ++generation;
             standing.replaceChildren();
+            checkins.replaceChildren();
+            checkInAction(checkins, student, pursuit, true);
             result.replaceChildren(el("p", { role: "status" }, "Reviewing recorded degree progress…"));
             try {
                 const responses = await Promise.allSettled([
@@ -1177,10 +1191,13 @@
         const choices = el("div", { class: "portal-progress-cards", "aria-label": "Your program pursuits" });
         const result = el("div", { "aria-live": "polite" }), advisors = el("section", { class: "mb-4", "aria-label": "Academic advisors" });
         const standing = el("section", { class: "mb-4", "aria-label": "Academic standing" });
-        container.append(choices, advisors, standing, result);
+        const checkins = el("section");
+        container.append(choices, advisors, standing, checkins, result);
         let generation = 0;
         async function review(student, pursuit) {
             const current = ++generation;
+            checkins.replaceChildren();
+            checkInAction(checkins, student, pursuit);
             advisors.replaceChildren(); standing.replaceChildren();
             result.replaceChildren(el("p", { role: "status" }, "Reviewing your recorded work…"));
             try {
