@@ -1088,6 +1088,7 @@ window.createWorkspaceStudents = function (ui) {
                     { class: "mb-1" },
                     `${choice.code} — ${choice.title}`,
                 ),
+                node("p", { class: "form-text" }, window.curriculumOrganizationText(choice)),
             );
             if (action)
                 section.append(

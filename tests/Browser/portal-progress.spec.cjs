@@ -115,7 +115,7 @@ async function fixture(page,options={}) {
                     required_courses: 2, course_upper_bound: 1, course_shortfall: 1,
                 }] : [], more_conflicts: false },
                 components: [{ kind: "degree", label: "Degree", progress: degree },
-                    { kind: "specialization", label: options.typed ? "Major DATA" : "Specialization DATA", progress: specialization },
+                    { kind: "specialization", label: options.typed ? "Major DATA" : "Specialization DATA", ...(options.typed ? { department: { code: "ENG", title: "Fictional English <department>", school: { code: "ARTS", title: "Fictional Arts <college>" } } } : {}), progress: specialization },
                     ...(options.typed ? [{ kind: "specialization", label: "Minor ART", progress: specialization }] : [])] };
         }
         if (options.calculationBlockers && data.records) {
@@ -513,6 +513,9 @@ test("owner combined progress names the major and minor and keeps drilldowns in 
     await page.getByRole("button", { name: "Review progress · BSCS · 26/FA", exact: true }).click();
     await expect(page.getByRole("button", { name: "Review Major DATA", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Review Minor ART", exact: true })).toBeVisible();
+    await expect(page.locator('body')).toContainText('Responsible department: ENG — Fictional English <department>');
+    await expect(page.locator('body')).toContainText('Fictional Arts <college>');
+    await expect(page.locator('body')).toContainText('Responsible department: not recorded in this publication');
     await page.getByRole("button", { name: "Review Minor ART", exact: true }).click();
     await expect(page.getByRole("heading", { name: /Data <b>fictional<\/b> requirements/ })).toBeVisible();
     expect(f.calls.filter(c => c.path.endsWith("/degree-progress/"))).toHaveLength(1);

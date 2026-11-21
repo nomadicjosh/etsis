@@ -35,7 +35,15 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
             "SELECT " .
                 implode(
                     ", ",
-                    array_map($q, ["id", "code", "title", "active", "revision", "kind"]),
+                    array_map($q, [
+                        "id",
+                        "code",
+                        "title",
+                        "active",
+                        "revision",
+                        "kind",
+                        "department_id",
+                    ]),
                 ) .
                 " FROM " .
                 $q("sis_program_specializations") .
@@ -51,7 +59,7 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
             $row["revision"] = (int) $row["revision"];
         }
         unset($row);
-        return $rows;
+        return $this->withDepartments($rows);
     }
 
     public function get(EntityId $program, EntityId $id): ProgramSpecialization
@@ -71,6 +79,7 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
             $row["kind"] === null
                 ? null
                 : \Domain\Catalog\ValueObject\CurriculumComponentKind::from($row["kind"]),
+            $row["department_id"] === null ? null : new EntityId($row["department_id"]),
         );
     }
 
@@ -134,8 +143,77 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
                 "kind" => $row["kind"],
                 "description" => $row["description"],
                 "revision" => (int) $row["revision"],
+                "department" => $row["department"],
             ],
-            $rows,
+            $this->withDepartments($rows),
         );
+    }
+    private function withDepartments(array $rows): array
+    {
+        $ids = array_values(array_unique(array_filter(array_column($rows, "department_id"))));
+        $departments = [];
+        if ($ids !== []) {
+            $q = $this->sql->quote(...);
+            $select = [];
+            foreach (["id", "kind", "code", "title", "school_id"] as $key) {
+                $select[] = "d." . $q($key);
+            }
+            foreach (["id", "kind", "code", "title"] as $key) {
+                $select[] = "s." . $q($key) . " AS " . $q("school_ref_" . $key);
+            }
+            $departments = array_column(
+                $this->sql->fetch(
+                    "SELECT " .
+                        implode(", ", $select) .
+                        " FROM " .
+                        $q("sis_catalog_classifications") .
+                        " d LEFT JOIN " .
+                        $q("sis_catalog_classifications") .
+                        " s ON d." .
+                        $q("school_id") .
+                        " = s." .
+                        $q("id") .
+                        " WHERE d." .
+                        $q("id") .
+                        " IN (" .
+                        implode(",", array_fill(0, count($ids), "?")) .
+                        ")",
+                    $ids,
+                    100,
+                ),
+                null,
+                "id",
+            );
+        }
+        foreach ($rows as &$row) {
+            $row["department"] = null;
+            if ($row["department_id"] === null) {
+                continue;
+            }
+            $d =
+            $departments[$row["department_id"]] ??
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+            if (
+                $d["kind"] !== "department" ||
+                ($d["school_id"] !== null && $d["school_ref_kind"] !== "school")
+            ) {
+                throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+            }
+            $row["department"] = new \Domain\Catalog\ValueObject\DepartmentDefinition([
+                "id" => $d["id"],
+                "code" => $d["code"],
+                "title" => $d["title"],
+                "school" =>
+                    $d["school_id"] === null
+                        ? null
+                        : [
+                            "id" => $d["school_id"],
+                            "code" => $d["school_ref_code"],
+                            "title" => $d["school_ref_title"],
+                        ],
+            ])->data;
+        }
+        unset($row);
+        return $rows;
     }
 }

@@ -23,11 +23,9 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
     {
         $row =
         $this->sql->current("sis_catalog_classifications", $id->value) ??
-        throw new \Domain\Shared\Exception\RecordNotFoundException(
-            "Classification not found.",
-        );
+        throw new \Domain\Shared\Exception\RecordNotFoundException("Classification not found.");
         $row["active"] = (bool) $row["active"];
-        return $row;
+        return $this->withSchools([$row])[0];
     }
 
     public function lock(EntityId $id): void
@@ -35,17 +33,13 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
         $this->sql->lock("sis_catalog_classifications", $id->value, "id");
     }
 
-    public function page(
-        ClassificationKind $kind,
-        string $search,
-        ?EntityId $after,
-    ): array {
+    public function page(ClassificationKind $kind, string $search, ?EntityId $after): array
+    {
         $q = $this->sql->quote(...);
         $where = [$q("kind") . " = ?"];
         $params = [$kind->value];
         if ($search !== "") {
-            $where[] =
-            "(" . $q("code") . " LIKE ? OR " . $q("title") . " LIKE ?)";
+            $where[] = "(" . $q("code") . " LIKE ? OR " . $q("title") . " LIKE ?)";
             $params[] = "%" . $search . "%";
             $params[] = "%" . $search . "%";
         }
@@ -67,7 +61,7 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
             $row["active"] = (bool) $row["active"];
         }
         unset($row);
-        return $rows;
+        return $this->withSchools($rows);
     }
 
     public function save(
@@ -104,20 +98,66 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
         }
     }
 
-    public function lockForCourse(
-        EntityId $course,
-        array $additional = [],
-    ): void {
-        $row =
-        $this->sql->rows(
-            "sis_course_classifications",
-            ["id" => $course->value],
-            1,
-        )[0] ?? [];
-        $ids = array_map(
-            static fn(EntityId $id): string => $id->value,
-            $additional,
+    public function assignSchool(EntityId $department, ?EntityId $school): void
+    {
+        $this->sql->update(
+            "sis_catalog_classifications",
+            ["school_id" => $school?->value],
+            ["id" => $department->value],
         );
+    }
+    /** One bounded label query for a page; never infer an organization from a name. */
+    private function withSchools(array $rows): array
+    {
+        $ids = [];
+        foreach ($rows as $row) {
+            if ($row["kind"] === "department" && $row["school_id"] !== null) {
+                $ids[$row["school_id"]] = $row["school_id"];
+            }
+        }
+        $schools = [];
+        if ($ids !== []) {
+            $q = $this->sql->quote(...);
+            $schools = array_column(
+                $this->sql->fetch(
+                    "SELECT * FROM " .
+                        $q("sis_catalog_classifications") .
+                        " WHERE " .
+                        $q("id") .
+                        " IN (" .
+                        implode(",", array_fill(0, count($ids), "?")) .
+                        ")",
+                    array_values($ids),
+                    51,
+                ),
+                null,
+                "id",
+            );
+        }
+        foreach ($rows as &$row) {
+            if ($row["kind"] !== "department") {
+                continue;
+            }
+            $school =
+            $row["school_id"] === null
+            ? null
+            : $schools[$row["school_id"]] ?? throw new CorruptHistoryException();
+            if ($school !== null && $school["kind"] !== "school") {
+                throw new CorruptHistoryException();
+            }
+            $row["school"] =
+            $school === null
+            ? null
+            : array_intersect_key($school, array_flip(["id", "code", "title"]));
+        }
+        unset($row);
+        return $rows;
+    }
+
+    public function lockForCourse(EntityId $course, array $additional = []): void
+    {
+        $row = $this->sql->rows("sis_course_classifications", ["id" => $course->value], 1)[0] ?? [];
+        $ids = array_map(static fn(EntityId $id): string => $id->value, $additional);
         foreach (ClassificationKind::courseKinds() as $kind) {
             if (($row[$kind->value . "_id"] ?? null) !== null) {
                 $ids[] = $row[$kind->value . "_id"];
@@ -132,12 +172,7 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
 
     public function course(EntityId $course): CourseClassifications
     {
-        $row =
-        $this->sql->rows(
-            "sis_course_classifications",
-            ["id" => $course->value],
-            1,
-        )[0] ?? [];
+        $row = $this->sql->rows("sis_course_classifications", ["id" => $course->value], 1)[0] ?? [];
         $values = [];
         foreach (ClassificationKind::courseKinds() as $kind) {
             $id = $row[$kind->value . "_id"] ?? null;
@@ -148,33 +183,19 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
             $values[$kind->value] =
             $value === null
             ? null
-            : array_intersect_key(
-                $value,
-                array_flip(["id", "code", "title"]),
-            );
+            : array_intersect_key($value, array_flip(["id", "code", "title"]));
         }
         return CourseClassifications::fromArray($values);
     }
 
-    public function assign(
-        EntityId $course,
-        CourseClassifications $values,
-    ): void {
+    public function assign(EntityId $course, CourseClassifications $values): void
+    {
         $row = [];
         foreach ($values->describe() as $kind => $value) {
             $row[$kind . "_id"] = $value["id"] ?? null;
         }
-        if (
-            $this->sql->rows(
-                "sis_course_classifications",
-                ["id" => $course->value],
-                1,
-            ) === []
-        ) {
-            $this->sql->insert(
-                "sis_course_classifications",
-                ["id" => $course->value] + $row,
-            );
+        if ($this->sql->rows("sis_course_classifications", ["id" => $course->value], 1) === []) {
+            $this->sql->insert("sis_course_classifications", ["id" => $course->value] + $row);
         } else {
             $this->sql->update("sis_course_classifications", $row, [
                 "id" => $course->value,

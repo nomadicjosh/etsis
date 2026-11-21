@@ -107,6 +107,7 @@ final readonly class SisProgramSpecializationController
                     throw new InvalidArgumentException(
                         "Choose a supported curriculum component type.",
                     ),
+                $input->optionalId("department_id"),
             ),
         );
     }

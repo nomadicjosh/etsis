@@ -44,6 +44,7 @@ final class SpecializationPolicyTest extends TestCase
             $f->access,
             $f->transactions,
             $f->audit,
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
         );
     }
     private function offer(ProgramPublicationFixture $p, string $code = 'DATA'): array

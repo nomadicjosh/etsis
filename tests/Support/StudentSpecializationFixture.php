@@ -82,6 +82,7 @@ final class StudentSpecializationFixture
             new \Infrastructure\Persistence\Repository\SqlProgramSpecializationRepository($f->sql),
             new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($f->sql),
             $f->access, $f->transactions, $f->audit,
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
         );
     }
     public function publish(): array

@@ -6,6 +6,7 @@ require_once __DIR__ . '/ReusableGroupFixture.php';
 require_once __DIR__ . '/ProgramPublicationFixture.php';
 
 use Domain\Shared\ValueObject\EntityId;
+use Domain\Catalog\Enum\ClassificationKind;
 
 final class StudentSpecializationRequirementsFixture
 {
@@ -25,6 +26,7 @@ final class StudentSpecializationRequirementsFixture
         array $componentKinds = [],
         array $kindLimits = [],
         bool $selectInitial = true,
+        bool $organized = false,
     )
     {
         $this->r = $r ??= new ReusableGroupFixture();
@@ -40,7 +42,30 @@ final class StudentSpecializationRequirementsFixture
         $policy->saveProgram($s->program, 0, 0, 2, $sharing, $kindLimits);
         $setup = new \Domain\Catalog\Service\ProgramSpecializationService(
             $choices, $references, $s->access, $s->transactions, $s->audit,
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($s->sql),
         );
+        $departments = [];
+        if ($organized) {
+            $school = $this->program->classifications->save(
+                ClassificationKind::School,
+                null,
+                'ARTS',
+                'Fictional Arts college',
+                true,
+                null,
+            );
+            foreach (['DATA', 'ART'] as $code) {
+                $departments[$code] = $this->program->classifications->save(
+                    ClassificationKind::Department,
+                    null,
+                    $code,
+                    'Fictional ' . $code . ' department',
+                    true,
+                    null,
+                    new EntityId($school['id']),
+                );
+            }
+        }
         foreach (['DATA', 'ART'] as $code) {
             $this->choices[$code] = $setup->save(
                 $s->program,
@@ -51,6 +76,7 @@ final class StudentSpecializationRequirementsFixture
                 null,
                 true,
                 $componentKinds[$code] ?? \Domain\Catalog\ValueObject\CurriculumComponentKind::Specialization,
+                isset($departments[$code]) ? new EntityId($departments[$code]['id']) : null,
             );
         }
         $review = $this->program->service->review($s->program, $r->year, 'Fictional offered choices.');

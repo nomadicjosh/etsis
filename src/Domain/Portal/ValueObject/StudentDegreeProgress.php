@@ -39,6 +39,8 @@ final readonly class StudentDegreeProgress
                         : ($kind?->label() ?? 'Component (type not recorded)') . ' ' .
                             $specialization['code'] . ' · ' . $specialization['title'],
                     'progress' => $progress,
+                    ...$specialization !== null && array_key_exists('department', $specialization)
+                        ? ['department' => self::department($specialization['department'])] : [],
                 ];
             }
             $this->data = ['status' => 'review', 'mode' => 'combined_curriculum', 'sharing' => $review['sharing'],
@@ -458,5 +460,20 @@ final readonly class StudentDegreeProgress
     public function __debugInfo(): array
     {
         return ["progress" => "[private student progress]"];
+    }
+    private static function department(?array $department): ?array
+    {
+        if ($department === null) {
+            return null;
+        }
+        $known = new \Domain\Catalog\ValueObject\DepartmentDefinition($department)->data;
+        return [
+            "code" => $known["code"],
+            "title" => $known["title"],
+            "school" =>
+                $known["school"] === null
+                    ? null
+                    : array_intersect_key($known["school"], array_flip(["code", "title"])),
+        ];
     }
 }

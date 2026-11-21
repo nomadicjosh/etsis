@@ -6,7 +6,7 @@ async function fixture(page, options = {}) {
     const calls = [], errors = [], publications = [];
     let definition = { code: 'BSCS', title: 'Computer Science', description: options.description || null, classifications: { department: null, academic_level: null, award: null, school: null, field_of_study: null, campus: null, additional_campuses: [] } };
     const rows = [
-        { id: id(3), kind: 'department', code: 'SCI', title: 'Sciences', active: true },
+        { id: id(3), kind: 'department', code: 'SCI', title: 'Sciences', active: true, school_id: id(7), school: { id: id(7), code: 'ARTS', title: 'College of Arts <b>fictional</b>' } },
         { id: id(4), kind: 'academic_level', code: 'UG', title: 'Undergraduate', active: true },
         { id: id(7), kind: 'school', code: 'ARTS', title: 'College of Arts <b>fictional</b>', active: true },
         { id: id(8), kind: 'field_of_study', code: '11.0701', title: 'Computer Science', active: true },
@@ -21,7 +21,7 @@ async function fixture(page, options = {}) {
     let institutionFailure = !!options.institutionFailure;
     let institution = {revision:0,minimum:0,maximum:1,default_maximum:1};
     let programPolicy = {revision:0,minimum:0,maximum:null,default_maximum:null,component_sharing:"one_component",kind_limits:{}};
-    const specializationSnapshot = () => ({program_id:id(1),component_sharing:programPolicy.component_sharing,kind_limits:programPolicy.kind_limits,institution:{revision:institution.revision,maximum:institution.maximum,default_maximum:institution.default_maximum},program:{revision:programPolicy.revision,minimum:programPolicy.minimum,maximum:programPolicy.maximum},effective:{minimum:programPolicy.minimum,maximum:programPolicy.maximum??institution.default_maximum},offered:specializations.filter(s=>s.active).map(({id,code,title,description,revision,kind})=>({id,code,title,description,revision,kind}))});
+    const specializationSnapshot = () => ({program_id:id(1),component_sharing:programPolicy.component_sharing,kind_limits:programPolicy.kind_limits,institution:{revision:institution.revision,maximum:institution.maximum,default_maximum:institution.default_maximum},program:{revision:programPolicy.revision,minimum:programPolicy.minimum,maximum:programPolicy.maximum},effective:{minimum:programPolicy.minimum,maximum:programPolicy.maximum??institution.default_maximum},offered:specializations.filter(s=>s.active).map(({id,code,title,description,revision,kind,department})=>({id,code,title,description,revision,kind,department:department??null}))});
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -47,7 +47,7 @@ async function fixture(page, options = {}) {
         } else if (path === `/sis/programs/${id(1)}/specializations/save/`) {
             if (specializationFailure) {specializationFailure=false;await route.fulfill({status:409,json:{error:'Reload this specialization before saving your changes.'}});return;}
             const previous=data.id?specializations.find(row=>row.id===data.id):null;
-            result={...data,id:previous?.id||id(99),program_id:id(1),code:data.code.trim().toUpperCase(),revision:(previous?.revision||0)+1};
+            result={...data,id:previous?.id||id(99),program_id:id(1),code:data.code.trim().toUpperCase(),revision:(previous?.revision||0)+1,department:data.department_id ? rows.find(row => row.id === data.department_id) : null};
             if(previous) Object.assign(previous,result);else specializations.push(result);
         } else if (path === `/sis/programs/${id(1)}/specializations/policy/`) {
             if(data){
@@ -73,6 +73,10 @@ async function fixture(page, options = {}) {
                 enabled: !options.assistanceDisabled, label: 'Fictional provider', tasks: options.tasks || ['description', ...(definition.description ? ['rewrite', 'expand'] : [])], revision: 'b'.repeat(64), saved_revision: 'a'.repeat(64),
                 draft: { kind: 'academic_program', code: definition.code, title: definition.title, description: definition.description, classifications: Object.fromEntries(Object.entries(definition.classifications).map(([kind, row]) => [kind, Array.isArray(row) ? row.map(site => ({ code: site.code, title: site.title })) : row ? { code: row.code, title: row.title } : null])) },
             };
+        } else if (path.startsWith('/sis/catalog/classifications/') && path.endsWith('/save/')) {
+            const previous = data.id ? rows.find(row => row.id === data.id) : null;
+            result = { ...data, id: data.id || id(88), kind: path.split('/')[4], revision: 'r'.repeat(64), school: rows.find(row => row.id === data.school_id) || null };
+            if (previous) Object.assign(previous, result); else rows.push(result);
         } else if (path.startsWith('/sis/catalog/classifications/')) {
             result = { items: rows.filter(row => row.kind === path.split('/')[4] && `${row.code} ${row.title}`.toLowerCase().includes(data.search.toLowerCase())), next_after: null };
         } else if (path === '/sis/academic-years/') result = { items: [{ id: id(2), code: '2024-2025' }].filter(year => year.code.includes(data.search)), next_after: null };
@@ -642,4 +646,46 @@ test('saving a new institutional default updates an inherited program maximum in
     await page.getByRole('button', { name: 'Save program specialization policy', exact: true }).click();
     expect(f.calls.find(c => c.path.endsWith('/specializations/policy/')).data.maximum).toBeNull();
     expect(f.errors).toEqual([]);
+});
+
+
+test('component department selection preserves edits and publication retains its college', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Majors, minors & specializations', exact: true }).click();
+    await page.getByRole('button', { name: 'Add a curriculum component', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Curriculum component type', exact: true }).selectOption('major');
+    await page.getByRole('textbox', { name: 'Component code', exact: true }).fill('ENG');
+    await page.getByRole('textbox', { name: 'Component title', exact: true }).fill('English major');
+    await page.getByRole('button', { name: 'Choose responsible department', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose SCI', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Component title', exact: true })).toHaveValue('English major');
+    await expect(page.locator('#drawer-body')).toContainText('College of Arts <b>fictional</b>');
+    await expect(page.locator('#drawer-body b')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Save curriculum component', exact: true }).click();
+    expect(f.calls.find(c => c.path.endsWith('/specializations/save/')).data.department_id).toBe(id(3));
+    await page.getByRole('button', { name: 'Back to program details', exact: true }).click();
+    await page.getByRole('button', { name: 'Publish for an academic year', exact: true }).click();
+    await page.getByLabel('Reason for program publication', { exact: true }).fill('Fictional department publication.');
+    await page.getByRole('button', { name: 'Choose academic year', exact: true }).click();
+    await page.getByRole('button', { name: 'Use academic year 2024-2025', exact: true }).click();
+    await page.getByRole('button', { name: 'Review program publication', exact: true }).click();
+    const context = page.getByRole('region', { name: 'Published specialization choices and policy', exact: true });
+    await context.locator('summary').click();
+    await expect(context).toContainText('Responsible department: SCI — Sciences');
+    await expect(context).toContainText('College of Arts <b>fictional</b>');
+    await accessible(page); expect(f.errors).toEqual([]);
+});
+
+test('department school chooser preserves the reference draft and saves the explicit affiliation', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Choose department', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit SCI', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Department name', exact: true }).fill('Sciences edited draft');
+    await page.getByRole('button', { name: 'Choose department school/college', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose ARTS', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Department name', exact: true })).toHaveValue('Sciences edited draft');
+    await page.getByRole('button', { name: 'Save classification', exact: true }).click();
+    expect(f.calls.find(c => c.path.endsWith('/department/save/')).data.school_id).toBe(id(7));
+    await expect(page.locator('#drawer-body')).toContainText('School/college: ARTS');
+    await accessible(page); expect(f.errors).toEqual([]);
 });

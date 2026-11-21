@@ -198,3 +198,8 @@ The authoring test screen can now [compare exact assigned publications with appr
 ## Major and minor components
 
 [Program-owned major/minor roles](program-publication.md#majors-minors-and-curriculum-component-types) now carry through the same selected component publications, exceptions, sharing rules and combined allocation. Staff and owner cards name the retained role; they never look up today's draft to label an earlier selection. A required major must be selected under the retained type limits before a combined review can proceed, including the owner degree-only shortcut. Independent component inspection remains explicitly independent. No new credit, GPA algorithm, retained evaluation or credential decision is introduced. Earlier unknown types stay unknown.
+
+
+## Retained curriculum ownership
+
+Combined curriculum cards and staff component drilldowns show the responsible department and its school/college from the component's exact retained program publication. An English major and History minor can therefore show different departments within the same broad degree. A later reference rename or departmental move does not change those assigned labels. Explicit unassigned ownership remains distinct from **Not recorded in this publication** for earlier publications. Students receive codes and titles without internal organization identifiers. These are academic responsibility labels; they grant no staff access and change no credits, GPA, placement or sharing rules. See [organization setup and publication](program-publication.md#departments-and-curriculum-ownership).

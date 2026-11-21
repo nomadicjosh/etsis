@@ -26,6 +26,7 @@ final class ProgramSpecializationTest extends TestCase
             $f->access,
             $f->transactions,
             $audit ?? $f->audit,
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
         );
     }
     public function testProgramOwnedReferencesEditRetireAndRemainSeparateFromAcademicDecisions(): void

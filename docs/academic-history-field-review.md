@@ -116,3 +116,8 @@ The legacy `stal.acadStanding` now has [institution-defined labels and reviewed 
 
 
 The [tracked late-withdrawal reinstatement](registration-history.md#reinstate-a-tracked-late-withdrawal) now restores the actual original ungraded credit and enrollment under their existing identities through new attributed events. It verifies original publications/offering/pursuit, preserves all account postings and previous withdrawal facts, blocks pending/later academic amendments and leaves unknown, removed or amended-source attempts for explicit reconciliation. This is a bounded current-policy registrar workflow, not a reconstruction of earlier unrecorded events or a general reopening decision.
+
+
+### Department and component ownership
+
+[Department-to-school affiliations and component responsibility](program-publication.md#departments-and-curriculum-ownership) now distinguish organization from program/academic-level/award. Audited current reference/component edits remain CRUD. New program publications retain each selected component's department plus its school labels in the existing journal; earlier absent ownership stays unknown. Student selections, exact requirement publications and combined staff/owner progress resolve those retained facts. Current renames/moves do not relabel earlier curriculum, assign access or change academic calculations. Broad programs can leave their own department blank; joint ownership, deeper hierarchies, component-owner reporting and major-dependent eligibility remain separate work.

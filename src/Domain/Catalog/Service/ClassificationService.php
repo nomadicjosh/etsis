@@ -30,8 +30,11 @@ final readonly class ClassificationService
     }
 
     /** @return array<string, mixed> */
-    public function page(ClassificationKind $kind, string $search = "", ?EntityId $after = null): array
-    {
+    public function page(
+        ClassificationKind $kind,
+        string $search = "",
+        ?EntityId $after = null,
+    ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         if (mb_strlen($search) > 100) {
             throw new InvalidArgumentException("Use a shorter classification search.");
@@ -55,6 +58,7 @@ final readonly class ClassificationService
         string $title,
         bool $active,
         ?string $revision,
+        ?EntityId $school = null,
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         $value = new ClassificationSnapshot(
@@ -69,16 +73,29 @@ final readonly class ClassificationService
             $active,
             $revision,
             $actor,
+            $school,
         ): array {
+            $old = $id === null ? null : $this->classifications->get($id);
+            $references = array_filter([$id?->value, $school?->value, $old["school_id"] ?? null]);
+            sort($references, SORT_STRING);
+            foreach (array_unique($references) as $reference) {
+                $this->classifications->lock(new EntityId($reference));
+            }
             if ($id !== null) {
                 $this->classifications->lock($id);
                 $old = $this->classifications->get($id);
                 if ($old["kind"] !== $kind->value || $revision !== $this->rowRevision($old)) {
-                    throw new ConcurrentModificationException("Reload the classification before saving.");
+                    throw new ConcurrentModificationException(
+                        "Reload the classification before saving.",
+                    );
                 }
             }
             $this->authorize($actor);
+            $schoolBefore = $this->school($kind, $school, $old["school_id"] ?? null);
             $this->classifications->save($kind, $value, $active, $id === null);
+            if ($kind === ClassificationKind::Department) {
+                $this->classifications->assignSchool($value->id, $school);
+            }
             $this->audit->record(
                 $actor,
                 $id === null ? "classification.created" : "classification.updated",
@@ -86,6 +103,17 @@ final readonly class ClassificationService
             );
             $row = $this->classifications->get($value->id);
             $this->authorize($actor);
+            if (
+                $this->school($kind, $school, $old["school_id"] ?? null) !== $schoolBefore ||
+                $row["code"] !== $value->code ||
+                $row["title"] !== $value->title ||
+                $row["active"] !== $active ||
+                $row["school_id"] !== $school?->value
+            ) {
+                throw new ConcurrentModificationException(
+                    "The department or school changed before saving completed.",
+                );
+            }
             return $row + ["revision" => $this->rowRevision($row)];
         });
     }
@@ -122,7 +150,9 @@ final readonly class ClassificationService
             $this->authorize($actor);
             $old = $this->classifications->course($course)->describe();
             if ($revision !== $this->revision($old)) {
-                throw new ConcurrentModificationException("Reload the course classifications before saving.");
+                throw new ConcurrentModificationException(
+                    "Reload the course classifications before saving.",
+                );
             }
             $values = [];
             foreach ($ids as $kind => $id) {
@@ -135,16 +165,40 @@ final readonly class ClassificationService
                     throw new ValidationException([
                         [
                             "field" => $kind . "_id",
-                            "message" => "Choose an active classification from the matching category.",
+                            "message" =>
+                                "Choose an active classification from the matching category.",
                         ],
                     ]);
                 }
                 $values[$kind] =
-                    $row === null ? null : array_intersect_key($row, array_flip(["id", "code", "title"]));
+                    $row === null
+                        ? null
+                        : array_intersect_key($row, array_flip(["id", "code", "title"]));
             }
             $this->classifications->assign($course, CourseClassifications::fromArray($values));
             $this->audit->record($actor, "course.classifications_assigned", $course);
         });
+    }
+
+    private function school(ClassificationKind $kind, ?EntityId $school, ?string $previous): ?array
+    {
+        if ($school === null) {
+            return null;
+        }
+        $row = $this->classifications->get($school);
+        if (
+            $kind !== ClassificationKind::Department ||
+            $row["kind"] !== "school" ||
+            (!$row["active"] && $previous !== $school->value)
+        ) {
+            throw new ValidationException([
+                [
+                    "field" => "school_id",
+                    "message" => "Choose an active school/college for this department.",
+                ],
+            ]);
+        }
+        return $row;
     }
 
     private function authorize(EntityId $actor): void
@@ -163,6 +217,7 @@ final readonly class ClassificationService
             "code" => $row["code"],
             "title" => $row["title"],
             "active" => (bool) $row["active"],
+            ...$row["kind"] === "department" ? ["school_id" => $row["school_id"]] : [],
         ]);
     }
 

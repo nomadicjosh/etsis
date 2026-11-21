@@ -764,6 +764,7 @@ final class DraftDegreeAuditTest extends TestCase
             new \Infrastructure\Persistence\Repository\SqlProgramSpecializationRepository($s->sql),
             new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($s->sql),
             $s->access, $s->transactions, $s->audit,
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($s->sql),
         )->save($s->program, null, null, 'DATA', 'Fictional data path', null, true);
         $scope = $f->f->degrees->open($s->program, $f->f->year, new EntityId($choice['id']));
         $id = new EntityId($scope['id']);
@@ -807,6 +808,7 @@ final class DraftDegreeAuditTest extends TestCase
             $s->access,
             $s->transactions,
             $s->audit,
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($s->sql),
         )->save($s->program, null, null, "DATA", "Fictional data path", null, true);
         $year = new EntityId(new SqlRequirementsRepository($s->sql)->get($degree)["academic_year_id"]);
         $row = $f->f->degrees->open($s->program, $year, new EntityId($choice["id"]));

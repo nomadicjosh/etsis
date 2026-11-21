@@ -22,6 +22,7 @@ final class CombinedDegreeProgressTest extends TestCase
         string $sharing = 'one_component',
         bool $typed = false,
         bool $missingSelection = false,
+        bool $organized = false,
     ): StudentSpecializationRequirementsFixture
     {
         $r = new ReusableGroupFixture();
@@ -50,6 +51,7 @@ final class CombinedDegreeProgressTest extends TestCase
             ] : [],
             $typed ? ['major' => ['minimum' => 1, 'maximum' => 1], 'minor' => ['minimum' => 0, 'maximum' => 1]] : [],
             !$missingSelection,
+            $organized,
         );
         $r->saveDegree();
         $version = new EntityId($r->publishDegree()['operation_id']);
@@ -854,6 +856,30 @@ final class CombinedDegreeProgressTest extends TestCase
         self::assertSame('needs_review', $result['status']);
         self::assertSame(['component_selection_missing'], $result['issues']);
         self::assertArrayNotHasKey('allocation', $result);
+    }
+
+    public function testCombinedOwnerProgressRetainsDepartmentLabelsWithoutExposingOrganizationIds(): void
+    {
+        $f = $this->fixture('multiple_components', true, organized: true);
+        $f->select(['DATA', 'ART']);
+        $f->assign('ART');
+        $result = $this->preview($f);
+        self::assertSame('review', $result['status']);
+        $owner = new \Domain\Portal\ValueObject\StudentDegreeProgress($result)->describe();
+        $major = $owner['components'][1];
+        self::assertSame('Fictional DATA department', $major['department']['title']);
+        self::assertSame('Fictional Arts college', $major['department']['school']['title']);
+        self::assertArrayNotHasKey('id', $major['department']);
+        self::assertArrayNotHasKey('id', $major['department']['school']);
+        $department = $result['components'][1]['progress']['context']['specialization']['department'];
+        $f->r->sis->sql->update(
+            'sis_catalog_classifications',
+            ['title' => 'Current renamed department'],
+            ['id' => $department['id']],
+        );
+        $fresh = new \Domain\Portal\ValueObject\StudentDegreeProgress($this->preview($f))->describe();
+        self::assertSame($major['department'], $fresh['components'][1]['department']);
+        self::assertSame('Minor ART', explode(' · ', $fresh['components'][2]['label'])[0]);
     }
 
 }

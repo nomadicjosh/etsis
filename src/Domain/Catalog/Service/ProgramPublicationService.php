@@ -477,7 +477,9 @@ final readonly class ProgramPublicationService
     private function lockChoices(EntityId $program, array $additional = []): void
     {
         $draft = $this->details->draft($program);
+        $owners = $this->specializations->classificationIds($program);
         $ids = [
+            ...$owners,
             ...array_map(static fn(EntityId $id): string => $id->value, $additional),
             ...$draft["additional_campus_ids"],
         ];
@@ -490,6 +492,11 @@ final readonly class ProgramPublicationService
         sort($ids, SORT_STRING);
         foreach ($ids as $id) {
             $this->classifications->lock(new EntityId($id));
+        }
+        if ($this->specializations->classificationIds($program) !== $owners) {
+            throw new ConcurrentModificationException(
+                'Component organization changed while preparing publication. Review again.',
+            );
         }
     }
 

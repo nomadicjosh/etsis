@@ -45,3 +45,8 @@ Native disclosure controls work with keyboard and assistive technology. Links mo
 **Program details & publications → Majors, minors & specializations** now offers explicit component types. Configure optional type limits beside the overall selection policy, publish the program, then use the existing student component-selection and requirements workflow. Combined staff/owner progress displays retained major/minor roles and applies the same sharing rules. See [major/minor setup and historical limits](program-publication.md#majors-minors-and-curriculum-component-types).
 
 For a broad program with one required major and an optional minor, the institution must permit at least two components and the program maximum must be two. Require exactly one major and allow zero or one minor; the overall required count is one. Follow the [worked broad-program example](program-publication.md#example-a-broad-ba-program-with-one-major-and-an-optional-minor) for the exact controls, requirements assignments, degree progress and current application/portal boundaries.
+
+
+## Department and curriculum responsibility
+
+Set each department's optional school/college in its reference editor. Set each major/minor's responsible department in its component editor, then review and publish the program. A broad program may keep its own department blank. Student choices and combined progress display the retained organization, with earlier missing ownership explicitly unknown. Follow [Departments and curriculum ownership](program-publication.md#departments-and-curriculum-ownership) for the connected setup and historical boundaries.

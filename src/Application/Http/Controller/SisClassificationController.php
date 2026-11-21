@@ -48,6 +48,7 @@ final readonly class SisClassificationController
                 $input->text("title", 191),
                 $input->requiredBoolean("active"),
                 $input->optionalText("revision", 64),
+                $input->optionalId("school_id"),
             ),
         );
     }

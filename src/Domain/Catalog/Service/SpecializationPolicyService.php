@@ -148,6 +148,22 @@ final readonly class SpecializationPolicyService
         $this->policies->lockInstitution();
     }
 
+    /** Current explicit component-owner references, collected under the program lock. */
+    public function classificationIds(EntityId $program): array
+    {
+        $ids = [];
+        foreach ($this->specializations->offered($program) as $choice) {
+            if ($choice["department"] !== null) {
+                $ids[] = $choice["department"]["id"];
+                if ($choice["department"]["school"] !== null) {
+                    $ids[] = $choice["department"]["school"]["id"];
+                }
+            }
+        }
+        $ids = array_values(array_unique($ids));
+        sort($ids, SORT_STRING);
+        return $ids;
+    }
     /** Caller owns the publication locks/authority. No new authorization or current-state fallback in replay. */
     public function snapshot(EntityId $program): ProgramSpecializationSnapshot
     {

@@ -16,7 +16,7 @@ window.createWorkspaceClassifications = function (ui) {
         department: {
             singular: "Department",
             plural: "Departments",
-            detail: "The academic unit responsible for a course.",
+            detail: "An academic department can serve undergraduate and graduate study. Assign its school/college explicitly; majors and minors can name their responsible department.",
         },
         academic_level: {
             singular: "Academic level",
@@ -170,6 +170,7 @@ window.createWorkspaceClassifications = function (ui) {
                 { class: "surface p-3 mb-2" },
                 node("h4", { class: "h5 text-break" }, `${row.code} — ${row.title}`),
                 node("p", {}, row.active ? "Active" : "Retired"),
+                kind === "department" ? node("p", {}, row.school ? `School/college: ${row.school.code} — ${row.school.title}` : "School/college not assigned") : null,
                 button(`Edit ${row.code}`, () =>
                     editor(kind, row, refresh, refresh),
                 ),
@@ -215,7 +216,7 @@ window.createWorkspaceClassifications = function (ui) {
         if (back) body.append(button(backLabel, back));
     }
 
-    async function editor(kind, row, saved, back) {
+    async function editor(kind, row, saved, back, draft = null, school = row?.school || null) {
         const category = kinds[kind];
         const body = openDrawer(
             `${row ? "Edit" : "Add"} ${category.singular.toLowerCase()}`,
@@ -226,7 +227,17 @@ window.createWorkspaceClassifications = function (ui) {
             ["title", `${category.singular} name`],
             ["active", "Available for new assignments", "checkbox"],
         ];
-        const form = await buildForm(fields, row || { active: true });
+        const form = await buildForm(fields, draft || row || { active: true });
+        if (!body.isConnected) return;
+        if (kind === "department") {
+            const restore = (choice = school) => editor(kind, row, saved, back, formData(form, fields), choice);
+            form.append(node("section", { class: "record-section", "aria-label": "Department school/college" },
+                node("h3", { class: "h6" }, "School/college affiliation"),
+                node("p", {}, school ? `${school.code} — ${school.title}` : "No school/college assigned"),
+                node("p", { class: "form-text" }, "This is the department's current organization. New curriculum publications retain it; earlier publications stay unchanged. It grants no additional access."),
+                button("Choose department school/college", () => library("school", "", null, [], restore, () => restore(), "Back to department")),
+                school ? button("Clear department school/college", () => restore(null)) : null));
+        }
         form.elements.namedItem("code").maxLength = 40;
         const save = node(
             "button",
@@ -245,6 +256,7 @@ window.createWorkspaceClassifications = function (ui) {
                         ...formData(form, fields),
                         id: row?.id ?? null,
                         revision: row?.revision ?? null,
+                        school_id: kind === "department" ? school?.id ?? null : null,
                     },
                 );
                 await saved(result);

@@ -215,6 +215,7 @@ final class CurriculumComponentTest extends TestCase
             $s->access,
             $s->transactions,
             $audit,
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($s->sql),
         );
         $before = [$s->sql->rows("sis_program_specializations"), $s->sql->rows("sis_audit")];
         try {

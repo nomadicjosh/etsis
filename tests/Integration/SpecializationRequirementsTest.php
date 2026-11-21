@@ -27,6 +27,7 @@ final class SpecializationRequirementsTest extends TestCase
             new SqlProgramSpecializationRepository($s->sql),
             new SqlCatalogRevisionRepository($s->sql),
             $s->access, $s->transactions, $s->audit,
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($s->sql),
         )->save($s->program, null, null, 'DATA', 'Fictional data specialization', 'Original description.', true);
     }
     private function program(ReusableGroupFixture $r, ProgramPublicationFixture $p): array

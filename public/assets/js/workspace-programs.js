@@ -601,6 +601,7 @@ window.createWorkspacePrograms = function (ui) {
                         { class: "surface p-3" },
                         node("h3", { class: "h5" }, `${item.code} — ${item.title}`),
                         node("p", {}, `Type: ${item.kind || "not recorded — choose a type before publishing"}`),
+                        node("p", {}, window.curriculumOrganizationText(item)),
                         node("p", {}, item.active ? "Active" : "Inactive — retained for reference"),
                         button(`Edit specialization ${item.code}`, () =>
                             editSpecialization(program, item.id, restore),
@@ -637,11 +638,11 @@ window.createWorkspacePrograms = function (ui) {
         body.append(controls);
     }
 
-    async function editSpecialization(program, id, back) {
+    async function editSpecialization(program, id, back, state = null) {
         const base = `/sis/programs/${program}/specializations/`;
-        const value = id
+        const value = state?.value || (id
             ? await request(`${base}${id}/`)
-            : { id: null, revision: null, code: "", title: "", description: null, active: true, kind: "specialization" };
+            : { id: null, revision: null, code: "", title: "", description: null, active: true, kind: "specialization", department: null });
         const body = openDrawer(
             id ? "Edit specialization" : "Add specialization",
             "PROGRAM SPECIALIZATION SETUP",
@@ -659,7 +660,9 @@ window.createWorkspacePrograms = function (ui) {
             ["title", "Component title"],
             ["description", "Component description", "textarea", "", false],
         ];
-        const form = await buildForm(fields, value);
+        const form = await buildForm(fields, state?.draft || value);
+        if (!body.isConnected) return;
+        const department = state ? state.department : value.department || null;
         form.elements.namedItem("code").maxLength = 80;
         form.elements.namedItem("code").pattern = "[A-Za-z0-9][A-Za-z0-9._-]{0,79}";
         form.elements.namedItem("code").title = "Use letters, numbers, dots, underscores or hyphens.";
@@ -669,7 +672,16 @@ window.createWorkspacePrograms = function (ui) {
             type: "checkbox",
             class: "form-check-input",
         });
-        active.checked = value.active;
+        active.checked = state?.active ?? value.active;
+        const restore = (choice = department) => editSpecialization(program, id, back, {
+            value, department: choice, active: active.checked, draft: formData(form, fields),
+        });
+        form.append(node("section", { class: "record-section", "aria-label": "Component department" },
+            node("h3", { class: "h6" }, "Responsible department"),
+            node("p", {}, window.curriculumOrganizationText({ department })),
+            node("p", { class: "form-text" }, "Choose the academic unit responsible for this component. It is independent of the program's department; a broad program may leave its own department blank. This choice grants no access."),
+            button("Choose responsible department", () => ui.references().library("department", "", null, [], restore, () => restore(), "Back to curriculum component")),
+            department ? button("Clear responsible department", () => restore(null)) : null));
         const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save curriculum component");
         form.append(
             node(
@@ -689,6 +701,7 @@ window.createWorkspacePrograms = function (ui) {
                     id: value.id,
                     revision: value.revision,
                     kind: draft.kind,
+                    department_id: department?.id ?? null,
                     code: draft.code,
                     title: draft.title,
                     description: form.elements.namedItem("description").value || null,
@@ -1002,6 +1015,7 @@ window.createWorkspacePrograms = function (ui) {
                                 { class: "border-top py-2" },
                                 node("h4", { class: "h6" }, `${choice.code} — ${choice.title}`),
                                 node("p", {}, `Curriculum type: ${choice.kind || "not recorded"}`),
+                                node("p", {}, window.curriculumOrganizationText(choice)),
                                 node(
                                     "p",
                                     { class: "course-description-text" },

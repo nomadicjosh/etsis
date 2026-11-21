@@ -24,6 +24,7 @@ final readonly class ProgramSpecializationService
         private StudentAccess $access,
         private UnitOfWork $transactions,
         private AuditTrail $audit,
+        private \Domain\Catalog\Repository\ClassificationRepository $classifications,
     ) {
     }
 
@@ -52,18 +53,18 @@ final readonly class ProgramSpecializationService
         ];
     }
 
-    /** @return array<string,scalar|null> */
+    /** @return array<string,mixed> */
     public function get(EntityId $program, EntityId $id): array
     {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         $this->programs->get("programs", $program);
         $value = $this->specializations->get($program, $id);
         $this->authorize($actor);
-        return $value->describe();
+        return $this->presentation($value);
     }
 
     /** Nullable identity/revision are required command inputs; null explicitly requests a new reference.
-     * @return array<string,scalar|null> */
+     * @return array<string,mixed> */
     public function save(
         EntityId $program,
         ?EntityId $id,
@@ -73,6 +74,7 @@ final readonly class ProgramSpecializationService
         ?string $description,
         bool $active,
         CurriculumComponentKind $kind = CurriculumComponentKind::Specialization,
+        ?EntityId $department = null,
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         if (
@@ -106,6 +108,7 @@ final readonly class ProgramSpecializationService
             $active,
             ($expectedRevision ?? 0) + 1,
             $kind,
+            $department,
         );
         return $this->transactions->run(function () use (
             $program,
@@ -124,6 +127,29 @@ final readonly class ProgramSpecializationService
                     "Reload this specialization before saving your changes.",
                 );
             }
+            $previous =
+                $id === null ? null : $this->specializations->get($program, $id)->departmentId;
+            $references = [];
+            foreach (array_filter([$previous, $value->departmentId]) as $reference) {
+                $references[] = $reference->value;
+                $school = $this->classifications->get($reference)["school_id"];
+                if ($school !== null) {
+                    $references[] = $school;
+                }
+            }
+            sort($references, SORT_STRING);
+            foreach (array_unique($references) as $reference) {
+                $this->classifications->lock(new EntityId($reference));
+            }
+            $departmentBefore = $this->department($value->departmentId, $previous);
+            if (
+                $departmentBefore !== null && $departmentBefore["school"] !== null &&
+                !in_array($departmentBefore["school"]["id"], $references, true)
+            ) {
+                throw new ConcurrentModificationException(
+                    "The department moved schools while saving. Review its organization again.",
+                );
+            }
             $this->specializations->save($value, $id === null);
             $this->audit->record(
                 $actor,
@@ -138,8 +164,39 @@ final readonly class ProgramSpecializationService
                     "The component changed before saving completed.",
                 );
             }
-            return $value->describe();
+            if ($this->department($value->departmentId, $previous) !== $departmentBefore) {
+                throw new ConcurrentModificationException(
+                    "The responsible department changed before saving completed.",
+                );
+            }
+            return $this->presentation($value);
         });
+    }
+
+    private function presentation(ProgramSpecialization $value): array
+    {
+        return $value->describe() + [
+            "department" => $this->department($value->departmentId, $value->departmentId),
+        ];
+    }
+    private function department(?EntityId $id, ?EntityId $previous): ?array
+    {
+        if ($id === null) {
+            return null;
+        }
+        $row = $this->classifications->get($id);
+        if (
+            $row["kind"] !== "department" ||
+            (!$row["active"] && $id->value !== $previous?->value)
+        ) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "department_id",
+                    "message" => "Choose an active responsible department.",
+                ],
+            ]);
+        }
+        return \Domain\Catalog\ValueObject\DepartmentDefinition::fromClassification($row)->data;
     }
 
     private function authorize(EntityId $actor): void

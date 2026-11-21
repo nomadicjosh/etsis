@@ -1,3 +1,11 @@
+/* Retained curriculum labels, shared by staff and private student progress. */
+window.curriculumOrganizationText = function (choice) {
+    if (!choice || !Object.hasOwn(choice, "department")) return "Responsible department: not recorded in this publication";
+    const department = choice.department;
+    if (!department) return "Responsible department: not assigned";
+    return `Responsible department: ${department.code} — ${department.title}. ` +
+        (department.school ? `School/college: ${department.school.code} — ${department.school.title}` : "School/college: not assigned");
+};
 /* Shared local guidance: no network calls, storage or academic calculations. */
 window.createDegreeProgressGuide = function (ui, layout, steps, slot, data, state, links) {
     const { node, button, actions } = ui;

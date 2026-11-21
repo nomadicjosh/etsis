@@ -22,6 +22,8 @@ interface ClassificationRepository
         bool $active,
         bool $create,
     ): void;
+    /** Caller validates the department/school and holds the reference locks. */
+    public function assignSchool(EntityId $department, ?EntityId $school): void;
     /** Caller holds the course lock. References are locked in identity order.
      * @param list<EntityId> $additional
      */

@@ -75,6 +75,7 @@ final readonly class ProgramSpecializationSnapshot
                 "description",
                 "revision",
                 ...array_key_exists("kind", $row) ? ["kind"] : [],
+                ...array_key_exists("department", $row) ? ["department"] : [],
             ]);
             if (
                 array_key_exists("kind", $row) &&
@@ -82,6 +83,9 @@ final readonly class ProgramSpecializationSnapshot
                     CurriculumComponentKind::tryFrom($row["kind"]) === null)
             ) {
                 throw new InvalidArgumentException("Retain a supported component type.");
+            }
+            if (array_key_exists("department", $row) && $row["department"] !== null) {
+                new DepartmentDefinition($row["department"]);
             }
             $value = new ProgramSpecialization(
                 new EntityId($row["id"]),
