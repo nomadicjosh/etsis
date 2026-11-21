@@ -62,7 +62,13 @@ final class AcademicTimetableFixture
             $f->audit,
             $c->fixture->cipher,
             $f->clock,
-            new PublishedSectionMeetingPlanReader($this->plans, $this->history)
+            new PublishedSectionMeetingPlanReader($this->plans, $this->history),
+            new \Domain\Registration\Service\FacultyScheduleService(
+                new \Infrastructure\Persistence\Repository\SqlFacultyScheduleRepository($f->sql),
+                new \Infrastructure\Persistence\Repository\SqlRegistrationScheduleRepository($f->sql),
+                $this->history,
+                new \Domain\Registration\Service\PublishedSectionMeetingPlanReader($this->plans, $this->history),
+            ),
         );
         $this->bookings = new BookingService(
             new SqlBookingRepository($f->sql),

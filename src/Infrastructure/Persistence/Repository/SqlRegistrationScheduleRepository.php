@@ -23,11 +23,8 @@ final readonly class SqlRegistrationScheduleRepository implements RegistrationSc
     {
         // Normal registrations do not take a shared institution-wide write lock.
         $row =
-        $this->sql->rows(
-            "sis_registration_policy",
-            ["id" => self::POLICY_ID],
-            1,
-        )[0] ?? throw new CorruptHistoryException();
+        $this->sql->rows("sis_registration_policy", ["id" => self::POLICY_ID], 1)[0] ??
+        throw new CorruptHistoryException();
         $version = filter_var($row["revision"], FILTER_VALIDATE_INT);
         if (
             !in_array($row["schedule_mode"], ["block", "warn"], true) ||
@@ -39,27 +36,41 @@ final readonly class SqlRegistrationScheduleRepository implements RegistrationSc
         }
         return ["mode" => $row["schedule_mode"], "revision" => $version];
     }
-    public function savePolicy(string $mode, int $revision): void
+    public function facultyPolicy(): array
+    {
+        $row =
+        $this->sql->rows("sis_registration_policy", ["id" => self::POLICY_ID], 1)[0] ??
+        throw new CorruptHistoryException();
+        $revision = filter_var($row["revision"], FILTER_VALIDATE_INT);
+        if (
+            !in_array($row["faculty_schedule_mode"] ?? null, ["block", "warn"], true) ||
+            $revision === false ||
+            $revision < 0 ||
+            $revision > 2000000000
+        ) {
+            throw new CorruptHistoryException();
+        }
+        return ["mode" => $row["faculty_schedule_mode"], "revision" => $revision];
+    }
+    public function savePolicy(string $mode, int $revision, ?string $facultyMode = null): void
     {
         if (
             !in_array($mode, ["block", "warn"], true) ||
+            ($facultyMode !== null && !in_array($facultyMode, ["block", "warn"], true)) ||
             $revision < 0 ||
             $revision >= 2000000000
         ) {
-            throw new \InvalidArgumentException(
-                "Choose a valid timetable policy.",
-            );
+            throw new \InvalidArgumentException("Choose a valid timetable policy.");
         }
         if (
             $this->sql->update(
                 "sis_registration_policy",
-                ["schedule_mode" => $mode, "revision" => $revision + 1],
+                ["schedule_mode" => $mode, "revision" => $revision + 1] +
+                    ($facultyMode === null ? [] : ["faculty_schedule_mode" => $facultyMode]),
                 ["id" => self::POLICY_ID, "revision" => $revision],
             ) !== 1
         ) {
-            throw new ConcurrentModificationException(
-                "The registration policy changed. Reload it.",
-            );
+            throw new ConcurrentModificationException("The registration policy changed. Reload it.");
         }
     }
     public function enrollments(EntityId $student, EntityId $target): array

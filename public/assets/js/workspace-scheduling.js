@@ -1121,6 +1121,28 @@ window.createWorkspaceScheduling = function (ui) {
         draw();
         return region;
     }
+    function facultyAssessment(value) {
+        const region = node('section', { class: 'mt-3', 'aria-label': 'Faculty schedule review' });
+        region.append(node('h3', { class: 'h5' }, 'Faculty schedule'));
+        if (!value) {
+            region.append(node('p', { class: 'form-text' }, 'Faculty conflict review was not recorded for this publication.'));
+            return region;
+        }
+        const message = value.pairs ? `${value.pairs} faculty overlap${value.pairs === 1 ? '' : 's'}. ${value.blocked ? 'Resolve the schedule before publishing.' : 'Institution policy allows publication after reviewing these warnings.'}`
+            : value.status === 'not_needed' ? 'No scheduled meetings need a faculty review.'
+            : value.status === 'unassigned' ? 'No faculty assigned to these meetings; overlaps could not be checked.'
+            : `No overlaps found across ${value.checked_faculty} assigned faculty and ${value.compared_sections} other published sections.`;
+        region.append(node('p', { class: `alert ${value.pairs || value.unassigned_meetings ? 'alert-warning' : 'alert-info'}`, role: 'status' }, message));
+        if (value.unassigned_meetings && value.status !== 'unassigned') region.append(node('p', {},
+            `${value.unassigned_meetings} meetings have no assigned faculty and were not checked.`));
+        if (value.conflicts.length) {
+            region.append(node('p', { class: 'small' }, `Showing ${value.conflicts.length} of ${value.pairs} overlaps. Times below are UTC.`),
+                grid(['Other section', 'Term', 'Overlap starts · UTC', 'Overlap ends · UTC'], value.conflicts.map(item => [
+                    item.section_code, item.term_code, item.starts_at.replace('T', ' ').replace('Z', ''), item.ends_at.replace('T', ' ').replace('Z', ''),
+                ]), 'Faculty overlaps with published classes'));
+        }
+        return region;
+    }
     async function meetingPlan(sectionId) {
         if (!can('sis:scheduling:manage') || !can('sis:catalog:manage')) return;
         const body = openDrawer('Section meeting plan', 'ACADEMIC SCHEDULE');
@@ -1166,8 +1188,10 @@ window.createWorkspaceScheduling = function (ui) {
                 body.append(pending);
                 body.append(button('Reload meeting plan', () => meetingPlan(sectionId)));
             }
-            body.append(meetingPlanTable(snapshot.working, 'Approved working meetings'));
-            if (snapshot.changed && !snapshot.pending_booking_ids.length) {
+            body.append(facultyAssessment(snapshot.faculty_assessment), meetingPlanTable(snapshot.working, 'Approved working meetings'));
+            if (snapshot.faculty_assessment?.blocked && !snapshot.pending_booking_ids.length)
+                body.append(button('Reload meeting plan', () => meetingPlan(sectionId)));
+            if (snapshot.changed && !snapshot.pending_booking_ids.length && !snapshot.faculty_assessment?.blocked) {
                 const form = node('form', { class: 'mt-4' });
                 const input = node('textarea', { id: 'meeting-plan-reason', name: 'reason', required: true,
                     maxlength: 1000, rows: 3, class: 'form-control' });
@@ -1195,7 +1219,7 @@ window.createWorkspaceScheduling = function (ui) {
             body.replaceChildren(title(`Published meeting plan ${publication.version}`),
                 node('p', {}, `Published ${display(publication.recorded_at)}`),
                 node('p', {}, publication.reason || 'Publication reason not available.'),
-                meetingPlanTable(publication.definition, 'Retained meetings'), button('Back', back));
+                facultyAssessment(publication.faculty_assessment), meetingPlanTable(publication.definition, 'Retained meetings'), button('Back', back));
             focusTitle();
         };
         const history = async (cursor = null) => {
@@ -1218,10 +1242,19 @@ window.createWorkspaceScheduling = function (ui) {
                 node('p', { class: 'alert alert-info' }, review.previous
                     ? `This will replace plan ${review.previous.version} with ${review.previous.definition.meetings.length} meetings. Its history will be retained.`
                     : 'This will publish the first meeting plan for this section.'),
-                meetingPlanTable(review.definition, 'Meetings to publish'));
+                facultyAssessment(review.faculty_assessment), meetingPlanTable(review.definition, 'Meetings to publish'));
             const status = node('p', { class: 'form-text', role: 'status' },
                 `Review expires ${display(new Date(review.expires_at * 1000))}.`);
+            const acknowledgement = review.faculty_assessment?.pairs ? node('input', {
+                type: 'checkbox', class: 'form-check-input', id: 'faculty-overlap-ack',
+            }) : null;
+            if (acknowledgement) body.append(node('div', { class: 'form-check mb-3' }, acknowledgement,
+                node('label', { for: acknowledgement.id, class: 'form-check-label' }, 'I reviewed the faculty overlaps.')));
             const confirmButton = button(review.definition.meetings.length ? 'Publish reviewed meeting plan' : 'Publish plan with no scheduled meetings', async () => {
+                if (acknowledgement && !acknowledgement.checked) {
+                    acknowledgement.focus();
+                    return;
+                }
                 if (!body.isConnected || Date.now() >= review.expires_at * 1000) {
                     status.textContent = 'This review has expired. Go back and review the meeting plan again.';
                     return;

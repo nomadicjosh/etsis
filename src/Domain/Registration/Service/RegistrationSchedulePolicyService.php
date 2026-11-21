@@ -28,27 +28,37 @@ final readonly class RegistrationSchedulePolicyService
     {
         $actor = $this->access->requirePermission("sis:registration:manage");
         $policy = $this->records->policy();
+        $value = $policy + [
+            "corequisites" => $this->corequisites->policy(),
+            "faculty_mode" => $this->records->facultyPolicy()["mode"],
+        ];
         $this->authorize($actor, false);
-        return $policy + ["corequisites" => $this->corequisites->policy()];
+        return $value;
     }
-    public function save(string $mode, int $revision, ?array $corequisites = null): array
-    {
+    public function save(
+        string $mode,
+        int $revision,
+        ?array $corequisites = null,
+        ?string $facultyMode = null,
+    ): array {
         $actor = $this->access->requirePermission("sis:registration:policy");
         return $this->transactions->run(function () use (
             $mode,
             $revision,
             $actor,
             $corequisites,
+            $facultyMode,
         ): array {
             $this->permissions->lock();
             $this->records->lockPolicy();
             $this->authorize($actor, true);
-            $this->records->savePolicy($mode, $revision);
+            $expectedFacultyMode = $facultyMode ?? $this->records->facultyPolicy()["mode"];
+            $this->records->savePolicy($mode, $revision, $facultyMode);
             if ($corequisites !== null) {
                 $this->corequisites->savePolicy(
-                    $corequisites['prior_completion'],
-                    $corequisites['drop_mode'],
-                    $corequisites['revision']
+                    $corequisites["prior_completion"],
+                    $corequisites["drop_mode"],
+                    $corequisites["revision"],
                 );
             }
             $this->audit->record(
@@ -57,21 +67,28 @@ final readonly class RegistrationSchedulePolicyService
                 new EntityId(RegistrationScheduleRepository::POLICY_ID),
             );
             $this->authorize($actor, true);
-            return $this->records->policy() + ["corequisites" => $this->corequisites->policy()];
+            $saved = $this->records->policy();
+            if (
+                $saved !== ["mode" => $mode, "revision" => $revision + 1] ||
+                $this->records->facultyPolicy()["mode"] !== $expectedFacultyMode
+            ) {
+                throw new \Domain\Shared\Exception\ConcurrentModificationException(
+                    "The timetable policy changed while saving. Reload it.",
+                );
+            }
+            return $saved + [
+                "corequisites" => $this->corequisites->policy(),
+                "faculty_mode" => $this->records->facultyPolicy()["mode"],
+            ];
         });
     }
     private function authorize(EntityId $actor, bool $write): void
     {
         if (
-            $this->access->requirePermission("sis:registration:manage")
-                ->value !== $actor->value ||
-            ($write &&
-                $this->access->requirePermission("sis:registration:policy")
-                    ->value !== $actor->value)
+            $this->access->requirePermission("sis:registration:manage")->value !== $actor->value ||
+            ($write && $this->access->requirePermission("sis:registration:policy")->value !== $actor->value)
         ) {
-            throw new AccessDeniedException(
-                "The registration policy actor changed.",
-            );
+            throw new AccessDeniedException("The registration policy actor changed.");
         }
     }
 }

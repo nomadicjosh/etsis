@@ -258,6 +258,9 @@ final class AcademicTimetableTest extends TestCase
     public function testFiveHundredMeetingWeeksAreCompleteAndOverflowAcrossClassesFailsClosed(): void
     {
         $school = new AcademicTimetableFixture();
+        // Advisory timetables must also cover an institution that permits reviewed overlaps.
+        new \Infrastructure\Persistence\Repository\SqlRegistrationScheduleRepository($school->sis->sql)
+            ->savePolicy('block', 0, 'warn');
         $times = [];
         $start = new DateTimeImmutable('2026-08-10T08:00:00-07:00');
         for ($i = 0; $i < 250; $i++) {
@@ -288,6 +291,9 @@ final class AcademicTimetableTest extends TestCase
     public function testOverlapAdviceUsesOnlyOwnedPublishedClassesAndAppendsNoDecisions(): void
     {
         $school = new AcademicTimetableFixture();
+        // Advisory timetables must also cover an institution that permits reviewed overlaps.
+        new \Infrastructure\Persistence\Repository\SqlRegistrationScheduleRepository($school->sis->sql)
+            ->savePolicy('block', 0, 'warn');
         $f = $school->sis;
         $another = $school->addSection();
         $sameClass = $school->bookings->request(
@@ -335,6 +341,9 @@ final class AcademicTimetableTest extends TestCase
     public function testOverlapAdviceDoesNotRevealAnotherInstructorsPublishedTimes(): void
     {
         $school = new AcademicTimetableFixture();
+        // Advisory timetables must also cover an institution that permits reviewed overlaps.
+        new \Infrastructure\Persistence\Repository\SqlRegistrationScheduleRepository($school->sis->sql)
+            ->savePolicy('block', 0, 'warn');
         $another = $school->addSection();
         foreach ([$school->section->id, $another->id] as $section) {
             $booking = $school->bookings->request(null, 'Private fictional class', [$this->time()], section: $section);
@@ -353,6 +362,9 @@ final class AcademicTimetableTest extends TestCase
     public function testDailyOverlapCountsExcludeAnOvernightContinuationAfterItsOverlapEnds(): void
     {
         $school = new AcademicTimetableFixture();
+        // Advisory timetables must also cover an institution that permits reviewed overlaps.
+        new \Infrastructure\Persistence\Repository\SqlRegistrationScheduleRepository($school->sis->sql)
+            ->savePolicy('block', 0, 'warn');
         $another = $school->addSection();
         $a = $school->bookings->request(null, 'Private overnight session', [
             $this->time('2026-08-10T23:00:00-07:00', '2026-08-11T02:00:00-07:00'),

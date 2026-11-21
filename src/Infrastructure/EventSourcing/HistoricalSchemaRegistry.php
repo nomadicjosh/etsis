@@ -1200,6 +1200,32 @@ final readonly class HistoricalSchemaRegistry
                     }
                     continue;
                 }
+                if ($name === 'faculty_assessment') {
+                    if (
+                        $class !== \Domain\Registration\Event\SectionMeetingPlanWasPublished::class
+                        || !is_array($value)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $assessment = new \Domain\Registration\ValueObject\FacultyConflictAssessment($value);
+                    $meetings = $payload['definition']['meetings'];
+                    if (
+                        $assessment->blocked() || $value['unassigned_meetings'] > count($meetings)
+                        || in_array(
+                            $payload['definition']['section_id'],
+                            array_column($value['sources'], 'section_id'),
+                            true
+                        )
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    foreach ($value['conflicts'] as $conflict) {
+                        if (!in_array($conflict['own_occurrence_id'], array_column($meetings, 'occurrence_id'), true)) {
+                            throw new CorruptHistoryException();
+                        }
+                    }
+                    continue;
+                }
                 if ($name === 'registration_price') {
                     if (
                         $class !== \Domain\Finance\Event\AccountEntryWasPosted::class || !is_array($value)

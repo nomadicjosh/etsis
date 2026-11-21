@@ -218,13 +218,16 @@ window.createWorkspaceRegistration = function (ui) {
         const value = await request("/sis/registration-policy/");
         if (!body.isConnected) return;
         const choices = ["block — Block confirmed overlaps", "warn — Warn and allow registration"];
+        const facultyChoices = ["block — Block overlapping classes", "warn — Warn and allow publication"];
         const dropChoices = ["block — Require linked courses to be dropped together", "warn — Warn and allow individual drops"];
         const form = await buildForm([
-            ["mode", "When published meetings overlap", "choice", choices],
+            ["mode", "When a student’s published meetings overlap", "choice", choices],
+            ["faculty_mode", "When a faculty member’s published classes overlap", "choice", facultyChoices],
             ["prior_completion", "Allow qualifying prior completion to satisfy co-requisites", "checkbox"],
             ["drop_mode", "When a drop leaves a co-requisite unsupported", "choice", dropChoices],
         ], {
             mode: choices.find((item) => item.startsWith(value.mode)),
+            faculty_mode: facultyChoices.find(item => item.startsWith(value.faculty_mode || "block")),
             prior_completion: value.corequisites.prior_completion,
             drop_mode: dropChoices.find(item => item.startsWith(value.corequisites.drop_mode)),
         });
@@ -238,6 +241,7 @@ window.createWorkspaceRegistration = function (ui) {
                 await request("/sis/registration-policy/", "POST", {
                     mode: form.elements.mode.value.split(" — ")[0],
                     revision: value.revision,
+                    faculty_mode: form.elements.faculty_mode.value.split(" — ")[0],
                     prior_completion: form.elements.prior_completion.checked,
                     drop_mode: form.elements.drop_mode.value.split(" — ")[0],
                     coreq_revision: value.corequisites.revision,
@@ -249,7 +253,7 @@ window.createWorkspaceRegistration = function (ui) {
             node(
                 "p",
                 {},
-                "Applies to student and staff registration, including planned schedules. Turn off prior completion to require co-requisites in the same academic term. Accepted registrations retain their original requirement and prior-completion policy; the current drop policy controls whether an unsupported drop is blocked or warned.",
+                "Student overlap policy applies to student and staff registration, including planned schedules. Faculty overlap policy applies when publishing a section meeting plan; earlier publications keep their reviewed policy. Turn off prior completion to require co-requisites in the same academic term. Accepted registrations retain their original requirement and prior-completion policy; the current drop policy controls whether an unsupported drop is blocked or warned.",
             ),
             form,
             back ? button("Back to registration", back, "btn-link") : null,

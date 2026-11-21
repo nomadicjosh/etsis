@@ -136,3 +136,35 @@ test("term policy preserves edits through review and history with private CSRF p
   ).toBe(true);
   expect(errors).toEqual([]);
 });
+
+
+test('institution configures faculty and student overlap policies separately', async ({ page }) => {
+  const { workspaceTool } = require('./support/workspace-actions.cjs');
+  const calls = [], errors = [];
+  let saved = false;
+  page.on('pageerror', error => errors.push(error.message));
+  await page.route('**/sis/**', async route => {
+    const path = new URL(route.request().url()).pathname;
+    const raw = route.request().postData();
+    const input = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
+    let result = { items: [], next_after: null };
+    if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+    if (path === '/sis/registration-policy/') {
+      if (input) { calls.push({ input, csrf: route.request().headers()['x-csrf-token'] }); saved = true; }
+      result = { mode: 'block', revision: saved ? 1 : 0, faculty_mode: saved ? 'warn' : 'block',
+        corequisites: { prior_completion: true, drop_mode: 'block', revision: 0 } };
+    }
+    await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
+  });
+  await page.goto('/admin/registration-policy-fixture/');
+  await page.locator('.workspace-nav-link[data-workspace="registration"]').click();
+  await workspaceTool(page, 'Registration timetable policy');
+  await page.getByLabel('When a faculty member’s published classes overlap').selectOption({ label: 'warn — Warn and allow publication' });
+  await page.getByRole('button', { name: 'Save policy', exact: true }).click();
+  await expect.poll(() => calls.length).toBe(1);
+  expect(calls[0].input).toMatchObject({ mode: 'block', faculty_mode: 'warn', revision: 0 });
+  expect(calls[0].csrf).toBe('fictional-test-token');
+  await expect(page.getByLabel('When a faculty member’s published classes overlap')).toHaveValue('warn — Warn and allow publication');
+  expect((await new AxeBuilder({ page }).include('#record-drawer').analyze()).violations).toEqual([]);
+  expect(errors).toEqual([]);
+});

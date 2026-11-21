@@ -97,6 +97,12 @@ final class SectionMeetingPlanTest extends TestCase
             $c->fixture->cipher,
             $f->clock,
             new \Domain\Registration\Service\PublishedSectionMeetingPlanReader($plans, $history),
+            new \Domain\Registration\Service\FacultyScheduleService(
+                new \Infrastructure\Persistence\Repository\SqlFacultyScheduleRepository($f->sql),
+                new \Infrastructure\Persistence\Repository\SqlRegistrationScheduleRepository($f->sql),
+                $history,
+                new \Domain\Registration\Service\PublishedSectionMeetingPlanReader($plans, $history),
+            ),
         );
     }
 
@@ -120,6 +126,8 @@ final class SectionMeetingPlanTest extends TestCase
         $service = $this->plans($c);
         self::assertNull($service->setup($section)['published']);
         $review = $service->review($section, 'Fictional registrar approved timetable');
+        self::assertSame('unassigned', $review['faculty_assessment']['status']);
+        self::assertSame(2, $review['faculty_assessment']['unassigned_meetings']);
         self::assertSame($original, $f->sql->rows('sis_history_events'));
         self::assertSame([], $f->sql->rows('sis_section_meeting_plans'));
         $receipt = $service->publish($section, $review['review_token']);
@@ -386,5 +394,57 @@ final class SectionMeetingPlanTest extends TestCase
         new SqlBookingCategoryRepository($c->sis->sql)->add($category);
         $bookings->categorize($b->id, $category->id, 1);
         self::assertFalse($this->plans($c)->setup($section)['changed']);
+    }
+    public function testEarlierAcceptedPublicationRemainsUnknownWhileAnOldUnacceptedReviewNeedsRefreshing(): void
+    {
+        [$c, $section] = $this->school();
+        $service = $this->plans($c);
+        $review = $service->review($section, 'Fictional earlier publication');
+        $r = json_decode($c->fixture->cipher->open($review['review_token']), true, 16, JSON_THROW_ON_ERROR);
+        unset($r['faculty_assessment']);
+        $token = $c->fixture->cipher->seal(json_encode($r, JSON_THROW_ON_ERROR));
+        try {
+            $service->publish($section, $token);
+            self::fail('An unaccepted earlier review needs the new assessment.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame([], $c->sis->sql->rows('sis_section_meeting_plans'));
+        }
+        $history = \EventStoreFixture::history($c->sis->connection->queryBuilder());
+        $stream = new \Domain\Shared\EventSourcing\StreamReference(
+            new \Domain\Registration\ValueObject\SectionMeetingPlanId($section->value),
+            'section_meeting_plan'
+        );
+        $operation = new EntityId($r['operation_id']);
+        $event = \Domain\Registration\Event\SectionMeetingPlanWasPublished::occur(
+            $stream->aggregateId,
+            ['version_id' => $operation->value, 'previous_version_id' => null, 'definition' => $r['definition']],
+            ['__aggregate_type' => 'section_meeting_plan']
+        )->withPlayhead(1);
+        $c->sis->transactions->run(function () use ($history, $stream, $operation, $event, $r, $c, $section): void {
+            $history->append(
+                $stream,
+                $operation,
+                0,
+                new \Domain\Shared\EventSourcing\EventContext(
+                    $c->sis->access->actor,
+                    $c->sis->clock->now(),
+                    $operation,
+                    reason: $r['reason']
+                ),
+                [$event]
+            );
+            new \Infrastructure\Persistence\Repository\SqlSectionMeetingPlanRepository(
+                $c->sis->sql,
+                $c->sis->bookingSections()
+            )->retain(
+                $section,
+                $operation,
+                1,
+                new \Domain\Registration\ValueObject\SectionMeetingPlanDefinition($r['definition'])->fingerprint()
+            );
+        });
+        self::assertNull($service->versions($section)['items'][0]['faculty_assessment']);
+        self::assertSame(1, $service->publish($section, $token)['last_version']);
+        self::assertNull($service->versions($section)['items'][0]['faculty_assessment']);
     }
 }

@@ -74,9 +74,14 @@ if (
     $teachingPost("/sis/registration-policy/", [
         "mode" => "warn",
         "revision" => 0,
+        "faculty_mode" => "warn",
     ])->getStatusCode() !== 200
 ) {
     throw new RuntimeException("Authorized timetable policy maintenance failed.");
+}
+$facultyPolicy = $app->make(\Domain\Registration\Service\RegistrationSchedulePolicyService::class)->current();
+if ($facultyPolicy['faculty_mode'] !== 'warn' || $facultyPolicy['revision'] !== 1) {
+    throw new RuntimeException('Faculty timetable policy did not resolve through the actual controller and provider.');
 }
 $accepted = $registrationPost($input + ["by_staff" => true]);
 if ($accepted->getStatusCode() !== 201) {
