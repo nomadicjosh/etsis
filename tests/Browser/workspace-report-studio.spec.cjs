@@ -95,6 +95,8 @@ async function fixture(page, options = {}) {
         posting_id: { label: 'Posting reference', type: 'string', relation: 'entry' },
         posting_type: { label: 'Posting type', type: 'string', relation: 'entry',
             choices: { charge: 'Charge', payment: 'Payment', refund: 'Refund', charge_credit: 'Charge credit' } },
+        posting_charge_source: { label: 'Retained charge source', type: 'string', relation: 'entry', choices: { manual_charge: 'Staff-recorded charge', credit_tuition: 'Per-credit tuition' } },
+        posting_effect: { label: 'Balance effect', type: 'double', relation: 'entry' },
         posting_amount: { label: 'Posting amount', type: 'double', relation: 'entry' },
         posting_reversed: { label: 'Posting reversed', type: 'boolean', relation: 'entry' },
         posting_payment_method: { label: 'Current receipt method', type: 'string', relation: 'entry',
@@ -1319,5 +1321,28 @@ test('denied report-to-application navigation restores the saved report without 
     await expect(page.locator('dialog.report-studio')).toContainText('Fictional admissions follow-up');
     await expect(page.locator('dialog.report-studio .report-local-error')).toBeVisible();
     expect(f.calls.some(c=>c.path.includes('/applications/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+for (const missing of [false, true]) test(`charge-source template ${missing ? 'finds unknown charges' : 'nets credits by retained category'}`, async ({ page }) => {
+    const f = await fixture(page, { postings: true });
+    await page.getByRole('button', { name: missing ? 'Charges without source details' : 'Net charges by source', exact: true }).click();
+    await page.getByLabel('Report name', { exact: true }).fill('Fictional charge sources');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.filters.rules).toEqual([
+        { id: 'posting_reversed', operator: 'equal', value: false },
+        { id: 'posting_type', operator: missing ? 'equal' : 'in', value: missing ? 'charge' : ['charge', 'charge_credit'] },
+        ...(missing ? [{ id: 'posting_charge_source', operator: 'is_null', value: null }] : []),
+    ]);
+    if (!missing) expect(query.columns.map(column => [column.field, column.aggregate])).toEqual([
+        ['posting_charge_source', 'none'], ['currency', 'none'], ['posting_effect', 'sum'],
+    ]);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(page.getByLabel('Column 3 label', { exact: true })).toHaveValue(missing ? 'Billing term' : 'Net charges');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(f.errors).toEqual([]);
 });

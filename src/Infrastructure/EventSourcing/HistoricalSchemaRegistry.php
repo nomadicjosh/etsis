@@ -1226,6 +1226,21 @@ final readonly class HistoricalSchemaRegistry
                     }
                     continue;
                 }
+                if ($name === 'charge_source') {
+                    if ($class !== \Domain\Finance\Event\AccountEntryWasPosted::class || !is_string($value)) {
+                        throw new CorruptHistoryException();
+                    }
+                    $source = \Domain\Finance\Enum\ChargeSource::tryFrom($value);
+                    if ($source === null) {
+                        throw new CorruptHistoryException();
+                    }
+                    $source->validate(
+                        $payload['type'],
+                        ($metadata['staff_recorded'] ?? false) === true,
+                        isset($metadata['registration_price'])
+                    );
+                    continue;
+                }
                 if ($name === 'registration_price') {
                     if (
                         $class !== \Domain\Finance\Event\AccountEntryWasPosted::class || !is_array($value)

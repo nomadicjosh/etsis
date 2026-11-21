@@ -8,6 +8,7 @@ use Codefy\Domain\Aggregate\EventSourcedAggregate;
 use Codefy\Domain\Metadata;
 use DomainException;
 use Domain\Finance\Enum\EntryType;
+use Domain\Finance\Enum\ChargeSource;
 use Domain\Finance\Event\AccountEntryWasPosted;
 use Domain\Finance\Event\AccountChargeWasCredited;
 use Domain\Finance\Event\AccountPaymentDetailsWereChanged;
@@ -26,6 +27,7 @@ use Domain\Shared\Exception\ValidationException;
  * @phpstan-type AccountEntry array{operation_id:string,type:string,minor:int,currency:string,reversed:bool,
  *     corrects_operation_id?:string,corrected_by_operation_id?:string,source_operation_id?:string,
  *     credited_minor?:int,remaining_charge_minor?:int,linked_credit_count?:int,reversed_with_operation_id?:string,refund_allocations?:list<array{payment_operation_id:string,amount_minor:int}>,
+ *     charge_source?:string,charge_source_label?:string,
  *     registration_price?:array{enrollment_id:string,rule_id:string,name:string,credits_milli:int,rate_minor:int,currency:string,rounding:string},
  *     linked_refund_minor?:int,linked_refund_count?:int,remaining_refundable_minor?:int}
  * @phpstan-type LinkedEntryResult array{status:string,operation_id:string,source_operation_id:string,
@@ -104,6 +106,16 @@ final class StudentAccount extends EventSourcedAggregate
         : [];
     }
 
+    /** @var array<string,string> */
+    private array $chargeSources = [];
+
+    /** @return array<string,string> */
+    private function chargeSource(string $operation): array
+    {
+        $source = isset($this->chargeSources[$operation]) ? ChargeSource::from($this->chargeSources[$operation]) : null;
+        return $source === null ? [] : ['charge_source' => $source->value, 'charge_source_label' => $source->label()];
+    }
+
     public static function open(AccountId $id, EntityId $studentId, EntityId $termId, string $currency): self
     {
         $money = new Money(0, $currency);
@@ -154,7 +166,7 @@ final class StudentAccount extends EventSourcedAggregate
             ["reversed" => isset($this->reversedOperations[$id])] +
             $this->correctionLinks($id) +
             $this->chargeLinks($id) +
-            $this->refundLinks($id) + $this->registrationLinks($id);
+            $this->refundLinks($id) + $this->registrationLinks($id) + $this->chargeSource($id);
             $entries[] = ["operation_id" => $id] + $entry + $flags;
         }
 
@@ -172,7 +184,8 @@ final class StudentAccount extends EventSourcedAggregate
         $entry + ["reversed" => isset($this->reversedOperations[$operation->value])] +
         $this->correctionLinks($operation->value) +
         $this->chargeLinks($operation->value) +
-        $this->refundLinks($operation->value) + $this->registrationLinks($operation->value);
+        $this->refundLinks($operation->value) +
+        $this->registrationLinks($operation->value) + $this->chargeSource($operation->value);
     }
 
     public function post(
@@ -185,7 +198,10 @@ final class StudentAccount extends EventSourcedAggregate
         #[\SensitiveParameter] ?PaymentDetails $paymentDetails = null,
         ?RefundAllocation $allocation = null,
         ?RegistrationPrice $registrationPrice = null,
+        ?ChargeSource $chargeSource = null,
     ): void {
+        $chargeSource ??= $staffRecorded && $type === EntryType::Charge ? ChargeSource::Manual : null;
+        $chargeSource?->validate($type->value, $staffRecorded, $registrationPrice !== null);
         if (
             $registrationPrice !== null && ($type !== EntryType::Charge || $staffRecorded
             || $registrationPrice->amount != $amount)
@@ -215,7 +231,9 @@ final class StudentAccount extends EventSourcedAggregate
                 ($this->openingPaymentDetails[$operationId->value] ?? null)?->values() !==
                     $paymentDetails?->values() ||
                 ($this->refundAllocations[$operationId->value] ?? null)?->values() !== $allocation?->values() ||
-                ($this->registrationPrices[$operationId->value] ?? null)?->values() !== $registrationPrice?->values()
+                ($this->registrationPrices[$operationId->value] ?? null)?->values() !== $registrationPrice?->values() ||
+                (isset($this->chargeSources[$operationId->value]) &&
+                    $this->chargeSources[$operationId->value] !== $chargeSource?->value)
             ) {
                 throw new DomainException("The operation identifier has already been used.");
             }
@@ -237,7 +255,8 @@ final class StudentAccount extends EventSourcedAggregate
                     ($reviewHash === null ? [] : ["review_hash" => $reviewHash]) +
                     ($paymentDetails === null ? [] : ["payment_details" => $paymentDetails->values()]) +
                     ($allocation === null ? [] : ["refund_allocations" => $allocation->values()]) +
-                    ($registrationPrice === null ? [] : ["registration_price" => $registrationPrice->values()]),
+                    ($registrationPrice === null ? [] : ["registration_price" => $registrationPrice->values()]) +
+                    ($chargeSource === null ? [] : ['charge_source' => $chargeSource->value]),
             ),
         );
     }
@@ -660,6 +679,9 @@ final class StudentAccount extends EventSourcedAggregate
             "minor" => $amount->minor,
             "currency" => $amount->currency,
         ];
+        if (isset($this->chargeSources[$source->value])) {
+            $this->chargeSources[$p['operation_id']] = $this->chargeSources[$source->value];
+        }
         $this->chargeCreditSources[$p["operation_id"]] = $source->value;
         $this->creditsByCharge[$source->value][] = $p["operation_id"];
         $this->balance = $balance;
@@ -951,6 +973,9 @@ final class StudentAccount extends EventSourcedAggregate
             "minor" => $amount->minor,
             "currency" => $amount->currency,
         ];
+        if (isset($this->chargeSources[$source->value])) {
+            $this->chargeSources[$p['operation_id']] = $this->chargeSources[$source->value];
+        }
         $this->receiptRoots[$p["operation_id"]] = $this->receiptRoots[$source->value];
         $this->changeRefundTotals($source->value, -1);
         if ($allocation !== null) {
@@ -1030,6 +1055,15 @@ final class StudentAccount extends EventSourcedAggregate
     protected function whenAccountEntryWasPosted(AccountEntryWasPosted $event): void
     {
         $payload = $event->payload();
+        if (array_key_exists('charge_source', $event->metadata())) {
+            $source = ChargeSource::from($event->metadata()['charge_source']);
+            $source->validate(
+                $payload['type'],
+                ($event->metadata()['staff_recorded'] ?? false) === true,
+                isset($event->metadata()['registration_price'])
+            );
+            $this->chargeSources[$payload['operation_id']] = $source->value;
+        }
         if (isset($event->metadata()['registration_price'])) {
             $price = RegistrationPrice::fromRecorded($event->metadata()['registration_price']);
             if (

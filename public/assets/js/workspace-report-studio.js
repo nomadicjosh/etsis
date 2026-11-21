@@ -213,6 +213,31 @@ window.createWorkspaceReportStudio = function (ui) {
                 })),
                 node("p", { class: "form-text" }, "Posting rows include original and replacement amounts. Exclude reversed postings for current totals. Recorded UTC times are event times, not bank settlement dates; earlier source classifications remain explicit. Amount replacements have their correction event time."),
             );
+            if (postings.fields.posting_charge_source) {
+                const charges = { condition: "AND", rules: [...structuredClone(currentPostings.rules),
+                    { id: "posting_type", operator: "in", value: ["charge", "charge_credit"] },
+                ] };
+                templateGrid.append(
+                    button("Net charges by source", () => edit(postings, {
+                        ...initial(postings),
+                        columns: [
+                            { field: "posting_charge_source", label: "Charge source", aggregate: "none" },
+                            { field: "currency", label: "Currency", aggregate: "none" },
+                            { field: "posting_effect", label: "Net charges", aggregate: "sum" },
+                        ], filters: structuredClone(charges),
+                    })),
+                    button("Charges without source details", () => edit(postings, {
+                        ...initial(postings),
+                        columns: ["institutional_id", "full_name", "term_code", "currency", "posting_amount", "posting_recorded_at"]
+                            .map(field => ({ field, label: postings.fields[field].label, aggregate: "none" })),
+                        filters: { condition: "AND", rules: [...structuredClone(currentPostings.rules),
+                            { id: "posting_type", operator: "equal", value: "charge" },
+                            { id: "posting_charge_source", operator: "is_null", value: null },
+                        ] },
+                    })),
+                    node("p", { class: "form-text" }, "Charge sources retain the category recorded when posted. Net charges include linked charge credits and exclude reversed postings. Blank source details remain unknown; they are not inferred from today's billing rules."),
+                );
+            }
             if (postings.fields.posting_payment_method) {
                 const payments = { condition: "AND", rules: [...structuredClone(currentPostings.rules),
                     { id: "posting_type", operator: "equal", value: "payment" },

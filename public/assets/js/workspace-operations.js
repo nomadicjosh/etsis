@@ -1014,6 +1014,9 @@ window.createWorkspaceOperations = function (ui) {
                                   ? `Reference: ${item.source_operation_id.slice(-8)} → ${item.operation_id.slice(-8)}`
                                   : `Reference: ${item.operation_id.slice(-8)}`,
                         ),
+                        ['charge', 'charge_credit'].includes(item.type)
+                            ? node("p", { class: "form-text" }, item.charge_source_label || "Detailed charge source not recorded")
+                            : null,
                         item.registration_price
                             ? node("p", { class: "form-text" }, `${item.registration_price.name} · ${item.registration_price.credits_milli / 1000} credits × ${money(item.registration_price.rate_minor, item.currency)} per credit · Rounded once per registration`)
                             : null,
@@ -1117,6 +1120,9 @@ window.createWorkspaceOperations = function (ui) {
                                 "div",
                                 {},
                                 node("code", { title: item.operation_id }, item.operation_id.slice(-8)),
+                                ['charge', 'charge_credit'].includes(item.type)
+                                    ? node("p", { class: "form-text mb-0" }, item.charge_source_label || "Detailed charge source not recorded")
+                                    : null,
                                 item.registration_price
                                     ? node("p", { class: "form-text mb-0" }, `${item.registration_price.name} · ${item.registration_price.credits_milli / 1000} credits × ${money(item.registration_price.rate_minor, item.currency)} per credit`)
                                     : null,

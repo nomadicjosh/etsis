@@ -75,7 +75,8 @@ final readonly class SqlAccountEntryProjection
                 (int) $old['amount_minor'] !== $entry['minor'] || $old['currency'] !== $entry['currency'] ||
                 (bool) $old['reversed'] || $old['corrected_by_operation_id'] !== null ||
                 $old['corrects_operation_id'] !== $values['corrects_operation_id'] ||
-                $old['source_operation_id'] !== $values['source_operation_id']
+                $old['source_operation_id'] !== $values['source_operation_id'] ||
+                $old['charge_source'] !== $values['charge_source']
             ) {
                 throw new CorruptHistoryException();
             }
@@ -312,6 +313,7 @@ final readonly class SqlAccountEntryProjection
     {
         return ['account_id' => (string) $account->aggregateId(), 'operation_id' => $entry['operation_id'],
             'type' => $entry['type'],
+            'charge_source' => $entry['charge_source'] ?? null,
             'payment_method' => $account->paymentDetails(new EntityId($entry['operation_id']))?->method?->value,
             'amount_minor' => $entry['minor'], 'currency' => $entry['currency'], 'reversed' => (int) $entry['reversed'],
             'effect_minor' => \Domain\Finance\Enum\EntryType::from($entry['type'])->balanceSign() * $entry['minor'],

@@ -152,6 +152,7 @@ final readonly class AccountEntryHistory
                     $root->entry(new EntityId($row["operation_id"])) ??
                     throw new CorruptHistoryException();
                 $row["type"] = $actual["type"];
+                $row += array_intersect_key($actual, array_flip(["charge_source", "charge_source_label"]));
                 $row["currency"] = $actual["currency"];
                 $row["amount_minor"] = $actual["minor"];
                 if (isset($row["source_operation_id"])) {

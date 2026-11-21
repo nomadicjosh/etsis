@@ -278,6 +278,7 @@ test('student statements explain the retained registration credits and rate', as
     await page.route(`**/portal/api/accounts/${account}/`, route => route.fulfill({
         json: { id: account, currency: 'USD', balance_minor: 152, entries: [
             { operation_id: id(71), type: 'charge', minor: 152, currency: 'USD', reversed: false,
+                charge_source: 'credit_tuition', charge_source_label: 'Per-credit tuition',
                 registration_price: { enrollment_id: id(73), rule_id: id(74), name: 'Fictional tuition',
                     credits_milli: 1500, rate_minor: 101, currency: 'USD', rounding: 'half_up' } },
         ] }, headers: { 'Cache-Control': 'private, no-store' },
@@ -286,6 +287,7 @@ test('student statements explain the retained registration credits and rate', as
     await page.getByRole('button', { name: 'View statement' }).click();
     await expect(page.locator('#campus-dialog')).toContainText('Fictional tuition');
     await expect(page.locator('#campus-dialog')).toContainText('1.5 credits × $1.01 per credit');
+    await expect(page.locator('#campus-dialog')).toContainText('Per-credit tuition');
     await expect(page.locator('#campus-dialog')).toContainText('$1.52');
     await accessible(page);
 });

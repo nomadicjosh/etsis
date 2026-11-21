@@ -105,7 +105,7 @@ final class AccountProjectionVerificationTest extends TestCase
     {
         foreach (
             ['amount_minor' => '10000oops', 'effect_minor' => 222, 'reversed' => 0,
-            'id' => EntityId::generate()->value, 'origin' => 'unclassified',
+            'id' => EntityId::generate()->value, 'origin' => 'unclassified', 'charge_source' => 'term_fee',
             'recorded_at' => '2000-01-01 00:00:00', 'corrected_by_operation_id' => null] as $field => $value
         ) {
             $s = new SisFixture();

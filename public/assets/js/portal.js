@@ -2300,12 +2300,18 @@
                                     statement.entries.map((entry) => [
                                         entry.registration_price
                                             ? el('span', {}, entry.registration_price.name, el('small', { class: 'd-block text-secondary' },
-                                                `${entry.registration_price.credits_milli / 1000} credits × ${amount(entry.registration_price.rate_minor, entry.currency)} per credit`))
+                                                `${entry.registration_price.credits_milli / 1000} credits × ${amount(entry.registration_price.rate_minor, entry.currency)} per credit`),
+                                                el('small', { class: 'd-block text-secondary' },
+                                                    entry.charge_source_label || 'Detailed charge source not recorded'))
                                             : entry.refund_allocations?.length
                                             ? el('span', {}, 'refund', ...entry.refund_allocations.map(p =>
                                                 el('small', { class: 'd-block text-secondary' },
                                                     `For payment ${p.payment_operation_id.slice(-8)} · ${amount(p.amount_minor, entry.currency)}`)))
-                                            : entry.type.replaceAll('_', ' '),
+                                            : el('span', {}, entry.type.replaceAll('_', ' '),
+                                                ...(['charge', 'charge_credit'].includes(entry.type)
+                                                    ? [el('small', { class: 'd-block text-secondary' },
+                                                        entry.charge_source_label || 'Detailed charge source not recorded')]
+                                                    : [])),
                                         amount(entry.type === 'charge_credit' ? -entry.minor : entry.minor, entry.currency),
                                         entry.reversed ? 'Reversed' : 'Posted',
                                     ]),

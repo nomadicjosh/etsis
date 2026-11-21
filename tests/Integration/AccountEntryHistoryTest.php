@@ -101,6 +101,32 @@ final class AccountEntryHistoryTest extends TestCase
         ]);
     }
 
+    public function testChargeHistoryCuratesRetainedSourceAcrossCorrectionsAndCredits(): void
+    {
+        $s = new SisFixture();
+        $id = $this->account($s);
+        $source = EntityId::generate();
+        $replacement = EntityId::generate();
+        $credit = EntityId::generate();
+        $root = $s->accounts->get($id);
+        $root->post($source, EntryType::Charge, new Money(1000, "USD"), $s->access->actor, staffRecorded: true);
+        $s->saveAccount($root);
+        $root->correct($source, $replacement, new Money(1200, "USD"), $s->access->actor, str_repeat('a', 64), null);
+        $s->saveAccount($root);
+        $root->creditCharge($replacement, $credit, new Money(200, "USD"), $s->access->actor, str_repeat('b', 64));
+        $s->saveAccount($root);
+        $page = $this->query($s)->page($id, $source);
+        self::assertCount(3, $page['items']);
+        self::assertSame(
+            ['manual_charge', 'manual_charge', 'manual_charge'],
+            array_column($page['items'], 'charge_source')
+        );
+        self::assertSame(
+            ['Staff-recorded charge', 'Staff-recorded charge', 'Staff-recorded charge'],
+            array_column($page['items'], 'charge_source_label')
+        );
+    }
+
     public function testHistoryShowsOnlyTheSelectedFamilyWithActualReasonsAttributionAndTimes(): void
     {
         $s = new SisFixture();

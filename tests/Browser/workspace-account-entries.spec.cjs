@@ -30,6 +30,7 @@ async function fixture(page, options = {}) {
             position, balance_minor: balance,
             entries: [{ operation_id: id(4), type: options.charge ? 'charge' : 'payment', minor: 1000, currency, reversed: corrected || sourceReversed,
                 ...(options.registrationPrice ? { registration_price: options.registrationPrice } : {}),
+                ...(options.chargeSource ? { charge_source_label: options.chargeSource } : {}),
                 can_correct_amount: options.eligible !== false && !corrected && !sourceReversed && creditedMinor() === 0,
                 can_correct_payment_details: options.eligible !== false && !options.charge,
                 ...(!options.charge ? { can_refund_payment: !corrected && !sourceReversed && balance < 0 && linkedRefundMinor() < 1000,
@@ -891,12 +892,18 @@ test('general refunds use the same allocation editor and exact three-decimal cur
 
 
 test('registration prices stay readable in statements without enabling amount replacement', async ({ page }) => {
-    const f = await fixture(page, { charge: true, eligible: false, registrationPrice: {
+    const f = await fixture(page, { charge: true, eligible: false, chargeSource: 'Per-credit tuition', registrationPrice: {
         enrollment_id: id(30), rule_id: id(31), name: 'Fictional tuition', credits_milli: 4000,
         rate_minor: 250, currency: 'USD', rounding: 'half_up',
     } });
     await expect(page.locator('#drawer-body')).toContainText('Fictional tuition · 4 credits × $2.50 per credit');
+    await expect(page.locator('#drawer-body')).toContainText('Per-credit tuition');
     await expect(page.getByRole('button', { name: 'Correct amount', exact: true, includeHidden: true })).toHaveCount(0);
     await page.setViewportSize({ width: 375, height: 850 }); await accessible(page);
     expect(f.errors).toEqual([]);
+});
+
+test('earlier charges explicitly lack detailed source classification', async ({ page }) => {
+    await fixture(page, { charge: true });
+    await expect(page.locator('#drawer-body')).toContainText('Detailed charge source not recorded');
 });

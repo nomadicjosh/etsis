@@ -28,6 +28,7 @@ final class CreateSisAccountEntryReports extends Migration
                 $t->integer('posted_position')->notNull();
                 $t->string('origin', 24)->notNull();
                 $t->string('payment_method', 24);
+                $t->string('charge_source', 24);
                 foreach (['corrects_operation_id', 'corrected_by_operation_id', 'source_operation_id'] as $field) {
                     $t->string($field, 26);
                 }

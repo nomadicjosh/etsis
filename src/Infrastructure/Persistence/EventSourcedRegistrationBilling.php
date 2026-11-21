@@ -6,6 +6,7 @@ namespace Infrastructure\Persistence;
 
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Finance\Enum\EntryType;
+use Domain\Finance\Enum\ChargeSource;
 use Domain\Finance\Enum\BillingBasis;
 use Domain\Finance\ValueObject\RegistrationPrice;
 use Domain\Finance\Repository\AccountRepository;
@@ -181,6 +182,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
             ]);
         }
         $prices = [];
+        $priceKinds = [];
         if ($courseOperation !== null) {
             foreach ($quote->rules as $rule) {
                 if ($rule->basis() !== BillingBasis::RegisteredCredit) {
@@ -195,6 +197,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
                 );
                 if ($price->amount->minor > 0) {
                     $prices[] = $price;
+                    $priceKinds[$price->rule->value] = $rule->kind();
                 }
             }
         }
@@ -227,6 +230,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
                 EntryType::Charge,
                 $rule->amount(),
                 $actor,
+                chargeSource: $rule->kind() === 'tuition' ? ChargeSource::TermTuition : ChargeSource::TermFee,
             );
         }
         if ($hasCourseFee) {
@@ -235,6 +239,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
                 EntryType::Charge,
                 $courseFee,
                 $actor,
+                chargeSource: ChargeSource::Section,
             );
         }
         foreach ($prices as $price) {
@@ -244,6 +249,8 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
                 $price->amount,
                 $actor,
                 registrationPrice: $price,
+                chargeSource: $priceKinds[$price->rule->value] === 'tuition'
+                    ? ChargeSource::CreditTuition : ChargeSource::CreditFee,
             );
         }
         $this->accounts->save($account, $context);

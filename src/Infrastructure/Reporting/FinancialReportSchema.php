@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Infrastructure\Reporting;
 
 use Domain\Finance\Enum\PaymentMethod;
+use Domain\Finance\Enum\ChargeSource;
 
 final class FinancialReportSchema
 {
@@ -23,6 +24,12 @@ final class FinancialReportSchema
                 'charge' => 'Charge', 'payment' => 'Payment', 'refund' => 'Refund', 'charge_credit' => 'Charge credit',
             ]],
             'posting_reversed' => $field('Posting reversed', 'boolean', 'reversed'),
+            'posting_charge_source' => $field('Retained charge source', 'string', 'charge_source') + [
+                'choices' => array_combine(
+                    array_column(ChargeSource::cases(), 'value'),
+                    array_map(static fn(ChargeSource $source): string => $source->label(), ChargeSource::cases())
+                ),
+            ],
             'posting_payment_method' => $field('Current receipt method', 'string', 'payment_method') + [
                 'choices' => array_combine(
                     array_column(PaymentMethod::cases(), 'value'),
