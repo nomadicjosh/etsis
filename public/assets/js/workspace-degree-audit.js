@@ -3273,14 +3273,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 actions(button("Review unused and pending work", () => degreeProgressContributions(data, restore))),
             ),
         );
-        for (const issue of data.issues)
-            body.append(
-                node(
-                    "p",
-                    { class: "alert alert-info" },
-                    `${issue.component === "credits" ? "Earned credits" : issue.component === "institutional" ? "Cumulative GPA" : "Overall GPA"}: ${calculationIssues[issue.code] || "A retained input needs review."}`,
-                ),
-            );
+        const blockers = window.createDegreeProgressBlockers({ node, button, milli: text }, data);
+        if (blockers) body.append(blockers);
         if (data.rule_eligibility?.length)
             body.append(
                 node(

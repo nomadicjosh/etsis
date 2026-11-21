@@ -452,3 +452,22 @@ test("staff contributions explain unchanged grading and preserve recorded grade 
     expect(f.calls.filter((c) => c.path === `${f.base}progress/`)).toHaveLength(1);
     expect(f.errors).toEqual([]);
 });
+
+
+test("calculation blockers expose captured coursework with accessible local pages", async ({ page }) => {
+    const f = await fixture(page, { assigned: true, progressUnknownOverall: true, calculationBlockers: true });
+    await page.getByRole("button", { name: "Degree progress", exact: true }).click();
+    const studio = page.locator("dialog.degree-audit-studio");
+    await expect(studio.getByRole("heading", { name: "Why calculations need review" })).toBeVisible();
+    await expect(studio).toContainText("source academic-period starts");
+    await expect(studio.getByRole("heading", { name: "Overall GPA: Repeat dates need review" })).toBeVisible();
+    await studio.getByText("Affected coursework (21)", { exact: true }).click();
+    await expect(studio).toContainText("Showing affected records 1–20 of 21");
+    await studio.getByRole("button", { name: "More affected records" }).click();
+    await expect(studio.getByRole("status").filter({hasText:"Showing affected records 21–21"})).toBeFocused();
+    await expect(studio).toContainText("LAST.101");
+    await page.setViewportSize({width:320,height:812});
+    await accessible(page);
+    expect(f.calls.filter(c => c.path === `${f.base}progress/`)).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});

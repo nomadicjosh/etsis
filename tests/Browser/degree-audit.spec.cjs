@@ -389,6 +389,7 @@ async function fixture(page, options = {}) {
                 records:[],issues:[],allocation:{outcome:options.rulePlacement ? "feasible" : options.ruleBacked ? "needs_review":"infeasible",groups:[],records:[],issues:options.ruleBacked ? ["rule_facts_unknown"]:[],competition:null},
                 policy:{repeat_credit:"highest_earned",repeat_gpa:"all_eligible",transfer_overall_gpa:"exclude",attempt_order:"academic_period"},
             };
+            if (options.calculationBlockers) response.issues = [{component:"overall",code:"policy_unknown"}];
             if (options.rulePlacement) {
                 response.current_record_count=1;
                 response.work_summary.placement_established=true;
@@ -1438,7 +1439,7 @@ test("degree review limits leave editing available without consent or a provider
 });
 
 test("temporary audit workspace tests unsaved degree settings and working groups without publication", async ({page}) => {
-    const f = await fixture(page, {existing:true});
+    const f = await fixture(page, {existing:true,calculationBlockers:true});
     await openDegree(page, true);
     await page.getByLabel("Requirement title", {exact:true}).fill("Unpublished trial <b>fictional</b>");
     await page.getByLabel("Total earned credits required", {exact:true}).fill("6");
@@ -1458,6 +1459,8 @@ test("temporary audit workspace tests unsaved degree settings and working groups
     await expect(dialog).toContainText("Working draft revision 1");
     await expect(dialog).toContainText("Unpublished trial");
     await expect(dialog).toContainText("No result is saved");
+    await expect(dialog.getByRole("heading",{name:"Overall GPA: Calculation policy not retained"})).toBeVisible();
+    await expect(dialog).toContainText("no individual coursework is identified here");
     await expect(dialog).toContainText("Fictional Learner <b>example</b>");
     await expect(dialog.locator("b")).toHaveCount(0);
     const trial=f.calls.find(c=>c.path.endsWith("/test/"));

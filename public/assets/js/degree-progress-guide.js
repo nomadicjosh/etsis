@@ -264,6 +264,10 @@ window.degreeProgressCalculationReasons = Object.freeze({
     placement_work_not_selected: "A reviewed placement selects different supporting coursework",
     equivalent_credit_alternative: "Tied earned-credit alternative; counted once for this course",
     equivalent_gpa_alternative: "Equivalent repeat alternative; one GPA contribution",
+    chronology_unknown: "Dates required by the retained repeat-ordering policy are unavailable",
+    ordering_policy_unknown: "The retained repeat-ordering choice is unavailable",
+    ambiguous_repeat: "Tied repeat attempts have different GPA weights",
+    arithmetic_limit: "The calculation reached its supported numeric limit",
     undetermined: "The complete total cannot be established",
     eligible: "Eligible for review",
 });
@@ -808,4 +812,172 @@ window.createDegreeGroupSupport = function (ui, group, outcome, options = {}) {
         show();
     });
     return section;
+};
+
+/* Explain only captured calculation blockers. Positions are local to this response. */
+window.degreeProgressCalculationBlockers = function (data) {
+  if (data?.status !== "review") return [];
+  const definitions = {
+    policy_unknown: [
+      "Calculation policy not retained",
+      "Ask the registrar to review the selected requirements and their retained repeat-credit, repeat-GPA and transfer-GPA choices. Today's defaults cannot replace a missing historical choice.",
+    ],
+    grade_unknown: [
+      "Grade evidence unavailable",
+      "Ask the registrar to verify the recorded grade and its retained definition. An unavailable definition is different from awaiting a final grade.",
+    ],
+    grading_policy_unknown: [
+      "Grading publication unknown",
+      "Ask the registrar to verify the grading publication for the selected requirements and affected grades. Matching grade labels or maximum points do not establish compatibility.",
+    ],
+    grading_policy_differs: [
+      "Grading publications differ",
+      "Ask the registrar to review compatibility with the selected requirements. No grade-scale conversion or replacement of the recorded grade has been assumed.",
+    ],
+    ordering_policy_unknown: [
+      "Repeat ordering not retained",
+      "Ask the registrar to verify the retained choice for ordering repeated attempts. A current default or correction timestamp cannot establish the missing choice.",
+    ],
+    chronology_unknown: [
+      "Repeat dates need review",
+      data.policy?.attempt_order === "completion_date"
+        ? "Ask the registrar to verify actual completion dates for these competing attempts. Posting dates and grade-correction times cannot substitute for completion dates."
+        : data.policy?.attempt_order === "academic_period"
+          ? "Ask the registrar to verify source academic-period starts for these competing attempts. A local posting-term label cannot substitute for the retained instructional or sending-institution period."
+          : "Ask the registrar to verify the retained repeat-ordering choice and the academic-period or completion dates it requires.",
+    ],
+    ambiguous_repeat: [
+      "Repeat weights are ambiguous",
+      "Tied eligible attempts have different attempted credits or quality points. Ask the registrar to review the retained repeat policy; no favorable winner has been chosen.",
+    ],
+    arithmetic_limit: [
+      "Calculation limit reached",
+      "Ask the registrar for a controlled review of these inputs. The supported numeric limit was reached; this does not mean the academic minimum was failed.",
+    ],
+  };
+  const scopes = {
+    credits: ["Earned credits", "credit"],
+    institutional: ["Cumulative GPA", "cumulative_gpa"],
+    overall: ["Overall GPA", "overall_gpa"],
+  };
+  const records = data.records || [];
+  const result = [];
+  for (const [scope, [label, field]] of Object.entries(scopes)) {
+    for (const [code, [title, guidance]] of Object.entries(definitions)) {
+      const positions = [];
+      records.forEach((record, index) => {
+        if (record[field] === code) positions.push(index);
+      });
+      if (
+        !positions.length &&
+        !(data.issues || []).some(
+          (issue) => issue.component === scope && issue.code === code,
+        )
+      )
+        continue;
+      result.push({ scope, label, code, title, guidance, positions });
+    }
+  }
+  return result;
+};
+
+window.createDegreeProgressBlockers = function (ui, data, headingLevel = 2) {
+  const issues = window.degreeProgressCalculationBlockers(data);
+  if (!issues.length) return null;
+  const { node, button, milli } = ui;
+  const section = node(
+    "section",
+    { class: "audit-preview portal-progress-detail" },
+    node(`h${headingLevel}`, {}, "Why calculations need review"),
+    node(
+      "p",
+      {},
+      "These checks explain unavailable totals in this captured review. Other independently verified checks keep their own results. No partial total or graduation decision is supplied.",
+    ),
+  );
+  for (const issue of issues) {
+    const card = node(
+      "article",
+      { class: "my-3" },
+      node(`h${headingLevel + 1}`, {}, `${issue.label}: ${issue.title}`),
+      node("p", {}, issue.guidance),
+    );
+    if (!issue.positions.length) {
+      card.append(
+        node(
+          "p",
+          {},
+          "This check concerns the retained policy or calculation as a whole; no individual coursework is identified here.",
+        ),
+      );
+    } else {
+      const detail = node(
+        "details",
+        {},
+        node(
+          "summary",
+          { class: "py-2" },
+          `Affected coursework (${issue.positions.length})`,
+        ),
+      );
+      let loaded = false;
+      const content = node("div");
+      detail.addEventListener("toggle", () => {
+        if (!detail.open || loaded) return;
+        loaded = true;
+        detail.append(content);
+        show();
+      });
+      function show(offset = 0, focus = false) {
+        content.replaceChildren();
+        const status = node(
+          "p",
+          { role: "status", tabindex: "-1" },
+          `Showing affected records ${offset + 1}–${Math.min(offset + 20, issue.positions.length)} of ${issue.positions.length}.`,
+        );
+        content.append(status);
+        for (const position of issue.positions.slice(offset, offset + 20)) {
+          const record = data.records[position];
+          content.append(
+            node(
+              "article",
+              { class: "my-3" },
+              node(
+                `h${headingLevel + 2}`,
+                {},
+                `${record.course_code} · ${record.course_title}`,
+              ),
+              node(
+                "p",
+                {},
+                record.term_label_retained && record.term_code
+                  ? `Retained posting term: ${record.term_code}`
+                  : "Posting term label not retained",
+              ),
+              node("p", {}, window.degreeProgressGradeText(record, milli)),
+              node(
+                "p",
+                {},
+                `Completion date: ${record.completed_on || "Not recorded"}`,
+              ),
+            ),
+          );
+        }
+        const pages = node("div", { class: "d-flex flex-wrap gap-2 my-2" });
+        if (offset)
+          pages.append(
+            button("Previous affected records", () => show(offset - 20, true)),
+          );
+        if (offset + 20 < issue.positions.length)
+          pages.append(
+            button("More affected records", () => show(offset + 20, true)),
+          );
+        content.append(pages);
+        if (focus) status.focus();
+      }
+      card.append(detail);
+    }
+    section.append(card);
+  }
+  return section;
 };

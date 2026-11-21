@@ -117,6 +117,11 @@ async function fixture(page,options={}) {
                 components: [{ kind: "degree", label: "Degree", progress: degree },
                     { kind: "specialization", label: "Specialization DATA", progress: specialization }] };
         }
+        if (options.calculationBlockers && data.records) {
+            data.issues = [{component:'overall',code:'chronology_unknown'}];
+            data.policy = {attempt_order:'academic_period'};
+            data.records.forEach(record => { record.overall_gpa = 'chronology_unknown'; });
+        }
         await route.fulfill({json:data,headers:{'Cache-Control':'private, no-store'}});
     });
     await page.goto('/portal/student/progress/');
@@ -484,3 +489,19 @@ for (const kind of ["count", "unknown"])
         expect(f.calls.filter((c) => c.path.endsWith("/degree-progress/"))).toHaveLength(1);
         expect(f.errors).toEqual([]);
     });
+
+
+test("student calculation blockers expose captured coursework with accessible local pages", async ({ page }) => {
+    const f = await fixture(page, { calculationBlockers: true });
+    await page.getByRole('button', {name:'Review progress · BSCS · 26/FA',exact:true}).click();
+    await expect(page.getByRole('heading',{name:'Why calculations need review'})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Overall GPA: Repeat dates need review'})).toBeVisible();
+    await page.getByText('Affected coursework (21)',{exact:true}).click();
+    await page.getByRole('button',{name:'More affected records'}).click();
+    await expect(page.getByRole('status').filter({hasText:'Showing affected records 21–21'})).toBeFocused();
+    await expect(page.getByRole('heading',{name:'LAST.101 · Retained work <b>fictional</b>'})).toBeVisible();
+    await page.setViewportSize({width:320,height:812});
+    await accessible(page);
+    expect(f.calls.filter(c=>c.path.endsWith('/degree-progress/'))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});

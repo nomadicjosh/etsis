@@ -752,6 +752,11 @@ async function fixture(page, options = {}) {
                     },
                 };
             }
+            if (options.calculationBlockers && response?.status === "review" && response.records) {
+                response.issues = [{ component: "overall", code: "chronology_unknown" }];
+                response.policy.attempt_order = "academic_period";
+                response.records.forEach(record => { record.overall_gpa = "chronology_unknown"; });
+            }
             if (path === `${base}combined/`) {
                 if (options.combinedIssue) response = { status: "needs_review", issues: [options.combinedIssue] };
                 if (response.status === "review") {

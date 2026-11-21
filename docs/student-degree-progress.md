@@ -32,6 +32,14 @@ An approved reduction shows the effective minimum and the original **published m
 
 Minimum checks are independent components. A known cumulative GPA can be displayed alongside an unavailable overall GPA or earned-credit total. Supported [shared-course shortages](student-course-placement.md#shared-course-shortages) now identify competing groups directly in this same review; the detailed group view reuses those explanations without another input request. There is no aggregate “eligible to graduate” result. Meeting these minimums does not establish course-group, specialization, residency-policy or final award completion.
 
+## Why calculations need review
+
+Staff degree/specialization reviews, temporary audit results and owner-only portal progress share a **Why calculations need review** section. It separates earned-credit, cumulative-GPA and overall-GPA blockers: missing retained calculation choices, unknown grade definitions, unknown or differing grading publications, missing repeat-ordering choices/dates, ambiguous repeat weights and numeric limits. A missing actual completion date and a missing source-period start have different guidance under the retained ordering choice. No current default, local posting-term label or correction timestamp fills a historical gap.
+
+Expand **Affected coursework** to inspect only records explicitly marked with that blocker. Twenty-record pages show captured course/term labels, recorded grade evidence and completion dates, with keyboard controls and focused paging status. Other records whose contribution is merely undetermined are not blamed for the missing total. Policy-wide and numeric-limit issues can appear without identifying individual coursework. Known pending grades remain distinct from unavailable grade evidence.
+
+The shared presenter filters the captured response only: no extra query, replay, allocation search, external service, browser storage or academic decision. Portal issue metadata is restricted to known scopes/codes (at most 24 entries); identities, reasons, actors and raw history remain excluded. Unknown metadata fails closed. Component reviews retain their own policies and independent results. The section does not supply partial totals, change academic facts, establish grading conversion, resolve missing history or determine graduation eligibility.
+
 ## Next steps for this review
 
 Expand **Next steps for this review** for local guidance based on the same captured result. It points to earlier-history checks, changed matriculation context, unavailable minimum checks, known shortfalls, course-group placement, pending grades and unused completed work when those conditions are present. An unavailable or limited review offers a controlled-review path without interpreting partial academic facts.

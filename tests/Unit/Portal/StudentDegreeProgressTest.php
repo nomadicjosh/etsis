@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+namespace Tests\Unit\Portal;
+
 use Domain\Portal\ValueObject\StudentDegreeProgress;
 use PHPUnit\Framework\TestCase;
 
@@ -139,7 +141,10 @@ final class StudentDegreeProgressTest extends TestCase
         self::assertSame(1, $coverage['applied_courses']);
         self::assertSame([0], array_keys($coverage['rules']));
         self::assertSame([[0]], $data['allocation']['groups'][0]['placements'][0]['evidence_options']);
-        self::assertSame(['code' => 'A', 'points_milli' => 4000, 'grading_publication_retained' => true], $data['records'][0]['retained_grade']);
+        self::assertSame(
+            ['code' => 'A', 'points_milli' => 4000, 'grading_publication_retained' => true],
+            $data['records'][0]['retained_grade'],
+        );
         self::assertSame(3000, $data['records'][0]['recorded_earned_milli']);
         self::assertStringNotContainsString('work_options', json_encode($data));
         self::assertSame(3000, $coverage['rules'][0]['required_credits_milli']);
@@ -225,10 +230,10 @@ final class StudentDegreeProgressTest extends TestCase
             self::assertSame($outcome === 'feasible' ? 'proposed' : 'not_established', $row['placement']);
             self::assertTrue($row['attempts'][0]['via_substitution']);
             $json = json_encode($data, JSON_THROW_ON_ERROR);
-            foreach (
-                ['fictional-staff-only-detail', 'fictional-private-course', 'work_id', 'course_id', 'actor']
-                as $secret
-            ) {
+            $privateFields = [
+                'fictional-staff-only-detail', 'fictional-private-course', 'work_id', 'course_id', 'actor',
+            ];
+            foreach ($privateFields as $secret) {
                 self::assertStringNotContainsString($secret, $json);
             }
         }
@@ -458,4 +463,41 @@ final class StudentDegreeProgressTest extends TestCase
     }
 
 
+    public function testCalculationIssuesExposeOnlyKnownScopesAndCodes(): void
+    {
+        $review = $this->review();
+        $review['issues'] = [
+            ['component' => 'overall', 'code' => 'chronology_unknown',
+                'work_ids' => ['private-id'], 'reason' => 'private-reason', 'actor' => 'private-actor'],
+            ['component' => 'credits', 'code' => 'policy_unknown'],
+        ];
+        $data = new StudentDegreeProgress($review)->describe();
+        self::assertSame([
+            ['component' => 'overall', 'code' => 'chronology_unknown'],
+            ['component' => 'credits', 'code' => 'policy_unknown'],
+        ], $data['issues']);
+        self::assertStringNotContainsString('private-', json_encode($data));
+        self::assertFalse($data['gpa']['overall']['ready']);
+    }
+
+    public function testInvalidOrUnboundedCalculationIssuesAreRejected(): void
+    {
+        $cases = [
+            [['component' => 'overall', 'code' => 'private-message']],
+            [['component' => 'private-scope', 'code' => 'grade_unknown']],
+            array_fill(0, 25, ['component' => 'overall', 'code' => 'grade_unknown']),
+            ['not-a-list' => ['component' => 'overall', 'code' => 'grade_unknown']],
+            ['private-message'],
+        ];
+        foreach ($cases as $issues) {
+            $review = $this->review();
+            $review['issues'] = $issues;
+            try {
+                new StudentDegreeProgress($review);
+                self::fail('Invalid calculation issues were exposed.');
+            } catch (\Domain\Shared\EventSourcing\CorruptHistoryException) {
+                self::assertTrue(true);
+            }
+        }
+    }
 }

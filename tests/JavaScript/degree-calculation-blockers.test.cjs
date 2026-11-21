@@ -1,0 +1,138 @@
+"use strict";
+const assert = require("node:assert/strict");
+const { readFileSync } = require("node:fs");
+const vm = require("node:vm");
+const test = require("node:test");
+const { node, walk } = require("./support/elements.cjs");
+const window = {};
+vm.runInNewContext(
+  readFileSync("public/assets/js/degree-progress-guide.js", "utf8"),
+  { window },
+  { timeout: 500 },
+);
+const review = () => ({
+  status: "review",
+  policy: { attempt_order: "academic_period" },
+  issues: [],
+  records: [],
+});
+const plain = (value) => JSON.parse(JSON.stringify(value));
+
+test("blockers retain separate scopes and only specifically affected records without private payloads", () => {
+  const data = review();
+  data.issues = [
+    {
+      component: "overall",
+      code: "chronology_unknown",
+      reason: "private reason",
+    },
+  ];
+  data.records = [
+    {
+      overall_gpa: "chronology_unknown",
+      cumulative_gpa: "included",
+      id: "private-id",
+    },
+    { overall_gpa: "undetermined", credit: "included" },
+    { overall_gpa: "in_progress" },
+  ];
+  const before = JSON.stringify(data);
+  const result = plain(window.degreeProgressCalculationBlockers(data));
+  assert.equal(result.length, 1);
+  assert.deepEqual(result[0].positions, [0]);
+  assert.equal(result[0].scope, "overall");
+  assert.match(result[0].guidance, /source academic-period/);
+  assert.doesNotMatch(JSON.stringify(result), /private|undetermined/);
+  assert.equal(JSON.stringify(data), before);
+});
+
+test("completion ordering, ties, incompatible scales and unknown grades have distinct explanations", () => {
+  const data = review();
+  data.policy.attempt_order = "completion_date";
+  data.records = [
+    "chronology_unknown",
+    "ambiguous_repeat",
+    "grading_policy_differs",
+    "grade_unknown",
+  ].map((overall_gpa) => ({ overall_gpa }));
+  const rows = window.degreeProgressCalculationBlockers(data);
+  assert.equal(rows.length, 4);
+  assert.match(
+    rows.find((r) => r.code === "chronology_unknown").guidance,
+    /actual completion dates/,
+  );
+  assert.match(
+    rows.find((r) => r.code === "ambiguous_repeat").guidance,
+    /no favorable winner/,
+  );
+  assert.match(
+    rows.find((r) => r.code === "grading_policy_differs").guidance,
+    /No grade-scale conversion/,
+  );
+  assert.match(
+    rows.find((r) => r.code === "grade_unknown").guidance,
+    /different from awaiting/,
+  );
+});
+
+test("global policy and numeric issues do not invent affected records or academic failure", () => {
+  const data = review();
+  data.issues = [
+    { component: "credits", code: "policy_unknown" },
+    { component: "overall", code: "arithmetic_limit" },
+    { component: "overall", code: "private arbitrary text" },
+  ];
+  const rows = window.degreeProgressCalculationBlockers(data);
+  assert.equal(rows.length, 2);
+  assert.ok(rows.every((r) => r.positions.length === 0));
+  assert.match(rows[1].guidance, /does not mean.*failed/);
+});
+
+test("unavailable and independently satisfied reviews expose no speculative blockers", () => {
+  for (const status of ["limited", "unavailable", "needs_selection"]) {
+    const data = review();
+    data.status = status;
+    data.records = [{ credit: "grade_unknown" }];
+    assert.equal(window.degreeProgressCalculationBlockers(data).length, 0);
+  }
+  assert.equal(window.degreeProgressCalculationBlockers(review()).length, 0);
+});
+
+test("affected coursework renders lazily in twenty-record pages and focuses the new status", () => {
+  const data = review();
+  data.records = Array.from({ length: 21 }, (_, i) => ({
+    course_code: `COURSE.${i}`,
+    course_title: "<b>Fictional</b>",
+    overall_gpa: "chronology_unknown",
+    grade_state: "awaiting_grade",
+  }));
+  const section = window.createDegreeProgressBlockers(
+    {
+      node,
+      button: (label, action) => {
+        const button = node("button", {}, label);
+        button.addEventListener("click", action);
+        return button;
+      },
+      milli: String,
+    },
+    data,
+  );
+  assert.doesNotMatch(section.textContent, /COURSE\.0/);
+  const details = walk(section).find((e) => e.tag === "details");
+  details.open = true;
+  details.events.toggle();
+  assert.match(section.textContent, /Showing affected records 1–20 of 21/);
+  assert.doesNotMatch(section.textContent, /COURSE\.20/);
+  walk(section)
+    .find(
+      (e) => e.tag === "button" && e.textContent === "More affected records",
+    )
+    .events.click();
+  assert.match(section.textContent, /Showing affected records 21–21 of 21/);
+  assert.match(section.textContent, /COURSE\.20/);
+  assert.ok(
+    walk(section).some((e) => e.attributes.role === "status" && e.focused),
+  );
+  assert.equal(walk(section).filter((e) => e.tag === "b").length, 0);
+});

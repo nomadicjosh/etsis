@@ -99,6 +99,24 @@ final readonly class StudentDegreeProgress
             ? null : $pick($value['retained_grade'], ['code', 'points_milli', 'grading_publication_retained']);
             $data['records'][] = $record;
         }
+        $data['issues'] = [];
+        $issues = $review['issues'] ?? [];
+        if (!is_array($issues) || !array_is_list($issues) || count($issues) > 24) {
+            throw new CorruptHistoryException();
+        }
+        foreach ($issues as $issue) {
+            if (
+                !is_array($issue) ||
+                !in_array($issue['component'] ?? null, ['credits', 'institutional', 'overall'], true) ||
+                !in_array($issue['code'] ?? null, [
+                    'policy_unknown', 'grade_unknown', 'grading_policy_unknown', 'grading_policy_differs',
+                    'ordering_policy_unknown', 'chronology_unknown', 'ambiguous_repeat', 'arithmetic_limit',
+                ], true)
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $data['issues'][] = $pick($issue, ['component', 'code']);
+        }
         $referenceCount = 0;
         $data["allocation"] = ["outcome" => $review["allocation"]["outcome"], "groups" => []];
         foreach ($review["allocation"]["groups"] as $value) {

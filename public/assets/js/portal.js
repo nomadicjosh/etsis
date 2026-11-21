@@ -1440,6 +1440,8 @@
                 "These comparisons use the retained program policies. Meeting them does not confirm graduation eligibility. No GPA is rounded upward to meet a minimum.",
             ),
         );
+        const blockers = window.createDegreeProgressBlockers({ node: el, button, milli }, data, 3);
+        if (blockers) body.append(blockers);
         const outcomes = {
             feasible: "A complete course-group placement was found",
             infeasible: "No complete course-group placement found",
