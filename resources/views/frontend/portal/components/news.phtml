@@ -24,7 +24,7 @@
                 <div class="campus-news-content">
                     <p class="campus-eyebrow">CAMPUS UPDATE</p>
                     <h3><a href="/portal/news/<?= $this->esc($item['code']); ?>/"><?= $this->esc($item['title']); ?></a></h3>
-                    <p><?= $this->esc(mb_strimwidth($item['content'], 0, 170, '…')); ?></p>
+                    <p><?= $this->esc(mb_strimwidth($item['excerpt'] ?? $item['content'], 0, 170, '…')); ?></p>
                     <a
                         class="campus-text-link"
                         href="/portal/news/<?= $this->esc($item['code']); ?>/"

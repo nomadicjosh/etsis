@@ -30,7 +30,7 @@ final class CampusPortalTest extends TestCase
         self::assertSame([], $c->service->programs('%')['items']);
         for ($index = 0; $index < 25; $index++) {
             $id = $c->content->save(null, 'news', 'fixture-' . $index, 'News ' . $index, 'Fictional content', 'public', null);
-            $c->posts->publish($id, true, 0);
+            $c->publish($id, true, 0);
         }
         $news = $c->service->news();
         self::assertCount(24, $news);
@@ -45,7 +45,7 @@ final class CampusPortalTest extends TestCase
         $old = $c->posts->create('news', 'legacy-news', 'Existing content', 'Campus content stays private.');
         self::assertSame([], $c->service->publicData()['news']);
         foreach ([$public, $campus, $old->id] as $id) {
-            $c->posts->publish($id, true, 0);
+            $c->publish($id, true, 0);
         }
         self::assertSame(['public-news'], array_column($c->service->publicData()['news'], 'code'));
         self::assertCount(3, $c->repository->news(true));
@@ -59,7 +59,7 @@ final class CampusPortalTest extends TestCase
         $c->content->save($public, 'news', 'public-news', 'Updated title', 'An edited draft', 'public', 1);
         self::assertSame([], $c->service->publicData()['news']);
         self::assertSame(2, $c->content->get($public)['version']);
-        $c->posts->publish($public, true, 2);
+        $c->publish($public, true, 2);
         self::assertSame('Updated title', $c->service->article('public-news')['title']);
         $this->expectException(ConcurrentModificationException::class);
         $c->content->save($public, 'news', 'public-news', 'Stale edit', 'Old draft', 'campus', 1);

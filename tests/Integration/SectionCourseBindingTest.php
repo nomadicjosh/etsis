@@ -177,7 +177,11 @@ final class SectionCourseBindingTest extends TestCase
             $version->value,
             $this->f->sql->one("sis_credit_course_versions", ["id" => $credit["id"]])["course_version_id"],
         );
-        $portal = new SqlCampusRepository($this->f->sql);
+        $portal = new SqlCampusRepository(
+            $this->f->sql,
+            $this->f->clock,
+            new \Infrastructure\Portal\SymfonyContentMarkup(),
+        );
         $rows = $portal->sections($this->f->term, "Algebra", null)["items"];
         $rows = array_column($rows, null, "id");
         self::assertSame("Algebra", $rows[$this->section->id->value]["title"]);

@@ -177,7 +177,11 @@ final class ApplicationFormScopeTest extends TestCase
         $override = $s->save(null, $f->program, 'Program override', $this->fields(), null);
         $s->publish($override->id, 0);
         self::assertSame($override->id->value, $s->active($f->program)->id->value);
-        $programs = new SqlCampusRepository($f->sql)->programs();
+        $programs = new SqlCampusRepository(
+            $f->sql,
+            $f->clock,
+            new \Infrastructure\Portal\SymfonyContentMarkup(),
+        )->programs();
         self::assertSame($override->id->value, array_column($programs, 'form_id', 'id')[$f->program->value]);
         self::assertSame($shared->id->value, array_column($programs, 'form_id', 'id')[$other->value]);
         $s->disable($f->program, $override->id);

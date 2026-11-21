@@ -25,7 +25,11 @@ final class PortalStudentProgressTest extends TestCase
         $s = $this->f->f->sis;
         $this->progress = $this->createMock(DegreeProgressReader::class);
         $this->service = new StudentProgressService(
-            new SqlCampusRepository($s->sql),
+            new SqlCampusRepository(
+                $s->sql,
+                $s->clock,
+                new \Infrastructure\Portal\SymfonyContentMarkup(),
+            ),
             new SqlStudentRecordRepository($s->sql),
             $this->progress,
             $s->access,

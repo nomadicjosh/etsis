@@ -40,7 +40,11 @@ final class SectionDeliveryTest extends TestCase
             $f->service->register($student->id, $section->id);
         }
         self::assertSame([], $f->sql->rows('sis_bookings'));
-        $rows = new SqlCampusRepository($f->sql)->sections($f->term, '', null)['items'];
+        $rows = new SqlCampusRepository(
+            $f->sql,
+            $f->clock,
+            new \Infrastructure\Portal\SymfonyContentMarkup(),
+        )->sections($f->term, '', null)['items'];
         self::assertContains('Online', array_column($rows, 'delivery_label'));
         self::assertContains('Hybrid', array_column($rows, 'delivery_label'));
     }

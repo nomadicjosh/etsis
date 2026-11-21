@@ -570,14 +570,7 @@
                         button(post.title, () =>
                             dialog(
                                 post.title,
-                                el(
-                                    'div',
-                                    {
-                                        class: 'campus-article-body',
-                                        style: 'white-space:pre-wrap',
-                                    },
-                                    post.content,
-                                ),
+                                window.CampusRichText.article(post, el),
                             ),
                         ),
                     ),
@@ -2428,41 +2421,16 @@
             );
             return;
         }
-        me.news.forEach((post) =>
-            container.append(
-                surface(
-                    post.title,
-                    el(
-                        'p',
-                        {
-                            class: 'campus-article-body',
-                            style: 'white-space:pre-wrap',
-                        },
-                        post.content,
-                    ),
-                ),
-            ),
-        );
+        const card = post => surface(post.title,
+            el('p', {}, (post.excerpt ?? post.content).slice(0, 180)),
+            button('Read update', () => dialog(post.title, window.CampusRichText.article(post, el))));
+        me.news.forEach(post => container.append(card(post)));
         let after = me.news.length === 24 ? me.news[23].id : '';
         const more = button('Older campus updates', async () => {
             const result = await request(
                 `/portal/api/campus-news/?after=${encodeURIComponent(after)}`,
             );
-            result.items.forEach((post) =>
-                more.before(
-                    surface(
-                        post.title,
-                        el(
-                            'p',
-                            {
-                                class: 'campus-article-body',
-                                style: 'white-space:pre-wrap',
-                            },
-                            post.content,
-                        ),
-                    ),
-                ),
-            );
+            result.items.forEach(post => more.before(card(post)));
             after = result.next_after || '';
             more.hidden = !after;
         });

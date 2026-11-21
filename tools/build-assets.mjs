@@ -16,6 +16,12 @@ const files = {
     'bootstrap-icons/LICENSE': 'bootstrap-icons.LICENSE',
     'sortablejs/Sortable.min.js': 'sortable.min.js',
     'sortablejs/LICENSE': 'sortable.LICENSE',
+    'quill/dist/quill.js': 'quill.js',
+    'quill/dist/quill.core.css': 'quill.core.css',
+    'quill/LICENSE': 'quill.LICENSE',
+    'quill/dist/quill.js.LICENSE.txt': 'quill.js.LICENSE.txt',
+    'dompurify/dist/purify.min.js': 'purify.min.js',
+    'dompurify/LICENSE': 'dompurify.LICENSE',
 };
 for (const [source, destination] of Object.entries(files)) {
     await copyFile(new URL(`node_modules/${source}`, root), new URL(destination, assets));

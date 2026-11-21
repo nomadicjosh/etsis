@@ -60,7 +60,11 @@ final class SubjectPublicationTest extends TestCase
         self::assertSame("MATH", $published->definition->subject->code);
         self::assertSame("Mathematics", $published->definition->subject->title);
         self::assertSame($before, $f->sql->rows("sis_history_events"));
-        $portal = new \Infrastructure\Persistence\Repository\SqlCampusRepository($f->sql);
+        $portal = new \Infrastructure\Persistence\Repository\SqlCampusRepository(
+            $f->sql,
+            $f->clock,
+            new \Infrastructure\Portal\SymfonyContentMarkup(),
+        );
         self::assertSame(
             "Mathematics",
             $portal->sections($f->term, "Mathematics", null)["items"][0]["subject_title"],

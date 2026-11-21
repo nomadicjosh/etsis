@@ -13,8 +13,11 @@ use Infrastructure\Persistence\SqlRecords;
 
 final readonly class SqlCampusRepository implements CampusRepository
 {
-    public function __construct(private SqlRecords $sql)
-    {
+    public function __construct(
+        private SqlRecords $sql,
+        private \Domain\Shared\Service\Clock $clock,
+        private \Domain\Portal\Service\ContentMarkup $markup,
+    ) {
     }
 
     public function terms(): array
@@ -227,12 +230,14 @@ final readonly class SqlCampusRepository implements CampusRepository
         if (!$campus) {
             $where .= " AND a." . $q("audience") . " = 'public'";
         }
-        $params = [];
+        $visibility = \Infrastructure\Persistence\SqlPortalVisibility::window($this->sql, 'p', $this->clock->now());
+        $where .= ' AND ' . $visibility['sql'];
+        $params = $visibility['parameters'];
         if ($after !== null) {
             $where .= " AND p." . $q("id") . " < ?";
             $params[] = $after->value;
         }
-        return $this->sql->fetch(
+        $rows = $this->sql->fetch(
             "SELECT p." .
                 $q("id") .
                 ", p." .
@@ -241,6 +246,7 @@ final readonly class SqlCampusRepository implements CampusRepository
                 $q("title") .
                 ", p." .
                 $q("content") .
+                ", p." . $q('content_format') .
                 ", a." .
                 $q("published_at") .
                 " FROM " .
@@ -259,24 +265,38 @@ final readonly class SqlCampusRepository implements CampusRepository
             $params,
             24,
         );
+        return array_map($this->newsContent(...), $rows);
     }
 
     public function article(string $code, bool $campus): array
     {
-        $post = $this->sql->one("sis_portal_posts", [
-            "code" => $code,
-            "status" => "published",
-            "kind" => "news",
-        ]);
+        $q = $this->sql->quote(...);
+        $visibility = \Infrastructure\Persistence\SqlPortalVisibility::window($this->sql, 'p', $this->clock->now());
+        $post = $this->sql->fetch(
+            'SELECT p.* FROM ' . $q('sis_portal_posts') . ' p WHERE p.' . $q('code') .
+                " = ? AND p." . $q('status') . " = 'published' AND p." . $q('kind') .
+                " = 'news' AND " . $visibility['sql'],
+            [$code, ...$visibility['parameters']],
+            1,
+        )[0] ?? throw new RecordNotFoundException('Article not found.');
         if (!$campus && $this->audience(new EntityId($post["id"])) !== "public") {
             throw new RecordNotFoundException("Article not found.");
         }
-        return [
+        return $this->newsContent([
             "id" => $post["id"],
             "title" => $post["title"],
             "content" => $post["content"],
             "code" => $post["code"],
-        ];
+            "content_format" => $post['content_format'],
+        ]);
+    }
+
+    private function newsContent(array $row): array
+    {
+        $row['content_html'] = $row['content_format'] === 'html' ? $this->markup->sanitize($row['content']) : null;
+        $text = $row['content_html'] === null ? $row['content'] : $this->markup->plainText($row['content_html']);
+        $row['excerpt'] = mb_strimwidth($text, 0, 180, '…');
+        return $row;
     }
 
     public function audience(EntityId $post): string

@@ -858,3 +858,16 @@ h3 { font-size: .9rem; font-weight: 650; }
 .report-column-conditions > summary { color: #244b70; font-weight: 650; cursor: pointer; }
 .report-column-condition-choices { display: flex; flex-wrap: wrap; gap: .4rem; margin-block: .75rem; }
 .report-column-conditions [data-report-column-editor] { margin-top: 1rem; min-width: 0; }
+
+/* Accessible, self-hosted campus news authoring. */
+.campus-news-editor { background: #fff; }
+.campus-editor-toolbar { background: #f5f7fb; }
+.campus-editor-toolbar .btn { min-width: 2.4rem; min-height: 2.4rem; }
+.campus-editor-toolbar .btn[aria-pressed="true"] { color: #fff; background: #174c87; border-color: #174c87; }
+.campus-editor-style { flex: 0 1 9rem; min-height: 2.4rem; }
+.campus-news-editor .ql-container { font: inherit; }
+.campus-news-editor .ql-editor { min-height: 17rem; max-height: 36rem; overflow-y: auto; padding: 1rem; line-height: 1.7; overflow-wrap: anywhere; }
+.campus-news-editor .ql-editor:focus-visible { outline: 3px solid #174c87; outline-offset: -3px; }
+.campus-editor-toolbar :focus-visible { outline: 3px solid #174c87; outline-offset: 2px; }
+.campus-article-body { overflow-wrap: anywhere; }
+.campus-article-body blockquote { border-left: .25rem solid #174c87; margin-left: 0; padding-left: 1rem; }

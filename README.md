@@ -97,7 +97,7 @@ Screenshots use a test campus and demonstration data. No real student or staff r
 
 ### Campus portal
 
-The public portal welcomes prospects and connects students with applications, courses, campus updates, and student services.
+The public portal welcomes prospects and connects students with applications, courses, campus updates, and student services. [Campus news](docs/campus-portal.md#news-editor-and-publication) now includes self-hosted Quill rich-text authoring, author/publisher review, scheduled visibility and safe rendering through Vihzhuo news blocks.
 
 ![Campus portal with academic artwork, application links, and student service navigation](docs/screenshots/portal.png)
 

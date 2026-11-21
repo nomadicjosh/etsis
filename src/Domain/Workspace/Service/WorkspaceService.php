@@ -50,6 +50,7 @@ final readonly class WorkspaceService
         "equivalencies" => "sis:transfer:manage",
     ];
     public const array PERMISSIONS = [
+        'sis:portal:publish',
         'sis:registration:prerequisite-exception',
         'sis:load:policy',
         'sis:standing:correct',
@@ -164,11 +165,24 @@ final readonly class WorkspaceService
             "portal" => "sis:portal:admin",
             default => null,
         };
-        if ($admin !== null && $this->permissions->allows($actor->value, $admin)) {
+        if (
+            ($admin !== null && $this->permissions->allows($actor->value, $admin)) ||
+            ($dataset === 'portal' && $this->permissions->allows($actor->value, 'sis:portal:publish'))
+        ) {
             $owner = null;
         }
 
         $result = $this->repository->records($dataset, $owner, trim($search), $after);
+        if ($dataset === 'portal') {
+            if (
+                $this->access->requirePermission('sis:portal:manage')->value !== $actor->value ||
+                $this->access->authenticatedUserId()->value !== $actor->value ||
+                ($owner === null && !$this->permissions->allows($actor->value, 'sis:portal:admin') &&
+                    !$this->permissions->allows($actor->value, 'sis:portal:publish'))
+            ) {
+                throw new \Domain\Shared\Exception\AccessDeniedException('The content reader changed.');
+            }
+        }
         if ($dataset === 'billing') {
             if (
                 $this->access->requirePermission('admin:dashboard')->value !== $actor->value

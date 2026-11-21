@@ -469,7 +469,7 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
             "reports" => ["sis_reports", ["id", "name", "program_id", "term_id"], ["name"]],
             "portal" => [
                 "sis_portal_posts",
-                ["id", "code", "title", "kind", "status", "version"],
+                ["id", "code", "title", "kind", "status", "version", "visible_from", "visible_until"],
                 ["title", "code"],
             ],
             "transcripts" => [

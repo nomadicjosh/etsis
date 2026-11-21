@@ -90,11 +90,11 @@ test('a late import inspection does not move focus away from another workspace',
     expect(state.errors).toEqual([]);
 });
 
-async function content(page, { status = 'draft', audience = 'public', rejectRead = false, delayed = false, limited = false } = {}) {
+async function content(page, { status = 'draft', audience = 'public', rejectRead = false, delayed = false, limited = false, writerOnly = false, publisherOnly = false } = {}) {
     const state = { calls: [], errors: [], rejectSave: false, stale: false,
         post: { id, kind: 'news', code: 'fictional-welcome', title: 'Fictional campus welcome <img>',
             content: 'Fictional campus news.\nThis text is only a test fixture. <script>Example</script>',
-            audience, status, version: 2 } };
+            audience, status, content_format: 'plain', content_html: null, version: 2, revision: '2'.padStart(64, '0'), can_edit: !publisherOnly, can_publish: !writerOnly, visible_from: null, visible_until: null, review_note: null, visibility: status } };
     let release;
     const pending = new Promise(resolve => { release = resolve; });
     state.release = release;
@@ -109,7 +109,7 @@ async function content(page, { status = 'draft', audience = 'public', rejectRead
         else if (path === `/sis/portal/editor/${id}/`) {
             if (delayed) await pending;
             if (rejectRead) return route.fulfill({ status: 403, json: { error: 'Access denied.' } });
-            result = state.post;
+            result = { ...state.post, visibility: state.post.status };
         } else if (path === '/sis/portal/editor/') {
             if (state.rejectSave) {
                 state.rejectSave = false;
@@ -117,19 +117,28 @@ async function content(page, { status = 'draft', audience = 'public', rejectRead
                     errors: [{ field: 'title', message: 'Fictional title needs review.' }] } });
             }
             state.post = { ...state.post, ...data, version: state.post.version + 1, status: 'draft' };
+            state.post.revision = String(state.post.version).padStart(64, '0');
+            state.post.content_html = state.post.content_format === 'html' ? state.post.content : null;
+        } else if (path === `/sis/portal/posts/${id}/publication/review/`) {
+            if (state.reviewGate) await state.reviewGate;
+            result = { ...data, post: state.post, operation_id: '01K00000000000000000000002', review_token: 'fictional-publication-proof' };
         } else if (path === `/sis/portal/posts/${id}/publication/`) {
             if (state.stale) {
                 state.stale = false;
                 state.post.version++;
+                state.post.revision = String(state.post.version).padStart(64, '0');
                 state.post.title = 'Updated fictional notice';
                 return route.fulfill({ status: 409, json: { error: 'Fictional stale revision. Reload and review again.' } });
             }
-            state.post.status = data.publish ? 'published' : 'archived';
+            state.post.status = { approve: 'published', archive: 'archived', submit: 'pending', return: 'draft' }[data.action];
+            state.post.review_note = data.note;
+            Object.assign(state.post, data.window);
             state.post.version++;
+            state.post.revision = String(state.post.version).padStart(64, '0');
         }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
-    await page.goto(limited ? '/admin/campus-content-fixture/' : '/admin/');
+    await page.goto(writerOnly ? '/admin/campus-content-fixture/' : limited ? '/admin/campus-publisher-fixture/' : '/admin/');
     await page.locator('.workspace-nav-link[data-workspace="portal"]').click();
     state.open = () => page.locator('#directory-results tbody button').first().click();
     await state.open();
@@ -167,7 +176,7 @@ test('content keeps failed edits and requires review of the exact saved audience
     await reflow(page, 'workspace-polished-content-review');
     await page.getByRole('button', { name: 'Confirm publication', exact: true }).click();
     await expect(page.locator('#record-drawer')).not.toHaveClass(/show/u);
-    expect(state.publications()[0].data).toEqual({ publish: true, version: 3 });
+    expect(state.publications()[0].data).toMatchObject({ action: 'approve', revision: '3'.padStart(64, '0'), window: { visible_from: null, visible_until: null }, review_token: 'fictional-publication-proof' });
     expect(state.publications()[0].csrf).toBe('fictional-test-token');
     expect(state.errors).toEqual([]);
 });
@@ -186,7 +195,7 @@ test('a stale publication needs a fresh saved-content review', async ({ page }) 
     await expect(page.getByRole('region', { name: 'Saved content review', exact: true })).toContainText('Updated fictional notice');
     await page.getByRole('button', { name: 'Confirm publication', exact: true }).click();
     await expect(page.locator('#record-drawer')).not.toHaveClass(/show/u);
-    expect(state.publications().map(call => call.data.version)).toEqual([2, 3]);
+    expect(state.publications().map(call => call.data.revision)).toEqual([2, 3].map(v => String(v).padStart(64, '0')));
     expect(state.errors).toEqual([]);
 });
 
@@ -206,7 +215,7 @@ test('new website links use the same structured editor and save a draft without 
     await expect(page.locator('#record-drawer')).not.toHaveClass(/show/u);
     expect(state.calls.find(call => call.path === '/sis/portal/editor/').data).toEqual({
         kind: 'link', code: 'fictional-link', title: 'Fictional campus link',
-        content: 'https://example.invalid/fictional-campus/', audience: 'campus',
+        content: 'https://example.invalid/fictional-campus/', audience: 'campus', content_format: 'plain',
     });
     expect(state.publications()).toHaveLength(0);
     expect(state.errors).toEqual([]);
@@ -220,7 +229,7 @@ test('archiving needs a separate confirmation and does not offer direct republic
     expect(state.publications()).toHaveLength(0);
     await page.getByRole('button', { name: 'Confirm archive', exact: true }).click();
     await expect(page.locator('#record-drawer')).not.toHaveClass(/show/u);
-    expect(state.publications()[0].data).toEqual({ publish: false, version: 2 });
+    expect(state.publications()[0].data).toMatchObject({ action: 'archive', revision: '2'.padStart(64, '0'), review_token: 'fictional-publication-proof' });
     await state.open();
     await expect(page.getByRole('button', { name: /^Review (publication|archive)$/u, includeHidden: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Save draft', exact: true })).toBeVisible();
@@ -315,4 +324,80 @@ test('program imports share mapping, dependency setup and explicit links without
     expect(calls.filter(c => c.data).every(c => c.csrf === 'fictional-test-token')).toBe(true);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(errors).toEqual([]);
+});
+
+
+test('scheduled publication invalidates earlier reviews, preserves dates and ignores delayed responses', async ({ page }) => {
+    const state = await content(page);
+    await page.getByRole('button', { name: 'Review publication', exact: true }).click();
+    const confirm = page.getByRole('button', { name: 'Confirm publication', exact: true });
+    await expect(confirm).toBeEnabled();
+    await page.getByLabel('Start publishing', { exact: true }).fill('2028-09-01T09:00');
+    await page.getByLabel('Stop publishing', { exact: true }).fill('2028-09-02T09:00');
+    await expect(confirm).toBeDisabled();
+    let release;
+    state.reviewGate = new Promise(resolve => { release = resolve; });
+    await page.getByRole('button', { name: 'Review schedule', exact: true }).click();
+    await expect.poll(() => state.calls.filter(c => c.path.endsWith('/publication/review/')).length).toBe(2);
+    await page.getByLabel('Stop publishing', { exact: true }).fill('2028-09-03T09:00');
+    state.reviewGate = null; release();
+    await expect(confirm).toBeDisabled();
+    await page.getByRole('button', { name: 'Review schedule', exact: true }).click();
+    await expect(confirm).toBeEnabled();
+    await expect(page.getByLabel('Stop publishing', { exact: true })).toHaveValue('2028-09-03T09:00');
+    await reflow(page);
+    await confirm.click();
+    const request = state.publications()[0];
+    expect(new Date(request.data.window.visible_until) > new Date(request.data.window.visible_from)).toBe(true);
+    expect(request.data.window.visible_until).toContain('2028-09-03');
+    expect(request.csrf).toBe('fictional-test-token');
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(state.errors).toEqual([]);
+});
+
+test('authors request review without publishing and publishers return feedback without editing another draft', async ({ page }) => {
+    let state = await content(page, { writerOnly: true });
+    await expect(page.getByRole('button', { name: 'Review publication', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Request review', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm review request', exact: true }).click();
+    expect(state.publications()[0].data.action).toBe('submit');
+    await page.unroute('**/sis/**');
+    state = await content(page, { publisherOnly: true, status: 'pending', limited: true });
+    await expect(page.getByRole('button', { name: 'Save draft', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Content awaiting review', exact: true })).toContainText('Fictional campus news.');
+    await page.getByRole('button', { name: 'Return to author', exact: true }).click();
+    await page.getByLabel('Note to author', { exact: true }).fill('Fictional request to clarify the date.');
+    await page.getByRole('button', { name: 'Review return', exact: true }).click();
+    await accessible(page);
+    await page.getByRole('button', { name: 'Return to author', exact: true }).click();
+    expect(state.publications()[0].data.note).toBe('Fictional request to clarify the date.');
+    expect(state.publications()[0].data.action).toBe('return');
+    expect(state.errors).toEqual([]);
+});
+
+
+test('news uses the self-hosted rich editor and saves semantic formatting without changing publication', async ({ page }) => {
+    const state = await content(page);
+    const editor = page.getByRole('textbox', { name: /^Content/u });
+    await expect(editor).toHaveAttribute('contenteditable', 'true');
+    await expect(page.getByRole('group', { name: 'News formatting', exact: true })).toBeVisible();
+    await editor.fill('Fictional welcome to campus.');
+    await editor.press('ControlOrMeta+A');
+    await page.getByRole('button', { name: 'Bold', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Bold', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.locator('textarea[name="content"]')).toHaveValue(/<strong>Fictional welcome to campus\.<\/strong>/);
+    await page.getByRole('combobox', { name: 'Text style', exact: true }).selectOption('2');
+    await expect(page.locator('textarea[name="content"]')).toHaveValue(/<h2>/);
+    await accessible(page);
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    const save = state.calls.find(c => c.path === '/sis/portal/editor/');
+    expect(save.data.content_format).toBe('html');
+    expect(save.data.content).toContain('<strong>');
+    expect(save.data.content).toContain('<h2>');
+    expect(state.publications()).toHaveLength(0);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(state.errors).toEqual([]);
 });

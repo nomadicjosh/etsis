@@ -264,8 +264,10 @@ final class AdministrationWorkflowTest extends TestCase
 
     public function testPortalDraftCannotBeReadAndPublishingSharesOnlyThePublishedPost(): void
     {
-        $f = new SisFixture();
-        $service = new PortalService(new SqlPortalRepository($f->sql), $f->access, $f->transactions, $f->audit);
+        require_once dirname(__DIR__) . '/Support/CampusFixture.php';
+        $campus = new \CampusFixture();
+        $f = $campus->sis;
+        $service = $campus->posts;
         $post = $service->create('news', 'welcome', 'Welcome', 'Institution news.');
         try {
             $service->published('welcome');
@@ -273,12 +275,12 @@ final class AdministrationWorkflowTest extends TestCase
         } catch (RecordNotFoundException) {
             self::assertSame('draft', $f->sql->one('sis_portal_posts', ['id' => $post->id->value])['status']);
         }
-        $service->publish($post->id, true, 0);
+        $campus->publish($post->id, true, 0);
         $f->access->actor = $f->user();
         $f->access->staff = false;
         self::assertSame('Institution news.', $service->published('welcome')->content);
         $this->expectException(AccessDeniedException::class);
-        $service->publish($post->id, false, 1);
+        $campus->publish($post->id, false, 1);
     }
 
     public function testLiveTransportStaysDisabledWithoutExplicitConfiguration(): void

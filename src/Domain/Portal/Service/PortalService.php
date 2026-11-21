@@ -8,7 +8,6 @@ use Domain\Audit\Repository\AuditTrail;
 use Domain\Portal\PortalPost;
 use Domain\Portal\Repository\PortalRepository;
 use Domain\Shared\Persistence\UnitOfWork;
-use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\ValueObject\EntityId;
 
@@ -18,34 +17,47 @@ final readonly class PortalService
         private PortalRepository $repository,
         private StudentAccess $access,
         private UnitOfWork $transactions,
-        private AuditTrail $audit
+        private AuditTrail $audit,
+        private ContentMarkup $markup,
     ) {
     }
 
-    public function create(string $kind, string $code, string $title, string $content): PortalPost
-    {
-        $actor = $this->access->requirePermission('sis:portal:manage');
-        $post = new PortalPost(EntityId::generate(), $actor, $kind, $code, $title, $content);
+    public function create(
+        string $kind,
+        string $code,
+        string $title,
+        #[\SensitiveParameter] string $content,
+        string $contentFormat = "plain",
+    ): PortalPost {
+        $actor = $this->access->requirePermission("sis:portal:manage");
+        if ($contentFormat === "html") {
+            $content = $this->markup->sanitize($content);
+        }
+        PortalPost::requireWritableContent($content);
+        $post = new PortalPost(
+            EntityId::generate(),
+            $actor,
+            $kind,
+            $code,
+            $title,
+            $content,
+            contentFormat: $contentFormat,
+        );
         $this->transactions->run(function () use ($post, $actor): void {
             $this->repository->add($post);
-            $this->audit->record($actor, 'portal.created', $post->id);
+            $this->audit->record($actor, "portal.created", $post->id);
+            if (
+                $this->access->requirePermission("sis:portal:manage")->value !== $actor->value ||
+                $this->access->authenticatedUserId()->value !== $actor->value ||
+                $this->repository->get($post->id) != $post
+            ) {
+                throw new \Domain\Shared\Exception\ConcurrentModificationException(
+                    "The content creator or draft changed.",
+                );
+            }
         });
 
         return $post;
-    }
-
-    public function publish(EntityId $id, bool $publish, int $expectedVersion): void
-    {
-        $actor = $this->access->requirePermission('sis:portal:manage');
-        $post = $this->repository->get($id);
-        $this->access->requireOwnerOrPermission($post->ownerUserId, 'sis:portal:admin');
-        if ($post->version !== $expectedVersion) {
-            throw new ConcurrentModificationException('Reload the current content before publishing.');
-        }
-        $this->transactions->run(function () use ($post, $publish, $expectedVersion, $actor): void {
-            $this->repository->save($post->publish($publish), $expectedVersion);
-            $this->audit->record($actor, $publish ? 'portal.published' : 'portal.archived', $post->id);
-        });
     }
 
     /** Publishing explicitly shares institution content with all authenticated portal users. */

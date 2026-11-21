@@ -18,7 +18,7 @@ $publicId = $campus->content->save(
     "public",
     null,
 );
-$campus->posts->publish($publicId, true, 0);
+$campus->publish($publicId, true, 0);
 $privateId = $campus->content->save(
     null,
     "news",
@@ -28,7 +28,7 @@ $privateId = $campus->content->save(
     "campus",
     null,
 );
-$campus->posts->publish($privateId, true, 0);
+$campus->publish($privateId, true, 0);
 $app->delegate(\Qubus\Expressive\Connection::class, static fn() => $sis->connection);
 $app->delegate(\Qubus\Expressive\Database::class, static fn() => $sis->connection->queryBuilder());
 $app->delegate(\Infrastructure\Persistence\SqlRecords::class, static fn() => $sis->sql);

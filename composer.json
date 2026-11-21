@@ -20,7 +20,8 @@
         "dompdf/dompdf": "^3.1.6",
         "league/csv": "^9.0",
         "nomadicjosh/vihzhuo": "^2",
-        "stripe/stripe-php": "^20.0"
+        "stripe/stripe-php": "^20.0",
+        "symfony/html-sanitizer": "^7.4"
     },
     "conflict": {
         "squizlabs/php_codesniffer": "<3.13.6 || >=4.0,<4.0.2"

@@ -535,7 +535,11 @@ final class CombinedDegreeProgressTest extends TestCase
         $s->access->staff = false;
         $s->access->actor = $owner;
         $portal = new \Domain\Portal\Service\StudentProgressService(
-            new \Infrastructure\Persistence\Repository\SqlCampusRepository($s->sql),
+            new \Infrastructure\Persistence\Repository\SqlCampusRepository(
+                $s->sql,
+                $s->clock,
+                new \Infrastructure\Portal\SymfonyContentMarkup(),
+            ),
             new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($s->sql),
             $this->service($f),
             $s->access,

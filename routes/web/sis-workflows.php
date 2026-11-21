@@ -1326,8 +1326,11 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/portal/posts/", [SisPortalController::class, "create"])
         ->name("sis.portal.create");
+    $router->map(['POST'], '/sis/portal/posts/{id}/publication/review/', [
+        \Application\Http\Controller\SisPortalEditorController::class, 'review',
+    ])->name('sis.portal.publication.review');
     $router
-        ->map(["POST"], "/sis/portal/posts/{id}/publication/", [SisPortalController::class, "publish"])
+        ->map(["POST"], "/sis/portal/posts/{id}/publication/", [\Application\Http\Controller\SisPortalEditorController::class, "confirm"])
         ->name("sis.portal.publish");
     $router
         ->map(["GET"], "/sis/portal/content/{code}/", [SisPortalController::class, "show"])

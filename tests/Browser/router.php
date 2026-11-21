@@ -175,6 +175,7 @@ echo $loader->render('framework::backend/workspace/index', [
         '/admin/student-read-fixture/' => ['sis:student:read'],
         '/admin/transcript-office-fixture/' => ['sis:transcript:manage'],
         '/admin/campus-content-fixture/' => ['sis:portal:manage'],
+        '/admin/campus-publisher-fixture/' => ['sis:portal:manage', 'sis:portal:publish'],
         '/admin/account-read-fixture/' => ['sis:finance:read'],
         '/admin/person-contact-fixture/' => ['sis:person:manage'],
         '/admin/specialization-fixture/' => ['sis:student:read', 'sis:degree-audit:assign'],

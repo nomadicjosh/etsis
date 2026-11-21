@@ -303,6 +303,11 @@
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const transferAwardStudio = window.createWorkspaceTransferAwards({ node, request, task, table, recordSummary, actionMenu, buildForm, formData, openDrawer, back: id => transferStudio.record('equivalencies', id) });
     const prerequisitePermissions = window.createWorkspacePrerequisitePermissions({ node, request, task, can, openDrawer });
+    const contentPublication = window.createCampusContentPublication({ node, request, task, openDrawer, recordSummary, badge,
+        edit: editCampusContent, saved: async action => {
+            notify({ approve: 'Publication approved.', submit: 'Draft submitted for review.', return: 'Draft returned to its author.', archive: 'Content archived.' }[action]);
+            drawer.hide(); await loadDirectory();
+        } });
     const enrollmentLoad = window.createWorkspaceEnrollmentLoad({ node, request, task, can, openDrawer });
     const standingStudio = window.createWorkspaceStanding({ node, request, task, can, openDrawer, degreeAudit: () => degreeAuditStudio });
     const advisingStudio = window.createWorkspaceAdvising({ node, request, task, can, openDrawer });
@@ -649,6 +654,7 @@
         let value = field === 'name' ? recordLabel(row) : field === 'short_id' ? `…${row.id.slice(-8)}` : row[field];
         if (field === 'billing_amount') return `${row.amount_decimal === null ? `${row.amount_minor} minor units` : row.amount_decimal} ${row.currency}${row.pricing_basis === 'registered_credit' ? ' per credit' : ''}`;
         if (field === 'active') return badge(Number(row.active) ? 'Active' : 'Inactive');
+        if (section === 'portal' && field === 'status') return badge(contentPublication.visibility(row));
         if (field === 'status') return badge(value);
         if (field === 'account') return badge(row.owner_user_id ? 'Linked' : 'Not linked');
         if (['credits_milli', 'points_milli'].includes(field)) value = value === null ? '—' : Number(value) / 1000;
@@ -737,7 +743,7 @@
             form.elements.subject.maxLength = 191;
             form.elements.body.maxLength = 100000;
         }
-        if (section === 'portal') campusContentForm(form);
+        if (section === 'portal') { await campusContentForm(form); if (!body.isConnected) return; }
         if (section === 'terms') {
             const code = form.elements.namedItem('code');
             code.maxLength = 22; code.pattern = String.raw`[A-Za-z0-9][A-Za-z0-9._\/\-]{0,21}`;
@@ -752,6 +758,7 @@
         form.addEventListener('submit', event => { event.preventDefault(); task(async () => {
             if (!form.reportValidity()) return;
             const data = { ...formData(form, definition.fields), ...(operation ? { operation_id: operation } : {}) };
+            if (section === 'portal') data.content_format = form.elements.content_format.value;
             if (section === 'people' && !data.institutional_id) delete data.institutional_id;
             const saved = await request(definition.endpoint, 'POST', data);
             notify('Saved. One less thing on your list.');
@@ -1191,11 +1198,11 @@
         await operations.enhance(section, row, body, origin);
     }
 
-    function campusContentForm(form) {
+    async function campusContentForm(form, format = 'plain') {
         const code = form.elements.namedItem('code');
         const kind = form.elements.namedItem('kind');
         const content = form.elements.namedItem('content');
-        content.maxLength = 100000;
+        content.maxLength = 60000;
         const helpId = `${code.id}-help`;
         code.maxLength = 80;
         code.pattern = '[a-z0-9][a-z0-9-]{0,79}';
@@ -1225,66 +1232,11 @@
                 'Campus content requires sign-in. Public news appears on the public website. Use Page builder to design public pages.',
             ),
         );
+        await window.CampusRichText.mount(form, node, format);
     }
 
-    async function reviewCampusPublication(post) {
-        const publish = post.status !== 'published';
-        const body = openDrawer(publish ? 'Review publication' : 'Review archive', 'CAMPUS PUBLISHING');
-        const confirm = node(
-            'button',
-            {
-                type: 'button',
-                class: 'btn btn-primary',
-                onclick: (event) =>
-                    task(async () => {
-                        try {
-                            await request(`/sis/portal/posts/${post.id}/publication/`, 'POST', {
-                                publish,
-                                version: Number(post.version),
-                            });
-                        } catch (error) {
-                            if (error.status === 409 && body.isConnected) confirm.remove();
-                            throw error;
-                        }
-                        if (!body.isConnected) return;
-                        notify(publish ? 'Content published to its selected audience.' : 'Content archived.');
-                        drawer.hide();
-                        await loadDirectory();
-                    }, event.currentTarget),
-            },
-            publish ? 'Confirm publication' : 'Confirm archive',
-        );
-        body.append(
-            node(
-                'button',
-                {
-                    type: 'button',
-                    class: 'btn btn-link mb-3',
-                    onclick: () => task(() => editCampusContent(post.id)),
-                },
-                'Back to editor',
-            ),
-            recordSummary([
-                ['Audience', post.audience === 'public' ? 'Public website' : 'Signed-in campus'],
-                ['Current status', badge(post.status)],
-            ]),
-            node(
-                'section',
-                { class: 'record-section', 'aria-label': 'Saved content review' },
-                node('h3', {}, post.title),
-                node('p', { class: 'message-preview' }, post.content),
-            ),
-            node(
-                'p',
-                { class: 'alert alert-info' },
-                publish
-                    ? post.audience === 'public'
-                        ? 'Publish this saved content for the public website. Public content may be read without signing in.'
-                        : 'Publish this saved content for signed-in campus users.'
-                    : 'Archive this published content so it no longer appears in the portal. Its saved wording is retained.',
-            ),
-            confirm,
-        );
+    async function reviewCampusPublication(post, action = post.status === 'published' ? 'archive' : 'approve') {
+        return contentPublication.open(post, action);
     }
 
     async function editCampusContent(id) {
@@ -1298,7 +1250,8 @@
         if (!body.isConnected) return;
         form.elements.kind.disabled = true;
         form.elements.code.readOnly = true;
-        campusContentForm(form);
+        if (post.can_edit) await campusContentForm(form, post.content_format);
+        if (!body.isConnected) return;
         form.append(
             node('p', { class: 'form-text' }, 'Saving an edit returns content to draft for review.'),
             node('button', { class: 'btn btn-primary', type: 'submit' }, 'Save draft'),
@@ -1312,6 +1265,7 @@
                         ...formData(form, fields),
                         id,
                         version: Number(post.version),
+                        content_format: form.elements.content_format.value,
                     });
                     if (!body.isConnected) return;
                     notify('Draft saved. Review it before publishing.');
@@ -1329,7 +1283,7 @@
         const baseline = JSON.stringify(formData(form, fields));
         const changed = () => JSON.stringify(formData(form, fields)) !== baseline;
         const hint = node('p', { class: 'form-text', role: 'status', hidden: true });
-        if (post.status !== 'archived') {
+        if (post.can_publish && can('sis:portal:publish') && post.status !== 'archived') {
             const review = node(
                 'button',
                 {
@@ -1354,18 +1308,34 @@
             form.addEventListener('change', update);
             actions.append(review);
         }
+        if (post.can_edit && post.status === 'draft' && !post.can_publish) {
+            const submit = node('button', { type: 'button', class: 'btn btn-outline-primary',
+                onclick: event => task(() => reviewCampusPublication(post, 'submit'), event.currentTarget) }, 'Request review');
+            const update = () => { submit.disabled = changed(); hint.hidden = !submit.disabled;
+                hint.textContent = submit.disabled ? 'Save your changes before requesting review.' : ''; };
+            form.addEventListener('input', update); form.addEventListener('change', update);
+            actions.append(submit);
+        }
+        if (post.can_publish && can('sis:portal:publish') && post.status === 'pending') {
+            const sendBack = node('button', { type: 'button', class: 'btn btn-outline-secondary',
+                onclick: event => task(() => reviewCampusPublication(post, 'return'), event.currentTarget) }, 'Return to author');
+            form.addEventListener('input', () => { sendBack.disabled = changed(); });
+            form.addEventListener('change', () => { sendBack.disabled = changed(); });
+            actions.append(sendBack);
+        }
         if (can('vihzhuo:manage'))
             actions.append(
                 node('a', { class: 'btn btn-outline-secondary', href: '/admin/manager' }, 'Page builder'),
             );
         body.replaceChildren(
             recordSummary([
-                ['Status', badge(post.status)],
+                ['Status', badge(post.visibility === 'pending' ? 'Awaiting review' : post.visibility)],
                 ['Audience', post.audience === 'public' ? 'Public website' : 'Signed-in campus'],
             ]),
             actions,
             hint,
-            form,
+            post.review_note ? node('section', { class: 'alert alert-info', 'aria-label': 'Author feedback' }, node('h3', { class: 'h6' }, 'Note from reviewer'), node('p', {}, post.review_note)) : null,
+            post.can_edit ? form : node('section', { class: 'record-section', 'aria-label': 'Content awaiting review' }, node('h3', {}, post.title), window.CampusRichText.article(post, node)),
         );
     }
     async function reviewTranscript(id) {

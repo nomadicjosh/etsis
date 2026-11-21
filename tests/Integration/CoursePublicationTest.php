@@ -311,7 +311,11 @@ final class CoursePublicationTest extends TestCase
             new \Domain\Finance\ValueObject\Money(0, "USD"),
         );
         $f->registration->addSection($section);
-        $portal = new \Infrastructure\Persistence\Repository\SqlCampusRepository($f->sql);
+        $portal = new \Infrastructure\Persistence\Repository\SqlCampusRepository(
+            $f->sql,
+            $f->clock,
+            new \Infrastructure\Portal\SymfonyContentMarkup(),
+        );
         $this->saveText("Algebra I", "Published paragraph.\n<script>fictional</script>");
         self::assertNull($portal->sections($f->term, "MATH.101", null)["items"][0]["description"]);
         $review = $this->service->review($this->course, "Fictional approved description");

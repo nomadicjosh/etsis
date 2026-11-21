@@ -19,7 +19,7 @@ async function mockServices(page, options = {}) {
         contact: { preferred_name: 'Alex', phone: '', address: '', version: 0 },
         students: [{ id: student, primary_program_id: program, entry_term_id: term, active: 1, enrollments: [{ section_id: section, term_id: term, section_code: course.section_code, course_code: course.course_code, title: 'Algebra', status: 'N', credits_milli: 3000 }] }],
         applications: [], restrictions: [], accounts: [{ id: account, student_id: student, term_id: term, currency: 'USD', balance_minor: 15000 }],
-        news: [{ title: 'A fictional campus update', content: 'A welcoming place to connect.' }],
+        news: options.news || [{ title: 'A fictional campus update', content: 'A welcoming place to connect.' }],
         transcript_requests: [], request_id: requestId, payment_id: id(14) };
     await page.route(/\/(?:portal\/api|sis\/forms|sis\/registration-schedule)\//, async route => {
         const req = route.request(), path = new URL(req.url()).pathname;
@@ -288,4 +288,23 @@ test('student statements explain the retained registration credits and rate', as
     await expect(page.locator('#campus-dialog')).toContainText('1.5 credits × $1.01 per credit');
     await expect(page.locator('#campus-dialog')).toContainText('$1.52');
     await accessible(page);
+});
+
+
+test('campus updates render rich text while removing unsafe elements and keeping plain text literal', async ({ page }) => {
+    await mockServices(page, { news: [
+        { title: 'Fictional rich campus news', content_format: 'html', content: '<p>Rich news</p>',
+            excerpt: 'Fictional campus welcome.', content_html: '<p>Fictional <strong>campus welcome</strong>.</p><img src=x onerror="window.newsAttack=1"><script>window.newsAttack=1</script>' },
+        { title: 'Fictional literal news', content_format: 'plain', content: '<b>Literal wording</b>', content_html: null },
+    ] });
+    await page.goto('/portal/student/updates/');
+    await expect(page.getByText('<b>Literal wording</b>', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Read update', exact: true }).first().click();
+    await expect(page.locator('.campus-article-body strong')).toHaveText('campus welcome');
+    await expect(page.locator('.campus-article-body img, .campus-article-body script, .campus-article-body b')).toHaveCount(0);
+    expect(await page.evaluate(() => window.newsAttack)).toBeUndefined();
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });

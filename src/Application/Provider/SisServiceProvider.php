@@ -291,6 +291,7 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Admissions\ClamdDocumentScanner::class,
             \Domain\Communications\Service\MailTransport::class =>
                 \Infrastructure\Communications\ConfiguredMailTransport::class,
+            \Domain\Portal\Service\ContentMarkup::class => \Infrastructure\Portal\SymfonyContentMarkup::class,
             \Domain\Portal\Repository\PortalRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlPortalRepository::class,
 

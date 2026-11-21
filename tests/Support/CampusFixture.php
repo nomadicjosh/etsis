@@ -76,10 +76,33 @@ final class CampusFixture
     public PaymentConfirmationService $confirmation;
     public GradebookService $gradebook;
 
+    public function publish(EntityId $id, bool $publish, int $version): array
+    {
+        $saved = $this->content->get($id);
+        if ($saved['version'] !== $version) {
+            throw new \Domain\Shared\Exception\ConcurrentModificationException();
+        }
+        $window = new \Domain\Portal\ValueObject\PublicationWindow(null, null);
+        $review = $this->content->review($id, $publish ? 'approve' : 'archive', $saved['revision'], $window, null);
+        return $this->content->confirm(
+            $id,
+            new EntityId($review['operation_id']),
+            $review['action'],
+            $review['revision'],
+            $window,
+            null,
+            $review['review_token'],
+        );
+    }
+
     public function __construct()
     {
         $f = $this->sis = new SisFixture();
-        $this->repository = new SqlCampusRepository($f->sql);
+        $this->repository = new SqlCampusRepository(
+            $f->sql,
+            $f->clock,
+            new \Infrastructure\Portal\SymfonyContentMarkup(),
+        );
         $this->payments = new SqlPaymentRepository($f->sql);
         $config = Collection::factory([]);
         $config->setConfigKey("app", ["crypto_key" => Key::createNewRandomKey()->saveToAsciiSafeString()]);
@@ -168,8 +191,14 @@ final class CampusFixture
             $this->contacts,
             $f->registrationBatches(),
         );
-        $posts = new SqlPortalRepository($f->sql);
-        $this->posts = new PortalService($posts, $f->access, $f->transactions, $f->audit);
+        $posts = new SqlPortalRepository($f->sql, $f->clock);
+        $this->posts = new PortalService(
+            $posts,
+            $f->access,
+            $f->transactions,
+            $f->audit,
+            new \Infrastructure\Portal\SymfonyContentMarkup(),
+        );
         $this->content = new CampusContentService(
             $posts,
             $this->repository,
@@ -177,6 +206,9 @@ final class CampusFixture
             $f->access,
             $f->transactions,
             $f->audit,
+            $f->clock,
+            new \Domain\Shared\Service\ReviewProof($this->cipher, $f->clock),
+            new \Infrastructure\Portal\SymfonyContentMarkup(),
         );
         $this->gateway = new FixturePaymentGateway();
         $this->checkout = new PortalPaymentService(

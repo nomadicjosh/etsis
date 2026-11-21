@@ -13,36 +13,39 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisPortalController
 {
-    public function __construct(private PortalService $service)
-    {
+    public function __construct(
+        private PortalService $service,
+        private \Domain\Portal\Service\ContentMarkup $markup,
+    ) {
     }
 
-    public function create(ServerRequest $request): ResponseInterface
+    public function create(#[\SensitiveParameter] ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);
         $post = $this->service->create(
-            $f->text('kind', 12),
-            $f->text('code', 80),
-            $f->text('title'),
-            $f->bodyText('content')
+            $f->text("kind", 12),
+            $f->text("code", 80),
+            $f->text("title"),
+            $f->bodyText("content"),
         );
 
-        return new JsonResponse(['id' => $post->id->value, 'status' => $post->status], 201);
-    }
-
-    public function publish(ServerRequest $request, string $id): ResponseInterface
-    {
-        $f = FormInput::from($request);
-        $this->service->publish(new EntityId($id), $f->boolean('publish', true), $f->integer('version'));
-
-        return new JsonResponse(['status' => 'changed']);
+        return new JsonResponse(["id" => $post->id->value, "status" => $post->status], 201);
     }
 
     public function show(string $code): ResponseInterface
     {
         $post = $this->service->published($code);
 
-        return new JsonResponse(['id' => $post->id->value, 'kind' => $post->kind, 'code' => $post->code,
-            'title' => $post->title, 'content' => $post->content]);
+        return new JsonResponse([
+            "id" => $post->id->value,
+            "kind" => $post->kind,
+            "code" => $post->code,
+            "title" => $post->title,
+            "content" =>
+                $post->contentFormat === "html" ? $this->markup->sanitize($post->content) : $post->content,
+            "content_format" => $post->contentFormat,
+            "content_html" =>
+                $post->contentFormat === "html" ? $this->markup->sanitize($post->content) : null,
+        ]);
     }
 }
