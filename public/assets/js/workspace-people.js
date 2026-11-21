@@ -243,6 +243,15 @@ window.createWorkspacePeople = function (ui) {
             window.createPersonEmergencyContacts({ node, request, task, notify })
                 .open(emergency, `/sis/ui/people/${id}/emergency-contacts/`)));
         body.append(emergency);
+        const requests = node("section", { class: "mt-4", 'aria-label': 'Profile update requests' });
+        body.append(requests);
+        window.createPersonProfileRequests({ node, request, task, notify }).mount(
+            requests, `/sis/ui/people/${id}/update-requests/`, { staff: true, openEditor: area => {
+                if (area === 'contact') form.elements.preferred_name.focus();
+                else (area === 'addresses' ? addresses : emergency).querySelector('button')?.click();
+            } },
+        );
+
 
     }
     function education(person) {

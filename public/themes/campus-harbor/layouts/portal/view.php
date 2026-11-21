@@ -39,6 +39,7 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
         <script defer src="/assets/js/application-revisions.js"></script>
         <script defer src="/assets/js/degree-progress-guide.js"></script>
         <script defer src="/assets/js/person-emergency-contacts.js"></script>
+        <script defer src="/assets/js/person-profile-requests.js"></script>
         <script defer src="/assets/js/person-education.js"></script>
         <script defer src="/assets/js/admission-documents.js"></script>
         <script defer src="/assets/js/admission-policy.js"></script>

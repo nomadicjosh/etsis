@@ -33,7 +33,7 @@ try {
             'credits_milli' => 3000], JSON_THROW_ON_ERROR)];
     }
     if (in_array(($argv[1] ?? ''), [
-        'check-portal', 'check-admission-readiness', 'check-drop-policy', 'check-hiatus-history', 'check-transcript-reviews', 'check-registration-schedule', 'check-gradebook-calculation', 'check-grade-changes', 'check-section-classifications', 'check-program-classifications', 'check-profile-command', 'check-login-sessions',
+        'check-profile-requests', 'check-portal', 'check-admission-readiness', 'check-drop-policy', 'check-hiatus-history', 'check-transcript-reviews', 'check-registration-schedule', 'check-gradebook-calculation', 'check-grade-changes', 'check-section-classifications', 'check-program-classifications', 'check-profile-command', 'check-login-sessions',
         'check-mapped-imports', 'check-standing', 'check-enrollment-load', 'check-content-publication', 'check-prerequisite-permissions',
         'check-advising', 'check-moodle-resolution', 'check-course-rules', 'check-prerequisite-groups', 'check-degree-trials', 'check-transfer-corrections', 'check-report-exports',
     ], true)) {
@@ -211,6 +211,10 @@ try {
         } elseif (($argv[1] ?? '') === 'check-moodle-resolution') {
             require __DIR__.'/MoodleResolutionBootChecks.php';
             $status=0;
+        } elseif (($argv[1] ?? '') === 'check-profile-requests') {
+            $kernel->bootstrap();
+            require __DIR__ . '/ProfileRequestsBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-person-projections') {
             require __DIR__ . '/PersonProjectionBootChecks.php';
             $status = 0;

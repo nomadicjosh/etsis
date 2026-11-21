@@ -770,3 +770,9 @@ The [co-requisite workflow](registration-history.md#co-requisites-and-linked-dro
 ## Operator profile verification
 
 The existing history command now offers [selected person/profile verification](event-history-foundation.md#selected-person-profile-verification) across canonical identity and account links, contact details, dated addresses, emergency contacts and self-reported education. It compares projections against one protected replay with shared limits, marks earlier unrecorded facts honestly and detects selected concurrent changes. The operator sees fixed component codes and counts, never private values. It performs no repair, domain decision, audit write, schema conversion or external effect. Ordinary owner/staff editors retain their existing authorization and behavior; independent integrity checkpoints and operational rebuild/retention remain open.
+
+## Profile update requests
+
+[Staff/owner profile follow-up](person-identity-and-accounts.md#profile-update-requests) now connects the People contact workspace to Personal information for ordinary contact details, dated addresses and emergency contacts. Staff request a specific update; owners use the existing editor and respond; staff review the actual details and close/cancel with an owner-visible note. Earlier requests remain available in private finished pages. Education retains its existing institution-specific feedback editor.
+
+This is audited working casework, with one active request per person/area, protected account-pinned messages, stale-write checks and original accepted retries. It does not make a profile fact authoritative, approve credentials, gate admissions/registration or send external notifications. The additive table preserves existing profile events and projections. Bounded verification: 50 PHP tests / 305 assertions, eight browser checks and unchanged native database checksums; see the linked guide for authority, paging, retention and API boundaries.

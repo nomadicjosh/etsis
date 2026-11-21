@@ -16,6 +16,9 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $profileRequests = \Application\Http\Controller\ProfileUpdateRequestController::class;
+    $router->get('/portal/api/profile-update-requests/', [$profileRequests, 'mine']);
+    $router->post('/portal/api/profile-update-requests/{requestId}/respond/', [$profileRequests, 'respond']);
     $revisions = \Application\Http\Controller\ApplicationRevisionController::class;
     $dropPlans = \Application\Http\Controller\SisCourseDropPlanController::class;
     $router->post('/portal/api/drop-plan/choices/', [$dropPlans, 'ownerChoices']);

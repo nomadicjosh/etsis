@@ -4,6 +4,8 @@ Adopted direction, 2026-11-08. [Event-sourcing rationale](event-sourcing.md) gov
 
 ## Implementation progress
 
+[Profile update requests](person-identity-and-accounts.md#profile-update-requests) now coordinate staff instructions, owner replies and staff closure/cancellation for contact/address/emergency follow-up as bounded encrypted, authorized, revision-checked audited CRUD. Actual edits continue through the existing person-profile events. No request is an approval, hold, credential decision or second profile journal, and earlier profile history is not inferred.
+
 [Selected person/profile verification](event-history-foundation.md#selected-person-profile-verification) now joins the existing global, financial-account and student-academic modes in `sis:history:verify`. One bounded protected profile replay compares current identity/privacy/identifier facts, account links/names and encrypted contact/address/emergency/education projections. The read-only operator result preserves earlier unknowns, distinguishes concurrent changes and exposes no personal values. It adds no repair, observation, checkpoint, schema or journal; independent anchors, full retained-history coverage, rebuild/cutover and retention acceptance remain open.
 
 [Multi-site program publications](program-publication.md#additional-offering-sites) now retain optional additional offering sites in the existing program stream and shared journal. Working associations stay audited CRUD. Current setup and retained snapshots use separate indexed joins, and earlier unrecorded lists remain unknown. One additive migration creates projections only; selected replay, final validation and original-result retries preserve accepted publications and student cohort bindings.

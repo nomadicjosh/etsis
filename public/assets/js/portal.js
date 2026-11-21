@@ -690,6 +690,14 @@
             window.createPersonEmergencyContacts({ node: el, request, task, notify: notice })
                 .open(emergency, '/portal/api/emergency-contacts/'), event.currentTarget) }, 'Manage emergency contacts'));
         container.append(surface('Emergency contacts', emergency));
+        const profileRequests = el('section', { 'aria-label': 'Profile update requests' });
+        container.append(surface('Requested updates', profileRequests));
+        window.createPersonProfileRequests({ node: el, request, task, notify: notice }).mount(
+            profileRequests, '/portal/api/profile-update-requests/', { openEditor: area => {
+                if (area === 'contact') form.elements.preferred_name.focus();
+                else (area === 'addresses' ? addresses : emergency).querySelector('button')?.click();
+            } },
+        );
         const education = el('div');
         window.createPersonEducation({ node: el, request, task, notify: notice })
             .mount(education, '/portal/api/education/');

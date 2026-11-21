@@ -22,6 +22,10 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $profileRequests = \Application\Http\Controller\ProfileUpdateRequestController::class;
+    $router->get('/sis/ui/people/{id}/update-requests/', [$profileRequests, 'staff']);
+    $router->post('/sis/ui/people/{id}/update-requests/', [$profileRequests, 'create']);
+    $router->post('/sis/ui/people/{id}/update-requests/{requestId}/resolve/', [$profileRequests, 'resolve']);
     $router->map(['GET'], '/sis/applications/{application}/documents/', [Documents::class, 'listing']);
     $router->map(['POST'], '/sis/applications/{application}/documents/', [Documents::class, 'upload']);
     $router->map(['GET'], '/sis/applications/{application}/documents/{id}/download/', [Documents::class, 'download']);
