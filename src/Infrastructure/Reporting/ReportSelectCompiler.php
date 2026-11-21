@@ -98,6 +98,7 @@ final readonly class ReportSelectCompiler
         }
         if (isset($s['source_scope'])) {
             $scope = match ($s['source_scope']) {
+                'advising_followups' => new AdvisingFollowUpReportSql($this->sql)->currentOwner($s['root']),
                 'active_attendance' => new AttendanceReportSql($this->sql)->activeRegistration($s['root']),
                 default => throw new \LogicException('Unknown reporting source scope.'),
             };

@@ -266,6 +266,12 @@ final readonly class RelationalReportService
         }
         $actions = [];
         foreach (StudentPopulationAction::cases() as $action) {
+            if (
+                isset($query->schema['population_actions'])
+                && !in_array($action->value, $query->schema['population_actions'], true)
+            ) {
+                continue;
+            }
             try {
                 $this->populationActor($action, $actor);
                 $actions[] = $action->value;
@@ -329,6 +335,15 @@ final readonly class RelationalReportService
                 32,
                 JSON_THROW_ON_ERROR
             ));
+            if (
+                isset($original->schema['population_actions'])
+                && !in_array($action->value, $original->schema['population_actions'], true)
+            ) {
+                throw new ValidationException([[
+                    'field' => 'action',
+                    'message' => 'This report supports only its declared student follow-up actions.',
+                ]]);
+            }
             $query = $original->studentPopulation($students);
             $this->grants($query->permissions());
             $result = $this->results($query, $offset);

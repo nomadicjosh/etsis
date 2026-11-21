@@ -197,6 +197,27 @@ window.createWorkspaceReportStudio = function (ui) {
             })),
             node("p", { class: "form-text" }, "Attendance reports contain recorded working marks for active registrations only. Unmarked dates are not absences. Choose class-date conditions explicitly; counts are not attendance rates. Save an unsummarized follow-up report to choose students for a separately reviewed message."),
         );
+        const followups = catalog.datasets.find(dataset => dataset.id === "advising_followups");
+        if (followups) {
+            const active = { condition: "AND", rules: [
+                { id: "followup_status", operator: "in", value: ["open", "responded"] },
+            ] };
+            templateGrid.append(
+                button("Advising follow-up", () => edit(followups, { ...initial(followups), filters: active })),
+                button("Advising responses to review", () => edit(followups, { ...initial(followups), filters: {
+                    condition: "AND", rules: [{ id: "followup_status", operator: "equal", value: "responded" }],
+                } })),
+                button("Advising follow-up by due date", () => edit(followups, { ...initial(followups), filters: active,
+                    columns: [
+                        { field: "due_on", label: "Follow-up due", aggregate: "none" },
+                        { field: "followup_status", label: "Follow-up status", aggregate: "none" },
+                        { field: "checkin_id", label: "Distinct check-ins", aggregate: "count_distinct" },
+                        { field: "student_id", label: "Distinct students", aggregate: "count_distinct" },
+                    ],
+                })),
+                node("p", { class: "form-text" }, "Follow-up reports contain dates and statuses only, including earlier program pursuits. Conversations and private advising notes stay in the check-in screen. Choose due-date filters explicitly; a blank date means no deadline. Save a detail report to select students for a separately reviewed message; this source offers no registration or billing handoff."),
+            );
+        }
         const loadRecords = catalog.datasets.find(dataset => dataset.id === "load_determinations");
         if (loadRecords) templateGrid.append(
             button("Recorded enrollment load", () => edit(loadRecords, initial(loadRecords))),
@@ -585,6 +606,7 @@ window.createWorkspaceReportStudio = function (ui) {
     function initial(dataset) {
         const choices = {
             load_determinations: ["institutional_id", "full_name", "term_code", "determined_on", "classification_title", "registered_credits"],
+            advising_followups: ["institutional_id", "full_name", "program_code", "held_on", "due_on", "followup_status"],
             attendance: ["institutional_id", "full_name", "section_code", "term_code", "held_on", "attendance_status"],
             standing: ["institutional_id", "full_name", "program_code", "standing_title", "effective_from"],
             postings: ["institutional_id", "term_code", "posting_type", "currency", "posting_amount", "posting_reversed", "posting_recorded_at"],

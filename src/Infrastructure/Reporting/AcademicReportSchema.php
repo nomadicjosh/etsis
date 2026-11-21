@@ -827,6 +827,7 @@ final class AcademicReportSchema
             "programs" => ["id" => "programs"] + $withStudentWork($program),
             'standing' => ['id' => 'standing'] + $withStudentWork(StudentStandingReportSchema::dataset()),
             'attendance' => AttendanceReportSchema::dataset(),
+            'advising_followups' => AdvisingFollowUpReportSchema::dataset(),
             'load_determinations' => ['id' => 'load_determinations'] +
                 $withStudentWork(LoadDeterminationReportSchema::dataset()),
             "credits" => ["id" => "credits"] + $withStudentWork($credits),

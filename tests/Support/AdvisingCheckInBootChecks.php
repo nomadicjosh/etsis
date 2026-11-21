@@ -106,3 +106,5 @@ if (
 }
 $sis->access->actor = $advisingActor;
 $sis->access->staff = true;
+
+require __DIR__ . '/AdvisingFollowUpReportBootChecks.php';

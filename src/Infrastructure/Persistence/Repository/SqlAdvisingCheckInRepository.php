@@ -11,7 +11,6 @@ use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\SqlRecords;
-use Throwable;
 
 final readonly class SqlAdvisingCheckInRepository implements AdvisingCheckInRepository
 {
@@ -102,28 +101,13 @@ final readonly class SqlAdvisingCheckInRepository implements AdvisingCheckInRepo
 
     private function open(#[\SensitiveParameter] array $row): AdvisingCheckIn
     {
-        try {
-            if (!is_string($row["sealed_data"]) || strlen($row["sealed_data"]) > 65536) {
+        $request = \Infrastructure\Persistence\AdvisingCheckInStorage::open($row, $this->cipher);
+        foreach (\Infrastructure\Persistence\AdvisingCheckInStorage::dates($request) as $key => $value) {
+            if (!array_key_exists($key, $row) || $row[$key] !== $value) {
                 throw new CorruptHistoryException();
             }
-            $data = json_decode(
-                $this->cipher->open($row["sealed_data"]),
-                true,
-                12,
-                JSON_THROW_ON_ERROR,
-            );
-            $request = AdvisingCheckIn::restore($data);
-            foreach (
-                ["id", "student_id", "pursuit_id", "owner_user_id", "status", "version"] as $key
-            ) {
-                if ((string) $row[$key] !== (string) $data[$key]) {
-                    throw new CorruptHistoryException();
-                }
-            }
-            return $request;
-        } catch (Throwable) {
-            throw new CorruptHistoryException();
         }
+        return $request;
     }
 
     public function save(AdvisingCheckIn $request, ?int $expectedVersion): void
@@ -133,6 +117,7 @@ final readonly class SqlAdvisingCheckInRepository implements AdvisingCheckInRepo
             $data,
             array_flip(["id", "student_id", "pursuit_id", "owner_user_id", "status", "version"]),
         );
+        $row += \Infrastructure\Persistence\AdvisingCheckInStorage::dates($request);
         $row["sealed_data"] = $this->cipher->seal(
             json_encode(
                 $data,

@@ -4,6 +4,18 @@ The legacy system is the feature inventory, not a requirement to reproduce its s
 
 “Working” below describes a workflow available in the current code. “Partial” means useful pieces work but the broader recommendation still needs implementation. “Proposed” is a design recommendation, not completed functionality.
 
+## Completed: advising reports and reviewed messaging
+
+**Working.** Report Studio offers active advising follow-up, responses to review and due-date summaries with explicit one-check-in grain, distinct student counts, UTC action dates and current identity/program labels. Global student-read/check-in duties remain independent of report ownership/sharing and scoped advisor access. Conversations and private notes remain in the separate authorized check-in screen. Current live sources exclude earlier-account conversations through a non-removable source condition.
+
+An unsummarized saved dynamic report provides a deliberately selected messaging shortlist, capped at twenty-five distinct students with version/live-status/routing/authority rechecks. It opens the existing composer with empty content, without creating or sending a campaign. This source rejects registration and billing population handoffs. Shared/static/export workflows retain their ordinary source grants and retention rules; static/grouped results cannot feed live office actions.
+
+Validation completed 2026-11-21: **77 focused PHP tests / 536 assertions**, separate real-provider report/graph/population/permission/CSRF/private-response checks, and **six browser scenarios** (three new advising starters and three adjacent attendance report regressions). Coverage includes distinct counts, explicit date/status filters, UTC dates, excluded conversation fields, stale live selections, earlier account links, shared/static source grants, encrypted complete exports, paging, rollback of damaged conversions and 200-record migration continuation. Query and additive schema/index definitions compile for all five framework dialects. Scoped PHP standards, JS syntax and whitespace checks pass. Verification ran sequentially with 96 MiB PHP caps, low scheduling priority, timeouts and one 192 MiB browser worker.
+
+Applied **`20261121000003_AddSisAdvisingFollowUpReports`** to the inspected configured `nomadicjosh_sis` MariaDB database in **0.94 seconds**. All nine before/after check-in/history/support/student/audit/grant checksums matched, the check-in table remained empty and twenty original journal events remained. Existing-data conversion was verified with populated fictional encrypted SQLite records; native populated/load, live multi-engine and institutional retention qualification remain separate.
+
+See [Advising follow-up reports](academic-advising.md#follow-up-reports-and-reviewed-messaging) for the bounded conversion, privacy and operational limits.
+
 ## Completed: advising check-ins and student follow-up
 
 **Working.** Staff open the selected student program's Advising check-ins action; advisors use the corresponding on-demand panel from My advisees. A completed check-in retains actual held date, optional follow-up date, a student-visible next step and optional encrypted private note. Students use their program-progress selection to respond, including when the independent degree review is unavailable. Authorized staff/advisors close or cancel follow-up with a student-visible outcome; original wording, timestamps and attributed receipts remain. No academic decision, appointment, notification or ordinary reporting disclosure results.

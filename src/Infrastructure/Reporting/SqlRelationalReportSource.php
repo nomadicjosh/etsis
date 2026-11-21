@@ -21,6 +21,9 @@ final readonly class SqlRelationalReportSource implements RelationalReportSource
      * Ordinary live pages call it independently. */
     public function assertReady(ReportQuery $query): void
     {
+        if (($query->schema['source_scope'] ?? null) === 'advising_followups') {
+            new AdvisingFollowUpReportSql($this->sql)->requireReady();
+        }
         if ($query->schema['financial_balances'] ?? false) {
             $this->requireCurrentBalances();
         }
