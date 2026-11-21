@@ -114,6 +114,12 @@ return static function (Psr7Router $router): void {
         ->name("portal.campus.news");
     $router->map(["GET"], "/portal/api/courses/", [Portal::class, "courses"])->name("portal.catalog");
     $load = \Application\Http\Controller\SisEnrollmentLoadController::class;
+    $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/load/determinations/', [
+        $load, 'ownerRecords',
+    ]);
+    $router->map(['POST'], '/portal/api/advising/students/{student}/programs/{pursuit}/load/determinations/', [
+        $load, 'advisorRecords',
+    ]);
     $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/load/terms/', [
         $load, 'ownerTerms',
     ])->name('owner.load.terms');

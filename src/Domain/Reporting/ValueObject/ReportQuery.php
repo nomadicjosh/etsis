@@ -163,17 +163,17 @@ final readonly class ReportQuery
             }
         }
         $this->validateMoney($columns);
-        $this->validateSectionMetrics($columns);
+        $this->validateRootMetrics($columns);
     }
 
-    /** Prevent one-to-many joins from multiplying a section's already-counted enrollments/target. */
-    private function validateSectionMetrics(array $columns): void
+    /** Prevent one-to-many joins from multiplying already-counted quantities at their source grain. */
+    private function validateRootMetrics(array $columns): void
     {
         $totals = array_filter($columns, fn(array $c): bool =>
             in_array($c['aggregate'], ['sum', 'avg'], true) &&
-            (($this->schema['fields'][$c['field']]['section_metric'] ?? false) ||
+            (($this->schema['fields'][$c['field']]['root_metric'] ?? false) ||
                 (isset($c['calculation']) &&
-                    ($this->schema['fields'][$c['calculation']['field']]['section_metric'] ?? false))));
+                    ($this->schema['fields'][$c['calculation']['field']]['root_metric'] ?? false))));
         if ($totals === []) {
             return;
         }
@@ -210,7 +210,7 @@ final readonly class ReportQuery
                     ($this->definition['record_selection'][$relation]['ties'] ?? null) !== 'one'
                 ) {
                     self::invalid('Choose one related row or use matching-record conditions before totaling ' .
-                        'section counts, capacities or targets. Multiple related rows would repeat each section.');
+                        'record quantities. Multiple related rows would repeat each source record.');
                 }
                 $relation = $r['parent'];
             }

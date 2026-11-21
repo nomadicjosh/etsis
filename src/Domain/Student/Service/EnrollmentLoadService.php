@@ -72,11 +72,42 @@ final readonly class EnrollmentLoadService
 
     public function review(EntityId $student, EntityId $pursuit, EntityId $term, string $channel): array
     {
+        return $this->collect($student, $pursuit, $term, $channel);
+    }
+
+    /** Internal retained decision context; never returned through owner/advisor working reviews. */
+    public function determinationContext(
+        EntityId $student,
+        EntityId $pursuit,
+        EntityId $term,
+        HistoryReadBudget $budget,
+    ): array {
+        $this->access->requirePermission('sis:load:determine');
+        return $this->collect($student, $pursuit, $term, 'staff', true, $budget);
+    }
+
+    private function collect(
+        EntityId $student,
+        EntityId $pursuit,
+        EntityId $term,
+        string $channel,
+        bool $retain = false,
+        ?HistoryReadBudget $shared = null,
+    ): array {
+
         $actor = $this->authorize($student, $pursuit, $channel);
-        return $this->transactions->run(function () use ($student, $pursuit, $term, $channel, $actor): array {
+        return $this->transactions->run(function () use (
+            $student,
+            $pursuit,
+            $term,
+            $channel,
+            $actor,
+            $retain,
+            $shared,
+        ): array {
             $this->registration->lockStudent($student);
             $this->authorize($student, $pursuit, $channel, $actor);
-            [$s, $p] = $this->scope($student, $pursuit);
+            [$s, $p] = $this->scope($student, $pursuit, $shared);
             $period = $this->records->term($term);
             $timing =
                 $period["ends_on"] < $this->clock->now()->format("Y-m-d")
@@ -98,7 +129,8 @@ final readonly class EnrollmentLoadService
                 if (count($inventory) > 200) {
                     throw new HistoryReadLimitException();
                 }
-                $budget = new HistoryReadBudget();
+                $budget = $shared ?? new HistoryReadBudget();
+                $sources = [];
                 $total = 0;
                 $unknown = false;
                 $items = [];
@@ -132,6 +164,12 @@ final readonly class EnrollmentLoadService
                     } else {
                         $total += $units;
                     }
+                    if ($retain && $units !== null) {
+                        $sources[] = ['enrollment_id' => $id->value, 'enrollment_version' => $input['history_version'],
+                            'credit_id' => $credit['credit_id'], 'credit_version' => $credit['history_version'],
+                            'credits_milli' => $units, 'course_code' => $credit['course_code'],
+                            'course_title' => $credit['course_title']];
+                    }
                     $items[] = [
                         "course_code" => $credit["course_code"],
                         "course_title" => $credit["course_title"],
@@ -149,7 +187,7 @@ final readonly class EnrollmentLoadService
                             : new EnrollmentLoadBands($policy["definition"])->classify($total),
                     "policy" => $policy,
                     "items" => $items,
-                ];
+                ] + ($retain ? ["sources" => $sources] : []);
             } catch (HistoryReadLimitException) {
                 $result = $base + [
                     "status" => "limited",
@@ -167,19 +205,22 @@ final readonly class EnrollmentLoadService
             }
             $this->audit->record($actor, "student.enrollment_load_reviewed", $student);
             $this->authorize($student, $pursuit, $channel, $actor);
-            $this->scope($student, $pursuit);
+            $this->scope($student, $pursuit, $shared);
+            if ($retain) {
+                $this->access->requirePermission("sis:load:determine");
+            }
             return $result;
         });
     }
 
-    private function scope(EntityId $student, EntityId $pursuit): array
+    private function scope(EntityId $student, EntityId $pursuit, ?HistoryReadBudget $budget = null): array
     {
         $s = $this->admissions->student($student);
         $p = $this->students->assignment($pursuit);
         if ($p->studentId->value !== $student->value) {
             throw new RecordNotFoundException("Student program not found.");
         }
-        $budget = new HistoryReadBudget();
+        $budget ??= new HistoryReadBudget();
         $this->programs->verify($p, $budget);
         $primary = $this->primary->documentContext($s, $budget);
         if ($p->status !== "active" || $primary["assignment_id"] !== $pursuit->value) {

@@ -569,16 +569,16 @@ final class AcademicReportSchema
                 "term_code" => $field("Academic term", "string", "term", "code"),
                 'term_starts_on' => $field('Academic term starts', 'date', 'term', 'starts_on'),
                 'term_ends_on' => $field('Academic term ends', 'date', 'term', 'ends_on'),
-                "capacity" => $field("Section capacity", "integer", "section", "capacity") + ["section_metric" => true],
+                "capacity" => $field("Section capacity", "integer", "section", "capacity") + ["root_metric" => true],
                 'section_active' => $field('Active section', 'boolean', 'section', 'active'),
                 'minimum_enrollment' => $field(
                     'Current minimum enrollment target',
                     'integer',
                     'section',
                     'minimum_enrollment'
-                ) + ['section_metric' => true],
+                ) + ['root_metric' => true],
                 'active_enrollment_count' => $field('Active enrollment count', 'integer', 'section', 'id') +
-                    ['expression' => 'section_enrollment_count', 'section_metric' => true],
+                    ['expression' => 'section_enrollment_count', 'root_metric' => true],
                 'below_enrollment_target' => $field('Below current enrollment target', 'boolean', 'section', 'id') +
                     ['expression' => 'section_below_target'],
                 'selected_minimum_enrollment' => $field(
@@ -586,7 +586,7 @@ final class AcademicReportSchema
                     'integer',
                     'selected_offering_definition',
                     'minimum_enrollment'
-                ) + ['section_metric' => true],
+                ) + ['root_metric' => true],
                 "delivery_mode" => $field("Delivery mode", "string", "delivery", "mode"),
                 "enrollment_id" => $field("Enrollment reference", "string", "enrollment", "id", $studentRead),
                 "enrollment_status" => $field(
@@ -789,6 +789,8 @@ final class AcademicReportSchema
             'students' => ['id' => 'students'] + $withStudentWork($students),
             "programs" => ["id" => "programs"] + $withStudentWork($program),
             'standing' => ['id' => 'standing'] + $withStudentWork(StudentStandingReportSchema::dataset()),
+            'load_determinations' => ['id' => 'load_determinations'] +
+                $withStudentWork(LoadDeterminationReportSchema::dataset()),
             "credits" => ["id" => "credits"] + $withStudentWork($credits),
             "sections" => ["id" => "sections"] + $withStudentWork($sections),
         ];

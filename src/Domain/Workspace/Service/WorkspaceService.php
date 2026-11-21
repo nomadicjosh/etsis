@@ -53,6 +53,7 @@ final readonly class WorkspaceService
         'sis:portal:publish',
         'sis:registration:prerequisite-exception',
         'sis:load:policy',
+        'sis:load:determine',
         'sis:standing:correct',
         'sis:standing:configure',
         'sis:standing:manage',

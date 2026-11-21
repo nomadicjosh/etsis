@@ -791,6 +791,15 @@ return static function (Psr7Router $router): void {
             ->name('sis.prerequisite.exceptions.' . $method);
     }
     $load = \Application\Http\Controller\SisEnrollmentLoadController::class;
+    foreach (
+        [
+        'record-review' => 'recordReview',
+        'record-confirm' => 'recordConfirm',
+        'determinations' => 'staffRecords',
+        ] as $suffix => $method
+    ) {
+        $router->map(['POST'], '/sis/students/{student}/programs/{pursuit}/load/' . $suffix . '/', [$load, $method]);
+    }
     foreach (['view', 'review', 'publish', 'history', 'programs'] as $method) {
         $router->map(['POST'], '/sis/enrollment-load/policy/' . $method . '/', [$load, $method])
             ->name('sis.load.policy.' . $method);

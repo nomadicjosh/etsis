@@ -1,30 +1,30 @@
-/* Shared, on-demand working review. Private results stay in the current page only. */
+/* Shared working review and retained determinations. Private results stay in the current page only. */
 window.createEnrollmentLoadReview = function (ui) {
     "use strict";
     const { node, request, task } = ui;
     const credits = milli => (milli / 1000).toLocaleString(undefined, { maximumFractionDigits: 3 });
     let sequence = 0;
-    return function mount(container, base) {
+    return function mount(container, base, { canDetermine = false, canReadDeterminations = true } = {}) {
         const root = node("section", { class: "surface border rounded p-3 my-3", "aria-label": "Enrollment load" });
         container.append(root);
         let serial = 0;
         const alive = token => root.isConnected && token === serial;
         const button = (label, run) => node("button", { type: "button", class: "btn btn-outline-primary campus-button secondary",
             onclick: event => task(run, event.currentTarget) }, label);
-        async function choose(search = "", after = null, stack = []) {
+        async function choose(search = "", after = null, stack = [], records = false) {
             const token = ++serial;
-            const data = await request(`${base}terms/`, "POST", { search, after });
+            const data = await request(`${base}terms/`, "POST", { search, after, ...(records ? { for_records: true } : {}) });
             if (!alive(token)) return;
             const id = `load-term-${++sequence}`;
             const input = node("input", { id, type: "search", maxlength: "80", class: "form-control", value: search });
             const form = node("form", { class: "mb-3" }, node("label", { for: id, class: "form-label" }, "Find a term"), input,
                 node("button", { type: "submit", class: "btn btn-primary campus-button mt-2" }, "Search"));
-            form.addEventListener("submit", event => { event.preventDefault(); task(() => choose(input.value)); });
+            form.addEventListener("submit", event => { event.preventDefault(); task(() => choose(input.value, null, [], records)); });
             root.replaceChildren(node("h2", { class: "h5" }, "Enrollment load"), form);
-            for (const term of data.items) root.append(node("div", { class: "mb-2" }, button(`${term.code} · ${term.starts_on}–${term.ends_on}`, () => review(term))));
+            for (const term of data.items) root.append(node("div", { class: "mb-2" }, button(`${term.code} · ${term.starts_on}–${term.ends_on}`, () => records ? history(term) : review(term))));
             if (!data.items.length) root.append(node("p", { role: "status" }, "No terms match your search."));
-            if (stack.length) root.append(button("Previous terms", () => choose(search, stack.at(-1), stack.slice(0, -1))));
-            if (data.next_after) root.append(button("More terms", () => choose(search, data.next_after, [...stack, after])));
+            if (stack.length) root.append(button("Previous terms", () => choose(search, stack.at(-1), stack.slice(0, -1), records)));
+            if (data.next_after) root.append(button("More terms", () => choose(search, data.next_after, [...stack, after], records)));
         }
         async function review(term) {
             const token = ++serial;
@@ -43,8 +43,66 @@ window.createEnrollmentLoadReview = function (ui) {
             for (const item of data.items) list.append(node("li", { class: "border-bottom py-2" },
                 `${item.course_code} · ${item.course_title} · ${item.credits_milli === null ? "Credits need review" : `${credits(item.credits_milli)} credits`}`));
             root.append(list, node("div", { class: "d-flex flex-wrap gap-2" }, button("Refresh review", () => review(term)), button("Change term", () => choose())));
+            if (canReadDeterminations) root.append(button("Recorded determinations for this term", () => history(term)));
+            if (canDetermine && data.term_timing === 'current' && ['ready', 'not_registered'].includes(data.status)) determinationForm(term);
+        }
+        async function history(term, after = null, stack = []) {
+            const token = ++serial;
+            const data = await request(`${base}determinations/`, "POST", { term_id: term.id, after });
+            if (!alive(token)) return;
+            root.replaceChildren(node("h2", { class: "h5" }, `Recorded enrollment load · ${term.code}`),
+                node("p", { class: "form-text campus-muted" }, "These are separate retained determinations. Later registration and policy changes do not replace them. They do not reconstruct an earlier census or determine financial-aid eligibility."));
+            for (const item of data.items) {
+                const details = node("details", {}, node("summary", {}, "Recorded policy and basis"),
+                    node("p", {}, `${item.program.code} · ${item.program.title}. Policy: ${item.policy.source === 'program' ? 'Program' : 'Institution'}. Basis: accepted registered credits.`),
+                    node("ul", {}, ...item.policy.definition.bands.map(band => node("li", {}, `${band.label}: from ${credits(band.min_credits_milli)} credits`))),
+                    node("p", { class: "form-text" }, "Individual registration sources remain in protected academic history."));
+                root.append(node("article", { class: "border rounded p-3 my-2" },
+                    node("h3", { class: "h6" }, `${item.as_of_date} · ${credits(item.credits_milli)} credits · ${item.classification?.label || 'Not registered'}`),
+                    node("p", {}, `Recorded ${item.recorded_at} · ${item.enrollment_count} active registrations`), details));
+            }
+            if (!data.items.length) root.append(node("p", { role: "status" }, "No load determinations have been recorded for this pursuit and term."));
+            if (stack.length) root.append(button("Newer determinations", () => history(term, stack.at(-1), stack.slice(0, -1))));
+            if (data.next_after) root.append(button("Older determinations", () => history(term, data.next_after, [...stack, after])));
+            root.append(button("Refresh recorded determinations", () => history(term)), button("Change recorded term", () => choose('', null, [], true)));
+        }
+        function determinationForm(term) {
+            const identity = `load-determination-${++sequence}`;
+            const input = node("textarea", { id: identity, class: "form-control", required: true, maxlength: "1000" });
+            const submit = node("button", { type: "submit", class: "btn btn-primary mt-2" }, "Review load determination");
+            const form = node("form", { class: "mt-3" }, node("label", { for: identity, class: "form-label" }, "Reason for recording load"), input,
+                node("p", { class: "form-text" }, "Record the current term using its published policy and original accepted registration quantities. This action does not backdate a census, replace an earlier determination or change registrations or charges."), submit);
+            form.addEventListener("submit", event => {
+                event.preventDefault();
+                task(async () => {
+                    if (!form.reportValidity()) return;
+                    const token = ++serial;
+                    const review = await request(`${base}record-review/`, "POST", { term_id: term.id, reason: input.value });
+                    if (!alive(token)) return;
+                    form.hidden = true;
+                    const result = review.result;
+                    const confirmation = node("div", { class: "mt-3", role: "region", "aria-label": "Confirm enrollment load determination" },
+                        node("h3", { class: "h6" }, "Review this retained determination"),
+                        node("p", {}, `${result.term.code} · ${result.as_of_date} · ${credits(result.credits_milli)} registered credits · ${result.classification?.label || 'Not registered'}`),
+                        node("p", {}, `Policy: ${result.policy.source === 'program' ? 'Program' : 'Institution'} · ${result.enrollment_count} active registrations`),
+                        node("details", {}, node("summary", {}, "Reviewed policy and registrations"),
+                            node("ul", {}, ...result.policy.definition.bands.map(band => node("li", {}, `${band.label}: from ${credits(band.min_credits_milli)} credits`))),
+                            node("ul", {}, ...result.items.map(item => node("li", {}, `${item.course_code} · ${item.course_title} · ${credits(item.credits_milli)} credits`)))),
+                        node("p", { style: "white-space: pre-wrap" }, review.reason),
+                        button("Confirm load determination", async () => {
+                            await request(`${base}record-confirm/`, "POST", { term_id: term.id, operation_id: review.operation_id,
+                                revision: review.revision, reason: review.reason, review_token: review.review_token });
+                            if (alive(token)) await history(term);
+                        }),
+                        button("Back to determination editing", () => { ++serial; confirmation.remove(); form.hidden = false; input.focus(); }));
+                    root.append(confirmation);
+                    confirmation.querySelector('button').focus();
+                }, submit);
+            });
+            root.append(form);
         }
         root.append(node("h2", { class: "h5" }, "Enrollment load"), button("Review enrollment load", () => choose()));
+        if (canReadDeterminations) root.append(button("Recorded determinations", () => choose('', null, [], true)));
         return root;
     };
 };
@@ -145,6 +203,6 @@ window.createWorkspaceEnrollmentLoad = function (ui) {
     }
     return { policy, open(student, pursuit) {
         const body = openDrawer("Enrollment load", "STUDENT PROGRAM");
-        mount(body, `/sis/students/${student}/programs/${pursuit}/load/`);
+        mount(body, `/sis/students/${student}/programs/${pursuit}/load/`, { canDetermine: can("sis:load:determine"), canReadDeterminations: can("sis:load:determine") });
     } };
 };

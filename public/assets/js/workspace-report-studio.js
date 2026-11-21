@@ -178,6 +178,20 @@ window.createWorkspaceReportStudio = function (ui) {
             );
         const templates = node("details", { class: "report-templates" }, node("summary", {}, "Start from a template"));
         const templateGrid = node("div", { class: "report-template-grid" });
+        const loadRecords = catalog.datasets.find(dataset => dataset.id === "load_determinations");
+        if (loadRecords) templateGrid.append(
+            button("Recorded enrollment load", () => edit(loadRecords, initial(loadRecords))),
+            button("Recorded load by date", () => edit(loadRecords, {
+                ...initial(loadRecords), columns: [
+                    { field: "term_code", label: "Recorded term", aggregate: "none" },
+                    { field: "determined_on", label: "Determination date", aggregate: "none" },
+                    { field: "classification_title", label: "Recorded load", aggregate: "none" },
+                    { field: "student_id", label: "Distinct students", aggregate: "count_distinct" },
+                    { field: "determination_id", label: "Determinations", aggregate: "count" },
+                ],
+            })),
+            node("p", { class: "form-text" }, "Recorded load is a retained decision, not today's enrollment total or a reconstructed census. One student may have several determinations and appear in different date/classification groups. Reasons and registration-source identities stay outside reporting."),
+        );
         const postings = catalog.datasets.find(dataset => dataset.id === "postings");
         if (postings) {
             const currentPostings = { condition: "AND", rules: [
@@ -551,6 +565,7 @@ window.createWorkspaceReportStudio = function (ui) {
     }
     function initial(dataset) {
         const choices = {
+            load_determinations: ["institutional_id", "full_name", "term_code", "determined_on", "classification_title", "registered_credits"],
             standing: ["institutional_id", "full_name", "program_code", "standing_title", "effective_from"],
             postings: ["institutional_id", "term_code", "posting_type", "currency", "posting_amount", "posting_reversed", "posting_recorded_at"],
             meetings: ["booking_title", "starts_at", "ends_at", "room_name", "building_name", "booking_status"],

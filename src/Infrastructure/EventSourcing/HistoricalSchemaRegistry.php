@@ -52,6 +52,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Student\Event\EnrollmentLoadWasDetermined::class => [
+                'type' => 'enrollment_load_determination', 'root' => \Domain\Student\EnrollmentLoadDetermination::class,
+                'fields' => \Domain\Student\EnrollmentLoadDetermination::FIELDS,
+            ],
             \Domain\Registration\Event\PrerequisitePermissionWasRecorded::class => [
                 'type' => 'prerequisite_permission', 'root' => \Domain\Registration\PrerequisitePermission::class,
                 'fields' => \Domain\Registration\PrerequisitePermission::FIELDS,
@@ -597,6 +601,12 @@ final readonly class HistoricalSchemaRegistry
             if ($class === \Domain\Registration\Event\PrerequisitePermissionWasRecorded::class) {
                 \Domain\Registration\PrerequisitePermission::validate($payload);
             }
+            if ($class === \Domain\Student\Event\EnrollmentLoadWasDetermined::class) {
+                \Domain\Student\EnrollmentLoadDetermination::validate($payload);
+                if ($payload['operation_id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\Student\Event\EnrollmentLoadPolicyWasPublished::class) {
                 \Domain\Student\EnrollmentLoadPolicy::validate($payload);
                 if (
@@ -977,7 +987,8 @@ final readonly class HistoricalSchemaRegistry
             foreach ($payload as $name => $value) {
                 // This complete payload is validated by its bounded typed schema above.
                 if (
-                    in_array($class, [\Domain\Registration\Event\PrerequisitePermissionWasRecorded::class,
+                    in_array($class, [\Domain\Student\Event\EnrollmentLoadWasDetermined::class,
+                    \Domain\Registration\Event\PrerequisitePermissionWasRecorded::class,
                     \Domain\Student\Event\EnrollmentLoadPolicyWasPublished::class,
                     \Domain\Advising\Event\StudentAdvisorsWereAssigned::class,
                     \Domain\Student\Event\StudentStandingWasRecorded::class,
@@ -1581,6 +1592,7 @@ final readonly class HistoricalSchemaRegistry
     {
         $type = match ($id->aggregateClassName()) {
             \Domain\Registration\PrerequisitePermission::class => 'prerequisite_permission',
+            \Domain\Student\EnrollmentLoadDetermination::class => 'enrollment_load_determination',
             \Domain\Student\EnrollmentLoadPolicy::class => 'enrollment_load_policy',
             \Domain\Student\StudentStanding::class => 'student_standing',
             \Domain\Advising\AdvisorHistory::class => 'student_advisors',
@@ -1630,6 +1642,7 @@ final readonly class HistoricalSchemaRegistry
     {
         $aggregateId = match ($type) {
             'prerequisite_permission' => new \Domain\Registration\ValueObject\PrerequisitePermissionId($id),
+            'enrollment_load_determination' => new \Domain\Student\ValueObject\LoadDeterminationId($id),
             'enrollment_load_policy' => new \Domain\Student\ValueObject\EnrollmentLoadPolicyId($id),
             'student_standing' => new \Domain\Student\ValueObject\StudentStandingId($id),
             'student_advisors' => new \Domain\Advising\ValueObject\AdvisorHistoryId($id),

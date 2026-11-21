@@ -14,6 +14,10 @@ final readonly class SqlEnrollmentLoadRepository implements EnrollmentLoadReposi
     {
     }
 
+    public function lockTerm(EntityId $term): void
+    {
+        $this->sql->lock('sis_terms', $term->value, 'id');
+    }
     public function terms(string $search, ?EntityId $after): array
     {
         $q = $this->sql->quote(...);

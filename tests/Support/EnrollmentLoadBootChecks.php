@@ -86,3 +86,41 @@ if (
 }
 $sis->access->actor = $advisingActor;
 $sis->access->staff = true;
+
+$loadDetermination = $loadPost('/sis' . $loadBase . 'record-review/', [
+    'term_id' => $sis->term->value,
+    'reason' => 'Fictional retained current load.',
+]);
+$loadInstruction = $loadDetermination + ['term_id' => $sis->term->value];
+$loadAccepted = $loadPost('/sis' . $loadBase . 'record-confirm/', $loadInstruction);
+if ($loadAccepted !== $loadPost('/sis' . $loadBase . 'record-confirm/', $loadInstruction)) {
+    throw new RuntimeException('The load determination lost its original confirmation receipt.');
+}
+$loadStaffRecords = $loadPost('/sis' . $loadBase . 'determinations/', ['term_id' => $sis->term->value]);
+if (count($loadStaffRecords['items']) !== 1 || $loadStaffRecords['items'][0]['credits_milli'] !== 3000) {
+    throw new RuntimeException('The retained load did not resolve through the real providers.');
+}
+$sis->access->staff = false;
+$sis->access->actor = $advisingPerson->ownerUserId;
+$loadPost('/portal/api/advising' . $loadBase . 'determinations/', ['term_id' => $sis->term->value]);
+$sis->access->actor = $sis->admissions->person($advisingStudent->personId)->ownerUserId;
+$loadOwnerRecords = $loadPost('/portal/api' . $loadBase . 'determinations/', ['term_id' => $sis->term->value]);
+$loadPost('/portal/api' . $loadBase . 'terms/', ['for_records' => true]);
+foreach (['reason', 'actor_id', 'enrollment_id', 'credit_id', 'version_id'] as $privateField) {
+    if (str_contains(json_encode($loadOwnerRecords), $privateField)) {
+        throw new RuntimeException('Private source evidence escaped the retained-load reader.');
+    }
+}
+if ($teachingPost('/sis' . $loadBase . 'record-confirm/', $loadInstruction)->getStatusCode() !== 403) {
+    throw new RuntimeException('Owner access widened registrar confirmation authority.');
+}
+$sis->access->actor = $sis->user();
+if (
+    $teachingPost('/portal/api' . $loadBase . 'determinations/', [
+        'term_id' => $sis->term->value,
+    ])->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Another account read private load determinations.');
+}
+$sis->access->actor = $advisingActor;
+$sis->access->staff = true;
