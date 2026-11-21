@@ -211,6 +211,9 @@ try {
         } elseif (($argv[1] ?? '') === 'check-moodle-resolution') {
             require __DIR__.'/MoodleResolutionBootChecks.php';
             $status=0;
+        } elseif (($argv[1] ?? '') === 'check-person-projections') {
+            require __DIR__ . '/PersonProjectionBootChecks.php';
+            $status = 0;
         } elseif (in_array($argv[1] ?? '', ['check-history-verification', 'check-account-projections', 'check-academic-projections'], true)) {
             require __DIR__.'/HistoryVerificationBootChecks.php';
             $status=0;

@@ -151,7 +151,7 @@ The same operator command can check one student's available registration, instit
 ddev codex sis:history:verify --student='<sis_students.id>' --events=500 --json
 ```
 
-Use the canonical student ULID, not an assigned institutional number. This mode requires trusted deployment access to the application database and history keys. It rejects `--account`, `--streams` and `--cursor` combinations before resolving storage. It adds no browser endpoint, ordinary reporting source, scheduled worker, schema, academic decision or repair operation.
+Use the canonical student ULID, not an assigned institutional number. This mode requires trusted deployment access to the application database and history keys. It rejects `--account`, `--person`, `--streams` and `--cursor` combinations before resolving storage. It adds no browser endpoint, ordinary reporting source, scheduled worker, schema, academic decision or repair operation.
 
 The check reuses `AcademicInputVerifier`, the internal available-source verifier used by registration, degree progress and transcripts. Its six-source bounded inventory compares surviving institutional/transfer source links, retained academic and registration streams, projections and accepted version references. Early removals are checked internally and excluded from the current-record count. Recorded grades, course titles, source identities, removal counts, actors, reasons and raw history never appear in operator output. This mode does not filter work to a pursuit or validate attribution/reuse decisions, person identity history, degree requirements, financial postings or archive-wide completeness. Use the ordinary authorized pursuit reviews and separate financial/global checks for their distinct purposes.
 
@@ -172,6 +172,44 @@ JSON contains only `status`, `scope: student_academic_inputs`, `student_referenc
 | Invalid input / 2 | Use one canonical student ULID, a supported event limit and optional JSON output. |
 
 Fictional fixtures verify recorded institutional and transfer work, earlier unknown transfer rows, early removals, projection/journal damage, limits, concurrent registrations and changed existing heads. Populated checks run with SQLite writes prohibited and unchanged journal/source/audit/finance snapshots. The native command is exercised through actual lazy providers. A bounded MariaDB check on 2026-11-20 correctly rejected a missing canonical student; that database contained no students and 20 journal events. All eleven inspected journal/support/academic/audit table checksums were unchanged. Populated MariaDB and other live-driver acceptance, isolated rebuilds, protected checkpoints and restore certification remain open.
+
+## Selected person profile verification
+
+Use the same operator command to compare **one canonical person** across their shared profile areas:
+
+```sh
+ddev codex sis:history:verify --person='<sis_persons.id>' --events=500 --json
+```
+
+Use the person ULID, not an institutional number, account ID, student ID or employment ID. This is a trusted deployment operation requiring database and history/decryption-key access. It adds no browser route, ordinary reporting field or staff permission. Exactly one of `--person`, `--student` and `--account` may be supplied; selected checks reject `--streams` and `--cursor` before resolving storage.
+
+One authenticated person-profile replay feeds all current comparisons:
+
+- Core names, directory restriction, institutional identifier/version and canonical account ownership.
+- The linked account's current first/last names and unique person link. Credentials, tokens, email, sign-in status and the User credential stream are outside this check.
+- Preferred name, phone and retained freeform mailing text.
+- The complete dated address book and managed-mailing flag, including historical intervals still in that book. Today's derived mailing display is not stored as another authority.
+- The ordered emergency-contact list, including an explicitly cleared list.
+- Self-reported education and its retained review state. This does not verify credentials or award academic credit.
+
+Encrypted projections are decoded through their existing strict repositories and compared with the already replayed `ProfileHistory` facts, including versions. A missing known row, different retained value, malformed encrypted payload or unexpected new address/emergency/education row is unverified. Legacy freeform contact rows without retained contact evidence remain explicitly unrecorded. Core profiles without an earlier stream and genuine first observations remain history gaps; the tool neither creates an observation nor silently adopts current rows. Matching current projections do not prove earlier history.
+
+The default allowance is 500 events, selectable from 1–2,000. All profile areas share one replay, a 4 MiB payload allowance and a five-second cooperative guard. Projection reads select at most two rows per person/area, so duplicate rows fail rather than increasing work with the institution's population. Replay applies facts in memory without calling a profile editor, audit writer, messaging service, account setup or repair operation. The check refuses an enclosing transaction, reads without write locks and captures/rechecks the selected profile head, identity, account-link/name facts and encrypted projection rows. An intervening selected edit reports **changed** instead of damaged projections. Unrelated-person activity and credential/token updates do not invalidate this profile-only check.
+
+| Status / application exit | Meaning |
+| --- | --- |
+| `verified` / 0 | Recorded creation and current profile projections match through the captured position; no observed/unrecorded earlier component was encountered. |
+| `history_gaps` / 3 | Available current comparisons match, but earlier observations or unrecorded identity/contact facts prevent full verification. |
+| `changed` / 3 | The captured head or selected current rows changed; repeat the check. |
+| `limited` / 3 | Replay, payload or time allowance stopped the check; no partial component result is certified. |
+| `unverified` / 1 | A component differs, protected history is damaged, or storage/keys are unavailable. No repair is attempted. |
+| Invalid input / 2 | Invalid limits, reference or incompatible options; storage is not resolved. |
+
+JSON contains only `status`, `scope`, the selected `person_reference`, captured `position`, `events_checked`, whitelisted `issues`, `unrecorded_components`, `earlier_history_unknown` and `records_changed: false`. Incomplete results withhold partial gap diagnoses. Issue codes are `journal`, `identity`, `account_link`, `contact`, `addresses`, `emergency_contacts`, `education` and `unavailable`. Output never includes names, assigned identifiers, phone/address/contact values, education/feedback, credentials, keys, ciphertext or underlying exception text. Keep the reference and shell output within private operator procedures. DDEV may wrap a nonzero application exit with its own failure message; `history_gaps` is an incomplete-verification outcome, not permission to synthesize missing history.
+
+This observational check provides no independent checkpoint or global snapshot. It does not validate every retry receipt, prove archive completeness, traverse orphan records without a reachable person stream, reconcile academic/financial/HR decisions, or rebuild/erase data. Use the global mode for its separate chain/reference/receipt inventory. Investigate current differences through authorized domain workflows or a separately reviewed reconstruction; never edit history to make a check pass.
+
+Bounded fictional verification covers populated and explicitly empty profiles with SQLite writes prohibited; all encrypted areas, missing/altered rows, privacy/identity/account drift, observed/untracked earlier facts, exact multi-page allowances, damaged/oversized history, provider failures and concurrent edits. Actual provider/console fixtures verify lazy invalid-input handling, text/JSON privacy and exit codes, alongside regression checks for existing global/account/student modes. Final checks passed **38 PHP tests / 246 assertions**, plus the separate student-command bootstrap check. Scoped production/new-test PHP coding standards and whitespace checks passed. Native DDEV MariaDB returned `history_gaps` for an earlier untracked profile, with all ten inspected event/support/profile/audit checksums unchanged; there were ten people, twenty journal events and no profile streams at that inspection. Populated native-server, rebuild and restore acceptance remain open.
 
 ## Verification and next steps
 

@@ -10,6 +10,7 @@ use Domain\AcademicRecord\Repository\AcademicProjectionVerifier;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Finance\Repository\AccountProjectionVerifier;
 use Domain\Finance\ValueObject\AccountId;
+use Domain\Person\Repository\PersonProjectionVerifier;
 use Domain\Shared\EventSourcing\HistoricalIntegrityVerifier;
 use Domain\Shared\EventSourcing\HistoryVerificationFailedException;
 use InvalidArgumentException;
@@ -28,6 +29,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
         ["json", null, "none", "Emit machine-readable counts and a protected continuation cursor."],
         ['student', null, 'required', 'Check one student’s available academic sources and projections; no cursor.'],
         ['account', null, 'required', 'Verify one financial account and its balance/posting projections; no cursor.'],
+        ['person', null, 'required', 'Compare one person’s profile projections with protected history; no cursor.'],
     ];
     public function __construct(Application $codefy)
     {
@@ -51,6 +53,16 @@ final class VerifyHistoryCommand extends ConsoleCommand
             }
             $account = $this->getOptions('account');
             $student = $this->getOptions('student');
+            $person = $this->getOptions('person');
+            if (count(array_filter([$account, $student, $person], static fn(mixed $id): bool => $id !== null)) > 1) {
+                throw new InvalidArgumentException();
+            }
+            if ($person !== null) {
+                if (!is_string($person) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
+                    throw new InvalidArgumentException();
+                }
+                return $this->person(new EntityId($person), $events, $json);
+            }
             if ($student !== null) {
                 if (
                     !is_string($student) || $account !== null || $cursor !== null ||
@@ -74,7 +86,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 $json,
                 "invalid_input",
                 "Use --streams=1..50, --events=1..2000 and a valid optional verification cursor. "
-                    . 'Use --account=ULID or --student=ULID with --events and optional --json for a selected check.',
+                    . 'Use one of --person=ULID, --account=ULID or --student=ULID with --events and optional --json.',
                 self::INVALID,
             );
         } catch (HistoryVerificationFailedException $exception) {
@@ -170,6 +182,33 @@ final class VerifyHistoryCommand extends ConsoleCommand
             default => self::FAILURE,
         };
     }
+    private function person(EntityId $person, int $events, bool $json): int
+    {
+        $result = $this->codefy->make(PersonProjectionVerifier::class)->verify($person, $events);
+        if ($json) {
+            $this->output->writeln(json_encode($result->describe(), JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
+        } else {
+            $this->terminalRaw('Person profile ' . $result->person->value . ': ' . $result->status . '.');
+            $this->terminalRaw('Captured position: ' . ($result->position ?? 'unknown') . '; '
+                . $result->events . ' events checked.');
+            if ($result->issues !== []) {
+                $this->terminalRaw('Unverified components: ' . implode(', ', $result->issues) . '.');
+            }
+            if ($result->unrecordedComponents !== []) {
+                $this->terminalRaw('Components without retained evidence: '
+                    . implode(', ', $result->unrecordedComponents) . '.');
+            }
+            $this->terminalRaw('No records were changed. Earlier observations and unrecorded components do not '
+                . 'establish complete history. Changed or limited checks must be repeated in a controlled review. '
+                . 'This checks profile projections and linked account names, not credentials or every retry receipt.');
+        }
+        return match ($result->status) {
+            'verified' => self::SUCCESS,
+            'history_gaps', 'changed', 'limited' => 3,
+            default => self::FAILURE,
+        };
+    }
+
     private function number(mixed $value, int $maximum): int
     {
         if (

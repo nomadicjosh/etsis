@@ -142,6 +142,10 @@ Migration **20261117000001** adds `sis_person_education`, an encrypted, versione
 
 The projection can be reconstructed from recorded education events, subject to the existing bounded replay and institution-owned key/backup/retention requirements. This does not add general operational rebuild or erasure tooling. Names, dates, GPA and feedback stay encrypted in the projection and journal, are redacted from debugging and are not new Report Studio fields or browser-storage values. All five framework SQL dialects compile the additive schema; SQLite fixtures and the configured MariaDB installation are exercised directly.
 
+## Operator profile integrity check
+
+Trusted deployment operators can use `ddev codex sis:history:verify --person='<sis_persons.id>' --events=500 --json` to compare current identity/privacy/identifier facts, linked account names, contact details, dated addresses, emergency contacts and education with one bounded protected profile replay. The result names components and counts without printing personal values. Earlier untracked profiles and contact facts remain explicit history gaps; the check writes no observation, audit, repair or credential change. Read the [operator limits, outcomes and scope](event-history-foundation.md#selected-person-profile-verification) before using the result. Profile rebuilding, independent checkpoints and retention/disposition remain separate work.
+
 ## Employment and time review
 
 Employment retains the same parent person and sign-in account. See the consolidated [Human resources guide](human-resources.md) for job/pay-grade setup, protected employment changes, historical review and weekly time review. Library edits do not rewrite employee or academic facts.
