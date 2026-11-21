@@ -187,6 +187,19 @@ window.createWorkspaceReportStudio = function (ui) {
                 button("Current financial postings", () => edit(postings, {
                     ...initial(postings), filters: structuredClone(currentPostings),
                 })),
+                button("Payments by posting month", () => edit(postings, {
+                    ...initial(postings),
+                    columns: [
+                        { field: "posting_recorded_at", label: "Posting month UTC", aggregate: "none", date_bucket: "month" },
+                        { field: "currency", label: "Currency", aggregate: "none" },
+                        { field: "posting_id", label: "Payment postings", aggregate: "count" },
+                        { field: "posting_amount", label: "Payments", aggregate: "sum" },
+                    ],
+                    filters: { condition: "AND", rules: [...structuredClone(currentPostings.rules),
+                        { id: "posting_type", operator: "equal", value: "payment" },
+                    ] },
+                    sort: [{ column: 0, direction: "asc" }],
+                })),
                 button("Payments by billing term", () => edit(postings, {
                     ...initial(postings),
                     columns: [
@@ -247,6 +260,13 @@ window.createWorkspaceReportStudio = function (ui) {
         ] };
         if (meetings) {
             templateGrid.append(
+                button("Approved meetings by month", () => edit(meetings, {
+                    ...initial(meetings),
+                    columns: [
+                        { field: "starts_at", label: "Meeting month UTC", aggregate: "none", date_bucket: "month" },
+                        { field: "meeting_id", label: "Meetings", aggregate: "count_distinct" },
+                    ], filters: structuredClone(approvedMeetings), sort: [{ column: 0, direction: "asc" }],
+                })),
                 button("Approved meeting schedule", () => edit(meetings, {
                     ...initial(meetings), filters: structuredClone(approvedMeetings),
                     sort: [{ column: 1, direction: "asc" }],
@@ -294,6 +314,15 @@ window.createWorkspaceReportStudio = function (ui) {
             templateGrid.append(node("p", {}, "Choose a starting question, then adjust its fields and filters."));
         if (applications?.fields.submitted_on)
             templateGrid.append(
+                button("Applications by submission month", () => edit(applications, {
+                    ...initial(applications),
+                    columns: [
+                        { field: "submitted_on", label: "Submission month", aggregate: "none", date_bucket: "month" },
+                        { field: "application_id", label: "Applications", aggregate: "count_distinct" },
+                    ],
+                    filters: { condition: "AND", rules: [{ id: "submitted_on", operator: "is_not_null", value: null }] },
+                    sort: [{ column: 0, direction: "asc" }],
+                })),
                 button("Applications with recorded submission dates", () => edit(applications, {
                     ...initial(applications),
                     filters: { condition: "AND", rules: [
@@ -1508,8 +1537,9 @@ window.createWorkspaceReportStudio = function (ui) {
                         ? `${dataset.fields[column.field].label} ${{ "+": "+", "-": "−", "*": "×", "/": "÷" }[column.calculation.operator]} ${dataset.fields[column.calculation.field].label}`
                         : `${relationLabel(dataset.fields[column.field].relation)} · ${dataset.fields[column.field].label}`,
                 );
-                const mode = button(summaryLabel(column.aggregate) + (column.conditions ? " · Filtered" : ""), () => inspect(column), "report-summary-button");
-                mode.setAttribute("aria-label", `Column ${index + 1} settings: ${summaryLabel(column.aggregate)}`);
+                const periodLabel = column.date_bucket ? `${calendarLabel(column.date_bucket)} · ` : "";
+                const mode = button(periodLabel + summaryLabel(column.aggregate) + (column.conditions ? " · Filtered" : ""), () => inspect(column), "report-summary-button");
+                mode.setAttribute("aria-label", `Column ${index + 1} settings: ${periodLabel}${summaryLabel(column.aggregate)}`);
                 mode.prepend(icon(column.aggregate === "none" ? "sliders" : "calculator"));
                 const sort = definition.sort.find((s) => s.column === index);
                 const order = button(
@@ -1579,6 +1609,14 @@ window.createWorkspaceReportStudio = function (ui) {
                         "Your report starts here. Check a field or drag one into this space.",
                     ),
                 );
+        }
+        function calendarLabel(period) {
+            return { day: "Day", month: "Month", year: "Year" }[period] || "Full date";
+        }
+        function columnType(column) {
+            if (["count", "count_distinct"].includes(column.aggregate)) return "integer";
+            if (column.aggregate === "avg" || column.calculation) return "double";
+            return column.date_bucket ? column.date_bucket === "day" ? "date" : "string" : dataset.fields[column.field].type;
         }
         function summaryLabel(mode) {
             return {
@@ -1652,6 +1690,30 @@ window.createWorkspaceReportStudio = function (ui) {
                 summaries,
                 node("p", { class: "form-text" }, "When you summarize a column, the other columns group your results."),
             );
+            if (["date", "datetime"].includes(field.type)) {
+                const periods = node("div", { class: "report-summary-choices", role: "group", "aria-label": "Calendar grouping" });
+                for (const period of [null, "day", "month", "year"]) {
+                    const choice = button(period ? calendarLabel(period) : "Original value", () => {
+                        syncFilters(true);
+                        if (period) column.date_bucket = period;
+                        else delete column.date_bucket;
+                        definition.having = pruneConditions(definition.having, id => id !== `c${index}`);
+                        destroyWidgets();
+                        readers = null;
+                        panels.filters.replaceChildren();
+                        dirty();
+                        renderColumns();
+                        inspect(column);
+                        inspector.querySelector('[aria-label="Calendar grouping"] [aria-pressed="true"]')?.focus();
+                    }, "report-choice-tile");
+                    choice.setAttribute("aria-pressed", String((column.date_bucket || null) === period));
+                    periods.append(choice);
+                }
+                inspector.append(node("h3", {}, "Group dates"), periods,
+                    node("p", { class: "form-text" }, field.type === "datetime"
+                        ? "Timestamp periods use UTC. Months include their year. Missing dates remain blank; filters still use the original timestamp."
+                        : "Use the recorded calendar date. Months include their year. Missing dates remain blank; filters still use the original date."));
+            }
             const duplicate = button("Duplicate column", () => {
                 if (frozen) return;
                 if (definition.columns.length >= 16) throw new Error("Choose up to 16 report columns.");
@@ -1795,11 +1857,7 @@ window.createWorkspaceReportStudio = function (ui) {
                                   `c${i}`,
                                   {
                                       label: c.label,
-                                      type: ["count", "count_distinct"].includes(c.aggregate)
-                                          ? "integer"
-                                          : c.aggregate === "avg" || c.calculation
-                                            ? "double"
-                                            : dataset.fields[c.field].type,
+                                      type: columnType(c),
                                   },
                               ],
                           ],

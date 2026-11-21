@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Infrastructure\Reporting;
 
 use Domain\Reporting\ValueObject\ReportQuery;
+use Domain\Reporting\Enum\ReportDateBucket;
 use Infrastructure\Persistence\SqlRecords;
 use Infrastructure\Persistence\SqlSelectLimit;
 
@@ -40,6 +41,14 @@ final readonly class ReportSelectCompiler
         $aggregate = false;
         foreach ($d["columns"] as $i => $column) {
             $rowExpression = $expression($column["field"]);
+            if (isset($column['date_bucket'])) {
+                $rowExpression = ReportCalendarSql::bucket(
+                    $rowExpression,
+                    $s['fields'][$column['field']]['type'],
+                    ReportDateBucket::from($column['date_bucket']),
+                    $this->sql->driver(),
+                );
+            }
             if (isset($column["calculation"])) {
                 $other = $expression($column["calculation"]["field"]);
                 $op = $column["calculation"]["operator"];

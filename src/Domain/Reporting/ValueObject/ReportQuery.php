@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\Reporting\ValueObject;
 
 use Domain\Shared\Exception\ValidationException;
+use Domain\Reporting\Enum\ReportDateBucket;
 use Domain\Shared\ValueObject\EntityId;
 
 final readonly class ReportQuery
@@ -61,6 +62,13 @@ final readonly class ReportQuery
                 self::invalid("Choose a supported column summary.");
             }
             $type = $schema["fields"][$column["field"]]["type"];
+            if (
+                array_key_exists('date_bucket', $column) &&
+                (!is_string($column['date_bucket']) || ReportDateBucket::tryFrom($column['date_bucket']) === null ||
+                    !in_array($type, ['date', 'datetime'], true))
+            ) {
+                self::invalid('Calendar grouping requires a date field and Day, Month or Year.');
+            }
             $calc = $column["calculation"] ?? null;
             if (
                 $calc !== null &&
@@ -480,6 +488,7 @@ final readonly class ReportQuery
         return match (true) {
             in_array($column["aggregate"], ["count", "count_distinct"], true) => "integer",
             $column["aggregate"] === "avg", isset($column["calculation"]) => "double",
+            isset($column['date_bucket']) => ReportDateBucket::from($column['date_bucket'])->outputType(),
             default => $this->schema["fields"][$column["field"]]["type"],
         };
     }

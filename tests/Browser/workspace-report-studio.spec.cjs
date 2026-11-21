@@ -36,6 +36,7 @@ async function fixture(page, options = {}) {
         term_code: { label: 'Billing term', type: 'string', relation: 'term' },
         currency: { label: 'Currency', type: 'string', relation: 'account' },
     } : options.scheduling ? {
+        meeting_id: { label: 'Meeting reference', type: 'string', relation: 'meeting' },
         room_code: { label: 'Room code', type: 'string', relation: 'room' },
         room_name: { label: 'Room name', type: 'string', relation: 'room' },
         building_name: { label: 'Building name', type: 'string', relation: 'building' },
@@ -197,7 +198,9 @@ async function fixture(page, options = {}) {
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
                 latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
-            const rows = options.postings || options.scheduling || options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, values[column.field] ?? null]))]
+            const rows = options.postings || options.scheduling || options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, column.date_bucket && values[column.field] != null
+                    ? String(values[column.field]).slice(0, { day: 10, month: 7, year: 4 }[column.date_bucket])
+                    : values[column.field] ?? null]))]
                 : data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
             result = { conditional_columns: query.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(query), columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
                 next_offset: options.postings || options.scheduling || options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
@@ -1179,5 +1182,68 @@ test('a date-selection change invalidates an older in-flight preview', async ({ 
     await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     await expect(studio.getByRole('complementary', { name: 'Related row selection' })).toContainText('earliest');
     expect(f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition.record_selection.registration.direction).toBe('earliest');
+    expect(f.errors).toEqual([]);
+});
+
+for (const [name, options, dateField] of [
+    ['Applications by submission month', { applications: true }, 'submitted_on'],
+    ['Approved meetings by month', { scheduling: 'meetings' }, 'starts_at'],
+    ['Payments by posting month', { postings: true }, 'posting_recorded_at'],
+]) test(`calendar starter ${name} keeps period controls in the shared saved-report workflow`, async ({ page }) => {
+    const f = await fixture(page, options);
+    await page.getByRole('button', { name, exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional calendar review');
+    const settings = studio.getByRole('button', { name: 'Column 1 settings: Month · Each value', exact: true });
+    await settings.click();
+    const periods = studio.getByRole('group', { name: 'Calendar grouping', exact: true });
+    await expect(periods.getByRole('button', { name: 'Month', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await periods.getByRole('button', { name: 'Year', exact: true }).click();
+    await expect(periods.getByRole('button', { name: 'Year', exact: true })).toBeFocused();
+    await expect(periods.getByRole('button', { name: 'Year', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await studio.getByRole('button', { name: 'Done', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.columns[0]).toMatchObject({ field: dateField, date_bucket: 'year' });
+    if (options.postings) {
+        expect(query.columns[1]).toMatchObject({ field: 'currency', aggregate: 'none' });
+        expect(query.filters.rules).toEqual([
+            { id: 'posting_reversed', operator: 'equal', value: false },
+            { id: 'posting_type', operator: 'equal', value: 'payment' },
+        ]);
+    }
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
+    await studio.getByRole('button', { name: 'Edit', exact: true }).click();
+    await studio.getByRole('button', { name: 'Column 1 settings: Year · Each value', exact: true }).click();
+    await expect(periods.getByRole('button', { name: 'Year', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.setViewportSize({ width: 320, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    await periods.getByRole('button', { name: 'Original value', exact: true }).click();
+    await studio.getByRole('button', { name: 'Done', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns[0]).not.toHaveProperty('date_bucket');
+    expect(f.calls.filter(call => call.path.endsWith('/preview/')).every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('calendar changes invalidate an older preview and non-date fields have no calendar controls', async ({ page }) => {
+    const f = await fixture(page, { applications: true });
+    await page.getByRole('button', { name: 'Applications by submission month', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByRole('button', { name: 'Column 1 settings: Month · Each value', exact: true }).click();
+    let release, started;
+    const waiting = new Promise(resolve => { release = resolve; });
+    const pending = new Promise(resolve => { started = resolve; });
+    await page.route('**/sis/report-studio/preview/', async route => { started(); await waiting; await route.fallback(); });
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    await pending;
+    await studio.getByRole('group', { name: 'Calendar grouping', exact: true }).getByRole('button', { name: 'Day', exact: true }).click();
+    release();
+    await expect(studio).toContainText('The draft changed during the preview');
+    await studio.getByRole('button', { name: 'Done', exact: true }).click();
+    await studio.getByRole('button', { name: 'Column 2 settings: Distinct count', exact: true }).click();
+    await expect(studio.getByRole('group', { name: 'Calendar grouping', exact: true })).toHaveCount(0);
     expect(f.errors).toEqual([]);
 });

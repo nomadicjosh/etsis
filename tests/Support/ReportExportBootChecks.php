@@ -85,9 +85,18 @@ $fundingDefinition = ['dataset' => 'postings', 'columns' => [
     ['id' => 'posting_type', 'operator' => 'equal', 'value' => 'payment'],
     ['id' => 'posting_reversed', 'operator' => 'equal', 'value' => false],
 ]]];
+$fundingDefinition['columns'][] = [
+    'field' => 'posting_recorded_at', 'label' => 'Posting month UTC',
+    'aggregate' => 'none', 'date_bucket' => 'month',
+];
 $fundingPreview = $teachingPost('/sis/report-studio/preview/', ['definition' => $fundingDefinition, 'offset' => 0]);
 $fundingData = json_decode((string) $fundingPreview->getBody(), true, flags: JSON_THROW_ON_ERROR);
-if ($fundingPreview->getStatusCode() !== 200 || ($fundingData['items'][0]['c0'] ?? null) !== 'loan') {
+if (
+    $fundingPreview->getStatusCode() !== 200 || ($fundingData['items'][0]['c0'] ?? null) !== 'loan' ||
+    preg_match('/^\d{4}-\d{2}$/D', (string) ($fundingData['items'][0]['c3'] ?? '')) !== 1 ||
+    !str_contains($fundingPreview->getHeaderLine('Cache-Control'), 'no-store') ||
+    $fundingPreview->hasHeader('phpdebugbar-id')
+) {
     throw new RuntimeException('The private finance report did not resolve its receipt-method projection.');
 }
 $fundingReport = \Domain\Shared\ValueObject\EntityId::generate()->value;

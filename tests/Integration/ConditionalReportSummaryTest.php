@@ -114,8 +114,18 @@ final class ConditionalReportSummaryTest extends TestCase
             ['field' => 'enrollment_id', 'label' => 'Known registrations', 'aggregate' => 'count',
                 'conditions' => $this->filter('enrollment_status', 'not_equal', 'W')],
         ]];
+        // Capacity totals and a many-row enrollment count need separate grains.
+        try {
+            $this->service($s)->preview($d, 0);
+            self::fail('A many-record enrollment join could inflate section totals.');
+        } catch (ValidationException $error) {
+            self::assertStringContainsString('Multiple related rows', $error->errors[0]['message']);
+        }
+        $enrollmentCount = array_pop($d['columns']);
         $rows = $this->service($s)->preview($d, 0)['items'];
-        self::assertSame([30, null, 30.0, $section->code, '2026-08-01', 0.0, 0], array_values($rows[0]));
+        self::assertSame([30, null, 30.0, $section->code, '2026-08-01', 0.0], array_values($rows[0]));
+        $d['columns'] = [$enrollmentCount];
+        self::assertSame(0, $this->service($s)->preview($d, 0)['items'][0]['c0']);
     }
 
     public function testColumnJoinAndRowAndSummaryParametersFollowSqlOrderInEveryDialect(): void
