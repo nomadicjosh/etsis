@@ -41,6 +41,8 @@ final readonly class StudentDegreeProgress
                     'progress' => $progress,
                     ...$specialization !== null && array_key_exists('department', $specialization)
                         ? ['department' => self::department($specialization['department'])] : [],
+                    ...$specialization !== null && array_key_exists('parent_major', $specialization)
+                        ? ['parent_major' => self::major($specialization['parent_major'])] : [],
                 ];
             }
             $this->data = ['status' => 'review', 'mode' => 'combined_curriculum', 'sharing' => $review['sharing'],
@@ -461,6 +463,11 @@ final readonly class StudentDegreeProgress
     {
         return ["progress" => "[private student progress]"];
     }
+    private static function major(?array $major): ?array
+    {
+        return $major === null ? null : array_intersect_key($major, array_flip(['code', 'title']));
+    }
+
     private static function department(?array $department): ?array
     {
         if ($department === null) {

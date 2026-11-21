@@ -7,6 +7,7 @@ async function fixture(
     {
         readOnly = false,
         typed = false,
+        linked = false,
         adjustments = false,
         cohortChanged = false,
         unknown = false,
@@ -31,6 +32,11 @@ async function fixture(
         revision: 1,
         kind: typed ? (n === 0 ? "major" : "minor") : "specialization",
     }));
+    if (linked) {
+        offered[0].kind = offered[1].kind = 'major';
+        offered[22].kind = 'concentration';
+        offered[22].parent_major = { id: offered[0].id, code: offered[0].code, title: offered[0].title };
+    }
     const program = {
         definition: { code: "BA.ART", title: "Fictional arts" },
         academic_year_code: "2024-2025",
@@ -975,5 +981,31 @@ test("major/minor selections show retained type limits and require the major bef
     await page.getByRole("button", { name: "Revise selection", exact: true }).click();
     await expect(major).toBeChecked();
     await expect(minor).toBeChecked();
+    expect(f.errors).toEqual([]);
+});
+
+
+test('linked concentration keeps its choice across pages while missing required major blocks review', async ({ page }) => {
+    const f = await fixture(page, { linked: true });
+    await page.getByRole('button', { name: 'More choices', exact: true }).click();
+    await page.getByLabel('CHOICE.23 — Fictional choice 23', { exact: true }).check();
+    await expect(page.locator('#drawer-body')).toContainText('Requires major: CHOICE.1');
+    await page.getByRole('button', { name: 'Previous choices', exact: true }).click();
+    await page.getByLabel('CHOICE.1 — Original <b>Art</b>', { exact: true }).uncheck();
+    await expect(page.getByRole('status').filter({ hasText: 'Select required majors for: CHOICE.23.' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Review specialization selection', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'More choices', exact: true }).click();
+    await expect(page.getByLabel('CHOICE.23 — Fictional choice 23', { exact: true })).toBeChecked();
+    await page.getByRole('button', { name: 'Previous choices', exact: true }).click();
+    await page.getByLabel('CHOICE.1 — Original <b>Art</b>', { exact: true }).check();
+    await page.getByLabel('Reason for this selection change', { exact: true }).fill('Fictional connected major review.');
+    await page.getByRole('button', { name: 'Review specialization selection', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Requires major: CHOICE.1');
+    await page.getByRole('button', { name: 'Confirm specialization selection', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Review specialization selection', exact: true })).toBeVisible();
+    expect(f.calls.find(c => c.path === f.base + 'review/').data.specialization_ids.sort()).toEqual([f.offered[0].id, f.offered[22].id].sort());
+    await page.setViewportSize({ width: 375, height: 812 });
+    expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(f.errors).toEqual([]);
 });

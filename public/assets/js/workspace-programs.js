@@ -602,6 +602,7 @@ window.createWorkspacePrograms = function (ui) {
                         node("h3", { class: "h5" }, `${item.code} — ${item.title}`),
                         node("p", {}, `Type: ${item.kind || "not recorded — choose a type before publishing"}`),
                         node("p", {}, window.curriculumOrganizationText(item)),
+                        node("p", {}, window.curriculumMajorText(item)),
                         node("p", {}, item.active ? "Active" : "Inactive — retained for reference"),
                         button(`Edit specialization ${item.code}`, () =>
                             editSpecialization(program, item.id, restore),
@@ -638,6 +639,22 @@ window.createWorkspacePrograms = function (ui) {
         body.append(controls);
     }
 
+    async function chooseParentMajor(program, choose, back, search = "", after = null, previous = []) {
+        const body = openDrawer("Choose required major", "MAJORS IN THIS PROGRAM");
+        const data = await request(`/sis/programs/${program}/specializations/page/`, "POST", { search, after, kind: "major" });
+        if (!body.isConnected) return;
+        const input = node("input", { type: "search", id: "parent-major-search", class: "form-control", maxlength: 100, value: search });
+        const form = node("form", {}, node("label", { for: input.id, class: "form-label" }, "Find a required major"), input, node("button", { type: "submit", class: "btn btn-primary" }, "Search majors"));
+        form.addEventListener("submit", event => { event.preventDefault(); task(() => chooseParentMajor(program, choose, back, input.value)); });
+        body.append(form, node("p", {}, "Choose the major this concentration, track or specialization requires. Selection must include that major under the retained program policy."));
+        for (const item of data.items) body.append(node("section", { class: "surface p-3 my-2" }, node("h3", { class: "h6" }, `${item.code} — ${item.title}`),
+            item.active ? button(`Use major ${item.code}`, () => choose({ id: item.id, code: item.code, title: item.title })) : node("p", {}, "Retired — unavailable for a new relationship")));
+        if (!data.items.length) body.append(node("p", { role: "status" }, "No matching majors. Add an active major to this program first."));
+        if (previous.length) body.append(button("Previous major choices", () => chooseParentMajor(program, choose, back, search, previous.at(-1), previous.slice(0, -1))));
+        if (data.next_after) body.append(button("More major choices", () => chooseParentMajor(program, choose, back, search, data.next_after, [...previous, after])));
+        body.append(button("Back to curriculum component", back));
+    }
+
     async function editSpecialization(program, id, back, state = null) {
         const base = `/sis/programs/${program}/specializations/`;
         const value = state?.value || (id
@@ -663,6 +680,7 @@ window.createWorkspacePrograms = function (ui) {
         const form = await buildForm(fields, state?.draft || value);
         if (!body.isConnected) return;
         const department = state ? state.department : value.department || null;
+        const parentMajor = state ? state.parentMajor : value.parent_major || null;
         form.elements.namedItem("code").maxLength = 80;
         form.elements.namedItem("code").pattern = "[A-Za-z0-9][A-Za-z0-9._-]{0,79}";
         form.elements.namedItem("code").title = "Use letters, numbers, dots, underscores or hyphens.";
@@ -673,15 +691,32 @@ window.createWorkspacePrograms = function (ui) {
             class: "form-check-input",
         });
         active.checked = state?.active ?? value.active;
-        const restore = (choice = department) => editSpecialization(program, id, back, {
-            value, department: choice, active: active.checked, draft: formData(form, fields),
-        });
+        const capture = () => ({ value, department, parentMajor, active: active.checked, draft: formData(form, fields) });
+        const restore = (choice = department) => editSpecialization(program, id, back, { ...capture(), department: choice });
+        const restoreParent = (choice = parentMajor) => editSpecialization(program, id, back, { ...capture(), parentMajor: choice });
         form.append(node("section", { class: "record-section", "aria-label": "Component department" },
             node("h3", { class: "h6" }, "Responsible department"),
             node("p", {}, window.curriculumOrganizationText({ department })),
             node("p", { class: "form-text" }, "Choose the academic unit responsible for this component. It is independent of the program's department; a broad program may leave its own department blank. This choice grants no access."),
             button("Choose responsible department", () => ui.references().library("department", "", null, [], restore, () => restore(), "Back to curriculum component")),
             department ? button("Clear responsible department", () => restore(null)) : null));
+        const majorPicker = button("Choose required major", () => chooseParentMajor(program, restoreParent, () => restoreParent()));
+        const majorNotice = node("p", { role: "status", class: "form-text" });
+        const kindInput = form.elements.namedItem("kind");
+        const refreshMajor = () => {
+            const supported = ["concentration", "track", "specialization"].includes(kindInput.value);
+            majorPicker.disabled = !supported;
+            majorNotice.textContent = supported
+                ? "Optional. Choose one required major, or leave this component independent. Program count/type limits still apply."
+                : parentMajor ? "Clear the required-major relationship before changing this component into a major or minor." : "Major and minor components do not require another major.";
+            kindInput.setCustomValidity(!supported && parentMajor ? "Clear this component's required major before changing its type." : "");
+        };
+        kindInput.addEventListener("change", refreshMajor);
+        refreshMajor();
+        form.append(node("section", { class: "record-section", "aria-label": "Required major relationship" },
+            node("h3", { class: "h6" }, "Required major"),
+            node("p", {}, window.curriculumMajorText({ parent_major: parentMajor })), majorNotice, majorPicker,
+            parentMajor ? button("Clear required major", () => restoreParent(null)) : null));
         const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save curriculum component");
         form.append(
             node(
@@ -702,6 +737,7 @@ window.createWorkspacePrograms = function (ui) {
                     revision: value.revision,
                     kind: draft.kind,
                     department_id: department?.id ?? null,
+                    parent_major_id: parentMajor?.id ?? null,
                     code: draft.code,
                     title: draft.title,
                     description: form.elements.namedItem("description").value || null,
@@ -1016,6 +1052,7 @@ window.createWorkspacePrograms = function (ui) {
                                 node("h4", { class: "h6" }, `${choice.code} — ${choice.title}`),
                                 node("p", {}, `Curriculum type: ${choice.kind || "not recorded"}`),
                                 node("p", {}, window.curriculumOrganizationText(choice)),
+                                node("p", {}, window.curriculumMajorText(choice)),
                                 node(
                                     "p",
                                     { class: "course-description-text" },

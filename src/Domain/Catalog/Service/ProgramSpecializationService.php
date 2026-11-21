@@ -29,8 +29,12 @@ final readonly class ProgramSpecializationService
     }
 
     /** @return array<string,mixed> */
-    public function page(EntityId $program, string $search = "", ?EntityId $after = null): array
-    {
+    public function page(
+        EntityId $program,
+        string $search = "",
+        ?EntityId $after = null,
+        ?CurriculumComponentKind $kind = null,
+    ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         if (
             mb_strlen($search) > 100 ||
@@ -40,7 +44,7 @@ final readonly class ProgramSpecializationService
             throw new InvalidArgumentException("Use a shorter specialization search.");
         }
         $parent = $this->programs->get("programs", $program);
-        $items = $this->specializations->page($program, trim($search), $after);
+        $items = $this->specializations->page($program, trim($search), $after, $kind);
         $this->authorize($actor);
         return [
             "program" => [
@@ -75,6 +79,7 @@ final readonly class ProgramSpecializationService
         bool $active,
         CurriculumComponentKind $kind = CurriculumComponentKind::Specialization,
         ?EntityId $department = null,
+        ?EntityId $parentMajor = null,
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         if (
@@ -109,6 +114,7 @@ final readonly class ProgramSpecializationService
             ($expectedRevision ?? 0) + 1,
             $kind,
             $department,
+            $parentMajor,
         );
         return $this->transactions->run(function () use (
             $program,
@@ -143,13 +149,17 @@ final readonly class ProgramSpecializationService
             }
             $departmentBefore = $this->department($value->departmentId, $previous);
             if (
-                $departmentBefore !== null && $departmentBefore["school"] !== null &&
+                $departmentBefore !== null &&
+                $departmentBefore["school"] !== null &&
                 !in_array($departmentBefore["school"]["id"], $references, true)
             ) {
                 throw new ConcurrentModificationException(
                     "The department moved schools while saving. Review its organization again.",
                 );
             }
+            $oldParent =
+                $id === null ? null : $this->specializations->get($program, $id)->parentMajorId;
+            $majorBefore = $this->parent($value, $oldParent);
             $this->specializations->save($value, $id === null);
             $this->audit->record(
                 $actor,
@@ -169,6 +179,11 @@ final readonly class ProgramSpecializationService
                     "The responsible department changed before saving completed.",
                 );
             }
+            if ($this->parent($value, $oldParent) !== $majorBefore) {
+                throw new ConcurrentModificationException(
+                    "The required major changed before saving completed.",
+                );
+            }
             return $this->presentation($value);
         });
     }
@@ -176,9 +191,54 @@ final readonly class ProgramSpecializationService
     private function presentation(ProgramSpecialization $value): array
     {
         return $value->describe() + [
+            "parent_major" =>
+                $value->parentMajorId === null
+                    ? null
+                    : array_intersect_key(
+                        $this->specializations
+                            ->get($value->programId, $value->parentMajorId)
+                            ->describe(),
+                        array_flip(["id", "code", "title"]),
+                    ),
             "department" => $this->department($value->departmentId, $value->departmentId),
         ];
     }
+    private function parent(ProgramSpecialization $value, ?EntityId $previous): ?array
+    {
+        if ($value->parentMajorId === null) {
+            return null;
+        }
+        if (
+            $value->parentMajorId->value === $value->id->value ||
+            !in_array(
+                $value->kind?->value,
+                \Domain\Catalog\ValueObject\ComponentMajorRules::CHILD_KINDS,
+                true,
+            )
+        ) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "parent_major_id",
+                    "message" =>
+                        "Only concentrations, tracks and specializations can require a different major.",
+                ],
+            ]);
+        }
+        $parent = $this->specializations->get($value->programId, $value->parentMajorId);
+        if (
+            $parent->kind !== CurriculumComponentKind::Major ||
+            (!$parent->active && $parent->id->value !== $previous?->value)
+        ) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "parent_major_id",
+                    "message" => "Choose an active major within this program.",
+                ],
+            ]);
+        }
+        return $parent->describe();
+    }
+
     private function department(?EntityId $id, ?EntityId $previous): ?array
     {
         if ($id === null) {

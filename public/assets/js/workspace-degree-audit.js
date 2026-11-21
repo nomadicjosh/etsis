@@ -2959,6 +2959,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 node("h2", { class: "h4" }, label),
                 node("h3", { class: "h5" }, context.name),
                 context.specialization ? node("p", { class: "form-text" }, window.curriculumOrganizationText(context.specialization)) : null,
+                context.specialization ? node("p", { class: "form-text" }, window.curriculumMajorText(context.specialization)) : null,
                 node(
                     "p",
                     {},
@@ -3036,7 +3037,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
                         : `${componentType(data.context.specialization)} only · ${data.context.specialization.code} — ${data.context.specialization.title}. ${component ? "This review uses the assigned publication." : "This test evaluates this component independently."} Combined degree/specialization sharing and exclusions are not applied.`,
                 ),
             );
-        if (data.context?.specialization) body.append(node("p", { class: "form-text" }, window.curriculumOrganizationText(data.context.specialization)));
+        if (data.context?.specialization) body.append(
+            node("p", { class: "form-text" }, window.curriculumOrganizationText(data.context.specialization)),
+            node("p", { class: "form-text" }, window.curriculumMajorText(data.context.specialization)),
+        );
         layout.append(body);
         shell.append(layout);
         const restore = () => renderDegreeProgress(base, back, data, state, trial);

@@ -6,6 +6,10 @@ window.curriculumOrganizationText = function (choice) {
     return `Responsible department: ${department.code} — ${department.title}. ` +
         (department.school ? `School/college: ${department.school.code} — ${department.school.title}` : "School/college: not assigned");
 };
+window.curriculumMajorText = function (choice) {
+    if (!choice || !Object.hasOwn(choice, "parent_major")) return "Required-major relationship: not recorded in this publication";
+    return choice.parent_major ? `Requires major: ${choice.parent_major.code} — ${choice.parent_major.title}` : "Required major: none";
+};
 /* Shared local guidance: no network calls, storage or academic calculations. */
 window.createDegreeProgressGuide = function (ui, layout, steps, slot, data, state, links) {
     const { node, button, actions } = ui;

@@ -828,3 +828,10 @@ This is audited working casework, with one active request per person/area, prote
 ## Completed: major/minor curriculum roles
 
 [Program curriculum components](program-publication.md#majors-minors-and-curriculum-component-types) now have explicit roles and optional per-type selection limits within existing institutional/program ceilings. Publication rejects infeasible choices, and registrar selection confirms against the student's retained policy. Existing requirements, approved exceptions, routing and combined progress handle majors/minors through the same allocation and credit/GPA rules. Staff and private owner cards retain the recorded labels; a missing required major cannot bypass selection through degree-only progress. Earlier unknown types remain unknown, with no new journal, inferred history or degree award.
+
+
+## Completed: required-major curriculum relationships
+
+Program-owned concentrations, tracks and specializations can now require one explicit same-program major. [Authoring and publication](program-publication.md#required-major-relationships) share existing revision/audit/authority protection, bounded major pickers and retained program snapshots. Publication checks both relationship integrity and count/type feasibility; a changed parent source invalidates an unaccepted review. The nullable self-reference migration preserves current data and original events without inferring links.
+
+Registrar selection rejects missing/wrong majors against the pursuit's exact retained publication and keeps incomplete browser choices available for correction across pages. Reviewed commits/retries preserve the original decision and later selections. Existing requirement assignment and combined evaluation retain the same exact publications. Staff and private-owner cards show historical major labels, with identifiers omitted from the owner label. Earlier absent relationships remain unknown. Multiple-parent requirements, broader component eligibility/exclusion rules, application choices and official transcript/credential decisions remain open.

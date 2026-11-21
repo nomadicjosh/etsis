@@ -45,6 +45,7 @@ $save = [
     "active" => true,
     "kind" => "major",
     "department_id" => $department["id"],
+    "parent_major_id" => null,
 ];
 $accepted = $postData($base . "save/", $save);
 if ($accepted["department"]["school"]["title"] !== "Fictional Arts college") {

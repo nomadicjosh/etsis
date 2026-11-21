@@ -89,6 +89,15 @@ final class CurriculumComponentMigrationTest extends TestCase
         );
         $migration->up();
         $migration->up();
-        self::assertSame($before, array_map($s->sql->rows(...), $tables));
+        $normalize = static function (array $tables): array {
+            return array_map(
+                static fn(array $rows): array => array_map(static function (array $row): array {
+                    ksort($row);
+                    return $row;
+                }, $rows),
+                $tables,
+            );
+        };
+        self::assertSame($normalize($before), $normalize(array_map($s->sql->rows(...), $tables)));
     }
 }

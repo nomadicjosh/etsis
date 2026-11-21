@@ -34,6 +34,7 @@ try {
     }
     if (in_array(($argv[1] ?? ''), [
         'check-academic-organization',
+        'check-component-major-links',
         'check-curriculum-components', 'check-enrollment-reinstatement', 'check-waitlists', 'check-workload-policy',
         'check-grade-certification', 'check-support-history',
         'check-profile-requests', 'check-portal', 'check-admission-readiness', 'check-drop-policy', 'check-hiatus-history', 'check-transcript-reviews', 'check-registration-schedule', 'check-gradebook-calculation', 'check-grade-changes', 'check-section-classifications', 'check-program-classifications', 'check-profile-command', 'check-login-sessions',
@@ -154,6 +155,11 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/StandingBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-component-major-links') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/ComponentMajorBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-academic-organization') {
             $kernel->bootstrap();

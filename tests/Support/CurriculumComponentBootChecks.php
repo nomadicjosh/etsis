@@ -42,6 +42,7 @@ $save = [
     "description" => null,
     "active" => true,
     "kind" => "major",
+    "parent_major_id" => null,
 ];
 $bad = $save;
 unset($bad["kind"]);

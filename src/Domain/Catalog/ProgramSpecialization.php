@@ -21,6 +21,7 @@ final readonly class ProgramSpecialization
         public int $revision = 1,
         public ?\Domain\Catalog\ValueObject\CurriculumComponentKind $kind = null,
         public ?EntityId $departmentId = null,
+        public ?EntityId $parentMajorId = null,
     ) {
         $errors = [];
         if (preg_match('/^[A-Z0-9][A-Z0-9._-]{0,79}$/D', $code) !== 1) {
@@ -75,6 +76,7 @@ final readonly class ProgramSpecialization
             "revision" => $this->revision,
             "kind" => $this->kind?->value,
             "department_id" => $this->departmentId?->value,
+            "parent_major_id" => $this->parentMajorId?->value,
         ];
     }
 }

@@ -1306,6 +1306,7 @@
                     el("h3", {}, component.label),
                     el("p", {}, component.progress.context.name),
                     component.kind === "specialization" ? el("p", {}, window.curriculumOrganizationText(component)) : null,
+                    component.kind === "specialization" ? el("p", {}, window.curriculumMajorText(component)) : null,
                     button(`Review ${component.label}`, () => inspect(index)),
                 );
                 cards.append(card);

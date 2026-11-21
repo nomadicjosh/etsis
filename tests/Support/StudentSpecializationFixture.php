@@ -18,7 +18,7 @@ final class StudentSpecializationFixture
     public array $choices = [];
     public array $publication;
 
-    public function __construct(?SisFixture $sis = null)
+    public function __construct(?SisFixture $sis = null, ?\Closure $configure = null)
     {
         $this->program = $p = new ProgramPublicationFixture($sis);
         $this->sis = $f = $p->sis;
@@ -38,6 +38,7 @@ final class StudentSpecializationFixture
         }
         $this->policies()->saveInstitution(0, 3, 1);
         $this->policies()->saveProgram($f->program, 0, 0, 2);
+        $configure?->__invoke($this);
         $this->publication = $this->publish();
         $person = $f->legacyPerson($f->user(), 'Fictional', 'Learner');
         $application = $f->legacyApplication($person->id, $f->program, new EntityId($this->year['terms'][0]['id']));

@@ -17,11 +17,16 @@ async function fixture(page, options = {}) {
     ];
     let reviews = 0, accepted = null;
     const specializations = options.specializations ? Array.from({length:23},(_,i)=>({id:id(30+i),program_id:id(1),code:`FOCUS.${String(i).padStart(2,'0')}`,title:`Fictional specialization ${i} <b>example</b>`,description:'A fictional description.',revision:1,active:true,kind:'specialization'})) : [];
+    if (options.linked) specializations[0].kind = 'major';
     let specializationFailure = !!options.specializationFailure;
     let institutionFailure = !!options.institutionFailure;
     let institution = {revision:0,minimum:0,maximum:1,default_maximum:1};
     let programPolicy = {revision:0,minimum:0,maximum:null,default_maximum:null,component_sharing:"one_component",kind_limits:{}};
-    const specializationSnapshot = () => ({program_id:id(1),component_sharing:programPolicy.component_sharing,kind_limits:programPolicy.kind_limits,institution:{revision:institution.revision,maximum:institution.maximum,default_maximum:institution.default_maximum},program:{revision:programPolicy.revision,minimum:programPolicy.minimum,maximum:programPolicy.maximum},effective:{minimum:programPolicy.minimum,maximum:programPolicy.maximum??institution.default_maximum},offered:specializations.filter(s=>s.active).map(({id,code,title,description,revision,kind,department})=>({id,code,title,description,revision,kind,department:department??null}))});
+    if (options.linked) {
+        institution = { ...institution, maximum: 3, default_maximum: 2 };
+        programPolicy = { ...programPolicy, minimum: 1, maximum: 2, kind_limits: { major: { minimum: 1, maximum: 1 }, concentration: { minimum: 0, maximum: 1 } } };
+    }
+    const specializationSnapshot = () => ({program_id:id(1),component_sharing:programPolicy.component_sharing,kind_limits:programPolicy.kind_limits,institution:{revision:institution.revision,maximum:institution.maximum,default_maximum:institution.default_maximum},program:{revision:programPolicy.revision,minimum:programPolicy.minimum,maximum:programPolicy.maximum},effective:{minimum:programPolicy.minimum,maximum:programPolicy.maximum??institution.default_maximum},offered:specializations.filter(s=>s.active).map(({id,code,title,description,revision,kind,department,parent_major})=>({id,code,title,description,revision,kind,department:department??null,parent_major:parent_major??null}))});
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -42,12 +47,12 @@ async function fixture(page, options = {}) {
             });
             result = { id: id(1), definition, revision: 'a'.repeat(64) };
         } else if (path === `/sis/programs/${id(1)}/specializations/page/`) {
-            const matches = specializations.filter(row=>(!data.after||row.id>data.after)&&`${row.code} ${row.title}`.toLowerCase().includes(data.search.toLowerCase())).sort((a,b)=>a.id.localeCompare(b.id));
+            const matches = specializations.filter(row=>(!data.kind||row.kind===data.kind)&&(!data.after||row.id>data.after)&&`${row.code} ${row.title}`.toLowerCase().includes(data.search.toLowerCase())).sort((a,b)=>a.id.localeCompare(b.id));
             result={program:{id:id(1),code:definition.code,title:definition.title},items:matches.slice(0,20).map(({description,...row})=>row),next_after:matches.length>20?matches[19].id:null};
         } else if (path === `/sis/programs/${id(1)}/specializations/save/`) {
             if (specializationFailure) {specializationFailure=false;await route.fulfill({status:409,json:{error:'Reload this specialization before saving your changes.'}});return;}
             const previous=data.id?specializations.find(row=>row.id===data.id):null;
-            result={...data,id:previous?.id||id(99),program_id:id(1),code:data.code.trim().toUpperCase(),revision:(previous?.revision||0)+1,department:data.department_id ? rows.find(row => row.id === data.department_id) : null};
+            result={...data,id:previous?.id||id(99),program_id:id(1),code:data.code.trim().toUpperCase(),revision:(previous?.revision||0)+1,parent_major:data.parent_major_id ? (({id,code,title})=>({id,code,title}))(specializations.find(row=>row.id===data.parent_major_id)) : null,department:data.department_id ? rows.find(row => row.id === data.department_id) : null};
             if(previous) Object.assign(previous,result);else specializations.push(result);
         } else if (path === `/sis/programs/${id(1)}/specializations/policy/`) {
             if(data){
@@ -688,4 +693,50 @@ test('department school chooser preserves the reference draft and saves the expl
     expect(f.calls.find(c => c.path.endsWith('/department/save/')).data.school_id).toBe(id(7));
     await expect(page.locator('#drawer-body')).toContainText('School/college: ARTS');
     await accessible(page); expect(f.errors).toEqual([]);
+});
+
+
+test('required major chooser preserves a concentration draft and retains its link in publication review', async ({ page }) => {
+    const f = await fixture(page, { specializations: true, linked: true });
+    await page.getByRole('button', { name: 'Majors, minors & specializations', exact: true }).click();
+    await page.getByRole('button', { name: 'Add a curriculum component', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Curriculum component type', exact: true }).selectOption('concentration');
+    await page.getByRole('textbox', { name: 'Component code', exact: true }).fill('WRITING');
+    await page.getByRole('textbox', { name: 'Component title', exact: true }).fill('Creative writing <b>fictional</b>');
+    await page.getByRole('button', { name: 'Choose required major', exact: true }).click();
+    await page.getByRole('button', { name: 'Use major FOCUS.00', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Component title', exact: true })).toHaveValue('Creative writing <b>fictional</b>');
+    await expect(page.getByRole('region', { name: 'Required major relationship', exact: true })).toContainText('Requires major: FOCUS.00');
+    await page.getByRole('button', { name: 'Choose responsible department', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose SCI', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: 'Curriculum component type', exact: true })).toHaveValue('concentration');
+    await expect(page.getByRole('region', { name: 'Required major relationship', exact: true })).toContainText('Requires major: FOCUS.00');
+    await page.getByRole('combobox', { name: 'Curriculum component type', exact: true }).selectOption('major');
+    expect(await page.getByRole('combobox', { name: 'Curriculum component type', exact: true }).evaluate(input => input.validity.valid)).toBe(false);
+    await page.getByRole('button', { name: 'Clear required major', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Required major relationship', exact: true })).toContainText('Required major: none');
+    await expect(page.getByRole('button', { name: 'Choose required major', exact: true })).toBeDisabled();
+    await page.getByRole('combobox', { name: 'Curriculum component type', exact: true }).selectOption('concentration');
+    await page.getByRole('button', { name: 'Choose required major', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to curriculum component', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Component title', exact: true })).toHaveValue('Creative writing <b>fictional</b>');
+    await page.getByRole('button', { name: 'Choose required major', exact: true }).click();
+    await page.getByRole('button', { name: 'Use major FOCUS.00', exact: true }).click();
+    await page.getByRole('button', { name: 'Save curriculum component', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Add a curriculum component', exact: true })).toBeVisible();
+    expect(f.calls.find(c => c.path.endsWith('/specializations/save/')).data).toMatchObject({ parent_major_id: id(30), department_id: id(3), kind: 'concentration' });
+    expect(f.calls.find(c => c.path.endsWith('/specializations/page/') && c.data.kind === 'major')).toBeTruthy();
+    await page.getByRole('button', { name: 'Back to program details', exact: true }).click();
+    await page.getByRole('button', { name: 'Publish for an academic year', exact: true }).click();
+    await page.getByLabel('Reason for program publication', { exact: true }).fill('Fictional linked major review.');
+    await page.getByRole('button', { name: 'Choose academic year', exact: true }).click();
+    await page.getByRole('button', { name: 'Use academic year 2024-2025', exact: true }).click();
+    await page.getByRole('button', { name: 'Review program publication', exact: true }).click();
+    const context = page.getByRole('region', { name: 'Published specialization choices and policy', exact: true });
+    await context.locator('summary').click();
+    await context.getByRole('button', { name: 'More offered specializations', exact: true }).click();
+    await expect(context).toContainText('Requires major: FOCUS.00');
+    await expect(context.locator('b')).toHaveCount(0);
+    await accessible(page);
+    expect(f.errors).toEqual([]);
 });

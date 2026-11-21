@@ -69,9 +69,11 @@ final readonly class ComponentSelectionRules
                 "The component-type limits cannot satisfy the overall program selection policy.",
             );
         }
+        new ComponentMajorRules()->publication($offered, $this->limits, $minimum, $maximum);
     }
     public function selection(array $offered, array $ids): void
     {
+        new ComponentMajorRules()->selection($offered, $ids);
         $selected = array_fill_keys($ids, true);
         $counts = [];
         foreach ($offered as $row) {

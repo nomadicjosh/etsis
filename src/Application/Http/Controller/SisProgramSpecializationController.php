@@ -24,7 +24,12 @@ final readonly class SisProgramSpecializationController
     {
         $input = FormInput::from($request);
         return new JsonResponse(
-            $this->service->page(new EntityId($id), $input->search(), $input->optionalId("after")),
+            $this->service->page(
+                new EntityId($id),
+                $input->search(),
+                $input->optionalId("after"),
+                $this->filterKind($input->optionalText("kind", 24)),
+            ),
         );
     }
 
@@ -76,10 +81,11 @@ final readonly class SisProgramSpecializationController
             !is_array($body) ||
             !array_key_exists("id", $body) ||
             !array_key_exists("revision", $body) ||
-            !array_key_exists("description", $body)
+            !array_key_exists("description", $body) ||
+            !array_key_exists("parent_major_id", $body)
         ) {
             throw new InvalidArgumentException(
-                "Provide the specialization identity, revision and description.",
+                "Provide the component identity, revision, description and explicit required-major choice.",
             );
         }
         $description = $body["description"];
@@ -108,8 +114,16 @@ final readonly class SisProgramSpecializationController
                         "Choose a supported curriculum component type.",
                     ),
                 $input->optionalId("department_id"),
+                $input->optionalId("parent_major_id"),
             ),
         );
+    }
+    private function filterKind(?string $kind): ?\Domain\Catalog\ValueObject\CurriculumComponentKind
+    {
+        return $kind === null
+        ? null
+        : \Domain\Catalog\ValueObject\CurriculumComponentKind::tryFrom($kind) ??
+        throw new InvalidArgumentException("Choose a supported component filter.");
     }
     private function kindLimits(array $body): array
     {

@@ -76,6 +76,7 @@ final readonly class ProgramSpecializationSnapshot
                 "revision",
                 ...array_key_exists("kind", $row) ? ["kind"] : [],
                 ...array_key_exists("department", $row) ? ["department"] : [],
+                ...array_key_exists("parent_major", $row) ? ["parent_major"] : [],
             ]);
             if (
                 array_key_exists("kind", $row) &&
@@ -102,6 +103,14 @@ final readonly class ProgramSpecializationSnapshot
                 );
             }
             $ids[$value->id->value] = $codes[$value->code] = true;
+        }
+        if (!$typed) {
+            new ComponentMajorRules()->publication(
+                $data["offered"],
+                [],
+                $policy->minimum,
+                $policy->effectiveMaximum,
+            );
         }
         if ($typed) {
             if (!is_array($data["kind_limits"])) {

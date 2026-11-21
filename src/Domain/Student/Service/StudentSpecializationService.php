@@ -754,6 +754,7 @@ final readonly class StudentSpecializationService
                     'Choose offered specializations within this published program’s required and maximum counts.'],
             ]);
         }
+        new \Domain\Catalog\ValueObject\ComponentMajorRules()->selection($snapshot['offered'], $ids);
         if (array_key_exists('kind_limits', $snapshot)) {
             new ComponentSelectionRules($snapshot['kind_limits'])->selection($snapshot['offered'], $ids);
         }
@@ -770,6 +771,11 @@ final readonly class StudentSpecializationService
         $limits = $program['specializations']['effective'];
         $offered = array_column($program['specializations']['offered'], null, 'id');
         $ids = $p['specialization_ids'];
+        try {
+            new \Domain\Catalog\ValueObject\ComponentMajorRules()->selection(array_values($offered), $ids);
+        } catch (\Domain\Shared\Exception\ValidationException) {
+            throw new CorruptHistoryException();
+        }
         if (array_key_exists('kind_limits', $program['specializations'])) {
             try {
                 new ComponentSelectionRules($program['specializations']['kind_limits'])->selection(

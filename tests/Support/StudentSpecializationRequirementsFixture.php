@@ -27,6 +27,7 @@ final class StudentSpecializationRequirementsFixture
         array $kindLimits = [],
         bool $selectInitial = true,
         bool $organized = false,
+        array $parentMajorCodes = [],
     )
     {
         $this->r = $r ??= new ReusableGroupFixture();
@@ -77,6 +78,7 @@ final class StudentSpecializationRequirementsFixture
                 true,
                 $componentKinds[$code] ?? \Domain\Catalog\ValueObject\CurriculumComponentKind::Specialization,
                 isset($departments[$code]) ? new EntityId($departments[$code]['id']) : null,
+                isset($parentMajorCodes[$code]) ? new EntityId($this->choices[$parentMajorCodes[$code]]['id']) : null,
             );
         }
         $review = $this->program->service->review($s->program, $r->year, 'Fictional offered choices.');

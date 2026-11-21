@@ -50,3 +50,8 @@ For a broad program with one required major and an optional minor, the instituti
 ## Department and curriculum responsibility
 
 Set each department's optional school/college in its reference editor. Set each major/minor's responsible department in its component editor, then review and publish the program. A broad program may keep its own department blank. Student choices and combined progress display the retained organization, with earlier missing ownership explicitly unknown. Follow [Departments and curriculum ownership](program-publication.md#departments-and-curriculum-ownership) for the connected setup and historical boundaries.
+
+
+### Required major for a concentration, track or specialization
+
+In **Programs → Program details & publications → Majors, minors & specializations**, first create the major, then edit its related concentration/track/specialization and choose **Choose required major**. Only this program's majors appear. Returning preserves your unsaved component fields and responsible department. Save, configure overall/type counts for both components, and explicitly review/publish the program. Use **Clear required major** to make a component independent. In **Student programs → Specializations**, select the required major together with its linked component; an unresolved link blocks review while preserving the checked choices. See the [worked linked-curriculum setup](program-publication.md#required-major-relationships), including an optional minor and retained student progress labels.

@@ -1089,6 +1089,7 @@ window.createWorkspaceStudents = function (ui) {
                     `${choice.code} — ${choice.title}`,
                 ),
                 node("p", { class: "form-text" }, window.curriculumOrganizationText(choice)),
+                node("p", { class: "form-text" }, window.curriculumMajorText(choice)),
             );
             if (action)
                 section.append(
@@ -1227,7 +1228,9 @@ window.createWorkspaceStudents = function (ui) {
         const updateCount = () => {
             const types = Object.entries(snapshot.kind_limits || {}).map(([kind, rule]) => ({ kind, rule, count: snapshot.offered.filter(choice => selected.has(choice.id) && choice.kind === kind).length }));
             count.textContent = `${selected.size} selected. Required ${snapshot.effective.minimum}; maximum ${snapshot.effective.maximum}. Selections on other pages are preserved. ${types.map(item => `${item.kind}: ${item.count} selected (${item.rule.minimum}–${item.rule.maximum} required/allowed)`).join(" · ")}`;
-            review.disabled = types.some(item => item.count < item.rule.minimum || item.count > item.rule.maximum);
+            const missingMajors = snapshot.offered.filter(choice => selected.has(choice.id) && choice.parent_major && !selected.has(choice.parent_major.id));
+            if (missingMajors.length) count.textContent += ` Select required majors for: ${missingMajors.map(choice => choice.code).join(", ")}.`;
+            review.disabled = selected.size < snapshot.effective.minimum || selected.size > snapshot.effective.maximum || missingMajors.length > 0 || types.some(item => item.count < item.rule.minimum || item.count > item.rule.maximum);
         };
         function show(focus = false) {
             const term = search.value.trim().toLowerCase();
@@ -1269,7 +1272,7 @@ window.createWorkspaceStudents = function (ui) {
                         ),
                     ),
                 );
-                row.append(node("p", { id: `student-component-kind-${choice.id}`, class: "small mb-1" }, `Curriculum type: ${choice.kind || "not recorded"}`));
+                row.append(node("p", { id: `student-component-kind-${choice.id}`, class: "small mb-1" }, `Curriculum type: ${choice.kind || "not recorded"}. ${window.curriculumMajorText(choice)}`));
                 if (choice.description)
                     row.append(
                         node(

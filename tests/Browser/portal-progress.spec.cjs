@@ -116,7 +116,7 @@ async function fixture(page,options={}) {
                 }] : [], more_conflicts: false },
                 components: [{ kind: "degree", label: "Degree", progress: degree },
                     { kind: "specialization", label: options.typed ? "Major DATA" : "Specialization DATA", ...(options.typed ? { department: { code: "ENG", title: "Fictional English <department>", school: { code: "ARTS", title: "Fictional Arts <college>" } } } : {}), progress: specialization },
-                    ...(options.typed ? [{ kind: "specialization", label: "Minor ART", progress: specialization }] : [])] };
+                    ...(options.typed ? [{ kind: "specialization", label: options.linked ? "Concentration ART" : "Minor ART", parent_major: options.linked ? { code: "DATA", title: "Original <b>major</b>" } : null, progress: specialization }] : [])] };
         }
         if (options.calculationBlockers && data.records) {
             data.issues = [{component:'overall',code:'chronology_unknown'}];
@@ -524,4 +524,16 @@ test("owner combined progress names the major and minor and keeps drilldowns in 
     expect(scan.violations.map(v => v.id)).toEqual([]);
     expect(f.errors).toEqual([]);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+
+test('owner combined progress shows a retained required-major label without another request', async ({ page }) => {
+    const f = await fixture(page, { combined: true, typed: true, linked: true });
+    await page.getByRole('button', { name: 'Review progress · BSCS · 26/FA', exact: true }).click();
+    await expect(page.locator('body')).toContainText('Requires major: DATA — Original <b>major</b>');
+    await page.getByRole('button', { name: 'Review Concentration ART', exact: true }).click();
+    await expect(page.getByRole('heading', { name: /Data <b>fictional<\/b> requirements/ })).toBeVisible();
+    expect(f.calls.filter(c => c.path.endsWith('/degree-progress/'))).toHaveLength(1);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
 });
