@@ -1178,9 +1178,10 @@ window.createWorkspaceStudents = function (ui) {
             node(
                 "p",
                 {},
-                `Required: ${snapshot.effective.minimum} · Maximum: ${snapshot.effective.maximum}. ${snapshot.effective.minimum === 0 ? "Selection is optional." : "This program requires a selection."}`,
+                `Required: ${snapshot.effective.minimum} · Maximum: ${snapshot.effective.maximum}. ${snapshot.effective.minimum === 0 && !Object.values(snapshot.kind_limits || {}).some(rule => rule.minimum > 0) ? "Selection is optional." : "This program requires a selection."}`,
             ),
         );
+        body.append(node("p", {}, snapshot.kind_limits == null ? "Curriculum types were not required by this earlier publication." : Object.entries(snapshot.kind_limits).map(([kind, rule]) => `${kind}: ${rule.minimum}–${rule.maximum}`).join(" · ") || "No additional limits by curriculum type."));
         if (!data.can_manage) {
             body.append(
                 node(
@@ -1223,7 +1224,9 @@ window.createWorkspaceStudents = function (ui) {
         choices.append(list, controls);
         let offset = 0;
         const updateCount = () => {
-            count.textContent = `${selected.size} selected. Required ${snapshot.effective.minimum}; maximum ${snapshot.effective.maximum}. Selections on other pages are preserved.`;
+            const types = Object.entries(snapshot.kind_limits || {}).map(([kind, rule]) => ({ kind, rule, count: snapshot.offered.filter(choice => selected.has(choice.id) && choice.kind === kind).length }));
+            count.textContent = `${selected.size} selected. Required ${snapshot.effective.minimum}; maximum ${snapshot.effective.maximum}. Selections on other pages are preserved. ${types.map(item => `${item.kind}: ${item.count} selected (${item.rule.minimum}–${item.rule.maximum} required/allowed)`).join(" · ")}`;
+            review.disabled = types.some(item => item.count < item.rule.minimum || item.count > item.rule.maximum);
         };
         function show(focus = false) {
             const term = search.value.trim().toLowerCase();
@@ -1244,6 +1247,7 @@ window.createWorkspaceStudents = function (ui) {
                     type: "checkbox",
                     class: "form-check-input",
                     checked: selected.has(choice.id),
+                    "aria-describedby": `student-component-kind-${choice.id}`,
                 });
                 input.addEventListener("change", () => {
                     if (input.checked) selected.add(choice.id);
@@ -1264,6 +1268,7 @@ window.createWorkspaceStudents = function (ui) {
                         ),
                     ),
                 );
+                row.append(node("p", { id: `student-component-kind-${choice.id}`, class: "small mb-1" }, `Curriculum type: ${choice.kind || "not recorded"}`));
                 if (choice.description)
                     row.append(
                         node(
@@ -1361,7 +1366,7 @@ window.createWorkspaceStudents = function (ui) {
                     node(
                         "p",
                         {},
-                        "This decision takes effect when confirmed. Earlier selections remain in restricted history. This records specialization choices; specialization requirement evaluation is still in development.",
+                        "This decision takes effect when confirmed. Earlier selections remain in restricted history. This records curriculum component choices. Their assigned requirements use the shared degree-progress review; this selection does not award a credential.",
                     ),
                     button(
                         "Confirm specialization selection",

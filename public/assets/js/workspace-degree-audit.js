@@ -14,6 +14,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         },
         true,
     );
+    const componentType = choice => ({ major: "Major", minor: "Minor", concentration: "Concentration", track: "Track", specialization: "Specialization" })[choice?.kind] || "Component (type not recorded)";
     const post = (path, data = {}) => request(path, "POST", data);
     const op = async () => (await request("/sis/ui/operation-id/")).id;
     function fail(error) {
@@ -609,7 +610,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const directory = () => launch(program, after, stack, specialization, back);
         if (specialization)
             body.append(
-                node("h2", { class: "h5" }, `${result.specialization.code} — ${result.specialization.title}`),
+                node("h2", { class: "h5" }, `${componentType(result.specialization)} · ${result.specialization.code} — ${result.specialization.title}`),
                 node(
                     "p",
                     { class: "alert alert-info" },
@@ -2072,7 +2073,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 node(
                     "p",
                     { class: "alert alert-info" },
-                    `Specialization: ${saved.specialization.code} — ${saved.specialization.title}. Publish the program’s offered choice for this academic year before publishing these requirements. Runtime tests evaluate this component independently.`,
+                    `${componentType(saved.specialization)}: ${saved.specialization.code} — ${saved.specialization.title}. Publish the program’s offered choice for this academic year before publishing these requirements. Runtime tests evaluate this component independently.`,
                 ),
             );
         body.append(
@@ -2879,6 +2880,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "A component has no matching retained program publication. Ask the registrar to review its assignment.",
                 sharing_policy_unknown:
                     "Course sharing was not recorded in this earlier program publication. Ask the registrar to review the retained curriculum; today's setting cannot replace it.",
+                component_selection_missing: "Review the pursuit’s major/minor selections against its retained program type requirements.",
                 specialization_requirements_missing:
                     "Each selected specialization needs an assigned requirements publication before a combined review.",
                 component_routing_changed:
@@ -2950,7 +2952,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         for (const component of data.components) {
             const progress = component.progress,
                 context = progress.context;
-            const label = component.kind === "degree" ? "Degree" : `Specialization ${context.specialization.code}`;
+            const label = component.kind === "degree" ? "Degree" : `${componentType(context.specialization)} ${context.specialization.code}`;
             const card = node(
                 "article",
                 { class: "audit-card" },
@@ -3029,8 +3031,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "p",
                     { class: "alert alert-info" },
                     combined
-                        ? `Specialization ${data.context.specialization.code} — ${data.context.specialization.title}. These placements come from the joint search and ${data.context.test_source && !data.context.exceptions_applied ? "explicit test sharing assumption" : "published component-sharing policy"}.`
-                        : `Specialization only · ${data.context.specialization.code} — ${data.context.specialization.title}. ${component ? "This review uses the assigned publication." : "This test evaluates this component independently."} Combined degree/specialization sharing and exclusions are not applied.`,
+                        ? `${componentType(data.context.specialization)} ${data.context.specialization.code} — ${data.context.specialization.title}. These placements come from the joint search and ${data.context.test_source && !data.context.exceptions_applied ? "explicit test sharing assumption" : "published component-sharing policy"}.`
+                        : `${componentType(data.context.specialization)} only · ${data.context.specialization.code} — ${data.context.specialization.title}. ${component ? "This review uses the assigned publication." : "This test evaluates this component independently."} Combined degree/specialization sharing and exclusions are not applied.`,
                 ),
             );
         layout.append(body);

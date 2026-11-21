@@ -19,41 +19,45 @@ final readonly class ProgramSpecialization
         public ?string $description = null,
         public bool $active = true,
         public int $revision = 1,
+        public ?\Domain\Catalog\ValueObject\CurriculumComponentKind $kind = null,
     ) {
         $errors = [];
         if (preg_match('/^[A-Z0-9][A-Z0-9._-]{0,79}$/D', $code) !== 1) {
             $errors[] = [
-                'field' => 'code',
-                'message' => 'Use up to 80 letters, numbers, dots, underscores or hyphens.',
+                "field" => "code",
+                "message" => "Use up to 80 letters, numbers, dots, underscores or hyphens.",
             ];
         }
         if (
-            trim($title) === '' ||
+            trim($title) === "" ||
             $title !== trim($title) ||
             mb_strlen($title) > 191 ||
-            !mb_check_encoding($title, 'UTF-8') ||
+            !mb_check_encoding($title, "UTF-8") ||
             preg_match('/[\x00-\x1F\x7F]/', $title)
         ) {
             $errors[] = [
-                'field' => 'title',
-                'message' => 'Enter a valid specialization title up to 191 characters.',
+                "field" => "title",
+                "message" => "Enter a valid specialization title up to 191 characters.",
             ];
         }
         if (
             $description !== null &&
-            (trim($description) === '' ||
+            (trim($description) === "" ||
                 $description !== trim($description) ||
                 mb_strlen($description) > 10000 ||
-                !mb_check_encoding($description, 'UTF-8') ||
+                !mb_check_encoding($description, "UTF-8") ||
                 preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/', $description))
         ) {
-            $errors[] = ['field' => 'description', 'message' => 'Use plain text up to 10000 characters.'];
+            $errors[] = [
+                "field" => "description",
+                "message" => "Use plain text up to 10000 characters.",
+            ];
         }
         if ($errors !== []) {
             throw new ValidationException($errors);
         }
         if ($revision < 1 || $revision > 2000000000) {
-            throw new InvalidArgumentException('Use a valid saved specialization revision.');
+            throw new InvalidArgumentException("Use a valid saved specialization revision.");
         }
     }
 
@@ -61,13 +65,14 @@ final readonly class ProgramSpecialization
     public function describe(): array
     {
         return [
-            'id' => $this->id->value,
-            'program_id' => $this->programId->value,
-            'code' => $this->code,
-            'title' => $this->title,
-            'description' => $this->description,
-            'active' => $this->active,
-            'revision' => $this->revision,
+            "id" => $this->id->value,
+            "program_id" => $this->programId->value,
+            "code" => $this->code,
+            "title" => $this->title,
+            "description" => $this->description,
+            "active" => $this->active,
+            "revision" => $this->revision,
+            "kind" => $this->kind?->value,
         ];
     }
 }

@@ -6,6 +6,7 @@ async function fixture(
     page,
     {
         readOnly = false,
+        typed = false,
         adjustments = false,
         cohortChanged = false,
         unknown = false,
@@ -28,12 +29,13 @@ async function fixture(
         title: n === 0 ? "Original <b>Art</b>" : `Fictional choice ${n + 1}`,
         description: "Plain <script>example</script> text.",
         revision: 1,
+        kind: typed ? (n === 0 ? "major" : "minor") : "specialization",
     }));
     const program = {
         definition: { code: "BA.ART", title: "Fictional arts" },
         academic_year_code: "2024-2025",
         catalog_revision: 1,
-        specializations: { effective: { minimum: 0, maximum: 2 }, offered },
+        specializations: { effective: { minimum: 0, maximum: 2 }, offered, ...(typed ? { kind_limits: { major: { minimum: 1, maximum: 1 }, minor: { minimum: 0, maximum: 1 } } } : {}) },
     };
     const summary = (ids) => ({
         program_version_id: id(10),
@@ -948,5 +950,30 @@ test("specialization exceptions reuse the reviewed editor and send no client-sel
     await expect(
         page.getByRole("button", { name: "Review specialization progress", exact: true }),
     ).toBeVisible();
+    expect(f.errors).toEqual([]);
+});
+
+
+test("major/minor selections show retained type limits and require the major before review", async ({ page }) => {
+    const f = await fixture(page, { typed: true });
+    const major = page.getByLabel("CHOICE.1 — Original <b>Art</b>", { exact: true });
+    const minor = page.getByLabel("CHOICE.2 — Fictional choice 2", { exact: true });
+    const review = page.getByRole("button", { name: "Review specialization selection", exact: true });
+    await major.uncheck();
+    await minor.check();
+    await expect(review).toBeDisabled();
+    await expect(page.getByRole("status").filter({ hasText: "major: 0 selected" })).toBeVisible();
+    await major.check();
+    await expect(review).toBeEnabled();
+    await page.getByLabel("Reason for this selection change").fill("Fictional major plus minor selection.");
+    await page.setViewportSize({ width: 320, height: 812 });
+    const scan = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect(scan.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) }))).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await review.click();
+    await expect(page.getByRole("button", { name: "Confirm specialization selection", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Revise selection", exact: true }).click();
+    await expect(major).toBeChecked();
+    await expect(minor).toBeChecked();
     expect(f.errors).toEqual([]);
 });

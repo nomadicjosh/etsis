@@ -27,10 +27,19 @@ final readonly class StudentDegreeProgress
             foreach ($review['components'] as $component) {
                 $progress = new self($component['progress'])->describe();
                 $specialization = $component['progress']['context']['specialization'] ?? null;
-                $components[] = ['kind' => $component['kind'],
+                $type = $specialization['kind'] ?? null;
+                $kind = null;
+                if ($type !== null) {
+                    $kind = \Domain\Catalog\ValueObject\CurriculumComponentKind::tryFrom($type)
+                    ?? throw new CorruptHistoryException();
+                }
+                $components[] = [
+                    'kind' => $component['kind'],
                     'label' => $specialization === null ? 'Degree'
-                        : 'Specialization ' . $specialization['code'] . ' · ' . $specialization['title'],
-                    'progress' => $progress];
+                        : ($kind?->label() ?? 'Component (type not recorded)') . ' ' .
+                            $specialization['code'] . ' · ' . $specialization['title'],
+                    'progress' => $progress,
+                ];
             }
             $this->data = ['status' => 'review', 'mode' => 'combined_curriculum', 'sharing' => $review['sharing'],
                 'outcome' => $review['outcome'], 'current_record_count' => $review['current_record_count'],

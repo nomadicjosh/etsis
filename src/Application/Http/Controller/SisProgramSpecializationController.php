@@ -24,13 +24,15 @@ final readonly class SisProgramSpecializationController
     {
         $input = FormInput::from($request);
         return new JsonResponse(
-            $this->service->page(new EntityId($id), $input->search(), $input->optionalId('after')),
+            $this->service->page(new EntityId($id), $input->search(), $input->optionalId("after")),
         );
     }
 
     public function show(string $id, string $specialization): ResponseInterface
     {
-        return new JsonResponse($this->service->get(new EntityId($id), new EntityId($specialization)));
+        return new JsonResponse(
+            $this->service->get(new EntityId($id), new EntityId($specialization)),
+        );
     }
 
     public function policy(string $id): ResponseInterface
@@ -41,29 +43,30 @@ final readonly class SisProgramSpecializationController
     public function savePolicy(ServerRequest $request, string $id): ResponseInterface
     {
         $body = $request->getParsedBody();
-        if (!is_array($body) || !array_key_exists('maximum', $body)) {
-            throw new InvalidArgumentException('Provide the explicit maximum or null to inherit.');
+        if (!is_array($body) || !array_key_exists("maximum", $body)) {
+            throw new InvalidArgumentException("Provide the explicit maximum or null to inherit.");
         }
         $input = FormInput::from($request);
         $this->policies->saveProgram(
             new EntityId($id),
-            $input->integer('revision'),
-            $input->integer('minimum', 0, 100),
-            $input->optionalInteger('maximum'),
-            $input->text('component_sharing', 24),
+            $input->integer("revision"),
+            $input->integer("minimum", 0, 100),
+            $input->optionalInteger("maximum"),
+            $input->text("component_sharing", 24),
+            $this->kindLimits($body),
         );
-        return new JsonResponse(['status' => 'saved']);
+        return new JsonResponse(["status" => "saved"]);
     }
 
     public function saveInstitutionPolicy(ServerRequest $request): ResponseInterface
     {
         $input = FormInput::from($request);
         $this->policies->saveInstitution(
-            $input->integer('revision'),
-            $input->integer('maximum', 1, 100),
-            $input->integer('default_maximum', 1, 100),
+            $input->integer("revision"),
+            $input->integer("maximum", 1, 100),
+            $input->integer("default_maximum", 1, 100),
         );
-        return new JsonResponse(['status' => 'saved']);
+        return new JsonResponse(["status" => "saved"]);
     }
 
     public function save(ServerRequest $request, string $id): ResponseInterface
@@ -71,29 +74,47 @@ final readonly class SisProgramSpecializationController
         $body = $request->getParsedBody();
         if (
             !is_array($body) ||
-            !array_key_exists('id', $body) ||
-            !array_key_exists('revision', $body) ||
-            !array_key_exists('description', $body)
+            !array_key_exists("id", $body) ||
+            !array_key_exists("revision", $body) ||
+            !array_key_exists("description", $body)
         ) {
             throw new InvalidArgumentException(
-                'Provide the specialization identity, revision and description.',
+                "Provide the specialization identity, revision and description.",
             );
         }
-        $description = $body['description'];
-        if ($description !== null && (!is_string($description) || mb_strlen($description) > 10000)) {
-            throw new InvalidArgumentException('Use a plain-text description up to 10000 characters.');
+        $description = $body["description"];
+        if (
+            $description !== null &&
+            (!is_string($description) || mb_strlen($description) > 10000)
+        ) {
+            throw new InvalidArgumentException(
+                "Use a plain-text description up to 10000 characters.",
+            );
         }
         $input = FormInput::from($request);
         return new JsonResponse(
             $this->service->save(
                 new EntityId($id),
-                $input->optionalId('id'),
-                $input->optionalInteger('revision'),
-                $input->text('code', 80),
-                $input->text('title', 191),
+                $input->optionalId("id"),
+                $input->optionalInteger("revision"),
+                $input->text("code", 80),
+                $input->text("title", 191),
                 $description,
-                $input->requiredBoolean('active'),
+                $input->requiredBoolean("active"),
+                \Domain\Catalog\ValueObject\CurriculumComponentKind::tryFrom(
+                    $input->text("kind", 24),
+                ) ??
+                    throw new InvalidArgumentException(
+                        "Choose a supported curriculum component type.",
+                    ),
             ),
         );
+    }
+    private function kindLimits(array $body): array
+    {
+        if (!is_array($body["kind_limits"] ?? null)) {
+            throw new InvalidArgumentException("Provide explicit curriculum type limits.");
+        }
+        return $body["kind_limits"];
     }
 }

@@ -823,3 +823,8 @@ This is audited working casework, with one active request per person/area, prote
 ### Optional course identifiers in connected catalog work
 
 [Optional course numbers](course-publication.md#optional-course-numbers) now share the existing titles/description editor, publication review, clone/import workflow, public section discovery and retained reports. Store `001A` as text while keeping the full code and ULID identities separate. Draft changes never publish or relabel accepted student definitions. Mapped imports require matching numbers, omissions preserve existing values and earlier publication omissions stay unknown. Existing private transport, current/final authority, stale versions, required audits and original receipts govern these paths. No grading, credit, fee or transcript-layout policy changes accompany this field.
+
+
+## Completed: major/minor curriculum roles
+
+[Program curriculum components](program-publication.md#majors-minors-and-curriculum-component-types) now have explicit roles and optional per-type selection limits within existing institutional/program ceilings. Publication rejects infeasible choices, and registrar selection confirms against the student's retained policy. Existing requirements, approved exceptions, routing and combined progress handle majors/minors through the same allocation and credit/GPA rules. Staff and private owner cards retain the recorded labels; a missing required major cannot bypass selection through degree-only progress. Earlier unknown types remain unknown, with no new journal, inferred history or degree award.

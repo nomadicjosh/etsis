@@ -115,7 +115,8 @@ async function fixture(page,options={}) {
                     required_courses: 2, course_upper_bound: 1, course_shortfall: 1,
                 }] : [], more_conflicts: false },
                 components: [{ kind: "degree", label: "Degree", progress: degree },
-                    { kind: "specialization", label: "Specialization DATA", progress: specialization }] };
+                    { kind: "specialization", label: options.typed ? "Major DATA" : "Specialization DATA", progress: specialization },
+                    ...(options.typed ? [{ kind: "specialization", label: "Minor ART", progress: specialization }] : [])] };
         }
         if (options.calculationBlockers && data.records) {
             data.issues = [{component:'overall',code:'chronology_unknown'}];
@@ -504,4 +505,20 @@ test("student calculation blockers expose captured coursework with accessible lo
     await accessible(page);
     expect(f.calls.filter(c=>c.path.endsWith('/degree-progress/'))).toHaveLength(1);
     expect(f.errors).toEqual([]);
+});
+
+
+test("owner combined progress names the major and minor and keeps drilldowns in the captured review", async ({ page }) => {
+    const f = await fixture(page, { combined: true, typed: true });
+    await page.getByRole("button", { name: "Review progress · BSCS · 26/FA", exact: true }).click();
+    await expect(page.getByRole("button", { name: "Review Major DATA", exact: true })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Review Minor ART", exact: true })).toBeVisible();
+    await page.getByRole("button", { name: "Review Minor ART", exact: true }).click();
+    await expect(page.getByRole("heading", { name: /Data <b>fictional<\/b> requirements/ })).toBeVisible();
+    expect(f.calls.filter(c => c.path.endsWith("/degree-progress/"))).toHaveLength(1);
+    await page.setViewportSize({ width: 320, height: 812 });
+    const scan = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect(scan.violations.map(v => v.id)).toEqual([]);
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });

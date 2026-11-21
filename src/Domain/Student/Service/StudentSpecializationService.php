@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\Student\Service;
 
+use Domain\Catalog\ValueObject\ComponentSelectionRules;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\Repository\CatalogYearRepository;
@@ -315,6 +316,7 @@ final readonly class StudentSpecializationService
             }
             $this->authorize($actor);
             $this->audit->record($actor, 'student.specializations_history_read', $assignment);
+            $this->authorize($actor);
             return ['items' => $items, 'next_cursor' => $page->nextCursor];
         });
     }
@@ -752,6 +754,9 @@ final readonly class StudentSpecializationService
                     'Choose offered specializations within this published program’s required and maximum counts.'],
             ]);
         }
+        if (array_key_exists('kind_limits', $snapshot)) {
+            new ComponentSelectionRules($snapshot['kind_limits'])->selection($snapshot['offered'], $ids);
+        }
     }
     /**
      * @param array<string,mixed> $p
@@ -765,6 +770,16 @@ final readonly class StudentSpecializationService
         $limits = $program['specializations']['effective'];
         $offered = array_column($program['specializations']['offered'], null, 'id');
         $ids = $p['specialization_ids'];
+        if (array_key_exists('kind_limits', $program['specializations'])) {
+            try {
+                new ComponentSelectionRules($program['specializations']['kind_limits'])->selection(
+                    array_values($offered),
+                    $ids,
+                );
+            } catch (\Domain\Shared\Exception\ValidationException) {
+                throw new CorruptHistoryException();
+            }
+        }
         if (
             count($ids) < $limits['minimum'] || count($ids) > $limits['maximum'] ||
             array_diff($ids, array_keys($offered)) !== []
@@ -778,6 +793,7 @@ final readonly class StudentSpecializationService
             'program_code' => $program['definition']['code'],
             'program_title' => $program['definition']['title'],
             'limits' => $limits,
+            'kind_limits' => $program['specializations']['kind_limits'] ?? null,
             'specializations' => array_values(array_intersect_key($offered, array_fill_keys($ids, true))),
         ];
     }

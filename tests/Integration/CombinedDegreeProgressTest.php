@@ -18,7 +18,11 @@ use PHPUnit\Framework\TestCase;
 
 final class CombinedDegreeProgressTest extends TestCase
 {
-    private function fixture(string $sharing = 'one_component'): StudentSpecializationRequirementsFixture
+    private function fixture(
+        string $sharing = 'one_component',
+        bool $typed = false,
+        bool $missingSelection = false,
+    ): StudentSpecializationRequirementsFixture
     {
         $r = new ReusableGroupFixture();
         $r->sis->gradeScale([
@@ -37,7 +41,16 @@ final class CombinedDegreeProgressTest extends TestCase
         $r->groupDefinition = $d;
         $r->definition['groups'] = [['group_id' => $r->group->value,'version_id' => $r->groupVersion->value]];
         $r->definition['min_credits_milli'] = $r->definition['min_resident_milli'] = 3000;
-        $f = new StudentSpecializationRequirementsFixture($r, $sharing);
+        $f = new StudentSpecializationRequirementsFixture(
+            $r,
+            $sharing,
+            $typed ? [
+                'DATA' => \Domain\Catalog\ValueObject\CurriculumComponentKind::Major,
+                'ART' => \Domain\Catalog\ValueObject\CurriculumComponentKind::Minor,
+            ] : [],
+            $typed ? ['major' => ['minimum' => 1, 'maximum' => 1], 'minor' => ['minimum' => 0, 'maximum' => 1]] : [],
+            !$missingSelection,
+        );
         $r->saveDegree();
         $version = new EntityId($r->publishDegree()['operation_id']);
         $requirements = $f->requirements();
@@ -50,7 +63,9 @@ final class CombinedDegreeProgressTest extends TestCase
             'Fictional retained degree selection.'
         );
         $requirements->assign($f->student, $f->assignment, $review['review_token']);
-        $f->assign();
+        if (!$missingSelection) {
+            $f->assign();
+        }
         return $f;
     }
     private function service(StudentSpecializationRequirementsFixture $f, int $steps = 100000, ?\Domain\DegreeAudit\Repository\AcademicInputRepository $repository = null): DegreeProgressService
@@ -796,6 +811,49 @@ final class CombinedDegreeProgressTest extends TestCase
         $degree = $f->requirements()->view($f->student, $f->assignment)["requirements"]["version_id"];
         $this->grant($f, $this->route($f, 0, $degree));
         self::assertSame("infeasible", $this->preview($f)["outcome"]);
+    }
+
+    public function testMajorsAndMinorsUseTheSameRetainedRequirementsSharingAndPrivateOwnerResult(): void
+    {
+        $f = $this->fixture('multiple_components', typed: true);
+        $f->select(['DATA', 'ART']);
+        $f->assign('ART');
+        $this->work($f, 0);
+        $result = $this->preview($f);
+        self::assertSame('review', $result['status']);
+        $types = [];
+        foreach ($result['components'] as $component) {
+            if ($component['kind'] !== 'degree') {
+                $types[] = $component['progress']['context']['specialization']['kind'];
+            }
+        }
+        sort($types);
+        self::assertSame(['major', 'minor'], $types);
+        $s = $f->r->sis;
+        $s->access->actor = $s->admissions->person($s->admissions->student($f->student)->personId)->ownerUserId;
+        $s->access->staff = false;
+        $owned = $this->service($f)->student($f->student, $f->assignment);
+        self::assertSame('review', $owned['status']);
+        $safe = new \Domain\Portal\ValueObject\StudentDegreeProgress($owned)->describe();
+        self::assertCount(3, $safe['components']);
+        $labels = implode(' ', array_column($safe['components'], 'label'));
+        self::assertStringContainsString('Major DATA', $labels);
+        self::assertStringContainsString('Minor ART', $labels);
+        self::assertStringNotContainsString($f->choices['DATA']['id'], json_encode($safe, JSON_THROW_ON_ERROR));
+        self::assertCount(1, $f->r->sis->sql->rows('sis_academic_credits'));
+    }
+
+    public function testRequiredMajorCannotDisappearThroughTheOwnerDegreeOnlyFastPath(): void
+    {
+        $f = $this->fixture(typed: true, missingSelection: true);
+        $service = $this->service($f);
+        $owner = $f->r->sis->admissions->person($f->r->sis->admissions->student($f->student)->personId)->ownerUserId;
+        $f->r->sis->access->actor = $owner;
+        $f->r->sis->access->staff = false;
+        $result = $service->student($f->student, $f->assignment);
+        self::assertSame('needs_review', $result['status']);
+        self::assertSame(['component_selection_missing'], $result['issues']);
+        self::assertArrayNotHasKey('allocation', $result);
     }
 
 }

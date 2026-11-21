@@ -16,11 +16,11 @@ async function fixture(page, options = {}) {
         { id: id(5), kind: 'award', code: 'BA', title: 'Bachelor of Arts <script>fictional</script>', active: true },
     ];
     let reviews = 0, accepted = null;
-    const specializations = options.specializations ? Array.from({length:23},(_,i)=>({id:id(30+i),program_id:id(1),code:`FOCUS.${String(i).padStart(2,'0')}`,title:`Fictional specialization ${i} <b>example</b>`,description:'A fictional description.',revision:1,active:true})) : [];
+    const specializations = options.specializations ? Array.from({length:23},(_,i)=>({id:id(30+i),program_id:id(1),code:`FOCUS.${String(i).padStart(2,'0')}`,title:`Fictional specialization ${i} <b>example</b>`,description:'A fictional description.',revision:1,active:true,kind:'specialization'})) : [];
     let specializationFailure = !!options.specializationFailure;
     let institution = {revision:0,minimum:0,maximum:1,default_maximum:1};
-    let programPolicy = {revision:0,minimum:0,maximum:null,default_maximum:null,component_sharing:"one_component"};
-    const specializationSnapshot = () => ({program_id:id(1),component_sharing:programPolicy.component_sharing,institution:{revision:institution.revision,maximum:institution.maximum,default_maximum:institution.default_maximum},program:{revision:programPolicy.revision,minimum:programPolicy.minimum,maximum:programPolicy.maximum},effective:{minimum:programPolicy.minimum,maximum:programPolicy.maximum??institution.default_maximum},offered:specializations.filter(s=>s.active).map(({id,code,title,description,revision})=>({id,code,title,description,revision}))});
+    let programPolicy = {revision:0,minimum:0,maximum:null,default_maximum:null,component_sharing:"one_component",kind_limits:{}};
+    const specializationSnapshot = () => ({program_id:id(1),component_sharing:programPolicy.component_sharing,kind_limits:programPolicy.kind_limits,institution:{revision:institution.revision,maximum:institution.maximum,default_maximum:institution.default_maximum},program:{revision:programPolicy.revision,minimum:programPolicy.minimum,maximum:programPolicy.maximum},effective:{minimum:programPolicy.minimum,maximum:programPolicy.maximum??institution.default_maximum},offered:specializations.filter(s=>s.active).map(({id,code,title,description,revision,kind})=>({id,code,title,description,revision,kind}))});
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -226,24 +226,24 @@ test("program specialization setup preserves the program draft and saves literal
     await page
         .getByRole("textbox", { name: "Program description", exact: true })
         .fill("My unsaved program description");
-    await page.getByRole("button", { name: "Program specializations", exact: true }).click();
+    await page.getByRole("button", { name: "Majors, minors & specializations", exact: true }).click();
     await expect(page.getByText("No specializations match this search.", { exact: true })).toBeVisible();
-    await page.getByRole("button", { name: "Add a specialization", exact: true }).click();
-    await page.getByRole("textbox", { name: "Specialization code", exact: true }).fill("DATA.SCI");
+    await page.getByRole("button", { name: "Add a curriculum component", exact: true }).click();
+    await page.getByRole("textbox", { name: "Component code", exact: true }).fill("DATA.SCI");
     await page
-        .getByRole("textbox", { name: "Specialization title", exact: true })
+        .getByRole("textbox", { name: "Component title", exact: true })
         .fill("Data science <b>fictional</b>");
     await page
-        .getByRole("textbox", { name: "Specialization description", exact: true })
+        .getByRole("textbox", { name: "Component description", exact: true })
         .fill("Fictional first paragraph.\nSecond paragraph.");
     await page.getByRole("checkbox", { name: "Active specialization", exact: true }).uncheck();
     await accessible(page);
-    await page.getByRole("button", { name: "Save specialization", exact: true }).click();
+    await page.getByRole("button", { name: "Save curriculum component", exact: true }).click();
     await expect(page.getByText("Specialization saved.", { exact: true })).toBeVisible();
     await expect(page.getByText("DATA.SCI — Data science <b>fictional</b>", { exact: true })).toBeVisible();
     await expect(page.getByText("Inactive — retained for reference", { exact: true })).toBeVisible();
     await page.getByRole("button", { name: "Edit specialization DATA.SCI", exact: true }).click();
-    await expect(page.getByRole("textbox", { name: "Specialization description", exact: true })).toHaveValue(
+    await expect(page.getByRole("textbox", { name: "Component description", exact: true })).toHaveValue(
         "Fictional first paragraph.\nSecond paragraph.",
     );
     await expect(
@@ -272,23 +272,23 @@ test("specialization lists page and search within their program and rejected edi
     page,
 }) => {
     const f = await fixture(page, { specializations: true, specializationFailure: true });
-    await page.getByRole("button", { name: "Program specializations", exact: true }).click();
+    await page.getByRole("button", { name: "Majors, minors & specializations", exact: true }).click();
     await expect(page.getByRole("button", { name: /^Edit specialization / })).toHaveCount(20);
     await page.getByRole("button", { name: "More specializations", exact: true }).click();
     await expect(page.getByRole("button", { name: /^Edit specialization / })).toHaveCount(3);
     await page.getByRole("button", { name: "Edit specialization FOCUS.22", exact: true }).click();
     await page
-        .getByRole("textbox", { name: "Specialization title", exact: true })
+        .getByRole("textbox", { name: "Component title", exact: true })
         .fill("Updated focus <script>fictional</script>");
     await page.getByRole("checkbox", { name: "Active specialization", exact: true }).uncheck();
-    await page.getByRole("button", { name: "Save specialization", exact: true }).click();
+    await page.getByRole("button", { name: "Save curriculum component", exact: true }).click();
     await expect(
         page.getByText("Reload this specialization before saving your changes.", { exact: true }),
     ).toBeVisible();
-    await expect(page.getByRole("textbox", { name: "Specialization title", exact: true })).toHaveValue(
+    await expect(page.getByRole("textbox", { name: "Component title", exact: true })).toHaveValue(
         "Updated focus <script>fictional</script>",
     );
-    await page.getByRole("button", { name: "Save specialization", exact: true }).click();
+    await page.getByRole("button", { name: "Save curriculum component", exact: true }).click();
     await expect(page.getByRole("button", { name: /^Edit specialization / })).toHaveCount(3);
     await page.getByRole("button", { name: "Previous specializations", exact: true }).click();
     await expect(page.getByRole("button", { name: /^Edit specialization / })).toHaveCount(20);
@@ -312,7 +312,7 @@ test("specialization lists page and search within their program and rejected edi
 
 test('institutional ceilings and program specialization limits are reviewed with the exact publication choices',async({page})=>{
     const f=await fixture(page,{specializations:true});
-    await page.getByRole('button',{name:'Program specializations',exact:true}).click();
+    await page.getByRole('button',{name:'Majors, minors & specializations',exact:true}).click();
     await page.getByRole('button',{name:'Specialization selection policy',exact:true}).click();
     await expect(page.getByRole('spinbutton',{name:'Program maximum specializations',exact:true})).toBeDisabled();
     await expect(page.getByText(/Institutional ceiling: 1\./)).toBeVisible();
@@ -350,14 +350,14 @@ test('institutional ceilings and program specialization limits are reviewed with
     await page.locator('summary').filter({hasText:'2024-2025 · Revision 1'}).click();
     await expect(page.getByRole('region',{name:'Published specialization choices and policy',exact:true})).toContainText('Maximum per pursuit: 2');
     expect(f.calls.find(c=>c.path==='/sis/catalog/specialization-policy/').data).toEqual({revision:0,maximum:3,default_maximum:1});
-    expect(f.calls.find(c=>c.path.endsWith('/specializations/policy/')).data).toEqual({revision:0,minimum:1,maximum:2,component_sharing:"multiple_components"});
+    expect(f.calls.find(c=>c.path.endsWith('/specializations/policy/')).data).toEqual({revision:0,minimum:1,maximum:2,component_sharing:"multiple_components",kind_limits:{}});
     expect(f.errors).toEqual([]);
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
 });
 
 test('catalog staff see institutional boundaries and retain rejected program policy edits without an institutional grant',async({page})=>{
     const f=await fixture(page,{catalogOnly:true});
-    await page.getByRole('button',{name:'Program specializations',exact:true}).click();
+    await page.getByRole('button',{name:'Majors, minors & specializations',exact:true}).click();
     await page.getByRole('button',{name:'Specialization selection policy',exact:true}).click();
     await expect(page.getByText('Institution-wide boundaries',{exact:true})).toHaveCount(0);
     const required=page.getByRole('spinbutton',{name:'Required specializations (zero means optional)',exact:true});
@@ -524,5 +524,42 @@ test('program offering sites are explicitly published and later draft removal pr
     expect(f.calls.filter(call => call.path.endsWith('/details/')).map(call => call.data.additional_campus_ids)).toEqual([[id(10)], []]);
     expect(f.calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('major authoring and typed selection policy are retained in reviewed program publication', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Majors, minors & specializations', exact: true }).click();
+    await page.getByRole('button', { name: 'Add a curriculum component', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Curriculum component type', exact: true }).selectOption('major');
+    await page.getByRole('textbox', { name: 'Component code', exact: true }).fill('HIST');
+    await page.getByRole('textbox', { name: 'Component title', exact: true }).fill('History <b>major</b>');
+    await page.getByRole('button', { name: 'Save curriculum component', exact: true }).click();
+    await expect(page.getByText('Type: major', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Specialization selection policy', exact: true }).click();
+    await page.getByLabel('Set major limits', { exact: true }).check();
+    await page.getByLabel('Minimum major selections', { exact: true }).fill('1');
+    await page.getByLabel('Maximum major selections', { exact: true }).fill('1');
+    await page.getByRole('button', { name: 'Save program specialization policy', exact: true }).click();
+    await expect(page.getByLabel('Set major limits', { exact: true })).toBeChecked();
+    await expect(page.getByLabel('Minimum major selections', { exact: true })).toHaveValue('1');
+    await page.getByRole('button', { name: 'Back to specializations', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to program details', exact: true }).click();
+    await page.getByRole('button', { name: 'Publish for an academic year', exact: true }).click();
+    await page.getByLabel('Reason for program publication', { exact: true }).fill('Fictional major requirements.');
+    await page.getByRole('button', { name: 'Choose academic year', exact: true }).click();
+    await page.getByRole('button', { name: 'Use academic year 2024-2025', exact: true }).click();
+    await page.getByRole('button', { name: 'Review program publication', exact: true }).click();
+    const context = page.getByRole('region', { name: 'Published specialization choices and policy', exact: true });
+    await expect(context).toContainText('major: 1–1');
+    await context.locator('summary').click();
+    await expect(context).toContainText('Curriculum type: major');
+    expect(await context.locator('b').count()).toBe(0);
+    expect(f.calls.find(c => c.path.endsWith('/specializations/save/')).data.kind).toBe('major');
+    expect(f.calls.find(c => c.path.endsWith('/specializations/policy/')).data.kind_limits).toEqual({ major: { minimum: 1, maximum: 1 } });
+    await page.setViewportSize({ width: 320, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(f.errors).toEqual([]);
 });

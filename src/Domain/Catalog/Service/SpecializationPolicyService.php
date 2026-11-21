@@ -33,31 +33,36 @@ final readonly class SpecializationPolicyService
     /** @return array<string,mixed> */
     public function settings(EntityId $program): array
     {
-        $actor = $this->access->requirePermission('sis:catalog:manage');
-        $parent = $this->programs->get('programs', $program);
+        $actor = $this->access->requirePermission("sis:catalog:manage");
+        $parent = $this->programs->get("programs", $program);
         $institution = $this->policies->get(null);
         $local = $this->policies->get($program);
         $errors = [];
         $effective = null;
         try {
             $policy = $this->resolve($institution, $local);
-            $effective = ['minimum' => $policy->minimum, 'maximum' => $policy->effectiveMaximum];
+            $effective = ["minimum" => $policy->minimum, "maximum" => $policy->effectiveMaximum];
         } catch (ValidationException $e) {
             $errors = $e->errors;
         }
         try {
-            $manage = $this->access->requirePermission('sis:catalog:policy')->value === $actor->value;
+            $manage =
+            $this->access->requirePermission("sis:catalog:policy")->value === $actor->value;
         } catch (AccessDeniedException) {
             $manage = false;
         }
-        $this->authorize($actor, 'sis:catalog:manage');
+        $this->authorize($actor, "sis:catalog:manage");
         return [
-            'program' => ['id' => $program->value, 'code' => $parent['code'], 'title' => $parent['title']],
-            'institution' => $institution,
-            'settings' => $local,
-            'effective' => $effective,
-            'errors' => $errors,
-            'can_manage_institution' => $manage,
+            "program" => [
+                "id" => $program->value,
+                "code" => $parent["code"],
+                "title" => $parent["title"],
+            ],
+            "institution" => $institution,
+            "settings" => $local,
+            "effective" => $effective,
+            "errors" => $errors,
+            "can_manage_institution" => $manage,
         ];
     }
 
@@ -67,12 +72,18 @@ final readonly class SpecializationPolicyService
         int $minimum,
         ?int $maximum,
         string $componentSharing = ComponentCourseSharing::OneComponent->value,
+        array $kindLimits = [],
     ): void {
-        $actor = $this->access->requirePermission('sis:catalog:manage');
+        $kindLimits = new \Domain\Catalog\ValueObject\ComponentSelectionRules($kindLimits)->limits;
+        $actor = $this->access->requirePermission("sis:catalog:manage");
         if (ComponentCourseSharing::tryFrom($componentSharing) === null) {
-            throw new ValidationException([['field' => 'component_sharing',
-                'message' => 'Choose whether completed courses may satisfy more than one curriculum component.',
-            ]]);
+            throw new ValidationException([
+                [
+                    "field" => "component_sharing",
+                    "message" =>
+                        "Choose whether completed courses may satisfy more than one curriculum component.",
+                ],
+            ]);
         }
         $this->transactions->run(function () use (
             $program,
@@ -80,45 +91,54 @@ final readonly class SpecializationPolicyService
             $minimum,
             $maximum,
             $componentSharing,
+            $kindLimits,
             $actor,
         ): void {
             $this->policies->lockInstitution();
-            $this->programs->lock('programs', $program);
-            $this->authorize($actor, 'sis:catalog:manage');
+            $this->programs->lock("programs", $program);
+            $this->authorize($actor, "sis:catalog:manage");
             $old = $this->policies->get($program);
-            $this->revision($revision, $old['revision']);
+            $this->revision($revision, $old["revision"]);
             $local = [
-                'revision' => $revision + 1,
-                'minimum' => $minimum,
-                'maximum' => $maximum,
-                'default_maximum' => null,
-                'component_sharing' => $componentSharing,
+                "revision" => $revision + 1,
+                "minimum" => $minimum,
+                "maximum" => $maximum,
+                "default_maximum" => null,
+                "component_sharing" => $componentSharing,
+                "kind_limits" => $kindLimits,
             ];
             $this->resolve($this->policies->get(null), $local);
             $this->policies->save($program, $local);
-            $this->audit->record($actor, 'program.specialization_policy_saved', $program);
+            $this->audit->record($actor, "program.specialization_policy_saved", $program);
+            $this->authorize($actor, "sis:catalog:manage");
+            if ($this->policies->get($program) !== $local) {
+                throw new ConcurrentModificationException(
+                    "The component policy changed before saving completed.",
+                );
+            }
         });
     }
 
     public function saveInstitution(int $revision, int $maximum, int $default): void
     {
-        $actor = $this->access->requirePermission('sis:catalog:policy');
+        $actor = $this->access->requirePermission("sis:catalog:policy");
         new SpecializationPolicy($maximum, $default);
         $this->transactions->run(function () use ($revision, $maximum, $default, $actor): void {
             $this->policies->lockInstitution();
-            $this->authorize($actor, 'sis:catalog:policy');
-            $this->revision($revision, $this->policies->get(null)['revision']);
+            $this->authorize($actor, "sis:catalog:policy");
+            $this->revision($revision, $this->policies->get(null)["revision"]);
             $this->policies->save(null, [
-                'revision' => $revision + 1,
-                'minimum' => 0,
-                'maximum' => $maximum,
-                'default_maximum' => $default,
+                "revision" => $revision + 1,
+                "minimum" => 0,
+                "maximum" => $maximum,
+                "default_maximum" => $default,
             ]);
             $this->audit->record(
                 $actor,
-                'institution.specialization_policy_saved',
+                "institution.specialization_policy_saved",
                 new EntityId(SpecializationPolicyRepository::INSTITUTION_ID),
             );
+            $this->authorize($actor, "sis:catalog:policy");
         });
     }
 
@@ -135,36 +155,46 @@ final readonly class SpecializationPolicyService
         $local = $this->policies->get($program);
         $policy = $this->resolve($institution, $local);
         $offered = $this->specializations->offered($program);
+        new \Domain\Catalog\ValueObject\ComponentSelectionRules($local["kind_limits"])->publication(
+            $offered,
+            $policy->minimum,
+            $policy->effectiveMaximum,
+        );
         if ($policy->minimum > count($offered)) {
             throw new ValidationException([
                 [
-                    'field' => 'minimum',
-                    'message' =>
-                        'Offer enough active specializations to meet the required number before publishing.',
+                    "field" => "minimum",
+                    "message" =>
+                        "Offer enough active specializations to meet the required number before publishing.",
                 ],
             ]);
         }
         $snapshot = [
-            'program_id' => $program->value,
-            'institution' => [
-                'revision' => $institution['revision'],
-                'maximum' => $institution['maximum'],
-                'default_maximum' => $institution['default_maximum'],
+            "program_id" => $program->value,
+            "institution" => [
+                "revision" => $institution["revision"],
+                "maximum" => $institution["maximum"],
+                "default_maximum" => $institution["default_maximum"],
             ],
-            'program' => [
-                'revision' => $local['revision'],
-                'minimum' => $local['minimum'],
-                'maximum' => $local['maximum'],
+            "program" => [
+                "revision" => $local["revision"],
+                "minimum" => $local["minimum"],
+                "maximum" => $local["maximum"],
             ],
-            'effective' => ['minimum' => $policy->minimum, 'maximum' => $policy->effectiveMaximum],
-            'offered' => $offered,
-            'component_sharing' => $local['component_sharing'] ??
+            "effective" => ["minimum" => $policy->minimum, "maximum" => $policy->effectiveMaximum],
+            "offered" => $offered,
+            "kind_limits" => $local["kind_limits"],
+            "component_sharing" =>
+                $local["component_sharing"] ??
                 throw new \Domain\Shared\EventSourcing\CorruptHistoryException(),
         ];
         if (strlen(json_encode($snapshot, JSON_THROW_ON_ERROR)) > 49152) {
             throw new ValidationException([
-                ['field' => 'specializations',
-                    'message' => 'Shorten specialization descriptions to fit one program publication.'],
+                [
+                    "field" => "specializations",
+                    "message" =>
+                        "Shorten specialization descriptions to fit one program publication.",
+                ],
             ]);
         }
         return new ProgramSpecializationSnapshot($snapshot);
@@ -174,26 +204,28 @@ final readonly class SpecializationPolicyService
      * @param array{revision:int,minimum:int,maximum:?int,default_maximum:?int,component_sharing?:?string} $local */
     private function resolve(array $institution, array $local): SpecializationPolicy
     {
-        if ($institution['maximum'] === null || $institution['default_maximum'] === null) {
+        if ($institution["maximum"] === null || $institution["default_maximum"] === null) {
             throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
         }
         return new SpecializationPolicy(
-            $institution['maximum'],
-            $institution['default_maximum'],
-            $local['minimum'],
-            $local['maximum'],
+            $institution["maximum"],
+            $institution["default_maximum"],
+            $local["minimum"],
+            $local["maximum"],
         );
     }
     private function revision(int $expected, int $actual): void
     {
         if ($expected < 0 || $expected >= 2000000000 || $expected !== $actual) {
-            throw new ConcurrentModificationException('Reload the specialization policy before saving.');
+            throw new ConcurrentModificationException(
+                "Reload the specialization policy before saving.",
+            );
         }
     }
     private function authorize(EntityId $actor, string $permission): void
     {
         if ($this->access->requirePermission($permission)->value !== $actor->value) {
-            throw new AccessDeniedException('Access denied.');
+            throw new AccessDeniedException("Access denied.");
         }
     }
 }

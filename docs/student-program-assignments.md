@@ -12,7 +12,7 @@ Earlier work remains owned by the former pursuit. After confirmation, authorized
 
 The review is staff-bound, expires after 20 minutes, and checks the original pursuit/status, primary-selection version and reviewed new-program context again on confirmation. Required assignment initialization, all decisions/projections and the audit either commit together or roll back together. A repeated accepted confirmation returns its original result after later program changes without reopening the former pursuit or changing the current selection.
 
-A combined dual-degree program, majors/minors and specializations can be organized within one pursuit; an additional independent pursuit is not required merely to describe those components. The existing additional-assignment and status tools remain available for exceptional administrative cases. This change does not implement unbuilt minor or combined-degree curriculum features.
+A combined dual-degree program, majors/minors and specializations can be organized within one pursuit; an additional independent pursuit is not required merely to describe those components. The existing additional-assignment and status tools remain available for exceptional administrative cases. [Major/minor curriculum roles and per-type limits](program-publication.md#majors-minors-and-curriculum-component-types) now use the shared component-selection and requirements workflow; a component is not another awarded degree.
 
 ## Staff workflow
 

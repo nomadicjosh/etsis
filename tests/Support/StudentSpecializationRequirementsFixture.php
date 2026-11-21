@@ -19,7 +19,13 @@ final class StudentSpecializationRequirementsFixture
     public \Domain\Student\Service\StudentSpecializationService $service;
     public string $programVersion;
 
-    public function __construct(?ReusableGroupFixture $r = null, string $sharing = 'one_component')
+    public function __construct(
+        ?ReusableGroupFixture $r = null,
+        string $sharing = 'one_component',
+        array $componentKinds = [],
+        array $kindLimits = [],
+        bool $selectInitial = true,
+    )
     {
         $this->r = $r ??= new ReusableGroupFixture();
         $s = $r->sis;
@@ -31,12 +37,21 @@ final class StudentSpecializationRequirementsFixture
             $choices, $references, $s->access, $s->transactions, $s->audit,
         );
         $policy->saveInstitution(0, 2, 1);
-        $policy->saveProgram($s->program, 0, 0, 2, $sharing);
+        $policy->saveProgram($s->program, 0, 0, 2, $sharing, $kindLimits);
         $setup = new \Domain\Catalog\Service\ProgramSpecializationService(
             $choices, $references, $s->access, $s->transactions, $s->audit,
         );
         foreach (['DATA', 'ART'] as $code) {
-            $this->choices[$code] = $setup->save($s->program, null, null, $code, 'Fictional ' . $code, null, true);
+            $this->choices[$code] = $setup->save(
+                $s->program,
+                null,
+                null,
+                $code,
+                'Fictional ' . $code,
+                null,
+                true,
+                $componentKinds[$code] ?? \Domain\Catalog\ValueObject\CurriculumComponentKind::Specialization,
+            );
         }
         $review = $this->program->service->review($s->program, $r->year, 'Fictional offered choices.');
         $this->programVersion = $this->program->service->publish($s->program, $review['review_token'])['operation_id'];
@@ -55,7 +70,9 @@ final class StudentSpecializationRequirementsFixture
         $this->student = $s->matriculate($application->id)->id;
         $this->assignment = new EntityId($s->sql->rows('sis_student_programs', ['student_id' => $this->student->value], 1)[0]['id']);
         $this->service = $this->service();
-        $this->select(['DATA']);
+        if ($selectInitial) {
+            $this->select(['DATA']);
+        }
     }
     public function service(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,

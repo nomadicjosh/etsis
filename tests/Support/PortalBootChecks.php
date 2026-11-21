@@ -4511,7 +4511,15 @@ $sis->access->grants = [];
 // Specialization setup uses catalog authority, program scope and the same private CSRF pipeline.
 $sis->access->staff = true;
 $specializationBase = '/sis/programs/' . $sis->program->value . '/specializations/';
-$specializationSave = ['id'=>null,'revision'=>null,'code'=>'FOCUS.FICTIONAL','title'=>'Fictional specialization','description'=>null,'active'=>true];
+$specializationSave = [
+    'kind' => 'specialization',
+    'id' => null,
+    'revision' => null,
+    'code' => 'FOCUS.FICTIONAL',
+    'title' => 'Fictional specialization',
+    'description' => null,
+    'active' => true,
+];
 $specializationResponse = $teachingPost($specializationBase . 'save/', $specializationSave);
 $specializationRow = json_decode((string)$specializationResponse->getBody(),true,flags:JSON_THROW_ON_ERROR);
 if ($specializationResponse->getStatusCode() !== 200 || ($specializationRow['revision'] ?? null) !== 1) {
@@ -4541,16 +4549,36 @@ $sis->access->grants = ['sis:catalog:manage'];
 $policyReadRequest = $specializationRequest->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $specializationBase . 'policy/'));
 $policyRead = $app->router->match($policyReadRequest);
 $policyData = json_decode((string)$policyRead->getBody(),true,flags:JSON_THROW_ON_ERROR);
-if ($policyRead->getStatusCode() !== 200 || ($policyData['effective']['maximum']??null)!==1 ||
-    ($policyData['can_manage_institution']??true)!==false ||
-    $teachingPost('/sis/catalog/specialization-policy/',['revision'=>0,'maximum'=>3,'default_maximum'=>1])->getStatusCode()!==403 ||
-    $teachingPost($specializationBase.'policy/',['revision'=>0,'minimum'=>1,'maximum'=>1,'component_sharing'=>'one_component'])->getStatusCode()!==200 ||
-    $teachingPost($specializationBase.'policy/',['revision'=>1,'minimum'=>0,'maximum'=>2,'component_sharing'=>'multiple_components'])->getStatusCode()!==422) {
+$componentPolicy = [
+    'revision' => 0,
+    'minimum' => 1,
+    'maximum' => 1,
+    'component_sharing' => 'one_component',
+    'kind_limits' => [],
+];
+if (
+    $policyRead->getStatusCode() !== 200 ||
+    ($policyData['effective']['maximum'] ?? null) !== 1 ||
+    ($policyData['can_manage_institution'] ?? true) !== false ||
+    $teachingPost('/sis/catalog/specialization-policy/', [
+        'revision' => 0, 'maximum' => 3, 'default_maximum' => 1,
+    ])->getStatusCode() !== 403 ||
+    $teachingPost($specializationBase . 'policy/', $componentPolicy)->getStatusCode() !== 200 ||
+    $teachingPost($specializationBase . 'policy/', array_replace($componentPolicy, [
+        'revision' => 1, 'minimum' => 0, 'maximum' => 2, 'component_sharing' => 'multiple_components',
+    ]))->getStatusCode() !== 422
+) {
     throw new RuntimeException('Specialization policy authority or inherited boundaries failed.');
 }
-$sis->access->grants[]='sis:catalog:policy';
-if ($teachingPost('/sis/catalog/specialization-policy/',['revision'=>0,'maximum'=>3,'default_maximum'=>1])->getStatusCode()!==200 ||
-    $teachingPost($specializationBase.'policy/',['revision'=>1,'minimum'=>1,'maximum'=>2,'component_sharing'=>'multiple_components'])->getStatusCode()!==200) {
+$sis->access->grants[] = 'sis:catalog:policy';
+if (
+    $teachingPost('/sis/catalog/specialization-policy/', [
+        'revision' => 0, 'maximum' => 3, 'default_maximum' => 1,
+    ])->getStatusCode() !== 200 ||
+    $teachingPost($specializationBase . 'policy/', array_replace($componentPolicy, [
+        'revision' => 1, 'minimum' => 1, 'maximum' => 2, 'component_sharing' => 'multiple_components',
+    ]))->getStatusCode() !== 200
+) {
     throw new RuntimeException('Explicit specialization policy controls failed through actual routes.');
 }
 $sis->access->staff = true;

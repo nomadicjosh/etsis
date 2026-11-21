@@ -207,7 +207,7 @@ window.createWorkspacePrograms = function (ui) {
                     capture();
                     return history(id, render);
                 }),
-                button("Program specializations", () => {
+                button("Majors, minors & specializations", () => {
                     capture();
                     return specializations(id, render);
                 }),
@@ -544,19 +544,19 @@ window.createWorkspacePrograms = function (ui) {
     async function specializations(program, back, state = { search: "", after: null, stack: [] }, notice = "") {
         const base = `/sis/programs/${program}/specializations/`;
         const data = await request(`${base}page/`, "POST", { search: state.search, after: state.after });
-        const body = openDrawer("Program specializations", "FOCUSED PATHS WITHIN AN ACADEMIC PROGRAM");
+        const body = openDrawer("Majors, minors & specializations", "FOCUSED PATHS WITHIN AN ACADEMIC PROGRAM");
         const restore = (notice = "") => specializations(program, back, state, notice);
         body.append(
             node("h3", { class: "h5" }, `${data.program.code} — ${data.program.title}`),
             node(
                 "p",
                 {},
-                "Maintain specialization names and availability for this program. This setup does not change a student's recorded program or degree requirements.",
+                "Maintain majors, minors, concentrations, tracks and specializations for this program. Each type uses the same retained requirements and student-selection workflow. This setup does not change a student's recorded program or degree requirements.",
             ),
             node(
                 "div",
                 { class: "d-flex flex-wrap gap-2 mb-3" },
-                button("Add a specialization", () => editSpecialization(program, null, restore)),
+                button("Add a curriculum component", () => editSpecialization(program, null, restore)),
                 button("Specialization selection policy", () => specializationPolicy(program, restore)),
                 button("Back to program details", back),
             ),
@@ -600,6 +600,7 @@ window.createWorkspacePrograms = function (ui) {
                         "article",
                         { class: "surface p-3" },
                         node("h3", { class: "h5" }, `${item.code} — ${item.title}`),
+                        node("p", {}, `Type: ${item.kind || "not recorded — choose a type before publishing"}`),
                         node("p", {}, item.active ? "Active" : "Inactive — retained for reference"),
                         button(`Edit specialization ${item.code}`, () =>
                             editSpecialization(program, item.id, restore),
@@ -640,7 +641,7 @@ window.createWorkspacePrograms = function (ui) {
         const base = `/sis/programs/${program}/specializations/`;
         const value = id
             ? await request(`${base}${id}/`)
-            : { id: null, revision: null, code: "", title: "", description: null, active: true };
+            : { id: null, revision: null, code: "", title: "", description: null, active: true, kind: "specialization" };
         const body = openDrawer(
             id ? "Edit specialization" : "Add specialization",
             "PROGRAM SPECIALIZATION SETUP",
@@ -653,9 +654,10 @@ window.createWorkspacePrograms = function (ui) {
             ),
         );
         const fields = [
-            ["code", "Specialization code"],
-            ["title", "Specialization title"],
-            ["description", "Specialization description", "textarea", "", false],
+            ["kind", "Curriculum component type", "choice", [{ value: "major", label: "Major" }, { value: "minor", label: "Minor" }, { value: "concentration", label: "Concentration" }, { value: "track", label: "Track" }, { value: "specialization", label: "Specialization" }]],
+            ["code", "Component code"],
+            ["title", "Component title"],
+            ["description", "Component description", "textarea", "", false],
         ];
         const form = await buildForm(fields, value);
         form.elements.namedItem("code").maxLength = 80;
@@ -668,7 +670,7 @@ window.createWorkspacePrograms = function (ui) {
             class: "form-check-input",
         });
         active.checked = value.active;
-        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save specialization");
+        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save curriculum component");
         form.append(
             node(
                 "div",
@@ -686,6 +688,7 @@ window.createWorkspacePrograms = function (ui) {
                 await request(`${base}save/`, "POST", {
                     id: value.id,
                     revision: value.revision,
+                    kind: draft.kind,
                     code: draft.code,
                     title: draft.title,
                     description: form.elements.namedItem("description").value || null,
@@ -806,6 +809,19 @@ window.createWorkspacePrograms = function (ui) {
             node("p", { class: "form-text" },
                 "Choose whether the same completed course can satisfy the degree and selected specializations. Sharing across groups inside a component is configured in its requirements. Overall credits and GPA are counted once. Publish the program to retain this choice; earlier publications stay unchanged. Independent component reviews do not apply this cross-component rule."),
         );
+        const typeRules = {};
+        const typed = node("fieldset", { class: "mt-3" }, node("legend", { class: "h5" }, "Limits by curriculum type"), node("p", {}, "Optional limits apply in addition to the overall program maximum. For example, require one major and allow one optional minor. Unchecked types use the overall limits. Publish the program to retain these rules."));
+        for (const kind of ["major", "minor", "concentration", "track", "specialization"]) {
+            const rule = data.settings.kind_limits?.[kind];
+            const enabled = node("input", { id: `component-rule-${kind}`, type: "checkbox", class: "form-check-input", checked: !!rule });
+            const min = field(`${kind}-minimum`, `Minimum ${kind} selections`, rule?.minimum ?? 0, 0, 100);
+            const max = field(`${kind}-maximum`, `Maximum ${kind} selections`, rule?.maximum ?? data.effective?.maximum ?? data.institution.default_maximum, 0, 100);
+            const toggle = () => { min.input.disabled = max.input.disabled = !enabled.checked; };
+            enabled.addEventListener("change", toggle); toggle();
+            typed.append(node("div", { class: "surface p-3 mb-2" }, node("div", { class: "form-check" }, enabled, node("label", { for: enabled.id, class: "form-check-label" }, `Set ${kind} limits`)), min.group, max.group));
+            typeRules[kind] = { enabled, min: min.input, max: max.input };
+        }
+        form.append(typed);
         const save = node(
             "button",
             { type: "submit", class: "btn btn-primary" },
@@ -823,6 +839,7 @@ window.createWorkspacePrograms = function (ui) {
                     minimum: Number(minimum.input.value),
                     maximum: inherit.checked ? null : Number(maximum.input.value),
                     component_sharing: sharing.value,
+                    kind_limits: Object.fromEntries(Object.entries(typeRules).filter(([, r]) => r.enabled.checked).map(([kind, r]) => [kind, { minimum: Number(r.min.value), maximum: Number(r.max.value) }])),
                 });
                 if (body.isConnected)
                     await specializationPolicy(
@@ -908,6 +925,7 @@ window.createWorkspacePrograms = function (ui) {
             one_component: "Apply a completed course to one component.",
             multiple_components: "A completed course may satisfy degree and specialization requirements.",
         }[snapshot.component_sharing] || "Not recorded in this earlier publication.")));
+        section.append(node("p", {}, snapshot.kind_limits == null ? "Curriculum type limits were not recorded in this earlier publication." : Object.entries(snapshot.kind_limits).map(([kind, rule]) => `${kind}: ${rule.minimum}–${rule.maximum}`).join(" · ") || "No additional limits by curriculum type."));
         if (!snapshot.offered.length) {
             section.append(node("p", {}, "No specialization choices offered in this publication."));
             return section;
@@ -942,6 +960,7 @@ window.createWorkspacePrograms = function (ui) {
                                 "article",
                                 { class: "border-top py-2" },
                                 node("h4", { class: "h6" }, `${choice.code} — ${choice.title}`),
+                                node("p", {}, `Curriculum type: ${choice.kind || "not recorded"}`),
                                 node(
                                     "p",
                                     { class: "course-description-text" },

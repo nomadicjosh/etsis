@@ -651,7 +651,7 @@ window.createCurriculumCompetition = function (ui, data, inspect) {
                 component.label ||
                 (component.kind === "degree"
                     ? "Degree"
-                    : `Specialization ${component.progress.context.specialization.code}`);
+                    : `${component.progress.context.specialization.kind || "Component (type not recorded)"} ${component.progress.context.specialization.code}`);
             return { ...reference, label: `${label} · ${group.name}` };
         });
         const card = node(

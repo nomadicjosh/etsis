@@ -36,3 +36,8 @@ All three workflows use one shared presentation component and fixed guidance tex
 Refreshing a review replaces its guide with the new captured result and closes the disclosure. Old detached guide controls cannot act on the replacement screen. Unknown or incomplete supported input produces a refresh instruction rather than a positive readiness claim. Changes elsewhere require the normal refresh/review workflow; the guide is not a live monitor.
 
 Native disclosure controls work with keyboard and assistive technology. Links move visible focus to the existing control or detail without submitting forms. The shared styles preserve narrow-screen reflow, contrast and focus, with no movement animation. The guides are available without configuring optional AI assistance. External student-progress AI sharing remains deferred.
+
+
+## Major and minor curriculum setup
+
+**Program details & publications → Majors, minors & specializations** now offers explicit component types. Configure optional type limits beside the overall selection policy, publish the program, then use the existing student component-selection and requirements workflow. Combined staff/owner progress displays retained major/minor roles and applies the same sharing rules. See [major/minor setup and historical limits](program-publication.md#majors-minors-and-curriculum-component-types).

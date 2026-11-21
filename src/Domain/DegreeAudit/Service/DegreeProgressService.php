@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\DegreeAudit\Service;
 
+use Domain\Catalog\ValueObject\ComponentSelectionRules;
 use Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException;
 use Domain\Catalog\ValueObject\ComponentCourseSharing;
 use Domain\DegreeAudit\ValueObject\AcademicInputStatus;
@@ -129,6 +130,16 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                 }
                 $specializations = $all["specializations"];
                 $selected = $specializations["selection"]["specialization_ids"] ?? [];
+                if (array_key_exists('kind_limits', $specializations['program']['specializations'] ?? [])) {
+                    try {
+                        new ComponentSelectionRules(
+                            $specializations['program']['specializations']['kind_limits'],
+                        )->selection($specializations['program']['specializations']['offered'], $selected);
+                    } catch (\Domain\Shared\Exception\ValidationException) {
+                        return ['status' => 'needs_review', 'issues' => ['component_selection_missing']];
+                    }
+                }
+
                 if (
                     !$staff &&
                     $selected === [] &&

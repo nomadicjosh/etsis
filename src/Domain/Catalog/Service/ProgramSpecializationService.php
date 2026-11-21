@@ -6,6 +6,7 @@ namespace Domain\Catalog\Service;
 
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\ProgramSpecialization;
+use Domain\Catalog\ValueObject\CurriculumComponentKind;
 use Domain\Catalog\Repository\CatalogRevisionRepository;
 use Domain\Catalog\Repository\ProgramSpecializationRepository;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -27,31 +28,35 @@ final readonly class ProgramSpecializationService
     }
 
     /** @return array<string,mixed> */
-    public function page(EntityId $program, string $search = '', ?EntityId $after = null): array
+    public function page(EntityId $program, string $search = "", ?EntityId $after = null): array
     {
-        $actor = $this->access->requirePermission('sis:catalog:manage');
+        $actor = $this->access->requirePermission("sis:catalog:manage");
         if (
             mb_strlen($search) > 100 ||
-            !mb_check_encoding($search, 'UTF-8') ||
+            !mb_check_encoding($search, "UTF-8") ||
             preg_match('/[\x00-\x1F\x7F]/', $search)
         ) {
-            throw new InvalidArgumentException('Use a shorter specialization search.');
+            throw new InvalidArgumentException("Use a shorter specialization search.");
         }
-        $parent = $this->programs->get('programs', $program);
+        $parent = $this->programs->get("programs", $program);
         $items = $this->specializations->page($program, trim($search), $after);
         $this->authorize($actor);
         return [
-            'program' => ['id' => $program->value, 'code' => $parent['code'], 'title' => $parent['title']],
-            'items' => array_slice($items, 0, 20),
-            'next_after' => count($items) > 20 ? $items[19]['id'] : null,
+            "program" => [
+                "id" => $program->value,
+                "code" => $parent["code"],
+                "title" => $parent["title"],
+            ],
+            "items" => array_slice($items, 0, 20),
+            "next_after" => count($items) > 20 ? $items[19]["id"] : null,
         ];
     }
 
     /** @return array<string,scalar|null> */
     public function get(EntityId $program, EntityId $id): array
     {
-        $actor = $this->access->requirePermission('sis:catalog:manage');
-        $this->programs->get('programs', $program);
+        $actor = $this->access->requirePermission("sis:catalog:manage");
+        $this->programs->get("programs", $program);
         $value = $this->specializations->get($program, $id);
         $this->authorize($actor);
         return $value->describe();
@@ -67,19 +72,28 @@ final readonly class ProgramSpecializationService
         string $title,
         ?string $description,
         bool $active,
+        CurriculumComponentKind $kind = CurriculumComponentKind::Specialization,
     ): array {
-        $actor = $this->access->requirePermission('sis:catalog:manage');
+        $actor = $this->access->requirePermission("sis:catalog:manage");
         if (
             ($id === null) !== ($expectedRevision === null) ||
-            ($expectedRevision !== null && ($expectedRevision < 1 || $expectedRevision >= 2000000000))
+            ($expectedRevision !== null &&
+                ($expectedRevision < 1 || $expectedRevision >= 2000000000))
         ) {
-            throw new InvalidArgumentException('Supply the saved revision when editing a specialization.');
+            throw new InvalidArgumentException(
+                "Supply the saved revision when editing a specialization.",
+            );
         }
-        foreach (['code' => $code, 'title' => $title, 'description' => $description] as $field => $text) {
-            $pattern = $field === 'description' ? '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/' : '/[\x00-\x1F\x7F]/';
+        foreach (
+            ["code" => $code, "title" => $title, "description" => $description] as $field => $text
+        ) {
+            $pattern =
+            $field === "description"
+            ? '/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/'
+            : '/[\x00-\x1F\x7F]/';
             if ($text !== null && preg_match($pattern, $text)) {
                 throw new \Domain\Shared\Exception\ValidationException([
-                    ['field' => $field, 'message' => 'Remove unsupported control characters.'],
+                    ["field" => $field, "message" => "Remove unsupported control characters."],
                 ]);
             }
         }
@@ -88,9 +102,10 @@ final readonly class ProgramSpecializationService
             $program,
             strtoupper(trim($code)),
             trim($title),
-            $description === null || trim($description) === '' ? null : trim($description),
+            $description === null || trim($description) === "" ? null : trim($description),
             $active,
             ($expectedRevision ?? 0) + 1,
+            $kind,
         );
         return $this->transactions->run(function () use (
             $program,
@@ -99,27 +114,38 @@ final readonly class ProgramSpecializationService
             $actor,
             $value,
         ): array {
-            $this->programs->lock('programs', $program);
+            $this->programs->lock("programs", $program);
             $this->authorize($actor);
-            if ($id !== null && $this->specializations->get($program, $id)->revision !== $expectedRevision) {
+            if (
+                $id !== null &&
+                $this->specializations->get($program, $id)->revision !== $expectedRevision
+            ) {
                 throw new ConcurrentModificationException(
-                    'Reload this specialization before saving your changes.',
+                    "Reload this specialization before saving your changes.",
                 );
             }
             $this->specializations->save($value, $id === null);
             $this->audit->record(
                 $actor,
-                $id === null ? 'program.specialization_created' : 'program.specialization_updated',
+                $id === null ? "program.specialization_created" : "program.specialization_updated",
                 $value->id,
             );
+            $this->authorize($actor);
+            if (
+                $this->specializations->get($program, $value->id)->describe() !== $value->describe()
+            ) {
+                throw new ConcurrentModificationException(
+                    "The component changed before saving completed.",
+                );
+            }
             return $value->describe();
         });
     }
 
     private function authorize(EntityId $actor): void
     {
-        if ($this->access->requirePermission('sis:catalog:manage')->value !== $actor->value) {
-            throw new AccessDeniedException('Access denied.');
+        if ($this->access->requirePermission("sis:catalog:manage")->value !== $actor->value) {
+            throw new AccessDeniedException("Access denied.");
         }
     }
 }

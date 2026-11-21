@@ -19,32 +19,36 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
     public function page(EntityId $program, string $search, ?EntityId $after): array
     {
         $q = $this->sql->quote(...);
-        $where = [$q('program_id') . ' = ?'];
+        $where = [$q("program_id") . " = ?"];
         $params = [$program->value];
-        if ($search !== '') {
-            $where[] = '(' . $q('code') . " LIKE ? ESCAPE '!' OR " . $q('title') . " LIKE ? ESCAPE '!')";
-            $pattern = '%' . strtr($search, ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+        if ($search !== "") {
+            $where[] =
+            "(" . $q("code") . " LIKE ? ESCAPE '!' OR " . $q("title") . " LIKE ? ESCAPE '!')";
+            $pattern = "%" . strtr($search, ["!" => "!!", "%" => "!%", "_" => "!_"]) . "%";
             array_push($params, $pattern, $pattern);
         }
         if ($after !== null) {
-            $where[] = $q('id') . ' > ?';
+            $where[] = $q("id") . " > ?";
             $params[] = $after->value;
         }
         $rows = $this->sql->fetch(
-            'SELECT ' .
-                implode(', ', array_map($q, ['id', 'code', 'title', 'active', 'revision'])) .
-                ' FROM ' .
-                $q('sis_program_specializations') .
-                ' WHERE ' .
-                implode(' AND ', $where) .
-                ' ORDER BY ' .
-                $q('id'),
+            "SELECT " .
+                implode(
+                    ", ",
+                    array_map($q, ["id", "code", "title", "active", "revision", "kind"]),
+                ) .
+                " FROM " .
+                $q("sis_program_specializations") .
+                " WHERE " .
+                implode(" AND ", $where) .
+                " ORDER BY " .
+                $q("id"),
             $params,
             21,
         );
         foreach ($rows as &$row) {
-            $row['active'] = (bool) $row['active'];
-            $row['revision'] = (int) $row['revision'];
+            $row["active"] = (bool) $row["active"];
+            $row["revision"] = (int) $row["revision"];
         }
         unset($row);
         return $rows;
@@ -52,18 +56,21 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
 
     public function get(EntityId $program, EntityId $id): ProgramSpecialization
     {
-        $row = $this->sql->one('sis_program_specializations', [
-            'id' => $id->value,
-            'program_id' => $program->value,
+        $row = $this->sql->one("sis_program_specializations", [
+            "id" => $id->value,
+            "program_id" => $program->value,
         ]);
         return new ProgramSpecialization(
             $id,
             $program,
-            $row['code'],
-            $row['title'],
-            $row['description'],
-            (bool) $row['active'],
-            (int) $row['revision'],
+            $row["code"],
+            $row["title"],
+            $row["description"],
+            (bool) $row["active"],
+            (int) $row["revision"],
+            $row["kind"] === null
+                ? null
+                : \Domain\Catalog\ValueObject\CurriculumComponentKind::from($row["kind"]),
         );
     }
 
@@ -71,24 +78,27 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
     {
         $other =
         $this->sql->rows(
-            'sis_program_specializations',
-            ['program_id' => $value->programId->value, 'code' => $value->code],
+            "sis_program_specializations",
+            ["program_id" => $value->programId->value, "code" => $value->code],
             1,
         )[0] ?? null;
-        if ($other !== null && $other['id'] !== $value->id->value) {
+        if ($other !== null && $other["id"] !== $value->id->value) {
             throw new ValidationException([
-                ['field' => 'code', 'message' => 'That specialization code is already used in this program.'],
+                [
+                    "field" => "code",
+                    "message" => "That specialization code is already used in this program.",
+                ],
             ]);
         }
         $row = $value->describe();
-        $row['active'] = (int) $value->active;
+        $row["active"] = (int) $value->active;
         if ($create) {
-            $this->sql->insert('sis_program_specializations', $row);
+            $this->sql->insert("sis_program_specializations", $row);
         } else {
-            unset($row['id'], $row['program_id']);
-            $this->sql->update('sis_program_specializations', $row, [
-                'id' => $value->id->value,
-                'program_id' => $value->programId->value,
+            unset($row["id"], $row["program_id"]);
+            $this->sql->update("sis_program_specializations", $row, [
+                "id" => $value->id->value,
+                "program_id" => $value->programId->value,
             ]);
         }
     }
@@ -97,19 +107,35 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
     {
         $q = $this->sql->quote(...);
         $rows = $this->sql->fetch(
-            'SELECT * FROM ' . $q('sis_program_specializations') . ' WHERE ' . $q('program_id') .
-                ' = ? AND ' . $q('active') . ' = ? ORDER BY ' . $q('id'),
+            "SELECT * FROM " .
+                $q("sis_program_specializations") .
+                " WHERE " .
+                $q("program_id") .
+                " = ? AND " .
+                $q("active") .
+                " = ? ORDER BY " .
+                $q("id"),
             [$program->value, 1],
             101,
         );
         if (count($rows) > 100) {
             throw new \Domain\Shared\Exception\ValidationException([
-                ['field' => 'specializations', 'message' => 'Publish at most 100 active choices for one program.'],
+                [
+                    "field" => "specializations",
+                    "message" => "Publish at most 100 active choices for one program.",
+                ],
             ]);
         }
-        return array_map(static fn(array $row): array => [
-            'id' => $row['id'], 'code' => $row['code'], 'title' => $row['title'],
-            'description' => $row['description'], 'revision' => (int) $row['revision'],
-        ], $rows);
+        return array_map(
+            static fn(array $row): array => [
+                "id" => $row["id"],
+                "code" => $row["code"],
+                "title" => $row["title"],
+                "kind" => $row["kind"],
+                "description" => $row["description"],
+                "revision" => (int) $row["revision"],
+            ],
+            $rows,
+        );
     }
 }

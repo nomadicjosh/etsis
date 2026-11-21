@@ -97,7 +97,7 @@ async function fixture(page, options = {}) {
             },
         ],
     ]);
-    const specialization = options.specialization ? { id: id(17), code: "DATA", title: "Data <b>fictional</b>" } : null;
+    const specialization = options.specialization ? { id: id(17), code: "DATA", title: "Data <b>fictional</b>", kind: "specialization" } : null;
     const context = {
         program_id: program,
         program_title: "Computing",
@@ -1708,7 +1708,7 @@ test("specialization requirements reuse the audit builder, preserve scope and te
     await page.getByRole("link", { name: "Programs", exact: true }).click();
     await page.getByRole("button",{name:"Computing",exact:true}).click();
     await page.getByRole("button",{name:"Program details & publications",exact:true}).click();
-    await page.getByRole("button",{name:"Program specializations",exact:true}).click();
+    await page.getByRole("button",{name:"Majors, minors & specializations",exact:true}).click();
     await page.getByRole("button",{name:"Requirements for DATA",exact:true}).click();
     await expect(page.getByRole("heading",{name:"Specialization audit builder",exact:true})).toBeVisible();
     await expect(page.getByRole("dialog")).toContainText("Data <b>fictional</b>");
