@@ -1,0 +1,562 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Tests\Integration;
+
+use CampusFixture;
+use Domain\AcademicRecord\Repository\AcademicProjectionVerifier;
+use Domain\Audit\Repository\AuditTrail;
+use Domain\Finance\Enum\EntryType;
+use Domain\Finance\StudentAccount;
+use Domain\Finance\ValueObject\AccountId;
+use Domain\Finance\ValueObject\Money;
+use Domain\Person\Repository\PersonProjectionVerifier;
+use Domain\Person\ValueObject\PersonProjectionCheck;
+use Domain\Shared\Exception\AccessDeniedException;
+use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\ValueObject\EntityId;
+use Domain\Support\Enum\HistoryCheckSubject;
+use Domain\Support\Service\HistoryCheckService;
+use Infrastructure\Persistence\Repository\SqlAccessRepository;
+use Infrastructure\Persistence\Repository\SqlHistoryCheckRepository;
+use Infrastructure\Persistence\Repository\SqlPersonProfileRepository;
+use Infrastructure\Persistence\Repository\SqlStudentRecordRepository;
+use PHPUnit\Framework\TestCase;
+
+final class HistoryCheckServiceTest extends TestCase
+{
+    public static function setUpBeforeClass(): void
+    {
+        require_once dirname(__DIR__) . "/Support/CampusFixture.php";
+    }
+
+    private function service(
+        CampusFixture $c,
+        ?PersonProjectionVerifier $people = null,
+        ?AuditTrail $audit = null,
+        ?AcademicProjectionVerifier $academics = null,
+    ): HistoryCheckService {
+        $s = $c->sis;
+        return new HistoryCheckService(
+            new SqlHistoryCheckRepository($s->sql),
+            $people ??
+                new \Infrastructure\Projection\SqlPersonProjectionVerifier(
+                    $s->sql,
+                    \EventStoreFixture::history($s->connection->queryBuilder()),
+                    new \Infrastructure\Persistence\Repository\SqlPersonContactRepository(
+                        $s->sql,
+                        $c->cipher,
+                    ),
+                    new \Infrastructure\Persistence\Repository\SqlAddressBookRepository(
+                        $s->sql,
+                        $c->cipher,
+                    ),
+                    new \Infrastructure\Persistence\Repository\SqlEmergencyContactsRepository(
+                        $s->sql,
+                        $c->cipher,
+                    ),
+                    new \Infrastructure\Persistence\Repository\SqlEducationBackgroundRepository(
+                        $s->sql,
+                        $c->cipher,
+                    ),
+                ),
+            $academics ??
+                new \Infrastructure\Projection\SqlAcademicProjectionVerifier(
+                    $s->sql,
+                    new \Infrastructure\Persistence\Repository\SqlAcademicInputRepository($s->sql),
+                    $s->inputVerifier(),
+                ),
+            new \Infrastructure\Projection\SqlAccountProjectionVerifier(
+                $s->sql,
+                \EventStoreFixture::history($s->connection->queryBuilder()),
+            ),
+            $s->admissions,
+            new SqlPersonProfileRepository($s->sql),
+            new SqlStudentRecordRepository($s->sql),
+            new SqlAccessRepository($s->sql),
+            $s->access,
+            $s->transactions,
+            $audit ?? $s->audit,
+            $s->clock,
+        );
+    }
+
+    private function fixture(): array
+    {
+        $c = new CampusFixture();
+        $s = $c->sis;
+        $owner = $s->user();
+        $student = $s->student($owner);
+        $s->sql->update(
+            "users",
+            ["first_name" => "Alex", "last_name" => "Example"],
+            ["user_id" => $owner->value],
+        );
+        $a = StudentAccount::open(new AccountId(), $student->id, $s->term, "USD");
+        $a->post(
+            EntityId::generate(),
+            EntryType::Charge,
+            new Money(10000, "USD"),
+            $s->access->actor,
+            staffRecorded: true,
+        );
+        $s->saveAccount($a);
+        return [$c, $student, new EntityId((string) $a->aggregateId())];
+    }
+
+    private function facts(CampusFixture $c): array
+    {
+        return array_map($c->sis->sql->rows(...), [
+            "sis_history_events",
+            "sis_history_streams",
+            "sis_history_operations",
+            "sis_persons",
+            "sis_students",
+            "sis_academic_credits",
+            "sis_enrollments",
+            "sis_student_accounts",
+            "sis_account_entries",
+            "sis_account_balances",
+            "sis_campaigns",
+            "sis_deliveries",
+        ]);
+    }
+
+    private function rejects(callable $run, string $type): void
+    {
+        try {
+            $run();
+        } catch (\Throwable $error) {
+            self::assertInstanceOf($type, $error);
+            return;
+        }
+        self::fail("A forbidden support operation was accepted.");
+    }
+
+    public function testRealProfileAcademicAndFinancialChecksRetainOnlyMinimalReceiptsWithoutChangingFacts(): void
+    {
+        [$c, $student, $account] = $this->fixture();
+        $s = $c->sis;
+        $service = $this->service($c);
+        $before = $this->facts($c);
+        $cases = [
+            [HistoryCheckSubject::Person, $student->personId, "history_gaps"],
+            [HistoryCheckSubject::Student, $student->id, "observed_empty"],
+            [HistoryCheckSubject::Account, $account, "verified"],
+        ];
+        foreach ($cases as [$kind, $id, $status]) {
+            $result = $service->run($kind, $id);
+            self::assertSame($status, $result["result"]["status"]);
+            self::assertSame(200, $result["event_limit"]);
+            self::assertFalse($result["result"]["records_changed"]);
+            self::assertSame("2026-08-10T17:00:00Z", $result["receipt"]["checked_at"]);
+            self::assertSame([$result["receipt"]], $service->history($kind, $id)["items"]);
+            self::assertSame(
+                "support.history_checked",
+                $s->audit->forSubject(new EntityId($result["receipt"]["reference"]))[0]["action"],
+            );
+            foreach (
+                [
+                    "amount",
+                    "balance_minor",
+                    "given_name",
+                    "email",
+                    "reason",
+                    "payload",
+                    "sealed",
+                    "password",
+                ] as $private
+            ) {
+                self::assertStringNotContainsString($private, json_encode($result));
+            }
+        }
+        self::assertCount(3, $s->sql->rows("sis_history_checks"));
+        foreach ($s->sql->rows("sis_history_checks") as $row) {
+            $keys = array_keys($row);
+            sort($keys);
+            self::assertSame(
+                [
+                    "actor_id",
+                    "checked_at",
+                    "events_checked",
+                    "id",
+                    "owner_user_id",
+                    "person_id",
+                    "status",
+                    "student_id",
+                    "subject_id",
+                    "subject_type",
+                ],
+                $keys,
+            );
+        }
+        self::assertSame($before, $this->facts($c));
+        self::assertFalse($s->connection->pdo->inTransaction());
+    }
+
+    public function testEveryContextNeedsAllIndependentDutiesEvenForTheOwner(): void
+    {
+        [$c, $student, $account] = $this->fixture();
+        $s = $c->sis;
+        $s->access->actor = $s->admissions->person($student->personId)->ownerUserId;
+        $s->access->staff = false;
+        $service = $this->service($c);
+        foreach (
+            [
+                [HistoryCheckSubject::Person, $student->personId],
+                [HistoryCheckSubject::Student, $student->id],
+                [HistoryCheckSubject::Account, $account],
+            ] as [$kind, $id]
+        ) {
+            $all = ["sis:history:verify", "sis:audit:read", ...$kind->permissions()];
+            foreach ($all as $missing) {
+                $s->access->grants = array_values(array_diff($all, [$missing]));
+                $this->rejects(fn() => $service->run($kind, $id), AccessDeniedException::class);
+                $this->rejects(fn() => $service->history($kind, $id), AccessDeniedException::class);
+            }
+            $s->access->grants = $all;
+            self::assertSame([], $service->history($kind, $id)["items"]);
+        }
+        self::assertSame([], $s->sql->rows("sis_history_checks"));
+    }
+
+    public function testSuperProtectedSourcesRequireSuperSupportAuthority(): void
+    {
+        [$c, $student, $account] = $this->fixture();
+        $s = $c->sis;
+        $roles = new SqlAccessRepository($s->sql);
+        $owner = $s->admissions->person($student->personId)->ownerUserId;
+        $roles->assign(
+            \Domain\Access\Enum\GrantKind::UserRole,
+            $owner,
+            $roles->roleNamed("super")->id,
+            true,
+        );
+        $service = $this->service($c);
+        foreach (
+            [
+                [HistoryCheckSubject::Person, $student->personId],
+                [HistoryCheckSubject::Student, $student->id],
+                [HistoryCheckSubject::Account, $account],
+            ] as [$kind, $id]
+        ) {
+            $this->rejects(fn() => $service->run($kind, $id), AccessDeniedException::class);
+        }
+        $s->access->actor = $owner;
+        self::assertSame(
+            "verified",
+            $service->run(HistoryCheckSubject::Account, $account)["result"]["status"],
+        );
+    }
+
+    public function testSourceFailuresWrongReferencesAndExcessiveProvidersNeverExposeExceptionsOrSaveFacts(): void
+    {
+        [$c, $student] = $this->fixture();
+        $people = $this->createStub(PersonProjectionVerifier::class);
+        $people
+            ->method("verify")
+            ->willThrowException(
+                new \RuntimeException("PRIVATE fake credential and profile payload"),
+            );
+        $before = $this->facts($c);
+        $result = $this->service($c, $people)->run(HistoryCheckSubject::Person, $student->personId);
+        self::assertSame(["unavailable"], $result["result"]["issues"]);
+        self::assertSame("unverified", $result["receipt"]["status"]);
+        self::assertStringNotContainsString("PRIVATE", json_encode($result));
+        foreach (
+            [
+                new PersonProjectionCheck(
+                    "unverified",
+                    EntityId::generate(),
+                    0,
+                    issues: ["unavailable"],
+                ),
+                new PersonProjectionCheck("limited", $student->personId, 201),
+            ] as $unexpected
+        ) {
+            $people = $this->createStub(PersonProjectionVerifier::class);
+            $people->method("verify")->willReturn($unexpected);
+            self::assertSame(
+                0,
+                $this->service($c, $people)->run(HistoryCheckSubject::Person, $student->personId)[
+                    "result"
+                ]["events_checked"],
+            );
+        }
+        self::assertSame($before, $this->facts($c));
+    }
+
+    public function testVerificationIsOutsideReceiptTransactionsAndUsesTheFixedBudget(): void
+    {
+        [$c, $student] = $this->fixture();
+        $people = $this->createMock(PersonProjectionVerifier::class);
+        $people
+            ->expects(self::once())
+            ->method("verify")
+            ->with($student->personId, 200)
+            ->willReturnCallback(static function () use ($c, $student): PersonProjectionCheck {
+                self::assertFalse($c->sis->connection->pdo->inTransaction());
+                return new PersonProjectionCheck("limited", $student->personId, 200);
+            });
+        $result = $this->service($c, $people)->run(HistoryCheckSubject::Person, $student->personId);
+        self::assertSame("limited", $result["receipt"]["status"]);
+        self::assertSame(200, $result["receipt"]["events_checked"]);
+    }
+
+    public function testAuditFailureAndFinalPermissionRevocationRollBackReceipts(): void
+    {
+        [$c, $student] = $this->fixture();
+        $audit = $this->createStub(AuditTrail::class);
+        $audit
+            ->method("record")
+            ->willThrowException(new \RuntimeException("Fictional failed required audit."));
+        $this->rejects(
+            fn() => $this->service($c, audit: $audit)->run(
+                HistoryCheckSubject::Person,
+                $student->personId,
+            ),
+            \RuntimeException::class,
+        );
+        self::assertSame([], $c->sis->sql->rows("sis_history_checks"));
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method("record")->willReturnCallback(static function () use ($c): void {
+            $c->sis->access->staff = false;
+            $c->sis->access->grants = [];
+        });
+        $this->rejects(
+            fn() => $this->service($c, audit: $audit)->run(
+                HistoryCheckSubject::Person,
+                $student->personId,
+            ),
+            AccessDeniedException::class,
+        );
+        self::assertSame([], $c->sis->sql->rows("sis_history_checks"));
+    }
+
+    public function testRoutingChangeDuringVerificationIsRejectedAndEarlierRoutingReceiptsStayRestricted(): void
+    {
+        [$c, $student] = $this->fixture();
+        $s = $c->sis;
+        $service = $this->service($c);
+        $service->run(HistoryCheckSubject::Person, $student->personId);
+        $people = $this->createStub(PersonProjectionVerifier::class);
+        $people
+            ->method("verify")
+            ->willReturnCallback(static function () use ($s, $student): PersonProjectionCheck {
+                $s->sql->update(
+                    "sis_persons",
+                    ["owner_user_id" => $s->user()->value],
+                    ["id" => $student->personId->value],
+                );
+                return new PersonProjectionCheck(
+                    "unverified",
+                    $student->personId,
+                    0,
+                    issues: ["account_link"],
+                );
+            });
+        $this->rejects(
+            fn() => $this->service($c, $people)->run(
+                HistoryCheckSubject::Person,
+                $student->personId,
+            ),
+            ConcurrentModificationException::class,
+        );
+        self::assertCount(1, $s->sql->rows("sis_history_checks"));
+        self::assertSame(
+            [],
+            $service->history(HistoryCheckSubject::Person, $student->personId)["items"],
+        );
+    }
+
+    public function testReceiptPagesAreBoundedAndSeparateContextsEvenForTheSamePerson(): void
+    {
+        [$c, $student, $account] = $this->fixture();
+        $service = $this->service($c);
+        for ($i = 0; $i < 12; $i++) {
+            $service->run(HistoryCheckSubject::Person, $student->personId);
+        }
+        $service->run(HistoryCheckSubject::Student, $student->id);
+        $service->run(HistoryCheckSubject::Account, $account);
+        $first = $service->history(HistoryCheckSubject::Person, $student->personId);
+        $last = $service->history(
+            HistoryCheckSubject::Person,
+            $student->personId,
+            new EntityId($first["next_after"]),
+        );
+        self::assertCount(10, $first["items"]);
+        self::assertCount(2, $last["items"]);
+        self::assertNull($last["next_after"]);
+        self::assertCount(
+            12,
+            array_unique(array_column([...$first["items"], ...$last["items"]], "reference")),
+        );
+        self::assertCount(
+            1,
+            $service->history(HistoryCheckSubject::Student, $student->id)["items"],
+        );
+    }
+    public function testUnlinkedEarlierPeopleCanBeCheckedWithoutCreatingAccountsAndDamagedReceiptsFailClosed(): void
+    {
+        [$c, $student] = $this->fixture();
+        $s = $c->sis;
+        $s->sql->update(
+            "sis_persons",
+            ["owner_user_id" => null],
+            ["id" => $student->personId->value],
+        );
+        $before = $this->facts($c);
+        $service = $this->service($c);
+        $result = $service->run(HistoryCheckSubject::Person, $student->personId);
+        self::assertSame("unverified", $result["result"]["status"]);
+        self::assertContains("account_link", $result["result"]["issues"]);
+        self::assertCount(
+            1,
+            $service->history(HistoryCheckSubject::Person, $student->personId)["items"],
+        );
+        self::assertSame($before, $this->facts($c));
+        $s->sql->update(
+            "sis_history_checks",
+            ["checked_at" => "invalid"],
+            ["id" => $result["receipt"]["reference"]],
+        );
+        $this->rejects(
+            fn() => $service->history(HistoryCheckSubject::Person, $student->personId),
+            \Domain\Shared\EventSourcing\CorruptHistoryException::class,
+        );
+    }
+
+    public function testAccountChangesAndActorSwitchesAfterRequiredAuditCannotPublishAReceipt(): void
+    {
+        [$c, $student] = $this->fixture();
+        $s = $c->sis;
+        foreach (["owner", "actor"] as $change) {
+            $audit = $this->createStub(AuditTrail::class);
+            $audit
+                ->method("record")
+                ->willReturnCallback(static function () use ($s, $student, $change): void {
+                    if ($change === "owner") {
+                        $s->sql->update(
+                            "sis_persons",
+                            ["owner_user_id" => $s->user()->value],
+                            ["id" => $student->personId->value],
+                        );
+                    } else {
+                        $s->access->actor = $s->user();
+                    }
+                });
+            $this->rejects(
+                fn() => $this->service($c, audit: $audit)->run(
+                    HistoryCheckSubject::Person,
+                    $student->personId,
+                ),
+                $change === "owner"
+                    ? ConcurrentModificationException::class
+                    : AccessDeniedException::class,
+            );
+            self::assertSame([], $s->sql->rows("sis_history_checks"));
+        }
+    }
+
+    public function testProtectedPermissionAndReceiptStorageCompileForAllFiveDatabasesWithoutAnotherJournal(): void
+    {
+        [$c, $student] = $this->fixture();
+        $s = $c->sis;
+        $this->service($c)->run(HistoryCheckSubject::Person, $student->personId);
+        $before = array_map($s->sql->rows(...), [
+            "sis_history_events",
+            "sis_history_streams",
+            "sis_history_operations",
+            "sis_history_checks",
+            "sis_audit",
+            "sis_access_role_permissions",
+            "sis_access_user_permissions",
+        ]);
+        // Exercise the actual upgrade path, where the newly seeded permission does not exist yet.
+        $seed = $s->sql->rows('sis_access_permissions', ['name' => 'sis:history:verify'], 1)[0];
+        $s->sql->execute(
+            'DELETE FROM sis_access_implications WHERE ancestor_id = ? OR descendant_id = ?',
+            [$seed['id'], $seed['id']]
+        );
+        $s->sql->execute('DELETE FROM sis_access_permissions WHERE id = ?', [$seed['id']]);
+        $definitions = [];
+        $schema = $this->createStub(\Qubus\Expressive\Schema::class);
+        $schema->method("hasTable")->willReturn(false);
+        $schema
+            ->method("create")
+            ->willReturnCallback(static function (
+                string $name,
+                callable $build
+            ) use (
+                &$definitions,
+            ): void {
+                $table = new \Qubus\Expressive\Schema\CreateTable($name);
+                $build($table);
+                $definitions[$name] = $table;
+            });
+        $connection = $this->createStub(\Qubus\Expressive\Connection::class);
+        $connection->method("getSchema")->willReturn($schema);
+        $connection->method("queryBuilder")->willReturn($s->connection->queryBuilder());
+        $migration = new \CreateSisHistoryChecks("support-compiler");
+        $migration->setObjectMap(
+            new \ArrayObject([
+                "phpmig.adapter" => new \Qubus\Expressive\Migration\Adapter\DbalMigrationAdapter(
+                    $connection,
+                    "fixture",
+                ),
+            ]),
+        );
+        $migration->up();
+        $migration->up();
+        self::assertSame(["sis_history_checks"], array_keys($definitions));
+        foreach (["MySQL", "PostgreSQL", "SQLite", "SQLServer", "Oracle"] as $dialect) {
+            $db = $this->createStub(\Qubus\Expressive\Connection::class);
+            $db->method("quoteIdentifier")->willReturnCallback(
+                static fn(string $name): string => '"' . $name . '"',
+            );
+            $class = "Qubus\\Expressive\\Schema\\Compiler\\" . $dialect;
+            $sql = json_encode(
+                new $class($db)->create($definitions["sis_history_checks"]),
+                JSON_THROW_ON_ERROR,
+            );
+            self::assertStringContainsString("shc_subject_page", $sql);
+            self::assertStringContainsString("checked_at", $sql);
+            self::assertDoesNotMatchRegularExpression(
+                "/sis_history_events|payload|sealed|reason|password|amount|DROP |DELETE FROM/i",
+                $sql,
+            );
+        }
+        self::assertSame(
+            $before,
+            array_map($s->sql->rows(...), [
+                "sis_history_events",
+                "sis_history_streams",
+                "sis_history_operations",
+                "sis_history_checks",
+                "sis_audit",
+                "sis_access_role_permissions",
+                "sis_access_user_permissions",
+            ]),
+        );
+        $permission = $s->sql->rows(
+            "sis_access_permissions",
+            ["name" => "sis:history:verify"],
+            1,
+        )[0];
+        self::assertSame(1, (int) $permission["is_system"]);
+        self::assertSame(
+            'Run bounded selected-record history checks and read their support receipts.',
+            $permission['description']
+        );
+        self::assertSame(
+            [],
+            $s->sql->rows("sis_access_role_permissions", ["permission_id" => $permission["id"]]),
+        );
+        self::assertSame(
+            [],
+            $s->sql->rows("sis_access_user_permissions", ["permission_id" => $permission["id"]]),
+        );
+        $this->rejects($migration->down(...), \LogicException::class);
+    }
+}

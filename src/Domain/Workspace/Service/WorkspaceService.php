@@ -97,6 +97,7 @@ final readonly class WorkspaceService
         "admin:access:manage",
         "sis:transfer:manage",
         "sis:audit:read",
+        "sis:history:verify",
         "admin:create:user",
         "admin:edit:user",
         "sis:transcript:manage",

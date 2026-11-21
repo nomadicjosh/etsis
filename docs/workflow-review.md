@@ -4,6 +4,18 @@ The legacy system is the feature inventory, not a requirement to reproduce its s
 
 “Working” below describes a workflow available in the current code. “Partial” means useful pieces work but the broader recommendation still needs implementation. “Proposed” is a design recommendation, not completed functionality.
 
+## Completed: contextual support history checks
+
+**Working.** Person/profile, student-academic and financial-account workspaces share an explicitly invoked support panel using the existing selected-record verifiers. The independent support duty, audit duty and each source duty are required; owners, advisors and faculty receive no implicit access. Super-linked sources remain protected. Fixed replay allowances and honest limited/changed/history-gap/empty outcomes avoid presenting partial observations as certification.
+
+Each completed observation receives a minimal attributed support reference. Current-routing ten-row history lists retain status/event count/time without personal values, amounts, credentials, grades, event payloads or exception details. Replay stays outside a snapshot/locking transaction; short metadata persistence and required audit recheck actor, permissions and routing atomically. This reads source facts and creates no academic/profile/financial decision, message or repair. Ordinary writes retain their own fresh checks.
+
+Validation completed 2026-11-21: **47 focused PHP tests / 376 assertions**, separate real-container/router/CSRF/private-response checks, **five browser workflows**, clean scoped new/changed PHP coding standards, JS syntax and whitespace checks. Coverage includes real profile/academic/financial verifiers, source-duty conjunctions, super protection, missing earlier account links, wrong provider references/limits, safe failures, verification outside receipt transactions, damaged receipt rows, audit/authority/routing rollback, ten-row paging, all five schema compilers, narrow-screen accessibility, access-loss clearing and delayed-response navigation. Existing unrelated formatting in the shared console fixture/routes/config was preserved. Checks ran sequentially with low priority, timeouts, 96 MiB PHP and a single 192 MiB browser worker.
+
+Applied **`20261121000004_CreateSisHistoryChecks`** on inspected configured `nomadicjosh_sis` MariaDB in **0.11 seconds**. All nine original journal/support/person/student/account/audit/grant checksums matched; twenty original journal events remain. The support table starts empty and the new protected permission has no new role/user grants. Native populated/load, live multi-engine and institutional retention/restore qualification remain separate.
+
+See [Contextual staff history checks](event-history-foundation.md#contextual-staff-history-checks). Remaining operational diagnostics, archive reconciliation, institutional retention and restore qualification stay open.
+
 ## Completed: advising reports and reviewed messaging
 
 **Working.** Report Studio offers active advising follow-up, responses to review and due-date summaries with explicit one-check-in grain, distinct student counts, UTC action dates and current identity/program labels. Global student-read/check-in duties remain independent of report ownership/sharing and scoped advisor access. Conversations and private notes remain in the separate authorized check-in screen. Current live sources exclude earlier-account conversations through a non-removable source condition.

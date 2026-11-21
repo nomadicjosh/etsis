@@ -7,7 +7,7 @@ namespace Domain\Finance\Repository;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Finance\ValueObject\AccountProjectionCheck;
 
-/** Trusted operator read, not a browser or financial command. */
+/** Trusted operator read; browser callers must use the separately authorized support facade. */
 interface AccountProjectionVerifier
 {
     public function verify(AccountId $account, int $eventLimit = 500): AccountProjectionCheck;

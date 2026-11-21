@@ -427,7 +427,9 @@ External student-progress AI remains deferred by project direction; catalog-auth
 - [x] Add [reviewed office handoffs](registration-history.md#hand-off-a-hold-to-another-office) in the existing hold drawer: independent capability, scope to both offices, explicit notes/history access acknowledgement, twenty-minute protected reviews, changed-input rejection and atomic routing/event/note/audit. Preserve original hold effects and historical authority; accepted retries never duplicate or rewind a later move. Reuse the person stream and worklist without another queue.
 - [x] Add [individual hold follow-up](registration-history.md#individual-follow-up) in the existing drawer/worklist: bounded minimal colleague search, enabled/permissioned dated delegates, optional institution-calendar dates, assignment/due filters before page bounds, revision-checked saves, safe immediate retries and atomic required audit. Reuse routing metadata; handoffs review and clear earlier work without adding a journal or queue.
 - [ ] Extend scoped delegation to other shared queues where needed, without granting permissions through case assignment. Reuse existing worklists and avoid a separate queue for each step.
-- [ ] Provide contextual, privacy-safe support diagnostics and operational audit views. Raw logs and event payloads remain outside ordinary staff reporting.
+- [x] [Connect contextual history checks](event-history-foundation.md#contextual-staff-history-checks) to person, student-academic and financial-account workspaces: reuse selected bounded verifiers, independent support/audit/source duties, super safeguards, fixed 200-event requests, explicit incomplete outcomes, safe failures and private accessible read-only results. Preserve source facts and reject snapshot-based financial observations.
+- [x] [Retain minimal support receipts](event-history-foundation.md#contextual-staff-history-checks): attributed ULID references, status/count/UTC time only, current-routing ten-row pages, atomic required audit/final authority checks, denied-access clearing and detached-response protection. Keep ordinary reporting, journal payloads, credentials, repairs and automatic effects outside this workflow.
+- [ ] Extend contextual support diagnostics and operational audit views to remaining workflows. Selected profile/academic/account checks and restricted receipts are implemented above. Raw logs and event payloads remain outside ordinary staff reporting.
 - [ ] Review remaining legacy settings, custom-field/extension hooks and API use cases. Application-form fields already have a builder; other extension points need explicit typed, authorized contracts rather than legacy SQL/PHP execution.
 
 **Done when:** supplied legacy module use cases have a usable replacement or an explicit documented scope decision, with accessible connected screens and no paid-module gating.
@@ -447,6 +449,7 @@ External student-progress AI remains deferred by project direction; catalog-auth
 ## 9. Multi-tenancy
 - [ ] One install codebase, multiple tenants; support subdomain installs; each subdomain should have its own database
 - [ ] Privacy and Security is of the utmost importance; making sure institution data isn't leaking into other institution data; making sure institutions can see other institution's data.
+- [ ] Option of offloading uploaded documents to Amazon S3 with encryption
 - [ ] Secure and encrypted mission-critical database backups with option to offload to Amazon S3
 
 ## 10. Misc.

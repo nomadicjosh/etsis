@@ -32,6 +32,9 @@ final readonly class SqlAccountProjectionVerifier implements AccountProjectionVe
             throw new InvalidArgumentException('Use an account verification allowance of 1–2000 events.');
         }
         $reference = new EntityId((string) $account);
+        if ($this->sql->inTransaction()) {
+            return new AccountProjectionCheck('unverified', $reference, 0, issues: ['unavailable']);
+        }
         $head = $identity = null;
         $events = [];
         $postings = null;

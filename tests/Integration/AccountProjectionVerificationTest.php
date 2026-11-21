@@ -69,6 +69,15 @@ final class AccountProjectionVerificationTest extends TestCase
         ]);
     }
 
+    public function testAnEnclosingSnapshotCannotBeReportedAsVerified(): void
+    {
+        $s = new SisFixture();
+        $account = $this->account($s);
+        $result = $s->transactions->run(fn() => $this->service($s)->verify($account->aggregateId()));
+        self::assertSame('unverified', $result->status);
+        self::assertSame(['unavailable'], $result->issues);
+    }
+
     public function testHealthyAccountIsVerifiedWithSqliteWritesProhibitedAndNoSensitiveOutput(): void
     {
         $s = new SisFixture();

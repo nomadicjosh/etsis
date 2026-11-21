@@ -746,6 +746,9 @@ window.createWorkspaceStudents = function (ui) {
         });
         body.append(actions);
         const extra = [];
+        if (can('sis:history:verify') && can('sis:audit:read') && can('sis:student:read'))
+            extra.push(button('Check academic history', () => ui.historyChecks().open('student', id, back)));
+
         if (can("sis:person:manage"))
             actions.append(
                 button("Open connected person", () =>

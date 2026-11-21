@@ -171,3 +171,7 @@ Trusted deployment operators can use `ddev codex sis:history:verify --person='<s
 Employment retains the same parent person and sign-in account. See the consolidated [Human resources guide](human-resources.md) for job/pay-grade setup, protected employment changes, historical review and weekly time review. Library edits do not rewrite employee or academic facts.
 
 This foundation covers current person creation, names, privacy, identifiers, personal contacts, account writers and employment title/active-status changes. Further role-specific decisions and complete operational projection rebuild/retention tooling remain on the roadmap. Existing academic and financial histories keep their own domain boundaries and exact historical snapshots.
+
+### Staff support observations
+
+**More → Check profile history** connects the existing selected profile verifier to the [shared support panel](event-history-foundation.md#contextual-staff-history-checks). It requires independent history-check and audit duties plus person-management authority, preserves super-account safeguards and runs only on deliberate request with a fixed allowance. Results contain statuses/components/counts and a minimal attributed support reference; profile values and credentials remain hidden. Receipt history follows current canonical routing. This does not replace the detailed profile-change screen, repair data, create accounts or certify a complete archive.

@@ -324,6 +324,8 @@ window.createWorkspaceOperations = function (ui) {
                 node("p", {}, `Institutional ID: ${data.institutional_id}`),
             ),
         );
+        if (can('sis:history:verify') && can('sis:audit:read') && can('sis:finance:read') && can('sis:student:read'))
+            body.append(button('Check account history', () => ui.historyChecks().open('account', row.id, back)));
         const paymentMethods = [
             ["cash", "Cash"],
             ["check", "Check"],

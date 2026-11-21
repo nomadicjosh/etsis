@@ -831,6 +831,11 @@ return static function (Psr7Router $router): void {
         ->name('staff.checkins.record');
     $router->map(['POST'], '/sis/students/{student}/programs/{pursuit}/checkins/act/', [$checkins, 'staffAct'])
         ->name('staff.checkins.act');
+    foreach (['run', 'history'] as $method) {
+        $router->map(['POST'], '/sis/history-checks/{kind}/{id}/' . $method . '/', [
+            \Application\Http\Controller\HistoryCheckController::class, $method,
+        ])->name('sis.history-checks.' . $method);
+    }
     $advising = \Application\Http\Controller\SisAdvisingController::class;
     $router->map(['POST'], '/sis/advisors/candidates/', [$advising, 'candidates'])->name('sis.advisors.candidates');
     foreach (
