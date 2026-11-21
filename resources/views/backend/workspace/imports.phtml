@@ -5,7 +5,7 @@
             <h1 id="imports-heading">Bring your data along<span class="brand-dot">.</span></h1>
             <p>Match your columns, check the details, and import with confidence.</p>
         </div>
-        <a class="btn btn-outline-secondary" href="/assets/examples/courses.csv" download>
+        <a id="import-sample" class="btn btn-outline-secondary" href="/assets/examples/courses.csv" download>
             <i class="bi bi-download" aria-hidden="true"></i> Sample CSV
         </a>
     </div>
@@ -21,8 +21,15 @@
                 <i class="bi bi-file-earmark-spreadsheet"></i><span>↑</span>
             </div>
             <h2>A little organization goes a long way.</h2>
-            <p class="muted-text">Start with a course catalog CSV. UTF-8, up to 1 MB and 1,000 rows.</p>
+            <p class="muted-text" id="import-description">Start with a course catalog CSV. UTF-8, up to 1 MB and 1,000 rows.</p>
             <div class="import-setup">
+                <div>
+                    <label class="form-label" for="import-target">Import destination</label>
+                    <select id="import-target" class="form-select">
+                        <option value="course">Courses</option>
+                        <option value="program">Academic programs</option>
+                    </select>
+                </div>
                 <div>
                     <label class="form-label" for="import-source">Source name</label>
                     <input
@@ -75,7 +82,7 @@
             </div>
             <div id="import-review-errors" role="alert"></div>
             <dl id="import-plan-summary" class="import-summary mt-3" aria-live="polite" aria-label="Import summary"></dl>
-            <p class="muted-text mt-3">
+            <p class="muted-text mt-3" id="import-boundary">
                 New courses are inactive drafts. Approve matching course links explicitly, or leave rows out.
                 Existing courses and historical publications are preserved.
             </p>
@@ -85,7 +92,7 @@
                     <button class="btn btn-outline-secondary" type="button" data-import-back="2">Adjust mapping</button>
                     <button class="btn btn-outline-primary" type="button" id="import-refresh">Review choices</button>
                     <button class="btn btn-primary" type="button" id="import-commit">
-                        Import courses <i class="bi bi-arrow-up-square" aria-hidden="true"></i>
+                        <span id="import-commit-label">Import courses</span> <i class="bi bi-arrow-up-square" aria-hidden="true"></i>
                     </button>
                 </div>
             </div>
@@ -99,6 +106,15 @@
                     </button>
                     <button id="import-reference-classes" class="btn btn-outline-secondary" type="button">
                         Set up departments &amp; levels
+                    </button>
+                    <button id="import-reference-program-fields" class="btn btn-outline-secondary" type="button" hidden>
+                        Schools &amp; fields
+                    </button>
+                    <button id="import-reference-campus" class="btn btn-outline-secondary" type="button" hidden>
+                        Campuses &amp; sites
+                    </button>
+                    <button id="import-reference-award" class="btn btn-outline-secondary" type="button" hidden>
+                        Degrees &amp; awards
                     </button>
                 </div>
             </details>
@@ -152,10 +168,11 @@
                 <button class="btn btn-outline-secondary" type="button" id="import-again">Import another file</button>
                 <a
                     class="btn btn-primary"
+                    id="import-draft-link"
                     href="/admin/workspace/courses/"
                     data-workspace="courses"
                     data-requires="sis:catalog:manage">
-                    Review course drafts <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                    <span id="import-draft-label">Review course drafts</span> <i class="bi bi-arrow-right" aria-hidden="true"></i>
                 </a>
             </div>
         </div>

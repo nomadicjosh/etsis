@@ -24,6 +24,8 @@ The functional coverage below does **not** mean these contexts already provide c
 
 [Program campuses/sites](program-publication.md#program-campuses-and-sites) now connect the shared reference library, optional draft selection, immutable academic-year publications and cohort-aware reporting. Earlier unknown locations remain unknown, current reference edits do not relabel student bindings, and final publication checks roll back source/authority/expiry/projection failures. The additive migration changes only existing projections, with no event conversion or new journal.
 
+[Catalog imports](catalog-imports.md) now consolidate course/program CSV parsing, mapping, reconciliation, reference resolution and guarded confirmation in one core. Program source mappings are independent; existing course fingerprints and accepted receipt meanings are preserved. Optional program descriptions/classifications affect only newly created working definitions. Explicit links preserve current definitions and all historical/student bindings. An additive empty support table changes no event history or permission grants.
+
 ## Source review and scope decisions
 
 `legacy-inventory.json` records documentation, migration tables/columns, view fields, router declarations, module functions, and source checksums. The review now includes 51 documentation files, six legacy migrations, 207 PHP views, 29 routers, and ten module files. The newly supplied module routers and views resolve the earlier missing-source question; missing behavior may also be reconstructed under the user's instruction.

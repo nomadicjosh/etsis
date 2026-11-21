@@ -8,7 +8,7 @@ use DateTimeImmutable;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Catalog\Course;
 use Domain\Import\Repository\CatalogImportRepository;
-use Domain\Import\ValueObject\CourseImportRow;
+use Domain\Import\ValueObject\CatalogImportRow;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
@@ -249,10 +249,10 @@ final class CourseImportReconciliationTest extends TestCase
         $inner = new SqlCatalogImportRepository($f->sql);
         $repository = $this->createStub(CatalogImportRepository::class);
         $repository->method('inspect')->willReturnCallback($inner->inspect(...));
-        $repository->method('lockCourses')->willReturnCallback(
+        $repository->method('lockRecords')->willReturnCallback(
             static function (array $ids) use ($f, $match, $inner): array {
                 $f->sql->update('sis_courses', ['active' => 0], ['id' => $match->value]);
-                return $inner->lockCourses($ids);
+                return $inner->lockRecords($ids);
             }
         );
         $service = $f->imports(repository: $repository);
@@ -499,13 +499,13 @@ final class CourseImportReconciliationTest extends TestCase
             ->method("inspect")
             ->willReturnCallback($inner->inspect(...));
         $repository
-            ->method("lockCourses")
-            ->willReturnCallback($inner->lockCourses(...));
+            ->method("lockRecords")
+            ->willReturnCallback($inner->lockRecords(...));
         $repository
             ->method("create")
             ->willReturnCallback(static function (
                 string $source,
-                CourseImportRow $row,
+                CatalogImportRow $row,
                 array $references,
             ) use (
                 $f,

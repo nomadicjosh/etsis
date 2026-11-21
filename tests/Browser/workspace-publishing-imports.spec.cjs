@@ -250,3 +250,69 @@ test('closing an editor before its content arrives does not reopen it', async ({
     expect(state.publications()).toHaveLength(0);
     expect(state.errors).toEqual([]);
 });
+
+test('program imports share mapping, dependency setup and explicit links without course-credit controls', async ({ page }) => {
+    const calls = [], errors = [];
+    let choices = [], linked = false;
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/sis/**', async route => {
+        const path = new URL(route.request().url()).pathname, raw = route.request().postData();
+        const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
+        calls.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
+        let result = { items: [], next_after: null };
+        if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+        else if (path === '/sis/imports/preview/') {
+            choices = data.choices;
+            linked = choices.some(c => c.action === 'link');
+            result = { headers: ['External ID', 'Program code', 'Program title', 'Program description', 'Campus/site code'],
+                samples: [['new', 'BA.ENG', 'Fictional English <img>', 'Fictional <b>description</b>', 'MAIN']], row_count: 2,
+                ready: !!Object.keys(data.mapping).length && linked, errors: [], review_token: linked ? 'fictional-program-import' : null,
+                summary: { create: 1, link: linked ? 1 : 0, skip: 0, omitted: 0, match: linked ? 0 : 1, conflict: 0 },
+                plan: [{ row: 2, external_id: 'new', code: 'BA.ENG', title: 'Fictional English <img>', action: 'create', program_id: null,
+                    description: 'Fictional <b>description</b>', description_mapped: true, message: 'Create a working program definition.',
+                    source_references: { campus: 'MAIN' }, references: { campus: { id, code: 'MAIN', title: 'Fictional campus' } } },
+                { row: 3, external_id: 'link', code: 'BS.CS', title: 'Computing', action: linked ? 'link' : 'match', program_id: id,
+                    matched_program: { id, code: 'BS.CS', title: 'Computing' }, message: 'Approve the existing program link.' }] };
+        } else if (path === '/sis/imports/commit/') result = { imported: 1, linked: 1, skipped: 0, omitted: 0, total: 2 };
+        else if (path === '/sis/catalog/classifications/campus/page/') result = { items: [{ id, code: 'MAIN', title: 'Fictional campus', active: true }], next_after: null };
+        await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
+    });
+    await page.goto('/admin/');
+    await page.locator('.workspace-nav-link[data-workspace="imports"]').click();
+    await page.getByLabel('Import destination', { exact: true }).selectOption('program');
+    await expect(page.locator('#import-source')).toHaveValue('program-catalog');
+    await expect(page.getByRole('link', { name: 'Sample CSV', exact: true })).toHaveAttribute('href', '/assets/examples/programs.csv');
+    await page.locator('#import-file').setInputFiles({ name: 'fictional-programs.csv', mimeType: 'text/csv',
+        buffer: Buffer.from('External ID,Program code,Program title,Program description,Campus/site code\nnew,BA.ENG,Fictional English,Fictional description,MAIN\nlink,BS.CS,Computing,,\n') });
+    await page.getByRole('button', { name: 'Match fields', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: /^Program code/ })).toHaveValue('1');
+    await expect(page.locator('#map-credits')).toHaveCount(0);
+    await expect(page.locator('#map-description-sample')).toHaveText('Example: Fictional <b>description</b>');
+    await page.getByRole('button', { name: 'Review import', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Import programs', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Link program for row 3', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Import programs', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Review choices', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Import programs', exact: true })).toBeEnabled();
+    await page.locator('#import-catalog-setup summary').click();
+    await page.getByRole('button', { name: 'Campuses & sites', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional campus');
+    await page.getByRole('button', { name: 'Close record', exact: true }).click();
+    await expect(page.locator('#import-plan-table')).toContainText('Fictional English <img>');
+    await expect(page.locator('#import-plan-table img, #import-plan-table b')).toHaveCount(0);
+    await expect(page.locator('#import-plan-table')).not.toContainText('Credits');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Import programs', exact: true }).click();
+    await expect(page.locator('#import-summary')).toContainText('Working programs created: 1');
+    await expect(page.getByRole('link', { name: 'Review program details', exact: true })).toHaveAttribute('href', '/admin/workspace/programs/');
+    const command = calls.find(c => c.path === '/sis/imports/commit/').data;
+    expect(command.target).toBe('program');
+    expect(command.choices).toEqual([{ external_id: 'link', action: 'link', program_id: id }]);
+    expect(command.mapping.campus_code).toBe(4);
+    expect(command.mapping.credits).toBeUndefined();
+    expect(calls.filter(c => c.data).every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(errors).toEqual([]);
+});

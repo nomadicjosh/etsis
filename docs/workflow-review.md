@@ -717,3 +717,7 @@ The [co-requisite workflow](registration-history.md#co-requisites-and-linked-dro
 ## Program location setup, publication and reporting
 
 [Optional program campuses/sites](program-publication.md#program-campuses-and-sites) use the existing shared reference chooser and one save/review/publish flow. This avoids a second location library or extra publication screen. A campus is descriptive context, not an automatic restriction on online teaching, admissions or registration. Student cohorts retain their published location; Report Studio's **Program campuses** template compares it with current setup without replacing earlier unknowns. Final publication checks and delayed-response guards protect both accepted history and unfinished editor work.
+
+## Shared catalog import and program setup
+
+[Catalog imports](catalog-imports.md) now offer courses and programs in one destination-aware mapping/review screen. Program descriptions and reference codes use the ordinary program model and existing catalog libraries, avoiding a second importer-specific editor. Staff resolve dependencies in place, approve identity links explicitly, confirm the bounded batch once and return to ordinary catalog review/publication. Imports never overwrite an existing definition or reinterpret an earlier student cohort. Other entity imports and larger background conversion remain open.

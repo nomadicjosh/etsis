@@ -1246,7 +1246,7 @@ final class SisFixture
         ?\Domain\Import\Repository\CatalogImportRepository $repository = null,
     ): \Domain\Import\Service\MappedImportService {
         return new \Domain\Import\Service\MappedImportService(
-            new \Infrastructure\Import\LeagueCourseCsvMapper(),
+            new \Infrastructure\Import\LeagueCatalogCsvMapper(),
             $repository ?? new \Infrastructure\Persistence\Repository\SqlCatalogImportRepository($this->sql),
             new \Infrastructure\Persistence\Repository\SqlCatalogWorkflowRepository($this->sql),
             $this->access, $this->transactions, $audit ?? $this->audit, $this->dropCipher, $this->clock,

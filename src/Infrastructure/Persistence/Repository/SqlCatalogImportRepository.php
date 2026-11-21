@@ -8,7 +8,8 @@ use Domain\Catalog\Enum\ClassificationKind;
 use Domain\Catalog\ValueObject\CourseClassifications;
 use Domain\Catalog\ValueObject\SubjectSnapshot;
 use Domain\Import\Repository\CatalogImportRepository;
-use Domain\Import\ValueObject\CourseImportRow;
+use Domain\Import\ValueObject\CatalogImportRow;
+use Domain\Import\Enum\CatalogImportTarget;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
@@ -20,82 +21,182 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
     {
     }
 
+    private function table(CatalogImportTarget $target): string
+    {
+        return $target === CatalogImportTarget::Course ? 'sis_courses' : 'sis_programs';
+    }
+
+    private function mappingTable(CatalogImportTarget $target): string
+    {
+        return $target === CatalogImportTarget::Course ? 'sis_import_mappings' : 'sis_program_import_mappings';
+    }
+
     public function inspect(string $source, array $rows): array
     {
+        $target = $rows[0]->target ?? CatalogImportTarget::Course;
+        foreach ($rows as $row) {
+            if (!($row instanceof CatalogImportRow) || $row->target !== $target) {
+                throw new \InvalidArgumentException("Keep one catalog destination per import.");
+            }
+        }
         $q = $this->sql->quote(...);
         $mappings = [];
         foreach (array_chunk($rows, 200) as $chunk) {
-            $ids = array_map(static fn(CourseImportRow $r): string => strtolower($r->externalId), $chunk);
-            $found = $this->sql->fetch('SELECT * FROM ' . $q('sis_import_mappings')
-                . ' WHERE ' . $q('source') . ' = ? AND LOWER(' . $q('external_id') . ') IN ('
-                . implode(',', array_fill(0, count($ids), '?')) . ')', [$source, ...$ids], count($ids) * 2 + 1);
+            $ids = array_map(static fn(CatalogImportRow $r): string => strtolower($r->externalId), $chunk);
+            $found = $this->sql->fetch(
+                "SELECT * FROM " .
+                    $q($this->mappingTable($target)) .
+                    " WHERE " .
+                    $q("source") .
+                    " = ? AND LOWER(" .
+                    $q("external_id") .
+                    ") IN (" .
+                    implode(",", array_fill(0, count($ids), "?")) .
+                    ")",
+                [$source, ...$ids],
+                count($ids) * 2 + 1,
+            );
             if (count($found) > count($ids) * 2) {
-                throw new ValidationException([['field' => 'file',
-                    'message' => 'Too many source identity matches. Resolve ambiguous IDs before importing.']]);
+                throw new ValidationException([
+                    [
+                        "field" => "file",
+                        "message" =>
+                            "Too many source identity matches. Resolve ambiguous IDs before importing.",
+                    ],
+                ]);
             }
             foreach ($found as $row) {
-                $key = 'external:' . strtolower($row['external_id']);
-                $mappings[$key] = isset($mappings[$key]) ? ['ambiguous' => true] : $row;
+                $key = "external:" . strtolower($row["external_id"]);
+                $mappings[$key] = isset($mappings[$key]) ? ["ambiguous" => true] : $row;
             }
         }
         $codes = [];
         $referenceCodes = [];
         foreach ($rows as $row) {
-            if (!isset($mappings['external:' . strtolower($row->externalId)])) {
+            if (!isset($mappings["external:" . strtolower($row->externalId)])) {
                 $codes[] = mb_strtolower($row->code);
                 foreach ($row->references as $kind => $code) {
                     $referenceCodes[$kind][] = $code;
                 }
             }
         }
-        $courses = [];
+        $records = [];
         foreach (array_chunk(array_values(array_unique($codes)), 200) as $chunk) {
             $limit = count($chunk) * 2;
+            if ($target === CatalogImportTarget::Course) {
+                $select =
+                "SELECT c." .
+                $q("id") .
+                ", c." .
+                $q("code") .
+                ", c." .
+                $q("title") .
+                ", c." .
+                $q("credits_milli") .
+                ", c." .
+                $q("active") .
+                ", s." .
+                $q("subject_id") .
+                ", k." .
+                $q("department_id") .
+                ", k." .
+                $q("academic_level_id") .
+                ", k." .
+                $q("course_level_id") .
+                " FROM " .
+                $q("sis_courses") .
+                " c LEFT JOIN " .
+                $q("sis_course_subjects") .
+                " s ON s." .
+                $q("id") .
+                " = c." .
+                $q("id") .
+                " LEFT JOIN " .
+                $q("sis_course_classifications") .
+                " k ON k." .
+                $q("id") .
+                " = c." .
+                $q("id");
+            } else {
+                $columns = ["c." . $q("id"), "c." . $q("code"), "c." . $q("title"), "d." . $q("description")];
+                foreach (array_keys($target->references()) as $kind) {
+                    $columns[] = "d." . $q($kind . "_id");
+                }
+                $select =
+                "SELECT " .
+                implode(", ", $columns) .
+                " FROM " .
+                $q("sis_programs") .
+                " c LEFT JOIN " .
+                $q("sis_program_details") .
+                " d ON d." .
+                $q("id") .
+                " = c." .
+                $q("id");
+            }
             $found = $this->sql->fetch(
-                'SELECT c.' . $q('id') . ', c.' . $q('code') . ', c.' . $q('title')
-                . ', c.' . $q('credits_milli') . ', c.' . $q('active') . ', s.' . $q('subject_id')
-                . ', k.' . $q('department_id') . ', k.' . $q('academic_level_id') . ', k.' . $q('course_level_id')
-                . ' FROM ' . $q('sis_courses') . ' c LEFT JOIN ' . $q('sis_course_subjects')
-                . ' s ON s.' . $q('id') . ' = c.' . $q('id') . ' LEFT JOIN ' . $q('sis_course_classifications')
-                . ' k ON k.' . $q('id') . ' = c.' . $q('id') . ' WHERE LOWER(c.' . $q('code') . ') IN ('
-                . implode(',', array_fill(0, count($chunk), '?')) . ')',
+                $select .
+                    " WHERE LOWER(c." .
+                    $q("code") .
+                    ") IN (" .
+                    implode(",", array_fill(0, count($chunk), "?")) .
+                    ")",
                 $chunk,
-                $limit + 1
+                $limit + 1,
             );
             if (count($found) > $limit) {
-                throw new ValidationException([[
-                    'field' => 'file',
-                    'message' => 'Too many catalog matches. Reduce the file or resolve duplicate codes.',
-                ]]);
+                throw new ValidationException([
+                    [
+                        "field" => "file",
+                        "message" => "Too many catalog matches. Reduce the file or resolve duplicate codes.",
+                    ],
+                ]);
             }
-            foreach ($found as $course) {
-                $courses[mb_strtolower($course['code'])][] = $course;
+            foreach ($found as $record) {
+                $records[mb_strtolower($record["code"])][] = $record;
             }
         }
-        return ['mappings' => $mappings, 'courses' => $courses,
-            'references' => $this->references($referenceCodes)];
+        return [
+            "mappings" => $mappings,
+            "records" => $records,
+            "references" => $this->references($referenceCodes),
+        ];
     }
 
-    public function lockCourses(array $ids, bool $withReferences = false): array
-    {
+    public function lockRecords(
+        array $ids,
+        bool $withReferences = false,
+        CatalogImportTarget $target = CatalogImportTarget::Course,
+    ): array {
         $ids = array_values(array_unique($ids));
         sort($ids, SORT_STRING);
         $rows = [];
         foreach ($ids as $id) {
-            $row = $this->sql->current('sis_courses', $id);
+            $row = $this->sql->current($this->table($target), $id);
             if ($row === null) {
-                throw new ConcurrentModificationException('A matched course was removed. Review the import again.');
+                throw new ConcurrentModificationException(
+                    "A matched catalog record was removed. Review the import again.",
+                );
             }
-            $course = array_intersect_key($row, array_flip(['id', 'code', 'title', 'credits_milli', 'active']));
-            if ($withReferences) {
-                $subject = $this->sql->current('sis_course_subjects', $id);
-                $classes = $this->sql->current('sis_course_classifications', $id);
-                $course['subject_id'] = $subject['subject_id'] ?? null;
+            $record = array_intersect_key(
+                $row,
+                array_flip(["id", "code", "title", "credits_milli", "active"]),
+            );
+            if ($target === CatalogImportTarget::Program) {
+                $details = $this->sql->current("sis_program_details", $id);
+                $record["description"] = $details["description"] ?? null;
+                foreach (array_keys($target->references()) as $kind) {
+                    $record[$kind . "_id"] = $details[$kind . "_id"] ?? null;
+                }
+            } elseif ($withReferences) {
+                $subject = $this->sql->current("sis_course_subjects", $id);
+                $classes = $this->sql->current("sis_course_classifications", $id);
+                $record["subject_id"] = $subject["subject_id"] ?? null;
                 foreach (ClassificationKind::courseKinds() as $kind) {
-                    $course[$kind->value . '_id'] = $classes[$kind->value . '_id'] ?? null;
+                    $record[$kind->value . "_id"] = $classes[$kind->value . "_id"] ?? null;
                 }
             }
-            $rows[] = $course;
+            $rows[] = $record;
         }
         return $rows;
     }
@@ -105,29 +206,36 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
         $subjects = [];
         $classifications = [];
         foreach ($references as $reference) {
-            if (!isset(CourseImportRow::REFERENCE_LABELS[$reference['kind']])) {
-                throw new \InvalidArgumentException('Unknown catalog classification.');
+            if (
+                !isset(
+                    (CatalogImportTarget::Course->references() + CatalogImportTarget::Program->references())[
+                        $reference["kind"]
+                    ],
+                )
+            ) {
+                throw new \InvalidArgumentException("Unknown catalog classification.");
             }
-            if ($reference['kind'] === 'subject') {
-                $subjects[$reference['id']] = true;
+            if ($reference["kind"] === "subject") {
+                $subjects[$reference["id"]] = true;
             } else {
-                $classifications[$reference['id']] = true;
+                $classifications[$reference["id"]] = true;
             }
         }
         ksort($subjects, SORT_STRING);
         ksort($classifications, SORT_STRING);
         $locked = [];
         // Match publication's course -> subject -> classification order across the complete batch.
-        foreach (['sis_subjects' => $subjects, 'sis_catalog_classifications' => $classifications] as $table => $ids) {
+        $tables = ["sis_subjects" => $subjects, "sis_catalog_classifications" => $classifications];
+        foreach ($tables as $table => $ids) {
             foreach (array_keys($ids) as $id) {
                 $row = $this->sql->current($table, $id);
                 if ($row === null) {
                     throw new ConcurrentModificationException(
-                        'A catalog reference was removed. Review the import again.'
+                        "A catalog reference was removed. Review the import again.",
                     );
                 }
-                if ($table === 'sis_subjects') {
-                    $row['kind'] = 'subject';
+                if ($table === "sis_subjects") {
+                    $row["kind"] = "subject";
                 }
                 $locked[] = $row;
             }
@@ -142,44 +250,85 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
         $q = $this->sql->quote(...);
         $references = [];
         foreach ($codes as $kind => $values) {
-            $table = $kind === 'subject' ? 'sis_subjects' : 'sis_catalog_classifications';
+            $table = $kind === "subject" ? "sis_subjects" : "sis_catalog_classifications";
             foreach (array_chunk(array_values(array_unique($values)), 200) as $chunk) {
                 $found = $this->sql->fetch(
-                    'SELECT ' . $q('id') . ', ' . $q('code') . ', ' . $q('title')
-                    . ', ' . $q('active') . ' FROM ' . $q($table) . ' WHERE UPPER(' . $q('code') . ') IN ('
-                    . implode(',', array_fill(0, count($chunk), '?')) . ')'
-                    . ($kind === 'subject' ? '' : ' AND ' . $q('kind') . ' = ?'),
-                    $kind === 'subject' ? $chunk : [...$chunk, $kind],
-                    count($chunk) * 2 + 1
+                    "SELECT " .
+                        $q("id") .
+                        ", " .
+                        $q("code") .
+                        ", " .
+                        $q("title") .
+                        ", " .
+                        $q("active") .
+                        " FROM " .
+                        $q($table) .
+                        " WHERE UPPER(" .
+                        $q("code") .
+                        ") IN (" .
+                        implode(",", array_fill(0, count($chunk), "?")) .
+                        ")" .
+                        ($kind === "subject" ? "" : " AND " . $q("kind") . " = ?"),
+                    $kind === "subject" ? $chunk : [...$chunk, $kind],
+                    count($chunk) * 2 + 1,
                 );
                 if (count($found) > count($chunk) * 2) {
-                    throw new ValidationException([['field' => 'file',
-                        'message' => 'Too many classification matches. Resolve ambiguous codes before importing.']]);
+                    throw new ValidationException([
+                        [
+                            "field" => "file",
+                            "message" =>
+                                "Too many classification matches. Resolve ambiguous codes before importing.",
+                        ],
+                    ]);
                 }
                 foreach ($found as $reference) {
-                    $reference['kind'] = $kind;
-                    $references[$kind . ':' . strtoupper($reference['code'])][] = $reference;
+                    $reference["kind"] = $kind;
+                    $references[$kind . ":" . strtoupper($reference["code"])][] = $reference;
                 }
             }
         }
         return $references;
     }
 
-    public function create(string $source, CourseImportRow $row, array $references): EntityId
+    public function create(string $source, CatalogImportRow $row, array $references): EntityId
     {
         if (
-            array_diff_key($row->references, $references) !== []
-            || array_diff_key($references, $row->references) !== []
+            array_diff_key($row->references, $references) !== [] ||
+            array_diff_key($references, $row->references) !== []
         ) {
-            throw new \InvalidArgumentException('Every requested classification requires a reviewed reference.');
+            throw new \InvalidArgumentException(
+                "Every requested classification requires a reviewed reference.",
+            );
+        }
+        if ($row->target === CatalogImportTarget::Program) {
+            $id = EntityId::generate();
+            $this->sql->insert("sis_programs", [
+                "id" => $id->value,
+                "code" => $row->code,
+                "title" => $row->title,
+            ]);
+            $choices = [];
+            foreach (array_keys($row->target->references()) as $kind) {
+                $choices[$kind] = isset($references[$kind])
+                ? \Domain\Catalog\ValueObject\ClassificationSnapshot::fromArray($references[$kind])->id
+                : null;
+            }
+            new SqlProgramDefinitionRepository($this->sql)->saveDraft($id, $row->description, $choices);
+            $this->link($source, $row, $id);
+            return $id;
         }
         $course = $row->draft();
-        $this->sql->insert('sis_courses', ['id' => $course->id->value, 'code' => $course->code,
-            'title' => $course->title, 'credits_milli' => $course->creditsMilli, 'active' => 0]);
-        if (isset($references['subject'])) {
+        $this->sql->insert("sis_courses", [
+            "id" => $course->id->value,
+            "code" => $course->code,
+            "title" => $course->title,
+            "credits_milli" => $course->creditsMilli,
+            "active" => 0,
+        ]);
+        if (isset($references["subject"])) {
             new SqlSubjectRepository($this->sql)->assign(
                 $course->id,
-                SubjectSnapshot::fromArray($references['subject'])->id
+                SubjectSnapshot::fromArray($references["subject"])->id,
             );
         }
         $classes = [];
@@ -189,16 +338,21 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
         if (array_filter($classes) !== []) {
             new SqlClassificationRepository($this->sql)->assign(
                 $course->id,
-                CourseClassifications::fromArray($classes)
+                CourseClassifications::fromArray($classes),
             );
         }
         $this->link($source, $row, $course->id);
         return $course->id;
     }
 
-    public function link(string $source, CourseImportRow $row, EntityId $course): void
+    public function link(string $source, CatalogImportRow $row, EntityId $course): void
     {
-        $this->sql->insert('sis_import_mappings', ['id' => EntityId::generate()->value, 'source' => $source,
-            'external_id' => $row->externalId, 'content_hash' => $row->fingerprint(), 'course_id' => $course->value]);
+        $this->sql->insert($this->mappingTable($row->target), [
+            "id" => EntityId::generate()->value,
+            "source" => $source,
+            "external_id" => $row->externalId,
+            "content_hash" => $row->fingerprint(),
+            $row->target->idField() => $course->value,
+        ]);
     }
 }

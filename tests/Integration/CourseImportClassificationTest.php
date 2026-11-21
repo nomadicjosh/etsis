@@ -326,8 +326,8 @@ final class CourseImportClassificationTest extends TestCase
             ->method("inspect")
             ->willReturnCallback($inner->inspect(...));
         $repository
-            ->method("lockCourses")
-            ->willReturnCallback($inner->lockCourses(...));
+            ->method("lockRecords")
+            ->willReturnCallback($inner->lockRecords(...));
         $repository
             ->method("lockReferences")
             ->willReturnCallback(static function (array $values) use (
@@ -405,10 +405,10 @@ final class CourseImportClassificationTest extends TestCase
         $inner = new SqlCatalogImportRepository($f->sql);
         $repository = $this->createStub(CatalogImportRepository::class);
         $repository->method('inspect')->willReturnCallback($inner->inspect(...));
-        $repository->method('lockCourses')->willReturnCallback(
+        $repository->method('lockRecords')->willReturnCallback(
             static function (array $values, bool $references) use ($f, $course, $other, $inner): array {
                 $f->sql->update('sis_course_subjects', ['subject_id' => $other->id->value], ['id' => $course['id']]);
-                return $inner->lockCourses($values, $references);
+                return $inner->lockRecords($values, $references);
             }
         );
         $repository->method('lockReferences')->willReturnCallback($inner->lockReferences(...));
