@@ -96,6 +96,13 @@ final readonly class ReportSelectCompiler
         if ($matching !== '') {
             $where = $where === '' ? $matching : '(' . $where . ') AND ' . $matching;
         }
+        if (isset($s['source_scope'])) {
+            $scope = match ($s['source_scope']) {
+                'active_attendance' => new AttendanceReportSql($this->sql)->activeRegistration($s['root']),
+                default => throw new \LogicException('Unknown reporting source scope.'),
+            };
+            $where = $where === '' ? $scope : '(' . $where . ') AND ' . $scope;
+        }
         $related = array_merge(
             array_keys($d["joins"] ?? []),
             array_keys($d["join_filters"] ?? []),

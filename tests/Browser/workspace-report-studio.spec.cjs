@@ -30,7 +30,18 @@ async function accessible(page) {
 }
 async function fixture(page, options = {}) {
     const calls = [], errors = []; let definition = null, version = 0, name = '', operation = 1;
-    const fields = options.load ? {
+    const fields = options.attendance ? {
+        attendance_id: { label: 'Attendance mark reference', type: 'string', relation: 'attendance' },
+        held_on: { label: 'Class date', type: 'date', relation: 'attendance' },
+        attendance_status: { label: 'Recorded attendance', type: 'string', relation: 'attendance',
+            choices: { present: 'Present', absent: 'Absent', late: 'Late', excused: 'Excused' } },
+        student_id: { label: 'Student reference', type: 'string', relation: 'student' },
+        institutional_id: { label: 'Institutional ID', type: 'string', relation: 'identity' },
+        full_name: { label: 'Student full name', type: 'string', relation: 'person' },
+        active: { label: 'Active student', type: 'boolean', relation: 'student' },
+        section_code: { label: 'Current section code', type: 'string', relation: 'section' },
+        term_code: { label: 'Current section term', type: 'string', relation: 'term' },
+    } : options.load ? {
         determination_id: { label: 'Determination reference', type: 'string', relation: 'determination' },
         determined_on: { label: 'Determination date', type: 'date', relation: 'determination' },
         classification_title: { label: 'Recorded load label', type: 'string', relation: 'determination' },
@@ -118,7 +129,16 @@ async function fixture(page, options = {}) {
         case_due_on: { label: 'Next casework due date', type: 'date', relation: 'casework' },
         case_reference: { label: 'Casework reference', type: 'string', relation: 'casework' },
     });
-    const dataset = options.load ? {
+    const dataset = options.attendance ? {
+        id: 'attendance', label: 'Recorded attendance', description: 'Recorded working marks for active registrations.', fields,
+        relationships: {
+            student: { label: 'Student records', parent: 'attendance', many: false },
+            person: { label: 'Student names', parent: 'student', many: false },
+            identity: { label: 'Institutional IDs', parent: 'person', many: false },
+            section: { label: 'Current sections', parent: 'attendance', many: false },
+            term: { label: 'Academic terms', parent: 'section', many: false },
+        },
+    } : options.load ? {
         id: 'load_determinations', label: 'Recorded enrollment load', description: 'One row per retained determination.', fields,
         relationships: {
             student: { label: 'Student records', parent: 'determination', many: false },
@@ -221,24 +241,34 @@ async function fixture(page, options = {}) {
                 labels:{program_code:'BS.CS',program_title:'Computing',term_code:'26/FA'}};
         }
         else if (path === `/sis/applications/${id(80)}/casework/`) result = {case:{application_id:id(80),version:0,office:'',work_status:'open',follow_up_on:'',private_notes:'',next_step:'',items:[]},assignee_name:'Unassigned',program_id:id(82)};
+        else if (options.attendance && path.endsWith('/population/')) result = {
+            items: [{ id: id(91), institutional_id: 'S-FICTIONAL', name: 'Alex Example', active: true }],
+            offset: 0, next_offset: null, report_version: version, action: 'messaging',
+        };
+        else if (options.attendance && path.endsWith('/population/select/')) result = {
+            items: [{ id: id(91), institutional_id: 'S-FICTIONAL', name: 'Alex Example', active: true }], report_version: version,
+        };
+        else if (options.attendance && path === '/sis/campaigns/recipients/students/') result = {
+            items: [{ id: id(92), user_id: id(93), institutional_id: 'S-FICTIONAL', given_name: 'Alex', family_name: 'Example' }],
+        };
         else if (path === '/sis/report-studio/catalog/') result = { datasets: [dataset] };
         else if (path === '/sis/report-studio/graph/') result = { dataset: copiedGraph(dataset, data.aliases) };
         else if (path === '/sis/report-studio/save/') { definition = data.definition; name = data.name; version = data.version + 1; result = { id: data.report_id }; }
         else if (path.endsWith('/preview/') || path.endsWith('/run/')) {
             const query = data.definition || definition;
-            const values = { determined_on: '2026-11-21', classification_title: 'Full time', registered_credits: 6.25, determination_id: id(90), student_id: id(91), application_id: id(80), case_office:'Admissions <b>fictional</b>', case_work_status:'waiting', case_due_on:'2026-09-01', posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
+            const values = { attendance_id: id(94), held_on: '2026-11-21', attendance_status: 'absent', section_code: 'MATH.101.A', determined_on: '2026-11-21', classification_title: 'Full time', registered_credits: 6.25, determination_id: id(90), student_id: id(91), application_id: id(80), case_office:'Admissions <b>fictional</b>', case_work_status:'waiting', case_due_on:'2026-09-01', posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
                 latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
-            const rows = options.load || options.postings || options.scheduling || options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, column.date_bucket && values[column.field] != null
+            const rows = options.attendance || options.load || options.postings || options.scheduling || options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, column.date_bucket && values[column.field] != null
                     ? String(values[column.field]).slice(0, { day: 10, month: 7, year: 4 }[column.date_bucket])
-                    : values[column.field] ?? null]))]
+                    : options.attendance && column.aggregate.startsWith('count') ? 1 : values[column.field] ?? null]))]
                 : data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
             result = { conditional_columns: query.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(query), columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
-                next_offset: options.load || options.postings || options.scheduling || options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
-                grouped: options.load || options.casework || options.postings || options.scheduling || options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
+                next_offset: options.attendance || options.load || options.postings || options.scheduling || options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
+                grouped: options.attendance || options.load || options.casework || options.postings || options.scheduling || options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
         } else if (path.endsWith('/export/')) { await route.fulfill({ body: 'Section,Term,Students\nMATH.101.A,26/FA,8\n', contentType: 'text/csv' }); return; }
-        else if (/\/sis\/report-studio\/[^/]+\/$/.test(path)) result = { conditional_columns: definition.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(definition), id: path.split('/').at(-2), name, version, definition, can_manage: !options.recipient };
+        else if (/\/sis\/report-studio\/[^/]+\/$/.test(path)) result = { conditional_columns: definition.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(definition), id: path.split('/').at(-2), name, version, definition, student_actions: options.attendance && !definition.columns.some(c => c.aggregate !== 'none') ? ['messaging'] : [], can_manage: !options.recipient };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto(options.recipient ? '/admin/report-fixture/' : '/admin/');
@@ -1388,6 +1418,55 @@ for (const starter of ['Recorded enrollment load', 'Recorded load by date']) {
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         expect(f.calls.every(c => c.csrf === 'fictional-test-token')).toBe(true);
         expect(f.errors).toEqual([]);
+        expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    });
+}
+
+for (const starter of ['Recorded attendance', 'Attendance by class date', 'Attendance follow-up']) {
+    test(`attendance starter ${starter} preserves mark grain and reviewed outreach`, async ({ page }) => {
+        const f = await fixture(page, { attendance: true });
+        await expect(page.getByText(/Unmarked dates are not absences/)).toBeVisible();
+        await page.getByRole('button', { name: starter, exact: true }).click();
+        const studio = page.locator('dialog.report-studio');
+        await studio.getByLabel('Report name', { exact: true }).fill('Fictional attendance follow-up');
+        await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+        const definition = f.calls.find(c => c.path.endsWith('/preview/')).data.definition;
+        expect(definition.dataset).toBe('attendance');
+        if (starter === 'Attendance by class date') {
+            expect(definition.columns.at(-2)).toMatchObject({ field: 'attendance_id', aggregate: 'count_distinct' });
+            expect(definition.columns.at(-1)).toMatchObject({ field: 'student_id', aggregate: 'count_distinct' });
+        } else {
+            expect(definition.columns.some(c => c.field === 'held_on' && c.aggregate === 'none')).toBe(true);
+            await expect(studio).toContainText('2026-11-21');
+        }
+        if (starter === 'Attendance follow-up') {
+            expect(definition.filters.rules).toEqual([{ id: 'attendance_status', operator: 'in', value: ['absent', 'late'] }]);
+        }
+        await studio.getByRole('button', { name: 'Save', exact: true }).click();
+        await expect(studio).toContainText('Definition revision 1');
+        expect(f.calls.find(c => c.path.endsWith('/save/')).data.definition).toEqual(definition);
+        await page.setViewportSize({ width: 320, height: 812 });
+        await accessible(page);
+        if (starter === 'Attendance follow-up') {
+            await page.getByRole('button', { name: 'Use students', exact: true }).click();
+            await page.getByRole('button', { name: 'Choose students for messaging', exact: true }).click();
+            await studio.getByRole('checkbox', { name: /^Select S-FICTIONAL / }).check();
+            await studio.getByRole('button', { name: 'Review selected students for messaging', exact: true }).click();
+            const drawer = page.locator('#record-drawer');
+            await expect(drawer).toContainText('To: Alex Example · S-FICTIONAL.');
+            await expect(drawer.getByRole('textbox', { name: 'Subject', exact: true })).toHaveValue('');
+            await expect(drawer.getByRole('textbox', { name: 'Message', exact: true })).toHaveValue('');
+            await expect(drawer).not.toContainText('absent');
+            expect(f.calls.find(c => c.path.endsWith('/population/select/')).data.action).toBe('messaging');
+            expect(f.calls.find(c => c.path.endsWith('/recipients/students/')).data).toEqual({ students: [{ student_id: id(91) }] });
+            expect(f.calls.some(c => c.path.endsWith('/queue/') || c.path.endsWith('/delivery-confirm/') || c.path === '/sis/campaigns/')).toBe(false);
+            await accessible(page);
+            await drawer.getByRole('button', { name: 'Back to report selection', exact: true }).click();
+            await expect(studio.getByRole('checkbox', { name: /^Select S-FICTIONAL / })).toBeChecked();
+        }
+        expect(f.errors).toEqual([]);
+        expect(f.calls.every(c => c.csrf === 'fictional-test-token')).toBe(true);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     });
 }

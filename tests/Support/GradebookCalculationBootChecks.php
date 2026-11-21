@@ -553,3 +553,5 @@ if (
 ) {
     throw new RuntimeException("The student acquired faculty-grade authority.");
 }
+
+require __DIR__ . '/AttendanceReportBootChecks.php';

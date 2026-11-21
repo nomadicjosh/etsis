@@ -280,6 +280,12 @@ Calendar transformation is typed and server-validated, using one current enum an
 
 Focused acceptance covers 84 PHP tests (631 assertions), six single-worker browser scenarios with automated WCAG checks and 320-pixel reflow, and the real-provider private preview/save/CSV/background-export routes. SQLite fixtures exercise grouping and unknown dates; compilation covers all five supported dialects. A native MariaDB check with fixed fictional values verified date formatting, UTC prefixes and NULL preservation. No institutional tables were read or changed for that native SQL check. Broader native-server, screen-reader and load qualification remain open.
 
+### Attendance reports and follow-up
+
+[Working attendance reports](academic-credit-history.md#attendance-reporting-and-follow-up) connect the class register to Recorded attendance, Attendance by class date and Attendance follow-up starters. The source declares one recorded mark per student/section/date and always requires a currently active matching registration. It excludes closed/removed registrations before filtering, grouping, named joins, populations or exports; unmarked work is never inferred as absent. Counts use distinct marks/students, not assumed attendance rates or historical rosters. Current labels and corrections stay distinct from authoritative academic history.
+
+Global student-read and gradebook-management source duties apply to catalog, hidden-field access, saved/shared/static results and exports; assigned faculty and student owners retain their scoped existing readers. An unsummarized saved live follow-up report can hand a deduplicated, revalidated shortlist to existing Communications, with independent messaging/person-directory permissions, minimal current recipient labels, blank content and separate audience/queue/background-delivery confirmations. Static captures remain fixed authorized artifacts under the existing retention/access contract and offer no live shortlist. No schema, event, automatic alert or parallel message queue is added.
+
 ### Latest and earliest related records
 
 On the **Fields** tab, connect a record such as **Registrations**, **Recorded academic credits** or **Person’s applications**. Its optional **Rows** disclosure offers **All**, **Latest** and **Earliest**. Choose an approved **Date** when selecting the latest or earliest records. The report keeps complete related rows, so a status, course, grade or application program comes from the selected record rather than an unrelated row beside a maximum date.

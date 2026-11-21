@@ -48,6 +48,12 @@ Approved wording cannot be edited in place. The owner or a Communications admini
 
 Every submission, approval, return and withdrawal checks the exact revision under the existing composition lock, rechecks current authority and commits its metadata audit atomically. Changed authority or an audit failure rolls back the decision. A stale approval cannot approve a replacement submission, and a private or retired template cannot be approved directly. Reads and copies recheck visibility before completion; if institutional access is withdrawn, another staff member cannot finish reading or copying that source. Owner, submitted, retired, institutional and reviewer lists all retain twenty-entry pages and omit message bodies. No schema migration, external delivery or academic event is added.
 
+## Attendance follow-up from a saved report
+
+Authorized staff can start from **Report Studio → Attendance follow-up**, explicitly choose class dates/sections, then save the live unsummarized report and choose students for messaging. [Attendance reporting](academic-credit-history.md#attendance-reporting-and-follow-up) requires global student-read and gradebook-management duties; Communications and person-directory access remain separate. The shortlist contains distinct students currently matching recorded Absent/Late conditions and an active registration. A mark correction or registration closure before confirmation can invalidate the selection.
+
+The shared handoff resolves canonical person accounts and opens this same composer with blank subject/body. Attendance details are not copied into the message. Write and review the wording, choose/confirm recipients, then separately confirm background delivery. Lookup/selection send nothing and create no campaign or delivery. Once composed, a campaign follows its existing recipient and delivery rules; it does not continuously reevaluate the report. This is deliberate outreach, not an automatic attendance-alert policy or formal academic determination.
+
 ## Drafts and recipient review
 
 Choose **Draft a message**, or start from a reusable template or a [published public-event invitation](public-campus-events.md#event-announcements). Save and review the message before choosing recipients. Draft edits require the current revision and stop after queueing.

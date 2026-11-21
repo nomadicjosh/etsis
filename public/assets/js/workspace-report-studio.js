@@ -178,6 +178,25 @@ window.createWorkspaceReportStudio = function (ui) {
             );
         const templates = node("details", { class: "report-templates" }, node("summary", {}, "Start from a template"));
         const templateGrid = node("div", { class: "report-template-grid" });
+        const attendance = catalog.datasets.find(dataset => dataset.id === "attendance");
+        if (attendance) templateGrid.append(
+            button("Recorded attendance", () => edit(attendance, initial(attendance))),
+            button("Attendance by class date", () => edit(attendance, {
+                ...initial(attendance), columns: [
+                    { field: "section_code", label: "Current section", aggregate: "none" },
+                    { field: "held_on", label: "Class date", aggregate: "none" },
+                    { field: "attendance_status", label: "Recorded attendance", aggregate: "none" },
+                    { field: "attendance_id", label: "Distinct marks", aggregate: "count_distinct" },
+                    { field: "student_id", label: "Distinct students", aggregate: "count_distinct" },
+                ],
+            })),
+            button("Attendance follow-up", () => edit(attendance, {
+                ...initial(attendance), filters: { condition: "AND", rules: [
+                    { id: "attendance_status", operator: "in", value: ["absent", "late"] },
+                ] },
+            })),
+            node("p", { class: "form-text" }, "Attendance reports contain recorded working marks for active registrations only. Unmarked dates are not absences. Choose class-date conditions explicitly; counts are not attendance rates. Save an unsummarized follow-up report to choose students for a separately reviewed message."),
+        );
         const loadRecords = catalog.datasets.find(dataset => dataset.id === "load_determinations");
         if (loadRecords) templateGrid.append(
             button("Recorded enrollment load", () => edit(loadRecords, initial(loadRecords))),
@@ -566,6 +585,7 @@ window.createWorkspaceReportStudio = function (ui) {
     function initial(dataset) {
         const choices = {
             load_determinations: ["institutional_id", "full_name", "term_code", "determined_on", "classification_title", "registered_credits"],
+            attendance: ["institutional_id", "full_name", "section_code", "term_code", "held_on", "attendance_status"],
             standing: ["institutional_id", "full_name", "program_code", "standing_title", "effective_from"],
             postings: ["institutional_id", "term_code", "posting_type", "currency", "posting_amount", "posting_reversed", "posting_recorded_at"],
             meetings: ["booking_title", "starts_at", "ends_at", "room_name", "building_name", "booking_status"],

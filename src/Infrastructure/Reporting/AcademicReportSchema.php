@@ -789,13 +789,16 @@ final class AcademicReportSchema
             'students' => ['id' => 'students'] + $withStudentWork($students),
             "programs" => ["id" => "programs"] + $withStudentWork($program),
             'standing' => ['id' => 'standing'] + $withStudentWork(StudentStandingReportSchema::dataset()),
+            'attendance' => AttendanceReportSchema::dataset(),
             'load_determinations' => ['id' => 'load_determinations'] +
                 $withStudentWork(LoadDeterminationReportSchema::dataset()),
             "credits" => ["id" => "credits"] + $withStudentWork($credits),
             "sections" => ["id" => "sections"] + $withStudentWork($sections),
         ];
         foreach ($datasets as &$dataset) {
-            $dataset['fields']['registration_status']['choices'] = $registrationChoices;
+            if (isset($dataset['fields']['registration_status'])) {
+                $dataset['fields']['registration_status']['choices'] = $registrationChoices;
+            }
         }
         unset($dataset);
         $datasets['sections']['fields']['enrollment_status']['choices'] = $registrationChoices;
@@ -805,7 +808,9 @@ final class AcademicReportSchema
         ];
         $datasets['applications']['fields']['status']['choices'] = $applicationChoices;
         foreach ($datasets as &$dataset) {
-            $dataset['fields']['person_application_status']['choices'] = $applicationChoices;
+            if (isset($dataset['fields']['person_application_status'])) {
+                $dataset['fields']['person_application_status']['choices'] = $applicationChoices;
+            }
         }
         unset($dataset);
         $datasets['applications']['fields']['submission_channel']['choices'] = [
