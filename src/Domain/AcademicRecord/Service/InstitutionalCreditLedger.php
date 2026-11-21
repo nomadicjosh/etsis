@@ -1320,6 +1320,32 @@ final readonly class InstitutionalCreditLedger
         ];
     }
 
+    /** Internal certification evidence; caller authorizes and owns student/section locks. */
+    public function certificationFacts(Enrollment $enrollment, HistoryReadBudget $budget): array
+    {
+        [, $root, $facts] = $this->source(
+            $enrollment->id,
+            $enrollment->studentId,
+            $enrollment->sectionId,
+            $budget,
+        );
+        if (
+            $facts["status"] !== $enrollment->status->value ||
+            ($root->registrationTermId() ?? $facts["term_id"]) !== $enrollment->termId->value
+        ) {
+            throw new CorruptHistoryException();
+        }
+        return [
+            "credit" => $facts,
+            "grade" => $root->grade(),
+            "history_version" => $root->playhead(),
+            "pending" => $root->pendingGradeChange() !== null,
+            "section_version_id" => $root->sectionVersion(),
+            "earlier_history_unknown" =>
+                $root->playhead() === 0 || $root->provenance() === "observed_existing",
+        ];
+    }
+
     /** Internal registration completion check; caller owns authorization and student locks. */
     public function verifyOpenEnrollment(Enrollment $enrollment, HistoryReadBudget $budget): void
     {

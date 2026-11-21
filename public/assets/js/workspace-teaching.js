@@ -92,6 +92,7 @@ window.createWorkspaceTeaching = function (ui) {
             },
             table(headers, rows, caption),
         );
+    let certification = null;
     const rosterFilters = new Map();
     let worksheet = null;
     const canLeave = () => worksheet?.canLeave() ?? true;
@@ -309,6 +310,12 @@ window.createWorkspaceTeaching = function (ui) {
                 { class: "inline-actions mb-3" },
                 button("Take attendance", () => takeAttendance(row, back), "btn-primary"),
                 button("Final-grade worksheet", () => finalGradeSheet(row, back, filters.search)),
+                ui.can("sis:gradebook:certify")
+                    ? button("Class grade certification", () => {
+                          certification ??= window.createGradeCertification(ui);
+                          return certification.open(row, back);
+                      })
+                    : null,
                 button("Review ungraded", () => gradeQueue(row, back, filters.search)),
             ),
         );

@@ -908,6 +908,26 @@ return static function (Psr7Router $router): void {
     $router->post('/sis/grade-changes/{id}/commit/', [$gradeChanges, 'commit'])->name('sis.grade-changes.commit');
     $router->get('/sis/grade-change-policy/', [$gradeChanges, 'policy'])->name('sis.grade-changes.policy');
     $router->post('/sis/grade-change-policy/', [$gradeChanges, 'savePolicy'])->name('sis.grade-changes.policy.save');
+    $router->get(
+        '/sis/sections/{id}/grade-certification/',
+        [\Application\Http\Controller\SisGradeCertificationController::class, 'readiness'],
+    )->name('sis.gradebook.certification');
+    $router->post(
+        '/sis/sections/{id}/grade-certification/review/',
+        [\Application\Http\Controller\SisGradeCertificationController::class, 'review'],
+    )->name('sis.gradebook.certification.review');
+    $router->post(
+        '/sis/sections/{id}/grade-certification/confirm/',
+        [\Application\Http\Controller\SisGradeCertificationController::class, 'confirm'],
+    )->name('sis.gradebook.certification.confirm');
+    $router->get(
+        '/sis/sections/{id}/grade-certification/history/',
+        [\Application\Http\Controller\SisGradeCertificationController::class, 'listing'],
+    )->name('sis.gradebook.certification.history');
+    $router->get(
+        '/sis/sections/{id}/grade-certification/history/{operation}/',
+        [\Application\Http\Controller\SisGradeCertificationController::class, 'detail'],
+    )->name('sis.gradebook.certification.detail');
     $router->get('/sis/sections/{id}/gradebook/calculation/', [SisGradebookController::class, 'calculationSetup'])
         ->name('sis.gradebook.calculation');
     $router->post('/sis/sections/{id}/gradebook/calculation/', [SisGradebookController::class, 'saveCalculation'])

@@ -24,6 +24,7 @@ final class EventClassMap
     public static function registered(): array
     {
         return [
+            \Domain\Gradebook\Event\ClassGradesWereCertified::class,
             \Domain\Student\Event\EnrollmentLoadWasDetermined::class,
             \Domain\Registration\Event\PrerequisitePermissionWasRecorded::class,
             \Domain\Student\Event\HiatusCaseWasRecorded::class,

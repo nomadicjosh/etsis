@@ -45,6 +45,7 @@ async function editor(bonus = false) {
         ],
     };
     const teaching = window.createWorkspaceTeaching({
+        can: () => false,
         node,
         table: () => node("table"),
         badge: (text) => node("span", {}, text),

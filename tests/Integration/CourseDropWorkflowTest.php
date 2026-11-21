@@ -91,6 +91,8 @@ final class CourseDropWorkflowTest extends TestCase
                 "credited_minor" => 0,
                 "remaining_charge_minor" => 0,
                 "linked_credit_count" => 0,
+                "charge_source" => "section_fee",
+                "charge_source_label" => "Section fee",
             ],
             $balance->entry($enrollment->id),
         );

@@ -543,6 +543,27 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
         );
     }
+    public function gradeCertifications(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Gradebook\Repository\GradeCertificationRoster $roster = null,
+    ): \Domain\Gradebook\Service\GradeCertificationService {
+        return new \Domain\Gradebook\Service\GradeCertificationService(
+            $roster ?? new \Infrastructure\Persistence\Repository\SqlGradeCertificationRoster($this->sql),
+            $this->registration,
+            $this->admissions,
+            $this->academicCredits(),
+            $this->enrollmentLedger(),
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->clock,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+        );
+    }
+
     public function gradebook(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
     ): \Domain\Gradebook\Service\GradebookService {

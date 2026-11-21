@@ -191,6 +191,15 @@ final class ConsoleBootstrapTest extends TestCase
         self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
     }
 
+    public function testClassGradeCertificationUsesActualProvidersCsrfAndPrivateScopedReads(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-grade-certification']);
+        $process->setTimeout(10);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testGradebookCalculationUsesActualProvidersCsrfAndPrivateReads(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',

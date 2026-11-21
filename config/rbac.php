@@ -53,6 +53,7 @@ return [
         "sis:admissions:correct" => [
             "description" => "Approve reasoned admissions outcome corrections before matriculation.",
         ],
+        "sis:gradebook:certify" => ["description" => "Review and certify retained class-wide final grades."],
         "sis:gradebook:amend" => ["description" => "Approve reasoned final-grade corrections."],
         'sis:gradebook:approve' => [
             'description' => 'Approve or reject another registrar’s requested grade correction.',

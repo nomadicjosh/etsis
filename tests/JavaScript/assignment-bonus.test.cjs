@@ -44,6 +44,7 @@ async function fixture(excused = false, bonusOnly = false) {
         return (body = node("div"));
     };
     const ui = {
+        can: () => false,
         node,
         openDrawer,
         task: (run) => (pending = Promise.resolve().then(run)),
