@@ -23,6 +23,7 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         array $required,
         #[\SensitiveParameter] array $support,
         public ?\Domain\Catalog\ValueObject\PrerequisiteGroups $groups = null,
+        public ?PrerequisitePermissionReference $permission = null,
     ) {
         if (!array_is_list($required) || count($required) > 100 || !array_is_list($support)) {
             throw new CorruptHistoryException();
@@ -94,6 +95,12 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         if ($groups !== null && $groups->courses() !== $required) {
             throw new CorruptHistoryException();
         }
+        if (
+            $permission !== null &&
+            ($permission->data['pursuit_id'] !== $assignment->value || $required === [])
+        ) {
+            throw new CorruptHistoryException();
+        }
         $this->required = $required;
         /** @var list<array<string,mixed>> $support */
         $this->support = $support;
@@ -101,7 +108,7 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
 
     public function isMet(): bool
     {
-        return $this->missingCount() === 0;
+        return $this->permission !== null || $this->missingCount() === 0;
     }
 
     /** Response-local positions match the shared prerequisite list; no supporting record identities.
@@ -199,6 +206,12 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
     public static function fromRetained(#[\SensitiveParameter] array $facts): self
     {
         $keys = ['assignment_id', 'required_course_ids', 'support'];
+        if (array_key_exists('permission', $facts)) {
+            if (!is_array($facts['permission'])) {
+                throw new CorruptHistoryException();
+            }
+            $keys[] = 'permission';
+        }
         if (array_key_exists('requirement_groups', $facts)) {
             $keys[] = 'requirement_groups';
         }
@@ -252,6 +265,8 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
                         minimumRequirements: $facts['requirement_minimum'] ?? null,
                         rule: $facts['requirement_rule'] ?? null
                     ) : null,
+                permission: isset($facts['permission'])
+                    ? new PrerequisitePermissionReference($facts['permission']) : null,
             );
         } catch (\InvalidArgumentException) {
             throw new CorruptHistoryException();
@@ -275,7 +290,8 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         ['requirement_grade_points_milli' => $this->groups->minimumGradePointsMilli]) +
         ($this->groups?->minimumRequirements === null ? [] :
         ['requirement_minimum' => $this->groups->minimumRequirements]) +
-        ($this->groups?->rule === null ? [] : ['requirement_rule' => $this->groups->rule->definition]);
+        ($this->groups?->rule === null ? [] : ['requirement_rule' => $this->groups->rule->definition]) +
+        ($this->permission === null ? [] : ['permission' => $this->permission->data]);
     }
 
     private static function id(mixed $value): void

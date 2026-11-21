@@ -50,6 +50,7 @@ final readonly class WorkspaceService
         "equivalencies" => "sis:transfer:manage",
     ];
     public const array PERMISSIONS = [
+        'sis:registration:prerequisite-exception',
         'sis:load:policy',
         'sis:standing:correct',
         'sis:standing:configure',

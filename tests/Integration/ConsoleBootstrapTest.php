@@ -7,6 +7,15 @@ use Symfony\Component\Process\Process;
 
 final class ConsoleBootstrapTest extends TestCase
 {
+    public function testPrerequisiteExceptionRoutesKeepIndependentAuthorityCsrfAndPrivateHistory(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-prerequisite-permissions']);
+        $process->setTimeout(12);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testRuntimeDegreeAuditUsesActualProvidersCsrfAndPrivateReadOnlyResponses(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',

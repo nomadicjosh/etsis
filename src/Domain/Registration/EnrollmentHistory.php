@@ -72,6 +72,19 @@ final class EnrollmentHistory extends EventSourcedAggregate
             ) {
                 throw new CorruptHistoryException();
             }
+            if ($decision->permission !== null) {
+                $permission = $decision->permission->data;
+                if (
+                    $permission['student_id'] !== $p['enrollment']['student_id'] ||
+                    $permission['section_id'] !== $p['enrollment']['section_id'] ||
+                    $permission['term_id'] !== $p['enrollment']['term_id'] ||
+                    $permission['course_version_id'] !== $p['source']['course_version_id'] ||
+                    new \DateTimeImmutable($permission['expires_at']) <=
+                        new \DateTimeImmutable($p['enrollment']['registered_at'])
+                ) {
+                    throw new CorruptHistoryException();
+                }
+            }
             $this->prerequisites = $decision;
         }
         if (array_key_exists("schedule_evidence", $event->metadata())) {
@@ -216,7 +229,7 @@ final class EnrollmentHistory extends EventSourcedAggregate
                     ? "not_recorded"
                     : ($this->prerequisites->required === []
                         ? "not_required"
-                        : "verified"),
+                        : ($this->prerequisites->permission !== null ? "permission" : "verified")),
             "required_course_count" =>
                 $this->prerequisites === null
                     ? null

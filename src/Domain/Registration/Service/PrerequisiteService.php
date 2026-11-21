@@ -13,8 +13,11 @@ use Domain\Registration\ValueObject\PrerequisiteDecision;
 /** Internal eligibility proof. The registration command authorizes and holds the student lock. */
 final readonly class PrerequisiteService
 {
-    public function __construct(private AcademicInputVerifier $inputs, private WorkPursuitService $pursuits)
-    {
+    public function __construct(
+        private AcademicInputVerifier $inputs,
+        private WorkPursuitService $pursuits,
+        private PrerequisitePermissionLedger $permissions,
+    ) {
     }
 
     /** @param list<string> $required */
@@ -24,6 +27,9 @@ final readonly class PrerequisiteService
         array $required,
         ?HistoryReadBudget $budget = null,
         ?\Domain\Catalog\ValueObject\PrerequisiteGroups $groups = null,
+        ?EntityId $section = null,
+        ?EntityId $term = null,
+        ?EntityId $courseVersion = null,
     ): PrerequisiteDecision {
         if ($required === []) {
             return new PrerequisiteDecision($assignment, [], [], $groups);
@@ -69,6 +75,13 @@ final readonly class PrerequisiteService
             }
         }
         ksort($completed, SORT_STRING);
-        return new PrerequisiteDecision($assignment, $required, array_values($completed), $groups);
+        $decision = new PrerequisiteDecision($assignment, $required, array_values($completed), $groups);
+        if (!$decision->isMet() && $section !== null && $term !== null) {
+            $permission = $this->permissions->effective($student, $assignment, $section, $term, $courseVersion);
+            if ($permission !== null) {
+                return new PrerequisiteDecision($assignment, $required, $decision->support, $groups, $permission);
+            }
+        }
+        return $decision;
     }
 }

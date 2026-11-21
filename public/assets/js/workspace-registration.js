@@ -606,6 +606,7 @@ window.createWorkspaceRegistration = function (ui) {
                         student.prerequisites?.status === "missing"
                             ? `Missing ${student.prerequisites.missing_count} ${student.prerequisites.missing_count === 1 ? "prerequisite" : "prerequisites"}`
                             : {
+                                  permission: "Prerequisite exception approved",
                                   met: "Verified for this pursuit",
                                   not_required: "No course prerequisites",
                                   not_rechecked: ["A", "N"].includes(student.enrollment_status)
@@ -811,6 +812,8 @@ window.createWorkspaceRegistration = function (ui) {
                                 ? `Prerequisites at acceptance: the nested rule across ${prerequisites.requirement_group_count} requirements was satisfied using ${prerequisites.supporting_record_count} verified academic records.`
                                 : `Prerequisites at acceptance: ${prerequisites.required_group_count ?? prerequisites.requirement_group_count} of ${prerequisites.requirement_group_count} prerequisite requirements satisfied using ${prerequisites.supporting_record_count} verified academic records.`
                             : `Prerequisites at acceptance: ${prerequisites.required_course_count} required ${prerequisites.required_course_count === 1 ? "course" : "courses"} matched to ${prerequisites.supporting_record_count} verified academic ${prerequisites.supporting_record_count === 1 ? "record" : "records"}.`
+                        : prerequisites?.status === "permission"
+                          ? "Registration accepted with a registrar prerequisite exception. This did not award prerequisite completion or credit."
                         : prerequisites?.status === "not_required"
                           ? "No course prerequisites were required at acceptance."
                           : "Supporting prerequisite references were not recorded for this earlier decision.",

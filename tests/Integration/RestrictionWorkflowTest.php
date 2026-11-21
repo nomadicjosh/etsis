@@ -346,7 +346,7 @@ final class RestrictionWorkflowTest extends TestCase
             $f->activityLedger(),
             $f->primaryProgramLedger(),
             $f->workPursuits(),
-            new \Domain\Registration\Service\PrerequisiteService($f->inputVerifier(), $f->workPursuits()),
+            $f->prerequisites(),
             $f->schedules(),
             $f->corequisites(),
             $f->windowPolicies(),

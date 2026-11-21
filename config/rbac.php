@@ -5,6 +5,7 @@ declare(strict_types=1);
 // Initial migration seed only. Runtime authorization is database controlled.
 return [
     "permissions" => [
+        "sis:registration:prerequisite-exception" => ["description" => "Approve and revoke pursuit-scoped prerequisite exceptions."],
         "sis:load:policy" => ["description" => "Publish institutional and program enrollment-load policies."],
         "sis:standing:correct" => ["description" => "Correct recorded academic standing on closed pursuits."],
         "sis:standing:configure" => ["description" => "Maintain institutional academic standing labels."],

@@ -153,7 +153,7 @@ final class AcademicWorkPursuitTest extends TestCase
         self::assertNull($result->items[0]['grade']);
         self::assertTrue($result->items[0]['earlier_history_unknown']);
         self::assertSame(1, $s->workPursuitLedger()->load($old->credit)->playhead());
-        self::assertFalse(new \Domain\Registration\Service\PrerequisiteService($s->inputVerifier(), $s->workPursuits())
+        self::assertFalse($s->prerequisites()
             ->evaluate($f->student, $f->assignment, [$old->course->value])->isMet());
     }
 
@@ -361,7 +361,11 @@ final class AcademicWorkPursuitTest extends TestCase
         $repo->expects(self::never())->method('inventory');
         $verifier = new \Domain\DegreeAudit\Service\AcademicInputVerifier($repo,
             $s->academicCredits(), $s->transferCredits(), $s->enrollmentLedger());
-        $service = new \Domain\Registration\Service\PrerequisiteService($verifier, $s->workPursuits());
+        $service = new \Domain\Registration\Service\PrerequisiteService(
+            $verifier,
+            $s->workPursuits(),
+            $s->prerequisitePermissionLedger(),
+        );
         self::assertTrue($service->evaluate($student, $assignment, [])->isMet());
         $course = new \Domain\Catalog\Course(EntityId::generate(), 'ZERO.101', 'Fictional orientation', 0);
         $s->registration->addCourse($course);
@@ -373,7 +377,7 @@ final class AcademicWorkPursuitTest extends TestCase
         $grade = $s->gradeCatalog()->byCode('P', $student);
         $review = $s->academicCredits()->review($student, $section->id, $enrollment->id, new EntityId($grade['id']), 0);
         $s->academicCredits()->commit($student, $section->id, $review['review_token']);
-        self::assertTrue(new \Domain\Registration\Service\PrerequisiteService($s->inputVerifier(), $s->workPursuits())
+        self::assertTrue($s->prerequisites()
             ->evaluate($student, $assignment, [$course->id->value])->isMet());
     }
 

@@ -775,6 +775,21 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/courses/", [SisRegistrationController::class, "course"])
         ->name("sis.registration.course");
+    $exceptions = \Application\Http\Controller\SisPrerequisitePermissionController::class;
+    $router->map(
+        ['POST'],
+        '/sis/students/{student}/programs/{pursuit}/prerequisite-exceptions/sections/',
+        [$exceptions, 'sections'],
+    )
+        ->name('sis.prerequisite.exceptions.sections');
+    foreach (['view', 'review', 'commit', 'history'] as $method) {
+        $router->map(
+            ['POST'],
+            '/sis/students/{student}/programs/{pursuit}/prerequisite-exceptions/{section}/' . $method . '/',
+            [$exceptions, $method],
+        )
+            ->name('sis.prerequisite.exceptions.' . $method);
+    }
     $load = \Application\Http\Controller\SisEnrollmentLoadController::class;
     foreach (['view', 'review', 'publish', 'history', 'programs'] as $method) {
         $router->map(['POST'], '/sis/enrollment-load/policy/' . $method . '/', [$load, $method])

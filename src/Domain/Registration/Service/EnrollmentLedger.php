@@ -67,6 +67,18 @@ final readonly class EnrollmentLedger
         ) {
             throw new CorruptHistoryException();
         }
+        if ($prerequisites->permission !== null) {
+            $permission = $prerequisites->permission->data;
+            if (
+                $permission['student_id'] !== $enrollment->studentId->value ||
+                $permission['section_id'] !== $section->id->value ||
+                $permission['term_id'] !== $section->termId->value ||
+                $permission['course_version_id'] !== $course->publicationVersionId?->value ||
+                new \DateTimeImmutable($permission['expires_at']) <= $this->clock->now()
+            ) {
+                throw new CorruptHistoryException();
+            }
+        }
         $metadata = [
             "__aggregate_type" => "enrollment",
             "prerequisite_evidence" => $prerequisites->retained(),

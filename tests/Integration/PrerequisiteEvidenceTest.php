@@ -272,7 +272,8 @@ final class PrerequisiteEvidenceTest extends TestCase
                 $s->transferCredits(),
                 $s->enrollmentLedger()
             ),
-            $s->workPursuits()
+            $s->workPursuits(),
+            $s->prerequisitePermissionLedger(),
         );
         $before = $s->sql->rows('sis_history_events');
         try {

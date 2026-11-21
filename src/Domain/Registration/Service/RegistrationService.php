@@ -143,6 +143,9 @@ final readonly class RegistrationService
                 $required,
                 $budget,
                 $course->prerequisiteGroups,
+                $section->id,
+                $section->termId,
+                $course->publicationVersionId,
             );
             $corequisites = $this->corequisites->evaluate(
                 $studentId,
@@ -251,6 +254,23 @@ final readonly class RegistrationService
                 $enrollment->id,
             );
             $this->verifyCourseSelection($sectionId, $budget, $courseRead);
+            if ($prerequisites->permission !== null) {
+                $freshPrerequisites = $this->prerequisites->evaluate(
+                    $studentId,
+                    $assignment,
+                    $required,
+                    $budget,
+                    $course->prerequisiteGroups,
+                    $section->id,
+                    $section->termId,
+                    $course->publicationVersionId,
+                );
+                if ($freshPrerequisites->revision() !== $prerequisites->revision()) {
+                    throw new ConcurrentModificationException(
+                        'The prerequisite exception changed. Review registration again.',
+                    );
+                }
+            }
             if ($corequisites !== null) {
                 $freshCorequisites = $this->corequisites->evaluate(
                     $studentId,
@@ -420,7 +440,10 @@ final readonly class RegistrationService
             $assignment,
             $required,
             $budget,
-            $course->prerequisiteGroups
+            $course->prerequisiteGroups,
+            $section->id,
+            $section->termId,
+            $course->publicationVersionId,
         );
         if (($course->prerequisiteGroups?->corequisites ?? []) !== []) {
             $this->corequisites->verifyAccepted($enrollment, $budget, $corequisiteRead);

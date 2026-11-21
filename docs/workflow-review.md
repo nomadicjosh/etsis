@@ -721,3 +721,7 @@ The [co-requisite workflow](registration-history.md#co-requisites-and-linked-dro
 ## Shared catalog import and program setup
 
 [Catalog imports](catalog-imports.md) now offer courses and programs in one destination-aware mapping/review screen. Program descriptions and reference codes use the ordinary program model and existing catalog libraries, avoiding a second importer-specific editor. Staff resolve dependencies in place, approve identity links explicitly, confirm the bounded batch once and return to ordinary catalog review/publication. Imports never overwrite an existing definition or reinterpret an earlier student cohort. Other entity imports and larger background conversion remain open.
+
+## Registrar prerequisite exceptions
+
+[Prerequisite exceptions](registration-history.md#registrar-prerequisite-exceptions) live alongside the selected student's program, with one section search and review/confirm flow for approval, renewal, revocation and history. Independent registrar authority and an explicit expiry keep this distinct from a grade, academic waiver or general staff privilege. Students and staff see the same readiness explanation, while accepted registrations preserve their original permission. Program changes do not carry the exception forward. Course equivalence and broader institutional override policies remain open.

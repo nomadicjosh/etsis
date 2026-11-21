@@ -91,6 +91,7 @@ window.createRegistrationSchedule = function (ui) {
         if (!courses.length || !value?.course_statuses?.length) return null;
         const nested = value.group_policy?.rule;
         const details = node("details", { class: "mb-3" }, node("summary", {}, nested ? "Prerequisite rule" : value.group_policy?.required_count < value.group_policy?.total_count ? "Prerequisite options" : "Required courses"));
+        if (value.permission) details.append(node("p", { class: "alert alert-info" }, `Registration permitted by a registrar prerequisite exception until ${new Date(value.permission.expires_at).toLocaleString()}. Courses below still show the academic requirements; no completion or credit is awarded by this exception.`));
         let rendered = false;
         details.addEventListener("toggle", () => {
             if (!details.open || rendered) return;
@@ -233,7 +234,7 @@ window.createRegistrationSchedule = function (ui) {
             node(
                 "p",
                 {},
-                `Prerequisites: ${{ met: "Verified for this program pursuit", missing: "Required coursework is missing", not_required: "No course prerequisites", not_rechecked: "Not rechecked for this record" }[student.prerequisites.status]}`,
+                `Prerequisites: ${{ permission: "Prerequisite exception approved", met: "Verified for this program pursuit", missing: "Required coursework is missing", not_required: "No course prerequisites", not_rechecked: "Not rechecked for this record" }[student.prerequisites.status]}`,
             ),
             prerequisites(student.prerequisites, review.section.prerequisite_courses),
             corequisites(student.corequisites, review.section.corequisite_courses),

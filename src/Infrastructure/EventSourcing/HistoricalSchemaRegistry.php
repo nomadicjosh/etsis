@@ -52,6 +52,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Registration\Event\PrerequisitePermissionWasRecorded::class => [
+                'type' => 'prerequisite_permission', 'root' => \Domain\Registration\PrerequisitePermission::class,
+                'fields' => \Domain\Registration\PrerequisitePermission::FIELDS,
+            ],
             \Domain\Student\Event\EnrollmentLoadPolicyWasPublished::class => [
                 'type' => 'enrollment_load_policy', 'root' => \Domain\Student\EnrollmentLoadPolicy::class,
                 'fields' => \Domain\Student\EnrollmentLoadPolicy::FIELDS,
@@ -590,6 +594,9 @@ final readonly class HistoricalSchemaRegistry
                     throw new CorruptHistoryException();
                 }
             }
+            if ($class === \Domain\Registration\Event\PrerequisitePermissionWasRecorded::class) {
+                \Domain\Registration\PrerequisitePermission::validate($payload);
+            }
             if ($class === \Domain\Student\Event\EnrollmentLoadPolicyWasPublished::class) {
                 \Domain\Student\EnrollmentLoadPolicy::validate($payload);
                 if (
@@ -970,7 +977,8 @@ final readonly class HistoricalSchemaRegistry
             foreach ($payload as $name => $value) {
                 // This complete payload is validated by its bounded typed schema above.
                 if (
-                    in_array($class, [\Domain\Student\Event\EnrollmentLoadPolicyWasPublished::class,
+                    in_array($class, [\Domain\Registration\Event\PrerequisitePermissionWasRecorded::class,
+                    \Domain\Student\Event\EnrollmentLoadPolicyWasPublished::class,
                     \Domain\Advising\Event\StudentAdvisorsWereAssigned::class,
                     \Domain\Student\Event\StudentStandingWasRecorded::class,
                     \Domain\Student\Event\StudentStandingWasCorrected::class], true)
@@ -1346,6 +1354,19 @@ final readonly class HistoricalSchemaRegistry
                         throw new CorruptHistoryException();
                     }
                     $decision = \Domain\Registration\ValueObject\PrerequisiteDecision::fromRetained($value);
+                    if ($decision->permission !== null) {
+                        $permission = $decision->permission->data;
+                        if (
+                            $permission['student_id'] !== $payload['enrollment']['student_id'] ||
+                            $permission['section_id'] !== $payload['enrollment']['section_id'] ||
+                            $permission['term_id'] !== $payload['enrollment']['term_id'] ||
+                            $permission['course_version_id'] !== $payload['source']['course_version_id'] ||
+                            new \DateTimeImmutable($permission['expires_at']) <=
+                                new \DateTimeImmutable($payload['enrollment']['registered_at'])
+                        ) {
+                            throw new CorruptHistoryException();
+                        }
+                    }
                     if ($decision->required !== $payload['eligibility']['required_course_ids']) {
                         throw new CorruptHistoryException();
                     }
@@ -1518,6 +1539,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Registration\PrerequisitePermission::class => 'prerequisite_permission',
             \Domain\Student\EnrollmentLoadPolicy::class => 'enrollment_load_policy',
             \Domain\Student\StudentStanding::class => 'student_standing',
             \Domain\Advising\AdvisorHistory::class => 'student_advisors',
@@ -1566,6 +1588,7 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            'prerequisite_permission' => new \Domain\Registration\ValueObject\PrerequisitePermissionId($id),
             'enrollment_load_policy' => new \Domain\Student\ValueObject\EnrollmentLoadPolicyId($id),
             'student_standing' => new \Domain\Student\ValueObject\StudentStandingId($id),
             'student_advisors' => new \Domain\Advising\ValueObject\AdvisorHistoryId($id),

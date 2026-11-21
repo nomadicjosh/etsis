@@ -62,7 +62,7 @@ final class RegistrationCompletionBoundaryTest extends TestCase
             $s->activityLedger(),
             $s->primaryProgramLedger(),
             $s->workPursuits(),
-            $prerequisites ?? new PrerequisiteService($s->inputVerifier(), $s->workPursuits()),
+            $prerequisites ?? $s->prerequisites(),
             $s->schedules(),
             $s->corequisites(),
             $s->windowPolicies(),
@@ -391,7 +391,7 @@ final class RegistrationCompletionBoundaryTest extends TestCase
             $s->academicCredits(),
             $s->transferCredits(),
             $s->enrollmentLedger()
-        ), $s->workPursuits());
+        ), $s->workPursuits(), $s->prerequisitePermissionLedger());
         $audit = $this->createMock(AuditTrail::class);
         $audit->expects(self::never())->method('record');
         $before = $this->facts($s);

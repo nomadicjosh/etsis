@@ -288,12 +288,18 @@ final readonly class RegistrationBatchService
             // Check every accepted section after the final write/audit, not just the last section.
             $corequisiteRead = new CoRequisitePlan($selection, $this->repository);
             foreach ($selection->sections as $section) {
+                $reviewedSection = array_values(array_filter(
+                    $context['sections'],
+                    static fn(array $row): bool => $row['section']['id'] === $section->value,
+                ))[0];
                 $this->registration->verifyCompletion(
                     $selection->student,
                     $section,
                     $actor,
                     $byStaff,
                     $budget,
+                    prerequisiteRevision: $reviewedSection['student']['prerequisites']['permission'] === null
+                        ? null : $reviewedSection['student']['prerequisites']['revision'],
                     courseRead: $courseRead,
                     corequisiteRead: $corequisiteRead,
                 );
@@ -656,6 +662,22 @@ final readonly class RegistrationBatchService
                 $this->clock->now()->format("Y-m-d\TH:i:sP"),
             );
             $this->audit->record($actor, "registration.batch_completed", $operation);
+            foreach ($context['students'] as $reviewedStudent) {
+                if (
+                    $reviewedStudent['enrollment_id'] === null &&
+                    $reviewedStudent['prerequisites']['permission'] !== null
+                ) {
+                    $this->registration->verifyCompletion(
+                        new EntityId($reviewedStudent['id']),
+                        $selection->section,
+                        $actor,
+                        $byStaff,
+                        $budget,
+                        prerequisiteRevision: $reviewedStudent['prerequisites']['revision'],
+                        courseRead: $courseRead,
+                    );
+                }
+            }
             if (
                 $created > 0 && $this->windows->checked(
                     $selectionTerm = new EntityId($context['section']['term_id']),
@@ -808,7 +830,16 @@ final readonly class RegistrationBatchService
             $decision =
             $assignment === null
             ? null
-            : $this->prerequisites->evaluate($id, $assignment, $required, $budget, $course->prerequisiteGroups);
+            : $this->prerequisites->evaluate(
+                $id,
+                $assignment,
+                $required,
+                $budget,
+                $course->prerequisiteGroups,
+                $section->id,
+                $section->termId,
+                $course->publicationVersionId,
+            );
             $corequisite = $assignment === null ? null : $this->corequisites->evaluate(
                 $id,
                 $assignment,
@@ -897,9 +928,11 @@ final readonly class RegistrationBatchService
                             ? "not_rechecked"
                             : ($required === []
                                 ? "not_required"
-                                : ($decision->isMet()
+                                : ($decision->permission !== null ? "permission" : ($decision->isMet()
                                     ? "met"
-                                    : "missing")),
+                                    : "missing"))),
+                    "permission" => $decision?->permission === null ? null :
+                        ['expires_at' => $decision->permission->data['expires_at']],
                     "course_statuses" => $decision?->courseStatuses() ?? [],
                     "groups" => $decision?->groupStatuses(),
                     "group_policy" => $decision?->groupPolicy(),

@@ -409,7 +409,11 @@ final class SisFixture
             $this->activityLedger(),
             $this->primaryProgramLedger(),
             $this->workPursuits(),
-            new \Domain\Registration\Service\PrerequisiteService($this->inputVerifier(), $this->workPursuits()),
+            new \Domain\Registration\Service\PrerequisiteService(
+                $this->inputVerifier(),
+                $this->workPursuits(),
+                $this->prerequisitePermissionLedger(),
+            ),
             $this->schedules(),
             $this->corequisites(),
             $this->windowPolicies(),
@@ -621,9 +625,43 @@ final class SisFixture
             new \Domain\Registration\Service\PublishedSectionMeetingPlanReader($plans, $history));
     }
 
+    public function prerequisitePermissionLedger(): \Domain\Registration\Service\PrerequisitePermissionLedger
+    {
+        return new \Domain\Registration\Service\PrerequisitePermissionLedger(
+            new \Infrastructure\Persistence\Repository\SqlPrerequisitePermissionRepository($this->sql),
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->clock,
+        );
+    }
+
+    public function prerequisitePermissions(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Registration\Service\PrerequisitePermissionService {
+        return new \Domain\Registration\Service\PrerequisitePermissionService(
+            new \Infrastructure\Persistence\Repository\SqlPrerequisitePermissionRepository($this->sql),
+            $this->prerequisitePermissionLedger(),
+            $this->registration,
+            $this->enrollmentLedger(),
+            $this->admissions,
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->programStatusLedger(),
+            $this->workPursuits(),
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->clock,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+        );
+    }
+
     public function prerequisites(): \Domain\Registration\Service\PrerequisiteService
     {
-        return new \Domain\Registration\Service\PrerequisiteService($this->inputVerifier(), $this->workPursuits());
+        return new \Domain\Registration\Service\PrerequisiteService(
+            $this->inputVerifier(),
+            $this->workPursuits(),
+            $this->prerequisitePermissionLedger(),
+        );
     }
     /** Authorized fixture command boundary for the single verified prerequisite implementation. */
     public function prerequisitesMet(EntityId $student, EntityId $course, ?array $required = null): bool
@@ -631,7 +669,7 @@ final class SisFixture
         return $this->transactions->run(function () use ($student, $course, $required): bool {
             $this->registration->lockStudent($student);
             $assignment = $this->workPursuits()->activePursuit($student);
-            return new \Domain\Registration\Service\PrerequisiteService($this->inputVerifier(), $this->workPursuits())
+            return $this->prerequisites()
                 ->evaluate($student, $assignment, $required ?? $this->registration->requiredCourses($course))->isMet();
         });
     }
