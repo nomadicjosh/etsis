@@ -81,6 +81,8 @@ final class SisServiceProvider extends CodefyServiceProvider
             \Domain\Lms\Service\MoodleConnectionProbe::class => \Infrastructure\Lms\RestMoodleGateway::class,
             \Domain\Shared\EventSourcing\HistoricalIntegrityVerifier::class =>
                 \Infrastructure\EventSourcing\SqlHistoricalIntegrityVerifier::class,
+            \Domain\AcademicRecord\Repository\AcademicProjectionVerifier::class =>
+                \Infrastructure\Projection\SqlAcademicProjectionVerifier::class,
             \Domain\Finance\Repository\AccountProjectionVerifier::class =>
                 \Infrastructure\Projection\SqlAccountProjectionVerifier::class,
             \Domain\DegreeAudit\Service\DegreeProgressReader::class =>

@@ -6,6 +6,8 @@ namespace Application\Console\Commands;
 
 use Codefy\Framework\Application;
 use Codefy\Framework\Console\ConsoleCommand;
+use Domain\AcademicRecord\Repository\AcademicProjectionVerifier;
+use Domain\Shared\ValueObject\EntityId;
 use Domain\Finance\Repository\AccountProjectionVerifier;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Shared\EventSourcing\HistoricalIntegrityVerifier;
@@ -21,9 +23,10 @@ final class VerifyHistoryCommand extends ConsoleCommand
     protected string $description = "Verify protected chains, references and retry receipts in read-only batches.";
     protected array $options = [
         ["streams", null, "required", "Maximum stream chains visited (1–50).", "10"],
-        ["events", null, "required", "Maximum global checks or selected-account replay events (1–2000).", "500"],
+        ["events", null, "required", "Maximum global checks or selected-source replay events (1–2000).", "500"],
         ["cursor", null, "required", "Protected continuation from an earlier verification batch."],
         ["json", null, "none", "Emit machine-readable counts and a protected continuation cursor."],
+        ['student', null, 'required', 'Check one student’s available academic sources and projections; no cursor.'],
         ['account', null, 'required', 'Verify one financial account and its balance/posting projections; no cursor.'],
     ];
     public function __construct(Application $codefy)
@@ -47,6 +50,16 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 throw new InvalidArgumentException();
             }
             $account = $this->getOptions('account');
+            $student = $this->getOptions('student');
+            if ($student !== null) {
+                if (
+                    !is_string($student) || $account !== null || $cursor !== null ||
+                    $this->input->hasParameterOption('--streams')
+                ) {
+                    throw new InvalidArgumentException();
+                }
+                return $this->student(new EntityId($student), $events, $json);
+            }
             if ($account !== null) {
                 if (!is_string($account) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
                     throw new InvalidArgumentException();
@@ -61,7 +74,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 $json,
                 "invalid_input",
                 "Use --streams=1..50, --events=1..2000 and a valid optional verification cursor. "
-                    . 'For one financial account, use --account=ULID with --events and optional --json only.',
+                    . 'Use --account=ULID or --student=ULID with --events and optional --json for a selected check.',
                 self::INVALID,
             );
         } catch (HistoryVerificationFailedException $exception) {
@@ -111,6 +124,29 @@ final class VerifyHistoryCommand extends ConsoleCommand
             );
         }
         return $result->complete ? self::SUCCESS : 3;
+    }
+
+    private function student(EntityId $student, int $events, bool $json): int
+    {
+        $result = $this->codefy->make(AcademicProjectionVerifier::class)->verify($student, $events);
+        if ($json) {
+            $this->output->writeln(json_encode($result->describe(), JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
+        } else {
+            $this->terminalRaw('Student academic check ' . $student->value . ': ' . $result->status . '.');
+            $this->terminalRaw($result->events . ' events checked; '
+                . ($result->records ?? 'unknown') . ' current records.');
+            if ($result->issues !== []) {
+                $this->terminalRaw('Unverified components: ' . implode(', ', $result->issues) . '.');
+            }
+            $this->terminalRaw('No records were changed. Earlier gaps and an empty observation do not establish '
+                . 'archive completeness. Changed or limited checks must be repeated in a controlled review. '
+                . 'This does not evaluate degree completion or verify pursuit attribution and finance.');
+        }
+        return match ($result->status) {
+            'verified' => self::SUCCESS,
+            'changed', 'limited', 'history_gaps', 'observed_empty' => 3,
+            default => self::FAILURE,
+        };
     }
 
     private function account(AccountId $account, int $events, bool $json): int

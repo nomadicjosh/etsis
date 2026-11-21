@@ -16,6 +16,8 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\Service\TransferCreditLedger;
 
 /** Internal cross-source verifier. The caller must authorize and hold the student lock.
+ * Trusted operator checks may instead compare bounded routing/head boundaries before and after this read,
+ * outside a transaction, and discard the result on change. Such observations authorize no academic decision.
  * No reads repair projections or create historical decisions. Never expose this port directly over HTTP.
  */
 final readonly class AcademicInputVerifier

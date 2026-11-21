@@ -97,6 +97,7 @@ This is an order of emphasis, not a requirement to finish every item in a large 
 - [ ] Provide bounded, read-only integrity/reconciliation tools and independently verified projection checkpoints; rebuild into isolated output, validate it and deliberately switch readers. Replay must never send messages, issue refunds or grant access.
 - [x] Add one [bounded read-only history verification command](event-history-foundation.md#read-only-operator-verification), with protected continuation, indexed traversal, authenticated chains, orphan/missing-receipt detection, exact receipt outcomes and original request-fingerprint verification. All stages share one check budget; receipt batches also have a fixed ceiling. Projection checkpoints, isolated rebuilds and restore acceptance remain open under the preceding item.
 - [x] Extend the same operator command with [selected financial-account verification](event-history-foundation.md#selected-financial-account-verification): authenticated bounded replay, canonical account identity, balance/category totals, exact posting rows/stable references and checkpoint comparison. Preserve all records, detect concurrent changes without false drift failures, return minimal statuses/counts and keep limits/invalid input distinct. Share deterministic projector comparisons, add no repair path, schema, worker or UI, and verify write-prohibited fixtures and actual providers. This covers one observed account position; other domains, independent anchors and isolated rebuild/restore certification remain open.
+- [x] Extend the same operator command with [selected student academic verification](event-history-foundation.md#selected-student-academic-verification): shared available-source registration/institutional/transfer checks, observed routing/head boundary comparison, explicit earlier gaps/empty observations, bounded replay/payload/time and minimal private results. Verify populated write-prohibited fixtures, actual lazy providers and unchanged native database checksums. No repairs, write locks, schema or academic decisions; pursuit attribution, independently protected checkpoints, archive completeness and isolated rebuilds remain open.
 - [ ] Implement and exercise key rotation/recovery, independently protected integrity anchors, least-privilege database access and backup/restore procedures.
 - [ ] Establish institutional retention categories, legal holds, protected artifact/document retention and access/export evidence, including backups. Preserve necessary facts without retaining unnecessary sensitive material indefinitely.
 
@@ -432,6 +433,7 @@ External student-progress AI remains deferred by project direction; catalog-auth
 - [ ] Support subdomain installs
 - [ ] Each subdomain should have its own database
 - [ ] Privacy and Security is of the utmost importance; making sure institution data isn't leaking into other institution data; making sure institutions can see other institution's data.
+- [ ] Gravatar and upload profile image support with cropping
 
 ## Next implementation stages
 

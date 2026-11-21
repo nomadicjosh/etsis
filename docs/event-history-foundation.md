@@ -143,6 +143,36 @@ This selected mode does not validate every retry receipt, the whole event invent
 
 On 2026-11-19, the configured DDEV MariaDB application correctly returned an unverified result for a missing account, including a canonical all-numeric ULID. Before/after checksums of the journal, support and financial projection tables were unchanged. That database had no financial accounts; populated comparisons, tampering and concurrent updates were verified with fictional SQLite fixtures, not a populated MariaDB ledger.
 
+## Selected student academic verification
+
+The same operator command can check one student's available registration, institutional-credit and transfer-award sources against protected history:
+
+```sh
+ddev codex sis:history:verify --student='<sis_students.id>' --events=500 --json
+```
+
+Use the canonical student ULID, not an assigned institutional number. This mode requires trusted deployment access to the application database and history keys. It rejects `--account`, `--streams` and `--cursor` combinations before resolving storage. It adds no browser endpoint, ordinary reporting source, scheduled worker, schema, academic decision or repair operation.
+
+The check reuses `AcademicInputVerifier`, the internal available-source verifier used by registration, degree progress and transcripts. Its six-source bounded inventory compares surviving institutional/transfer source links, retained academic and registration streams, projections and accepted version references. Early removals are checked internally and excluded from the current-record count. Recorded grades, course titles, source identities, removal counts, actors, reasons and raw history never appear in operator output. This mode does not filter work to a pursuit or validate attribution/reuse decisions, person identity history, degree requirements, financial postings or archive-wide completeness. Use the ordinary authorized pursuit reviews and separate financial/global checks for their distinct purposes.
+
+This is an observation without write locks. It runs outside an existing transaction and compares the student’s existence, complete bounded source-routing inventory and relevant scalar journal heads before and after verification. A detected registration/drop/award change returns `changed` and discards the current count. It never calls the student write lock, initializes a projection or writes access-audit rows. This avoids SQLite's update-based locking reads and keeps the command usable with writes prohibited. A quiet maintenance window remains necessary for a stable acceptance pass; the check is not a transaction-wide snapshot or independently protected integrity checkpoint. An unchanged boundary cannot detect facts and all their routing references disappearing together or prove that a prior valid database was never restored.
+
+Limits are shared across the selected student: 200 available source identities, 201 rows per inventory query to detect overflow, 400 replay pages, at most 20 events per page and 1–2,000 returned events (500 by default). Optional replay-budget controls add a 4 MiB serialized event-payload/metadata allowance and a five-second cooperative deadline. Checks occur before/after replay pages and after verification/boundary comparison; database query timeouts remain deployment concerns. Other workflows retain their existing budget defaults. No partial record count escapes a failed or exhausted verification, and no continuation/result file is created.
+
+JSON contains only `status`, `scope: student_academic_inputs`, `student_reference`, `events_checked`, nullable `current_records`, fixed `issues` and `records_changed: false`. Event counts describe returned replay events, including repeated reads, not unique events or proof of full-chain completion after a limit. Treat output and shell history as private maintenance information.
+
+| Status / exit | Meaning |
+| --- | --- |
+| `verified` / 0 | Available recorded sources and their projections agreed within the observed boundary. This can include retained early-drop history with zero current records. |
+| `history_gaps` / 3 | Available sources agreed, but some earlier history was unknown or explicitly observed. No earlier events were invented. |
+| `observed_empty` / 3 | The student exists but no available sources were discovered. This is not proof that no academic history ever existed. |
+| `changed` / 3 | Routing or relevant heads changed; repeat the check against the newer state. |
+| `limited` / 3 | The inventory, replay, payload or time allowance prevented a completed check. |
+| `unverified` / 1 | Student identity, academic sources or protected storage could not be verified. Fixed issue codes are `student_identity`, `academic_sources` and `unavailable`; no exception contents are printed. |
+| Invalid input / 2 | Use one canonical student ULID, a supported event limit and optional JSON output. |
+
+Fictional fixtures verify recorded institutional and transfer work, earlier unknown transfer rows, early removals, projection/journal damage, limits, concurrent registrations and changed existing heads. Populated checks run with SQLite writes prohibited and unchanged journal/source/audit/finance snapshots. The native command is exercised through actual lazy providers. A bounded MariaDB check on 2026-11-20 correctly rejected a missing canonical student; that database contained no students and 20 journal events. All eleven inspected journal/support/academic/audit table checksums were unchanged. Populated MariaDB and other live-driver acceptance, isolated rebuilds, protected checkpoints and restore certification remain open.
+
 ## Verification and next steps
 
 The schema compiles with the installed MySQL, PostgreSQL, SQLite, SQL Server and Oracle compilers. Fictional SQLite tests exercise populated and empty conversion, all thirteen existing event types, preserved identity/provenance, restart and source-prefix verification, failed conversion without source deletion, shared framework/domain replay, version conflicts, transaction rollback, tampering, cursor boundaries and key rotation. Other engines still need live multi-session locking, DDL recovery and LOB integration tests; compiler coverage is not live-driver certification.

@@ -17,6 +17,62 @@ $early = new \Symfony\Component\Console\Tester\CommandTester(
 if ($early->execute(["--events" => "0"]) !== 2) {
     throw new RuntimeException("Invalid verification options resolved storage.");
 }
+if (($argv[1] ?? '') === 'check-academic-projections') {
+    foreach (
+        [
+        ['--student' => 'fictional-private-input'],
+        ['--student' => '00000000000000000000000000', '--streams' => '10'],
+        ['--student' => '00000000000000000000000000', '--cursor' => 'fictional-private-input'],
+        ['--student' => '00000000000000000000000000', '--account' => '00000000000000000000000000'],
+        ] as $options
+    ) {
+        if (
+            $early->execute(['--json' => true] + $options) !== 2 ||
+            str_contains($early->getDisplay(), 'fictional-private-input')
+        ) {
+            throw new RuntimeException('Invalid academic verification resolved storage or leaked input.');
+        }
+    }
+    $f = new HistoryVerificationFixture();
+    $s = $f->sis;
+    $student = $s->student()->id;
+    $enrollment = $s->service->register($student, $s->section()->id);
+    $bindVerification($f);
+    $kernel->bootstrap();
+    $test = new \Symfony\Component\Console\Tester\CommandTester($kernel->all()['sis:history:verify']);
+    $before = $f->digest();
+    $s->connection->pdo->exec('PRAGMA query_only = ON');
+    $options = ['--student' => $student->value, '--json' => true];
+    if ($test->execute($options) !== 0) {
+        throw new RuntimeException('Actual academic verification provider failed its read-only check.');
+    }
+    $result = json_decode($test->getDisplay(), true, flags: JSON_THROW_ON_ERROR);
+    if (
+        $result['status'] !== 'verified' || $result['current_records'] !== 1 ||
+        $result['records_changed'] !== false || str_contains($test->getDisplay(), $enrollment->id->value)
+    ) {
+        throw new RuntimeException('Academic verification returned incorrect or private source details.');
+    }
+    if (
+        $test->execute(['--events' => '1'] + $options) !== 3 ||
+        json_decode($test->getDisplay(), true)['status'] !== 'limited'
+    ) {
+        throw new RuntimeException('Academic verification ignored its replay bound.');
+    }
+    if (
+        $test->execute(['--student' => '00000000000000000000000000', '--json' => true]) !== 1 ||
+        json_decode($test->getDisplay(), true)['issues'] !== ['student_identity']
+    ) {
+        throw new RuntimeException('Missing student was certified as an empty record.');
+    }
+    if (
+        $test->execute(['--student' => $student->value]) !== 0 ||
+        !str_contains($test->getDisplay(), 'No records were changed') || $before !== $f->digest()
+    ) {
+        throw new RuntimeException('Text academic verification failed or changed recorded history.');
+    }
+    return;
+}
 if (($argv[1] ?? '') === 'check-account-projections') {
     $invalidAccounts = [
         ['--account' => 'fictional-private-input'],

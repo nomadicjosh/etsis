@@ -141,4 +141,46 @@ final class AcademicInputBoundsTest extends TestCase
         );
         self::assertSame(["inputs" => "[protected academic inputs]"], $result->__debugInfo());
     }
+    public function testOptionalPayloadAllowanceIsSharedAcrossPages(): void
+    {
+        $event = $this->event();
+        $bytes = strlen(json_encode([$event->event->payload(), $event->event->metadata()], JSON_THROW_ON_ERROR));
+        $store = $this->createMock(HistoricalEventStore::class);
+        $store->expects(self::exactly(2))->method('page')->willReturn(new EventPage([$event], null, 1));
+        $budget = new HistoryReadBudget(maximumBytes: $bytes);
+        $budget->page($store, $this->stream());
+        self::assertSame(1, $budget->eventsRead());
+        $this->expectException(HistoryReadLimitException::class);
+        $budget->page($store, $this->stream());
+    }
+
+    public function testOptionalDeadlineStopsAfterSlowReadsAndBeforeSubsequentReads(): void
+    {
+        $store = $this->createMock(HistoricalEventStore::class);
+        $store->expects(self::once())->method('page')->willReturnCallback(static function (): EventPage {
+            usleep(30000);
+            return new EventPage([], null, 0);
+        });
+        $budget = new HistoryReadBudget(maximumMilliseconds: 20);
+        foreach ([1, 2] as $read) {
+            try {
+                $budget->page($store, $this->stream());
+                self::fail('The replay deadline was ignored.');
+            } catch (HistoryReadLimitException) {
+                self::assertTrue(true);
+            }
+        }
+    }
+
+    public function testOptionalBudgetLimitsRejectNonpositiveValues(): void
+    {
+        foreach ([['maximumBytes' => 0], ['maximumMilliseconds' => -1]] as $options) {
+            try {
+                new HistoryReadBudget(...$options);
+                self::fail('Invalid history-read limits were accepted.');
+            } catch (\InvalidArgumentException) {
+                self::assertTrue(true);
+            }
+        }
+    }
 }

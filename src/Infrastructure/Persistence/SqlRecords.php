@@ -21,6 +21,11 @@ final readonly class SqlRecords
         return $this->db->getConnection()->getSchema()->hasTable($table, clear: true);
     }
 
+    public function inTransaction(): bool
+    {
+        return $this->db->getConnection()->pdo->inTransaction();
+    }
+
     public function driver(): string
     {
         return (string) $this->db->getConnection()->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
