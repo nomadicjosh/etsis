@@ -11,8 +11,14 @@ interface ProgramDefinitionRepository
 {
     /** @return array<string, mixed> */
     public function draft(EntityId $program): array;
-    /** @param array<string, ?EntityId> $choices */
-    public function saveDraft(EntityId $program, ?string $description, array $choices): void;
+    /** @param array<string, ?EntityId> $choices
+     * @param list<EntityId> $additionalCampuses */
+    public function saveDraft(
+        EntityId $program,
+        ?string $description,
+        array $choices,
+        array $additionalCampuses = [],
+    ): void;
     public function lockYear(EntityId $year): void;
     /** @return array<string, mixed>|null */
     public function current(EntityId $program, EntityId $year): ?array;

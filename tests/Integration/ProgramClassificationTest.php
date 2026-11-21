@@ -159,7 +159,7 @@ final class ProgramClassificationTest extends TestCase
         $current = new ProgramClassifications();
         self::assertTrue($current->schoolAndFieldRecorded);
         self::assertSame(
-            $earlier + ['school' => null, 'field_of_study' => null, 'campus' => null],
+            $earlier + ['school' => null, 'field_of_study' => null, 'campus' => null, 'additional_campuses' => []],
             $current->describe(),
         );
         foreach (
@@ -177,18 +177,27 @@ final class ProgramClassificationTest extends TestCase
 
     public static function historicalClassificationShapes(): array
     {
-        return ['before school fields' => [false], 'school fields without campus' => [true]];
+        return [
+            'before school fields' => [false, false],
+            'school fields without campus' => [true, false],
+            'single campus before additional sites' => [true, true],
+        ];
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('historicalClassificationShapes')]
-    public function testEarlierRetainedProjectionsDoNotInferSchoolsFromCurrentAssignments(bool $schoolFields): void
-    {
+    public function testEarlierRetainedProjectionsDoNotInferSchoolsFromCurrentAssignments(
+        bool $schoolFields,
+        bool $campusFields,
+    ): void {
         $p = new ProgramPublicationFixture();
         $f = $p->sis;
         $year = $p->calendar->year(2024);
         $review = $p->service->review($f->program, new EntityId($year['id']), 'Fictional earlier publication');
         $values = $review['definition'];
-        unset($values['classifications']['campus']);
+        unset($values['classifications']['additional_campuses']);
+        if (!$campusFields) {
+            unset($values['classifications']['campus']);
+        }
         if (!$schoolFields) {
             unset($values['classifications']['school'], $values['classifications']['field_of_study']);
         }
@@ -234,7 +243,8 @@ final class ProgramClassificationTest extends TestCase
         self::assertEquals($values, $p->service->versions($f->program)['items'][0]['definition']);
         self::assertSame($before, $f->sql->rows('sis_history_events'));
         $row = $f->sql->one('sis_program_catalog_details', ['id' => $operation->value]);
-        self::assertSame(0, (int) $row['campus_recorded']);
+        self::assertSame($campusFields ? 1 : 0, (int) $row['campus_recorded']);
+        self::assertSame(0, (int) $row['additional_campuses_recorded']);
         $f->sql->update('sis_program_catalog_details', ['campus_code' => 'INVENTED'], ['id' => $operation->value]);
         $this->expectException(CorruptHistoryException::class);
         new SqlProgramDefinitionRepository($f->sql)->retained($operation);

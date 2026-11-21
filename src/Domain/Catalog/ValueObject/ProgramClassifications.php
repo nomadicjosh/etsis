@@ -8,6 +8,10 @@ use InvalidArgumentException;
 
 final readonly class ProgramClassifications
 {
+    /** @var list<ClassificationSnapshot> */
+    public array $additionalCampuses;
+
+    /** @param list<ClassificationSnapshot> $additionalCampuses */
     public function __construct(
         public ?ClassificationSnapshot $department = null,
         public ?ClassificationSnapshot $academicLevel = null,
@@ -17,7 +21,34 @@ final readonly class ProgramClassifications
         public bool $schoolAndFieldRecorded = true,
         public ?ClassificationSnapshot $campus = null,
         public bool $campusRecorded = true,
+        array $additionalCampuses = [],
+        public bool $additionalCampusesRecorded = true,
     ) {
+        if (
+            count($additionalCampuses) > 20 ||
+            !array_is_list($additionalCampuses) ||
+            (!$additionalCampusesRecorded && $additionalCampuses !== []) ||
+            ($additionalCampusesRecorded && !$campusRecorded)
+        ) {
+            throw new InvalidArgumentException(
+                "Use up to twenty additional program campuses and preserve unknown earlier locations.",
+            );
+        }
+        $sites = [];
+        foreach ($additionalCampuses as $site) {
+            if (
+                !($site instanceof ClassificationSnapshot) ||
+                isset($sites[$site->id->value]) ||
+                $site->id->value === $campus?->id->value
+            ) {
+                throw new InvalidArgumentException(
+                    "Choose distinct additional campuses, separate from the primary campus.",
+                );
+            }
+            $sites[$site->id->value] = $site;
+        }
+        ksort($sites, SORT_STRING);
+        $this->additionalCampuses = array_values($sites);
         if (!$schoolAndFieldRecorded && ($school !== null || $fieldOfStudy !== null)) {
             throw new InvalidArgumentException(
                 "Unrecorded school and field classifications cannot contain values.",
@@ -36,6 +67,12 @@ final readonly class ProgramClassifications
     /** Missing historical keys remain absent; an explicit blank is a different recorded fact. */
     public static function fromArray(array $data): self
     {
+        $sitesRecorded = array_key_exists("additional_campuses", $data);
+        $sites = $sitesRecorded ? $data["additional_campuses"] : [];
+        if ($sitesRecorded && (!is_array($sites) || !array_is_list($sites) || count($sites) > 20)) {
+            throw new InvalidArgumentException("Use a bounded list of complete program campuses.");
+        }
+        unset($data["additional_campuses"]);
         $extended = array_key_exists("school", $data) || array_key_exists("field_of_study", $data);
         $campusRecorded = array_key_exists("campus", $data);
         $keys = ["department", "academic_level", "award"];
@@ -66,10 +103,17 @@ final readonly class ProgramClassifications
             schoolAndFieldRecorded: $extended,
             campus: $values["campus"] ?? null,
             campusRecorded: $campusRecorded,
+            additionalCampuses: array_map(static function (mixed $site): ClassificationSnapshot {
+                if (!is_array($site)) {
+                    throw new InvalidArgumentException("Provide complete campus snapshots.");
+                }
+                return ClassificationSnapshot::fromArray($site);
+            }, $sites),
+            additionalCampusesRecorded: $sitesRecorded,
         );
     }
 
-    /** @return array<string, array{id:string, code:string, title:string}|null> */
+    /** @return array<string, mixed> */
     public function describe(): array
     {
         $values = [
@@ -83,6 +127,15 @@ final readonly class ProgramClassifications
                 "field_of_study" => $this->fieldOfStudy?->describe(),
             ];
         }
-        return $this->campusRecorded ? $values + ["campus" => $this->campus?->describe()] : $values;
+        if ($this->campusRecorded) {
+            $values["campus"] = $this->campus?->describe();
+        }
+        if ($this->additionalCampusesRecorded) {
+            $values["additional_campuses"] = array_map(
+                static fn(ClassificationSnapshot $site): array => $site->describe(),
+                $this->additionalCampuses,
+            );
+        }
+        return $values;
     }
 }

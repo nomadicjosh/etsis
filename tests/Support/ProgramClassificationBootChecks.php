@@ -67,6 +67,17 @@ if ($teachingPost($base . "details/", $input)->getStatusCode() !== 422) {
     throw new RuntimeException("An omitted campus silently cleared a program location.");
 }
 $input["campus_id"] = $references["campus"]["id"];
+if ($teachingPost($base . "details/", $input)->getStatusCode() !== 422) {
+    throw new RuntimeException("Omitting additional-site choices silently cleared existing program setup.");
+}
+$extraResponse = $teachingPost("/sis/catalog/classifications/campus/save/", [
+    "code" => "EAST", "title" => "Fictional East Campus", "active" => true,
+]);
+$extra = json_decode((string) $extraResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($extraResponse->getStatusCode() !== 200) {
+    throw new RuntimeException("An additional campus could not be created through the shared library.");
+}
+$input["additional_campus_ids"] = [$extra["id"]];
 if ($teachingPost($base . "details/", $input)->getStatusCode() !== 200) {
     throw new RuntimeException("Program references could not be saved through actual providers.");
 }
@@ -185,6 +196,33 @@ if (
     )
 ) {
     throw new RuntimeException("Program campus fields were not available to the visual report builder.");
+}
+$siteDefinition = ["dataset" => "programs", "columns" => [
+    ["field" => "program_additional_campus_title", "label" => "Published site", "aggregate" => "none"],
+    ["field" => "program_additional_campuses_recorded", "label" => "Sites recorded", "aggregate" => "none"],
+]];
+$siteResponse = $teachingPost("/sis/report-studio/preview/", ["definition" => $siteDefinition, "offset" => 0]);
+$siteRows = json_decode((string) $siteResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $siteResponse->getStatusCode() !== 200 ||
+    ($siteRows["items"][0] ?? null) !== ["c0" => "Fictional East Campus", "c1" => true] ||
+    !str_contains($siteResponse->getHeaderLine("Cache-Control"), "no-store") ||
+    $siteResponse->hasHeader("phpdebugbar-id")
+) {
+    throw new RuntimeException("Published offering-site reports lost retained facts or transport protections.");
+}
+$currentSites = ["dataset" => "catalog_program_sites", "columns" => [
+    ["field" => "program_code", "label" => "Program", "aggregate" => "none"],
+    ["field" => "additional_campus_title", "label" => "Current additional site", "aggregate" => "none"],
+]];
+$currentSiteResponse = $teachingPost("/sis/report-studio/preview/", ["definition" => $currentSites, "offset" => 0]);
+$currentSiteRows = json_decode((string) $currentSiteResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $currentSiteResponse->getStatusCode() !== 200 ||
+    ($currentSiteRows["items"][0]["c1"] ?? null) !== "Fictional East Campus" ||
+    $sis->sql->rows("sis_history_events") !== $campusEvents
+) {
+    throw new RuntimeException("Current offering-site reports failed or changed academic history.");
 }
 $sis->access->staff = false;
 $sis->access->grants = ["sis:reporting:manage", "sis:reporting:run"];

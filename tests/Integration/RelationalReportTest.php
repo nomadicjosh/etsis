@@ -149,10 +149,15 @@ final class RelationalReportTest extends TestCase
         $f->access->staff = false;
         $f->access->grants = ["sis:reporting:manage", "sis:reporting:run", "sis:catalog:manage"];
         $catalog = $this->service($h)->catalog();
-        self::assertCount(1, $catalog["datasets"]);
-        self::assertArrayNotHasKey("identity", $catalog["datasets"][0]["relationships"]);
-        self::assertArrayNotHasKey("person", $catalog["datasets"][0]["relationships"]);
-        self::assertArrayNotHasKey("institutional_id", $catalog["datasets"][0]["fields"]);
+        self::assertEqualsCanonicalizing(
+            ["sections", "catalog_program_sites"],
+            array_column($catalog["datasets"], "id"),
+        );
+        foreach ($catalog["datasets"] as $dataset) {
+            self::assertArrayNotHasKey("identity", $dataset["relationships"]);
+            self::assertArrayNotHasKey("person", $dataset["relationships"]);
+            self::assertArrayNotHasKey("institutional_id", $dataset["fields"]);
+        }
         foreach (["field", "join"] as $case) {
             $q = [
                 "dataset" => "sections",

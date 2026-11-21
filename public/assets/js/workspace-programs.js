@@ -8,7 +8,7 @@ window.createWorkspacePrograms = function (ui) {
         award: "Award",
         school: "School/college",
         field_of_study: "Field of study",
-        campus: "Campus/site",
+        campus: "Primary campus/site",
     };
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
@@ -43,6 +43,10 @@ window.createWorkspacePrograms = function (ui) {
                             value ? `${value.code} — ${value.title}` : "Not specified"),
                     );
                 }),
+                node("div", {}, node("dt", {}, "Additional offering sites"), node("dd", {},
+                    definition.classifications.additional_campuses === undefined ? "Not recorded in this publication" :
+                    definition.classifications.additional_campuses.length ?
+                        definition.classifications.additional_campuses.map(site => `${site.code} — ${site.title}`).join("; ") : "No additional sites")),
             ),
         );
     }
@@ -53,8 +57,9 @@ window.createWorkspacePrograms = function (ui) {
         if (!loading.isConnected) return;
         const draft = {
             ...current.definition,
-            classifications: { ...current.definition.classifications },
+            classifications: structuredClone(current.definition.classifications),
         };
+        let siteNotice = "";
         async function render() {
             const body = openDrawer(
                 "Program details",
@@ -97,6 +102,10 @@ window.createWorkspacePrograms = function (ui) {
                             null,
                             [],
                             async (row) => {
+                                if (kind === "campus" && draft.classifications.additional_campuses?.some(site => site.id === row.id)) {
+                                    draft.classifications.additional_campuses = draft.classifications.additional_campuses.filter(site => site.id !== row.id);
+                                    siteNotice = "This site is now the primary campus. Save the draft to keep the change.";
+                                }
                                 draft.classifications[kind] = {
                                     id: row.id,
                                     code: row.code,
@@ -119,6 +128,38 @@ window.createWorkspacePrograms = function (ui) {
                     );
                 cards.append(node("div", { class: "col-12 col-xl-4" }, card));
             });
+            const sites = draft.classifications.additional_campuses || [];
+            const locations = node("section", { class: "surface p-3 mb-3", "aria-label": "Additional offering sites" },
+                node("h3", { class: "h5" }, "Additional offering sites"),
+                node("p", { class: "form-text" }, "Choose up to 20 other campuses or sites where this program is offered. These do not assign a student to a location or restrict online delivery."));
+            const addSite = button("Add offering site", () => {
+                capture();
+                return ui.references().library("campus", "", null, [], async (row) => {
+                    if (row.id === draft.classifications.campus?.id || sites.some(site => site.id === row.id)) {
+                        siteNotice = "This campus is already included. Choose another offering site.";
+                    } else {
+                        draft.classifications.additional_campuses = [...sites, { id: row.id, code: row.code, title: row.title }]
+                            .sort((a, b) => a.id.localeCompare(b.id));
+                        siteNotice = "Offering site added to the draft. Save before reviewing publication.";
+                    }
+                    await render();
+                }, render, "Back to program details");
+            });
+            addSite.disabled = sites.length >= 20;
+            locations.append(addSite);
+            if (!sites.length) locations.append(node("p", { class: "mt-3 mb-0" }, "No additional sites selected."));
+            for (const site of sites) {
+                const remove = button("Remove", () => {
+                    capture();
+                    draft.classifications.additional_campuses = sites.filter(value => value.id !== site.id);
+                    siteNotice = "Offering site removed from the draft. Earlier publications are unchanged.";
+                    return render();
+                });
+                remove.setAttribute("aria-label", `Remove offering site ${site.code}`);
+                locations.append(node("div", { class: "d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3" },
+                    node("span", { class: "text-break" }, `${site.code} — ${site.title}`), remove));
+            }
+            locations.append(node("p", { role: "status", class: "form-text mt-3 mb-0" }, siteNotice));
             const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save program details");
             const publish = button("Publish for an academic year", () => setup(id));
             const status = node("p", { role: "status" });
@@ -149,13 +190,14 @@ window.createWorkspacePrograms = function (ui) {
                         school_id: draft.classifications.school?.id ?? null,
                         field_of_study_id: draft.classifications.field_of_study?.id ?? null,
                         campus_id: draft.classifications.campus?.id ?? null,
+                        additional_campus_ids: (draft.classifications.additional_campuses || []).map(site => site.id),
                         revision: current.revision,
                     });
                     await ui.refreshDirectory();
                     await open(id, true);
                 }, save);
             });
-            form.append(cards, save);
+            form.append(cards, locations, save);
             state();
             body.append(
                 form,

@@ -137,12 +137,19 @@ final readonly class ProgramAssistanceService
         $labels = static fn(?array $value): ?array => $value === null
             ? null
             : ["code" => $value["code"], "title" => $value["title"]];
+        $classifications = $definition->classifications->describe();
+        $sites = $classifications["additional_campuses"] ?? null;
+        unset($classifications["additional_campuses"]);
+        $classifications = array_map($labels, $classifications);
+        if ($sites !== null) {
+            $classifications["additional_campuses"] = array_map($labels, $sites);
+        }
         return [
             "kind" => "academic_program",
             "code" => $definition->code,
             "title" => $definition->title,
             "description" => $definition->description,
-            "classifications" => array_map($labels, $definition->classifications->describe()),
+            "classifications" => $classifications,
         ];
     }
     private function revision(ProgramDefinition $definition, string $provider): string

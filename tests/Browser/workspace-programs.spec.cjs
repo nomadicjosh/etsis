@@ -4,13 +4,15 @@ const id = number => `01K000000000000000000000${String(number).padStart(2, '0')}
 
 async function fixture(page, options = {}) {
     const calls = [], errors = [], publications = [];
-    let definition = { code: 'BSCS', title: 'Computer Science', description: options.description || null, classifications: { department: null, academic_level: null, award: null, school: null, field_of_study: null, campus: null } };
+    let definition = { code: 'BSCS', title: 'Computer Science', description: options.description || null, classifications: { department: null, academic_level: null, award: null, school: null, field_of_study: null, campus: null, additional_campuses: [] } };
     const rows = [
         { id: id(3), kind: 'department', code: 'SCI', title: 'Sciences', active: true },
         { id: id(4), kind: 'academic_level', code: 'UG', title: 'Undergraduate', active: true },
         { id: id(7), kind: 'school', code: 'ARTS', title: 'College of Arts <b>fictional</b>', active: true },
         { id: id(8), kind: 'field_of_study', code: '11.0701', title: 'Computer Science', active: true },
         { id: id(9), kind: 'campus', code: 'MAIN', title: 'Fictional Main <b>Campus</b>', active: true },
+        { id: id(10), kind: 'campus', code: 'EAST', title: 'Fictional East <img src=x onerror=alert(1)>', active: true },
+        { id: id(11), kind: 'campus', code: 'WEST', title: 'Fictional West Campus', active: true },
         { id: id(5), kind: 'award', code: 'BA', title: 'Bachelor of Arts <script>fictional</script>', active: true },
     ];
     let reviews = 0, accepted = null;
@@ -33,6 +35,10 @@ async function fixture(page, options = {}) {
                 const row = rows.find(row => row.id === data[`${kind}_id`]);
                 return [kind, row ? { id: row.id, code: row.code, title: row.title } : null];
             })) };
+            if (data) definition.classifications.additional_campuses = (data.additional_campus_ids || []).map(site => {
+                const row = rows.find(value => value.id === site);
+                return { id: row.id, code: row.code, title: row.title };
+            });
             result = { id: id(1), definition, revision: 'a'.repeat(64) };
         } else if (path === `/sis/programs/${id(1)}/specializations/page/`) {
             const matches = specializations.filter(row=>(!data.after||row.id>data.after)&&`${row.code} ${row.title}`.toLowerCase().includes(data.search.toLowerCase())).sort((a,b)=>a.id.localeCompare(b.id));
@@ -63,7 +69,7 @@ async function fixture(page, options = {}) {
             if (data && options.editWhileRunning) await page.getByRole('textbox', { name: 'Program description', exact: true }).fill('My later edit');
             result = data ? { task: data.task, advice: { summary: '<script>window.programAiExecuted = true</script> Review this suggestion.', suggestions: ['Verify the description.'], description: 'A fictional program <img src=x onerror=alert(1)>.' } } : {
                 enabled: !options.assistanceDisabled, label: 'Fictional provider', tasks: options.tasks || ['description', ...(definition.description ? ['rewrite', 'expand'] : [])], revision: 'b'.repeat(64), saved_revision: 'a'.repeat(64),
-                draft: { kind: 'academic_program', code: definition.code, title: definition.title, description: definition.description, classifications: Object.fromEntries(Object.entries(definition.classifications).map(([kind, row]) => [kind, row ? { code: row.code, title: row.title } : null])) },
+                draft: { kind: 'academic_program', code: definition.code, title: definition.title, description: definition.description, classifications: Object.fromEntries(Object.entries(definition.classifications).map(([kind, row]) => [kind, Array.isArray(row) ? row.map(site => ({ code: site.code, title: site.title })) : row ? { code: row.code, title: row.title } : null])) },
             };
         } else if (path.startsWith('/sis/catalog/classifications/')) {
             result = { items: rows.filter(row => row.kind === path.split('/')[4] && `${row.code} ${row.title}`.toLowerCase().includes(data.search.toLowerCase())), next_after: null };
@@ -97,7 +103,7 @@ test('program details and classifications are edited together and explicitly rev
     const f = await fixture(page);
     await page.getByRole('textbox', { name: 'Program title', exact: true }).fill('Fictional Science');
     await page.getByRole('textbox', { name: 'Program description', exact: true }).fill('A fictional description <img src=x onerror=alert(1)>');
-    for (const [category, code] of [['department', 'SCI'], ['academic level', 'UG'], ['award', 'BA'], ['school/college', 'ARTS'], ['field of study', '11.0701'], ['campus/site', 'MAIN']]) {
+    for (const [category, code] of [['department', 'SCI'], ['academic level', 'UG'], ['award', 'BA'], ['school/college', 'ARTS'], ['field of study', '11.0701'], ['primary campus/site', 'MAIN']]) {
         await page.getByRole('button', { name: `Choose ${category}`, exact: true }).click();
         await page.getByRole('button', { name: `Choose ${code}`, exact: true }).click();
     }
@@ -371,9 +377,15 @@ test('catalog staff see institutional boundaries and retain rejected program pol
     expect(f.errors).toEqual([]);
 });
 
-test('program campus report template compares retained cohort and current setup without exposing markup', async ({ page }) => {
-    const calls = [], errors = [];
-    const fields = {
+for (const starter of ['Program campuses', 'Cohort program sites', 'Program offering sites']) test(`program sites report ${starter} uses authorized sources without exposing markup`, async ({ page }) => {
+    const calls = [], errors = [], current = starter === 'Program offering sites';
+    const fields = current ? {
+        program_code: ['Program code', 'string', 'program'],
+        program_title: ['Program title', 'string', 'program'],
+        primary_campus_title: ['Primary campus name', 'string', 'primary_campus'],
+        additional_campus_code: ['Additional campus code', 'string', 'additional_campus'],
+        additional_campus_title: ['Additional campus name', 'string', 'additional_campus'],
+    } : {
         institutional_id: ['Institutional ID', 'string', 'identity'],
         full_name: ['Student full name', 'string', 'person'],
         published_program_title: ['Published program title', 'string', 'catalog'],
@@ -381,15 +393,23 @@ test('program campus report template compares retained cohort and current setup 
         program_campus_title: ['Published program campus/site name', 'string', 'program_definition'],
         current_program_campus_title: ['Current program campus/site name', 'string', 'current_campus'],
         program_campus_recorded: ['Program campus/site recorded', 'boolean', 'program_definition'],
+        program_additional_campus_title: ['Published additional campus name', 'string', 'program_additional_site'],
+        program_additional_campuses_recorded: ['Additional program sites recorded', 'boolean', 'program_definition'],
     };
-    const dataset = { id: 'programs', label: 'Student programs & catalog cohorts', description: 'One row per program pursuit.',
+    const dataset = { id: current ? 'catalog_program_sites' : 'programs', label: current ? 'Program offering sites' : 'Student programs & catalog cohorts', description: 'One row per program offering affiliation.',
         fields: Object.fromEntries(Object.entries(fields).map(([key, [label, type, relation]]) => [key, { label, type, relation }])),
-        relationships: { student: { label: 'Student records', parent: 'assignment', many: false },
+        relationships: current ? {
+            details: { label: 'Current program details', parent: 'program', many: false },
+            primary_campus: { label: 'Primary campus', parent: 'details', many: false },
+            site: { label: 'Additional offering sites', parent: 'program', many: true },
+            additional_campus: { label: 'Additional campus definitions', parent: 'site', many: false },
+        } : { student: { label: 'Student records', parent: 'assignment', many: false },
             person: { label: 'Student names', parent: 'student', many: false },
             identity: { label: 'Institutional IDs', parent: 'person', many: false },
             catalog: { label: 'Assigned catalog', parent: 'assignment', many: false },
             year: { label: 'Academic year', parent: 'catalog', many: false },
             program_definition: { label: 'Published program details', parent: 'catalog', many: false },
+            program_additional_site: { label: 'Published additional offering sites', parent: 'program_definition', many: true },
             current_campus: { label: 'Current program campus/site', parent: 'assignment', many: false } } };
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
@@ -400,25 +420,31 @@ test('program campus report template compares retained cohort and current setup 
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/report-studio/catalog/') result = { datasets: [dataset] };
         else if (path === '/sis/report-studio/graph/') result = { dataset };
-        else if (path === '/sis/report-studio/preview/') result = { columns: data.definition.columns.map(c => c.label),
-            items: [{ c0: 'S-FICTIONAL', c1: 'Alex Example', c2: 'Fictional Computing', c3: '2024-2025',
-                c4: 'Original <b>Campus</b>', c5: 'Current Campus', c6: true }], next_offset: null, offset: 0, limit: 50, grouped: false };
+        else if (path === '/sis/report-studio/preview/') {
+            const values = { institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', published_program_title: 'Fictional Computing', catalog_year: '2024-2025',
+                program_campus_title: 'Original <b>Campus</b>', current_program_campus_title: 'Current Campus', program_campus_recorded: true,
+                program_additional_campus_title: 'Original East <b>Campus</b>', program_additional_campuses_recorded: true,
+                program_code: 'BSCS', program_title: 'Fictional Computing', primary_campus_title: 'Original <b>Campus</b>', additional_campus_code: 'EAST', additional_campus_title: 'Current East Campus' };
+            result = { columns: data.definition.columns.map(c => c.label), items: [Object.fromEntries(data.definition.columns.map((column, i) => [`c${i}`, values[column.field]]))],
+                next_offset: null, offset: 0, limit: 50, grouped: false };
+        }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto('/admin/');
     await page.locator('.workspace-nav-link[data-workspace="reports"]').click();
     await page.getByRole('button', { name: 'Open Report Studio', exact: true }).click();
     await page.getByText('Start from a template', { exact: true }).click();
-    await page.getByRole('button', { name: 'Program campuses', exact: true }).click();
+    await page.getByRole('button', { name: starter, exact: true }).click();
     await page.getByLabel('Report name', { exact: true }).fill('Fictional program campuses');
     await page.getByRole('button', { name: 'Preview', exact: true }).click();
     const results = page.getByRole('region', { name: 'Relational report results', exact: true });
-    await expect(results).toContainText('Original <b>Campus</b>');
-    await expect(results).toContainText('Current Campus');
+    await expect(results).toContainText(starter === 'Cohort program sites' ? 'Original East <b>Campus</b>' : 'Original <b>Campus</b>');
     await expect(results.locator('b')).toHaveCount(0);
     const definition = calls.find(c => c.path.endsWith('/preview/')).data.definition;
-    expect(definition.dataset).toBe('programs');
-    expect(definition.columns.map(c => c.field)).toEqual(Object.keys(fields));
+    expect(definition.dataset).toBe(dataset.id);
+    expect(definition.columns.map(c => c.field)).toEqual(current ? Object.keys(fields) : starter === 'Program campuses' ? Object.keys(fields).slice(0,7) : [
+        'institutional_id', 'full_name', 'published_program_title', 'catalog_year', 'program_campus_title', 'program_additional_campus_title', 'program_additional_campuses_recorded',
+    ]);
     await accessible(page);
     expect(calls.filter(c => c.data).every(c => c.csrf === 'fictional-test-token')).toBe(true);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
@@ -435,7 +461,7 @@ test('a delayed campus chooser cannot replace a later program draft', async ({ p
         await gate;
         await route.fulfill({ json: { items: [{ id: id(9), kind: 'campus', code: 'OLD', title: 'Delayed Campus', active: true }], next_after: null } });
     });
-    await page.getByRole('button', { name: 'Choose campus/site', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose primary campus/site', exact: true }).click();
     await started;
     await page.getByRole('button', { name: 'Close record', exact: true }).click();
     await expect(page.locator('#record-drawer')).not.toBeVisible();
@@ -446,5 +472,57 @@ test('a delayed campus chooser cannot replace a later program draft', async ({ p
     await page.waitForResponse(response => response.url().includes('/classifications/campus/page/'));
     await expect(page.getByRole('textbox', { name: 'Program title', exact: true })).toHaveValue('Keep this unfinished draft');
     await expect(page.locator('#drawer-body')).not.toContainText('Delayed Campus');
+    expect(f.errors).toEqual([]);
+});
+
+test('program offering sites preserve draft text, reject duplicates and allow a site to become primary', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('textbox', { name: 'Program description', exact: true }).fill('A private unsaved program description.');
+    for (const code of ['EAST', 'WEST']) {
+        await page.getByRole('button', { name: 'Add offering site', exact: true }).click();
+        await page.getByRole('button', { name: `Choose ${code}`, exact: true }).click();
+    }
+    await expect(page.getByRole('textbox', { name: 'Program description', exact: true })).toHaveValue('A private unsaved program description.');
+    const sites = page.getByRole('region', { name: 'Additional offering sites', exact: true });
+    await expect(sites.getByRole('button', { name: /^Remove offering site/ })).toHaveCount(2);
+    await page.getByRole('button', { name: 'Add offering site', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose EAST', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'This campus is already included.' })).toBeVisible();
+    await expect(sites.getByRole('button', { name: /^Remove offering site/ })).toHaveCount(2);
+    await page.getByRole('button', { name: 'Choose primary campus/site', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose WEST', exact: true }).click();
+    await expect(sites.getByRole('button', { name: /^Remove offering site/ })).toHaveCount(1);
+    await expect(sites).toContainText('Fictional East <img src=x onerror=alert(1)>');
+    await expect(sites.locator('img')).toHaveCount(0);
+    await accessible(page);
+    await page.getByRole('button', { name: 'Save program details', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Program details saved.' })).toBeVisible();
+    expect(f.calls.find(call => call.path.endsWith('/details/')).data).toMatchObject({ campus_id: id(11), additional_campus_ids: [id(10)] });
+    expect(f.errors).toEqual([]);
+});
+
+test('program offering sites are explicitly published and later draft removal preserves the frozen history', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('button', { name: 'Add offering site', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose EAST', exact: true }).click();
+    await page.getByRole('button', { name: 'Save program details', exact: true }).click();
+    await page.getByRole('button', { name: 'Publish for an academic year', exact: true }).click();
+    await page.getByLabel('Reason for program publication', { exact: true }).fill('Fictional location review.');
+    await page.getByRole('button', { name: 'Choose academic year', exact: true }).click();
+    await page.getByRole('button', { name: 'Use academic year 2024-2025', exact: true }).click();
+    await page.getByRole('button', { name: 'Review program publication', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional East <img src=x onerror=alert(1)>');
+    await page.getByRole('button', { name: 'Confirm program publication', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Catalog revision 1 published.' })).toBeVisible();
+    await page.getByRole('button', { name: 'Back to program details', exact: true }).click();
+    await page.getByRole('button', { name: 'Remove offering site EAST', exact: true }).click();
+    await page.getByRole('button', { name: 'Save program details', exact: true }).click();
+    await page.getByRole('button', { name: 'Published program details', exact: true }).click();
+    await page.getByText('2024-2025 · Revision 1 · Computer Science', { exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional East <img src=x onerror=alert(1)>');
+    await expect(page.locator('#drawer-body img')).toHaveCount(0);
+    expect(f.calls.filter(call => call.path.endsWith('/details/')).map(call => call.data.additional_campus_ids)).toEqual([[id(10)], []]);
+    expect(f.calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });

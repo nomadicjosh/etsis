@@ -168,6 +168,8 @@ Download the [connector 0.6.0-alpha ZIP](dist/moodle/local_etsis-0.6.0-alpha.zip
 
 [Booking updates](docs/booking-updates.md) give requesters a private place to review approvals, cancellations and rescheduled meetings. Read tracking keeps newer changes visible without changing the booking revision or sending email.
 
+[Multi-site programs](docs/program-publication.md#additional-offering-sites) now support an optional primary campus and additional offering sites in one editor. Academic-year publications preserve the reviewed locations for existing cohorts; separate current and cohort report templates keep their meanings clear.
+
 [Calendar reporting](docs/workflow-review.md#calendar-period-reports) now groups approved dates by day, month or year in the existing column settings, with monthly admissions, meeting and payment starters. Saved reports and exports retain those choices; missing dates stay unknown and financial totals remain currency-separated.
 
 [Reviewed catalog imports](docs/catalog-imports.md) now share one field-mapping and reconciliation workflow for catalog reference lists, courses and academic programs. Import subjects, departments, levels and other reference lists first, then resolve their codes in course/program imports. Explicit links, exclusions, optional references and guarded retries preserve existing publications and student cohorts. New courses remain inactive drafts; programs return to the normal editor for deliberate academic-year publication.

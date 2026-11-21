@@ -252,6 +252,19 @@ window.createWorkspaceReportStudio = function (ui) {
                 node("p", { class: "form-text" }, "Compare the campus retained for each student's program cohort with today's program setup. Each row is a program pursuit. Earlier unknown locations stay distinct from an explicit blank."),
             );
         }
+        const catalogSites = catalog.datasets.find(dataset => dataset.id === "catalog_program_sites");
+        if (catalogSites) templateGrid.append(button("Program offering sites", () => edit(catalogSites, {
+            ...initial(catalogSites), columns: ["program_code", "program_title", "primary_campus_title", "additional_campus_code", "additional_campus_title"]
+                .map(field => ({ field, label: catalogSites.fields[field].label, aggregate: "none" })),
+        })));
+        if (programLocations?.fields.program_additional_campus_title) templateGrid.append(
+            button("Cohort program sites", () => edit(programLocations, {
+                ...initial(programLocations), columns: ["institutional_id", "full_name", "published_program_title", "catalog_year",
+                    "program_campus_title", "program_additional_campus_title", "program_additional_campuses_recorded"]
+                    .map(field => ({ field, label: programLocations.fields[field].label, aggregate: "none" })),
+            })),
+            node("p", { class: "form-text" }, "Additional-site reports add one row per program pursuit and published offering site. Count distinct students or pursuits when summarizing. These are program affiliations, not a student's personal attendance location; earlier unknown site lists remain unknown."),
+        );
         const meetings = catalog.datasets.find(dataset => dataset.id === "meetings");
         const rooms = catalog.datasets.find(dataset => dataset.id === "rooms");
         const approvedMeetings = { condition: "AND", rules: [
@@ -494,6 +507,7 @@ window.createWorkspaceReportStudio = function (ui) {
             applications: ["institutional_id", "full_name", "program_code", "entry_term", "status", "submitted_on"],
             students: ["institutional_id", "full_name", "program_code", "entry_term"],
             programs: ["institutional_id", "full_name", "program_code", "catalog_year"],
+            catalog_program_sites: ["program_code", "program_title", "primary_campus_title", "additional_campus_title"],
             credits: ["full_name", "course_code", "course_title", "grade_code"],
             sections: ["section_code", "course_title", "term_code", "capacity"],
         };

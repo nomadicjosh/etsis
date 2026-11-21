@@ -4467,6 +4467,7 @@ if (
         "school_id" => null,
         "field_of_study_id" => null,
         "campus_id" => null,
+        "additional_campus_ids" => [],
         "award_id" => $programAward["id"],
         "revision" => $programDraft["revision"],
     ])->getStatusCode() !== 200

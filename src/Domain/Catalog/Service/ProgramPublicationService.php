@@ -63,7 +63,8 @@ final readonly class ProgramPublicationService
         return ["id" => $program->value, "definition" => $definition, "revision" => $this->hash($definition)];
     }
 
-    /** @return array<string, mixed> */
+    /** @param list<EntityId> $additionalCampuses
+     * @return array<string, mixed> */
     public function save(
         EntityId $program,
         string $code,
@@ -76,21 +77,53 @@ final readonly class ProgramPublicationService
         ?EntityId $school = null,
         ?EntityId $fieldOfStudy = null,
         ?EntityId $campus = null,
+        array $additionalCampuses = [],
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
-        $choices = ["department" => $department, "academic_level" => $academicLevel, "award" => $award,
-            "school" => $school, "field_of_study" => $fieldOfStudy, "campus" => $campus];
+        if (
+            !array_is_list($additionalCampuses) ||
+            count($additionalCampuses) > 20 ||
+            array_any($additionalCampuses, static fn(mixed $site): bool => !($site instanceof EntityId))
+        ) {
+            throw new ValidationException([
+                [
+                    "field" => "additional_campus_ids",
+                    "message" => "Choose up to twenty additional program campuses.",
+                ],
+            ]);
+        }
+        $siteIds = array_map(static fn(EntityId $id): string => $id->value, $additionalCampuses);
+        if (
+            count(array_unique($siteIds)) !== count($siteIds) ||
+            ($campus !== null && in_array($campus->value, $siteIds, true))
+        ) {
+            throw new ValidationException([
+                [
+                    "field" => "additional_campus_ids",
+                    "message" => "Choose distinct additional campuses, separate from the primary campus.",
+                ],
+            ]);
+        }
+        $choices = [
+            "department" => $department,
+            "academic_level" => $academicLevel,
+            "award" => $award,
+            "school" => $school,
+            "field_of_study" => $fieldOfStudy,
+            "campus" => $campus,
+        ];
         return $this->transactions->run(function () use (
             $program,
             $code,
             $title,
             $description,
             $choices,
+            $additionalCampuses,
             $revision,
             $actor,
         ): array {
             $this->catalog->lock("programs", $program);
-            $this->lockChoices($program, array_values(array_filter($choices)));
+            $this->lockChoices($program, [...array_values(array_filter($choices)), ...$additionalCampuses]);
             $this->authorize($actor);
             $old = $this->definition($program)->describe();
             if (!hash_equals($this->hash($old), $revision)) {
@@ -114,6 +147,23 @@ final readonly class ProgramPublicationService
                 $values[$kind] =
                     $row === null ? null : array_intersect_key($row, array_flip(["id", "code", "title"]));
             }
+            $values["additional_campuses"] = [];
+            $previousSites = array_column($old["classifications"]["additional_campuses"], null, "id");
+            foreach ($additionalCampuses as $site) {
+                $row = $this->classifications->get($site);
+                if ($row["kind"] !== "campus" || (!$row["active"] && !isset($previousSites[$site->value]))) {
+                    throw new ValidationException([
+                        [
+                            "field" => "additional_campus_ids",
+                            "message" => "Choose active additional campuses from the campus library.",
+                        ],
+                    ]);
+                }
+                $values["additional_campuses"][] = array_intersect_key(
+                    $row,
+                    array_flip(["id", "code", "title"]),
+                );
+            }
             $definition = new ProgramDefinition(
                 strtoupper(trim($code)),
                 trim($title),
@@ -124,10 +174,38 @@ final readonly class ProgramPublicationService
                 "code" => $definition->code,
                 "title" => $definition->title,
             ]);
-            $this->details->saveDraft($program, $definition->description, $choices);
+            $this->details->saveDraft($program, $definition->description, $choices, $additionalCampuses);
             $this->audit->record($actor, "program.details_saved", $program);
             $this->authorize($actor);
-            return $this->draft($program);
+            foreach ($choices as $kind => $id) {
+                if ($id === null) {
+                    continue;
+                }
+                $row = $this->classifications->get($id);
+                if (
+                    $row["kind"] !== $kind ||
+                    (!$row["active"] && ($old["classifications"][$kind]["id"] ?? null) !== $id->value)
+                ) {
+                    throw new ConcurrentModificationException(
+                        "A program reference changed while saving. Reload the draft.",
+                    );
+                }
+            }
+            foreach ($additionalCampuses as $site) {
+                $row = $this->classifications->get($site);
+                if ($row["kind"] !== "campus" || (!$row["active"] && !isset($previousSites[$site->value]))) {
+                    throw new ConcurrentModificationException(
+                        "An offering site changed while saving. Reload the draft.",
+                    );
+                }
+            }
+            $saved = $this->draft($program);
+            if ($this->hash($saved["definition"]) !== $this->hash($definition->describe())) {
+                throw new ConcurrentModificationException(
+                    "Program locations changed while saving. Reload the draft.",
+                );
+            }
+            return $saved;
         });
     }
 
@@ -163,7 +241,7 @@ final readonly class ProgramPublicationService
                 "catalog_revision" => $this->cohorts->nextRevision($program, $year),
                 "previous_catalog_id" => $this->details->current($program, $year)["id"] ?? null,
                 "definition" => $definition,
-                'specializations' => $this->specializations->snapshot($program)->data,
+                "specializations" => $this->specializations->snapshot($program)->data,
                 "reason" => $reason,
                 "expires_at" => $this->clock->now()->getTimestamp() + 1200,
             ];
@@ -245,7 +323,7 @@ final readonly class ProgramPublicationService
                 $root->versionId() !== $payload["previous_version_id"] ||
                 $this->definition($program)->describe() !== $payload["definition"] ||
                 $this->hash($this->specializations->snapshot($program)->data) !==
-                    $this->hash($payload['specializations']) ||
+                    $this->hash($payload["specializations"]) ||
                 $this->year($year)["code"] !== $payload["academic_year_code"] ||
                 $this->cohorts->nextRevision($program, $year) !== $payload["catalog_revision"] ||
                 ($this->details->current($program, $year)["id"] ?? null) !== $payload["previous_catalog_id"]
@@ -282,7 +360,7 @@ final readonly class ProgramPublicationService
                 $payload["academic_year_code"],
                 $receipt["last_version"],
                 $definition,
-                new \Domain\Catalog\ValueObject\ProgramSpecializationSnapshot($payload['specializations']),
+                new \Domain\Catalog\ValueObject\ProgramSpecializationSnapshot($payload["specializations"]),
             );
             $this->cohorts->publishRelease($operation, $program);
             $this->audit->record($actor, "program.definition_published", $program);
@@ -291,11 +369,11 @@ final readonly class ProgramPublicationService
                 $review["expires_at"] <= $this->clock->now()->getTimestamp() ||
                 $this->definition($program)->describe() !== $payload["definition"] ||
                 $this->hash($this->specializations->snapshot($program)->data) !==
-                    $this->hash($payload['specializations']) ||
+                    $this->hash($payload["specializations"]) ||
                 $this->year($year)["code"] !== $payload["academic_year_code"]
             ) {
                 throw new ConcurrentModificationException(
-                    'Program details changed during publication. Review them again.',
+                    "Program details changed during publication. Review them again.",
                 );
             }
             $head = $this->history->latest($this->stream($program));
@@ -384,7 +462,7 @@ final readonly class ProgramPublicationService
             "catalog_revision" => $payload["catalog_revision"],
             "stream_version" => $latest->event->playhead(),
             "definition" => $payload["definition"],
-            'specializations' => $payload['specializations'],
+            "specializations" => $payload["specializations"],
         ];
         if (
             $retained === null ||
@@ -399,7 +477,10 @@ final readonly class ProgramPublicationService
     private function lockChoices(EntityId $program, array $additional = []): void
     {
         $draft = $this->details->draft($program);
-        $ids = array_map(static fn(EntityId $id): string => $id->value, $additional);
+        $ids = [
+            ...array_map(static fn(EntityId $id): string => $id->value, $additional),
+            ...$draft["additional_campus_ids"],
+        ];
         foreach (ClassificationKind::programKinds() as $kind) {
             if ($draft[$kind->value . "_id"] !== null) {
                 $ids[] = $draft[$kind->value . "_id"];
@@ -425,6 +506,17 @@ final readonly class ProgramPublicationService
             }
             $choices[$kind->value] =
             $row === null ? null : array_intersect_key($row, array_flip(["id", "code", "title"]));
+        }
+        $choices["additional_campuses"] = [];
+        foreach ($draft["additional_campus_ids"] as $id) {
+            $row = $this->classifications->get(new EntityId($id));
+            if ($row["kind"] !== "campus") {
+                throw new CorruptHistoryException();
+            }
+            $choices["additional_campuses"][] = array_intersect_key(
+                $row,
+                array_flip(["id", "code", "title"]),
+            );
         }
         return ProgramDefinition::fromArray([
             "code" => $core["code"],
@@ -455,7 +547,7 @@ final readonly class ProgramPublicationService
             "catalog_revision",
             "previous_catalog_id",
             "definition",
-            'specializations',
+            "specializations",
         ];
         foreach ($fields as $field) {
             if (!array_key_exists($field, $review)) {
@@ -470,7 +562,7 @@ final readonly class ProgramPublicationService
             "catalog_revision" => $review["catalog_revision"],
             "previous_catalog_id" => $review["previous_catalog_id"],
             "definition" => $review["definition"],
-            'specializations' => $review['specializations'],
+            "specializations" => $review["specializations"],
         ];
     }
 
