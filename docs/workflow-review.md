@@ -720,7 +720,7 @@ The [co-requisite workflow](registration-history.md#co-requisites-and-linked-dro
 
 ## Shared catalog import and program setup
 
-[Catalog imports](catalog-imports.md) now offer courses and programs in one destination-aware mapping/review screen. Program descriptions and reference codes use the ordinary program model and existing catalog libraries, avoiding a second importer-specific editor. Staff resolve dependencies in place, approve identity links explicitly, confirm the bounded batch once and return to ordinary catalog review/publication. Imports never overwrite an existing definition or reinterpret an earlier student cohort. Other entity imports and larger background conversion remain open.
+[Catalog imports](catalog-imports.md) now offer catalog reference lists, courses and programs in one destination-aware mapping/review screen. Import subjects, departments, levels and other reference libraries first; their active codes are immediately available to dependent course/program imports. Explicit links and source identities are scoped per destination, and retired references require a separate catalog decision. Program descriptions and reference codes use the ordinary program model and existing catalog libraries, avoiding a second importer-specific editor. Staff resolve dependencies in place, approve identity links explicitly, confirm the bounded batch once and return to ordinary catalog review/publication. Imports never overwrite an existing definition or reinterpret an earlier student cohort. Other entity imports and larger background conversion remain open.
 
 ## Registrar prerequisite exceptions
 

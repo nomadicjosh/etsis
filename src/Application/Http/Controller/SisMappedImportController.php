@@ -62,7 +62,8 @@ final readonly class SisMappedImportController
             !is_string($data["source"] ?? null) ||
             !is_string($data["csv"] ?? null) ||
             !is_array($data["mapping"] ?? null) ||
-            (array_key_exists("target", $data) && !in_array($data["target"], ["course", "program"], true)) ||
+            (array_key_exists("target", $data) &&
+                (!is_string($data["target"]) || CatalogImportTarget::tryFrom($data["target"]) === null)) ||
             (isset($data["delimiter"]) && !is_string($data["delimiter"])) ||
             (isset($data["choices"]) && (!is_array($data["choices"]) || !array_is_list($data["choices"])))
         ) {

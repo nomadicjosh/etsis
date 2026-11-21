@@ -6,6 +6,7 @@ namespace Domain\Import\ValueObject;
 
 use Domain\Catalog\Course;
 use Domain\Catalog\ValueObject\ProgramDefinition;
+use Domain\Catalog\ValueObject\ClassificationSnapshot;
 use Domain\Import\Enum\CatalogImportTarget;
 use Domain\Shared\ValueObject\EntityId;
 use InvalidArgumentException;
@@ -59,6 +60,17 @@ final readonly class CatalogImportRow
                 throw new InvalidArgumentException("Course imports require credits without program fields.");
             }
             $this->draft();
+        } elseif ($target->isReference()) {
+            if ($creditsMilli !== null || $description !== null || $descriptionMapped) {
+                throw new InvalidArgumentException(
+                    "Reference imports require only source ID, code and name.",
+                );
+            }
+            new ClassificationSnapshot(
+                EntityId::generate(),
+                $this->code,
+                $this->title,
+            );
         } else {
             if ($creditsMilli !== null || (!$descriptionMapped && $description !== null)) {
                 throw new InvalidArgumentException("Program imports have no course credits.");
@@ -77,6 +89,12 @@ final readonly class CatalogImportRow
 
     public function fingerprint(): string
     {
+        if ($this->target->isReference()) {
+            return hash(
+                "sha256",
+                json_encode([$this->target->value, $this->code, $this->title], JSON_THROW_ON_ERROR),
+            );
+        }
         $facts =
         $this->target === CatalogImportTarget::Course
         ? [$this->code, $this->title, $this->creditsMilli]

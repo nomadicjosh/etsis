@@ -103,7 +103,7 @@ final readonly class LeagueCatalogCsvMapper implements CatalogCsvMapper
             try {
                 $external = trim($row[$mapping["external_id"]] ?? "");
                 $code = trim($row[$mapping["code"]] ?? "");
-                if ($target === CatalogImportTarget::Program) {
+                if ($target !== CatalogImportTarget::Course) {
                     $code = strtoupper($code);
                 }
                 $title = trim($row[$mapping["title"]] ?? "");
@@ -154,7 +154,9 @@ final readonly class LeagueCatalogCsvMapper implements CatalogCsvMapper
                         " code and title. " .
                         ($target === CatalogImportTarget::Course
                             ? "Use numeric credits with up to three decimal places. "
-                            : "Use a plain-text description of up to 10000 characters. ") .
+                            : ($target === CatalogImportTarget::Program
+                                ? "Use a plain-text description of up to 10000 characters. "
+                                : "Use a code up to 40 characters and a name up to 191 characters. ")) .
                         "Use classification codes of up to 40 characters.",
                 ];
             }

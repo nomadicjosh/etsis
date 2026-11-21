@@ -73,6 +73,36 @@ foreach (["arbitrary_table", null] as $invalidTarget) {
         throw new RuntimeException("The browser supplied an invalid catalog destination.");
     }
 }
+// Reference setup shares the same private, CSRF-protected coordinator and is immediately usable.
+$referenceDestinations = [
+    "subject", "department", "academic_level", "course_level", "award",
+    "instructional_method", "campus", "school", "field_of_study",
+];
+foreach ($referenceDestinations as $destination) {
+    $referenceRequest = [
+        "target" => $destination,
+        "source" => "fictional-references",
+        "csv" => "ID,Code,Title\nref,REF.NEW,Fictional Reference\n",
+        "mapping" => ["external_id" => 0, "code" => 1, "title" => 2],
+    ];
+    $referenceResponse = $teachingPost("/sis/imports/preview/", $referenceRequest);
+    $referenceReview = json_decode((string) $referenceResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if (
+        $referenceResponse->getStatusCode() !== 200 ||
+        !$referenceReview["ready"] ||
+        !str_contains($referenceResponse->getHeaderLine("Cache-Control"), "no-store") ||
+        $referenceResponse->hasHeader("phpdebugbar-id")
+    ) {
+        throw new RuntimeException("The shared reference import lost routing or privacy protection.");
+    }
+    $referenceResponse = $teachingPost(
+        "/sis/imports/commit/",
+        $referenceRequest + ["review_token" => $referenceReview["review_token"]],
+    );
+    if ($referenceResponse->getStatusCode() !== 200 || $sis->sql->rows("sis_history_events") !== $before) {
+        throw new RuntimeException("The reference import failed or changed authoritative history.");
+    }
+}
 $sis->access->staff = false;
 $sis->access->grants = ["sis:import:manage"];
 if (

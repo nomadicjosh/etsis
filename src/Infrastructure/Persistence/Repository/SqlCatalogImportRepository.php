@@ -6,6 +6,7 @@ namespace Infrastructure\Persistence\Repository;
 
 use Domain\Catalog\Enum\ClassificationKind;
 use Domain\Catalog\ValueObject\CourseClassifications;
+use Domain\Catalog\ValueObject\ClassificationSnapshot;
 use Domain\Catalog\ValueObject\SubjectSnapshot;
 use Domain\Import\Repository\CatalogImportRepository;
 use Domain\Import\ValueObject\CatalogImportRow;
@@ -23,12 +24,22 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
 
     private function table(CatalogImportTarget $target): string
     {
-        return $target === CatalogImportTarget::Course ? 'sis_courses' : 'sis_programs';
+        return match ($target) {
+            CatalogImportTarget::Course => "sis_courses",
+            CatalogImportTarget::Program => "sis_programs",
+            CatalogImportTarget::Subject => "sis_subjects",
+            default => "sis_catalog_classifications",
+        };
     }
 
     private function mappingTable(CatalogImportTarget $target): string
     {
-        return $target === CatalogImportTarget::Course ? 'sis_import_mappings' : 'sis_program_import_mappings';
+        return match ($target) {
+            CatalogImportTarget::Course => "sis_import_mappings",
+            CatalogImportTarget::Program => "sis_program_import_mappings",
+            CatalogImportTarget::Subject => "sis_subject_import_mappings",
+            default => "sis_class_import_mappings",
+        };
     }
 
     public function inspect(string $source, array $rows): array
@@ -52,8 +63,9 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
                     $q("external_id") .
                     ") IN (" .
                     implode(",", array_fill(0, count($ids), "?")) .
-                    ")",
-                [$source, ...$ids],
+                    ")" .
+                    ($target->classification() !== null ? " AND " . $q("kind") . " = ?" : ""),
+                [$source, ...$ids, ...$target->classification() !== null ? [$target->value] : []],
                 count($ids) * 2 + 1,
             );
             if (count($found) > count($ids) * 2) {
@@ -117,6 +129,8 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
                 $q("id") .
                 " = c." .
                 $q("id");
+            } elseif ($target->isReference()) {
+                $select = "SELECT c.* FROM " . $q($this->table($target)) . " c";
             } else {
                 $columns = ["c." . $q("id"), "c." . $q("code"), "c." . $q("title"), "d." . $q("description")];
                 foreach (array_keys($target->references()) as $kind) {
@@ -140,8 +154,9 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
                     $q("code") .
                     ") IN (" .
                     implode(",", array_fill(0, count($chunk), "?")) .
-                    ")",
-                $chunk,
+                    ")" .
+                    ($target->classification() !== null ? " AND c." . $q("kind") . " = ?" : ""),
+                [...$chunk, ...$target->classification() !== null ? [$target->value] : []],
                 $limit + 1,
             );
             if (count($found) > $limit) {
@@ -178,9 +193,12 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
                     "A matched catalog record was removed. Review the import again.",
                 );
             }
+            if ($target->classification() !== null && ($row["kind"] ?? null) !== $target->value) {
+                throw new ConcurrentModificationException("The reference category changed. Review again.");
+            }
             $record = array_intersect_key(
                 $row,
-                array_flip(["id", "code", "title", "credits_milli", "active"]),
+                array_flip(["id", "code", "title", "credits_milli", "active", "kind"]),
             );
             if ($target === CatalogImportTarget::Program) {
                 $details = $this->sql->current("sis_program_details", $id);
@@ -188,7 +206,7 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
                 foreach (array_keys($target->references()) as $kind) {
                     $record[$kind . "_id"] = $details[$kind . "_id"] ?? null;
                 }
-            } elseif ($withReferences) {
+            } elseif ($target === CatalogImportTarget::Course && $withReferences) {
                 $subject = $this->sql->current("sis_course_subjects", $id);
                 $classes = $this->sql->current("sis_course_classifications", $id);
                 $record["subject_id"] = $subject["subject_id"] ?? null;
@@ -300,6 +318,26 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
                 "Every requested classification requires a reviewed reference.",
             );
         }
+        if ($row->target->isReference()) {
+            $id = EntityId::generate();
+            $value = new ClassificationSnapshot($id, $row->code, $row->title);
+            if ($row->target === CatalogImportTarget::Subject) {
+                new SqlSubjectRepository($this->sql)->save(
+                    new SubjectSnapshot($id, $value->code, $value->title),
+                    true,
+                    true,
+                );
+            } else {
+                new SqlClassificationRepository($this->sql)->save(
+                    $row->target->classification(),
+                    $value,
+                    true,
+                    true,
+                );
+            }
+            $this->link($source, $row, $id);
+            return $id;
+        }
         if ($row->target === CatalogImportTarget::Program) {
             $id = EntityId::generate();
             $this->sql->insert("sis_programs", [
@@ -310,7 +348,7 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
             $choices = [];
             foreach (array_keys($row->target->references()) as $kind) {
                 $choices[$kind] = isset($references[$kind])
-                ? \Domain\Catalog\ValueObject\ClassificationSnapshot::fromArray($references[$kind])->id
+                ? ClassificationSnapshot::fromArray($references[$kind])->id
                 : null;
             }
             new SqlProgramDefinitionRepository($this->sql)->saveDraft($id, $row->description, $choices);
@@ -347,12 +385,15 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
 
     public function link(string $source, CatalogImportRow $row, EntityId $course): void
     {
-        $this->sql->insert($this->mappingTable($row->target), [
-            "id" => EntityId::generate()->value,
-            "source" => $source,
-            "external_id" => $row->externalId,
-            "content_hash" => $row->fingerprint(),
-            $row->target->idField() => $course->value,
-        ]);
+        $this->sql->insert(
+            $this->mappingTable($row->target),
+            [
+                "id" => EntityId::generate()->value,
+                "source" => $source,
+                "external_id" => $row->externalId,
+                "content_hash" => $row->fingerprint(),
+                $row->target->idField() => $course->value,
+            ] + ($row->target->classification() !== null ? ["kind" => $row->target->value] : []),
+        );
     }
 }

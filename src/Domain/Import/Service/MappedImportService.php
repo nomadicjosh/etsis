@@ -299,6 +299,15 @@ final readonly class MappedImportService
                     "The imported program description changed before completion.",
                 );
             }
+            if (
+                $target->isReference() &&
+                (!(bool) $record["active"] ||
+                    ($target->classification() !== null && ($record["kind"] ?? null) !== $target->value))
+            ) {
+                throw new ConcurrentModificationException(
+                    "The imported reference changed before completion.",
+                );
+            }
             $referenceKinds = $action["action"] === "create" ? $target->references() : $row->references;
             foreach (array_keys($referenceKinds) as $kind) {
                 if (($record[$kind . "_id"] ?? null) !== ($action["references"][$kind]["id"] ?? null)) {
@@ -325,6 +334,7 @@ final readonly class MappedImportService
         foreach ($rows as $row) {
             $target = $row->target;
             $idField = $target->idField();
+            $label = str_replace("_", " ", $target->value);
             $key = "external:" . $row->externalId;
             $choice = $choices[$key] ?? null;
             $mapping = $snapshot["mappings"]["external:" . strtolower($row->externalId)] ?? null;
@@ -340,7 +350,10 @@ final readonly class MappedImportService
             ($target === CatalogImportTarget::Course
             ? (int) $record["credits_milli"] === $row->creditsMilli
             : !$row->descriptionMapped || ($record["description"] ?? null) === $row->description);
-            $same = $sameCore && $resolved["errors"] === [];
+            $same =
+            $sameCore &&
+            $resolved["errors"] === [] &&
+            (!$target->isReference() || (bool) $record["active"]);
             foreach ($resolved["references"] as $kind => $reference) {
                 $same = $same && ($record[$kind . "_id"] ?? null) === $reference["id"];
             }
@@ -362,9 +375,9 @@ final readonly class MappedImportService
                 $recordId = $mapping[$idField];
                 $message =
                 $action === "skip"
-                ? "Previously imported; the existing " . $target->value . " is left unchanged."
+                ? "Previously imported; the existing " . $label . " is left unchanged."
                 : "This source ID already identifies different " .
-                $target->value .
+                $label .
                 " data. Leave it out or correct the source file.";
                 if ($choice !== null) {
                     $action = "conflict";
@@ -374,7 +387,7 @@ final readonly class MappedImportService
                 $action = "conflict";
                 $message =
                 "Several catalog " .
-                $target->value .
+                $label .
                 "s use this code. Resolve the ambiguity before linking.";
             } elseif ($record !== null) {
                 $recordId = $record["id"];
@@ -385,21 +398,30 @@ final readonly class MappedImportService
                             "credits_milli" => (int) $record["credits_milli"],
                             "active" => (bool) $record["active"],
                         ]
-                : ["description" => $record["description"] ?? null]);
+                : ($target->isReference()
+                            ? ["active" => (bool) $record["active"]]
+                            : ["description" => $record["description"] ?? null]));
                 $action = $same ? ($choice === null ? "match" : "link") : "conflict";
-                $message = $same
-                ? "An existing " .
-                $target->value .
-                " matches. Approve linking its source ID, or leave this row out."
-                : ($sameCore
-                        ? "The existing " .
-                            $target->value .
-                            " has different classifications. Use the catalog editor or leave it out."
-                        : ($target === CatalogImportTarget::Course
-                            ? "This code already has a different title or credits. " .
-                        "Existing details will not be overwritten."
-                            : "This code already has a different title or mapped description. " .
-                        "Existing details will not be overwritten."));
+                $message =
+                $target->isReference() && !(bool) $record["active"]
+                ? "This reference is retired. Review it in catalog setup or leave this row out. " .
+                "Imports never reactivate references."
+                : ($same
+                            ? "An existing " .
+                                $label .
+                                " matches. Approve linking its source ID, or leave this row out."
+                            : ($sameCore
+                                ? "The existing " .
+                                    $label .
+                                    " has different classifications. Use the catalog editor or leave it out."
+                                : ($target === CatalogImportTarget::Course
+                                    ? "This code already has a different title or credits. " .
+                                        "Existing details will not be overwritten."
+                                    : ($target->isReference()
+                                        ? "This code already has a different name. " .
+                                            "Existing entries will not be overwritten."
+                                        : "This code already has a different title or mapped description. " .
+                                            "Existing details will not be overwritten."))));
                 if (
                     $choice !== null &&
                     ($choice["action"] !== "link" || $choice[$idField] !== $recordId || !$same)
@@ -412,7 +434,7 @@ final readonly class MappedImportService
                 $action = "conflict";
                 $message =
                 "The selected " .
-                $target->value .
+                $label .
                 " no longer matches. Remove the link choice and review again.";
             } elseif (isset($newCodes[mb_strtolower($row->code)])) {
                 $action = "conflict";
@@ -423,7 +445,9 @@ final readonly class MappedImportService
                 $message =
                 $target === CatalogImportTarget::Course
                 ? "Create an inactive course draft; publication and activation remain separate."
-                : "Create a working program definition; academic-year publication remains separate.";
+                : ($target->isReference()
+                            ? "Create an active catalog reference; existing publications remain unchanged."
+                            : "Create a working program definition; academic-year publication remains separate.");
             }
             if ($resolved["errors"] !== []) {
                 $action = "conflict";

@@ -4,29 +4,53 @@ window.createWorkspaceImports = function (ui) {
     const { node, table, request, notify, number, task, can, subjects, classifications, recordSummary } = ui;
     const one = (selector) => document.querySelector(selector);
     const all = (selector) => [...document.querySelectorAll(selector)];
-    const program = () => one("#import-target").value === "program";
-    const idField = () => (program() ? "program_id" : "course_id");
-    const requiredFields = () =>
-        program() ? ["external_id", "code", "title"] : ["external_id", "code", "title", "credits"];
+    const target = () => one("#import-target").value;
+    const program = () => target() === "program";
+    const course = () => target() === "course";
+    const reference = () => !program() && !course();
+    const referenceNames = {
+        subject: ["Subject", "Subjects"],
+        department: ["Department", "Departments"],
+        academic_level: ["Academic level", "Academic levels"],
+        course_level: ["Course level", "Course levels"],
+        award: ["Award", "Degrees & awards"],
+        instructional_method: ["Instructional method", "Instructional methods"],
+        campus: ["Campus/site", "Campuses & sites"],
+        school: ["School/college", "Schools & colleges"],
+        field_of_study: ["Field of study", "Fields of study"],
+    };
+    const name = () => (program() ? "Program" : course() ? "Course" : referenceNames[target()][0]);
+    const plural = () =>
+        program() ? "programs" : course() ? "courses" : referenceNames[target()][1].toLowerCase();
+    const idField = () => (reference() && target() !== "subject" ? "classification_id" : `${target()}_id`);
+    const requiredFields = () => ["external_id", "code", "title", ...(course() ? ["credits"] : [])];
     function destination() {
-        const isProgram = program(),
-            plural = isProgram ? "programs" : "courses";
-        one("#import-sample").href = `/assets/examples/${plural}.csv`;
+        one("#import-sample").href = `/assets/examples/${reference() ? "catalog-references" : plural()}.csv`;
         one("#import-description").textContent =
-            `Start with a ${isProgram ? "program" : "course"} catalog CSV. UTF-8, up to 1 MB and 1,000 rows.`;
-        one("#import-boundary").textContent = isProgram
-            ? "Create working program definitions or explicitly link matching existing programs. Imports do not publish an academic year, replace student cohorts or assign application forms. Existing program details and publications are preserved."
-            : "New courses are inactive drafts. Approve matching course links explicitly, or leave rows out. Existing courses and historical publications are preserved.";
-        one("#import-commit-label").textContent = `Import ${plural}`;
-        one("#import-reference-subjects").hidden = isProgram;
+            `Start with a ${name().toLowerCase()} CSV. UTF-8, up to 1 MB and 1,000 rows.`;
+        one("#import-boundary").textContent = reference()
+            ? "Create active reference entries or explicitly link matching active entries. Existing entries are never overwritten or reactivated. Historical publications keep their original labels."
+            : program()
+              ? "Create working program definitions or explicitly link matching existing programs. Imports do not publish an academic year, replace student cohorts or assign application forms. Existing program details and publications are preserved."
+              : "New courses are inactive drafts. Approve matching course links explicitly, or leave rows out. Existing courses and historical publications are preserved.";
+        one("#import-commit-label").textContent = `Import ${plural()}`;
+        one("#import-reference-subjects").hidden = !course();
         ["program-fields", "campus", "award"].forEach((kind) => {
-            one(`#import-reference-${kind}`).hidden = !isProgram;
+            one(`#import-reference-${kind}`).hidden = !program();
         });
-        one("#import-draft-link").href = `/admin/workspace/${plural}/`;
-        one("#import-draft-link").dataset.workspace = plural;
-        one("#import-draft-label").textContent = isProgram
+        one("#import-catalog-setup").hidden = reference() || !can("sis:catalog:manage");
+        one('#import-plan-filter option[value="create"]').textContent = reference()
+            ? "New entries"
+            : "New drafts";
+        const link = one("#import-draft-link");
+        link.hidden = reference() || !can("sis:catalog:manage");
+        link.href = `/admin/workspace/${plural()}/`;
+        link.dataset.workspace = plural();
+        one("#import-draft-label").textContent = program()
             ? "Review program details"
             : "Review course drafts";
+        one("#import-reference-open").hidden = !reference() || !can("sis:catalog:manage");
+        one("#import-reference-open").textContent = `Review ${plural()}`;
     }
     let state,
         busy = false,
@@ -166,13 +190,13 @@ window.createWorkspaceImports = function (ui) {
             else if (["match", "link"].includes(row.action))
                 box.append(
                     button(
-                        program() ? "Link program" : "Link course",
+                        `Link ${name().toLowerCase()}`,
                         () =>
                             choose(row, {
                                 action: "link",
                                 [idField()]: row[idField()],
                             }),
-                        `Link ${program() ? "program" : "course"} for row ${row.row}`,
+                        `Link ${name().toLowerCase()} for row ${row.row}`,
                     ),
                 );
             if (choice?.action !== "skip")
@@ -192,21 +216,29 @@ window.createWorkspaceImports = function (ui) {
             const review = node(
                 "div",
                 {},
-                node("strong", {}, changed ? "Choice changed — review needed" : labels[row.action]),
+                node(
+                    "strong",
+                    {},
+                    changed
+                        ? "Choice changed — review needed"
+                        : row.action === "create" && reference()
+                          ? "New entry"
+                          : labels[row.action],
+                ),
                 node("p", { class: "mb-1" }, row.message),
             );
-            const matched = row[program() ? "matched_program" : "matched_course"];
+            const matched = row[`matched_${target()}`];
             if (matched)
                 review.append(
                     node(
                         "p",
                         { class: "form-text mb-0" },
-                        program()
+                        !course()
                             ? `Existing: ${matched.code} · ${matched.title}`
                             : `Existing: ${matched.code} · ${matched.title} · ${number(matched.credits_milli / 1000)} credits · ${matched.active ? "Active" : "Inactive"}`,
                     ),
                 );
-            const course = node(
+            const record = node(
                 "div",
                 {},
                 node("strong", {}, row.code),
@@ -231,12 +263,12 @@ window.createWorkspaceImports = function (ui) {
                         node("li", {}, `${names[kind]}: ${code}${resolved ? " · " + resolved.title : ""}`),
                     );
                 }
-                course.append(
+                record.append(
                     node("details", { class: "mt-2" }, node("summary", {}, "Catalog classifications"), list),
                 );
             }
             if (program() && row.description_mapped)
-                course.append(
+                record.append(
                     node(
                         "details",
                         { class: "mt-2" },
@@ -246,19 +278,17 @@ window.createWorkspaceImports = function (ui) {
                 );
             return [
                 String(row.row),
-                course,
-                ...(program() ? [] : [number(row.credits_milli / 1000)]),
+                record,
+                ...(course() ? [number(row.credits_milli / 1000)] : []),
                 review,
                 controls(row),
             ];
         });
         one("#import-plan-table").replaceChildren(
             table(
-                program()
-                    ? ["Row", "Program", "Review", "Action"]
-                    : ["Row", "Course", "Credits", "Review", "Action"],
+                ["Row", name(), ...(course() ? ["Credits"] : []), "Review", "Action"],
                 content,
-                program() ? "Reviewed program import rows" : "Reviewed course import rows",
+                `Reviewed ${name().toLowerCase()} import rows`,
             ),
         );
         one("#import-plan-status").textContent = rows.length
@@ -283,7 +313,7 @@ window.createWorkspaceImports = function (ui) {
         one("#import-plan-summary").replaceChildren(
             ...(summary
                 ? [
-                      ["New drafts", summary.create],
+                      [reference() ? "New entries" : "New drafts", summary.create],
                       ["Approved links", summary.link],
                       ["Prior imports", summary.skip],
                       ["Left out", summary.omitted],
@@ -359,44 +389,56 @@ window.createWorkspaceImports = function (ui) {
             ),
             optionalFields,
         );
-        const core = program()
+        const core = reference()
             ? [
                   ["external_id", "External ID", "A stable source-system ID; preserve its letter case"],
-                  ["code", "Program code", "For example BA.ENG; letters are normalized to uppercase"],
-                  ["title", "Program title", "The program name"],
+                  ["code", `${name()} code`, "Up to 40 characters; letters are normalized to uppercase"],
+                  ["title", `${name()} name`, "A descriptive name, up to 191 characters"],
               ]
-            : [
-                  ["external_id", "External ID", "A stable source-system ID; preserve its letter case"],
-                  ["code", "Course code", "For example MATH.101"],
-                  ["title", "Course title", "The course name"],
-                  ["credits", "Credits", "Decimal credits, such as 3 or 3.5"],
-              ];
-        const references = program()
-            ? [
-                  ["description", "Program description", "Optional plain text up to 10,000 characters"],
-                  ...[
-                      ["department", "Department"],
-                      ["academic_level", "Academic level"],
-                      ["award", "Award"],
-                      ["school", "School/college"],
-                      ["field_of_study", "Field of study"],
-                      ["campus", "Campus/site"],
-                  ].map(([kind, label]) => [
-                      `${kind}_code`,
-                      `${label} code`,
-                      "Use an active code from the catalog reference library",
-                  ]),
-              ]
-            : [
-                  ["subject_code", "Subject code", "For example ENG; use an active subject from the catalog"],
-                  ["department_code", "Department code", "Use an active department code"],
-                  [
-                      "academic_level_code",
-                      "Academic level code",
-                      "For example UG or GR; use the academic level library",
-                  ],
-                  ["course_level_code", "Course level code", "Use an active course-level code"],
-              ];
+            : program()
+              ? [
+                    ["external_id", "External ID", "A stable source-system ID; preserve its letter case"],
+                    ["code", "Program code", "For example BA.ENG; letters are normalized to uppercase"],
+                    ["title", "Program title", "The program name"],
+                ]
+              : [
+                    ["external_id", "External ID", "A stable source-system ID; preserve its letter case"],
+                    ["code", "Course code", "For example MATH.101"],
+                    ["title", "Course title", "The course name"],
+                    ["credits", "Credits", "Decimal credits, such as 3 or 3.5"],
+                ];
+        const references = reference()
+            ? []
+            : program()
+              ? [
+                    ["description", "Program description", "Optional plain text up to 10,000 characters"],
+                    ...[
+                        ["department", "Department"],
+                        ["academic_level", "Academic level"],
+                        ["award", "Award"],
+                        ["school", "School/college"],
+                        ["field_of_study", "Field of study"],
+                        ["campus", "Campus/site"],
+                    ].map(([kind, label]) => [
+                        `${kind}_code`,
+                        `${label} code`,
+                        "Use an active code from the catalog reference library",
+                    ]),
+                ]
+              : [
+                    [
+                        "subject_code",
+                        "Subject code",
+                        "For example ENG; use an active subject from the catalog",
+                    ],
+                    ["department_code", "Department code", "Use an active department code"],
+                    [
+                        "academic_level_code",
+                        "Academic level code",
+                        "For example UG or GR; use the academic level library",
+                    ],
+                    ["course_level_code", "Course level code", "Use an active course-level code"],
+                ];
         for (const [target, label, help] of [...core, ...references]) {
             const required = core.some((field) => field[0] === target);
             const select = node(
@@ -453,7 +495,7 @@ window.createWorkspaceImports = function (ui) {
                 ),
             );
         }
-        mapping.append(optional);
+        if (references.length) mapping.append(optional);
         step(2);
     });
     action("#import-review", async () => {
@@ -463,9 +505,7 @@ window.createWorkspaceImports = function (ui) {
             if (select.value !== "") mapping[select.name] = Number(select.value);
         }
         if (new Set(requiredFields().map((field) => mapping[field])).size !== requiredFields().length)
-            throw new Error(
-                `Choose distinct columns for the ${program() ? "three" : "four"} required fields.`,
-            );
+            throw new Error(`Choose distinct columns for the ${requiredFields().length} required fields.`);
         state.mapping = mapping;
         await review();
     });
@@ -485,6 +525,11 @@ window.createWorkspaceImports = function (ui) {
             if (can("sis:catalog:manage")) await classifications(kind);
         });
     }
+    action("#import-reference-open", async () => {
+        if (!can("sis:catalog:manage")) return;
+        if (target() === "subject") await subjects();
+        else await classifications(target());
+    });
     action("#import-commit", async () => {
         if (!state.preview?.review_token || pending()) return;
         try {
@@ -493,11 +538,11 @@ window.createWorkspaceImports = function (ui) {
                 review_token: state.preview.review_token,
             });
             one("#import-summary").textContent =
-                `${program() ? "Working programs" : "Inactive drafts"} created: ${number(result.imported)} · ${program() ? "Programs" : "Courses"} linked: ${number(result.linked)} · Prior imports: ${number(result.skipped)} · Left out: ${number(result.omitted)}. Existing catalog details and publications were preserved.`;
+                `${reference() ? "Reference entries" : program() ? "Working programs" : "Inactive drafts"} created: ${number(result.imported)} · ${reference() ? name() + " entries" : program() ? "Programs" : "Courses"} linked: ${number(result.linked)} · Prior imports: ${number(result.skipped)} · Left out: ${number(result.omitted)}. Existing catalog details and publications were preserved.`;
             reset();
             one("#import-file").value = "";
             step(4);
-            notify(program() ? "Program import complete." : "Course import complete.");
+            notify(`${name()} import complete.`);
         } catch (error) {
             if ([409, 422].includes(error.status)) state.preview.review_token = null;
             throw error;
@@ -533,7 +578,7 @@ window.createWorkspaceImports = function (ui) {
         if (busy) return;
         reset();
         one("#import-file").value = "";
-        one("#import-source").value = program() ? "program-catalog" : "course-catalog";
+        one("#import-source").value = `${target().replaceAll("_", "-")}-catalog`;
         destination();
         step(1);
         synchronize();
