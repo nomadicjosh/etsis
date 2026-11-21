@@ -747,7 +747,7 @@ The [co-requisite workflow](registration-history.md#co-requisites-and-linked-dro
 
 ## Campus news publication
 
-[Campus content](campus-portal.md#news-editor-and-publication) now keeps authoring, review handoff, publisher approval/return and timed visibility in one existing workspace flow. The institution assigns author and publisher duties separately or together. Quill supplies permissively licensed rich-text authoring; the same sanitized content reaches previews, public articles and private updates, while lists use compact excerpts. Server-side visibility applies equally to direct URLs and native news blocks. Working content remains audited CRUD, and ordinary reading creates no academic history. Full-page Vihzhuo approval remains separate work.
+[Campus content](campus-portal.md#news-editor-and-publication) now keeps authoring, review handoff, publisher approval/return and timed visibility in one existing workspace flow. The institution assigns author and publisher duties separately or together. Tiptap supplies MIT-licensed rich-text authoring; the same sanitized content reaches previews, public articles and private updates, while lists use compact excerpts. Server-side visibility applies equally to direct URLs and native news blocks. Working content remains audited CRUD, and ordinary reading creates no academic history. Full-page Vihzhuo approval remains separate work.
 
 ## Admissions casework reports
 

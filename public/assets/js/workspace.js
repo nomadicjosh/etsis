@@ -750,7 +750,7 @@
             form.elements.subject.maxLength = 191;
             form.elements.body.maxLength = 100000;
         }
-        if (section === 'portal') { await campusContentForm(form); if (!body.isConnected) return; }
+        if (section === 'portal') { body.append(form); await campusContentForm(form); if (!body.isConnected) return; }
         if (section === 'terms') {
             const code = form.elements.namedItem('code');
             code.maxLength = 22; code.pattern = String.raw`[A-Za-z0-9][A-Za-z0-9._\/\-]{0,21}`;
@@ -1257,7 +1257,7 @@
         if (!body.isConnected) return;
         form.elements.kind.disabled = true;
         form.elements.code.readOnly = true;
-        if (post.can_edit) await campusContentForm(form, post.content_format);
+        if (post.can_edit) { body.append(form); await campusContentForm(form, post.content_format); }
         if (!body.isConnected) return;
         form.append(
             node('p', { class: 'form-text' }, 'Saving an edit returns content to draft for review.'),

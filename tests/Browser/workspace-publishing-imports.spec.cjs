@@ -90,11 +90,13 @@ test('a late import inspection does not move focus away from another workspace',
     expect(state.errors).toEqual([]);
 });
 
-async function content(page, { status = 'draft', audience = 'public', rejectRead = false, delayed = false, limited = false, writerOnly = false, publisherOnly = false } = {}) {
+async function content(page, { status = 'draft', audience = 'public', rejectRead = false, delayed = false, limited = false, writerOnly = false, publisherOnly = false, rich = false } = {}) {
     const state = { calls: [], errors: [], rejectSave: false, stale: false,
         post: { id, kind: 'news', code: 'fictional-welcome', title: 'Fictional campus welcome <img>',
             content: 'Fictional campus news.\nThis text is only a test fixture. <script>Example</script>',
             audience, status, content_format: 'plain', content_html: null, version: 2, revision: '2'.padStart(64, '0'), can_edit: !publisherOnly, can_publish: !writerOnly, visible_from: null, visible_until: null, review_note: null, visibility: status } };
+    if (rich) Object.assign(state.post, {content_format:'html',
+        content:'<h2>Retained headline</h2><p>A <strong>formatted</strong> update with <a href="https://example.invalid/news">a link</a>.</p><ul><li><p>Retained list item</p></li></ul><script>window.editorAttack=1</script><img src="https://example.invalid/tracker" onerror="window.editorAttack=1">'});
     let release;
     const pending = new Promise(resolve => { release = resolve; });
     state.release = release;
@@ -399,5 +401,135 @@ test('news uses the self-hosted rich editor and saves semantic formatting withou
     expect(save.data.content).toContain('<h2>');
     expect(state.publications()).toHaveLength(0);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(state.errors).toEqual([]);
+});
+
+test('tiptap preserves retained HTML and literal plain text while rejecting unsafe pasted markup', async ({page}) => {
+    const requests=[];
+    page.on('request', request => requests.push(request.url()));
+    const state = await content(page,{rich:true});
+    const editor=page.getByRole('textbox',{name:/^Content/u});
+    await expect(editor).toHaveAttribute('contenteditable','true');
+    await expect(editor.locator('h2')).toHaveText('Retained headline');
+    await expect(editor.locator('strong')).toHaveText('formatted');
+    await expect(editor.locator('li')).toContainText('Retained list item');
+    await expect(editor.locator('a')).toHaveAttribute('href','https://example.invalid/news');
+    await expect(editor.locator('script,img,iframe')).toHaveCount(0);
+    await editor.press('ControlOrMeta+End');
+    await editor.evaluate(element=>{
+        const clipboardData=new DataTransfer();
+        clipboardData.setData('text/html','<p>Safe pasted <em>word</em><a href="javascript:window.editorAttack=1">bad link</a><img src="https://example.invalid/pasted-tracker" onerror="window.editorAttack=1"></p>');
+        element.dispatchEvent(new ClipboardEvent('paste',{clipboardData,bubbles:true,cancelable:true}));
+    });
+    await expect(editor).toContainText('Safe pasted');
+    await expect(editor.locator('script,img,iframe,a[href^="javascript:"]')).toHaveCount(0);
+    expect(await page.evaluate(()=>window.editorAttack)).toBeUndefined();
+    expect(requests.some(url=>url.startsWith('https://example.invalid/'))).toBe(false);
+    await page.getByRole('button',{name:'Save draft',exact:true}).click();
+    const save=state.calls.find(c=>c.path==='/sis/portal/editor/');
+    expect(save.data.content).toContain('<h2>Retained headline</h2>');
+    expect(save.data.content).toContain('<em>word</em>');
+    expect(save.data.content).not.toMatch(/editorAttack|<img|<script|javascript:/);
+    expect(state.errors).toEqual([]);
+});
+
+test('tiptap formatting links undo redo and content-type changes preserve the working draft', async ({page}) => {
+    const state=await content(page);
+    await expect(page.getByRole('textbox',{name:/^Content/u})).toContainText('<script>Example</script>');
+    await page.getByRole('button',{name:'Close record',exact:true}).click();
+    await page.getByRole('button',{name:'Create content',exact:true}).click();
+    await page.getByRole('combobox',{name:/^Content type/u}).selectOption('news');
+    const editor=page.getByRole('textbox',{name:/^Content/u});
+    await expect(editor).toHaveAttribute('contenteditable','true');
+    await editor.fill('Fictional formatted draft');
+    await editor.press('ControlOrMeta+A');
+    for(const name of ['Bold','Italic','Underline','Strikethrough']) {
+        await page.getByRole('button',{name,exact:true}).click();
+        await expect(page.getByRole('button',{name,exact:true})).toHaveAttribute('aria-pressed','true');
+    }
+    await page.getByRole('button',{name:'Add or edit link',exact:true}).click();
+    await page.getByLabel('Link address',{exact:true}).fill('javascript:alert(1)');
+    await page.getByRole('button',{name:'Apply link',exact:true}).click();
+    await expect(editor.locator('a')).toHaveCount(0);
+    await page.getByLabel('Link address',{exact:true}).fill('https://example.invalid/news');
+    await page.getByRole('button',{name:'Apply link',exact:true}).click();
+    await expect(editor.locator('a')).toHaveAttribute('href','https://example.invalid/news');
+    await page.getByRole('button',{name:'Undo',exact:true}).click();
+    await expect(editor.locator('a')).toHaveCount(0);
+    await page.getByRole('button',{name:'Redo',exact:true}).click();
+    await expect(editor.locator('a')).toHaveCount(1);
+    await page.getByRole('combobox',{name:/^Content type/u}).selectOption('page');
+    await expect(page.locator('textarea[name="content"]')).toHaveValue('Fictional formatted draft');
+    await page.getByRole('combobox',{name:/^Content type/u}).selectOption('news');
+    await expect(editor.locator('strong')).toContainText('Fictional formatted draft');
+    await expect(editor.locator('a')).toHaveCount(1);
+    await editor.click();
+    await editor.press('ControlOrMeta+A');
+    await page.getByRole('button',{name:'Clear formatting',exact:true}).click();
+    await expect(editor.locator('strong,em,u,s,a')).toHaveCount(0);
+    for (const [name, tag] of [['Bulleted list','ul'],['Numbered list','ol'],['Quote','blockquote']]) {
+        await page.getByRole('button',{name,exact:true}).click();
+        await expect(editor.locator(tag)).toHaveCount(1);
+        await page.getByRole('button',{name,exact:true}).click();
+        await expect(editor.locator(tag)).toHaveCount(0);
+    }
+    await page.getByRole('button',{name:'Bold',exact:true}).focus();
+    await page.getByRole('button',{name:'Bold',exact:true}).press('Space');
+    await expect(page.getByRole('button',{name:'Bold',exact:true})).toHaveAttribute('aria-pressed','true');
+
+    await page.setViewportSize({width:320,height:812});
+    await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(state.publications()).toHaveLength(0);
+    expect(state.errors).toEqual([]);
+});
+
+test('failed tiptap load preserves saved HTML blocks saving and supports an explicit retry', async ({page}) => {
+    await page.route('**/assets/vendor/tiptap.js', route=>route.abort());
+    const state=await content(page,{rich:true});
+    await expect(page.getByRole('button',{name:'Retry news editor',exact:true})).toBeVisible();
+    await expect(page.locator('textarea[name="content"]')).toHaveValue(state.post.content);
+    await expect(page.locator('input[name="content_format"]')).toHaveValue('html');
+    await page.getByRole('button',{name:'Save draft',exact:true}).click();
+    expect(state.calls.some(c=>c.path==='/sis/portal/editor/')).toBe(false);
+    await page.unroute('**/assets/vendor/tiptap.js');
+    await page.getByRole('button',{name:'Retry news editor',exact:true}).click();
+    const editor=page.getByRole('textbox',{name:/^Content/u});
+    await expect(editor.locator('h2')).toHaveText('Retained headline');
+    await expect(editor.locator('img,script')).toHaveCount(0);
+    await expect(page.getByRole('button',{name:'Retry news editor',exact:true})).toHaveCount(0);
+    expect(state.errors).toEqual([]);
+});
+
+test('tiptap empty and oversize drafts remain editable and never submit partial content', async ({page}) => {
+    const state=await content(page);
+    const editor=page.getByRole('textbox',{name:/^Content/u});
+    await editor.fill('');
+    await page.getByRole('button',{name:'Save draft',exact:true}).click();
+    await expect(page.getByRole('alert').filter({hasText:'Add some news text'})).toBeVisible();
+    await expect(editor).toBeFocused();
+    await editor.fill('é'.repeat(31000));
+    await page.getByRole('button',{name:'Save draft',exact:true}).click();
+    await expect(page.getByRole('alert').filter({hasText:'too long'})).toBeVisible();
+    expect(state.calls.some(c=>c.path==='/sis/portal/editor/')).toBe(false);
+    await editor.fill('A shorter fictional update.');
+    await page.getByRole('button',{name:'Save draft',exact:true}).click();
+    expect(state.calls.find(c=>c.path==='/sis/portal/editor/').data.content).toBe('<p>A shorter fictional update.</p>');
+    expect(state.errors).toEqual([]);
+});
+
+test('a delayed tiptap load cannot restore a closed content editor', async ({page}) => {
+    let release, markRequested;
+    const pending=new Promise(resolve=>{release=resolve;});
+    const requested=new Promise(resolve=>{markRequested=resolve;});
+    await page.route('**/assets/vendor/tiptap.js',async route=>{markRequested();await pending;await route.continue();});
+    const state=await content(page);
+    await requested;
+    await page.getByRole('button',{name:'Close record',exact:true}).click();
+    const loaded=page.waitForResponse(response=>response.url().endsWith('/assets/vendor/tiptap.js'));
+    release();await loaded;
+    await expect(page.locator('.campus-news-editor')).toHaveCount(0);
+    await expect(page.locator('#record-drawer')).not.toHaveClass(/show/u);
+    expect(state.calls.some(c=>c.path==='/sis/portal/editor/')).toBe(false);
     expect(state.errors).toEqual([]);
 });
