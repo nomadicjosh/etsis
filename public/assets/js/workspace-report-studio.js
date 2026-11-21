@@ -325,6 +325,33 @@ window.createWorkspaceReportStudio = function (ui) {
             })));
         if (students?.fields.latest_term_code || sections?.fields.enrollment_id || applications?.fields.submitted_on || accounts?.fields.balance)
             templateGrid.append(node("p", {}, "Choose a starting question, then adjust its fields and filters."));
+        if (applications?.fields.case_work_status) {
+            const cols = fields => fields.map(field => ({ field, label: applications.fields[field].label, aggregate: "none" }));
+            templateGrid.append(
+                button("Admissions follow-up", () => edit(applications, {
+                    ...initial(applications),
+                    columns: cols(["application_id", "full_name", "program_code", "entry_term", "status", "case_office", "case_work_status", "case_due_on"]),
+                    filters: { condition: "AND", rules: [
+                        { id: "case_work_status", operator: "in", value: ["open", "waiting"] },
+                        { id: "status", operator: "not_equal", value: "withdrawn" },
+                    ] },
+                })),
+                button("Admissions workload by office", () => edit(applications, {
+                    ...initial(applications),
+                    columns: [...cols(["case_office", "case_work_status"]),
+                        { field: "application_id", label: "Applications", aggregate: "count_distinct" }],
+                    filters: { condition: "AND", rules: [
+                        { id: "case_work_status", operator: "in", value: ["open", "waiting"] },
+                        { id: "status", operator: "not_equal", value: "withdrawn" },
+                    ] },
+                })),
+                button("Applications without casework", () => edit(applications, {
+                    ...initial(applications),
+                    columns: cols(["application_id", "full_name", "program_code", "entry_term", "status"]),
+                    filters: { condition: "AND", rules: [{ id: "case_reference", operator: "is_null" }] },
+                })),
+            );
+        }
         if (applications?.fields.submitted_on)
             templateGrid.append(
                 button("Applications by submission month", () => edit(applications, {
@@ -2342,7 +2369,7 @@ window.createWorkspaceReportStudio = function (ui) {
             node("p", { class: "form-text" }, "These columns include only rows matching their own conditions. Shared row filters still apply. Counts show zero when nothing matches; other summaries stay blank."),
         ) : null;
     }
-    function renderResults(panel, result, load, exportPage = null) {
+    function renderResults(panel, result, load, exportPage = null, applicationAction = null) {
         chart?.destroy();
         chart = null;
         panel.replaceChildren(
@@ -2372,6 +2399,25 @@ window.createWorkspaceReportStudio = function (ui) {
                     "Relational report results",
                 ),
             );
+        if (applicationAction && !result.grouped && result.lifecycle?.mode !== "static" && can("sis:admissions:manage")) {
+            const { definition, back } = applicationAction;
+            const index = definition?.dataset === "applications" && definition.columns.every(c => c.aggregate === "none")
+                ? definition.columns.findIndex(c => c.field === "application_id") : -1;
+            if (index >= 0 && result.items.length) {
+                const cases = node("details", { class: "my-3" }, node("summary", {}, "Open an application from these results"));
+                const choices = node("div", { class: "d-flex flex-wrap gap-2 my-2" });
+                result.items.forEach((row, offset) => {
+                    const id = row[`c${index}`];
+                    if (typeof id !== "string" || !/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(id)) return;
+                    choices.append(button(`Open application · row ${offset + 1}`, async () => {
+                        if (!panel.isConnected) return;
+                        await ui.openApplication?.(id, back);
+                    }));
+                });
+                cases.append(node("p", {}, "Opens the current application with a fresh access check. Return here to refresh the saved report."), choices);
+                panel.append(cases);
+            }
+        }
         if (result.grouped && result.items.length && window.Chart) {
             const numeric = Object.keys(result.items[0]).find((key) => typeof result.items[0][key] === "number");
             const label = Object.keys(result.items[0]).find((key) => typeof result.items[0][key] === "string");
@@ -2824,7 +2870,7 @@ window.createWorkspaceReportStudio = function (ui) {
                     }
                     throw error;
                 }
-            });
+            }, !frozen && ui.openApplication ? { definition: saved.definition, back: () => record(id) } : null);
         };
         recordTools.prepend(button(frozen ? "Read results" : "Refresh results", () => load(0), "btn-primary"));
         await load(0);

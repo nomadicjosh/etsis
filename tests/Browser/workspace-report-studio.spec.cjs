@@ -101,6 +101,12 @@ async function fixture(page, options = {}) {
             choices: { cash: 'Cash', check: 'Check', loan: 'Loan', grant: 'Grant', scholarship: 'Scholarship', other: 'Other' } },
         posting_recorded_at: { label: 'Posting event recorded UTC', type: 'datetime', relation: 'entry' },
     });
+    if (options.casework) Object.assign(fields, {
+        case_office: { label: 'Casework office', type: 'string', relation: 'casework' },
+        case_work_status: { label: 'Casework status', type: 'string', relation: 'casework', choices: {open:'Open',waiting:'Waiting',done:'Done'} },
+        case_due_on: { label: 'Next casework due date', type: 'date', relation: 'casework' },
+        case_reference: { label: 'Casework reference', type: 'string', relation: 'casework' },
+    });
     const dataset = options.postings ? {
         id: 'postings', label: 'Financial postings', description: 'One row per original or replacement posting.', fields,
         relationships: {
@@ -158,6 +164,7 @@ async function fixture(page, options = {}) {
         },
     } : { id: 'sections', label: 'Sections, teaching & enrollment counts', description: 'Explore sections and their registration relationships.', fields,
         relationships: { term: { label: 'Term', parent: 'section', many: false }, course: { label: 'Course', parent: 'section', many: false }, enrollment: { label: 'Enrollment', parent: 'section', many: true } } };
+    if (options.casework) dataset.relationships.casework = {label:'Current admissions casework',parent:'application',many:false};
     if (options.postingLinks) dataset.relationships.entry = {
         label: 'Financial postings', parent: 'account', many: true,
         date_fields: { posting_recorded_at: 'Posting event recorded UTC' },
@@ -189,12 +196,19 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/ui/operation-id/') result = { id: id(operation++) };
         else if (path.startsWith('/sis/ui/data/')) result = { items: options.recipient ? [{ id: id(71), name }] : [], next_after: null };
         else if (path === `/sis/reports/${id(71)}/`) result = { id: id(71), name, relational: true };
+        else if (path === `/sis/applications/${id(80)}/review/`) {
+            if (options.denyApplication) return route.fulfill({status:403,json:{error:'Access denied.'}});
+            result = {application:{id:{value:id(80)},status:'submitted',version:0},
+                person:{id:{value:id(81)},givenName:'Fictional',familyName:'Applicant',institutionalId:{value:'APP.EXAMPLE'}},
+                labels:{program_code:'BS.CS',program_title:'Computing',term_code:'26/FA'}};
+        }
+        else if (path === `/sis/applications/${id(80)}/casework/`) result = {case:{application_id:id(80),version:0,office:'',work_status:'open',follow_up_on:'',private_notes:'',next_step:'',items:[]},assignee_name:'Unassigned',program_id:id(82)};
         else if (path === '/sis/report-studio/catalog/') result = { datasets: [dataset] };
         else if (path === '/sis/report-studio/graph/') result = { dataset: copiedGraph(dataset, data.aliases) };
         else if (path === '/sis/report-studio/save/') { definition = data.definition; name = data.name; version = data.version + 1; result = { id: data.report_id }; }
         else if (path.endsWith('/preview/') || path.endsWith('/run/')) {
             const query = data.definition || definition;
-            const values = { posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
+            const values = { application_id: id(80), case_office:'Admissions <b>fictional</b>', case_work_status:'waiting', case_due_on:'2026-09-01', posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
                 latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
@@ -204,7 +218,7 @@ async function fixture(page, options = {}) {
                 : data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
             result = { conditional_columns: query.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(query), columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
                 next_offset: options.postings || options.scheduling || options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
-                grouped: options.postings || options.scheduling || options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
+                grouped: options.casework || options.postings || options.scheduling || options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
         } else if (path.endsWith('/export/')) { await route.fulfill({ body: 'Section,Term,Students\nMATH.101.A,26/FA,8\n', contentType: 'text/csv' }); return; }
         else if (/\/sis\/report-studio\/[^/]+\/$/.test(path)) result = { conditional_columns: definition.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(definition), id: path.split('/').at(-2), name, version, definition, can_manage: !options.recipient };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
@@ -1245,5 +1259,65 @@ test('calendar changes invalidate an older preview and non-date fields have no c
     await studio.getByRole('button', { name: 'Done', exact: true }).click();
     await studio.getByRole('button', { name: 'Column 2 settings: Distinct count', exact: true }).click();
     await expect(studio.getByRole('group', { name: 'Calendar grouping', exact: true })).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});
+
+for (const starter of ['Admissions follow-up', 'Admissions workload by office', 'Applications without casework']) {
+    test(`admissions casework starter ${starter} retains typed filters and a saved definition`, async ({page}) => {
+        const f = await fixture(page, {applications:true,casework:true});
+        await page.getByRole('button',{name:starter,exact:true}).click();
+        const studio = page.locator('dialog.report-studio');
+        await studio.getByLabel('Report name',{exact:true}).fill('Fictional admissions follow-up');
+        await studio.getByRole('button',{name:'Preview',exact:true}).click();
+        const query = f.calls.find(c=>c.path.endsWith('/preview/')).data.definition;
+        expect(query.dataset).toBe('applications');
+        if (starter === 'Applications without casework') {
+            expect(query.filters.rules).toEqual([{id:'case_reference',operator:'is_null'}]);
+        } else {
+            expect(query.filters.rules).toEqual([
+                {id:'case_work_status',operator:'in',value:['open','waiting']},
+                {id:'status',operator:'not_equal',value:'withdrawn'},
+            ]);
+        }
+        if (starter === 'Admissions workload by office') {
+            expect(query.columns.at(-1)).toMatchObject({field:'application_id',aggregate:'count_distinct'});
+        }
+        await studio.getByRole('button',{name:'Save',exact:true}).click();
+        await expect(studio).toContainText('Definition revision 1');
+        if (starter === 'Admissions follow-up') {
+            await studio.getByText('Open an application from these results',{exact:true}).click();
+            await studio.getByRole('button',{name:'Open application · row 1',exact:true}).click();
+            await expect(page.locator('#drawer-body')).toContainText('APP.EXAMPLE');
+            await page.getByRole('button',{name:'Checklist & follow-up',exact:true}).click();
+            await page.getByText('Routing & next steps',{exact:true}).click();
+            await page.getByLabel('Private staff notes',{exact:true}).fill('Fictional unfinished note');
+            await page.getByRole('button',{name:'Back to report',exact:true}).click();
+            await expect(page.getByLabel('Private staff notes',{exact:true})).toHaveValue('Fictional unfinished note');
+            await page.getByLabel('Private staff notes',{exact:true}).fill('');
+            await page.getByRole('button',{name:'Back to report',exact:true}).click();
+            await expect(page.locator('dialog.report-studio')).toContainText('Fictional admissions follow-up');
+            expect(f.visited.filter(path=>path===`/sis/applications/${id(80)}/review/`)).toHaveLength(1);
+        } else if (starter === 'Admissions workload by office') {
+            await expect(studio.getByText('Open an application from these results',{exact:true})).toHaveCount(0);
+        }
+        await page.setViewportSize({width:320,height:812});
+        await accessible(page);
+        expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+        expect(f.errors).toEqual([]);
+        expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    });
+}
+
+test('denied report-to-application navigation restores the saved report without acting on the application', async ({page}) => {
+    const f = await fixture(page, {applications:true,casework:true,denyApplication:true});
+    await page.getByRole('button',{name:'Admissions follow-up',exact:true}).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByLabel('Report name',{exact:true}).fill('Fictional admissions follow-up');
+    await studio.getByRole('button',{name:'Save',exact:true}).click();
+    await studio.getByText('Open an application from these results',{exact:true}).click();
+    await studio.getByRole('button',{name:'Open application · row 1',exact:true}).click();
+    await expect(page.locator('dialog.report-studio')).toContainText('Fictional admissions follow-up');
+    await expect(page.locator('dialog.report-studio .report-local-error')).toBeVisible();
+    expect(f.calls.some(c=>c.path.includes('/applications/'))).toBe(false);
     expect(f.errors).toEqual([]);
 });

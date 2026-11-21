@@ -811,7 +811,8 @@ final class AcademicReportSchema
         ];
         $datasets['sections'] = SchedulingReportSchema::withSectionBookings($datasets['sections']);
         return ProgramSitesReportSchema::extend(
-            FinancialReportSchema::extend($datasets) + SchedulingReportSchema::datasets(),
+            AdmissionCaseworkReportSchema::extend(FinancialReportSchema::extend($datasets))
+                + SchedulingReportSchema::datasets(),
         );
     }
 }

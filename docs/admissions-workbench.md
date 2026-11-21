@@ -34,6 +34,24 @@ From **Admissions**, choose **Follow-up queue**. Filter **All open**, **Assigned
 
 The follow-up date is the earliest of the case's explicit follow-up date and its unfinished checklist item dates. Completed or not-needed items contribute no deadline. Done cases leave the queue but remain accessible through their applications. Dates use the institution's configured clock; the queue displays the institution date used for the comparison. This queue tracks work; it does not send automatic messages or make admissions decisions.
 
+## Report on casework and return to the application
+
+In **Reports → Report Studio**, the **Applications & admissions** source now includes **Casework office**, **Casework status**, **Next casework due date** and **Casework updated UTC**. These are current operational routing facts, separate from the application’s admissions decision. The due date is the existing earliest unfinished-item/follow-up deadline used by the work queue; a done case has no next deadline. Missing casework remains blank rather than appearing open or unassigned by inference.
+
+Three starting points reuse the visual builder:
+
+- **Admissions follow-up** lists open/waiting casework for applications that are not withdrawn, with program/intake and both application and work statuses. Add a due-date condition for the institution-calendar cutoff you want; the starter does not silently choose today.
+- **Admissions workload by office** counts distinct applications by office and work status under those same filters. Distinct counts avoid inflation when authorized related student records are joined. Add the desired named relationships and conditions using the ordinary builder.
+- **Applications without casework** finds applications with no case row. It includes all application statuses until you deliberately narrow them; it does not certify that guidance is required or automatically create a case.
+
+Staff who also have `sis:person:manage` can add **Assigned colleague** and **Assigned account reference**, or use them in filters. The name follows the canonical person/account link and reflects current labels. An assignment with a missing person link has no inferred name. A recorded assignee is not a claim that the account remains eligible for new assignments, and reporting never grants admissions access through assignment. Names, emails and private staff records are not made generally reportable by adding casework fields.
+
+Saved reports use existing dynamic/static, sharing, expiry and CSV controls. Readers require current report-run and admissions permissions; assignee fields retain the additional person duty, even when hidden in filters. A dynamic report follows routing changes; an earlier static capture retains its original answer. Private notes, checklist labels/instructions, next-step prose, application answers and encrypted payloads remain excluded from the report registry and SQL selection. Reporting reads the indexed operational projection and does not decrypt or replay every case.
+
+A saved **dynamic**, ungrouped application report that includes **Application reference** offers **Open an application from these results**. Choose the displayed row to open the existing current application review, which independently checks access. **Back to report** reopens and refreshes the saved report. Unfinished casework, documents, offers and other guarded forms keep their existing protections; an unsuccessful application read restores the saved report with an error. Static captures, summary rows and draft previews offer no action. Opening a case does not assign it, send a message or make an admissions decision.
+
+This slice adds no migration, new event, case store, report engine or automatic follow-up job. The same authorized casework editor remains responsible for changes. Institutional retention, broader admissions facts and other reporting datasets remain on the roadmap.
+
 ## Applicant next steps
 
 Applicants open **Start your application → Your applications → Next steps** for the relevant program/term. The read happens on demand and preserves a new application being edited on the same page. It shows the office, applicant next step and only the checklist items staff marked visible, including instructions, progress and due dates. It excludes private notes, internal tasks, assignee identities, work status and revision metadata. Staff privileges do not override ownership on this portal endpoint.

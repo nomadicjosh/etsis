@@ -402,6 +402,9 @@ window.createWorkspacePeople = function (ui) {
         function mayLeave() {
             return otherForms() && offerEditor.beforeLeave() && (withdrawalEditor?.beforeLeave() ?? true) && (answerEditor?.beforeLeave() ?? true);
         }
+        if (typeof row.reportBack === "function") body.prepend(
+            button("Back to report", () => mayLeave() && row.reportBack()),
+        );
         if (can('sis:communications:manage') && can('sis:person:manage')) actions.prepend(
             button('Message applicant', () => ui.messageRecord('application', row.id, () => application(row), body,
                 mayLeave)),

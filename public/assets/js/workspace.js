@@ -315,6 +315,13 @@
     relationalStudio = window.createWorkspaceReportStudio({
         node, request, requestFile, task, can, table, openDrawer, actionMenu, disposeActionMenus,
         closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(),
+        openApplication: (id, back) => {
+            relationalStudio.cleanup(false);
+            return peopleStudio.application({ id, reportBack: back }).catch(async error => {
+                await back();
+                throw error;
+            });
+        },
         registerPopulation: (students, back) => {
             relationalStudio.cleanup(false);
             return batchRegistration.start("", students, back);
