@@ -44,6 +44,12 @@ test('staff maintain checklist progress office routing and applicant instruction
     await work.getByLabel('Office shown to applicant', { exact: true }).fill('Admissions');
     await work.getByLabel('Next step shown to applicant', { exact: true }).fill('Arrange your previous transcript.');
     await work.getByLabel('Private staff notes', { exact: true }).fill('Fictional staff-only note.');
+    await page.locator('[data-review-guide] > summary').click();
+    await expect(page.locator('[data-review-guide]')).toContainText('Unfinished edits do not count as saved evidence.');
+    await page.getByRole('button', { name: 'Go to checklist', exact: true }).click();
+    await expect(body.getByRole('button', { name: 'Checklist & follow-up', exact: true })).toBeFocused();
+    await expect(work.getByLabel('Private staff notes', { exact: true })).toHaveValue('Fictional staff-only note.');
+    expect(posts).toHaveLength(0);
     await work.getByLabel('Assignment', { exact: true }).selectOption('selected');
     await work.getByLabel('Colleague name or institutional ID', { exact: true }).fill('Fictional');
     await work.getByRole('button', { name: 'Find colleague', exact: true }).click();

@@ -253,3 +253,8 @@ Active counts include sections with zero registrations without joining student r
 **Below current enrollment target** is blank when no positive target is configured, true below target and false once met. Numeric/Boolean conditions preserve those distinctions. Section counts, capacities and targets may be totaled at section grain; the server rejects Sum/Average through joins that would repeat sections. Use matching-record conditions or explicitly choose one related row before such totals. Ordinary per-enrollment detail remains a different grain. Saved dynamic/static reports, shares and private exports reuse the existing reporting workflow.
 
 The worklist and reports share the same prepared SQL count using the existing section/status index; no additional count table, journal, queue or per-row publication replay is introduced. Migration `20261120000004_AddSisSectionEnrollmentTargets` adds nullable columns to current sections and retained offering projections, without backfilling earlier facts. SQLite integration and compiler checks cover the five supported database dialects; live engine/load qualification remains separate. The configured MariaDB upgrade preserved all existing protected events and stream/operation checksums.
+
+
+## Meeting plan guide
+
+The shared [captured-review guides](workspace-guides.md) explain next steps from the current response and focus existing details without fetching records or changing decisions. Refresh the review after records change.

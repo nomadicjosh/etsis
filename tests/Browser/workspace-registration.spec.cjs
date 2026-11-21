@@ -283,3 +283,19 @@ test("missing prerequisites are visible before confirmation and cannot submit a 
     );
     expect(f.errors).toEqual([]);
 });
+
+
+test('group registration guide opens proposed charge details without committing or fetching', async ({ page }) => {
+    const f = await fixture(page);
+    await review(page, f);
+    const count = f.sent.length;
+    await page.locator('[data-review-guide] > summary').click();
+    await expect(page.locator('[data-review-guide]')).toContainText('Keep existing registrations');
+    await page.getByRole('button', { name: 'Show proposed charges', exact: true }).click();
+    await expect(page.locator('[data-charge-review] > summary').first()).toBeFocused();
+    await expect(page.getByRole('region', { name: 'Registration charges', exact: true }).first()).toBeVisible();
+    expect(f.sent.length).toBe(count);
+    expect(f.sent.some(item => item.path.endsWith('/commit/'))).toBe(false);
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});

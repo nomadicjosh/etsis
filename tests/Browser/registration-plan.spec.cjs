@@ -188,6 +188,14 @@ test("student builds the same reviewed schedule and retries an uncertain confirm
     );
     await page.getByRole("button", { name: "Review schedule", exact: true }).click();
     await expect(page.locator("#campus-dialog-body")).toContainText("Term-wide fees are counted once");
+    const guide = page.locator('#campus-dialog-body [data-review-guide]');
+    await expect(guide).toHaveCount(1);
+    await guide.locator(':scope > summary').click();
+    const requestCount = f.calls.length;
+    await page.getByRole('button', { name: 'Show proposed charges', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Registration charges', exact: true }).first()).toBeFocused();
+    expect(f.calls.length).toBe(requestCount);
+
     await page.setViewportSize({ width: 375, height: 812 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     const scan = await new AxeBuilder({ page })

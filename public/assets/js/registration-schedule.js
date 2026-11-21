@@ -18,6 +18,7 @@ window.createRegistrationSchedule = function (ui) {
                 role: "status",
                 "aria-live": "polite",
                 "aria-label": "Registration timetable check",
+                "data-timetable-attention": String(Boolean(value?.blocked || value?.conflict_count || value?.unpublished_count)),
             },
             node("h3", { class: "h6" }, text(value)),
             value?.unpublished_count
@@ -63,7 +64,9 @@ window.createRegistrationSchedule = function (ui) {
     };
     function readiness(checks = []) {
         if (!checks.length) return null;
-        const details = node("details", { class: "mb-3" }, node("summary", {}, "Registration checks"));
+        const details = node("details", { class: "mb-3",
+            'data-checks-attention': String(checks.some(check => !['met', 'not_applicable'].includes(check.status))),
+        }, node("summary", {}, "Registration checks"));
         let rendered = false;
         details.addEventListener("toggle", () => {
             if (!details.open || rendered) return;
@@ -153,7 +156,8 @@ window.createRegistrationSchedule = function (ui) {
     function charges(value, money) {
         return node(
             "section",
-            { class: "border rounded p-3 mb-3", "aria-label": "Registration charges" },
+            { class: "border rounded p-3 mb-3", "aria-label": "Registration charges",
+                'data-charges-attention': String(value.total_minor == null || value.problems.length > 0) },
             node("h3", { class: "h6" }, "New registration charges"),
             node(
                 "p",
@@ -187,9 +191,9 @@ window.createRegistrationSchedule = function (ui) {
             ),
         );
     }
-    function registration(review, money) {
+    function registration(review, money, { guide = true } = {}) {
         const student = review.students[0];
-        return node(
+        const body = node(
             "div",
             {},
             node("h3", { class: "h5" }, `${review.section.course_code} · ${review.section.course_title}`),
@@ -260,6 +264,33 @@ window.createRegistrationSchedule = function (ui) {
                 "Review expires after 20 minutes. Changes to pricing, eligibility or the selected academic definitions require another review. Confirmation saves registration, academic credit and applicable charges together.",
             ),
         );
+        if (guide) body.append(guidance(review, false, body));
+        return body;
+    }
+    function guidance(review, planned, body) {
+        return window.createReviewGuidance({ node }, window.capturedReviewGuidance.registration(review, planned), {
+            checks: { label: 'Show registration checks', find: () => {
+                const summary = body.querySelector('[data-checks-attention="true"] > summary')
+                    || [...body.querySelectorAll('summary')].find(item => item.textContent === 'Registration checks');
+                return summary || null;
+            } },
+            timetable: { label: 'Show timetable details', find: () => {
+                const target = body.querySelector('[data-schedule-conflicts]')
+                    || body.querySelector('[data-timetable-attention="true"]')
+                    || body.querySelector('[aria-label="Registration timetable check"]')
+                    || body.querySelector('[aria-label="Reviewed registration group"]');
+                if (target) target.tabIndex = -1;
+                return target;
+            } },
+            charges: { label: 'Show proposed charges', find: () => {
+                const target = body.querySelector('[data-charges-attention="true"]')
+                    || body.querySelector('[data-charge-review]')
+                    || body.querySelector('[aria-label="Registration charges"]');
+                if (target?.tagName === 'DETAILS') return target.querySelector('summary');
+                if (target) target.tabIndex = -1;
+                return target;
+            } },
+        });
     }
     function plan(review, money) {
         const body = node(
@@ -304,7 +335,8 @@ window.createRegistrationSchedule = function (ui) {
             body.append(
                 node(
                     "ul",
-                    { class: planned.blocked ? "alert alert-danger" : "alert alert-warning" },
+                    { class: planned.blocked ? "alert alert-danger" : "alert alert-warning",
+                        'data-schedule-conflicts': '', 'aria-label': 'Proposed schedule overlaps' },
                     planned.conflicts.map((item) =>
                         node(
                             "li",
@@ -324,7 +356,7 @@ window.createRegistrationSchedule = function (ui) {
                         {},
                         `${row.section.course_code} · ${row.section.code} · ${row.student.charges.total_minor === null ? "Pricing needs review" : money(row.student.charges.total_minor, row.student.charges.currency)}`,
                     ),
-                    registration({ section: row.section, students: [row.student] }, money),
+                    registration({ section: row.section, students: [row.student] }, money, { guide: false }),
                 ),
             );
         }
@@ -343,9 +375,10 @@ window.createRegistrationSchedule = function (ui) {
                 "Term-wide fees are counted once. Each section and registered-credit price is included separately. These totals do not show your account balance. This review expires after 20 minutes.",
             ),
         );
+        body.append(guidance(review, true, body));
         return body;
     }
-    return { text, panel, charges, registration, prerequisites, corequisites, readiness, canConfirm, plan };
+    return { text, panel, charges, registration, prerequisites, corequisites, readiness, canConfirm, plan, guidance };
 };
 
 /* The same reviewed confirmation for staff and owned student schedules. Drafts remain in memory. */

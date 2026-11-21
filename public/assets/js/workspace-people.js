@@ -378,24 +378,7 @@ window.createWorkspacePeople = function (ui) {
                 ? extra[0]
                 : actionMenu("More", extra, { context: "More application actions" }),
         );
-        const guidance = {
-            submitted: "Review the submitted responses before accepting or rejecting this application.",
-            accepted:
-                "Review matriculation to confirm the initial program and entry term before creating the student record.",
-            rejected: "This application was rejected. Authorized corrections preserve the earlier decision.",
-            withdrawn: 'This application was withdrawn. Returning it to review requires a fresh admissions decision.',
-
-            matriculated:
-                "Matriculation is recorded. Earlier application and decision history remain available.",
-        };
-        body.append(
-            actions,
-            node(
-                "p",
-                { class: "form-text" },
-                guidance[app.status] || "Review this application and its recorded history.",
-            ),
-        );
+        body.append(actions);
         const submission = review.submission;
         const casework = node('div', { class: 'record-section mt-3' });
         const workbench = window.createAdmissionCasework({ node, request, task, notify }).mount(casework, row.id,
@@ -423,6 +406,11 @@ window.createWorkspacePeople = function (ui) {
             button('Message applicant', () => ui.messageRecord('application', row.id, () => application(row), body,
                 mayLeave)),
         );
+        body.append(window.createReviewGuidance({ node }, window.capturedReviewGuidance.admissions(review), {
+            checklist: { label: 'Go to checklist', find: () => casework.querySelector('button') },
+            documents: { label: 'Go to documents', find: () => documents.querySelector('button') },
+            offer: { label: 'Go to admission offer', find: () => offerArea.querySelector('button') },
+        }));
         body.append(casework);
         if (can('sis:person:manage')) {
             const education = node('div', { class: 'record-section mt-3' });

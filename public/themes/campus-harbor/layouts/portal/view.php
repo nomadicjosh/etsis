@@ -31,8 +31,10 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
         <link rel="stylesheet" href="/assets/css/portal.css" />
         <link rel="stylesheet" href="/assets/css/application-form.css" />
         <link rel="stylesheet" href="/assets/css/degree-progress.css" />
+        <link rel="stylesheet" href="/assets/css/review-guide.css" />
         <link rel="stylesheet" href="<?= $esc($themeAsset) ?>" />
         <script defer src="/assets/vendor/bootstrap.bundle.min.js"></script>
+        <script defer src="/assets/js/review-guidance.js"></script>
         <script defer src="/assets/js/application-form.js"></script>
         <script defer src="/assets/js/application-revisions.js"></script>
         <script defer src="/assets/js/degree-progress-guide.js"></script>

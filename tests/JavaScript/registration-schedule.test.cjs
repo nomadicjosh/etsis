@@ -4,7 +4,8 @@ const test = require("node:test"),
 const fs = require("node:fs"),
     vm = require("node:vm");
 const { node, walk } = require("./support/elements.cjs");
-const presentation = fs.readFileSync("public/assets/js/registration-schedule.js", "utf8");
+const presentation = fs.readFileSync("public/assets/js/review-guidance.js", "utf8") + "\n"
+    + fs.readFileSync("public/assets/js/registration-schedule.js", "utf8");
 const conflict = (blocked) => ({
     status: "conflict",
     mode: blocked ? "block" : "warn",

@@ -665,7 +665,8 @@ window.createWorkspaceRegistration = function (ui) {
                     );
                 const details = node(
                     "details",
-                    { class: "mb-3" },
+                    { class: "mb-3", 'data-charge-review': '',
+                        'data-charges-attention': String(student.charges.total_minor == null || student.charges.problems.length > 0) },
                     node(
                         "summary",
                         { class: "fw-semibold" },
@@ -697,6 +698,7 @@ window.createWorkspaceRegistration = function (ui) {
                 },
                 "btn-primary",
             );
+            body.append(schedule.guidance(reviewed, false, body));
             submit.disabled = !schedule.canConfirm(reviewed);
             if (reviewed.students.some((student) => student.schedule?.blocked)) {
                 submit.disabled = true;

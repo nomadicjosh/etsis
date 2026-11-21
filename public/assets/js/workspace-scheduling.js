@@ -1155,6 +1155,23 @@ window.createWorkspaceScheduling = function (ui) {
         const title = text => node('h2', { class: 'h4', tabindex: '-1' }, text);
         const explain = () => node('p', { class: 'form-text' },
             'Publishing retains a historical academic schedule. It does not approve requests, move reservations or change student registration. Later booking changes need a new reviewed publication.');
+        const guide = (data, reviewed = false) => window.createReviewGuidance({ node },
+            window.capturedReviewGuidance.meetingPlan(data, reviewed), {
+                faculty: { label: 'Show faculty review', find: () => {
+                    const heading = body.querySelector('[aria-label="Faculty schedule review"] h3');
+                    if (heading) heading.tabIndex = -1;
+                    return heading;
+                } },
+                meetings: { label: 'Show meeting times', find: () => {
+                    const region = body.querySelector('[aria-label="Approved working meetings"], [aria-label="Meetings to publish"]');
+                    if (region) region.tabIndex = -1;
+                    return region;
+                } },
+                pending: { label: 'Go to pending requests', find: () =>
+                    [...body.querySelectorAll('button')].find(item => item.textContent === 'Review request 1') || null },
+                published: { label: 'Go to published plan', find: () =>
+                    [...body.querySelectorAll('button')].find(item => item.textContent === 'View published plan') || null },
+            });
         const home = () => {
             generation++;
             body.replaceChildren(title(`${snapshot.working.section_code} · ${snapshot.working.term_code}`), explain());
@@ -1188,7 +1205,7 @@ window.createWorkspaceScheduling = function (ui) {
                 body.append(pending);
                 body.append(button('Reload meeting plan', () => meetingPlan(sectionId)));
             }
-            body.append(facultyAssessment(snapshot.faculty_assessment), meetingPlanTable(snapshot.working, 'Approved working meetings'));
+            body.append(guide(snapshot), facultyAssessment(snapshot.faculty_assessment), meetingPlanTable(snapshot.working, 'Approved working meetings'));
             if (snapshot.faculty_assessment?.blocked && !snapshot.pending_booking_ids.length)
                 body.append(button('Reload meeting plan', () => meetingPlan(sectionId)));
             if (snapshot.changed && !snapshot.pending_booking_ids.length && !snapshot.faculty_assessment?.blocked) {
@@ -1242,7 +1259,7 @@ window.createWorkspaceScheduling = function (ui) {
                 node('p', { class: 'alert alert-info' }, review.previous
                     ? `This will replace plan ${review.previous.version} with ${review.previous.definition.meetings.length} meetings. Its history will be retained.`
                     : 'This will publish the first meeting plan for this section.'),
-                facultyAssessment(review.faculty_assessment), meetingPlanTable(review.definition, 'Meetings to publish'));
+                guide(review, true), facultyAssessment(review.faculty_assessment), meetingPlanTable(review.definition, 'Meetings to publish'));
             const status = node('p', { class: 'form-text', role: 'status' },
                 `Review expires ${display(new Date(review.expires_at * 1000))}.`);
             const acknowledgement = review.faculty_assessment?.pairs ? node('input', {

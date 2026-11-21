@@ -363,7 +363,11 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [x] Add local next-step guidance to the captured degree-progress review, with no provider calls, extra record reads or academic mutations. External AI data sharing remains separate.
 - [x] Add a dockable local guide to the staff degree-progress review, with keyboard controls, responsive reading order, captured-result detail links and no provider calls or new record reads. Refreshing or closing the review clears guide state; no browser storage or academic decisions are added. See [guide behavior](student-degree-progress.md#dockable-local-guide).
 - [x] Add owner-only student-portal degree progress with indexed pursuit choices, canonical on-demand calculations, a minimized student response, local detail paging and the shared guide. Remove the portal's separate transcript-row GPA calculation. No new academic writes or provider calls. See [student workflow](student-degree-progress.md#student-portal).
-- [ ] Extend contextual local helpers to other authorized workflows. External student-progress AI remains deferred by project direction; catalog-authoring AI stays separate. No automated academic decisions.
+- [x] Add [captured registration guidance](workspace-guides.md#registration) across staff single/group and shared staff/student schedules: distinguish existing/closed attempts, missing prerequisites/co-requisites, timetable blockers/warnings, unavailable evidence and proposed charges. Share one guide per selection with focused detail links; preserve existing confirmation and atomic backend rules.
+- [x] Add [admissions next-step guidance](workspace-guides.md#admissions) for submitted, accepted, rejected, withdrawn and matriculated applications: clarify institutional acceptance, offer response, intake and canonical-person matriculation. Focus existing checklist/document/offer controls while preserving unfinished casework and separate permissions.
+- [x] Add [meeting-plan guidance](workspace-guides.md#meeting-plan-publication) for working and reviewed schedules: pending decisions, unassigned faculty, conflicts, physical/online times, empty plans and unchanged publications. Reuse the same accessible disclosure component, replace guidance on refresh and keep detached controls inert. All guides use captured flags and fixed text, with no extra reads, browser storage, external AI calls or academic writes.
+
+External student-progress AI remains deferred by project direction; catalog-authoring AI stays separate. These local guides do not make academic decisions.
 
 ## 7. Scheduling, employment and office workflows
 
@@ -421,6 +425,12 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 - [ ] Run representative admissions-to-graduation and registration-to-billing-to-refund scenarios with fictional records, then institution-led acceptance of the agreed initial release scope.
 
 **Done when:** the intended release scope is explicit and accepted, recovery is demonstrated, and operational/security/accessibility checks pass. Event sourcing supports evidence; it does not by itself certify legal compliance.
+
+## 9. Multi-tenancy
+- [ ] One install codebase, multiple tenants
+- [ ] Support subdomain installs
+- [ ] Each subdomain should have its own database
+- [ ] Privacy and Security is of the utmost importance; making sure institution data isn't leaking into other institution data; making sure institutions can see other institution's data.
 
 ## Next implementation stages
 

@@ -142,3 +142,25 @@ test('faculty warning needs acknowledgement before publishing and retains its re
     expect(state.calls.filter(item => item.path.endsWith('/publish/')).every(item => item.csrf === 'fictional-test-token')).toBe(true);
     expect(state.errors).toEqual([]);
 });
+
+
+test('meeting guidance keeps an unfinished reason and focuses existing details without requests', async ({ page }) => {
+    const state = await fixture(page, { faculty: 'warn' });
+    await page.getByLabel('Reason for publication').fill('Fictional unsaved reason');
+    const count = state.calls.length;
+    await page.locator('[data-review-guide] > summary').click();
+    await expect(page.locator('[data-review-guide]')).toContainText('Acknowledge faculty warnings');
+    await page.getByRole('button', { name: 'Show faculty review', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Faculty schedule', exact: true })).toBeFocused();
+    await page.getByRole('button', { name: 'Show meeting times', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Approved working meetings', exact: true })).toBeFocused();
+    await expect(page.getByLabel('Reason for publication')).toHaveValue('Fictional unsaved reason');
+    expect(state.calls.length).toBe(count);
+    await page.setViewportSize({ width: 320, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect((await new AxeBuilder({ page }).include('#record-drawer').analyze()).violations).toEqual([]);
+    await page.getByRole('button', { name: 'Review meeting plan', exact: true }).click();
+    await expect(page.locator('[data-review-guide]')).toHaveCount(1);
+    await expect(page.locator('[data-review-guide]')).not.toHaveAttribute('open');
+    expect(state.errors).toEqual([]);
+});
