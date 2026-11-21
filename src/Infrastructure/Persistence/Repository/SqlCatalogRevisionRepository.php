@@ -48,12 +48,13 @@ final readonly class SqlCatalogRevisionRepository implements CatalogRevisionRepo
     {
         if (
             $kind === "courses" &&
-            (array_key_exists("transcript_title", $values) || array_key_exists("description", $values))
+            (array_key_exists("transcript_title", $values) || array_key_exists("description", $values) ||
+                array_key_exists('course_number', $values))
         ) {
             $text = new \Infrastructure\Persistence\SqlCourseText($this->sql);
             $current = $text->get($id);
             $text->save($id, \Domain\Catalog\ValueObject\CourseText::fromArray(array_replace($current, $values)));
-            unset($values["transcript_title"], $values["description"]);
+            unset($values["transcript_title"], $values["description"], $values['course_number']);
         }
         if ($values === []) {
             return;

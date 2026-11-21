@@ -398,6 +398,7 @@
                 {},
                 `Section ${course.section_code} · ${Number(course.credits_milli) / 1000} credits`,
             ),
+            course.course_number ? el('p', {}, `Course number ${course.course_number}`) : null,
             el('p', {}, course.delivery_label || 'Delivery to be confirmed'),
             el('p', {}, `${seats} of ${course.capacity} seats available`),
             el(

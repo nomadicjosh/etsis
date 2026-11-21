@@ -829,6 +829,9 @@ window.createWorkspaceCatalog = function (ui) {
             value: draft.transcript_title || "",
             "aria-describedby": "course-text-help",
         });
+        const courseNumber = node('input', { id: 'course-number', name: 'course_number',
+            class: 'form-control', type: 'text', maxlength: 32, value: draft.course_number || '',
+            'aria-describedby': 'course-number-help' });
         const description = node("textarea", {
             class: "form-control",
             id: "course-catalog-description",
@@ -839,6 +842,9 @@ window.createWorkspaceCatalog = function (ui) {
         });
         description.value = draft.description || "";
         form.append(
+            node('label', { class: 'form-label', for: courseNumber.id }, 'Course number (optional)'), courseNumber,
+            node('p', { id: 'course-number-help', class: 'form-text' },
+                'Use up to 32 characters, including leading zeros or suffixes. The full course code remains its catalog identifier; no number is inferred from it.'),
             node("label", { class: "form-label", for: title.id }, "Transcript title (optional)"),
             title,
             node(
@@ -862,6 +868,7 @@ window.createWorkspaceCatalog = function (ui) {
                 await request(`/sis/courses/${course}/text/`, "POST", {
                     transcript_title: title.value,
                     description: description.value,
+                    course_number: courseNumber.value,
                     revision: draft.revision,
                 });
                 const done = openDrawer("Course text draft saved", "READY FOR REVIEW");
@@ -881,6 +888,7 @@ window.createWorkspaceCatalog = function (ui) {
         body.append(
             button("Optional AI help", async () => {
                 if (
+                    courseNumber.value !== (draft.course_number || '') ||
                     description.value !== (draft.description || "") ||
                     title.value !== (draft.transcript_title || "")
                 ) {
@@ -1041,6 +1049,8 @@ window.createWorkspaceCatalog = function (ui) {
             "dl",
             { class: "detail-list" },
             node("div", {}, node("dt", {}, "Course code"), node("dd", {}, definition.code)),
+            node('div', {}, node('dt', {}, 'Course number'), node('dd', {},
+                Object.hasOwn(definition, 'course_number') ? definition.course_number || 'Not specified' : 'Not recorded in this publication')),
             node("div", {}, node("dt", {}, "Course title"), node("dd", {}, definition.title)),
             node("div", {}, node("dt", {}, "Subject"), node("dd", {}, subject)),
             node(

@@ -28,6 +28,8 @@ final readonly class CatalogImportRow
         public CatalogImportTarget $target = CatalogImportTarget::Course,
         public ?string $description = null,
         public bool $descriptionMapped = false,
+        public ?string $courseNumber = null,
+        public bool $numberMapped = false,
     ) {
         if (
             $row < 2 ||
@@ -36,6 +38,16 @@ final readonly class CatalogImportRow
             preg_match('/[\x00-\x1F\x7F]/', $code . $title)
         ) {
             throw new InvalidArgumentException("A source ID and printable catalog details are required.");
+        }
+        if (
+            ($target !== CatalogImportTarget::Course && ($courseNumber !== null || $numberMapped)) ||
+            (!$numberMapped && $courseNumber !== null)
+        ) {
+            throw new InvalidArgumentException('Map a course number only for a course destination.');
+        }
+        $number = new \Domain\Catalog\ValueObject\CourseText(courseNumber: $courseNumber);
+        if ($number->courseNumber !== $courseNumber) {
+            throw new InvalidArgumentException('Use a canonical course number.');
         }
         $clean = [];
         foreach ($references as $kind => $code) {
@@ -107,6 +119,9 @@ final readonly class CatalogImportRow
         // Existing source receipts attest to these original three facts; preserve their actual meaning.
         if ($this->references !== []) {
             $facts[] = $this->references;
+        }
+        if ($this->numberMapped) {
+            $facts[] = ['course_number' => $this->courseNumber];
         }
         return hash("sha256", json_encode($facts, JSON_THROW_ON_ERROR));
     }

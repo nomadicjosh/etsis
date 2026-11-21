@@ -47,6 +47,9 @@ final readonly class LeagueCatalogCsvMapper implements CatalogCsvMapper
         if ($target === CatalogImportTarget::Program) {
             $optional[] = "description";
         }
+        if ($target === CatalogImportTarget::Course) {
+            $optional[] = 'course_number';
+        }
         $errors = [];
         if ($mapping !== []) {
             if (
@@ -130,6 +133,8 @@ final readonly class LeagueCatalogCsvMapper implements CatalogCsvMapper
                 $descriptionMapped =
                 $target === CatalogImportTarget::Program && isset($mapping["description"]);
                 $description = $descriptionMapped ? trim($row[$mapping["description"]]) : null;
+                $numberMapped = $target === CatalogImportTarget::Course && isset($mapping['course_number']);
+                $number = $numberMapped ? trim($row[$mapping['course_number']]) : null;
                 $course = new CatalogImportRow(
                     $offset + 1,
                     $external,
@@ -140,6 +145,8 @@ final readonly class LeagueCatalogCsvMapper implements CatalogCsvMapper
                     $target,
                     $description === "" ? null : $description,
                     $descriptionMapped,
+                    courseNumber: $number === '' ? null : $number,
+                    numberMapped: $numberMapped,
                 );
                 $seen[strtolower($external)] = true;
                 $rows[] = $course;
@@ -153,7 +160,7 @@ final readonly class LeagueCatalogCsvMapper implements CatalogCsvMapper
                         $target->value .
                         " code and title. " .
                         ($target === CatalogImportTarget::Course
-                            ? "Use numeric credits with up to three decimal places. "
+                            ? "Use credits with up to three decimal places and a course number up to 32 characters. "
                             : ($target === CatalogImportTarget::Program
                                 ? "Use a plain-text description of up to 10000 characters. "
                                 : "Use a code up to 40 characters and a name up to 191 characters. ")) .

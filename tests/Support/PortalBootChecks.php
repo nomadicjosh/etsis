@@ -3761,6 +3761,7 @@ if (
     !str_contains($courseTextResponse->getHeaderLine("Cache-Control"), "no-store") ||
     $teachingPost($courseTextPath, [
         "revision" => $courseText["revision"],
+        'course_number' => '001A',
         "transcript_title" => "Fictional short title",
         "description" => "Fictional first paragraph.\nA second paragraph.",
     ])->getStatusCode() !== 200
@@ -3847,6 +3848,7 @@ if (
     $publishedDefinitions["items"][0]["definition"]["subject"]["code"] !== "FICTIONAL" ||
     new DateTimeImmutable($publishedDefinitions["items"][0]["effective_at"])->getTimestamp() !==
         $sis->clock->now()->modify("-21 minutes")->getTimestamp() ||
+    $publishedDefinitions["items"][0]["definition"]['course_number'] !== '001A' ||
     $publishedDefinitions["items"][0]["definition"]["transcript_title"] !== "Fictional short title"
 ) {
     throw new RuntimeException("Course publication did not retain the reviewed catalog text.");
@@ -4235,6 +4237,7 @@ if (
         ->getStatusCode() !== 403 ||
     $teachingPost($courseTextPath, [
         "revision" => $courseText["revision"],
+        'course_number' => null,
         "transcript_title" => "Unprivileged change",
         "description" => null,
     ])->getStatusCode() !== 403 ||

@@ -115,6 +115,7 @@ final readonly class CourseCloneService
             $this->catalog->save("courses", $draft->id, [
                 "transcript_title" => $context["source"]["transcript_title"],
                 "description" => $context["source"]["description"],
+                'course_number' => $context['source']['course_number'],
             ]);
             foreach ($ids as $id) {
                 $this->registration->addPrerequisite($draft->id, new EntityId($id));
@@ -225,6 +226,7 @@ final readonly class CourseCloneService
                 "active" => $course->active,
                 "transcript_title" => $text["transcript_title"],
                 "description" => $text["description"],
+                'course_number' => $text['course_number'],
             ],
             "prerequisites" => $prerequisites,
             "prerequisite_groups" => $groups?->groups,

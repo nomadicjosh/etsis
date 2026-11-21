@@ -98,6 +98,8 @@ final readonly class SqlCampusRepository implements CampusRepository
         $title = $course->value("title", "c." . $q("title"));
         $credits = $course->value("credits_milli", "c." . $q("credits_milli"));
         $description = $course->value("description", "x." . $q("published_description"));
+        $courseNumber = $course->value('course_number', 'x.' . $q('published_course_number'));
+        $numberRecorded = $course->value('number_recorded', 'x.' . $q('published_number_recorded'));
         $where = ["s." . $q("active") . " = 1", "c." . $q("active") . " = 1"];
         $params = [];
         if ($term !== null) {
@@ -119,7 +121,9 @@ final readonly class SqlCampusRepository implements CampusRepository
             $q("code") .
             ") LIKE ? ESCAPE '!' OR LOWER(pcs." . $q("code") .
             ") LIKE ? ESCAPE '!' OR LOWER(pcs." . $q("title") . ") LIKE ? ESCAPE '!')";
-            array_push($params, $pattern, $pattern, $pattern, $pattern, $pattern);
+            $where[count($where) - 1] = '(' . $where[count($where) - 1] .
+            ' OR LOWER(' . $courseNumber . ") LIKE ? ESCAPE '!')";
+            array_push($params, $pattern, $pattern, $pattern, $pattern, $pattern, $pattern);
         }
         $rows = $this->sql->fetch(
             "SELECT s." .
@@ -158,6 +162,8 @@ final readonly class SqlCampusRepository implements CampusRepository
                 $description .
                 " AS " .
                 $q("description") .
+                ', ' . $courseNumber . ' AS ' . $q('course_number') .
+                ', ' . $numberRecorded . ' AS ' . $q('course_number_recorded') .
                 ", pcs." . $q("code") . " AS " . $q("subject_code") .
                 ", pcs." . $q("title") . " AS " . $q("subject_title") .
                 ", scb." .

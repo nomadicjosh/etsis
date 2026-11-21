@@ -11,7 +11,7 @@ async function fixture(page, options = {}) {
     const termRow = { id: term, code: '26/FA', starts_on: '2026-08-01', ends_on: '2026-12-20', add_drop_ends_on: '2026-08-15' };
     const calls = [], errors = []; let published = false, rows = options.rows || [], saved = options.saved || false, definitionPublished = false;
     let sectionBound = false, acceptedReview = null, courseReviewCount = 0, courseCommitCount = 0;
-    let courseText = { transcript_title: null, description: options.description || null };
+    let courseText = { transcript_title: null, description: options.description || null, course_number: null };
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname, raw = route.request().postData();
@@ -28,7 +28,7 @@ async function fixture(page, options = {}) {
             result = data ? { task: data.task, advice: { summary: '<script>window.aiExecuted = true</script> Review this suggestion.', suggestions: ['Verify learning outcomes.'], description: data.task !== 'readiness' ? 'A fictional introduction to algebra.' : null } } : { enabled: !options.assistanceDisabled, label: 'Fictional provider', tasks: options.assistanceTasks || ['readiness', 'description', ...(courseText.description ? ['rewrite', 'expand'] : [])], revision: 'a'.repeat(64), draft: { code: 'MATH.101', title: 'Algebra', transcript_title: courseText.transcript_title, description: courseText.description, credits_milli: 3000, prerequisite_count: 0, subject: null, classifications: {} } };
         }
         else if (path === `/sis/courses/${course}/text/`) {
-            if (data) { courseText = { transcript_title: data.transcript_title, description: data.description }; result = { status: 'saved' }; }
+            if (data) { courseText = { transcript_title: data.transcript_title, description: data.description, course_number: data.course_number }; result = { status: 'saved' }; }
             else result = { id: course, code: 'MATH.101', title: 'Algebra', ...courseText, revision: 'fictional-text-revision' };
         }
         else if (path.endsWith('/course-definition/page/')) result = { section: { id: section, code: 'MATH.101.A' }, has_student_records: false,
@@ -172,6 +172,7 @@ test('course text drafts preserve paragraphs and render markup as text through p
     const f = await fixture(page);
     await page.getByRole('button', { name: 'Algebra', exact: true }).click();
     await page.getByRole('button', { name: 'Titles & description', exact: true }).click();
+    await page.getByLabel('Course number (optional)', { exact: true }).fill('001A');
     await page.getByLabel('Transcript title (optional)', { exact: true }).fill('Algebra I');
     const description = 'First paragraph.\n<script>window.fictionalCourseTextExecuted = true</script>\nSecond paragraph.';
     await page.getByLabel('Catalog description (optional)', { exact: true }).fill(description);
@@ -180,13 +181,14 @@ test('course text drafts preserve paragraphs and render markup as text through p
     await page.getByRole('button', { name: 'Save course text draft', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Your text is saved as a draft.');
     const saved = f.calls.find(call => call.path.endsWith('/text/'));
-    expect(saved).toMatchObject({ csrf: 'fictional-test-token', data: { transcript_title: 'Algebra I', description, revision: 'fictional-text-revision' } });
+    expect(saved).toMatchObject({ csrf: 'fictional-test-token', data: { course_number: '001A', transcript_title: 'Algebra I', description, revision: 'fictional-text-revision' } });
     expect(f.calls.some(call => call.path.endsWith('/publication/commit/'))).toBe(false);
     await page.getByRole('button', { name: 'Review publication', exact: true }).click();
     await page.getByLabel('Reason for publication').fill('Fictional approved description');
     await page.getByRole('button', { name: 'Review current definition', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText(description);
     await expect(page.locator('#drawer-body')).toContainText('Algebra I');
+    await expect(page.locator('#drawer-body')).toContainText('001A');
     expect(await page.evaluate(() => window.fictionalCourseTextExecuted)).toBeUndefined();
     await accessible(page);
     await page.getByRole('button', { name: 'Publish reviewed definition', exact: true }).click();

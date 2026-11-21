@@ -3,7 +3,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
 
 const id = suffix => `01K${String(suffix).padStart(23, '0')}`;
 const program = id(1), term = id(2), person = id(3), student = id(4), section = id(5), account = id(6), requestId = id(7), formId = id(8);
-const course = { id: section, term_id: term, course_code: 'MATH.101', title: 'Algebra', section_code: 'MATH.101.01', term_code: '26/FA', credits_milli: 3000, capacity: 25, enrolled: 8, fee_minor: 15000, currency: 'USD', web_registration: 1 };
+const course = { id: section, term_id: term, course_code: 'MATH.101', course_number: '001A', title: 'Algebra', section_code: 'MATH.101.01', term_code: '26/FA', credits_milli: 3000, capacity: 25, enrolled: 8, fee_minor: 15000, currency: 'USD', web_registration: 1 };
 const transcript = [{ course_code: 'MATH.101', course_title: 'Algebra', completed_milli: 3000, attempted_milli: 3000, grade_points_milli: 12000, grade_code: 'A', counts_gpa: true }];
 
 async function accessible(page) {
@@ -69,6 +69,7 @@ test('three academic themes, public news and course discovery are responsive and
     }
     await page.goto('/portal/courses/?guest=1');
     await expect(page.locator('#campus-course-results')).toContainText('MATH.101');
+    await expect(page.locator('#campus-course-results')).toContainText('Course number 001A');
     await page.getByLabel('Academic term').selectOption(term);
     await page.getByLabel('Course code, title, or section').fill('MATH.101');
     await page.getByRole('button', { name: 'Find courses' }).click();

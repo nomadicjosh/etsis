@@ -235,7 +235,7 @@ window.createWorkspaceImports = function (ui) {
                         { class: "form-text mb-0" },
                         !course()
                             ? `Existing: ${matched.code} · ${matched.title}`
-                            : `Existing: ${matched.code} · ${matched.title} · ${number(matched.credits_milli / 1000)} credits · ${matched.active ? "Active" : "Inactive"}`,
+                            : `Existing: ${matched.code} · ${matched.title} · ${number(matched.credits_milli / 1000)} credits · Number: ${matched.course_number || 'Not specified'} · ${matched.active ? "Active" : "Inactive"}`,
                     ),
                 );
             const record = node(
@@ -267,6 +267,7 @@ window.createWorkspaceImports = function (ui) {
                     node("details", { class: "mt-2" }, node("summary", {}, "Catalog classifications"), list),
                 );
             }
+            if (course() && row.number_mapped) record.append(node('p', {}, `Course number: ${row.course_number || 'Not specified'}`));
             if (program() && row.description_mapped)
                 record.append(
                     node(
@@ -371,11 +372,11 @@ window.createWorkspaceImports = function (ui) {
         const optional = node(
             "details",
             { class: "mt-4", id: "import-optional-fields" },
-            node("summary", {}, program() ? "Add program details" : "Add catalog classifications"),
+            node("summary", {}, program() ? "Add program details" : "Add course details & classifications"),
             node(
                 "p",
                 { class: "form-text mt-2" },
-                "Map existing catalog codes when available. Blank or unmapped values stay unspecified; they never clear existing catalog details.",
+                "Map existing catalog codes when available. Unmapped course numbers preserve existing values; a mapped blank number matches only an unspecified number. Imports never clear existing details.",
             ),
             node(
                 "a",
@@ -426,6 +427,7 @@ window.createWorkspaceImports = function (ui) {
                     ]),
                 ]
               : [
+                    ['course_number', 'Course number', 'Optional text, such as 001A; preserve leading zeros and suffixes'],
                     [
                         "subject_code",
                         "Subject code",

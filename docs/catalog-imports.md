@@ -25,12 +25,14 @@ After confirmation, **Review subjects**, **Review departments**, or the correspo
 
 ## Optional details and dependencies
 
-Expand **Add catalog classifications** for a course, or **Add program details** for a program. Map only the fields you intend to supply.
+Expand **Add course details & classifications** for a course, or **Add program details** for a program. Map only the fields you intend to supply.
 
 | Destination | Optional fields |
 | --- | --- |
-| Courses | Subject, department, academic level and course level codes. |
+| Courses | Optional course number; subject, department, academic level and course level codes. |
 | Programs | Program description; department, academic level, award, school/college, field of study and campus/site codes. |
+
+Course number is optional text up to 32 printable characters, for example `001A`. It preserves leading zeros, suffixes and case; the full code remains required. An unmapped number does not participate in matching and cannot clear the existing value. A mapped value, including an explicit blank, must match before an existing course can be linked. Different numbers are a conflict requiring a separate catalog edit or exclusion. Mapping the number never changes an earlier accepted source receipt or a published/student definition. The importer does not infer numbers from full codes.
 
 Each nonblank reference code must resolve to exactly one active entry in its own library. Codes are trimmed and normalized to uppercase; readable names appear in the review. The importer never guesses a subject from a course code, turns a school into a campus, creates missing references silently or assumes Undergraduate/Graduate exist in every installation. Optional destinations may deliberately share a source column.
 

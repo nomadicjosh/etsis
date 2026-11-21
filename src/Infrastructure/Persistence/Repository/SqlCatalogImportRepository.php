@@ -97,7 +97,7 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
             $limit = count($chunk) * 2;
             if ($target === CatalogImportTarget::Course) {
                 $select =
-                "SELECT c." .
+                'SELECT d.' . $q('course_number') . ', c.' .
                 $q("id") .
                 ", c." .
                 $q("code") .
@@ -128,7 +128,8 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
                 " k ON k." .
                 $q("id") .
                 " = c." .
-                $q("id");
+                $q("id") . ' LEFT JOIN ' . $q('sis_course_descriptions') . ' d ON d.' .
+                $q('course_id') . ' = c.' . $q('id');
             } elseif ($target->isReference()) {
                 $select = "SELECT c.* FROM " . $q($this->table($target)) . " c";
             } else {
@@ -200,6 +201,10 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
                 $row,
                 array_flip(["id", "code", "title", "credits_milli", "active", "kind"]),
             );
+            if ($target === CatalogImportTarget::Course) {
+                $text = $this->sql->current('sis_course_descriptions', $id, 'course_id');
+                $record['course_number'] = $text['course_number'] ?? null;
+            }
             if ($target === CatalogImportTarget::Program) {
                 $details = $this->sql->current("sis_program_details", $id);
                 $record["description"] = $details["description"] ?? null;
@@ -363,6 +368,12 @@ final readonly class SqlCatalogImportRepository implements CatalogImportReposito
             "credits_milli" => $course->creditsMilli,
             "active" => 0,
         ]);
+        if ($row->numberMapped) {
+            new \Infrastructure\Persistence\SqlCourseText($this->sql)->save(
+                $course->id,
+                new \Domain\Catalog\ValueObject\CourseText(courseNumber: $row->courseNumber)
+            );
+        }
         if (isset($references["subject"])) {
             new SqlSubjectRepository($this->sql)->assign(
                 $course->id,

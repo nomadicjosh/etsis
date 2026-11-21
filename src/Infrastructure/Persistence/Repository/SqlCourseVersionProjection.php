@@ -82,6 +82,15 @@ final readonly class SqlCourseVersionProjection
                 }
                 $definition['corequisites'] = json_decode($r['corequisites'], true, 4, JSON_THROW_ON_ERROR);
             }
+            if (
+                !in_array($r['number_recorded'], [0, 1, '0', '1', true, false], true) ||
+                (!(bool) $r['number_recorded'] && $r['course_number'] !== null)
+            ) {
+                throw new CorruptHistoryException();
+            }
+            if ((bool) $r['number_recorded']) {
+                $definition['course_number'] = $r['course_number'];
+            }
             $definition += ["transcript_title" => $r["transcript_title"], "description" => $r["description"]];
             $subject = $this->sql->rows("sis_course_version_subjects", ["id" => $r["id"]], 1)[0] ?? null;
             $definition["subject"] =
@@ -97,6 +106,9 @@ final readonly class SqlCourseVersionProjection
                 "version_id" => $r["id"],
                 "definition" => $definition,
             ]);
+            if ($published->definition->text->courseNumber !== $r['course_number']) {
+                throw new CorruptHistoryException();
+            }
             return $published;
         } catch (Throwable) {
             throw new CorruptHistoryException();
@@ -177,6 +189,8 @@ final readonly class SqlCourseVersionProjection
             "credits_milli" => $definition->definition->creditsMilli,
             "transcript_title" => $definition->definition->text->transcriptTitle,
             "description" => $definition->definition->text->description,
+            'course_number' => $definition->definition->text->courseNumber,
+            'number_recorded' => (int) $definition->definition->text->courseNumberRecorded,
             "prerequisites" => json_encode($definition->definition->prerequisites, JSON_THROW_ON_ERROR),
             "corequisites" => $definition->definition->prerequisiteGroups?->corequisites === null ? null :
                 json_encode($definition->definition->prerequisiteGroups->corequisites, JSON_THROW_ON_ERROR),
@@ -191,6 +205,7 @@ final readonly class SqlCourseVersionProjection
             $this->sql->insert("sis_course_versions", $r);
         } else {
             $old["schema_version"] = (int) $old["schema_version"];
+            $old['number_recorded'] = (int) $old['number_recorded'];
             $old["credits_milli"] = (int) $old["credits_milli"];
             if ($old['requirement_minimum'] !== null) {
                 $minimum = filter_var($old['requirement_minimum'], FILTER_VALIDATE_INT);

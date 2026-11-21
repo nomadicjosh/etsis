@@ -25,6 +25,8 @@ final readonly class SqlCourseTextProjection implements CourseTextProjection
         $values = [
             "published_transcript_title" => $text->transcriptTitle,
             "published_description" => $text->description,
+            'published_course_number' => $text->courseNumber,
+            'published_number_recorded' => (int) $text->courseNumberRecorded,
             "publication_version_id" => $version->value,
             "published_position" => $position,
         ];
@@ -37,7 +39,9 @@ final readonly class SqlCourseTextProjection implements CourseTextProjection
                 (int) $existing["published_position"] !== $position ||
                 $existing["publication_version_id"] !== $version->value ||
                 $existing["published_transcript_title"] !== $text->transcriptTitle ||
-                $existing["published_description"] !== $text->description
+                $existing["published_description"] !== $text->description ||
+                $existing['published_course_number'] !== $text->courseNumber ||
+                (int) $existing['published_number_recorded'] !== (int) $text->courseNumberRecorded
             ) {
                 throw new CorruptHistoryException();
             }

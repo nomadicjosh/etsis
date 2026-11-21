@@ -27,8 +27,9 @@ final readonly class SisCourseTextController
     {
         $f = FormInput::from($request);
         $body = $request->getParsedBody();
-        if (!is_array($body)) {
-            throw new \InvalidArgumentException("Provide course text in the form.");
+        if (!is_array($body) || !array_key_exists('course_number', $body)) {
+            throw new \Domain\Shared\Exception\ValidationException([['field' => 'course_number',
+                'message' => 'Provide the course number, or explicitly leave it blank.']]);
         }
         $this->editor->courseText(new EntityId($id), CourseText::fromArray($body), $f->text("revision", 64));
         return new JsonResponse(["status" => "saved"]);

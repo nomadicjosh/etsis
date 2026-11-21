@@ -68,6 +68,9 @@ final readonly class CourseDefinition
             "subject",
             "classifications",
         ];
+        if (array_key_exists('course_number', $data)) {
+            $keys[] = 'course_number';
+        }
         if (array_key_exists('prerequisite_groups', $data)) {
             if (!is_array($data['prerequisite_groups'])) {
                 throw new InvalidArgumentException('Use complete prerequisite choice groups.');

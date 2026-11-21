@@ -30,9 +30,10 @@ final readonly class CatalogEditor
     /** @return array<string, scalar|null> */
     public function view(string $kind, EntityId $id): array
     {
-        $this->access->requirePermission("sis:catalog:manage");
+        $actor = $this->access->requirePermission("sis:catalog:manage");
         $row = $this->repository->get($kind, $id);
 
+        $this->sameActor($actor);
         return $row + ["revision" => $this->revision($row)];
     }
 
@@ -77,6 +78,7 @@ final readonly class CatalogEditor
         $actor = $this->access->requirePermission("sis:catalog:manage");
         $this->transactions->run(function () use ($kind, $id, $revision, $values, $actor): void {
             $this->repository->lock($kind, $id);
+            $this->sameActor($actor);
             if (!hash_equals($this->revision($this->repository->get($kind, $id)), $revision)) {
                 throw new ConcurrentModificationException("This catalog record changed. Reload before saving.");
             }
@@ -85,7 +87,18 @@ final readonly class CatalogEditor
             }
             $this->repository->save($kind, $id, $values);
             $this->audit->record($actor, "catalog." . $kind . ".updated", $id);
+            $this->sameActor($actor);
         });
+    }
+
+    private function sameActor(EntityId $actor): void
+    {
+        if (
+            $this->access->requirePermission('sis:catalog:manage')->value !== $actor->value ||
+            $this->access->authenticatedUserId()->value !== $actor->value
+        ) {
+            throw new \Domain\Shared\Exception\AccessDeniedException();
+        }
     }
 
     /** @param array<string, scalar|null> $values */

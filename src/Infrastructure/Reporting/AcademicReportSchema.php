@@ -414,6 +414,13 @@ final class AcademicReportSchema
                         "course_version_id",
                     ),
                     "course_code" => $field("Recorded course code", "string", "credit", "course_code"),
+                    'course_number' => $field('Retained course number', 'string', 'course_version', 'course_number'),
+                    'course_number_recorded' => $field(
+                        'Course number recorded in publication',
+                        'boolean',
+                        'course_version',
+                        'number_recorded',
+                    ),
                     "course_title" => $field("Recorded course title", "string", "credit", "course_title"),
                     "term_code" => $field("Academic term", "string", "term", "code"),
                     "retained_posting_term_code" => $field(
@@ -534,6 +541,36 @@ final class AcademicReportSchema
                     "id",
                 ),
                 "retained_course_code" => $field("Retained course code", "string", "course_version", "code"),
+                'retained_course_number' => $field(
+                    'Retained course number',
+                    'string',
+                    'course_version',
+                    'course_number',
+                ),
+                'retained_number_recorded' => $field(
+                    'Course number recorded in publication',
+                    'boolean',
+                    'course_version',
+                    'number_recorded',
+                ),
+                'current_course_number' => $field(
+                    'Current draft course number',
+                    'string',
+                    'course_text',
+                    'course_number',
+                ),
+                'published_course_number' => $field(
+                    'Current published course number',
+                    'string',
+                    'course_text',
+                    'published_course_number',
+                ),
+                'published_number_recorded' => $field(
+                    'Current publication recorded a number choice',
+                    'boolean',
+                    'course_text',
+                    'published_number_recorded',
+                ),
                 "retained_course_title" => $field(
                     "Retained catalog title",
                     "string",

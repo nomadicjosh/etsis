@@ -22,12 +22,12 @@ test('course import reviews matches and exclusions with bounded rows, safe rende
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         if (path === '/sis/imports/preview/') {
             const choices = Object.fromEntries((body.choices || []).map(choice => [choice.external_id, choice]));
-            const plan = Object.keys(body.mapping).length ? base.map(row => ({ ...row,
+            const plan = Object.keys(body.mapping).length ? base.map(row => ({ ...row, course_number: body.mapping.course_number != null ? '001A' : null, number_mapped: body.mapping.course_number != null,
                 action: choices[row.external_id]?.action === 'skip' ? 'omitted' : choices[row.external_id]?.action === 'link' ? 'link' : row.action })) : [];
             const summary = { create: 0, link: 0, skip: 0, omitted: 0, match: 0, conflict: 0 };
             plan.forEach(row => summary[row.action]++);
             const ready = plan.length > 0 && !summary.match && !summary.conflict;
-            result = { headers: ['External ID', 'Code', 'Title', 'Credits'], samples: [['1', 'MATH.101', title, '3']],
+            result = { headers: ['External ID', 'Code', 'Title', 'Credits', 'Number'], samples: [['1', 'MATH.101', title, '3', '001A']],
                 row_count: 30, ready, errors: [], fingerprint: 'fictional-source-hash', plan, summary,
                 review_token: ready ? `fictional-review-${++reviewCount}` : null, review_minutes: 20 };
         }
@@ -44,12 +44,15 @@ test('course import reviews matches and exclusions with bounded rows, safe rende
     await page.goto('/admin/course-import-fixture/');
     await page.locator('.workspace-nav-link[data-workspace="imports"]').click();
     await page.locator('#import-file').setInputFiles({ name: 'fictional.csv', mimeType: 'text/csv',
-        buffer: Buffer.from('External ID,Code,Title,Credits\n1,MATH.101,Fictional Algebra,3\n') });
+        buffer: Buffer.from('External ID,Code,Title,Credits,Number\n1,MATH.101,Fictional Algebra,3,001A\n') });
     await page.getByRole('button', { name: 'Match fields', exact: false }).click();
+    await page.getByText('Add course details & classifications', { exact: true }).click();
+    await page.locator('#map-course_number').selectOption('4');
     await page.getByRole('button', { name: 'Review import', exact: false }).click();
     await expect(page.getByLabel('Review rows', { exact: true })).toHaveValue('unresolved');
     await expect(page.getByRole('table', { name: 'Reviewed course import rows' })).toContainText(title);
     await expect(page.locator('[data-import-panel="3"] img')).toHaveCount(0);
+    await expect(page.getByRole('table', { name: 'Reviewed course import rows' })).toContainText('Course number: 001A');
     await expect(page.locator('#import-commit')).toBeDisabled();
     await page.getByRole('button', { name: 'Link course for row 2', exact: true }).click();
     await page.getByRole('button', { name: 'Leave out row 3', exact: true }).click();
@@ -79,6 +82,7 @@ test('course import reviews matches and exclusions with bounded rows, safe rende
     const commits = calls.filter(call => call.path === '/sis/imports/commit/');
     expect(commits).toHaveLength(2);
     expect(commits[0].body).toEqual(commits[1].body);
+    expect(commits[0].body.mapping.course_number).toBe(4);
     expect(commits[0].body.choices).toEqual([
         { external_id: '1', action: 'link', course_id: id(1) },
         { external_id: '__proto__', action: 'skip', course_id: null },

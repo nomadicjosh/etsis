@@ -291,6 +291,12 @@ final readonly class MappedImportService
                 );
             }
             if (
+                $target === CatalogImportTarget::Course && ($row->numberMapped || $action['action'] === 'create') &&
+                ($record['course_number'] ?? null) !== $row->courseNumber
+            ) {
+                throw new ConcurrentModificationException('The imported course number changed before completion.');
+            }
+            if (
                 $target === CatalogImportTarget::Program &&
                 ($row->descriptionMapped || $action["action"] === "create") &&
                 ($record["description"] ?? null) !== $row->description
@@ -348,7 +354,8 @@ final readonly class MappedImportService
             $record !== null &&
             $record["title"] === $row->title &&
             ($target === CatalogImportTarget::Course
-            ? (int) $record["credits_milli"] === $row->creditsMilli
+            ? ((int) $record["credits_milli"] === $row->creditsMilli &&
+                (!$row->numberMapped || ($record['course_number'] ?? null) === $row->courseNumber))
             : !$row->descriptionMapped || ($record["description"] ?? null) === $row->description);
             $same =
             $sameCore &&
@@ -397,6 +404,7 @@ final readonly class MappedImportService
                 ? [
                             "credits_milli" => (int) $record["credits_milli"],
                             "active" => (bool) $record["active"],
+                            'course_number' => $record['course_number'] ?? null,
                         ]
                 : ($target->isReference()
                             ? ["active" => (bool) $record["active"]]
@@ -471,6 +479,7 @@ final readonly class MappedImportService
                     "references" => $resolved["references"],
                     "reference_errors" => $resolved["errors"],
                 ] +
+            ($row->numberMapped ? ['course_number' => $row->courseNumber, 'number_mapped' => true] : []) +
             ($target === CatalogImportTarget::Program
             ? ["description" => $row->description, "description_mapped" => $row->descriptionMapped]
             : []);

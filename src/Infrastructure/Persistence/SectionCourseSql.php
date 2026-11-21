@@ -39,7 +39,9 @@ final readonly class SectionCourseSql
 
     public function value(string $field, string $unboundExpression): string
     {
-        if (!in_array($field, ["code", "title", "credits_milli", "description", "transcript_title"], true)) {
+        $fields = ['code', 'title', 'credits_milli', 'description', 'transcript_title',
+            'course_number', 'number_recorded'];
+        if (!in_array($field, $fields, true)) {
             throw new InvalidArgumentException("Unknown retained course field.");
         }
         $q = $this->sql->quote(...);

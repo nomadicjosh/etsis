@@ -14,18 +14,19 @@ final readonly class SqlCourseText
     {
     }
 
-    /** @return array{transcript_title: ?string, description: ?string} */
+    /** @return array{transcript_title: ?string, description: ?string, course_number: ?string} */
     public function get(EntityId $id): array
     {
         $row = $this->sql->rows("sis_course_descriptions", ["course_id" => $id->value], 1)[0] ?? null;
-        return ["transcript_title" => $row["transcript_title"] ?? null, "description" => $row["description"] ?? null];
+        return ["transcript_title" => $row["transcript_title"] ?? null, "description" => $row["description"] ?? null,
+            'course_number' => $row['course_number'] ?? null];
     }
 
     public function save(EntityId $id, CourseText $text): void
     {
         $existing = $this->sql->rows("sis_course_descriptions", ["course_id" => $id->value], 1);
         if ($existing === []) {
-            if ($text->transcriptTitle !== null || $text->description !== null) {
+            if ($text->transcriptTitle !== null || $text->description !== null || $text->courseNumber !== null) {
                 $this->sql->insert(
                     "sis_course_descriptions",
                     ["id" => EntityId::generate()->value, "course_id" => $id->value] + $text->describe(),
