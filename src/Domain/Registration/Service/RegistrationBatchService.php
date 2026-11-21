@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\Registration\Service;
 
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Registration\Repository\RegistrationBatchRepository;
@@ -46,6 +47,22 @@ final readonly class RegistrationBatchService
     ) {
     }
 
+    /** Internal reinstatement assessment; the coordinator owns duty, exact identity and source verification. */
+    public function assessReinstatement(
+        EntityId $student,
+        EntityId $section,
+        EntityId $enrollment,
+        HistoryReadBudget $budget,
+    ): array {
+        $quotes = [];
+        return $this->context(
+            new RegistrationBatchSelection($section, $student),
+            $budget,
+            true,
+            $quotes,
+            reinstating: $enrollment,
+        );
+    }
     /** Internal section-change assessment. The coordinator owns student/person/section/course locks.
      * @return array<string,mixed> */
     public function assessSectionChange(
@@ -797,6 +814,7 @@ final readonly class RegistrationBatchService
         ?RegistrationScheduleRead $scheduleRead = null,
         ?EntityId $replacingSection = null,
         ?CoRequisitePlan $corequisitePlan = null,
+        ?EntityId $reinstating = null,
     ): array {
         $section = $this->repository->section($selection->section);
         $course = $this->repository->courseForSection($section);
@@ -813,6 +831,16 @@ final readonly class RegistrationBatchService
         foreach ($selection->students as $id) {
             $records[$id->value] = $this->admissions->student($id);
             $existing[$id->value] = $this->repository->enrollment($id, $section->id);
+            if ($reinstating !== null) {
+                $current = $existing[$id->value];
+                if (
+                    $current?->id->value !== $reinstating->value ||
+                    $current->status->value !== 'W' || count($selection->students) !== 1
+                ) {
+                    throw new ConcurrentModificationException('The selected withdrawn attempt changed.');
+                }
+                $existing[$id->value] = null;
+            }
             if ($existing[$id->value] === null) {
                 $program = $records[$id->value]->programId;
                 $programs[$program->value] = $program;
@@ -823,7 +851,8 @@ final readonly class RegistrationBatchService
         $prerequisiteCourses = $programs === [] ? [] : array_map(static fn(string $id): array =>
             $labels[$id] ?? ["code" => null, "title" => null], $required);
         $rules =
-        $programs === [] ? [] : $this->billing->rules($section->termId, $budget, array_values($programs));
+        ($programs === [] || $reinstating !== null)
+        ? [] : $this->billing->rules($section->termId, $budget, array_values($programs));
         foreach ($selection->students as $id) {
             $student = $records[$id->value];
             $person = $this->admissions->person($student->personId);
@@ -855,7 +884,7 @@ final readonly class RegistrationBatchService
             ? $this->schedules->evaluate($id, $section->id, $scheduleRead, $replacingSection)
             : null;
             $quote =
-            $enrollment === null
+            $enrollment === null && $reinstating === null
             ? $this->billing->registrationQuote(
                 $id,
                 $section->termId,
@@ -915,6 +944,25 @@ final readonly class RegistrationBatchService
             }
             if ($enrollment !== null && !$enrollment->status->isEnrolled()) {
                 $issues = ["A closed enrollment requires registrar review before re-enrollment."];
+            }
+            if ($reinstating !== null) {
+                $evidence = [
+                    'prerequisites' => $decision,
+                    'corequisites' => $corequisite,
+                    'schedule' => $schedule,
+                    'window' => $window,
+                    'eligibility' => [
+                        'student_active' => $student->active,
+                        'by_staff' => true,
+                        'self_service_open' => $window->isOpen($now),
+                        'courses_before' => $this->repository->enrolledCount($id, $section->termId),
+                        'course_limit' => $window->courseLimit,
+                        'prerequisites_met' => $decision->isMet(),
+                        'required_course_ids' => $decision->required,
+                        'opens_at' => \Domain\Registration\ValueObject\EnrollmentFacts::utc($window->dates->start),
+                        'closes_at' => \Domain\Registration\ValueObject\EnrollmentFacts::utc($window->dates->end),
+                    ],
+                ];
             }
             $students[] = [
                 'waitlist' => $waitlist,
@@ -993,7 +1041,7 @@ final readonly class RegistrationBatchService
                 ),
             ],
             "students" => $students,
-        ];
+        ] + ($reinstating === null ? [] : ['evidence' => $evidence]);
     }
 
     /**

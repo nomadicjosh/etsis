@@ -17,6 +17,8 @@ Open an application in **Admissions**. The guide follows its recorded status:
 
 Sections now have an explicit [waitlisting setting and queue workflow](registration-history.md#per-section-waitlists). **Waitlist policy** starts disabled for each section; **Section waitlist** provides staff queue review, while students use **Waitlist options** and **Your waitlist requests**. Joining does not enroll or charge. When a seat is available, the oldest request uses the same registration guide, eligibility review and fee confirmation described below.
 
+Registrars can separately [reinstate an unchanged tracked late withdrawal](registration-history.md#reinstate-a-tracked-late-withdrawal) through **Students → Registration history → Reinstate this withdrawal**. The reasoned review reuses the shared readiness/timetable explanations and shows the original attempt/credit effect. Existing account postings stay unchanged. It requires the independent reinstatement and closed-record duties in addition to registration management; broader unknown/removed/amended-source reopening remains separate.
+
 The guide appears in staff single/group registration and shared staff/student schedule reviews. A multi-section schedule gets one guide for the complete selection.
 
 It distinguishes existing active registrations from closed attempts, directs staff to outstanding registration checks, explains missing prerequisites and companion courses, separates blocking timetable conflicts from permitted warnings, and calls out unavailable schedules or pricing. An unpublished meeting plan is not evidence of a clear timetable. Proposed registration charges are separate from the account balance, aid and a payment request.

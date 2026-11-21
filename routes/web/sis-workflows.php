@@ -892,6 +892,13 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/registrations/", [SisRegistrationController::class, "register"])
         ->name("sis.registration.register");
+    $reinstatements = \Application\Http\Controller\SisEnrollmentReinstatementController::class;
+    $router->post('/sis/students/{student}/sections/{section}/enrollments/{enrollment}/reinstatement/review/', [
+        $reinstatements, 'review',
+    ]);
+    $router->post('/sis/students/{student}/sections/{section}/enrollments/{enrollment}/reinstatement/confirm/', [
+        $reinstatements, 'confirm',
+    ]);
     $waitlists = \Application\Http\Controller\SisWaitlistController::class;
     $router->get('/sis/sections/{id}/waitlist/policy/', [$waitlists, 'policy'])->name('sis.waitlist.policy');
     $router->post('/sis/sections/{id}/waitlist/policy/review/', [$waitlists, 'reviewPolicy']);

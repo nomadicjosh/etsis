@@ -113,3 +113,6 @@ The legacy `stal.acadStanding` now has [institution-defined labels and reviewed 
 ## Registered credit load
 
 [Enrollment load](enrollment-load.md) now has versioned institutional/program bands and runtime-only selected-term reviews. Registered units and the registration term come from genuine opening facts, separately from corrected awarded units and academic posting terms. Active registrations accepted under a prior pursuit still count for the term after a program change; the current primary program supplies the working policy. Closed/early-drop rows stay excluded and unknown earlier quantities are not inferred. Retained census determinations and official load reporting remain gaps.
+
+
+The [tracked late-withdrawal reinstatement](registration-history.md#reinstate-a-tracked-late-withdrawal) now restores the actual original ungraded credit and enrollment under their existing identities through new attributed events. It verifies original publications/offering/pursuit, preserves all account postings and previous withdrawal facts, blocks pending/later academic amendments and leaves unknown, removed or amended-source attempts for explicit reconciliation. This is a bounded current-policy registrar workflow, not a reconstruction of earlier unrecorded events or a general reopening decision.

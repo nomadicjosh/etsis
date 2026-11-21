@@ -1775,6 +1775,7 @@ window.createWorkspaceTeaching = function (ui) {
                                               course_accepted: "Course publication accepted",
                                               course_corrected: "Awarded course corrected",
                                               dropped: "Course dropped",
+                                              reinstated: "Withdrawal reinstated",
                                           }[item.action] || "Academic decision",
                                   ["course_accepted", "course_corrected"].includes(item.action)
                                       ? `${item.course_code} · ${item.course_title}`

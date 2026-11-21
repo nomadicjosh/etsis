@@ -253,6 +253,153 @@ final readonly class EnrollmentLedger
         }
         $this->project($root, $before["version"]);
     }
+    /** Internal exact tracked withdrawal basis; no reconstruction of unknown earlier admission. */
+    public function reinstatementBasis(
+        Enrollment $enrollment,
+        Section $section,
+        Course $course,
+        HistoryReadBudget $budget,
+    ): array {
+        $root = $this->load($enrollment->id, $budget);
+        if (
+            !$root->canReinstate() ||
+            $root->source()["course_version_id"] === null ||
+            $root->sectionVersion() !== $section->publicationVersionId?->value ||
+            !$this->same(
+                $root->source(),
+                $this->source($section, $enrollment->termId, $course->publicationVersionId),
+            )
+        ) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "enrollment",
+                    "message" =>
+                        "Reinstatement needs a tracked withdrawal, its original published course " .
+                        "and unchanged offering facts. Review unknown or amended sources with the registrar.",
+                ],
+            ]);
+        }
+        return [
+            "facts" => $root->facts(),
+            "status" => $root->reinstatementStatus(),
+            "history_version" => $root->playhead(),
+            "section_version_id" => $root->sectionVersion(),
+        ];
+    }
+    public function verifyReinstatementOffering(
+        Enrollment $enrollment,
+        Section $section,
+        Course $course,
+        HistoryReadBudget $budget,
+    ): void {
+        $root = $this->load($enrollment->id, $budget);
+        if (
+            $root->sectionVersion() !== $section->publicationVersionId?->value ||
+            !$this->same(
+                $root->source(),
+                $this->source($section, $enrollment->termId, $course->publicationVersionId),
+            )
+        ) {
+            throw new \Domain\Shared\Exception\ConcurrentModificationException(
+                "The reinstated offering facts changed before completion.",
+            );
+        }
+    }
+    public function reinstatementReceipt(
+        EntityId $enrollment,
+        EntityId $operation,
+        HistoryReadBudget $budget,
+    ): ?array {
+        return $this->load($enrollment, $budget)->reinstatement($operation);
+    }
+    /** Caller owns authorization, locks and the common transaction. Academic reinstatement has already succeeded. */
+    public function reinstate(
+        Enrollment $enrollment,
+        Section $section,
+        array $academic,
+        EntityId $operation,
+        string $revision,
+        array $evidence,
+        EventContext $context,
+        HistoryReadBudget $budget,
+    ): Enrollment {
+        $this->actor($context->actor ?? throw new CorruptHistoryException());
+        $root = $this->load($enrollment->id, $budget);
+        if (
+            !$root->canReinstate() ||
+            $root->facts()["version"] !== $enrollment->version ||
+            $evidence["prerequisites"]->assignment->value !== $academic["assignment_id"]
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $metadata = [
+            "__aggregate_type" => "enrollment",
+            "prerequisite_evidence" => $evidence["prerequisites"]->retained(),
+            "schedule_evidence" => $evidence["schedule"]->facts,
+        ];
+        if ($root->sectionVersion() !== null) {
+            $metadata["section_version_id"] = $root->sectionVersion();
+        }
+        if ($evidence["corequisites"] !== null) {
+            $metadata["corequisite_evidence"] = $evidence["corequisites"]->retained();
+        }
+        if ($evidence["window"]->reference !== null) {
+            $metadata["registration_window"] = $evidence["window"]->reference;
+        }
+        unset($metadata["__aggregate_type"]);
+        $metadata = ["__aggregate_type" => "enrollment", "reinstatement_evidence" => $metadata];
+        $decision = \Domain\Shared\ValueObject\DerivedIdentity::from(
+            $operation,
+            "reinstatement.enrollment",
+        );
+        $event = \Domain\Registration\Event\EnrollmentWasReinstated::occur(
+            new EnrollmentHistoryId($enrollment->id->value),
+            [
+                "decision_id" => $decision->value,
+                "operation_id" => $operation->value,
+                "previous_decision_id" => $root->decision(),
+                "status" => $root->reinstatementStatus(),
+                "status_at" => EnrollmentFacts::utc(
+                    $context->effectiveAt ?? throw new CorruptHistoryException(),
+                ),
+                "enrollment_version" => $enrollment->version + 1,
+                "academic_credit_id" => $academic["credit_id"],
+                "academic_version" => $academic["version"],
+                "revision" => $revision,
+                "intent" => \Domain\Registration\ValueObject\ReinstatementIntent::hash(
+                    $enrollment->studentId,
+                    $enrollment->sectionId,
+                    $enrollment->id,
+                    $operation,
+                    $revision,
+                    $context->reason ?? "",
+                ),
+                "eligibility" => $evidence["eligibility"],
+                "seat" => $this->nextSeat($section, 1, $budget),
+            ],
+            $metadata,
+        )->withPlayhead($root->playhead() + 1);
+        $this->history->append(
+            $this->stream($enrollment->id),
+            $decision,
+            $root->playhead(),
+            $context,
+            [$event],
+        );
+        $root->acceptHistorical($event, $context);
+        $this->project($root, $enrollment->version);
+        $facts = $root->facts();
+        return new Enrollment(
+            $enrollment->id,
+            $enrollment->studentId,
+            $enrollment->sectionId,
+            $enrollment->termId,
+            \Domain\Registration\Enum\RegistrationStatus::from($facts["status"]),
+            $enrollment->registeredAt,
+            $context->effectiveAt,
+            $facts["version"],
+        );
+    }
     /** Restricted curated read, after caller authorizes and locks the student/section.
      * @return array<string,mixed> */
     public function summary(
@@ -269,12 +416,11 @@ final readonly class EnrollmentLedger
             $e = $stored->event;
             $p = $e->payload();
             $items[] = [
-                "action" =>
-                    $e instanceof EnrollmentWasEstablished
-                        ? $p["provenance"]
-                        : ($p["policy"]["remove_current"]
-                            ? "early_drop"
-                            : "late_drop"),
+                "action" => match (true) {
+                    $e instanceof \Domain\Registration\Event\EnrollmentWasReinstated => 'reinstated',
+                    $e instanceof EnrollmentWasEstablished => $p['provenance'],
+                    default => $p['policy']['remove_current'] ? 'early_drop' : 'late_drop',
+                },
                 "section_sequence" => $p["seat"]["sequence"] ?? null,
                 "effective_at" => $stored->context->describe()["effective_at"],
                 "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
@@ -333,7 +479,7 @@ final readonly class EnrollmentLedger
         do {
             $page = $budget->page($this->history, $this->stream($id), $cursor);
             foreach ($page->events as $stored) {
-                $root->acceptHistorical($stored->event);
+                $root->acceptHistorical($stored->event, $stored->context);
             }
             $cursor = $page->nextCursor;
         } while ($cursor !== null);
@@ -382,7 +528,7 @@ final readonly class EnrollmentLedger
         return $root;
     }
     /** @return array<string,mixed>|null */
-    private function head(Section $section): ?array
+    private function head(Section $section, ?HistoryReadBudget $budget = null): ?array
     {
         $last = $this->records->latest($section->id);
         $maximum = $this->records->maximumSequence($section->id);
@@ -395,7 +541,7 @@ final readonly class EnrollmentLedger
         if ($last["sequence"] !== $maximum) {
             throw new CorruptHistoryException();
         }
-        $root = $this->load(new EntityId($last["enrollment_id"]));
+        $root = $this->load(new EntityId($last["enrollment_id"]), $budget);
         $seat = $root->seat();
         if (
             $root->decision() !== $last["id"] ||
@@ -412,9 +558,9 @@ final readonly class EnrollmentLedger
         return $last;
     }
     /** @return array<string,mixed> */
-    private function nextSeat(Section $section, int $delta): array
+    private function nextSeat(Section $section, int $delta, ?HistoryReadBudget $budget = null): array
     {
-        $last = $this->head($section);
+        $last = $this->head($section, $budget);
         $before = $this->records->usedSeats($section->id);
         if (
             ($delta === 1 &&

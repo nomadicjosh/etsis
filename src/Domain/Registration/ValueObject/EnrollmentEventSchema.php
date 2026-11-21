@@ -15,6 +15,10 @@ final class EnrollmentEventSchema
     /** @param array<string,mixed> $p */
     public static function validate(string $class, #[\SensitiveParameter] array $p): void
     {
+        if ($class === \Domain\Registration\Event\EnrollmentWasReinstated::class) {
+            ReinstatementEventSchema::validate($p, false);
+            return;
+        }
         $keys = match ($class) {
             EnrollmentWasEstablished::class => [
                 "decision_id",
@@ -155,7 +159,7 @@ final class EnrollmentEventSchema
         }
     }
     /** @param array<string,mixed> $e */
-    private static function eligibility(array $e): void
+    public static function eligibility(array $e): void
     {
         self::keys($e, [
             "student_active",
@@ -196,7 +200,7 @@ final class EnrollmentEventSchema
         }
     }
     /** @param array<string,mixed> $s */
-    private static function seat(array $s, int $delta): void
+    public static function seat(array $s, int $delta): void
     {
         self::keys($s, ["sequence", "previous_decision_id", "used_before", "used_after", "capacity"]);
         foreach (["sequence", "used_before", "used_after", "capacity"] as $key) {

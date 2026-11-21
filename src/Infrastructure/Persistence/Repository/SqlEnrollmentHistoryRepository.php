@@ -51,8 +51,13 @@ final readonly class SqlEnrollmentHistoryRepository implements EnrollmentHistory
                 " = ? ORDER BY " .
                 $q("stream_version"),
             [$enrollment->value],
-            3,
+            1000,
         );
+        if (count($rows) === 1000) {
+            throw new \Domain\Shared\EventSourcing\HistoryReadLimitException(
+                'This enrollment exceeds the bounded decision-index verification limit.',
+            );
+        }
         return array_map($this->decision(...), $rows);
     }
     public function latest(EntityId $section): ?array

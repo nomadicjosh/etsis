@@ -52,6 +52,14 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Registration\Event\EnrollmentWasReinstated::class => [
+                'type' => 'enrollment', 'root' => \Domain\Registration\EnrollmentHistory::class,
+                'fields' => \Domain\Registration\ValueObject\ReinstatementEventSchema::ENROLLMENT,
+            ],
+            \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class => [
+                'type' => 'academic_credit', 'root' => \Domain\AcademicRecord\AcademicCredit::class,
+                'fields' => \Domain\Registration\ValueObject\ReinstatementEventSchema::ACADEMIC,
+            ],
             \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class => [
                 'type' => 'section_waitlist',
                 'root' => \Domain\Registration\Waitlist\SectionWaitlist::class,
@@ -1042,6 +1050,8 @@ final readonly class HistoricalSchemaRegistry
                 // This complete payload is validated by its bounded typed schema above.
                 if (
                     in_array($class, [
+                    \Domain\Registration\Event\EnrollmentWasReinstated::class,
+                    \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class,
                     \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class,
                     \Domain\Registration\Waitlist\WaitlistPlaceWasChanged::class,
                     \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class,
@@ -1401,6 +1411,16 @@ final readonly class HistoricalSchemaRegistry
                     continue;
                 }
                 if ($name === "schema_version" && $value === $version) {
+                    continue;
+                }
+                if ($name === 'reinstatement_evidence') {
+                    if (
+                        $class !== \Domain\Registration\Event\EnrollmentWasReinstated::class ||
+                        !is_array($value)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    \Domain\Registration\ValueObject\ReinstatementEventSchema::evidence($value, $payload);
                     continue;
                 }
                 if ($name === 'corequisite_evidence') {

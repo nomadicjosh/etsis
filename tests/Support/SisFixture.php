@@ -1653,6 +1653,27 @@ final class SisFixture
         );
     }
 
+    public function reinstatements(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Registration\Service\EnrollmentReinstatementService {
+        return new \Domain\Registration\Service\EnrollmentReinstatementService(
+            $this->registration,
+            $this->admissions,
+            $this->enrollmentLedger(),
+            $this->academicCredits(),
+            $this->registrationBatches(),
+            $this->service,
+            $this->waitlistGuard($audit),
+            $this->activityLedger(),
+            $this->primaryProgramLedger(),
+            $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->clock,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+        );
+    }
     public function waitlistLedger(): \Domain\Registration\Waitlist\WaitlistLedger
     {
         return new \Domain\Registration\Waitlist\WaitlistLedger(

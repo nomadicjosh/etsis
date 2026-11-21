@@ -1216,6 +1216,125 @@ final readonly class InstitutionalCreditLedger
             $facts["version"],
         );
     }
+    /** Internal exact recorded withdrawal. This never observes an earlier untracked row. */
+    public function reinstatementBasis(Enrollment $enrollment, HistoryReadBudget $budget): array
+    {
+        [$id, $root, $facts] = $this->source(
+            $enrollment->id,
+            $enrollment->studentId,
+            $enrollment->sectionId,
+            $budget,
+        );
+        if (!$root->canReinstate() || $facts["status"] !== "W") {
+            throw new ValidationException([
+                [
+                    "field" => "enrollment",
+                    "message" =>
+                        "Only an unchanged tracked withdrawal can be reinstated. " .
+                        "Resolve later academic changes and pending grade requests separately.",
+                ],
+            ]);
+        }
+        $pursuit = $this->pursuits->load($id, $budget)->projection();
+        if ($pursuit === null || $pursuit["owner_assignment_id"] === null) {
+            throw new ValidationException([
+                [
+                    "field" => "enrollment",
+                    "message" =>
+                        "The original academic pursuit must be verified before reinstatement.",
+                ],
+            ]);
+        }
+        return [
+            "credit_id" => $id->value,
+            "version" => $facts["version"],
+            "history_version" => $root->playhead(),
+            "assignment_id" => $pursuit["owner_assignment_id"],
+            "before" => $facts,
+            "restored" => $root->reinstatementBase(),
+        ];
+    }
+    public function reinstate(
+        Enrollment $enrollment,
+        array $basis,
+        EntityId $operation,
+        EventContext $context,
+        HistoryReadBudget $budget,
+    ): array {
+        $this->actor($context->actor ?? throw new CorruptHistoryException());
+        $current = $this->reinstatementBasis($enrollment, $budget);
+        if ($current !== $basis) {
+            throw new ConcurrentModificationException("The withdrawn academic source changed.");
+        }
+        $id = new EntityId($basis["credit_id"]);
+        $root = $this->load($id, $budget);
+        $decision = \Domain\Shared\ValueObject\DerivedIdentity::from(
+            $operation,
+            "reinstatement.credit",
+        );
+        $event = \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::occur(
+            new AcademicCreditId($id->value),
+            [
+                "decision_id" => $decision->value,
+                "operation_id" => $operation->value,
+                "previous_decision_id" => $root->decision(),
+                "enrollment_id" => $enrollment->id->value,
+            ],
+            ["__aggregate_type" => "academic_credit"],
+        )->withPlayhead($root->playhead() + 1);
+        $this->history->append($this->stream($id), $decision, $root->playhead(), $context, [
+            $event,
+        ]);
+        $root->acceptHistorical($event);
+        $this->records->project($root->credit(), $enrollment->sectionId, $basis["version"]);
+        return [
+            "credit_id" => $id->value,
+            "version" => $root->credit()["version"],
+            "assignment_id" => $basis["assignment_id"],
+        ];
+    }
+    public function verifyReinstatementCompletion(
+        Enrollment $enrollment,
+        array $basis,
+        EntityId $operation,
+        HistoryReadBudget $budget,
+    ): void {
+        [$id, $root, $facts] = $this->source(
+            $enrollment->id,
+            $enrollment->studentId,
+            $enrollment->sectionId,
+            $budget,
+        );
+        $expected = array_replace($basis["restored"], ["version" => $basis["version"] + 1]);
+        if (
+            !$this->same($facts, $expected) ||
+            $root->reinstatement($operation) === null ||
+            $id->value !== $basis["credit_id"]
+        ) {
+            throw new ConcurrentModificationException(
+                "The reinstated academic facts changed before completion.",
+            );
+        }
+    }
+    public function verifyReinstatementReceipt(
+        EntityId $credit,
+        EntityId $enrollment,
+        EntityId $operation,
+        int $version,
+        HistoryReadBudget $budget,
+    ): void {
+        $root = $this->load($credit, $budget);
+        $receipt = $root->reinstatement($operation);
+        if (
+            $receipt !== [
+                "credit_id" => $credit->value,
+                "enrollment_id" => $enrollment->value,
+                "version" => $version,
+            ]
+        ) {
+            throw new CorruptHistoryException();
+        }
+    }
     /** Internal policy read, after the drop workflow authorizes the student.
      * @return array<string,mixed>|null
      */
@@ -1424,6 +1543,7 @@ final readonly class InstitutionalCreditLedger
                     $e instanceof \Domain\AcademicRecord\Event\GradeChangeWasResolved => "correction_" .
                         $p["outcome"],
                     $e instanceof InstitutionalCreditWasDropped => "dropped",
+                    $e instanceof \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated => "reinstated",
                     default => throw new CorruptHistoryException(),
                 },
                 "academic_on" => $p["academic_on"] ?? null,

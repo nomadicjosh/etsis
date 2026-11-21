@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\AcademicRecord;
 
+use Domain\Shared\ValueObject\EntityId;
 use Codefy\Domain\Aggregate\EventSourcedAggregate;
 use Codefy\Domain\EventSourcing\DomainEvent;
 use Domain\AcademicRecord\Event\InstitutionalCreditWasEstablished;
@@ -45,6 +46,9 @@ final class AcademicCredit extends EventSourcedAggregate
     /** @var array<string, array<string, mixed>> */
     private array $gradeChanges = [];
     private ?string $pendingGradeChange = null;
+    private ?array $withdrawalBase = null;
+    private ?string $withdrawalDecision = null;
+    private array $reinstatements = [];
     public function acceptHistorical(DomainEvent $event): void
     {
         if (
@@ -56,6 +60,7 @@ final class AcademicCredit extends EventSourcedAggregate
                     \Domain\AcademicRecord\Event\GradeChangeWasRequested::class,
                     \Domain\AcademicRecord\Event\GradeChangeWasResolved::class,
                     InstitutionalCreditWasDropped::class,
+                    \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class,
                     AcademicCompletionWasRecorded::class,
                     InstitutionalAcademicPeriodWasRecorded::class,
                     InstitutionalCourseWasAccepted::class,
@@ -459,6 +464,8 @@ final class AcademicCredit extends EventSourcedAggregate
                 throw new CorruptHistoryException();
             }
         }
+        $this->withdrawalBase = $o['delete_records'] ? null : $this->credit;
+        $this->withdrawalDecision = $o['delete_records'] ? null : $p['decision_id'];
         $this->credit["status"] = $o["delete_records"] ? "D" : "W";
         $this->credit["grade_id"] = $o["grade_id"];
         $this->credit["completed_milli"] = 0;
@@ -469,6 +476,44 @@ final class AcademicCredit extends EventSourcedAggregate
         ++$this->credit["version"];
         new CreditSnapshot($this->credit);
         $this->decision = $p["decision_id"];
+    }
+    public function whenInstitutionalCreditWasReinstated(
+        \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated $event,
+    ): void {
+        $p = $event->payload();
+        $this->assertNext($p);
+        if (!$this->canReinstate() || $p["enrollment_id"] !== $this->credit["source_id"]) {
+            throw new CorruptHistoryException();
+        }
+        $version = $this->credit["version"] + 1;
+        $this->credit = array_replace($this->withdrawalBase, ["version" => $version]);
+        $this->grade = null;
+        $this->decision = $p["decision_id"];
+        $this->withdrawalBase = null;
+        $this->withdrawalDecision = null;
+        $this->reinstatements[$p["operation_id"]] = [
+            "credit_id" => $this->credit["id"],
+            "enrollment_id" => $this->credit["source_id"],
+            "version" => $version,
+        ];
+        new CreditSnapshot($this->credit);
+    }
+    public function canReinstate(): bool
+    {
+        return $this->provenance === "registration" &&
+        $this->credit !== null &&
+        $this->credit["status"] === "W" &&
+        $this->withdrawalBase !== null &&
+        $this->decision === $this->withdrawalDecision &&
+        $this->pendingGradeChange === null;
+    }
+    public function reinstatement(EntityId $operation): ?array
+    {
+        return $this->reinstatements[$operation->value] ?? null;
+    }
+    public function reinstatementBase(): ?array
+    {
+        return $this->canReinstate() ? $this->withdrawalBase : null;
     }
     /** @param array<string,mixed> $p */
     private function assertNext(array $p): void

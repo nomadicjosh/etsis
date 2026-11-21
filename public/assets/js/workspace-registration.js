@@ -797,15 +797,15 @@ window.createWorkspaceRegistration = function (ui) {
                     `Timetable at acceptance: ${schedule.text(record.schedule)}.`,
                 ),
             );
-            const window = record.registration_window;
-            if (window?.opens_at)
+            const registrationWindow = record.registration_window;
+            if (registrationWindow?.opens_at)
                 panel.append(
                     node(
                         "p",
                         { class: "form-text" },
-                        `Accepted registration window: ${new Date(window.opens_at).toLocaleString()} through ${new Date(window.closes_at).toLocaleString()}; maximum ${window.course_limit} courses. ` +
-                            (window.status === "published"
-                                ? `Published revision ${window.version}.`
+                        `Accepted registration window: ${new Date(registrationWindow.opens_at).toLocaleString()} through ${new Date(registrationWindow.closes_at).toLocaleString()}; maximum ${registrationWindow.course_limit} courses. ` +
+                            (registrationWindow.status === "published"
+                                ? `Published revision ${registrationWindow.version}.`
                                 : "Earlier publication history is not recorded."),
                     ),
                 );
@@ -836,6 +836,7 @@ window.createWorkspaceRegistration = function (ui) {
                             observed_existing: "Existing enrollment observed",
                             early_drop: "Early drop",
                             late_drop: "Late drop / withdrawal",
+                            reinstated: "Withdrawal reinstated",
                         }[item.action] || "Enrollment decision",
                         item.section_sequence ?? "—",
                         item.effective_at,
@@ -844,6 +845,9 @@ window.createWorkspaceRegistration = function (ui) {
                     "Recorded registration decisions",
                 ),
             );
+            if (record.status === "W" && !record.earlier_history_unknown && ui.can("sis:registration:reinstate") && ui.can("sis:gradebook:closed")) {
+                panel.append(button("Reinstate this withdrawal", () => window.createEnrollmentReinstatement(ui).open(student, record, () => history(student, back, after, stack))));
+            }
             body.append(panel);
         }
         if (!page.items.length)
