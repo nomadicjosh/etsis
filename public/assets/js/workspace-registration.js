@@ -387,6 +387,8 @@ window.createWorkspaceRegistration = function (ui) {
             confirm.disabled = !schedule.canConfirm(reviewed);
             panel.append(
                 schedule.registration(reviewed, money),
+                (reviewed.students[0]?.waitlist?.enabled || reviewed.students[0]?.waitlist?.entry_id) && ui.can("sis:registration:waitlist")
+                    ? button("Waitlist options", () => window.createSectionWaitlist(ui).place(student, { id: section }, () => single(student, back, { section_id: section }))) : null,
                 node(
                     "div",
                     { class: "inline-actions" },

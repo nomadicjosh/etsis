@@ -52,6 +52,16 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class => [
+                'type' => 'section_waitlist',
+                'root' => \Domain\Registration\Waitlist\SectionWaitlist::class,
+                'fields' => \Domain\Registration\Waitlist\SectionWaitlist::POLICY_FIELDS,
+            ],
+            \Domain\Registration\Waitlist\WaitlistPlaceWasChanged::class => [
+                'type' => 'section_waitlist',
+                'root' => \Domain\Registration\Waitlist\SectionWaitlist::class,
+                'fields' => \Domain\Registration\Waitlist\SectionWaitlist::PLACE_FIELDS,
+            ],
             \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class => [
                 'type' => 'timesheet_policy',
                 'root' => \Domain\HumanResources\TimeApprovalPolicy::class,
@@ -616,6 +626,17 @@ final readonly class HistoricalSchemaRegistry
             if ($class === \Domain\Registration\Event\PrerequisitePermissionWasRecorded::class) {
                 \Domain\Registration\PrerequisitePermission::validate($payload);
             }
+            if (
+                in_array($class, [
+                    \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class,
+                    \Domain\Registration\Waitlist\WaitlistPlaceWasChanged::class,
+                ], true)
+            ) {
+                \Domain\Registration\Waitlist\SectionWaitlist::validate(
+                    $payload,
+                    $class === \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class,
+                );
+            }
             if ($class === \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class) {
                 \Domain\HumanResources\TimeApprovalPolicy::validate($payload);
                 if ((string) $stream->aggregateId !== \Domain\HumanResources\TimeApprovalPolicy::ID) {
@@ -1021,6 +1042,8 @@ final readonly class HistoricalSchemaRegistry
                 // This complete payload is validated by its bounded typed schema above.
                 if (
                     in_array($class, [
+                    \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class,
+                    \Domain\Registration\Waitlist\WaitlistPlaceWasChanged::class,
                     \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class,
                     \Domain\HumanResources\Event\TimeEntryWasDecided::class,
                     \Domain\Gradebook\Event\ClassGradesWereCertified::class,
@@ -1628,6 +1651,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Registration\Waitlist\SectionWaitlist::class => 'section_waitlist',
             \Domain\HumanResources\TimeApprovalPolicy::class => 'timesheet_policy',
             \Domain\HumanResources\TimeDecision::class => 'timesheet_decision',
             \Domain\Gradebook\GradeCertificationHistory::class => 'class_grade_certifications',
@@ -1681,6 +1705,7 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            'section_waitlist' => new \Domain\Registration\Waitlist\WaitlistId($id),
             'timesheet_policy' => new \Domain\HumanResources\ValueObject\TimeApprovalPolicyId($id),
             'timesheet_decision' => new \Domain\HumanResources\ValueObject\TimeDecisionId($id),
             'class_grade_certifications' => new \Domain\Gradebook\ValueObject\GradeCertificationId($id),

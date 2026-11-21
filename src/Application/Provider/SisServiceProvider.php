@@ -333,6 +333,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlSectionContactTimeRepository::class,
             \Domain\Registration\Repository\ContactHoursPolicyReader::class =>
                 \Infrastructure\HumanResources\WorkloadContactPolicyReader::class,
+            \Domain\Registration\Waitlist\WaitlistRepository::class =>
+                \Infrastructure\Persistence\Waitlist\SqlWaitlistRepository::class,
             \Domain\Registration\Repository\RegistrationRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlRegistrationRepository::class,
             \Domain\Registration\Service\RegistrationBilling::class =>

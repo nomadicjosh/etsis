@@ -42,6 +42,7 @@ final readonly class RegistrationBatchService
         private \Domain\Shared\Service\ReviewProof $reviews,
         private CoRequisiteService $corequisites,
         private RegistrationWindowService $windows,
+        private \Domain\Registration\Waitlist\WaitlistSeatGuard $waitlists,
     ) {
     }
 
@@ -808,6 +809,7 @@ final readonly class RegistrationBatchService
         $corequired = $course->prerequisiteGroups?->corequisites ?? [];
         $corequisiteLabels = $this->repository->courseLabels($corequired);
         $records = $existing = $programs = [];
+        $waitlistStatuses = $this->waitlists->statuses($section->id, $selection->students, $budget);
         foreach ($selection->students as $id) {
             $records[$id->value] = $this->admissions->student($id);
             $existing[$id->value] = $this->repository->enrollment($id, $section->id);
@@ -885,6 +887,18 @@ final readonly class RegistrationBatchService
                 $window->courseLimit,
                 $decision?->isMet() ?? true,
             ) : [];
+            $waitlist = $waitlistStatuses[$id->value];
+            if ($enrollment === null && $waitlist['waiting_count'] > 0) {
+                $readiness[] = [
+                    'code' => 'waitlist',
+                    'label' => 'Waitlist priority',
+                    'status' => $waitlist['can_register'] ? 'met' : 'blocked',
+                    'message' => $waitlist['can_register'] ? 'Your request is the oldest accepted request.'
+                        : 'Earlier accepted waitlist requests have priority.',
+                    'next_step' => $waitlist['can_register'] ? null
+                        : 'Wait for your turn or ask the registrar to review the queue.',
+                ];
+            }
             $issues = array_column(
                 array_filter($readiness, static fn(array $check): bool => $check["status"] === "blocked"),
                 "message",
@@ -903,6 +917,7 @@ final readonly class RegistrationBatchService
                 $issues = ["A closed enrollment requires registrar review before re-enrollment."];
             }
             $students[] = [
+                'waitlist' => $waitlist,
                 "charges" => $charges,
                 "pricing_revision" => $quote?->fingerprint(),
                 "issues" => $issues,

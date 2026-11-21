@@ -138,6 +138,7 @@ final class RegistrationScheduleFixture
             $f->schedules(),
             $f->corequisites(),
             $f->windowPolicies(),
+            $f->waitlistGuard($audit),
         );
     }
     public function digest(): string

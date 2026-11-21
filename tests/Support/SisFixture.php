@@ -417,6 +417,7 @@ final class SisFixture
             $this->schedules(),
             $this->corequisites(),
             $this->windowPolicies(),
+            $this->waitlistGuard(),
         );
         if (!$initialize) {
             $this->term = new EntityId($this->sql->rows("sis_terms", [], 1)[0]["id"]);
@@ -1652,6 +1653,42 @@ final class SisFixture
         );
     }
 
+    public function waitlistLedger(): \Domain\Registration\Waitlist\WaitlistLedger
+    {
+        return new \Domain\Registration\Waitlist\WaitlistLedger(
+            new \Infrastructure\Persistence\Waitlist\SqlWaitlistRepository($this->sql, $this->dropCipher),
+            EventStoreFixture::history($this->connection->queryBuilder()),
+        );
+    }
+    public function waitlistGuard(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Registration\Waitlist\WaitlistSeatGuard {
+        return new \Domain\Registration\Waitlist\WaitlistSeatGuard(
+            $this->waitlistLedger(),
+            $audit ?? $this->audit,
+            $this->clock,
+        );
+    }
+    public function waitlists(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Registration\Waitlist\WaitlistService {
+        return new \Domain\Registration\Waitlist\WaitlistService(
+            $this->waitlistLedger(),
+            new \Infrastructure\Persistence\Waitlist\SqlWaitlistRepository($this->sql, $this->dropCipher),
+            $this->registration,
+            $this->admissions,
+            $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->clock,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+            $this->windowPolicies(),
+            $this->activityLedger(),
+            $this->primaryProgramLedger(),
+        );
+    }
+
     public function registrationBatches(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Registration\Repository\RegistrationRepository $repository = null,
@@ -1676,6 +1713,7 @@ final class SisFixture
             new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
             $this->corequisites(),
             $this->windowPolicies(),
+            $this->waitlistGuard(),
         );
     }
 

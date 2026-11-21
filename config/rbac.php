@@ -87,6 +87,9 @@ return [
                 "sis:communications:admin" => ["description" => "Administer institution communications."],
                 "sis:portal:manage" => ["description" => "Manage institution portal publications."],
                 "sis:portal:admin" => ["description" => "Administer portal publications."],
+                "sis:registration:waitlist" => [
+                    "description" => "Review section waitlists and record attributed request removals.",
+                ],
                 "sis:registration:manage" => [
                     "description" => "Manage registration and enrollment changes.",
                 ],

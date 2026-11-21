@@ -301,6 +301,7 @@
 
     one('#campus-dialog')?.addEventListener('hidden.bs.modal', () => {
         portalDialogGeneration++;
+        one('#campus-dialog-body [data-section-waitlist]')?.remove();
         const destination = dialogOpener?.isConnected
             ? dialogOpener
             : one('#campus-main');
@@ -426,6 +427,8 @@
                 ),
                 addToRegistrationPlan ? button('Add to schedule', () => addToRegistrationPlan(course)) : null,
             );
+        } else if (registration && me?.students.length && !seats && Number(course.web_registration)) {
+            card.append(button('Waitlist options', () => waitlistOptions(course)));
         } else if (!Number(course.web_registration))
             card.append(
                 el(
@@ -1842,6 +1845,7 @@
                 surface(
                     'Your registered sections',
                     button('Drop selected courses', () => dropPlans.start(student.id, renderService)),
+                    button('Your waitlist requests', () => waitlistUi().mine(student.id, renderService)),
                     student.enrollments.length
                         ? table(
                               ['Course', 'Section', 'Status', 'Actions'],
@@ -2033,7 +2037,23 @@
         await load();
     }
 
-    function confirmRegistration(course) {
+    function waitlistUi() {
+        return window.createSectionWaitlist({ node: el, request, table, button, task, portal: true,
+            register: (student, section) => confirmRegistration({ id: section }, student),
+            open: title => { const body = el('div', { 'data-section-waitlist': '' }); dialog(title, body); return body; } });
+    }
+    function waitlistOptions(course) {
+        const body = el('div');
+        const form = el('form');
+        const student = control(form, 'student_id', 'Student program', 'select', { required: true });
+        selectOptions(student, me.students.map(item => ({ id: item.id, label: programName(item.primary_program_id) })));
+        if (me.students.length === 1) student.value = me.students[0].id;
+        const submit = el('button', { type: 'submit', class: 'btn campus-button' }, 'View waitlist options');
+        form.append(submit);
+        form.addEventListener('submit', event => { event.preventDefault(); if (form.reportValidity()) task(() => waitlistUi().place(student.value, { id: course.id }, renderService, true), submit); });
+        body.append(form); dialog('Choose your student program', body);
+    }
+    function confirmRegistration(course, presetStudent = null) {
         const form = el('form');
         const student = control(
             form,
@@ -2049,7 +2069,8 @@
                 label: programName(item.primary_program_id),
             })),
         );
-        if (me.students.length === 1) student.value = me.students[0].id;
+        if (presetStudent && me.students.some(item => item.id === presetStudent)) student.value = presetStudent;
+        else if (me.students.length === 1) student.value = me.students[0].id;
         const schedulePanel = el('div');
         const confirmation = el('button', { class: 'btn campus-button', type: 'submit', disabled: true }, 'Confirm registration');
         let serial = 0, reviewedStudent = '', reviewed = null, dialogGeneration = 0;

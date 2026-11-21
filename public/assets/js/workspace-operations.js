@@ -2300,6 +2300,10 @@ window.createWorkspaceOperations = function (ui) {
                 ),
             );
         }
+        if (["sections", "teaching"].includes(sectionName) && can("sis:registration:manage")) {
+            if (can("sis:registration:policy")) actions.append(button("Waitlist policy", () => ui.waitlists().policy(row, () => openRecord(sectionName, row))));
+            if (can("sis:registration:waitlist")) actions.append(button("Section waitlist", () => ui.waitlists().staff(row, () => openRecord(sectionName, row))));
+        }
         if (tasks.childElementCount) body.append(tasks);
         if (["sections", "teaching"].includes(sectionName) && can("sis:registration:manage"))
             actions.append(button("Register a group into this section", () => ui.batchRegistration().start(row.id)));

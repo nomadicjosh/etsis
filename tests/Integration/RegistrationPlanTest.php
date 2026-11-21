@@ -398,6 +398,7 @@ final class RegistrationPlanTest extends TestCase
             $f->schedules(),
             $f->corequisites(),
             $f->windowPolicies(),
+            $f->waitlistGuard($audit),
         );
         try {
             $f->registrationBatches(registration: $core)->commitPlan(

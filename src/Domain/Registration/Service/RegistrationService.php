@@ -44,6 +44,7 @@ final readonly class RegistrationService
         private RegistrationScheduleService $schedules,
         private CoRequisiteService $corequisites,
         private RegistrationWindowService $windows,
+        private \Domain\Registration\Waitlist\WaitlistSeatGuard $waitlists,
     ) {
     }
 
@@ -113,6 +114,7 @@ final readonly class RegistrationService
                     "A closed enrollment requires registrar review before re-enrollment.",
                 );
             }
+            $waitlistClaim = $this->waitlists->claim($sectionId, $studentId);
             $course = $this->repository->courseForSection($section);
             $window = $this->windows->checked($section->termId, $this->repository->window($section->termId));
             $courseRead ??= new RegistrationCourseRead();
@@ -253,6 +255,7 @@ final readonly class RegistrationService
                 "registration.created",
                 $enrollment->id,
             );
+            $this->waitlists->complete($waitlistClaim, $enrollment, $actor);
             $this->verifyCourseSelection($sectionId, $budget, $courseRead);
             if ($prerequisites->permission !== null) {
                 $freshPrerequisites = $this->prerequisites->evaluate(

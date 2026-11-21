@@ -75,6 +75,8 @@ final readonly class WorkspaceService
         "sis:admissions:policy",
         "sis:student:read",
         "sis:catalog:manage",
+        "sis:registration:waitlist",
+        "sis:registration:policy",
         "sis:registration:manage",
         "sis:gradebook:certify",
         "sis:gradebook:manage",

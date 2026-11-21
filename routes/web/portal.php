@@ -204,6 +204,11 @@ return static function (Psr7Router $router): void {
     ]);
     $router->post('/portal/api/registration-plan/review/', [Portal::class, 'reviewRegistrationPlan']);
     $router->post('/portal/api/registration-plan/commit/', [Portal::class, 'registerPlan']);
+    $waitlists = \Application\Http\Controller\SisWaitlistController::class;
+    $router->get('/portal/api/waitlists/{student}/', [$waitlists, 'mine'])->name('portal.waitlist.mine');
+    $router->get('/portal/api/waitlists/{student}/sections/{id}/', [$waitlists, 'ownerView']);
+    $router->post('/portal/api/waitlists/{student}/sections/{id}/review/', [$waitlists, 'ownerReview']);
+    $router->post('/portal/api/waitlists/{student}/sections/{id}/confirm/', [$waitlists, 'ownerConfirm']);
     $router->post('/portal/api/registration/review/', [Portal::class, 'reviewRegistration'])
         ->name('portal.registration.review');
     $router
