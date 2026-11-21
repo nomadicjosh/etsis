@@ -243,6 +243,9 @@ final readonly class ReportSelectCompiler
                 default => $given . " || ' ' || " . $family,
             };
         }
+        if (($field['expression'] ?? '') === 'curriculum_cohort_matches') {
+            return new CurriculumReportSql($this->sql)->cohortMatches($alias);
+        }
         if (($field['expression'] ?? '') === 'section_enrollment_count') {
             return new \Infrastructure\Persistence\SectionEnrollmentSql($this->sql)->count($alias);
         }

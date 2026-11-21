@@ -319,6 +319,13 @@
     relationalStudio = window.createWorkspaceReportStudio({
         node, request, requestFile, task, can, table, openDrawer, actionMenu, disposeActionMenus,
         closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(),
+        openCurriculum: (student, pursuit, back) => {
+            relationalStudio.cleanup(false);
+            return studentStudio.specializations(student, pursuit, back, null, "", "Back to report").catch(async error => {
+                await back();
+                throw error;
+            });
+        },
         openApplication: (id, back) => {
             relationalStudio.cleanup(false);
             return peopleStudio.application({ id, reportBack: back }).catch(async error => {

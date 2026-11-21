@@ -232,6 +232,26 @@ window.createWorkspaceReportStudio = function (ui) {
             })),
             node("p", { class: "form-text" }, "Recorded load is a retained decision, not today's enrollment total or a reconstructed census. One student may have several determinations and appear in different date/classification groups. Reasons and registration-source identities stay outside reporting."),
         );
+        const components = catalog.datasets.find(dataset => dataset.id === "catalog_components");
+        if (components) templateGrid.append(
+            button("Current component ownership", () => edit(components, initial(components))),
+            node("p", { class: "form-text" }, "Current program component setup, including retired entries. This is separate from student selections and retained academic labels."),
+        );
+        const selectedComponents = catalog.datasets.find(dataset => dataset.id === "selected_components");
+        if (selectedComponents) templateGrid.append(
+            button("Selected student curriculum", () => edit(selectedComponents, initial(selectedComponents))),
+            button("Students by major and department", () => edit(selectedComponents, {
+                ...initial(selectedComponents), columns: [
+                    { field: "program_code", label: "Retained program", aggregate: "none" },
+                    { field: "component_kind", label: "Retained type", aggregate: "none" },
+                    { field: "component_code", label: "Retained component", aggregate: "none" },
+                    { field: "department_title", label: "Retained department", aggregate: "none" },
+                    { field: "student_id", label: "Distinct students", aggregate: "count_distinct" },
+                    { field: "component_row_id", label: "Selected components", aggregate: "count" },
+                ],
+            })),
+            node("p", { class: "form-text" }, "One detail row per selected component in a pursuit. Names and pursuit status are current; program, component and ownership labels are retained. Choose status/cohort filters deliberately. A student can appear in several groups: use distinct student counts within each group and do not sum group headcounts. Save a live detail report with Student reference and Program pursuit reference to open the exact student curriculum."),
+        );
         const postings = catalog.datasets.find(dataset => dataset.id === "postings");
         if (postings) {
             const currentPostings = { condition: "AND", rules: [
@@ -607,6 +627,8 @@ window.createWorkspaceReportStudio = function (ui) {
         const choices = {
             load_determinations: ["institutional_id", "full_name", "term_code", "determined_on", "classification_title", "registered_credits"],
             advising_followups: ["institutional_id", "full_name", "program_code", "held_on", "due_on", "followup_status"],
+            catalog_components: ["program_code", "component_code", "component_title", "component_kind", "component_active", "department_title", "school_title", "parent_major_code"],
+            selected_components: ["student_id", "pursuit_id", "institutional_id", "full_name", "program_code", "academic_year_code", "component_code", "component_kind", "department_title", "pursuit_status", "cohort_matches"],
             attendance: ["institutional_id", "full_name", "section_code", "term_code", "held_on", "attendance_status"],
             standing: ["institutional_id", "full_name", "program_code", "standing_title", "effective_from"],
             postings: ["institutional_id", "term_code", "posting_type", "currency", "posting_amount", "posting_reversed", "posting_recorded_at"],
@@ -2500,6 +2522,26 @@ window.createWorkspaceReportStudio = function (ui) {
                 panel.append(cases);
             }
         }
+        if (applicationAction && ui.openCurriculum && !result.grouped && result.lifecycle?.mode !== "static" && can("sis:student:read")) {
+            const { definition, back } = applicationAction;
+            if (definition?.dataset === "selected_components" && definition.columns.every(c => c.aggregate === "none")) {
+                const studentIndex = definition.columns.findIndex(c => c.field === "student_id");
+                const pursuitIndex = definition.columns.findIndex(c => c.field === "pursuit_id");
+                if (studentIndex >= 0 && pursuitIndex >= 0 && result.items.length) {
+                    const actions = node("details", { class: "my-3" }, node("summary", {}, "Open a student's selected curriculum"));
+                    const choices = node("div", { class: "d-flex flex-wrap gap-2 my-2" });
+                    result.items.forEach((row, offset) => {
+                        const student = row[`c${studentIndex}`], pursuit = row[`c${pursuitIndex}`];
+                        if (![student, pursuit].every(id => typeof id === "string" && /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(id))) return;
+                        choices.append(button(`Open curriculum · row ${offset + 1}`, async () => {
+                            if (panel.isConnected) await ui.openCurriculum(student, pursuit, back);
+                        }));
+                    });
+                    actions.append(node("p", {}, "Opens the exact pursuit with a fresh student-access check. Return here to refresh the saved report. Editing still requires its independent permission."), choices);
+                    panel.append(actions);
+                }
+            }
+        }
         if (result.grouped && result.items.length && window.Chart) {
             const numeric = Object.keys(result.items[0]).find((key) => typeof result.items[0][key] === "number");
             const label = Object.keys(result.items[0]).find((key) => typeof result.items[0][key] === "string");
@@ -2952,7 +2994,7 @@ window.createWorkspaceReportStudio = function (ui) {
                     }
                     throw error;
                 }
-            }, !frozen && ui.openApplication ? { definition: saved.definition, back: () => record(id) } : null);
+            }, !frozen && (ui.openApplication || ui.openCurriculum) ? { definition: saved.definition, back: () => record(id) } : null);
         };
         recordTools.prepend(button(frozen ? "Read results" : "Refresh results", () => load(0), "btn-primary"));
         await load(0);

@@ -150,7 +150,7 @@ final class RelationalReportTest extends TestCase
         $f->access->grants = ["sis:reporting:manage", "sis:reporting:run", "sis:catalog:manage"];
         $catalog = $this->service($h)->catalog();
         self::assertEqualsCanonicalizing(
-            ["sections", "catalog_program_sites"],
+            ["sections", "catalog_program_sites", "catalog_components"],
             array_column($catalog["datasets"], "id"),
         );
         foreach ($catalog["datasets"] as $dataset) {

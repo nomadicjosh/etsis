@@ -30,7 +30,24 @@ async function accessible(page) {
 }
 async function fixture(page, options = {}) {
     const calls = [], errors = []; let definition = null, version = 0, name = '', operation = 1;
-    const fields = options.followups ? {
+    const fields = options.curriculum ? {
+        student_id: { label: 'Student reference', type: 'string', relation: 'student' },
+        pursuit_id: { label: 'Program pursuit reference', type: 'string', relation: 'component' },
+        institutional_id: { label: 'Institutional ID', type: 'string', relation: 'identity' },
+        full_name: { label: 'Student full name', type: 'string', relation: 'person' },
+        component_row_id: { label: 'Selection row reference', type: 'string', relation: 'component' },
+        component_code: { label: 'Component code', type: 'string', relation: 'component' },
+        component_title: { label: 'Component name', type: 'string', relation: 'component' },
+        component_kind: { label: 'Component type', type: 'string', relation: 'component', choices: { major: 'Major', minor: 'Minor', concentration: 'Concentration' } },
+        component_active: { label: 'Available in current setup', type: 'boolean', relation: 'component' },
+        program_code: { label: 'Program code', type: 'string', relation: 'component' },
+        academic_year_code: { label: 'Selected catalog year', type: 'string', relation: 'component' },
+        department_title: { label: 'Responsible department', type: 'string', relation: 'component' },
+        school_title: { label: 'Department school', type: 'string', relation: 'component' },
+        parent_major_code: { label: 'Required major', type: 'string', relation: 'component' },
+        pursuit_status: { label: 'Program pursuit status', type: 'string', relation: 'pursuit' },
+        cohort_matches: { label: 'Selection matches current cohort', type: 'boolean', relation: 'component' },
+    } : options.followups ? {
         checkin_id: { label: 'Check-in reference', type: 'string', relation: 'checkin' },
         held_on: { label: 'Check-in held on', type: 'date', relation: 'checkin' },
         due_on: { label: 'Follow-up due', type: 'date', relation: 'checkin' },
@@ -139,7 +156,17 @@ async function fixture(page, options = {}) {
         case_due_on: { label: 'Next casework due date', type: 'date', relation: 'casework' },
         case_reference: { label: 'Casework reference', type: 'string', relation: 'casework' },
     });
-    const dataset = options.followups ? {
+    const dataset = options.curriculum ? {
+        id: options.curriculum === 'catalog' ? 'catalog_components' : 'selected_components',
+        label: options.curriculum === 'catalog' ? 'Current curriculum components' : 'Selected student curriculum',
+        description: 'One row per component; count distinct students within each group.', fields,
+        relationships: {
+            student: { label: 'Student records', parent: 'component', many: false },
+            person: { label: 'Student names', parent: 'student', many: false },
+            identity: { label: 'Institutional IDs', parent: 'person', many: false },
+            pursuit: { label: 'Program pursuits', parent: 'component', many: false },
+        },
+    } : options.followups ? {
         id: 'advising_followups', label: 'Advising follow-up', description: 'Dates and statuses only; no conversation text.', fields,
         relationships: {
             student: { label: 'Student records', parent: 'checkin', many: false },
@@ -249,6 +276,10 @@ async function fixture(page, options = {}) {
         visited.push(path);
         if (data) calls.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
         let result = {};
+        if (path === `/sis/students/${id(91)}/programs/${id(92)}/specializations/`) {
+            if (options.denyCurriculum) return route.fulfill({ status: 403, json: { error: 'Access denied.' } });
+            return route.fulfill({ json: { scope: { status: 'active' }, revision: 'fictional', selection: null, cohort_changed: false, can_manage: false, program: null }, headers: { 'Cache-Control': 'private, no-store' } });
+        }
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/operation-id/') result = { id: id(operation++) };
         else if (path.startsWith('/sis/ui/data/')) result = { items: options.recipient ? [{ id: id(71), name }] : [], next_after: null };
@@ -275,17 +306,17 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/report-studio/save/') { definition = data.definition; name = data.name; version = data.version + 1; result = { id: data.report_id }; }
         else if (path.endsWith('/preview/') || path.endsWith('/run/')) {
             const query = data.definition || definition;
-            const values = { checkin_id: id(95), due_on: '2026-11-25', followup_status: 'responded', attendance_id: id(94), held_on: '2026-11-21', attendance_status: 'absent', section_code: 'MATH.101.A', determined_on: '2026-11-21', classification_title: 'Full time', registered_credits: 6.25, determination_id: id(90), student_id: id(91), application_id: id(80), case_office:'Admissions <b>fictional</b>', case_work_status:'waiting', case_due_on:'2026-09-01', posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
+            const values = { pursuit_id: id(92), component_row_id: id(93), component_code: 'ART', component_title: 'Retained <b>concentration</b>', component_kind: 'concentration', component_active: true, department_title: 'English <b>department</b>', school_title: 'Arts <college>', parent_major_code: 'ENG', academic_year_code: '2026-2027', pursuit_status: 'active', cohort_matches: true, checkin_id: id(95), due_on: '2026-11-25', followup_status: 'responded', attendance_id: id(94), held_on: '2026-11-21', attendance_status: 'absent', section_code: 'MATH.101.A', determined_on: '2026-11-21', classification_title: 'Full time', registered_credits: 6.25, determination_id: id(90), student_id: id(91), application_id: id(80), case_office:'Admissions <b>fictional</b>', case_work_status:'waiting', case_due_on:'2026-09-01', posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
                 latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
-            const rows = options.followups || options.attendance || options.load || options.postings || options.scheduling || options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, column.date_bucket && values[column.field] != null
+            const rows = options.curriculum || options.followups || options.attendance || options.load || options.postings || options.scheduling || options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, column.date_bucket && values[column.field] != null
                     ? String(values[column.field]).slice(0, { day: 10, month: 7, year: 4 }[column.date_bucket])
                     : (options.attendance || options.followups) && column.aggregate.startsWith('count') ? 1 : values[column.field] ?? null]))]
                 : data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
             result = { conditional_columns: query.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(query), columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
-                next_offset: options.followups || options.attendance || options.load || options.postings || options.scheduling || options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
-                grouped: options.followups || options.attendance || options.load || options.casework || options.postings || options.scheduling || options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
+                next_offset: options.curriculum || options.followups || options.attendance || options.load || options.postings || options.scheduling || options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
+                grouped: options.curriculum || options.followups || options.attendance || options.load || options.casework || options.postings || options.scheduling || options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
         } else if (path.endsWith('/export/')) { await route.fulfill({ body: 'Section,Term,Students\nMATH.101.A,26/FA,8\n', contentType: 'text/csv' }); return; }
         else if (/\/sis\/report-studio\/[^/]+\/$/.test(path)) result = { conditional_columns: definition.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(definition), id: path.split('/').at(-2), name, version, definition, student_actions: (options.attendance || options.followups) && !definition.columns.some(c => c.aggregate !== 'none') ? ['messaging'] : [], can_manage: !options.recipient };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
@@ -1533,3 +1564,68 @@ for (const starter of ['Advising follow-up', 'Advising responses to review', 'Ad
         expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     });
 }
+
+
+for (const summary of [false, true]) test(`curriculum ${summary ? 'headcount' : 'current ownership'} starter preserves its grain and saved columns`, async ({ page }) => {
+    const f = await fixture(page, { curriculum: summary ? 'selected' : 'catalog' });
+    await page.getByRole('button', { name: summary ? 'Students by major and department' : 'Current component ownership', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional curriculum report');
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.dataset).toBe(summary ? 'selected_components' : 'catalog_components');
+    if (summary) expect(query.columns.slice(-2).map(c => [c.field, c.aggregate])).toEqual([['student_id', 'count_distinct'], ['component_row_id', 'count']]);
+    else expect(query.columns.map(c => c.field)).toContain('parent_major_code');
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
+    await expect(studio.getByText("Open a student's selected curriculum", { exact: true })).toHaveCount(0);
+    await page.setViewportSize({ width: 375, height: 812 });
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+for (const denied of [false, true]) test(`saved curriculum report opens the exact pursuit and ${denied ? 'recovers denied access' : 'returns to refreshed results'}`, async ({ page }) => {
+    const f = await fixture(page, { curriculum: 'selected', denyCurriculum: denied });
+    await page.getByRole('button', { name: 'Selected student curriculum', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional selected curriculum');
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
+    await studio.getByText("Open a student's selected curriculum", { exact: true }).click();
+    await studio.getByRole('button', { name: 'Open curriculum · row 1', exact: true }).click();
+    if (denied) await expect(page.locator('dialog.report-studio .report-local-error')).toBeVisible();
+    else {
+        await expect(page.getByRole('button', { name: 'Back to report', exact: true })).toBeVisible();
+        await page.getByRole('button', { name: 'Back to report', exact: true }).click();
+    }
+    await expect(page.locator('dialog.report-studio')).toContainText('Fictional selected curriculum');
+    expect(f.visited.filter(path => path === `/sis/students/${id(91)}/programs/${id(92)}/specializations/`)).toHaveLength(1);
+    expect(f.calls.filter(c => c.path.endsWith('/run/')).length).toBeGreaterThanOrEqual(2);
+    expect(f.calls.some(c => c.path.includes('/specializations/') && c.data)).toBe(false);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('a dismissed report curriculum request cannot reopen the drawer when its response arrives', async ({ page }) => {
+    const f = await fixture(page, { curriculum: 'selected' });
+    await page.getByRole('button', { name: 'Selected student curriculum', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional delayed curriculum');
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
+    let release, started;
+    const waiting = new Promise(resolve => { release = resolve; });
+    const pending = new Promise(resolve => { started = resolve; });
+    const path = `/sis/students/${id(91)}/programs/${id(92)}/specializations/`;
+    await page.route(`**${path}`, async route => { started(); await waiting; await route.fallback(); });
+    await studio.getByText("Open a student's selected curriculum", { exact: true }).click();
+    await studio.getByRole('button', { name: 'Open curriculum · row 1', exact: true }).click();
+    await pending;
+    await expect(page.getByRole('status').filter({ hasText: 'Loading the selected curriculum' })).toBeVisible();
+    await page.locator('#record-drawer [data-bs-dismiss="offcanvas"]').click();
+    await expect(page.locator('#drawer-body > *')).toHaveCount(0);
+    const received = page.waitForResponse(response => new URL(response.url()).pathname === path);
+    release(); await received;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
+    await expect(page.locator('#drawer-body > *')).toHaveCount(0);
+    await expect(page.locator('dialog.report-studio')).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});

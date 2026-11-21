@@ -1117,14 +1117,25 @@ window.createWorkspaceStudents = function (ui) {
         back,
         preset = null,
         notice = "",
+        backLabel = "Back to student",
     ) {
         const path = `/sis/students/${studentId}/programs/${assignment}/specializations/`;
-        const data = await request(path);
         const body = openDrawer(
             "Student specializations",
             "ONE PROGRAM PURSUIT",
         );
-        const reopen = () => specializations(studentId, assignment, back);
+        body.append(node("p", { role: "status" }, "Loading the selected curriculum…"));
+        let data;
+        try {
+            data = await request(path);
+        } catch (error) {
+            if (!body.isConnected) return;
+            body.replaceChildren(node("p", { role: "alert" }, "This curriculum could not be loaded. Return and try again."));
+            throw error;
+        }
+        if (!body.isConnected) return;
+        body.replaceChildren();
+        const reopen = () => specializations(studentId, assignment, back, null, "", backLabel);
         if (notice)
             body.append(
                 node(
@@ -1134,7 +1145,7 @@ window.createWorkspaceStudents = function (ui) {
                 ),
             );
         body.append(
-            button("Back to student", back),
+            button(backLabel, back),
             node(
                 "p",
                 {},
@@ -1362,7 +1373,7 @@ window.createWorkspaceStudents = function (ui) {
                 );
                 confirm.append(
                     button("Revise selection", () =>
-                        specializations(studentId, assignment, back, draft),
+                        specializations(studentId, assignment, back, draft, "", backLabel),
                     ),
                     specializationSummary(prepared.before, "Before"),
                     specializationSummary(prepared.after, "After"),
@@ -1385,6 +1396,7 @@ window.createWorkspaceStudents = function (ui) {
                                     back,
                                     null,
                                     "Specialization selection recorded.",
+                                    backLabel,
                                 );
                             }
                         },

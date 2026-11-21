@@ -821,6 +821,7 @@ final class AcademicReportSchema
             'W' => 'Withdrawn', 'C' => 'Cancelled',
         ];
         $datasets = [
+            ...CurriculumReportSchema::datasets(),
             'accounts' => ['id' => 'accounts'] + $withStudentWork($accounts),
             'applications' => ['id' => 'applications'] + $withStudentWork($applications),
             'students' => ['id' => 'students'] + $withStudentWork($students),

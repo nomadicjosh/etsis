@@ -269,6 +269,7 @@ final readonly class StudentSpecializationService
             $this->selections->project($assignment, $p, $root->playhead());
             $this->selections->projectRequirements($assignment, $root->requirements());
             $this->audit->record($actor, 'student.specializations_selected', $assignment);
+            $this->finishProjection($actor, $assignment, $root, $data['expires_at']);
             return $receipt;
         });
     }
@@ -603,8 +604,28 @@ final readonly class StudentSpecializationService
             );
             $this->selections->projectRequirements($assignment, $root->requirements());
             $this->audit->record($actor, 'student.specialization_requirements_assigned', $assignment);
+            $this->finishProjection($actor, $assignment, $root, $data['expires_at']);
             return $receipt;
         });
+    }
+
+    private function finishProjection(
+        EntityId $actor,
+        EntityId $assignment,
+        StudentSpecializations $root,
+        int $expiresAt,
+    ): void {
+        $this->authorize($actor, true);
+        if ($expiresAt <= $this->clock->now()->getTimestamp()) {
+            throw new ConcurrentModificationException('The curriculum review expired. Review it again.');
+        }
+        $expected = ['payload' => $root->selection(), 'position' => $root->playhead()];
+        if (
+            $this->selections->get($assignment) !== $expected ||
+            $this->selections->requirements($assignment) !== $root->requirements()
+        ) {
+            throw new CorruptHistoryException();
+        }
     }
 
     /** @param array<string,mixed> $scope */
