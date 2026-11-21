@@ -768,10 +768,19 @@ window.createWorkspacePrograms = function (ui) {
             checked: data.settings.maximum === null,
         });
         const status = node("p", { role: "status" });
+        const maximumHelp = node("p", {
+            id: "specialization-policy-maximum-help", class: "form-text",
+        });
+        maximum.input.setAttribute("aria-describedby", maximumHelp.id);
         function refresh() {
+            maximum.input.max = String(data.institution.maximum);
             maximum.input.disabled = inherit.checked;
             if (inherit.checked) maximum.input.value = data.institution.default_maximum;
             status.textContent = `Institutional ceiling: ${data.institution.maximum}. Institutional default maximum: ${data.institution.default_maximum}. Program maximum: ${inherit.checked ? data.institution.default_maximum : maximum.input.value || "not entered"}.`;
+            maximumHelp.textContent = `This field uses the saved institutional ceiling of ${data.institution.maximum}. ` +
+                (data.can_manage_institution
+                    ? "To raise it, save Institution-wide boundaries above first. Unsaved institutional changes do not change this limit."
+                    : "An administrator with institutional catalog-policy authority must save a higher ceiling before you can increase this limit.");
         }
         const sharing = node("select", {
             id: "specialization-component-sharing", name: "component_sharing", class: "form-select", required: true,
@@ -797,6 +806,7 @@ window.createWorkspacePrograms = function (ui) {
                 ),
             ),
             maximum.group,
+            maximumHelp,
             node(
                 "p",
                 {},
@@ -853,7 +863,7 @@ window.createWorkspacePrograms = function (ui) {
         if (data.can_manage_institution) {
             const panel = node(
                 "details",
-                { class: "surface p-3 my-3" },
+                { class: "surface p-3 my-3", open: true },
                 node("summary", { class: "h5" }, "Institution-wide boundaries"),
             );
             const ceiling = field(
@@ -873,6 +883,8 @@ window.createWorkspacePrograms = function (ui) {
             const globalForm = node(
                 "form",
                 {},
+                node("p", { class: "alert alert-info" },
+                    "Save institutional changes here first, then save the program policy below. The program maximum uses the saved ceiling. Saving these boundaries keeps your unsaved program edits on this screen."),
                 node(
                     "p",
                     {},
@@ -881,31 +893,60 @@ window.createWorkspacePrograms = function (ui) {
                 ceiling.group,
                 defaultMaximum.group,
             );
+            const pending = node("p", {
+                id: "specialization-policy-institution-pending",
+                role: "status", class: "alert alert-warning", hidden: true,
+            });
+            const saved = node("p", { role: "status" });
+            maximum.input.setAttribute("aria-describedby", `${maximumHelp.id} ${pending.id}`);
+            const institutionDraft = () => {
+                const changed = Number(ceiling.input.value) !== data.institution.maximum ||
+                    Number(defaultMaximum.input.value) !== data.institution.default_maximum;
+                pending.hidden = !changed;
+                pending.textContent = changed
+                    ? `Institutional changes are not saved. The program maximum still uses the saved ceiling of ${data.institution.maximum}. Choose Save institutional specialization boundaries first.`
+                    : "";
+            };
+            globalForm.addEventListener("input", () => {
+                saved.textContent = "";
+                institutionDraft();
+            });
             const commit = node(
                 "button",
                 { type: "submit", class: "btn btn-outline-primary" },
                 "Save institutional specialization boundaries",
             );
-            globalForm.append(commit);
+            globalForm.append(pending, commit, saved);
             globalForm.addEventListener("submit", (event) => {
                 event.preventDefault();
                 task(async () => {
                     if (!globalForm.reportValidity()) return;
+                    const submittedCeiling = ceiling.input.value;
+                    const submittedDefault = defaultMaximum.input.value;
                     await request("/sis/catalog/specialization-policy/", "POST", {
                         revision: data.institution.revision,
-                        maximum: Number(ceiling.input.value),
-                        default_maximum: Number(defaultMaximum.input.value),
+                        maximum: Number(submittedCeiling),
+                        default_maximum: Number(submittedDefault),
                     });
-                    if (body.isConnected)
-                        await specializationPolicy(
-                            program,
-                            back,
-                            "Institutional specialization boundaries saved. Earlier publications are unchanged.",
-                        );
+                    if (!body.isConnected) return;
+                    const updated = await request(path);
+                    if (!body.isConnected) return;
+                    data.institution = updated.institution;
+                    data.can_manage_institution = updated.can_manage_institution;
+                    if (ceiling.input.value === submittedCeiling) ceiling.input.value = data.institution.maximum;
+                    if (defaultMaximum.input.value === submittedDefault) defaultMaximum.input.value = data.institution.default_maximum;
+                    refresh();
+                    institutionDraft();
+                    saved.textContent = `Institutional specialization boundaries saved. The program maximum now allows up to ${data.institution.maximum}. Your unsaved program edits were kept; save the program policy when ready. Earlier publications are unchanged.`;
+                    if (!data.can_manage_institution) {
+                        maximum.input.setAttribute("aria-describedby", maximumHelp.id);
+                        body.append(saved);
+                        panel.remove();
+                    }
                 }, commit);
             });
             panel.append(globalForm);
-            body.append(panel);
+            body.insertBefore(panel, form);
         }
     }
 

@@ -172,3 +172,49 @@ Each selected major/minor uses the existing **Requirements for …** authoring/p
 Earlier published snapshots without role/type-limit keys round-trip with those fields absent. Earlier working references migrate with a null role; staff must explicitly classify every active offered reference before its next publication. Titles/codes never infer a role. A missing historical type is displayed as unrecorded and is never borrowed from the current draft. The additive migration `20261121000009_AddSisCurriculumComponentKinds` adds only nullable `kind` and bounded JSON `kind_limits` authoring fields to the existing tables. It creates no new event table, grants, academic/financial facts or historical backfill. Existing program/student streams, expected versions, expiring actor-bound reviews, original-result receipts, scope checks, CSRF, private/no-store responses and replay limits continue to apply. Required audits and final authority checks cover new authoring/policy writes.
 
 Independent graduation/credential decisions, official transcript component presentation, additional component exclusion rules, broader location eligibility and qualified larger/longer evaluations remain separate roadmap work. A major/minor selection or a feasible progress review does not confer a degree.
+
+### Example: a broad BA program with one major and an optional minor
+
+An institution can organize several majors under one broad academic program. For example:
+
+| Setting | Example |
+| --- | --- |
+| Program code | `ARTS-UG` |
+| Program title | Undergraduate Arts |
+| Academic level | Undergraduate |
+| Award | Bachelor of Arts |
+| Offered majors | English, History, Philosophy |
+| Offered minors | History, French |
+
+The code is an institutional label. Academic level and award are separate settings; including `BA` in a code does not configure either one or automatically select a major. A subject-specific program such as `BA.ENG` can instead include the English curriculum directly in its program requirements, without requiring another English selection. Choose the structure that matches the institution's curriculum.
+
+**1. Add the offered choices.** Open **Academic catalog → Programs → a program → Program details & publications → Majors, minors & specializations**. Add each major with type **Major** and each minor with type **Minor**. Offering three majors gives students three alternatives; it does not require them to complete all three. Codes must be unique within the program, so use different codes for a History major and History minor, such as `HIST-MAJ` and `HIST-MIN`.
+
+**2. Configure one required major plus an optional minor.** Open **Specialization selection policy**. Some current controls still use “specializations” to mean all curriculum components, including majors and minors. A major and a minor therefore count as **two selections** toward the overall maximum.
+
+| Control | Value for this example |
+| --- | --- |
+| **Institution-wide boundaries → Institution-wide maximum specializations** | At least **2**; keep a higher existing ceiling if appropriate |
+| **Default maximum for programs** | May remain **1** if other programs should keep that default |
+| **Use institutional default maximum** | Clear this option when the default is still 1 |
+| **Program maximum specializations** | **2** |
+| **Required specializations (zero means optional)** | **1** overall |
+| **Limits by curriculum type → Major** | Enable; minimum **1**, maximum **1** |
+| **Limits by curriculum type → Minor** | Enable; minimum **0**, maximum **1** |
+| Other curriculum types | For this major/minor-only example, enable each remaining type limit with minimum **0**, maximum **0** |
+
+The institution's ceiling and default both initially equal one. Raise the ceiling before trying to save a program maximum of two. The ceiling permits programs to use a higher maximum; it does not automatically raise every program's default. Institution-wide boundaries require the appropriate institutional authority. Unchecked type limits add no restriction beyond the overall policy, so explicitly exclude other types when only majors and minors should be selectable.
+
+Use **Institution-wide boundaries**, shown first and expanded above **Program limits**, to change the ceiling. Choose **Save institutional specialization boundaries** before increasing the program maximum. The program field's up arrows use the **saved** ceiling; editing the institutional field alone leaves that limit unchanged. Manually typing a larger program maximum does not bypass validation. An unsaved-changes notice explains the pending institutional edit. After the institutional save succeeds, the program's arrow limit and inherited default refresh in place, preserving unsaved program counts, type limits and course-sharing choices. Then choose **Save program specialization policy** separately. The institutional panel requires `sis:catalog:policy` in addition to the catalog-management access used to open this screen.
+
+With these settings, **English major alone** and **English major plus History minor** are valid. An empty selection or a minor alone is invalid; two majors or two minors also exceed the type limits. The overall required count is one because the minor is optional; setting it to two would require a second component. Save the settings, then review and confirm the program publication for the applicable academic year. Saving the draft alone changes no student's requirements or choices.
+
+**3. Publish and assign the requirements.** Put shared BA requirements, such as general education and overall credit minimums, in the program's **Degree audit requirements**. Use **Requirements for …** on each major/minor to build and publish its own course requirements against the matching program publication. Reusable course groups can supply shared content.
+
+After the student has a program pursuit with the appropriate retained program publication, use **Students → Student programs → Specializations** to [record the student's choices](student-program-assignments.md#specialization-choices-within-a-pursuit). Assign the program's degree requirements and [assign a matching requirements publication](student-program-assignments.md#assign-published-specialization-requirements) to each selected major/minor. Selecting a component does not automatically assign its requirements.
+
+**4. Review the selected curriculum together.** For an English major with a History minor, **Combined curriculum progress** checks the shared BA requirements, English-major requirements and History-minor requirements. History-major and Philosophy-major requirements do not apply because those majors were not selected. The student's portal uses these assigned requirements for its combined progress view. Missing required choices or missing requirement assignments require registrar attention.
+
+Choose the published [course-sharing policy](#course-sharing-between-curriculum-components) deliberately. A course may satisfy requirements in more than one component only when policy permits; a three-credit course still contributes three earned credits to the degree total. Component totals are not added together to manufacture additional earned credit. Combined progress is a current review, not an official graduation decision.
+
+**Application and portal boundary:** applicants currently choose the academic program and entry term. Adding these offered components does not automatically add major/minor selectors to the application. Staff record the choices and assign their requirements after matriculation; students cannot yet declare or change them through the portal. Major-dependent concentration eligibility, such as allowing Creative Writing only with the English major, remains separate configuration/enforcement work.
