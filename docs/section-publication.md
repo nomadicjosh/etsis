@@ -258,3 +258,15 @@ The worklist and reports share the same prepared SQL count using the existing se
 ## Meeting plan guide
 
 The shared [captured-review guides](workspace-guides.md) explain next steps from the current response and focus existing details without fetching records or changing decisions. Refresh the review after records change.
+
+## Weekly teaching contact hours
+
+Open **Academic catalog → Sections → section → Contact hours**. Enter **Weekly instructional minutes** for a typical teaching week, then **Save working contact time**. Blank means unknown; zero is an explicit known value. The current calculation displays instructional minutes, the minutes-per-contact-hour divisor, rounding, calculated weekly contact hours and institutional-policy/default provenance. This is a section-owned draft component, separate from course academic credits and employee timesheet intervals.
+
+The [institutional time and contact policy](human-resources.md#institutional-time-review-and-teaching-contact-policy) defaults to 50 instructional minutes per contact hour, rounded half up to the nearest thousandth. Institutions can change the divisor and rounding. Arithmetic uses integers; for example, 150 instructional minutes produces 3.000 weekly contact hours under the fallback, or 2.500 under a sixty-minute institution policy. No academic credits, weeks-per-term, meeting pattern, preparation time, pay rate or faculty allocation is inferred.
+
+Review and publish **Published section details** to retain the contact calculation in the existing section-definition event and projection. Each new publication captures either an explicit unknown value or the actual minutes, conversion/rounding, result and policy reference. Earlier publications without this field remain unrecorded; they do not gain an invented zero or fifty-minute policy. Draft edits and later institutional publications do not rewrite an earlier offering. Current planning for an already selected offering preserves its captured contact calculation; deliberately republish/select/amend the offering to change prospective published meaning.
+
+The selected offering and current draft appear separately in the contact editor. Assigned instructors can open **My teaching → section → Section contact hours** as a read-only view; HR can inspect section contact information, while saving working minutes still requires catalog maintenance. Names, student rosters and compensation are not part of this reader. Publication confirmation rechecks the contact source/policy after required audit, so a concurrent policy/draft change cannot be accepted silently. Optimistic draft revisions, current authorization, private/no-store responses and framework CSRF apply.
+
+The additive nullable projection leaves earlier retained definitions unchanged. Historical contact calculations remain part of the single protected section-publication journal. This does not add contact hours to earned-credit/GPA/load totals, determine payroll, infer a typical week from exceptions/cancellations, or allocate work across a teaching team. Those policies require their own explicit contracts.

@@ -96,6 +96,8 @@ return [
                 ],
                 "sis:gradebook:manage" => ["description" => "Manage grades across course sections."],
                 "sis:scheduling:manage" => ["description" => "Manage room booking approvals."],
+                "sis:hr:time-policy" => ["description" => "Publish institutional timesheet review policies."],
+                "sis:hr:time-exception" => ["description" => "Approve documented timesheet policy exceptions."],
                 "sis:hr:manage" => ["description" => "Manage employment and timesheet approvals."],
                 "sis:transfer:manage" => ["description" => "Manage transfer courses and credit awards."],
                 "sis:finance:ledger" => [

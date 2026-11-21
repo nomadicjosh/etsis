@@ -33,7 +33,7 @@ try {
             'credits_milli' => 3000], JSON_THROW_ON_ERROR)];
     }
     if (in_array(($argv[1] ?? ''), [
-        'check-grade-certification', 'check-support-history',
+        'check-workload-policy', 'check-grade-certification', 'check-support-history',
         'check-profile-requests', 'check-portal', 'check-admission-readiness', 'check-drop-policy', 'check-hiatus-history', 'check-transcript-reviews', 'check-registration-schedule', 'check-gradebook-calculation', 'check-grade-changes', 'check-section-classifications', 'check-program-classifications', 'check-profile-command', 'check-login-sessions',
         'check-mapped-imports', 'check-standing', 'check-enrollment-load', 'check-content-publication', 'check-prerequisite-permissions',
         'check-advising', 'check-moodle-resolution', 'check-course-rules', 'check-prerequisite-groups', 'check-degree-trials', 'check-transfer-corrections', 'check-report-exports',
@@ -152,6 +152,11 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/StandingBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-workload-policy') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/WorkloadPolicyBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-grade-certification') {
             $kernel->bootstrap();

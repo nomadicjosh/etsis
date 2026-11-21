@@ -76,6 +76,7 @@ final class SectionAssistanceTest extends TestCase
                 $f->sql,
                 new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
             ),
+            $f->sectionContactHours(),
         );
         $this->service = new SectionAssistanceService(
             $this->publications,

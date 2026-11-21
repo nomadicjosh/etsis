@@ -1211,6 +1211,16 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["GET"], "/sis/bookings/{id}/", [SisBookingController::class, "show"])
         ->name("sis.booking.show");
+    $router->get('/sis/sections/{id}/contact-hours/', [\Application\Http\Controller\SisSectionContactController::class, 'view'])
+        ->name('sis.section.contact-hours');
+    $router->post('/sis/sections/{id}/contact-hours/', [\Application\Http\Controller\SisSectionContactController::class, 'save'])
+        ->name('sis.section.contact-hours.save');
+    $router->get('/sis/time-policy/', [\Application\Http\Controller\SisTimePolicyController::class, 'view'])
+        ->name('sis.time-policy');
+    $router->post('/sis/time-policy/review/', [\Application\Http\Controller\SisTimePolicyController::class, 'review'])
+        ->name('sis.time-policy.review');
+    $router->post('/sis/time-policy/publish/', [\Application\Http\Controller\SisTimePolicyController::class, 'publish'])
+        ->name('sis.time-policy.publish');
     $router
         ->map(["POST"], "/sis/employees/", [SisTimesheetController::class, "employee"])
         ->name("sis.timesheet.employee");

@@ -1414,6 +1414,9 @@ window.createWorkspaceCatalog = function (ui) {
                     unspecified: "To be confirmed",
                 }[definition.delivery_mode],
             ],
+            ["Weekly contact hours", definition.contact_hours === undefined ? "Not recorded in this publication"
+                : definition.contact_hours === null ? "Unknown"
+                : `${(definition.contact_hours.weekly_contact_milli / 1000).toFixed(3)} (${definition.contact_hours.weekly_instruction_minutes} instructional min/week ÷ ${definition.contact_hours.unit_minutes}; rounding ${definition.contact_hours.rounding}; ${definition.contact_hours.policy_version ? `policy ${definition.contact_hours.policy_version}` : "50-minute default"})`],
             ["Section fee", money(definition.fee_minor, definition.currency)],
         ];
         if (facultyLabel !== null) fields.push(["Faculty", facultyLabel]);
@@ -1985,5 +1988,6 @@ window.createWorkspaceCatalog = function (ui) {
                 }),
             );
     }
-    return { enrollmentReview, subjects, courseSubject, clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
+    const contactHours = (section, back) => window.createSectionContactHours(ui).open(section, back);
+    return { contactHours, enrollmentReview, subjects, courseSubject, clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
 };

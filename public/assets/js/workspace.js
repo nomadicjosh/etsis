@@ -293,6 +293,7 @@
         composeAnnouncement: (preset, back) => createRecord('campaigns', preset, { back,
             explanation: 'Review this copy of the published invitation and dates before saving. Later event changes are not copied into this message. Saving creates an encrypted draft; choose recipients and confirm delivery in Communications.' }) });
     const employmentStudio = window.createWorkspaceEmployment({ node, request, task, can, recordSummary, actionMenu, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, openPerson, buildForm, formData, notify, table, badge, historyPanel, positions: () => positionStudio, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const timeReviewPolicy = window.createTimeReviewPolicy({ node, request, task, openDrawer, table });
     const hrSetup = window.createWorkspaceHrSetup({ node, request, task, openDrawer, table, badge, notify });
     const positionStudio = window.createWorkspacePositions({ node, request, task, openDrawer, table, badge,
         flow: operations.flow, amounts: hrSetup.amounts, openEmployee: id => employmentStudio.employee(id), notify });
@@ -577,6 +578,7 @@
                 ], { icon: 'journal-richtext' }),
             );
         }
+        if (family === 'employees' && can('sis:hr:manage') && can('sis:hr:time-policy')) tools.append(tool('Time review policy', () => timeReviewPolicy.open(), 'Institutional time review policy', 'sliders'));
         if (family === 'employees' && can('sis:hr:manage')) tools.append(tool('HR setup', () => hrSetup.library(), 'HR setup', 'gear'));
         if (section === 'campaigns' && can('sis:communications:manage')) tools.append(tool('Message templates', () => operations.campaignTemplates(), 'My message templates', 'chat-square-text'));
         if (['reports', 'sharedreports'].includes(section)) {

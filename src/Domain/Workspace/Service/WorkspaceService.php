@@ -81,6 +81,8 @@ final readonly class WorkspaceService
         "sis:gradebook:amend",
         "sis:academic-work:scope",
         "sis:scheduling:manage",
+        "sis:hr:time-policy",
+        "sis:hr:time-exception",
         "sis:hr:manage",
         "sis:finance:read",
         "sis:finance:post",

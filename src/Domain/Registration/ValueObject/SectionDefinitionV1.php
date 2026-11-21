@@ -32,8 +32,8 @@ final readonly class SectionDefinitionV1
     public function __construct(public array $data)
     {
         if (
-            !in_array(count($data), [count(self::FIELDS), count(self::FIELDS) + 1, count(self::FIELDS) + 2], true) ||
-            array_diff(array_keys($data), [...self::FIELDS, 'web_registration', 'minimum_enrollment']) !== [] ||
+            !in_array(count($data), [count(self::FIELDS), count(self::FIELDS) + 1, count(self::FIELDS) + 2, count(self::FIELDS) + 3], true) ||
+            array_diff(array_keys($data), [...self::FIELDS, 'web_registration', 'minimum_enrollment', 'contact_hours']) !== [] ||
             array_diff(self::FIELDS, array_keys($data)) !== [] ||
             (array_key_exists('web_registration', $data) && !is_bool($data['web_registration']))
         ) {
@@ -47,6 +47,12 @@ final readonly class SectionDefinitionV1
                 $data['minimum_enrollment'] > $data['capacity'])
         ) {
             throw new InvalidArgumentException('Use an enrollment target from zero through section capacity.');
+        }
+        if (isset($data['contact_hours'])) {
+            if (!is_array($data['contact_hours'])) {
+                throw new InvalidArgumentException('Use a retained contact-hours calculation.');
+            }
+            new ContactHours($data['contact_hours']);
         }
         foreach (["course_id", "course_version_id", "term_id"] as $field) {
             if (

@@ -327,6 +327,12 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlSectionEnrollmentReviewRepository::class,
             \Domain\Registration\Repository\RegistrationWindowRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlRegistrationWindowRepository::class,
+            \Domain\HumanResources\Repository\TimePolicyState::class =>
+                \Infrastructure\Persistence\Repository\SqlTimePolicyState::class,
+            \Domain\Registration\Repository\SectionContactTimeRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlSectionContactTimeRepository::class,
+            \Domain\Registration\Repository\ContactHoursPolicyReader::class =>
+                \Infrastructure\HumanResources\WorkloadContactPolicyReader::class,
             \Domain\Registration\Repository\RegistrationRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlRegistrationRepository::class,
             \Domain\Registration\Service\RegistrationBilling::class =>

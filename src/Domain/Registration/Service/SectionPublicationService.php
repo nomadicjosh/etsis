@@ -50,6 +50,7 @@ final readonly class SectionPublicationService
         private Clock $clock,
         private SectionVersionRepository $versions,
         private SectionClassificationRepository $classifications,
+        private SectionContactHoursService $contactHours,
     ) {
     }
 
@@ -366,6 +367,12 @@ final readonly class SectionPublicationService
                 "section.definition_published",
                 $section,
             );
+            $this->authorize($actor);
+            if ($r["expires_at"] <= $this->clock->now()->getTimestamp() ||
+                $this->contactHours->snapshot($section) !== $r["definition"]["contact_hours"]
+            ) {
+                throw new ConcurrentModificationException("Contact time or its policy changed. Review the offering again.");
+            }
             return $receipt;
         });
     }
@@ -440,6 +447,8 @@ final readonly class SectionPublicationService
                         $end,
                         $selected === null || array_key_exists("web_registration", $selected->definition->data),
                         $selected === null || array_key_exists("minimum_enrollment", $selected->definition->data),
+                        $selected === null || array_key_exists("contact_hours", $selected->definition->data),
+                        $selected?->definition->data ?? [],
                     );
             if (
                 $course !== null &&
@@ -556,6 +565,7 @@ final readonly class SectionPublicationService
                         $d["instruction_ends_on"],
                         array_key_exists("web_registration", $d),
                         array_key_exists("minimum_enrollment", $d),
+                        array_key_exists("contact_hours", $d),
                     ),
                 ) !== $this->fingerprint($d) ||
                 !$this->matchingClassifications($definition, $row)
@@ -697,6 +707,7 @@ final readonly class SectionPublicationService
             ) {
                 throw new CorruptHistoryException();
             }
+            $this->assertContactPublication($section, $definition);
             $event = \Domain\Registration\Event\SectionOfferingVersionWasSelected::occur(
                 $stream->aggregateId,
                 $payload,
@@ -723,8 +734,21 @@ final readonly class SectionPublicationService
                 "section.offering_version_selected",
                 $section,
             );
+            $this->authorize($actor);
+            $this->assertContactPublication($section, $definition);
             return $receipt;
         });
+    }
+
+    private function assertContactPublication(EntityId $section, PublishedSectionDefinition $definition): void
+    {
+        $data = $definition->definition->data;
+        if (
+            array_key_exists('contact_hours', $data) &&
+            $this->contactHours->snapshot($section) !== $data['contact_hours']
+        ) {
+            throw new ConcurrentModificationException('Contact time or its policy changed. Review the offering again.');
+        }
     }
 
     private function recordedClassifications(
@@ -811,6 +835,7 @@ final readonly class SectionPublicationService
                         $d["instruction_ends_on"],
                         array_key_exists("web_registration", $d),
                         array_key_exists("minimum_enrollment", $d),
+                        array_key_exists("contact_hours", $d),
                     ),
                 ) !== $this->fingerprint($d) ||
                 !$this->matchingClassifications($definition, $row)
@@ -1065,8 +1090,10 @@ final readonly class SectionPublicationService
         string $end,
         bool $recordWeb = true,
         bool $recordMinimum = true,
+        bool $recordContact = true,
+        array $retainedContact = [],
     ): array {
-        return new SectionDefinitionV1([
+        $data = [
             "course_id" => $row["course_id"],
             "course_version_id" => $course["version_id"],
             "term_id" => $term["id"],
@@ -1082,8 +1109,19 @@ final readonly class SectionPublicationService
             "currency" => $row["currency"],
             "instruction_starts_on" => $start,
             "instruction_ends_on" => $end,
-        ] + ($recordWeb ? ["web_registration" => (bool) $row["web_registration"]] : []) +
-        ($recordMinimum ? ["minimum_enrollment" => (int) ($row["minimum_enrollment"] ?? 0)] : []))->data;
+        ];
+        if ($recordWeb) {
+            $data['web_registration'] = (bool) $row['web_registration'];
+        }
+        if ($recordMinimum) {
+            $data['minimum_enrollment'] = (int) ($row['minimum_enrollment'] ?? 0);
+        }
+        if ($recordContact) {
+            $data['contact_hours'] = array_key_exists('contact_hours', $retainedContact)
+                ? $retainedContact['contact_hours']
+                : $this->contactHours->snapshot(new EntityId($row['id']));
+        }
+        return new SectionDefinitionV1($data)->data;
     }
 
     /** @param array<string, mixed> $earlier

@@ -106,6 +106,7 @@ final class SectionPublicationTest extends TestCase
                 $f->sql,
                 new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
             ),
+            $f->sectionContactHours(),
         );
     }
 
@@ -127,6 +128,28 @@ final class SectionPublicationTest extends TestCase
             new SectionPublicationId($this->section->id->value),
             "section_publication",
         );
+    }
+
+    public function testContactHoursRetainTheReviewedCalculationAfterPolicyAndDraftChanges(): void
+    {
+        $f = $this->f;
+        $f->sectionContactHours()->save($this->section->id, 150, 0);
+        $review = $this->review();
+        self::assertSame(3000, $review["definition"]["contact_hours"]["weekly_contact_milli"]);
+        $this->service->publish($this->section->id, $review["review_token"]);
+        $versions = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($f->sql);
+        $original = $versions->find(new EntityId($review["operation_id"]));
+        self::assertSame(3000, $original->definition->data["contact_hours"]["weekly_contact_milli"]);
+        $policies = $f->timeApprovalPolicies();
+        $rules = array_replace($policies->view()["rules"], ["contact_unit_minutes" => 60]);
+        $p = $policies->review($rules, 0, "Fictional sixty-minute institutional contact unit.");
+        $policies->publish(new EntityId($p["publication_id"]), $p["rules"], 0, $p["reason"], $p["review_token"]);
+        self::assertSame(3000, $versions->find($original->publication)->definition->data["contact_hours"]["weekly_contact_milli"]);
+        $next = $this->review();
+        self::assertSame(2500, $next["definition"]["contact_hours"]["weekly_contact_milli"]);
+        $f->sectionContactHours()->save($this->section->id, 180, 1);
+        $this->expectException(ConcurrentModificationException::class);
+        $this->service->publish($this->section->id, $next["review_token"]);
     }
 
     public function testReviewDoesNotPublishAndConfirmationUsesActualTimeAndProtectedContext(): void
@@ -582,6 +605,7 @@ final class SectionPublicationTest extends TestCase
                 $this->f->sql,
                 new \Infrastructure\Persistence\Repository\SqlClassificationRepository($this->f->sql),
             ),
+            $this->f->sectionContactHours(),
         );
         $this->expectException(AccessDeniedException::class);
         try {
@@ -744,6 +768,7 @@ final class SectionPublicationTest extends TestCase
                 $f->sql,
                 new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
             ),
+            $f->sectionContactHours(),
         );
         $before = $f->sql->rows('sis_history_events');
         $setup = $service->setup($this->section->id);

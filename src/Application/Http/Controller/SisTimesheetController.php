@@ -50,7 +50,11 @@ final readonly class SisTimesheetController
     public function decide(ServerRequest $request, string $id): ResponseInterface
     {
         $f = FormInput::from($request);
-        $this->service->decide(new EntityId($id), $f->requiredBoolean('approve'), $f->integer('version'));
+        $body = $request->getParsedBody();
+        $reason = is_array($body) && isset($body['exception_reason']) && $body['exception_reason'] !== ''
+            ? $f->bodyText('exception_reason') : null;
+        $this->service->decide(new EntityId($id), $f->requiredBoolean('approve'), $f->integer('version'),
+            $f->optionalText('review_revision', 64), $reason);
 
         return new JsonResponse(['status' => 'decided']);
     }

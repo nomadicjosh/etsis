@@ -52,6 +52,16 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class => [
+                'type' => 'timesheet_policy',
+                'root' => \Domain\HumanResources\TimeApprovalPolicy::class,
+                'fields' => \Domain\HumanResources\TimeApprovalPolicy::FIELDS,
+            ],
+            \Domain\HumanResources\Event\TimeEntryWasDecided::class => [
+                'type' => 'timesheet_decision',
+                'root' => \Domain\HumanResources\TimeDecision::class,
+                'fields' => \Domain\HumanResources\TimeDecision::FIELDS,
+            ],
             \Domain\Gradebook\Event\ClassGradesWereCertified::class => [
                 'type' => 'class_grade_certifications',
                 'root' => \Domain\Gradebook\GradeCertificationHistory::class,
@@ -606,6 +616,18 @@ final readonly class HistoricalSchemaRegistry
             if ($class === \Domain\Registration\Event\PrerequisitePermissionWasRecorded::class) {
                 \Domain\Registration\PrerequisitePermission::validate($payload);
             }
+            if ($class === \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class) {
+                \Domain\HumanResources\TimeApprovalPolicy::validate($payload);
+                if ((string) $stream->aggregateId !== \Domain\HumanResources\TimeApprovalPolicy::ID) {
+                    throw new CorruptHistoryException();
+                }
+            }
+            if ($class === \Domain\HumanResources\Event\TimeEntryWasDecided::class) {
+                \Domain\HumanResources\TimeDecision::validate($payload);
+                if ($payload['entry_id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\Gradebook\Event\ClassGradesWereCertified::class) {
                 \Domain\Gradebook\GradeCertificationHistory::validate($payload);
                 if ($payload['section_id'] !== (string) $stream->aggregateId) {
@@ -999,6 +1021,8 @@ final readonly class HistoricalSchemaRegistry
                 // This complete payload is validated by its bounded typed schema above.
                 if (
                     in_array($class, [
+                    \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class,
+                    \Domain\HumanResources\Event\TimeEntryWasDecided::class,
                     \Domain\Gradebook\Event\ClassGradesWereCertified::class,
                     \Domain\Student\Event\EnrollmentLoadWasDetermined::class,
                     \Domain\Registration\Event\PrerequisitePermissionWasRecorded::class,
@@ -1604,6 +1628,8 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\HumanResources\TimeApprovalPolicy::class => 'timesheet_policy',
+            \Domain\HumanResources\TimeDecision::class => 'timesheet_decision',
             \Domain\Gradebook\GradeCertificationHistory::class => 'class_grade_certifications',
             \Domain\Registration\PrerequisitePermission::class => 'prerequisite_permission',
             \Domain\Student\EnrollmentLoadDetermination::class => 'enrollment_load_determination',
@@ -1655,6 +1681,8 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            'timesheet_policy' => new \Domain\HumanResources\ValueObject\TimeApprovalPolicyId($id),
+            'timesheet_decision' => new \Domain\HumanResources\ValueObject\TimeDecisionId($id),
             'class_grade_certifications' => new \Domain\Gradebook\ValueObject\GradeCertificationId($id),
             'prerequisite_permission' => new \Domain\Registration\ValueObject\PrerequisitePermissionId($id),
             'enrollment_load_determination' => new \Domain\Student\ValueObject\LoadDeterminationId($id),

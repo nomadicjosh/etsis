@@ -309,6 +309,7 @@ window.createWorkspaceTeaching = function (ui) {
                 "div",
                 { class: "inline-actions mb-3" },
                 button("Take attendance", () => takeAttendance(row, back), "btn-primary"),
+                button("Section contact hours", () => window.createSectionContactHours(ui).open(row, back, false)),
                 button("Final-grade worksheet", () => finalGradeSheet(row, back, filters.search)),
                 ui.can("sis:gradebook:certify")
                     ? button("Class grade certification", () => {

@@ -217,6 +217,12 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
             if ($row['minimum_enrollment'] !== null) {
                 $facts['minimum_enrollment'] = $this->integer($row['minimum_enrollment']);
             }
+            if ($row['contact_hours'] !== null) {
+                if (!is_string($row['contact_hours']) || strlen($row['contact_hours']) > 2048) {
+                    throw new CorruptHistoryException();
+                }
+                $facts['contact_hours'] = json_decode($row['contact_hours'], true, 8, JSON_THROW_ON_ERROR);
+            }
             $facts["capacity"] = $this->integer($facts["capacity"]);
             $facts["fee_minor"] = $this->integer($facts["fee_minor"]);
             $schema = $this->integer($row["schema_version"]);
@@ -259,9 +265,13 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 "stream_version" => $definition->position,
                 "schema_version" =>
                     $definition->classifications === null ? 1 : 2,
-            ] + array_diff_key($definition->definition->data, ['web_registration' => true]) +
+            ] + array_diff_key($definition->definition->data, [
+                'web_registration' => true, 'contact_hours' => true,
+            ]) +
                 ['web_registration' => array_key_exists('web_registration', $definition->definition->data) ?
-                    (int) $definition->definition->data['web_registration'] : null],
+                    (int) $definition->definition->data['web_registration'] : null,
+                'contact_hours' => array_key_exists('contact_hours', $definition->definition->data)
+                    ? json_encode($definition->definition->data['contact_hours'], JSON_THROW_ON_ERROR) : null],
         );
         if ($definition->classifications !== null) {
             $row = ["id" => $definition->publication->value];

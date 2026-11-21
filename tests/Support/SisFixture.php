@@ -1396,7 +1396,36 @@ final class SisFixture
             $this->clock,
             $actors ?? new \Infrastructure\Persistence\SqlActorDirectory($this->sql),
             $this->employmentDatesLedger(),
-            $this->positionLedger()
+            $this->positionLedger(),
+            new \Domain\HumanResources\Service\TimeReviewService(
+                $repository ?? new \Infrastructure\Persistence\Repository\SqlTimeRepository($this->sql, $this->dropCipher),
+                $this->timeApprovalPolicies(),
+            ),
+            new \Domain\HumanResources\Service\TimeDecisionLedger(
+                EventStoreFixture::history($this->connection->queryBuilder()), $this->clock,
+            ),
+        );
+    }
+    public function sectionContactHours(): \Domain\Registration\Service\SectionContactHoursService
+    {
+        return new \Domain\Registration\Service\SectionContactHoursService(
+            new \Infrastructure\Persistence\Repository\SqlSectionContactTimeRepository($this->sql),
+            new \Infrastructure\HumanResources\WorkloadContactPolicyReader($this->timeApprovalPolicies()),
+            $this->registration,
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
+            EventStoreFixture::history($this->connection->queryBuilder()), $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions, $this->audit,
+        );
+    }
+    public function timeApprovalPolicies(): \Domain\HumanResources\Service\TimeApprovalPolicyService
+    {
+        return new \Domain\HumanResources\Service\TimeApprovalPolicyService(
+            EventStoreFixture::history($this->connection->queryBuilder()), $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions, $this->audit, $this->clock,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+            new \Infrastructure\Persistence\Repository\SqlTimePolicyState($this->sql),
         );
     }
     public function profileLedger(): \Domain\Person\Service\ProfileLedger
