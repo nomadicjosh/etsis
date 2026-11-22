@@ -1564,6 +1564,7 @@ return static function (Psr7Router $router): void {
     $router->get("/sis/course-groups/{id}/assistance/", [$groupAssistance, "preview"]);
     $router->post("/sis/course-groups/{id}/assistance/", [$groupAssistance, "suggest"]);
     $router->post("/sis/course-groups/page/", [SisCourseGroupController::class, "page"]);
+    $router->post('/sis/course-groups/transfer-institutions/', [SisCourseGroupController::class, 'institutions']);
     $router->post("/sis/course-groups/create/", [SisCourseGroupController::class, "create"]);
     $router->get("/sis/course-groups/{id}/", [SisCourseGroupController::class, "view"]);
     $router->post("/sis/course-groups/{id}/save/", [SisCourseGroupController::class, "save"]);

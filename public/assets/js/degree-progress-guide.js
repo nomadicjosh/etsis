@@ -1,7 +1,9 @@
 /* Display only the retained group restriction; dates are inclusive actual-completion boundaries. */
 window.degreeGroupEligibilityText = function (facts, context = null) {
     const origin = { any: "Institutional or transfer work", institutional: "Institutional work only", transfer: "Transfer work only" };
-    return `${origin[facts?.credit_origin || "any"]}. ` +
+    const institutions = facts?.transfer_institutions || [];
+    const transfer = institutions.length ? `Transfer work must come from: ${institutions.map(item => `${item.code} — ${item.name}`).join("; ")}. Institutional work remains subject to the origin rule. ` : "";
+    return `${origin[facts?.credit_origin || "any"]}. ` + transfer +
         (facts?.completed_from || facts?.completed_through
             ? `Actual completion ${[facts.completed_from ? `on or after ${facts.completed_from}` : "", facts.completed_through ? `on or before ${facts.completed_through}` : ""].filter(Boolean).join(" and ")}. Missing completion dates require review.`
             : facts?.max_age_months_at_pursuit_start != null ? "No fixed completion-date window." : "No completion-date restriction.") +
@@ -248,6 +250,8 @@ window.createDegreeProgressNextSteps = function (node, data) {
             add("Review actual completion dates", "Ask the registrar to verify actual completion dates for this group's retained date or course-age rule. Posting terms and catalog dates cannot replace missing completion evidence.");
         if ([...(data.allocation?.issues || []), ...(data.allocation?.eligibility_issues || [])].includes("pursuit_start_unknown"))
             add("Review the recorded pursuit start", "Ask the registrar to review the actual pursuit start selected with degree requirements. Today's date, term starts and anticipated completion cannot replace it. Temporary tests use that same recorded date.");
+        if ([...(data.allocation?.issues || []), ...(data.allocation?.eligibility_issues || [])].includes("transfer_institution_unknown"))
+            add("Review retained transfer-source evidence", "Ask the registrar to review the award's recorded sending institution. Today's catalog or equivalency labels cannot replace missing retained evidence.");
         if ([...(data.allocation?.issues || []), ...(data.allocation?.eligibility_issues || [])].includes("origin_unknown"))
             add("Review coursework origin", "Ask the registrar to verify the recorded institutional or transfer origin before applying this group's restriction.");
         if ((data.work_summary?.awaiting_grade_count || 0) > 0)
@@ -450,6 +454,8 @@ window.createDegreeNamedCourseReview = function (ui, rows, resolve) {
     const reasons = {
         candidate: "Eligible after this group's publication, grade and coursework eligibility checks.",
         origin_excluded: "This group's recorded credit-origin restriction excludes this work.",
+        transfer_institution_excluded: "The retained sending institution is not listed for this group.",
+        transfer_institution_unknown: "Review the award's retained sending-institution evidence before allocating it.",
         origin_unknown: "The recorded credit origin needed by this group is unavailable.",
         completion_date_unknown: "Record the actual completion date before evaluating this group's date or age rule.",
         pursuit_start_unknown: "Review the actual pursuit start before evaluating this group's course-age limit.",

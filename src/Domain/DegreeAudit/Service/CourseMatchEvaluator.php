@@ -366,6 +366,13 @@ final readonly class CourseMatchEvaluator
         if ($origin !== null) {
             return $origin;
         }
+        $transfer = $eligibility->transferStatus(
+            $work['credit_type'] ?? null,
+            $work['transfer_institution_id'] ?? null,
+        );
+        if ($transfer !== null && $transfer !== Status::TransferInstitutionUnknown) {
+            return $transfer;
+        }
         if (!$work["grade_recorded"] && $work["completed_milli"] === 0) {
             return Status::InProgress;
         }
@@ -414,6 +421,6 @@ final readonly class CourseMatchEvaluator
                 return Status::InsufficientGrade;
             }
         }
-        return $completion ?? Status::Candidate;
+        return $transfer ?? $completion ?? Status::Candidate;
     }
 }

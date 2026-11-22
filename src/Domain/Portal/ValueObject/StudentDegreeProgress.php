@@ -138,6 +138,7 @@ final readonly class StudentDegreeProgress
             "eligibility_issues" => array_values(
                 array_intersect($review["allocation"]["issues"] ?? [], [
                     "origin_unknown",
+                    'transfer_institution_unknown',
                     "completion_date_unknown",
                     'pursuit_start_unknown',
                 ]),
@@ -160,11 +161,20 @@ final readonly class StudentDegreeProgress
                     "completed_from",
                     "completed_through",
                     'max_age_months_at_pursuit_start',
+                    'transfer_institutions',
                 ]);
                 try {
                     $group["work_eligibility"] = new GroupWorkEligibility($facts)->facts;
                 } catch (\InvalidArgumentException) {
                     throw new CorruptHistoryException();
+                }
+                if (array_key_exists('transfer_institutions', $facts)) {
+                    $group['work_eligibility']['transfer_institutions'] = array_map(
+                        static fn(array $institution): array => [
+                            'code' => $institution['code'], 'name' => $institution['name'],
+                        ],
+                        $facts['transfer_institutions']
+                    );
                 }
                 if (($facts['max_age_months_at_pursuit_start'] ?? null) !== null) {
                     $context = $value['work_eligibility_context'] ?? null;

@@ -79,10 +79,29 @@ if (
 ) {
     throw new RuntimeException('The actual coursework age rule lost its policy or rewrote academic history.');
 }
+$source = ['id' => EntityId::generate()->value, 'code' => 'GROUP.EXT', 'name' => 'Fictional source college'];
+$sis->sql->insert('sis_external_institutions', $source);
+$directoryPath = '/sis/course-groups/transfer-institutions/';
+$directory = $teachingPost($directoryPath, ['search' => 'GROUP.EXT']);
+$choices = json_decode((string) $directory->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $directory->getStatusCode() !== 200 || $choices['items'] !== [$source]
+    || !str_contains($directory->getHeaderLine('Cache-Control'), 'no-store')
+    || $directory->hasHeader('phpdebugbar-id')
+) {
+    throw new RuntimeException('The private metadata-only sending-institution directory failed.');
+}
+$restricted = $aged['definition'];
+$restricted['work_eligibility']['transfer_institutions'] = [$source];
+$sourceSave = ['revision' => $aged['revision'], 'definition' => $restricted];
+if ($teachingPost($base . 'save/', $sourceSave)->getStatusCode() !== 200) {
+    throw new RuntimeException('The real course-group route failed to retain the source restriction.');
+}
 $sis->access->staff = false;
 $sis->access->grants = [];
 $sis->access->actor = $sis->user();
 if (
+    $teachingPost($directoryPath, ['search' => 'GROUP.EXT'])->getStatusCode() !== 403 ||
     $readEligibility()->getStatusCode() !== 403 ||
     $teachingPost($base . "save/", $save)->getStatusCode() !== 403
 ) {

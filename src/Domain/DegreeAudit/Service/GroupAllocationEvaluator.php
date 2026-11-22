@@ -196,6 +196,7 @@ final readonly class GroupAllocationEvaluator
                             "scale_differs",
                             "approval_conflict",
                             "origin_unknown",
+                            'transfer_institution_unknown',
                             "completion_date_unknown",
                             'pursuit_start_unknown',
                         ],

@@ -181,7 +181,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
         };
         if (definition.work_eligibility && (definition.work_eligibility.credit_origin !== "any" ||
             definition.work_eligibility.completed_from || definition.work_eligibility.completed_through ||
-            definition.work_eligibility.max_age_months_at_pursuit_start != null))
+            definition.work_eligibility.max_age_months_at_pursuit_start != null ||
+            definition.work_eligibility.transfer_institutions?.length))
             summary.warnings.push("Catalog totals do not check a student's credit origin or actual completion date. Run a student test.");
         const raw = definition.requirement_type === "courses" ? definition.min_courses : definition.min_credits_milli;
         let required = raw;
@@ -781,6 +782,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
         if (d.work_eligibility) {
             d.work_eligibility.completed_from = d.work_eligibility.completed_from || null;
             d.work_eligibility.completed_through = d.work_eligibility.completed_through || null;
+            if ((d.work_eligibility.transfer_institutions || []).length > 20)
+                throw new Error("Choose at most 20 sending institutions for this group.");
+            if (d.work_eligibility.credit_origin === "institutional" && d.work_eligibility.transfer_institutions?.length)
+                throw new Error("Remove the sending-institution list or allow transfer work in the origin rule.");
             const age = d.work_eligibility.max_age_months_at_pursuit_start;
             if (age != null && (!Number.isInteger(age) || age < 1 || age > 1200))
                 throw new Error("Enter a course-age limit of 1–1,200 whole months, or leave it blank.");
@@ -1069,6 +1074,50 @@ window.createWorkspaceDegreeAudit = function (ui) {
             eligibilityHelp.textContent = window.degreeGroupEligibilityText(eligibility);
         }
         origin.addEventListener("change", () => changeEligibility("credit_origin", origin.value));
+        const selectedInstitutions = node("div", { class: "record-section" });
+        const institutionResults = node("div", { class: "record-section", role: "region", "aria-label": "Sending institution search results", "aria-live": "polite" });
+        const institutionSearch = node("input", { type: "search", maxlength: 80, class: "form-control" });
+        institutionSearch.id = `audit-transfer-institution-${++sequence}`;
+        let institutionCursor = null, institutionSerial = 0;
+        function institutionSelection() {
+            const selected = eligibility.transfer_institutions || [];
+            selectedInstitutions.replaceChildren(...(selected.length ? selected.map(item =>
+                node("div", { class: "d-flex flex-wrap gap-2 align-items-center my-2" },
+                    node("span", {}, `${item.code} — ${item.name}`),
+                    button(`Remove institution ${item.code}`, () => {
+                        changeEligibility("transfer_institutions", selected.filter(old => old.id !== item.id));
+                        institutionSelection();
+                    }))) : [node("p", { class: "form-text" }, "No sending-institution restriction.")]));
+        }
+        async function findInstitutions(after = null) {
+            const token = ++institutionSerial;
+            const response = await request("/sis/course-groups/transfer-institutions/", "POST", {
+                search: institutionSearch.value, after,
+            });
+            if (!institutionResults.isConnected || token !== institutionSerial) return;
+            institutionCursor = response.next_after;
+            const rows = response.items.map(item => node("div", { class: "my-2" },
+                node("p", {}, `${item.code} — ${item.name}`), button(`Use institution ${item.code}`, () => {
+                    const selected = eligibility.transfer_institutions || [];
+                    const exists = selected.some(old => old.id === item.id);
+                    if (!exists && selected.length >= 20) throw new Error("Choose at most 20 sending institutions.");
+                    const snapshot = { id: item.id, code: item.code, name: item.name };
+                    changeEligibility("transfer_institutions", exists
+                        ? selected.map(old => old.id === item.id ? snapshot : old) : [...selected, snapshot]);
+                    institutionSelection();
+                })));
+            institutionResults.replaceChildren(...(rows.length ? rows : [node("p", {}, "No sending institutions match.")]));
+            institutionMore.hidden = !institutionCursor;
+        }
+        const institutionMore = button("More sending institutions", () => findInstitutions(institutionCursor));
+        institutionMore.hidden = true;
+        institutionSearch.addEventListener("input", () => {
+            institutionSerial++;
+            institutionCursor = null;
+            institutionMore.hidden = true;
+            institutionResults.replaceChildren();
+        });
+        institutionSelection();
         eligibilityHelp.textContent = window.degreeGroupEligibilityText(eligibility);
         const eligibilityFields = node("fieldset", { class: "mt-3" },
             node("legend", { class: "h6" }, "Coursework eligibility"),
@@ -1078,6 +1127,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
             field("Maximum age before pursuit start (months, optional)", eligibility.max_age_months_at_pursuit_start,
                 v => changeEligibility("max_age_months_at_pursuit_start", v === "" ? null : Number(v)),
                 { type: "number", min: 1, max: 1200, step: 1 }),
+            node("label", { for: institutionSearch.id, class: "form-label" }, "Find sending institutions (optional)"),
+            institutionSearch,
+            button("Find sending institutions", () => findInstitutions()), institutionMore,
+            selectedInstitutions, institutionResults,
+            node("p", { class: "form-text" }, "A selected list restricts transfer work in this group only. Leave the list empty for any sending institution. Use a search result again to refresh a changed label; institutional work follows the origin rule above."),
             eligibilityHelp,
             node("p", { class: "form-text" }, "Use actual recorded completion dates. These rules restrict this group; they do not change awarded credits or cumulative GPA."));
         inspector.append(

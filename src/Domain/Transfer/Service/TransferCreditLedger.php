@@ -286,6 +286,7 @@ final readonly class TransferCreditLedger
             "academic_on" => $root->academicOn(),
             "course_version_id" => $root->courseVersion(),
             "retained_term_code" => $root->source()["term_code"] ?? null,
+            'transfer_institution_id' => $root->source()['institution_id'] ?? null,
         ];
     }
     /**

@@ -2,6 +2,8 @@
 
 Reviewed 2026-11-08 against the legacy documentation, migration definitions and academic views, and the current domain models, migrations and write/read repositories; implementation status refreshed 2026-11-09. This is an implementation input and gap review, not a claim that the missing fields or event streams have been built. Apply the [event-sourcing direction](event-sourcing.md) and [architecture/retrofit order](event-sourcing-architecture.md) before expanding academic writes. The [development roadmap](development-roadmap.md) consolidates remaining work.
 
+Course-group [sending-institution eligibility](degree-audit-builder.md#sending-institution-restrictions) now uses only the institution identity retained in the protected transfer-award decision or an explicitly accepted observation. Current equivalency joins never repair missing earlier source evidence. Working drafts validate reference labels; immutable publications retain their original source restrictions, selected student requirements remain explicit, and recorded progress reviews preserve their frozen basis. Known exclusions affect group placement only; unknown source evidence stops allocation without changing awarded credit/GPA. No schema, journal, report or fabricated historical fact was added.
+
 ## Sources and evidence
 
 Nested prerequisite routes now retain their counted expression in the existing course publication and accepted registration evidence. Current drafts, published rules and curated branch-status explanations remain distinct; earlier flat rules are not rewritten. See the [authoring and historical boundaries](course-publication.md#nested-prerequisite-routes).

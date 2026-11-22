@@ -10,6 +10,8 @@ enum CourseMatchStatus: string
     case ComponentExcluded = "component_excluded";
     case OriginExcluded = "origin_excluded";
     case OriginUnknown = "origin_unknown";
+    case TransferInstitutionExcluded = 'transfer_institution_excluded';
+    case TransferInstitutionUnknown = 'transfer_institution_unknown';
     case CompletionDateUnknown = "completion_date_unknown";
     case CompletedBeforeWindow = "completed_before_window";
     case CompletedAfterWindow = "completed_after_window";
@@ -41,6 +43,10 @@ enum CourseMatchStatus: string
             self::OriginExcluded => "This group requires a different recorded credit origin.",
             self::OriginUnknown
             => "The recorded credit origin is unavailable; this group's restriction needs review.",
+            self::TransferInstitutionExcluded
+            => "The recorded sending institution is not included in this group's transfer-source list.",
+            self::TransferInstitutionUnknown
+            => "The award has no retained sending-institution evidence; registrar review is required.",
             self::CompletionDateUnknown
             => "An actual completion date is required by this group. Posting or catalog dates cannot replace it.",
             self::CompletedBeforeWindow

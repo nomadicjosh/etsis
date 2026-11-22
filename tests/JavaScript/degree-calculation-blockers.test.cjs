@@ -156,3 +156,15 @@ test("course-age guidance uses retained calendar dates and explains missing purs
   assert.match(window.createDegreeProgressNextSteps(node,data).textContent, /Review the recorded pursuit start/);
   assert.match(window.createDegreeProgressNextSteps(node,data).textContent, /Today's date, term starts/);
 });
+
+
+test("sending-institution guidance retains labels and asks for real missing source evidence", () => {
+  const policy = {credit_origin:"any",completed_from:null,completed_through:null,
+    transfer_institutions:[{code:"EXT",name:"Fictional college"}]};
+  assert.match(window.degreeGroupEligibilityText(policy), /Transfer work must come from: EXT — Fictional college/);
+  const data = review();
+  data.allocation = {outcome:"needs_review",eligibility_issues:["transfer_institution_unknown"]};
+  const text = window.createDegreeProgressNextSteps(node,data).textContent;
+  assert.match(text, /Review retained transfer-source evidence/);
+  assert.match(text, /Today's catalog or equivalency labels cannot replace missing retained evidence/);
+});

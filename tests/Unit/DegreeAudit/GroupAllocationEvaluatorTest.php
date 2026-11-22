@@ -161,6 +161,40 @@ final class GroupAllocationEvaluatorTest extends TestCase
         return $rows;
     }
 
+    public function testMissingRetainedSendingInstitutionStopsBothNamedAndSavedRulePlans(): void
+    {
+        foreach ([false, true] as $savedRule) {
+            $g = $savedRule ? $this->ruleGroup(1, 3000, 1) : $this->group(1);
+            $g["definition"]["work_eligibility"] = array_replace(
+                \Domain\DegreeAudit\ValueObject\GroupWorkEligibility::DEFAULT,
+                [
+                    "transfer_institutions" => [
+                        ["id" => self::id(990), "code" => "EXT", "name" => "Fictional college"],
+                    ],
+                ],
+            );
+            $r = $this->requirements([self::id(1) => $g]);
+            $work = [$this->work(10, origin: "transfer")];
+            $result = $this->evaluator()->evaluate(
+                $work,
+                $r,
+                $this->effective($r),
+                $this->decisions($work, $r),
+            );
+            self::assertSame("needs_review", $result["outcome"]);
+            self::assertContains("transfer_institution_unknown", $result["issues"]);
+            self::assertSame([], $result["groups"][0]["placements"]);
+            $work[0]["transfer_institution_id"] = self::id(990);
+            $result = $this->evaluator()->evaluate(
+                $work,
+                $r,
+                $this->effective($r),
+                $this->decisions($work, $r),
+            );
+            self::assertSame("feasible", $result["outcome"]);
+        }
+    }
+
     public function testOverlappingSavedRulesUseOneAwardWithoutMultiplyingGroupCredits(): void
     {
         $r = $this->requirements([self::id(1) => $this->ruleGroup(1, 3000, 2)]);

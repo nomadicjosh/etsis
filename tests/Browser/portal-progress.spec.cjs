@@ -35,6 +35,7 @@ async function fixture(page,options={}) {
         } else throw new Error(`Unexpected private request ${path}`);
         if (options.groupEligibility && data.allocation) data.allocation.groups[0].work_eligibility = options.groupEligibility;
         if (options.recencyContext && data.allocation) data.allocation.groups[0].work_eligibility_context = options.recencyContext;
+        if (options.sourceUnknown && data.allocation) data.allocation.eligibility_issues = ['transfer_institution_unknown'];
         if (options.recencyUnknown && data.allocation) data.allocation.eligibility_issues = ['pursuit_start_unknown'];
         if (options.evidence && data.allocation) {
             data.records.forEach((record,i)=>Object.assign(record,{
@@ -583,6 +584,21 @@ for (const unknown of [false, true]) test(`student course-age explanation uses $
         await expect(page.getByRole('complementary', {name:'Degree progress guide',exact:true})).toContainText('Review the recorded pursuit start');
     }
     await page.setViewportSize({width:320,height:812});
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+});
+
+
+test('student sending-institution rule explains exclusions and missing retained evidence', async ({page}) => {
+    const f = await fixture(page, {sourceUnknown:true, groupEligibility:{credit_origin:'any',
+        completed_from:null,completed_through:null,
+        transfer_institutions:[{code:'EXT',name:'Fictional sending college'}]}});
+    await page.getByRole('button',{name:'Review progress · BSCS · 26/FA',exact:true}).click();
+    await expect(page.locator('#campus-service-content')).toContainText('Transfer work must come from: EXT — Fictional sending college');
+    await page.getByRole('button',{name:'Open degree progress guide',exact:true}).click();
+    await expect(page.getByRole('complementary',{name:'Degree progress guide',exact:true})).toContainText('Review retained transfer-source evidence');
+    await page.setViewportSize({width:320,height:1000});
     await accessible(page);
     expect(f.errors).toEqual([]);
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);

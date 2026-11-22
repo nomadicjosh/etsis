@@ -7,6 +7,8 @@ namespace Domain\DegreeAudit\ValueObject;
 use DateTimeImmutable;
 use DateTimeZone;
 use InvalidArgumentException;
+use Domain\Shared\ValueObject\EntityId;
+use Domain\Transfer\ValueObject\TransferLabel;
 
 /** Published group restrictions on recorded origin and actual completion, never posting dates. */
 final readonly class GroupWorkEligibility
@@ -16,12 +18,13 @@ final readonly class GroupWorkEligibility
         "completed_from" => null,
         "completed_through" => null,
         "max_age_months_at_pursuit_start" => null,
+        "transfer_institutions" => [],
     ];
 
     public function __construct(public array $facts = self::DEFAULT)
     {
         if (
-            !in_array(count($facts), [3, 4], true) ||
+            !in_array(count($facts), [3, 4, 5], true) ||
             array_diff(array_keys($facts), array_keys(self::DEFAULT)) !== [] ||
             array_diff(
                 ["credit_origin", "completed_from", "completed_through"],
@@ -34,6 +37,39 @@ final readonly class GroupWorkEligibility
         $months = $facts["max_age_months_at_pursuit_start"] ?? null;
         if ($months !== null && (!is_int($months) || $months < 1 || $months > 1200)) {
             self::invalid();
+        }
+        $institutions = $facts["transfer_institutions"] ?? [];
+        if (
+            !is_array($institutions) ||
+            !array_is_list($institutions) ||
+            count($institutions) > 20 ||
+            ($institutions !== [] && $facts["credit_origin"] === "institutional")
+        ) {
+            self::invalid();
+        }
+        $seen = [];
+        foreach ($institutions as $institution) {
+            if (
+                !is_array($institution) ||
+                count($institution) !== 3 ||
+                array_diff(array_keys($institution), ["id", "code", "name"]) !== []
+            ) {
+                self::invalid();
+            }
+            try {
+                $id = new EntityId($institution["id"]);
+                $label = new TransferLabel($institution["code"], $institution["name"], "name");
+                if (
+                    $label->code !== $institution["code"] ||
+                    $label->title !== $institution["name"] ||
+                    isset($seen[$id->value])
+                ) {
+                    self::invalid();
+                }
+                $seen[$id->value] = true;
+            } catch (\Throwable) {
+                self::invalid();
+            }
         }
         foreach (["completed_from", "completed_through"] as $key) {
             if ($facts[$key] !== null) {
@@ -59,6 +95,25 @@ final readonly class GroupWorkEligibility
             return CourseMatchStatus::OriginUnknown;
         }
         return $origin === $this->facts["credit_origin"] ? null : CourseMatchStatus::OriginExcluded;
+    }
+
+    public function transferStatus(
+        ?string $origin = null,
+        ?string $institution = null,
+    ): ?CourseMatchStatus {
+        $allowed = $this->facts["transfer_institutions"] ?? [];
+        if ($allowed === [] || $origin === "institutional") {
+            return null;
+        }
+        if ($origin !== "transfer") {
+            return CourseMatchStatus::OriginUnknown;
+        }
+        if ($institution === null) {
+            return CourseMatchStatus::TransferInstitutionUnknown;
+        }
+        return in_array($institution, array_column($allowed, "id"), true)
+        ? null
+        : CourseMatchStatus::TransferInstitutionExcluded;
     }
 
     public function completionStatus(
@@ -166,7 +221,8 @@ final readonly class GroupWorkEligibility
     private static function invalid(): never
     {
         throw new InvalidArgumentException(
-            "Choose a credit origin, valid inclusive completion dates and an optional age of 1–1,200 whole months.",
+            "Choose valid origin/completion rules, optional age of 1–1,200 months " .
+            "and up to 20 distinct sending institutions.",
         );
     }
 }

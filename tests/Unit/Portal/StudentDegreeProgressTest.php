@@ -521,6 +521,31 @@ final class StudentDegreeProgressTest extends TestCase
             json_encode($data, JSON_THROW_ON_ERROR),
         );
     }
+    public function testSendingInstitutionLabelsArePublicButPrivateIdsAreRemoved(): void
+    {
+        $review = $this->review("needs_review");
+        $id = str_repeat("0", 25) . "9";
+        $review["allocation"]["groups"][0]["work_eligibility"] = array_replace(
+            \Domain\DegreeAudit\ValueObject\GroupWorkEligibility::DEFAULT,
+            [
+                "transfer_institutions" => [
+                    ["id" => $id, "code" => "EXT", "name" => "Fictional college"],
+                ],
+            ],
+        );
+        $review["allocation"]["issues"] = ["transfer_institution_unknown"];
+        $data = new StudentDegreeProgress($review)->describe();
+        self::assertSame(
+            [["code" => "EXT", "name" => "Fictional college"]],
+            $data["allocation"]["groups"][0]["work_eligibility"]["transfer_institutions"],
+        );
+        self::assertSame(
+            ["transfer_institution_unknown"],
+            $data["allocation"]["eligibility_issues"],
+        );
+        self::assertStringNotContainsString($id, json_encode($data, JSON_THROW_ON_ERROR));
+    }
+
     public function testRecencyContextIsMinimizedAndUnknownPursuitStartIsExplicit(): void
     {
         $review = $this->review("needs_review");

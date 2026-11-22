@@ -73,6 +73,30 @@ final class CourseMatchEvaluatorTest extends TestCase
         )[0]["requirement_matches"][0];
     }
 
+    public function testSendingInstitutionUsesRetainedEvidenceAndPreservesKnownAcademicFailures(): void
+    {
+        [$work, $r, $e] = $this->inputs();
+        $r["group_details"][self::id(4)]["definition"]["work_eligibility"] = array_replace(
+            \Domain\DegreeAudit\ValueObject\GroupWorkEligibility::DEFAULT,
+            [
+                "transfer_institutions" => [
+                    ["id" => self::id(90), "code" => "EXT", "name" => "Fictional college"],
+                ],
+            ],
+        );
+        $work["credit_type"] = "transfer";
+        self::assertSame("transfer_institution_unknown", $this->first($work, $r, $e)["status"]);
+        $work["grade"]["points_milli"] = 2000;
+        self::assertSame("insufficient_grade", $this->first($work, $r, $e)["status"]);
+        $work["grade"]["points_milli"] = 2800;
+        $work["transfer_institution_id"] = self::id(90);
+        self::assertSame("candidate", $this->first($work, $r, $e)["status"]);
+        $work["transfer_institution_id"] = self::id(91);
+        self::assertSame("transfer_institution_excluded", $this->first($work, $r, $e)["status"]);
+        $work["credit_type"] = "institutional";
+        self::assertSame("candidate", $this->first($work, $r, $e)["status"]);
+    }
+
     public function testInstitutionalPointsUseTheRetainedScaleAndNotWeightedQualityPoints(): void
     {
         [$work, $requirements, $effective] = $this->inputs();

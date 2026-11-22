@@ -108,6 +108,8 @@ final class ReusableGroupFixture
                 $audit ?? $f->audit,
                 $f->clock,
             ),
+            new \Infrastructure\Persistence\Repository\SqlTransferInstitutionDirectory($f->sql),
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($f->sql),
         );
     }
     public function gradingScales(

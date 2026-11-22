@@ -19,6 +19,8 @@ final class AcademicWorkView
             "course_code" => $facts["course_code"],
             "course_title" => $facts["course_title"],
             "credit_type" => $facts["credit_type"],
+            ...array_key_exists('transfer_institution_id', $input)
+                ? ['transfer_institution_id' => $input['transfer_institution_id']] : [],
             "term_id" => $facts["term_id"],
             "term_code" => $input["retained_term_code"] ?? $currentTermCode,
             "term_label_retained" => $input["retained_term_code"] !== null,

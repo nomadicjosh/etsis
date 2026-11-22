@@ -12,6 +12,63 @@ use PHPUnit\Framework\TestCase;
 
 final class GroupWorkEligibilityTest extends TestCase
 {
+    public static function sendingSources(): array
+    {
+        return [
+            ["transfer", null, "transfer_institution_unknown"],
+            ["transfer", str_repeat("0", 25) . "1", null],
+            ["transfer", str_repeat("0", 25) . "2", "transfer_institution_excluded"],
+            ["institutional", null, null],
+            [null, null, "origin_unknown"],
+        ];
+    }
+
+    #[DataProvider("sendingSources")]
+    public function testSourceRestrictions(
+        string|null $origin,
+        string|null $source,
+        string|null $expected,
+    ): void {
+        $policy = array_replace(GroupWorkEligibility::DEFAULT, [
+            "transfer_institutions" => [
+                ["id" => str_repeat("0", 25) . "1", "code" => "EXT", "name" => "Fictional college"],
+            ],
+        ]);
+        self::assertSame(
+            $expected,
+            new GroupWorkEligibility($policy)->transferStatus($origin, $source)?->value,
+        );
+        self::assertNull(new GroupWorkEligibility()->transferStatus($origin, $source));
+    }
+
+    public static function invalidSources(): array
+    {
+        $item = ["id" => str_repeat("0", 25) . "1", "code" => "EXT", "name" => "Fictional college"];
+        return [
+            [[$item, $item], "any"],
+            [array_fill(0, 21, $item), "any"],
+            [[array_replace($item, ["id" => "invalid"])], "any"],
+            [[array_replace($item, ["name" => ""])], "any"],
+            [[array_replace($item, ["code" => " EXT"])], "any"],
+            [[$item + ["private" => "hidden"]], "any"],
+            [[$item], "institutional"],
+            [["key" => $item], "any"],
+            ["EXT", "any"],
+        ];
+    }
+
+    #[DataProvider("invalidSources")]
+    public function testInvalidSourcePoliciesAreRejected(mixed $sources, string $origin): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        new GroupWorkEligibility(
+            array_replace(GroupWorkEligibility::DEFAULT, [
+                "credit_origin" => $origin,
+                "transfer_institutions" => $sources,
+            ]),
+        );
+    }
+
     public static function windows(): array
     {
         return [

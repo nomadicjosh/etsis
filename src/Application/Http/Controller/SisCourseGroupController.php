@@ -29,6 +29,14 @@ final readonly class SisCourseGroupController
             ),
         );
     }
+    public function institutions(ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->institutionChoices(
+            $f->search('search', 80),
+            $f->optionalId('after'),
+        ));
+    }
     public function create(ServerRequest $request): ResponseInterface
     {
         return new JsonResponse(

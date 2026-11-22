@@ -11,6 +11,8 @@ use Domain\Communications\Service\MessageCipher;
 use Domain\DegreeAudit\CourseGroupPublication;
 use Domain\DegreeAudit\Event\CourseGroupWasPublished;
 use Domain\DegreeAudit\Repository\CourseGroupRepository;
+use Domain\DegreeAudit\Repository\TransferInstitutionDirectory;
+use Domain\Access\Repository\AccessRepository;
 use Domain\Gradebook\Service\GradingScaleService;
 use Domain\DegreeAudit\ValueObject\CourseGroupDefinition;
 use Domain\DegreeAudit\ValueObject\CourseGroupDefinitionV2;
@@ -44,8 +46,29 @@ final readonly class CourseGroupService
         private Clock $clock,
         private GradingScaleService $gradeScale,
         private \Domain\Rules\Service\CourseRuleService $rules,
+        private TransferInstitutionDirectory $institutions,
+        private AccessRepository $roles,
     ) {
     }
+    /** Catalog reference choices only. This exposes no transfer awards or equivalencies.
+     * @return array<string,mixed>
+     */
+    public function institutionChoices(string $search = "", ?EntityId $after = null): array
+    {
+        $actor = $this->access->requirePermission("sis:catalog:manage");
+        if (mb_strlen($search) > 80 || !mb_check_encoding($search, "UTF-8")) {
+            throw new InvalidArgumentException(
+                "Use an institution search of at most 80 characters.",
+            );
+        }
+        $rows = $this->institutions->page(trim($search), $after);
+        $this->authorize($actor);
+        return [
+            "items" => array_slice($rows, 0, 25),
+            "next_after" => count($rows) > 25 ? $rows[24]["id"] : null,
+        ];
+    }
+
     /** @return array<string, mixed> */
     public function page(string $search = "", ?EntityId $after = null, bool $publishedOnly = false): array
     {
@@ -65,6 +88,8 @@ final readonly class CourseGroupService
     {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         return $this->transactions->run(function () use ($id, $definition, $actor): array {
+            $this->roles->lock();
+            $this->authorize($actor);
             try {
                 $old = $this->groups->get($id);
             } catch (RecordNotFoundException) {
@@ -80,8 +105,12 @@ final readonly class CourseGroupService
             }
             $this->assertCurrentScale($definition);
             $this->assertRules($definition);
+            $this->assertInstitutions($definition);
             $this->groups->create($id, $definition->definition);
             $this->audit->record($actor, "course_group.draft_created", $id);
+            $this->authorize($actor);
+            $this->assertInstitutions($definition);
+            $this->assertDraft($id, $definition, 0);
             return $this->view($id);
         });
     }
@@ -110,6 +139,8 @@ final readonly class CourseGroupService
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         return $this->transactions->run(function () use ($id, $revision, $definition, $actor): array {
+            $this->roles->lock();
+            $this->authorize($actor);
             $this->groups->lock($id);
             $row = $this->groups->get($id);
             $this->assertRules($definition);
@@ -123,8 +154,12 @@ final readonly class CourseGroupService
                 throw new ConcurrentModificationException("The group changed. Reload before saving.");
             }
             $this->assertCurrentScale($definition);
+            $this->assertInstitutions($definition);
             $this->groups->save($id, $revision, $definition->definition);
             $this->audit->record($actor, "course_group.draft_saved", $id);
+            $this->authorize($actor);
+            $this->assertInstitutions($definition);
+            $this->assertDraft($id, $definition, $revision + 1);
             return $this->view($id);
         });
     }
@@ -136,6 +171,7 @@ final readonly class CourseGroupService
             throw new InvalidArgumentException("Use a publication reason of at most 1000 characters.");
         }
         return $this->transactions->run(function () use ($id, $actor, $reason): array {
+            $this->roles->lock();
             $this->groups->lock($id);
             $this->authorize($actor);
             $row = $this->groups->get($id);
@@ -143,6 +179,7 @@ final readonly class CourseGroupService
             $d->assertPublishable();
             $this->assertRules($d);
             $this->assertCurrentScale($d);
+            $this->assertInstitutions($d);
             $details = $this->courseDetails($d);
             [$state] = $this->load($id);
             if (
@@ -232,6 +269,7 @@ final readonly class CourseGroupService
             throw new AccessDeniedException("This group review belongs to another staff member.");
         }
         return $this->transactions->run(function () use ($id, $data, $actor, $schema): array {
+            $this->roles->lock();
             $this->groups->lock($id);
             $this->authorize($actor);
             $row = $this->groups->get($id);
@@ -297,6 +335,7 @@ final readonly class CourseGroupService
             $definition->assertPublishable();
             $this->assertRules($definition);
             $this->assertCurrentScale($definition);
+            $this->assertInstitutions($definition);
             $this->courseDetails($definition);
             $this->authorize($actor);
             if ($data["expires_at"] <= $this->clock->now()->getTimestamp()) {
@@ -313,6 +352,20 @@ final readonly class CourseGroupService
             );
             $this->groups->published($id, $op, $receipt["last_version"], $data["definition"]["name"]);
             $this->audit->record($actor, "course_group.published", $id);
+            $this->authorize($actor);
+            $this->assertInstitutions($definition);
+            $this->assertRules($definition);
+            $this->assertCurrentScale($definition);
+            $this->courseDetails($definition);
+            $current = $this->groups->get($id);
+            if (
+                $current['revision'] !== $data['revision'] || $current['published_version_id'] !== $op->value
+                || $current['publication_position'] !== $receipt['last_version']
+                || CourseGroupDefinitionV2::draft($current['definition'])->hash() !== $definition->hash()
+                || $data['expires_at'] <= $this->clock->now()->getTimestamp()
+            ) {
+                throw new ConcurrentModificationException('The group or review changed. Review publication again.');
+            }
             return $receipt;
         });
     }
@@ -448,6 +501,40 @@ final readonly class CourseGroupService
             if ($this->fingerprint($expected) !== $this->fingerprint($snapshot->snapshot)) {
                 throw new InvalidArgumentException('The selected course rule differs from its saved revision.');
             }
+        }
+    }
+
+    private function assertInstitutions(
+        CourseGroupDefinition|CourseGroupDefinitionV2 $definition,
+    ): void {
+        $selected = $definition->definition["work_eligibility"]["transfer_institutions"] ?? [];
+        $ids = array_column($selected, "id");
+        sort($ids, SORT_STRING);
+        foreach ($ids as $id) {
+            $this->institutions->lock(new EntityId($id));
+        }
+        foreach ($selected as $snapshot) {
+            if ($this->institutions->get(new EntityId($snapshot["id"])) != $snapshot) {
+                throw new ConcurrentModificationException(
+                    "A selected sending institution changed. Refresh its label and review the group again.",
+                );
+            }
+        }
+    }
+
+    private function assertDraft(
+        EntityId $id,
+        CourseGroupDefinition|CourseGroupDefinitionV2 $definition,
+        int $revision,
+    ): void {
+        $current = $this->groups->get($id);
+        if (
+            $current["revision"] !== $revision ||
+            CourseGroupDefinitionV2::draft($current["definition"])->hash() !== $definition->hash()
+        ) {
+            throw new ConcurrentModificationException(
+                "The group changed while saving. Reload it before continuing.",
+            );
         }
     }
 
