@@ -77,7 +77,7 @@ final readonly class ReportSelectCompiler
                 $groups[] = $term;
             }
             $metadata = $s['fields'][$column['field']];
-            if (($metadata['expression'] ?? null) === 'account_money') {
+            if (in_array($metadata['expression'] ?? null, ['account_money', 'historical_account_money'], true)) {
                 foreach ($d['columns'] as $currencyIndex => $currencyColumn) {
                     if (
                         $currencyColumn['field'] === $metadata['currency_field']
@@ -100,6 +100,10 @@ final readonly class ReportSelectCompiler
             $scope = match ($s['source_scope']) {
                 'advising_followups' => new AdvisingFollowUpReportSql($this->sql)->currentOwner($s['root']),
                 'active_attendance' => new AttendanceReportSql($this->sql)->activeRegistration($s['root']),
+                'historical_accounts' => new HistoricalFinancialReportSql($this->sql)
+                    ->opened($s['root'], $d['financial_as_of']),
+                'historical_postings' => new HistoricalFinancialReportSql($this->sql)
+                    ->active($s['root'], $d['financial_as_of']),
                 default => throw new \LogicException('Unknown reporting source scope.'),
             };
             $where = $where === '' ? $scope : '(' . $where . ') AND ' . $scope;
@@ -234,6 +238,16 @@ final readonly class ReportSelectCompiler
     {
         $q = $this->sql->quote(...);
         $name = $q($alias) . '.' . $q($field['column']);
+        if (($field['expression'] ?? null) === 'historical_cutoff') {
+            return new HistoricalFinancialReportSql($this->sql)->cutoff($field['financial_as_of']);
+        }
+        if (in_array($field['expression'] ?? null, ['historical_account_money', 'historical_account_minor'], true)) {
+            $name = new HistoricalFinancialReportSql($this->sql)->amount(
+                $alias,
+                $field['historical_measure'],
+                $field['financial_as_of']
+            );
+        }
         if (($field['expression'] ?? '') === 'full_name') {
             $given = 'COALESCE(' . $q($alias) . '.' . $q('given_name') . ", '')";
             $family = 'COALESCE(' . $q($alias) . '.' . $q('family_name') . ", '')";
@@ -252,7 +266,7 @@ final readonly class ReportSelectCompiler
         if (($field['expression'] ?? '') === 'section_below_target') {
             return new \Infrastructure\Persistence\SectionEnrollmentSql($this->sql)->below($alias);
         }
-        if (($field['expression'] ?? '') === 'account_money') {
+        if (in_array($field['expression'] ?? '', ['account_money', 'historical_account_money'], true)) {
             $currency = $q($field['currency_relation']) . '.' . $q('currency');
             // Unknown currency precision is not silently treated as cents.
             $name = '(' . $name . ' * 1.0 / (' . $this->currencyPrecision($currency, divisor: true) . '))';

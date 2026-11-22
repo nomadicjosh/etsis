@@ -311,6 +311,10 @@ final readonly class ReportExportService
         $schema = $this->source->datasets()[$data['dataset'] ?? ''] ??
         throw new RecordNotFoundException('Report source not found.');
         $query = new ReportQuery($data, $schema);
+        if ($schema['financial_as_of'] ?? false) {
+            new \Domain\Reporting\ValueObject\ReportFinancialCutoff($data['financial_as_of'])
+                ->requireRecordedBy($this->clock->now());
+        }
         foreach ($query->permissions() as $permission) {
             if (!$this->permissions->allows($actor->value, $permission)) {
                 throw new AccessDeniedException('Report source access is no longer available.');

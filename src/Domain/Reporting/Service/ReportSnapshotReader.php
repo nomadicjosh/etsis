@@ -30,6 +30,9 @@ final readonly class ReportSnapshotReader
         ) {
             throw new \RuntimeException('Static report capture could not be verified.');
         }
+        if (isset($data['financial_as_of'])) {
+            new \Domain\Reporting\ValueObject\ReportFinancialCutoff($data['financial_as_of']);
+        }
         return $data;
     }
 

@@ -33,7 +33,7 @@ try {
             'credits_milli' => 3000], JSON_THROW_ON_ERROR)];
     }
     if (in_array(($argv[1] ?? ''), [
-        'check-primary-position', 'check-recorded-progress',
+        'check-historical-finance', 'check-primary-position', 'check-recorded-progress',
         'check-academic-organization', 'check-group-work-eligibility',
         'check-component-major-links',
         'check-curriculum-reports',
@@ -228,6 +228,10 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/GradeChangeBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-historical-finance') {
+            $kernel->bootstrap();
+            require __DIR__ . '/HistoricalFinanceBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-primary-position') {
             $kernel->bootstrap();

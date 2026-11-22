@@ -127,7 +127,8 @@ final readonly class RelationalReportService
         }
         unset($relation);
         return ['id' => $dataset['id'], 'label' => $dataset['label'], 'description' => $dataset['description'],
-            'fields' => $fields, 'relationships' => $relationships];
+            'fields' => $fields, 'relationships' => $relationships,
+            'financial_as_of' => $dataset['financial_as_of'] ?? false];
     }
 
     /** @param array<string, mixed> $definition
@@ -426,6 +427,10 @@ final readonly class RelationalReportService
             throw new ValidationException([["field" => "dataset", "message" => "Choose a known dataset."]]);
         }
         $query = new ReportQuery($data, $this->source->datasets()[$id]);
+        if ($query->schema['financial_as_of'] ?? false) {
+            new \Domain\Reporting\ValueObject\ReportFinancialCutoff($data['financial_as_of'])
+                ->requireRecordedBy($this->clock->now());
+        }
         $this->grants($query->permissions());
         return $query;
     }
@@ -448,6 +453,7 @@ final readonly class RelationalReportService
         return [
             "row_selection" => $query->rowSelectionSummary(),
             'conditional_columns' => $query->conditionalColumns(),
+            'financial_as_of' => $query->definition['financial_as_of'] ?? null,
             "columns" => array_map(static fn(array $column): string => $column["label"], $query->definition["columns"]),
             "items" => array_slice($rows, 0, 50),
             "offset" => $offset,

@@ -26,6 +26,17 @@ final readonly class ReportQuery
         public ?array $populationStudents = null,
     ) {
         $this->baseSchema = $schema;
+        if ($schema['financial_as_of'] ?? false) {
+            new ReportFinancialCutoff($definition['financial_as_of'] ?? null);
+            foreach ($schema['fields'] as &$field) {
+                if (isset($field['historical_measure']) || ($field['expression'] ?? null) === 'historical_cutoff') {
+                    $field['financial_as_of'] = $definition['financial_as_of'];
+                }
+            }
+            unset($field);
+        } elseif (array_key_exists('financial_as_of', $definition)) {
+            self::invalid('A recorded cutoff is only available for historical student financial sources.');
+        }
         $this->schema = $schema = ReportGraph::expand($schema, $definition['aliases'] ?? []);
         if (($definition["dataset"] ?? null) !== $schema["id"]) {
             self::invalid("Choose a report dataset.");

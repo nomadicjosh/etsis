@@ -410,6 +410,25 @@ window.createWorkspaceReportStudio = function (ui) {
         const students = catalog.datasets.find((item) => item.id === "students");
         const sections = catalog.datasets.find((item) => item.id === "sections");
         const applications = catalog.datasets.find((item) => item.id === "applications");
+        const historicalAccounts = catalog.datasets.find(item => item.id === "historical_accounts");
+        const historicalPostings = catalog.datasets.find(item => item.id === "historical_postings");
+        if (historicalAccounts) templateGrid.append(
+            button("Student balances at a cutoff", () => edit(historicalAccounts, initial(historicalAccounts))),
+            button("Balances by billing term at a cutoff", () => edit(historicalAccounts, {
+                ...initial(historicalAccounts), columns: [
+                    { field: "cutoff_utc", label: "Recorded cutoff UTC", aggregate: "none" },
+                    { field: "term_code", label: "Billing term", aggregate: "none" },
+                    { field: "currency", label: "Currency", aggregate: "none" },
+                    ...["balance", "charges", "payments", "refunds"].map(field => ({
+                        field, label: historicalAccounts.fields[field].label, aggregate: "sum",
+                    })),
+                    { field: "account_id", label: "Accounts opened by cutoff", aggregate: "count_distinct" },
+                ],
+            })),
+            node("p", { class: "form-text" }, "Select an inclusive UTC second. Historical amounts use recorded postings and reversals; student identity, academic status and term labels are current. These are not bank-settlement or overdue-account figures."),
+        );
+        if (historicalPostings) templateGrid.append(button("Student postings active at a cutoff",
+            () => edit(historicalPostings, initial(historicalPostings))));
         const accounts = catalog.datasets.find((item) => item.id === "accounts");
         if (accounts?.fields.posting_recorded_at)
             templateGrid.append(button("Latest payment postings", () => edit(accounts, {
@@ -634,6 +653,8 @@ window.createWorkspaceReportStudio = function (ui) {
             postings: ["institutional_id", "term_code", "posting_type", "currency", "posting_amount", "posting_reversed", "posting_recorded_at"],
             meetings: ["booking_title", "starts_at", "ends_at", "room_name", "building_name", "booking_status"],
             rooms: ["room_code", "room_name", "building_name", "room_capacity"],
+            historical_accounts: ["cutoff_utc", "account_id", "institutional_id", "full_name", "term_code", "currency", "balance"],
+            historical_postings: ["cutoff_utc", "account_id", "institutional_id", "full_name", "term_code", "currency", "posting_type", "posting_amount", "posting_recorded_at"],
             accounts: ["institutional_id", "full_name", "term_code", "currency", "balance"],
             applications: ["institutional_id", "full_name", "program_code", "entry_term", "status", "submitted_on"],
             students: ["institutional_id", "full_name", "program_code", "entry_term"],
@@ -644,6 +665,7 @@ window.createWorkspaceReportStudio = function (ui) {
         };
         return {
             dataset: dataset.id,
+            ...(dataset.financial_as_of ? { financial_as_of: new Date().toISOString().slice(0, 19) + "Z" } : {}),
             columns: (choices[dataset.id] || Object.keys(dataset.fields).slice(0, 4))
                 .filter((id) => dataset.fields[id])
                 .map((field) => ({
@@ -927,6 +949,18 @@ window.createWorkspaceReportStudio = function (ui) {
             placeholder: "Name your report",
         });
         const toolbar = node("div", { class: "report-editor-toolbar" }, labeled("Report name", name));
+        if (dataset.financial_as_of) {
+            const cutoff = node("input", { type: "datetime-local", step: 1, required: true,
+                class: "form-control", value: (definition.financial_as_of || "").replace(/Z$/, ""),
+                max: new Date().toISOString().slice(0, 19), "data-report-financial-cutoff": "true" });
+            cutoff.addEventListener("input", () => {
+                definition.financial_as_of = cutoff.value ? cutoff.value.slice(0, 16)
+                    + (cutoff.value.length === 16 ? ":00" : cutoff.value.slice(16)) + "Z" : "";
+                dirty();
+            });
+            toolbar.append(labeled("Recorded activity through (UTC, inclusive second)", cutoff),
+                node("p", { class: "form-text" }, "Uses recorded posting and reversal times. Student identity, program and term labels remain current. Changing the cutoff requires a fresh preview."));
+        }
         const actions = node("div", { class: "report-editor-actions" });
         const heading = dialog.querySelector(".report-workbench-heading");
         heading.classList.add("report-editor-heading");
@@ -2484,6 +2518,8 @@ window.createWorkspaceReportStudio = function (ui) {
                 `${result.items.length} rows on this page${result.next_offset !== null ? "; more are available" : ""}. ${result.lifecycle?.mode === "static" ? "Saved static results" : "Live results"} · page ${result.offset / 50 + 1}.`,
             ),
         );
+        if (result.financial_as_of) panel.append(node("p", { class: "form-text" },
+            `Recorded activity through ${result.financial_as_of} (inclusive UTC second). Student identity, academic status and term labels are current.`));
         const selectionNote = rowSelectionUi.describe(result.row_selection);
         if (selectionNote) panel.append(selectionNote);
         const columnNote = conditionalNote(result.conditional_columns);
@@ -2538,6 +2574,27 @@ window.createWorkspaceReportStudio = function (ui) {
                         }));
                     });
                     actions.append(node("p", {}, "Opens the exact pursuit with a fresh student-access check. Return here to refresh the saved report. Editing still requires its independent permission."), choices);
+                    panel.append(actions);
+                }
+            }
+        }
+        if (applicationAction && ui.openAccount && !result.grouped && result.lifecycle?.mode !== "static"
+            && can("sis:finance:read") && can("sis:student:read")) {
+            const { definition, back } = applicationAction;
+            if (["accounts", "postings", "historical_accounts", "historical_postings"].includes(definition?.dataset)
+                && definition.columns.every(c => c.aggregate === "none")) {
+                const index = definition.columns.findIndex(c => c.field === "account_id");
+                if (index >= 0 && result.items.length) {
+                    const actions = node("details", { class: "my-3" }, node("summary", {}, "Open a student's current account"));
+                    const choices = node("div", { class: "d-flex flex-wrap gap-2 my-2" });
+                    result.items.forEach((row, offset) => {
+                        const id = row[`c${index}`];
+                        if (typeof id !== "string" || !/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(id)) return;
+                        choices.append(button(`Open current account · row ${offset + 1}`, async () => {
+                            if (panel.isConnected) await ui.openAccount(id, back);
+                        }));
+                    });
+                    actions.append(node("p", {}, "Opens today's account statement with a fresh access check. Its current balance can differ from this report's cutoff. Return here to refresh the saved report; financial changes require their own authority and review."), choices);
                     panel.append(actions);
                 }
             }
@@ -2994,7 +3051,7 @@ window.createWorkspaceReportStudio = function (ui) {
                     }
                     throw error;
                 }
-            }, !frozen && (ui.openApplication || ui.openCurriculum) ? { definition: saved.definition, back: () => record(id) } : null);
+            }, !frozen && (ui.openApplication || ui.openCurriculum || ui.openAccount) ? { definition: saved.definition, back: () => record(id) } : null);
         };
         recordTools.prepend(button(frozen ? "Read results" : "Refresh results", () => load(0), "btn-primary"));
         await load(0);

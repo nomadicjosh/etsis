@@ -33,6 +33,9 @@ final readonly class SqlRelationalReportSource implements RelationalReportSource
         if ($query->schema['financial_entries'] ?? false) {
             $this->requireCurrentEntries();
         }
+        if ($query->schema['financial_as_of'] ?? false) {
+            new HistoricalFinancialReportSql($this->sql)->requireReady();
+        }
     }
 
     /** Check the atomic posting projection checkpoint, without scanning or decrypting individual events. */

@@ -35,11 +35,12 @@ final readonly class SqlAccountEntryProjection
         $head = $this->sql->current('sis_account_entry_heads', $id);
         if (
             ($expected === 0 && $head !== null) ||
-            ($expected > 0 && ($head === null || (int) $head['position'] !== $expected))
+            ($expected > 0 && ($head === null || (int) $head['position'] !== $expected
+                || (int) $head['temporal_position'] !== $expected || $head['opened_at'] === null))
         ) {
             throw new CorruptHistoryException();
         }
-        [$created, $affected, $previousMethods] = $this->changes($account, $events);
+        [$created, $affected, $previousMethods, $reversals] = $this->changes($account, $events);
         foreach ($affected as $operation => $moneyChanged) {
             $entry = $account->entry(new EntityId($operation)) ?? throw new CorruptHistoryException();
             $old = $this->sql->rows(
@@ -80,13 +81,14 @@ final readonly class SqlAccountEntryProjection
             ) {
                 throw new CorruptHistoryException();
             }
-            $this->sql->update('sis_account_entries', $values, ['id' => $old['id']]);
+            $this->sql->update('sis_account_entries', $values + ($reversals[$operation] ?? []), ['id' => $old['id']]);
         }
         $count = ($head === null ? 0 : (int) $head['entry_count']) + count($created);
         if ($count !== $account->entryCount()) {
             throw new CorruptHistoryException();
         }
-        $values = ['position' => $account->playhead(), 'entry_count' => $count];
+        $values = ['position' => $account->playhead(), 'entry_count' => $count,
+            'temporal_position' => $account->playhead(), 'opened_at' => $head['opened_at'] ?? $this->openedAt($events)];
         if ($head === null) {
             $this->sql->insert('sis_account_entry_heads', ['id' => $id] + $values);
         } elseif (
@@ -106,6 +108,7 @@ final readonly class SqlAccountEntryProjection
         #[\SensitiveParameter] StudentAccount $account,
         #[\SensitiveParameter] array $events,
         bool $enrichPaymentMethods = false,
+        bool $enrichTemporal = false,
     ): void {
         $id = (string) $account->aggregateId();
         [$created] = $this->changes($account, $events);
@@ -124,10 +127,22 @@ final readonly class SqlAccountEntryProjection
                 $this->sql->insert('sis_account_entries', $this->values($account, $entry) + $opening);
             }
             $this->sql->insert('sis_account_entry_heads', ['id' => $id, 'position' => $account->playhead(),
-                'entry_count' => count($entries)]);
+                'entry_count' => count($entries), 'opened_at' => $this->openedAt($events),
+                'temporal_position' => $account->playhead()]);
             return;
         }
-        $this->compare($account, $created, $entries, $head, $rows, $enrichPaymentMethods);
+        $this->compare($account, $created, $entries, $head, $rows, $enrichPaymentMethods, $enrichTemporal);
+        $this->compareTemporalHead($head, $events, $account->playhead(), $enrichTemporal);
+        if ($enrichTemporal) {
+            foreach ($created as $operation => $facts) {
+                $this->sql->update('sis_account_entries', [
+                    'reversed_at' => $facts['reversed_at'], 'reversed_position' => $facts['reversed_position'],
+                ], ['account_id' => $id, 'operation_id' => $operation]);
+            }
+            $this->sql->update('sis_account_entry_heads', [
+                'opened_at' => $this->openedAt($events), 'temporal_position' => $account->playhead(),
+            ], ['id' => $id, 'position' => $account->playhead()]);
+        }
         if ($enrichPaymentMethods) {
             foreach ($entries as $entry) {
                 $values = $this->values($account, $entry);
@@ -138,6 +153,9 @@ final readonly class SqlAccountEntryProjection
                 );
             }
             $this->compare($account, $created, $entries, $head, $this->rows($id));
+        }
+        if ($enrichTemporal) {
+            $this->verify($account, $events);
         }
     }
 
@@ -156,6 +174,7 @@ final readonly class SqlAccountEntryProjection
             throw new CorruptHistoryException();
         }
         $this->compare($account, $created, $entries, $head, $rows);
+        $this->compareTemporalHead($head, $events, $account->playhead());
     }
 
     /** @param array<string,array<string,mixed>> $created
@@ -169,6 +188,7 @@ final readonly class SqlAccountEntryProjection
         array $head,
         #[\SensitiveParameter] array $rows,
         bool $enrichPaymentMethods = false,
+        bool $enrichTemporal = false,
     ): void {
         if (
             (string) ($head['position'] ?? null) !== (string) $account->playhead() ||
@@ -180,7 +200,7 @@ final readonly class SqlAccountEntryProjection
         foreach ($entries as $entry) {
             $expected = $this->values($account, $entry) + $created[$entry['operation_id']];
             $old = $rows[$entry['operation_id']] ?? throw new CorruptHistoryException();
-            $this->compareValues($expected, $old, $enrichPaymentMethods);
+            $this->compareValues($expected, $old, $enrichPaymentMethods, ignoreMissingTemporal: $enrichTemporal);
         }
     }
 
@@ -189,10 +209,17 @@ final readonly class SqlAccountEntryProjection
         #[\SensitiveParameter] array $old,
         bool $ignoreMissingMethod = false,
         bool $methodOnlyChange = false,
+        bool $ignoreMissingTemporal = false,
     ): void {
         foreach ($expected as $field => $value) {
             if (!array_key_exists($field, $old)) {
                 throw new CorruptHistoryException();
+            }
+            if (
+                $ignoreMissingTemporal && in_array($field, ['reversed_at', 'reversed_position'], true)
+                && $old[$field] === null
+            ) {
+                continue;
             }
             if ($field === 'payment_method' && ($methodOnlyChange || ($ignoreMissingMethod && $old[$field] === null))) {
                 continue;
@@ -229,7 +256,7 @@ final readonly class SqlAccountEntryProjection
     }
 
     /** @param list<DomainEvent> $events
-     * @return array{array<string,array<string,mixed>>,array<string,bool>,array<string,string|null>} */
+     * @return array{array<string,array<string,mixed>>,array<string,bool>,array<string,string|null>,array<string,array<string,mixed>>} */
     private function changes(
         #[\SensitiveParameter] StudentAccount $account,
         #[\SensitiveParameter] array $events,
@@ -240,6 +267,7 @@ final readonly class SqlAccountEntryProjection
         $created = [];
         $affected = [];
         $previousMethods = [];
+        $reversals = [];
         foreach ($events as $event) {
             if ((string) $event->aggregateId() !== (string) $account->aggregateId()) {
                 throw new CorruptHistoryException();
@@ -260,8 +288,10 @@ final readonly class SqlAccountEntryProjection
             $operation = new EntityId($p['operation_id']);
             $affected[$operation->value] = true;
             if ($event instanceof AccountEntryWasReversed) {
+                $reversals[$operation->value] = $this->reversal($event);
                 foreach ($event->metadata()['reversed_credit_ids'] ?? [] as $credit) {
                     $affected[new EntityId($credit)->value] = true;
+                    $reversals[new EntityId($credit)->value] = $this->reversal($event);
                 }
                 continue;
             }
@@ -279,6 +309,7 @@ final readonly class SqlAccountEntryProjection
                 'recorded_at' => DateTimeImmutable::createFromInterface($event->recordedAt())
                     ->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s'),
                 'posted_position' => $event->playhead(),
+                'reversed_at' => null, 'reversed_position' => null,
                 'origin' => match (true) {
                     $event instanceof AccountEntryWasCorrected => 'staff_correction',
                     $event instanceof AccountChargeWasCredited => 'charge_credit',
@@ -289,9 +320,48 @@ final readonly class SqlAccountEntryProjection
             ];
             if ($event instanceof AccountEntryWasCorrected) {
                 $affected[new EntityId($p['source_operation_id'])->value] = true;
+                $reversals[new EntityId($p['source_operation_id'])->value] = $this->reversal($event);
             }
         }
-        return [$created, $affected, $previousMethods];
+        foreach ($created as $operation => &$facts) {
+            if (isset($reversals[$operation])) {
+                $facts = array_replace($facts, $reversals[$operation]);
+            }
+        }
+        unset($facts);
+        return [$created, $affected, $previousMethods, $reversals];
+    }
+
+    /** @param list<DomainEvent> $events */
+    private function openedAt(array $events): string
+    {
+        $first = $events[0] ?? null;
+        if (!$first instanceof StudentAccountWasOpened || $first->playhead() !== 1) {
+            throw new CorruptHistoryException();
+        }
+        return $this->utc($first);
+    }
+    /** @return array{reversed_at:string,reversed_position:int} */
+    private function reversal(DomainEvent $event): array
+    {
+        return ['reversed_at' => $this->utc($event), 'reversed_position' => $event->playhead()];
+    }
+    private function utc(DomainEvent $event): string
+    {
+        return DateTimeImmutable::createFromInterface($event->recordedAt())
+            ->setTimezone(new DateTimeZone('UTC'))->format('Y-m-d H:i:s');
+    }
+    /** @param array<string,mixed> $head
+     * @param list<DomainEvent> $events */
+    private function compareTemporalHead(array $head, array $events, int $version, bool $enrich = false): void
+    {
+        if (
+            ($head['opened_at'] !== $this->openedAt($events) && !($enrich && $head['opened_at'] === null))
+            || ((string) $head['temporal_position'] !== (string) $version
+                && !($enrich && $head['temporal_position'] === null))
+        ) {
+            throw new CorruptHistoryException();
+        }
     }
 
     /** Stable ULID timestamp/entropy, using the same installed Crockford encoder as EntityId generation. */

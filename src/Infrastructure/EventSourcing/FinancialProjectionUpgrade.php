@@ -26,10 +26,10 @@ final readonly class FinancialProjectionUpgrade
     {
     }
 
-    public function run(string $type, bool $entries = false, bool $paymentMethods = false): void
+    public function run(string $type, bool $entries = false, bool $paymentMethods = false, bool $temporal = false): void
     {
-        if ($paymentMethods && ($type !== 'student_account' || !$entries)) {
-            throw new LogicException('Payment-method enrichment requires the verified account-entry upgrade.');
+        if (($paymentMethods || $temporal) && ($type !== 'student_account' || !$entries)) {
+            throw new LogicException('Financial entry enrichment requires the verified account-entry upgrade.');
         }
         $sql = new SqlRecords($this->db);
         $table = match ($type) {
@@ -61,7 +61,16 @@ final readonly class FinancialProjectionUpgrade
             $this->codec,
             new HistoricalSchemaRegistry()
         );
-        $uow->run(function () use ($sql, $history, $records, $table, $type, $entries, $paymentMethods): void {
+        $uow->run(function () use (
+            $sql,
+            $history,
+            $records,
+            $table,
+            $type,
+            $entries,
+            $paymentMethods,
+            $temporal
+        ): void {
             $budget = new HistoryReadBudget();
             foreach ($records as $row) {
                 $sql->lock($table, $row['id'], 'id');
@@ -102,7 +111,8 @@ final readonly class FinancialProjectionUpgrade
                     new \Infrastructure\Projection\SqlAccountEntryProjection($sql)->initialize(
                         $root,
                         $events,
-                        enrichPaymentMethods: $paymentMethods
+                        enrichPaymentMethods: $paymentMethods,
+                        enrichTemporal: $temporal
                     );
                 }
             }

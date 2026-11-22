@@ -391,4 +391,13 @@ final class ConsoleBootstrapTest extends TestCase
         self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
     }
 
+    public function testHistoricalStudentFinanceUsesActualProvidersCsrfAndSourcePermissions(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-historical-finance']);
+        $process->setTimeout(15);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
 }

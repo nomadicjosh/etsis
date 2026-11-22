@@ -26,6 +26,8 @@ final class CreateSisAccountEntryReports extends Migration
                 $t->boolean('reversed')->notNull();
                 $t->string('recorded_at', 19)->notNull();
                 $t->integer('posted_position')->notNull();
+                $t->string('reversed_at', 19);
+                $t->integer('reversed_position');
                 $t->string('origin', 24)->notNull();
                 $t->string('payment_method', 24);
                 $t->string('charge_source', 24);
@@ -43,6 +45,8 @@ final class CreateSisAccountEntryReports extends Migration
                 $t->string('id', 26)->notNull()->primary();
                 $t->integer('position')->notNull();
                 $t->integer('entry_count')->notNull();
+                $t->string('opened_at', 19);
+                $t->integer('temporal_position');
                 $t->foreign('id', 'saeh_account_fk')->references('sis_student_accounts', 'id');
             });
         }

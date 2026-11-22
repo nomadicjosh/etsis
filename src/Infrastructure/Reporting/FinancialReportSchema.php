@@ -84,6 +84,6 @@ final class FinancialReportSchema
             'many' => true, 'label' => 'Financial postings', 'permissions' => [],
         ];
         $datasets['accounts']['fields'] += $fields;
-        return $datasets;
+        return HistoricalFinancialReportSchema::extend($datasets);
     }
 }

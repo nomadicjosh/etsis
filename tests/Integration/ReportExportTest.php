@@ -422,4 +422,44 @@ final class ReportExportTest extends TestCase
         self::assertSame('failed', $service->latest($report)['status']);
         self::assertSame([], $s->sql->rows('sis_report_export_chunks'));
     }
+    public function testHistoricalStudentExportRetainsCutoffAndEarlierBalanceAfterLaterActivity(): void
+    {
+        require_once dirname(__DIR__) . '/Support/HistoricalFinancialFixture.php';
+        $f = new \Tests\Support\HistoricalFinancialFixture();
+        $s = $f->sis;
+        $account = $f->account();
+        $account->post(
+            EntityId::generate(),
+            \Domain\Finance\Enum\EntryType::Charge,
+            new \Domain\Finance\ValueObject\Money(10000, 'USD'),
+            $s->access->actor
+        );
+        $f->save($account, '2026-08-03T10:00:00Z');
+        $definition = $f->definition();
+        $definition['columns'] = [
+            ['field' => 'cutoff_utc', 'label' => 'Recorded cutoff UTC', 'aggregate' => 'none'],
+            ['field' => 'currency', 'label' => 'Currency', 'aggregate' => 'none'],
+            ['field' => 'balance_minor', 'label' => 'Balance in minor units', 'aggregate' => 'none'],
+        ];
+        $report = EntityId::generate();
+        $f->reports()->save($report, EntityId::generate(), -1, 'Fictional historical export', $definition);
+        $account->post(
+            EntityId::generate(),
+            \Domain\Finance\Enum\EntryType::Payment,
+            new \Domain\Finance\ValueObject\Money(2500, 'USD'),
+            $s->access->actor
+        );
+        $f->save($account, '2026-08-04T10:00:00Z');
+        $service = $this->service($s);
+        $job = $service->request($report, EntityId::generate(), 0);
+        $events = $this->history($s);
+        $service->work(true);
+        $download = $service->download($report, new EntityId($job['id']));
+        $csv = implode('', iterator_to_array($download->chunks));
+        self::assertStringContainsString('2026-08-03 10:00:00', $csv);
+        self::assertStringContainsString('USD,10000', $csv);
+        self::assertStringNotContainsString('7500', $csv);
+        self::assertSame($events, $this->history($s));
+    }
+
 }

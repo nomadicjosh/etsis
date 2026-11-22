@@ -321,6 +321,12 @@ The existing [admissions corrections](admissions-corrections.md) feature covers 
 
 ## 5. Reporting, populations and conversion
 
+Current alpha reporting development is focused on **student data**, as requested by the user. New employee/workforce and general operational reporting are deferred.
+
+- [x] Add [historical student account balances](workflow-review.md#historical-student-financial-reports): explicit inclusive recorded UTC cutoff, zero-inclusive accounts opened by that second, retained posting/correction/charge-credit/reversal chronology, currency-separated sums and existing fan-out protection. Verified nullable projection enrichment preserves the journal and stops on known conflicts.
+- [x] Add [student postings active at a cutoff](workflow-review.md#historical-student-financial-reports), with original amounts before replacement/reversal, retained sources, typed cutoff columns, saved dynamic/static results and complete exports. Omit mutable receipt methods/later correction links; label identity, program and term metadata as current. Historical populations do not authorize registration/billing/messaging handoffs.
+- [x] Connect [live financial detail rows to the current student account](workflow-review.md#historical-student-financial-reports): explicit account references, fresh finance/student access checks, independent financial write authority, preserved report return and denied-access recovery. Keep grouped and static results read-only, show cutoff context before the table and preserve failed/revised drafts with accessible narrow-screen controls.
+
 - [x] [Report section enrollment planning](section-publication.md#enrollment-reporting): current/selected/accepted target fields, zero-inclusive active counts, configurable low-enrollment thresholds and typed below-target conditions. Preserve student-detail permissions, original offering references and existing saved/captured/export flows; reject section-metric Sum/Average through joins that multiply rows. Reuse the section/status index and shared SQL counter without another projection table or journal.
 
 - [x] Add [typed calendar grouping](workflow-review.md#calendar-period-reports) to the shared report-column inspector: Day, Month and Year, year-qualified months, explicit UTC timestamp semantics, preserved unknown dates, typed min/max/count results and unchanged original-value filters. Retain source grants, named joins, ordering and stale-preview protection without raw SQL or another query engine.

@@ -308,10 +308,10 @@ window.createWorkspaceOperations = function (ui) {
     async function roster(body, row, sectionName) {
         return ui.teaching().section(body, row, sectionName);
     }
-    async function openAccount(id, back) {
+    async function openAccount(id, back, backLabel = "Back to finance task") {
         const body = openDrawer("Student account", "FINANCE OFFICE");
-        body.append(button("Back to finance task", back, "btn-link"));
-        await account(body, { id }, () => openAccount(id, back));
+        body.append(button(backLabel, back, "btn-link"));
+        await account(body, { id }, () => openAccount(id, back, backLabel));
     }
     async function account(body, row, reopen = null) {
         const data = await request(`/sis/accounts/${row.id}/`);

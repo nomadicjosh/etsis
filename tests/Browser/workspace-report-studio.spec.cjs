@@ -29,6 +29,7 @@ async function accessible(page) {
     expect(scan.violations.map(item => ({ id: item.id, targets: item.nodes.map(node => node.target) }))).toEqual([]);
 }
 async function fixture(page, options = {}) {
+    if (options.historical) options.accounts = true;
     const calls = [], errors = []; let definition = null, version = 0, name = '', operation = 1;
     const fields = options.curriculum ? {
         student_id: { label: 'Student reference', type: 'string', relation: 'student' },
@@ -248,6 +249,13 @@ async function fixture(page, options = {}) {
         },
     } : { id: 'sections', label: 'Sections, teaching & enrollment counts', description: 'Explore sections and their registration relationships.', fields,
         relationships: { term: { label: 'Term', parent: 'section', many: false }, course: { label: 'Course', parent: 'section', many: false }, enrollment: { label: 'Enrollment', parent: 'section', many: true } } };
+    if (options.historical) {
+        dataset.id = 'historical_accounts'; dataset.label = 'Student balances at a cutoff';
+        dataset.financial_as_of = true;
+        delete dataset.relationships.balance;
+        for (const key of ['balance', 'charges', 'payments', 'refunds']) fields[key].relation = 'account';
+        fields.cutoff_utc = { label: 'Recorded cutoff UTC', type: 'datetime', relation: 'account' };
+    }
     if (options.casework) dataset.relationships.casework = {label:'Current admissions casework',parent:'application',many:false};
     if (options.postingLinks) dataset.relationships.entry = {
         label: 'Financial postings', parent: 'account', many: true,
@@ -276,7 +284,11 @@ async function fixture(page, options = {}) {
         visited.push(path);
         if (data) calls.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
         let result = {};
-        if (path === `/sis/students/${id(91)}/programs/${id(92)}/specializations/`) {
+        if (path === `/sis/accounts/${id(15)}/`) {
+            if (options.denyAccount) return route.fulfill({ status: 403, json: { error: 'Access denied.' } });
+            result = { balance_minor: 99999, currency: 'USD', institutional_id: 'S-FICTIONAL', entries: [] };
+        }
+        else if (path === `/sis/students/${id(91)}/programs/${id(92)}/specializations/`) {
             if (options.denyCurriculum) return route.fulfill({ status: 403, json: { error: 'Access denied.' } });
             return route.fulfill({ json: { scope: { status: 'active' }, revision: 'fictional', selection: null, cohort_changed: false, can_manage: false, program: null }, headers: { 'Cache-Control': 'private, no-store' } });
         }
@@ -306,7 +318,7 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/report-studio/save/') { definition = data.definition; name = data.name; version = data.version + 1; result = { id: data.report_id }; }
         else if (path.endsWith('/preview/') || path.endsWith('/run/')) {
             const query = data.definition || definition;
-            const values = { pursuit_id: id(92), component_row_id: id(93), component_code: 'ART', component_title: 'Retained <b>concentration</b>', component_kind: 'concentration', component_active: true, department_title: 'English <b>department</b>', school_title: 'Arts <college>', parent_major_code: 'ENG', academic_year_code: '2026-2027', pursuit_status: 'active', cohort_matches: true, checkin_id: id(95), due_on: '2026-11-25', followup_status: 'responded', attendance_id: id(94), held_on: '2026-11-21', attendance_status: 'absent', section_code: 'MATH.101.A', determined_on: '2026-11-21', classification_title: 'Full time', registered_credits: 6.25, determination_id: id(90), student_id: id(91), application_id: id(80), case_office:'Admissions <b>fictional</b>', case_work_status:'waiting', case_due_on:'2026-09-01', posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
+            const values = { cutoff_utc: query.financial_as_of?.replace('T', ' ').replace('Z', ''), pursuit_id: id(92), component_row_id: id(93), component_code: 'ART', component_title: 'Retained <b>concentration</b>', component_kind: 'concentration', component_active: true, department_title: 'English <b>department</b>', school_title: 'Arts <college>', parent_major_code: 'ENG', academic_year_code: '2026-2027', pursuit_status: 'active', cohort_matches: true, checkin_id: id(95), due_on: '2026-11-25', followup_status: 'responded', attendance_id: id(94), held_on: '2026-11-21', attendance_status: 'absent', section_code: 'MATH.101.A', determined_on: '2026-11-21', classification_title: 'Full time', registered_credits: 6.25, determination_id: id(90), student_id: id(91), application_id: id(80), case_office:'Admissions <b>fictional</b>', case_work_status:'waiting', case_due_on:'2026-09-01', posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
                 latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
@@ -314,7 +326,7 @@ async function fixture(page, options = {}) {
                     ? String(values[column.field]).slice(0, { day: 10, month: 7, year: 4 }[column.date_bucket])
                     : (options.attendance || options.followups) && column.aggregate.startsWith('count') ? 1 : values[column.field] ?? null]))]
                 : data.offset ? [{ c0: 'CHEM.101.A', c1: '26/FA', c2: 5 }] : [{ c0: 'MATH.101.A', c1: '26/FA', c2: 8 }, { c0: 'ENG.101.A', c1: '26/FA', c2: 0 }];
-            result = { conditional_columns: query.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(query), columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
+            result = { conditional_columns: query.columns.filter(column => column.conditions).map(column => column.label), row_selection: selectionSummary(query), financial_as_of: query.financial_as_of || null, columns: query.columns.map(column => column.label), items: rows, offset: data.offset,
                 next_offset: options.curriculum || options.followups || options.attendance || options.load || options.postings || options.scheduling || options.students || options.applications || options.accounts || data.offset ? null : 50, limit: 50,
                 grouped: options.curriculum || options.followups || options.attendance || options.load || options.casework || options.postings || options.scheduling || options.accounts ? query.columns.some(column => column.aggregate !== 'none') : !options.students && !options.applications };
         } else if (path.endsWith('/export/')) { await route.fulfill({ body: 'Section,Term,Students\nMATH.101.A,26/FA,8\n', contentType: 'text/csv' }); return; }
@@ -1627,5 +1639,39 @@ test('a dismissed report curriculum request cannot reopen the drawer when its re
     await page.evaluate(() => new Promise(resolve => requestAnimationFrame(resolve)));
     await expect(page.locator('#drawer-body > *')).toHaveCount(0);
     await expect(page.locator('dialog.report-studio')).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});
+
+
+for (const denied of [false, true]) test(`historical student balances preserve cutoff and ${denied ? 'recover denied current account access' : 'return from current account review'}`, async ({ page }) => {
+    const f = await fixture(page, { historical: true, denyAccount: denied });
+    await page.getByRole('button', { name: 'Student balances at a cutoff', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional historical student balances');
+    const cutoff = studio.getByLabel('Recorded activity through (UTC, inclusive second)', { exact: true });
+    await cutoff.fill('2026-08-03T10:00:00');
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    await expect(studio).toContainText('Recorded activity through 2026-08-03T10:00:00Z');
+    expect(f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition.financial_as_of).toBe('2026-08-03T10:00:00Z');
+    await cutoff.fill('2026-08-02T10:00:00');
+    await expect(studio).toContainText('Unsaved changes. Preview to see the updated report.');
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
+    await studio.getByText("Open a student's current account", { exact: true }).click();
+    await studio.getByRole('button', { name: 'Open current account · row 1', exact: true }).click();
+    if (denied) await expect(page.locator('dialog.report-studio .report-local-error')).toBeVisible();
+    else {
+        await expect(page.locator('#drawer-body')).toContainText('Balance:');
+        await page.getByRole('button', { name: 'Back to report', exact: true }).click();
+    }
+    await expect(page.locator('dialog.report-studio')).toContainText('Fictional historical student balances');
+    await expect(page.locator('dialog.report-studio')).toContainText('2026-08-02T10:00:00Z');
+    await page.setViewportSize({ width: 320, height: 812 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    expect(f.visited.filter(path => path === `/sis/accounts/${id(15)}/`)).toHaveLength(1);
+    expect(f.calls.filter(c => c.path.endsWith('/run/')).length).toBeGreaterThanOrEqual(2);
+    expect(f.calls.some(c => c.path.startsWith(`/sis/accounts/${id(15)}/`) && c.data)).toBe(false);
+    expect(f.calls.every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });

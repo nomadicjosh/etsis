@@ -156,6 +156,9 @@ final readonly class ReportLifecycleService
                         $query->definition['columns'],
                         static fn(array $c): bool => $c['aggregate'] !== 'none'
                     )];
+                if (isset($query->definition['financial_as_of'])) {
+                    $manifest['financial_as_of'] = $query->definition['financial_as_of'];
+                }
                 $values += ['capture_id' => $capture->value, 'captured_at' => $now->format(DATE_ATOM),
                     'encrypted_manifest' => $this->cipher->seal(json_encode($manifest, JSON_THROW_ON_ERROR))];
                 $this->storage->savePages($id, $pages);
@@ -217,6 +220,7 @@ final readonly class ReportLifecycleService
         $this->audit->record($actor, 'report.static_read', $id);
         $this->read($id, $actor);
         return ['columns' => $manifest['columns'], 'items' => $rows, 'offset' => $offset,
+            'financial_as_of' => $manifest['financial_as_of'] ?? null,
             'next_offset' => $offset + 50 < $manifest['row_count'] ? $offset + 50 : null,
             'limit' => 50, 'grouped' => $manifest['grouped'], 'lifecycle' => $this->describe($id)];
     }
@@ -256,6 +260,10 @@ final readonly class ReportLifecycleService
         $schema = $this->source->datasets()[$definition['dataset']] ??
         throw new \RuntimeException('Unknown report source.');
         $query = new ReportQuery($definition, $schema);
+        if ($schema['financial_as_of'] ?? false) {
+            new \Domain\Reporting\ValueObject\ReportFinancialCutoff($definition['financial_as_of'])
+                ->requireRecordedBy($this->clock->now());
+        }
         $this->grants($query);
         return $query;
     }
