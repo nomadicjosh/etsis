@@ -173,6 +173,7 @@ echo $loader->render('framework::backend/workspace/index', [
         '/admin/grade-amend-fixture/' => ['sis:student:read', 'sis:gradebook:amend'],
         '/admin/closed-grade-fixture/' => ['sis:student:read', 'sis:gradebook:amend', 'sis:gradebook:closed'],
         '/admin/student-read-fixture/' => ['sis:student:read'],
+        '/admin/hr-only-fixture/' => ['sis:hr:manage'],
         '/admin/transcript-office-fixture/' => ['sis:transcript:manage'],
         '/admin/campus-content-fixture/' => ['sis:portal:manage'],
         '/admin/campus-publisher-fixture/' => ['sis:portal:manage', 'sis:portal:publish'],

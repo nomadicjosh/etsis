@@ -3,8 +3,8 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
 const employee = id(1), jobId = id(4), gradeId = id(5);
 
-async function setup(page, basis = 'hourly') {
-    const state = { positions: [], calls: [], errors: [], reject: true };
+async function setup(page, basis = 'hourly', path = '/admin/') {
+    const state = { positions: [], calls: [], errors: [], reject: true, primary: null, primaryVersion: 0, primaryHistory: [], rejectPrimary: false };
     const job = { id: jobId, code: 'LIB.ASST', title: '<script>Fictional library assistant</script>', currency: 'USD',
         basis, active: true, pay_grade_id: gradeId, rate_minor: basis === 'monthly' ? 450050 : 2500, weekly_minutes: 2250, version: 0 };
     const grade = { id: gradeId, code: 'H.1', title: 'Fictional pay band', currency: 'USD', basis,
@@ -23,6 +23,30 @@ async function setup(page, basis = 'hourly') {
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/data/employees/') result = { items: [profile], next_after: null };
         else if (path === `/sis/employees/${employee}/`) result = profile;
+        else if (path === `/sis/employees/${employee}/primary-position/`) result = {
+            selection: state.primary, version: state.primaryVersion, operation_id: id(999),
+            status: state.primary ? 'current' : state.primaryVersion ? 'cleared' : 'unrecorded',
+        };
+        else if (path === `/sis/employees/${employee}/primary-position/review/`) {
+            const p = state.positions.find(item => item.id === data.position_id);
+            result = { before: state.primary, after: p ? { id: p.id, code: p.job.code, title: p.job.title } : null,
+                review_token: 'fictional-actor-bound-primary-proof' };
+        }
+        else if (path === `/sis/employees/${employee}/primary-position/confirm/`) {
+            if (state.rejectPrimary) {
+                state.rejectPrimary = false;
+                return route.fulfill({ status: 409, json: { error: 'Fictional primary appointment changed. Review again.' } });
+            }
+            const p = state.positions.find(item => item.id === data.position_id);
+            state.primary = p ? { id: p.id, code: p.job.code, title: p.job.title } : null;
+            state.primaryVersion++;
+            state.primaryHistory.push({ selection: state.primary, version: state.primaryVersion,
+                effective_at: '2026-11-15T10:00:00Z', recorded_by: 'Fictional HR recorder', reason: data.reason });
+            result = { status: 'saved' };
+        }
+        else if (path === `/sis/employees/${employee}/primary-position/history/`) result = {
+            items: state.primaryHistory, through_version: state.primaryVersion, next_after: null,
+        };
         else if (path === '/sis/hr/jobs/page/') result = { items: [job], next_after: null,
             currencies: [{ code: 'USD', digits: 2 }], new_id: id(30) };
         else if (path === `/sis/hr/jobs/${jobId}/`) result = job;
@@ -61,7 +85,7 @@ async function setup(page, basis = 'hourly') {
         }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
-    await page.goto('/admin/');
+    await page.goto(path);
     await page.locator('.workspace-nav-link[data-workspace="employees"]').click();
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     await page.getByRole('button', { name: 'Position assignments', exact: true }).click();
@@ -177,5 +201,59 @@ test('end dates and voids retain version checks while delayed navigation cannot 
     await expect(page.locator('#record-drawer')).not.toBeVisible();
     release();
     await expect(page.getByLabel('Job definition', { exact: true })).toHaveCount(0);
+    expect(state.errors).toEqual([]);
+});
+
+
+test('primary designation supports review, revision, stale retry, history and clearing at narrow width', async ({ page }) => {
+    const state = await setup(page);
+    state.positions.push({ id: id(100), job: { id: jobId, code: 'LIB.ASST', title: '<script>Fictional librarian</script>', currency: 'USD', basis: 'hourly' },
+        grade: null, valid_from: '2026-09-01', valid_through: null, rate_minor: 2500, weekly_minutes: 1200,
+        currency_digits: 2, version: 1, voided: false, recorded_at: '2026-11-15T10:00:00Z', recorded_by: 'Fictional HR recorder' });
+    await page.getByRole('button', { name: 'Back to employment', exact: true }).click();
+    await page.getByRole('button', { name: 'Position assignments', exact: true }).click();
+    await page.getByRole('button', { name: 'Open position assignment', exact: true }).click();
+    await page.getByRole('button', { name: 'Designate as primary position', exact: true }).click();
+    await page.getByLabel('Reason for primary designation').fill('Fictional reviewed main appointment');
+    await page.getByRole('button', { name: 'Review primary designation', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('After: LIB.ASST');
+    await page.getByRole('button', { name: 'Revise primary designation', exact: true }).click();
+    await expect(page.getByLabel('Reason for primary designation')).toHaveValue('Fictional reviewed main appointment');
+    await page.getByRole('button', { name: 'Review primary designation', exact: true }).click();
+    state.rejectPrimary = true;
+    await page.getByRole('button', { name: 'Confirm primary designation', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional primary appointment changed. Review again.');
+    await expect(page.locator('#drawer-body')).toContainText('Fictional reviewed main appointment');
+    await page.setViewportSize({ width: 320, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Confirm primary designation', exact: true }).click();
+    await page.getByRole('button', { name: 'Primary designation history', exact: true }).click();
+    await expect(page.getByRole('table', { name: 'Primary designation decisions' })).toContainText('Fictional reviewed main appointment');
+    await accessible(page);
+    await page.getByRole('button', { name: 'Back to primary position', exact: true }).click();
+    await page.getByRole('button', { name: 'Clear primary designation', exact: true }).click();
+    await page.getByLabel('Reason for primary designation').fill('Fictional leave unassigned');
+    await page.getByRole('button', { name: 'Review primary designation', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('After: No primary designation');
+    await page.getByRole('button', { name: 'Confirm primary designation', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Explicitly cleared');
+    expect(state.primaryHistory).toHaveLength(2);
+    expect(state.calls.every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(await page.locator('#drawer-body img, #drawer-body script').count()).toBe(0);
+    expect(state.errors).toEqual([]);
+});
+
+
+test('HR without the independent primary duty reads context without designation controls', async ({ page }) => {
+    const state = await setup(page, 'hourly', '/admin/hr-only-fixture/');
+    await page.getByRole('button', { name: 'Primary position', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Not recorded; earlier designations are unknown');
+    await expect(page.getByRole('button', { name: 'Choose from position assignments', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Clear primary designation', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Primary designation history', exact: true })).toHaveCount(0);
+    await expect(page.getByLabel('Reason for primary designation')).toHaveCount(0);
+    expect(state.calls.some(call => /primary-position\/(review|confirm)/.test(call.path))).toBe(false);
     expect(state.errors).toEqual([]);
 });

@@ -33,7 +33,8 @@ try {
             'credits_milli' => 3000], JSON_THROW_ON_ERROR)];
     }
     if (in_array(($argv[1] ?? ''), [
-        'check-recorded-progress', 'check-academic-organization', 'check-group-work-eligibility',
+        'check-primary-position', 'check-recorded-progress',
+        'check-academic-organization', 'check-group-work-eligibility',
         'check-component-major-links',
         'check-curriculum-reports',
         'check-registered-credits', 'check-coursework-grade-policy',
@@ -227,6 +228,10 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/GradeChangeBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-primary-position') {
+            $kernel->bootstrap();
+            require __DIR__ . '/PrimaryPositionBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-recorded-progress') {
             $kernel->bootstrap();

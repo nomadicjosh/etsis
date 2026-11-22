@@ -1349,6 +1349,31 @@ final class SisFixture
             $audit ?? $this->audit, $this->clock
         );
     }
+    public function primaryPositionLedger(
+        ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null
+    ): \Domain\HumanResources\Service\PrimaryPositionLedger {
+        return new \Domain\HumanResources\Service\PrimaryPositionLedger(
+            new \Infrastructure\Persistence\Repository\SqlPrimaryPositionRepository($this->sql, $this->dropCipher),
+            $history ?? EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->positionLedger(),
+            $this->clock
+        );
+    }
+    public function primaryPositions(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null
+    ): \Domain\HumanResources\Service\PrimaryPositionService {
+        return new \Domain\HumanResources\Service\PrimaryPositionService(
+            $this->timesheetService(),
+            $this->primaryPositionLedger(),
+            $this->positionLedger(),
+            $this->employmentDatesLedger(),
+            $this->access,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+            $audit ?? $this->audit,
+            new \Infrastructure\Persistence\SqlActorDirectory($this->sql),
+            $this->clock
+        );
+    }
     public function employmentDatesLedger(): \Domain\HumanResources\Service\EmploymentDatesLedger
     {
         return new \Domain\HumanResources\Service\EmploymentDatesLedger(
@@ -1405,6 +1430,7 @@ final class SisFixture
             new \Domain\HumanResources\Service\TimeDecisionLedger(
                 EventStoreFixture::history($this->connection->queryBuilder()), $this->clock,
             ),
+            $this->primaryPositionLedger(),
         );
     }
     public function sectionContactHours(): \Domain\Registration\Service\SectionContactHoursService

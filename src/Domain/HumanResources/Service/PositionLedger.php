@@ -169,7 +169,8 @@ final readonly class PositionLedger
         return $entries;
     }
 
-    private function verified(EntityId $employee, EntityId $id): EmployeePosition
+    /** Internal selected-appointment verification; the caller must authorize the employee. */
+    public function verified(EntityId $employee, EntityId $id): EmployeePosition
     {
         $position = $this->rows->find($id) ?? throw new CorruptHistoryException();
         if ($position->employeeId->value !== $employee->value) {

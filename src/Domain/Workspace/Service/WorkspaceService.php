@@ -91,6 +91,7 @@ final readonly class WorkspaceService
         "sis:hr:time-policy",
         "sis:hr:time-exception",
         "sis:hr:manage",
+        "sis:hr:primary",
         "sis:finance:read",
         "sis:finance:post",
         "sis:finance:ledger",

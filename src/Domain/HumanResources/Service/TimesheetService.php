@@ -44,6 +44,7 @@ final readonly class TimesheetService
         private PositionLedger $positions,
         private TimeReviewService $timeReviews,
         private TimeDecisionLedger $timeDecisions,
+        private PrimaryPositionLedger $primaryPositions,
     ) {
     }
 
@@ -105,8 +106,11 @@ final readonly class TimesheetService
     /** @return array<string,mixed> */
     public function employeeDetails(EntityId $id): array
     {
+        $actor = $this->access->authenticatedUserId();
         $profile = $this->employeeProfile($id);
-        return $this->profileDetails($profile);
+        $primary = $this->primaryPositions->summary($this->primaryPositions->inspect($id)['root']->designation());
+        $this->recheckEmployee($profile->employee, $actor);
+        return $this->profileDetails($profile) + ['primary_position' => $primary];
     }
 
     /** @return array<string,mixed> */
@@ -372,7 +376,12 @@ final readonly class TimesheetService
             proposed: true,
         );
         $this->recheckEmployee($profile->employee, $actor);
-        return $result + ["timezone" => $zone->getName(), "time_review" => $evidence->summary];
+        $primary = $this->primaryPositions->summary(
+            $this->primaryPositions->inspect($employee)['root']->designation()
+        );
+        $this->recheckEmployee($profile->employee, $actor);
+        return $result + ["timezone" => $zone->getName(), "time_review" => $evidence->summary,
+            'primary_position' => $primary];
     }
 
     public function submit(

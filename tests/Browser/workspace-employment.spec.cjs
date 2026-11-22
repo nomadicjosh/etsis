@@ -346,11 +346,14 @@ test('time submission requires a choice across jobs and preserves the draft afte
         { id: id(400), code: 'LIB', title: '<script>Fictional library assistant</script>', version: 1 },
         { id: id(401), code: 'LAB', title: 'Fictional lab assistant', version: 2 },
     ];
+    positions.primary_position = { selection: { id: id(400), code: 'LIB', title: 'Fictional library assistant' }, status: 'current' };
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     await page.getByRole('button', { name: 'Submit time for this employee', exact: true }).click();
     await page.getByLabel(/^Started/).fill('2026-08-11T09:00');
     await page.getByLabel(/^Finished/).fill('2026-08-11T10:00');
     await expect(page.getByLabel('Position worked', { exact: true })).toBeEnabled();
+    await expect(page.getByLabel('Position worked', { exact: true })).toHaveValue('');
+    await expect(page.getByLabel('Position worked', { exact: true }).locator('option', { hasText: ' · Current primary' })).toHaveCount(1);
     await page.getByRole('button', { name: 'Submit time entry', exact: true }).click();
     expect(calls.filter(call => call.path === '/sis/timesheets/')).toHaveLength(0);
     await page.getByLabel('Position worked', { exact: true }).selectOption(id(400));

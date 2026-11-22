@@ -55,6 +55,7 @@ window.createWorkspaceEmployment = function (ui) {
         });
         const extra = [];
         actions.append(button("Employment dates", () => employmentDates(id)));
+        actions.append(button("Primary position", () => ui.positions().primary(id)));
         if (can("sis:audit:read"))
             extra.push(button("View audit history", () => showAudit("employees", id)));
         if (can("sis:hr:manage") && can("sis:audit:read"))
@@ -65,6 +66,10 @@ window.createWorkspaceEmployment = function (ui) {
             recordSummary([
                 ["Institutional ID", record.institutional_id],
                 ["Job title", record.job_title],
+                ["Primary position", record.primary_position?.selection
+                    ? `${record.primary_position.selection.code} · ${record.primary_position.selection.title}${
+                        record.primary_position.status === 'current' ? '' : ' · HR review required'}`
+                    : record.primary_position?.status === 'cleared' ? 'Explicitly cleared' : 'Not recorded'],
                 [
                     "Time submission setting",
                     badge(record.active ? "Time submissions enabled" : "Time submissions paused"),
@@ -727,7 +732,10 @@ window.createWorkspaceEmployment = function (ui) {
                 ),
             );
             result.items.forEach((item) =>
-                position.append(node("option", { value: item.id }, `${item.code} · ${item.title}`)),
+                position.append(node("option", { value: item.id }, `${item.code} · ${item.title}${
+                    result.primary_position?.selection?.id === item.id
+                        ? result.primary_position.status === 'current' ? ' · Current primary' : ' · Primary designation needs HR review'
+                        : ''}`)),
             );
             if (result.items.some((item) => item.id === previous)) position.value = previous;
             else if (result.items.length === 1) position.value = result.items[0].id;

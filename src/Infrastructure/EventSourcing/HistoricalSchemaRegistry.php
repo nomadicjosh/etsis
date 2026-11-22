@@ -142,6 +142,10 @@ final readonly class HistoricalSchemaRegistry
                 'type' => 'employment_lifecycle', 'root' => \Domain\HumanResources\EmploymentTimeline::class,
                 'fields' => ['operation_id', 'previous_operation_id', 'period_id', 'facts', 'intent'],
             ],
+            \Domain\HumanResources\Event\PrimaryPositionWasRecorded::class => [
+                'type' => 'employment_primary_position', 'root' => \Domain\HumanResources\PrimaryPositionHistory::class,
+                'fields' => ['operation_id', 'previous_operation_id', 'facts', 'intent'],
+            ],
             \Domain\HumanResources\Event\EmployeePositionWasRecorded::class => [
                 'type' => 'employment_position', 'root' => \Domain\HumanResources\PositionHistory::class,
                 'fields' => ['operation_id', 'previous_operation_id', 'action', 'facts', 'intent'],
@@ -761,6 +765,12 @@ final readonly class HistoricalSchemaRegistry
                     throw new CorruptHistoryException();
                 }
             }
+            if ($class === \Domain\HumanResources\Event\PrimaryPositionWasRecorded::class) {
+                \Domain\HumanResources\PrimaryPositionHistory::validate($payload);
+                if ($payload['facts']['employee_id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\HumanResources\Event\EmployeePositionWasRecorded::class) {
                 \Domain\HumanResources\PositionHistory::validate($payload);
                 if ($payload['facts']['id'] !== (string) $stream->aggregateId) {
@@ -1107,6 +1117,7 @@ final readonly class HistoricalSchemaRegistry
                         in_array($class, [\Domain\Person\Event\PersonProfileWasRecorded::class,
                             \Domain\Student\Event\PersonRestrictionsWereRecorded::class,
                             \Domain\HumanResources\Event\EmploymentDatesWereRecorded::class,
+                            \Domain\HumanResources\Event\PrimaryPositionWasRecorded::class,
                             \Domain\HumanResources\Event\EmployeePositionWasRecorded::class,
                             \Domain\HumanResources\Event\EmploymentProfileWasRecorded::class,
                             \Domain\Admissions\Event\AdmissionOfferWasRecorded::class], true) &&
@@ -1717,6 +1728,7 @@ final readonly class HistoricalSchemaRegistry
             $id instanceof \Domain\Registration\ValueObject\DropPolicyPublicationId && $id->isSection
             ? 'section_drop_policy' : 'term_drop_policy',
             \Domain\Student\PersonRestrictions::class => 'person_restrictions',
+            \Domain\HumanResources\PrimaryPositionHistory::class => 'employment_primary_position',
             \Domain\HumanResources\PositionHistory::class => 'employment_position',
             \Domain\HumanResources\EmploymentTimeline::class => 'employment_lifecycle',
             \Domain\HumanResources\EmploymentHistory::class => 'employment_profile',
@@ -1771,6 +1783,7 @@ final readonly class HistoricalSchemaRegistry
             'term_drop_policy' => new \Domain\Registration\ValueObject\DropPolicyPublicationId($id),
             'section_drop_policy' => new \Domain\Registration\ValueObject\DropPolicyPublicationId($id, true),
             'person_restrictions' => new \Domain\Student\ValueObject\PersonRestrictionsId($id),
+            'employment_primary_position' => new \Domain\HumanResources\ValueObject\PrimaryPositionId($id),
             'employment_position' => new \Domain\HumanResources\ValueObject\EmployeePositionId($id),
             'employment_lifecycle' => new \Domain\HumanResources\ValueObject\EmploymentTimelineId($id),
             'person_profile' => new \Domain\Person\ValueObject\PersonProfileId($id),

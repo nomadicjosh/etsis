@@ -1,7 +1,7 @@
 /* Dated employee assignments. Private drafts and reviewed terms stay in page memory. */
 window.createWorkspacePositions = function (ui) {
     'use strict';
-    const { node, request, task, openDrawer, table, badge, flow, amounts, openEmployee, notify } = ui;
+    const { node, request, task, openDrawer, table, badge, flow, amounts, openEmployee, notify, can } = ui;
     const base = employee => `/sis/employees/${employee}/positions`;
     const button = (label, callback, style = 'btn-outline-primary') => node('button', {
         type: 'button', class: `btn ${style}`, onclick: event => task(callback, event.currentTarget),
@@ -13,10 +13,13 @@ window.createWorkspacePositions = function (ui) {
     const workload = minutes => minutes == null ? 'Not set' : `${Math.floor(minutes / 60)}h ${minutes % 60}m per week`;
     const status = (p, today) => p.voided ? 'Voided' : p.valid_from > today ? 'Scheduled'
         : p.valid_through && p.valid_through < today ? 'Ended' : 'Current';
+    let navigation = 0;
 
     async function page(employee, after = null, stack = []) {
+        navigation++;
         const body = openDrawer('Position assignments', 'HUMAN RESOURCES');
         body.append(button('Back to employment', () => openEmployee(employee)));
+        body.append(button('Primary position', () => primary(employee)));
         const data = await request(`${base(employee)}/page/`, 'POST', after ? { after } : {});
         if (!body.isConnected) return;
         body.append(node('p', { class: 'form-text' },
@@ -37,6 +40,7 @@ window.createWorkspacePositions = function (ui) {
         body.append(node('div', { class: 'inline-actions' }, previous, next));
     }
     async function detail(employee, id) {
+        navigation++;
         const body = openDrawer('Position assignment', 'RETAINED HR AGREEMENT');
         body.append(button('Back to assignments', () => page(employee)));
         const record = await request(`${base(employee)}/${id}/`);
@@ -51,6 +55,9 @@ window.createWorkspacePositions = function (ui) {
             node('p', { class: 'form-text private-text' },
                 `Last recorded: ${new Date(record.recorded_at).toLocaleString()}. Recorded by: ${record.recorded_by}.`));
         if (record.replaces_id) body.append(button('Open previous assignment', () => detail(employee, record.replaces_id)));
+        if (can('sis:hr:primary') && !record.voided) {
+            body.append(button('Designate as primary position', () => primary(employee, record)));
+        }
         if (!record.voided) {
             body.append(button('Change position terms', async () => {
                 const data = await request(`${base(employee)}/page/`, 'POST', {});
@@ -70,6 +77,7 @@ window.createWorkspacePositions = function (ui) {
                 : 'Record why this assignment should be marked incorrect. Earlier facts stay protected.')));
     }
     async function assign(employee, id, today, previous = null) {
+        navigation++;
         const body = openDrawer(previous ? 'Change position terms' : 'Record position assignment', 'HUMAN RESOURCES');
         body.append(button(previous ? 'Back to assignment' : 'Back to assignments', () => previous
             ? detail(employee, previous.id) : page(employee)));
@@ -194,5 +202,86 @@ window.createWorkspacePositions = function (ui) {
         });
         await choices('');
     }
-    return { page, detail };
+    const primaryLabel = selection => selection ? `${selection.code} · ${selection.title}` : 'No primary designation';
+    const primaryStatus = status => ({ current: 'Current', changed: 'Appointment changed — HR review required',
+        ended: 'Appointment ended — HR review required', voided: 'Appointment voided — HR review required',
+        scheduled: 'Appointment does not cover today — HR review required', cleared: 'Explicitly cleared',
+        unrecorded: 'Not recorded; earlier designations are unknown' })[status] || 'Review required';
+
+    async function primary(employee, proposed = undefined) {
+        navigation++;
+        const body = openDrawer('Primary position', 'EMPLOYMENT');
+        body.append(button('Back to employment', () => openEmployee(employee)));
+        const data = await request(`/sis/employees/${employee}/primary-position/`);
+        if (!body.isConnected) return;
+        body.append(node('h3', { class: 'h5 private-text' }, primaryLabel(data.selection)),
+            node('p', { role: 'status', class: 'private-text' }, primaryStatus(data.status)),
+            node('p', { class: 'form-text' }, 'This is an explicit HR designation from confirmation onward. It does not change pay, security access or the position actually worked on a timesheet. Ended or replaced appointments stay visible until HR reviews the designation.'));
+        const allowed = can('sis:hr:manage') && can('sis:hr:primary');
+        if (can('sis:hr:manage')) body.append(button('Choose from position assignments', () => page(employee)));
+        if (can('sis:hr:manage') && can('sis:audit:read')) {
+            body.append(button('Primary designation history', () => primaryHistory(employee)));
+        }
+        if (!allowed) return;
+        if (proposed === undefined) {
+            if (data.selection) body.append(button('Clear primary designation', () => primary(employee, null)));
+            return;
+        }
+        const form = node('form', { class: 'record-form' });
+        const reason = node('textarea', { id: 'primary-position-reason', class: 'form-control', required: true,
+            rows: 3, maxlength: 1000 });
+        const submit = node('button', { type: 'submit', class: 'btn btn-primary' }, 'Review primary designation');
+        form.append(node('h3', { class: 'h5 private-text' }, `Proposed: ${primaryLabel(proposed?.job
+            ? { code: proposed.job.code, title: proposed.job.title } : proposed)}`),
+            node('label', { for: reason.id, class: 'form-label' }, 'Reason for primary designation'), reason, submit);
+        const confirmation = node('div', { hidden: true });
+        body.append(form, confirmation);
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            if (!form.reportValidity()) return;
+            task(async () => {
+                const payload = { operation_id: data.operation_id, version: data.version,
+                    position_id: proposed?.id ?? null, position_version: proposed?.version ?? null, reason: reason.value };
+                const reviewed = await request(`/sis/employees/${employee}/primary-position/review/`, 'POST', payload);
+                if (!body.isConnected) return;
+                confirmation.replaceChildren(node('h3', { class: 'h5' }, 'Review primary designation'),
+                    node('p', { class: 'private-text' }, `Before: ${primaryLabel(reviewed.before)}`),
+                    node('p', { class: 'private-text' }, `After: ${primaryLabel(reviewed.after)}`),
+                    node('p', { class: 'private-text' }, `Reason: ${payload.reason}`),
+                    button('Revise primary designation', () => { confirmation.hidden = true; form.hidden = false; reason.focus(); }),
+                    button('Confirm primary designation', async () => {
+                        await request(`/sis/employees/${employee}/primary-position/confirm/`, 'POST', {
+                            ...payload, review_token: reviewed.review_token,
+                        });
+                        if (!body.isConnected) return;
+                        notify('Primary position designation recorded.');
+                        await primary(employee);
+                    }, 'btn-primary'));
+                form.hidden = true; confirmation.hidden = false;
+                confirmation.querySelector('button').focus();
+            }, submit);
+        });
+    }
+    async function primaryHistory(employee, after = 0, through = null, stack = []) {
+        const token = ++navigation;
+        const origin = document.getElementById('drawer-body')?.firstChild;
+        const data = await request(`/sis/employees/${employee}/primary-position/history/`, 'POST', {
+            after, through_version: through,
+        });
+        if (token !== navigation || (origin && !origin.isConnected)) return;
+        const body = openDrawer('Primary designation history', 'RETAINED HR DECISIONS');
+        body.append(button('Back to primary position', () => primary(employee)));
+        body.append(node('p', { class: 'form-text' }, 'Only recorded designations appear. Earlier designations remain unknown. Recorder labels reflect current account names.'),
+            data.items.length ? grid(['Decision', 'Primary position', 'Effective', 'Recorded by', 'Reason'], data.items.map(item => [
+                item.version, primaryLabel(item.selection), new Date(item.effective_at).toLocaleString(),
+                item.recorded_by, item.reason,
+            ]), 'Primary designation decisions') : node('p', {}, 'No designation decisions have been recorded.'));
+        const previous = button('Previous decisions', () => {
+            const prior = [...stack]; return primaryHistory(employee, prior.pop() ?? 0, data.through_version, prior);
+        });
+        const next = button('Next decisions', () => primaryHistory(employee, data.next_after, data.through_version, [...stack, after]));
+        previous.disabled = !stack.length; next.disabled = data.next_after === null;
+        body.append(node('div', { class: 'inline-actions' }, previous, next));
+    }
+    return { page, detail, primary };
 };
