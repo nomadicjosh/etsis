@@ -182,6 +182,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         if (definition.work_eligibility && (definition.work_eligibility.credit_origin !== "any" ||
             definition.work_eligibility.completed_from || definition.work_eligibility.completed_through ||
             definition.work_eligibility.max_age_months_at_pursuit_start != null ||
+            definition.work_eligibility.max_age_months_at_evaluation != null ||
             definition.work_eligibility.transfer_institutions?.length))
             summary.warnings.push("Catalog totals do not check a student's credit origin or actual completion date. Run a student test.");
         const raw = definition.requirement_type === "courses" ? definition.min_courses : definition.min_credits_milli;
@@ -789,6 +790,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
             const age = d.work_eligibility.max_age_months_at_pursuit_start;
             if (age != null && (!Number.isInteger(age) || age < 1 || age > 1200))
                 throw new Error("Enter a course-age limit of 1–1,200 whole months, or leave it blank.");
+            const expiration = d.work_eligibility.max_age_months_at_evaluation;
+            if (expiration != null && (!Number.isInteger(expiration) || expiration < 1 || expiration > 1200))
+                throw new Error("Enter a review-date age limit of 1–1,200 whole months, or leave it blank.");
             if (d.work_eligibility.completed_from && d.work_eligibility.completed_through &&
                 d.work_eligibility.completed_from > d.work_eligibility.completed_through)
                 throw new Error("The earliest completion date must be on or before the latest date.");
@@ -1127,6 +1131,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
             field("Maximum age before pursuit start (months, optional)", eligibility.max_age_months_at_pursuit_start,
                 v => changeEligibility("max_age_months_at_pursuit_start", v === "" ? null : Number(v)),
                 { type: "number", min: 1, max: 1200, step: 1 }),
+            field("Maximum age at review (months, optional)", eligibility.max_age_months_at_evaluation,
+                v => changeEligibility("max_age_months_at_evaluation", v === "" ? null : Number(v)),
+                { type: "number", min: 1, max: 1200, step: 1 }),
+            node("p", { class: "form-text" }, "Review-date expiration uses each progress review's date. Recorded reviews keep their original date and result; this does not reverse credit or confer a degree."),
             node("label", { for: institutionSearch.id, class: "form-label" }, "Find sending institutions (optional)"),
             institutionSearch,
             button("Find sending institutions", () => findInstitutions()), institutionMore,
@@ -3828,7 +3836,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "article",
                     { class: "audit-card" },
                     node("h3", {}, group.name),
-                    node("p", { class: "form-text" }, window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context)),
+                    node("p", { class: "form-text" }, window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context)),
                     node(
                         "p",
                         {},
@@ -3993,7 +4001,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
     }
     function groupPlacementDetails(data, group, back, offset = 0, ruleOffset = 0) {
         const body = screen(group.name, "PROPOSED COURSE-GROUP PLACEMENT");
-        body.append(node("p", {}, window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context)));
+        body.append(node("p", {}, window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context)));
         body.append(
             node(
                 "p",
@@ -4629,7 +4637,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "div",
                     { class: "mb-3" },
                     node("h4", { class: "h6" }, match.group_name),
-                    node("p", { class: "form-text" }, window.degreeGroupEligibilityText(match.work_eligibility, match.work_eligibility_context)),
+                    node("p", { class: "form-text" }, window.degreeGroupEligibilityText(match.work_eligibility, match.work_eligibility_context, match.work_evaluation_context)),
                     node(
                         "p",
                         {},

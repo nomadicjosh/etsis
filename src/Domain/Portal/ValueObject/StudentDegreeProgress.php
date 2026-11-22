@@ -138,6 +138,7 @@ final readonly class StudentDegreeProgress
             "eligibility_issues" => array_values(
                 array_intersect($review["allocation"]["issues"] ?? [], [
                     "origin_unknown",
+                    "evaluation_date_unknown",
                     'transfer_institution_unknown',
                     "completion_date_unknown",
                     'pursuit_start_unknown',
@@ -162,6 +163,7 @@ final readonly class StudentDegreeProgress
                     "completed_through",
                     'max_age_months_at_pursuit_start',
                     'transfer_institutions',
+                    'max_age_months_at_evaluation',
                 ]);
                 try {
                     $group["work_eligibility"] = new GroupWorkEligibility($facts)->facts;
@@ -175,6 +177,23 @@ final readonly class StudentDegreeProgress
                         ],
                         $facts['transfer_institutions']
                     );
+                }
+                if (($facts['max_age_months_at_evaluation'] ?? null) !== null) {
+                    $context = $value['work_evaluation_context'] ?? null;
+                    if (!is_array($context) || count($context) !== 2) {
+                        throw new CorruptHistoryException();
+                    }
+                    try {
+                        $expected = new GroupWorkEligibility($facts)->evaluationContext(
+                            $context['evaluated_on'] ?? null,
+                        );
+                    } catch (\InvalidArgumentException | \TypeError) {
+                        throw new CorruptHistoryException();
+                    }
+                    if ($context != $expected) {
+                        throw new CorruptHistoryException();
+                    }
+                    $group['work_evaluation_context'] = $expected;
                 }
                 if (($facts['max_age_months_at_pursuit_start'] ?? null) !== null) {
                     $context = $value['work_eligibility_context'] ?? null;

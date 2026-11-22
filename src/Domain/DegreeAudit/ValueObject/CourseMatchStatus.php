@@ -16,6 +16,8 @@ enum CourseMatchStatus: string
     case CompletedBeforeWindow = "completed_before_window";
     case CompletedAfterWindow = "completed_after_window";
     case PursuitStartUnknown = 'pursuit_start_unknown';
+    case EvaluationDateUnknown = "evaluation_date_unknown";
+    case CompletionExpired = "completion_expired";
     case CompletionTooOld = 'completion_too_old';
     case Candidate = "candidate";
     case PlacementRestricted = "placement_restricted";
@@ -55,6 +57,8 @@ enum CourseMatchStatus: string
             => "The actual completion date is after this group's permitted window.",
             self::PursuitStartUnknown
             => "The recorded pursuit start is unavailable; this group's course-age rule needs review.",
+            self::EvaluationDateUnknown => "The review date required by this group's expiration rule is unavailable.",
+            self::CompletionExpired => "This work expired under the group's age limit at the review date.",
             self::CompletionTooOld
             => "The actual completion date is too early for this group's age limit at the recorded pursuit start.",
             self::Candidate

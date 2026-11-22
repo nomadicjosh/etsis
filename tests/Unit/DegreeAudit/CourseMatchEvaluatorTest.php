@@ -402,6 +402,31 @@ final class CourseMatchEvaluatorTest extends TestCase
         self::assertSame("waived", $this->first($work, $requirements, $effective)["status"]);
     }
 
+    public function testApprovedReplacementCannotBypassReviewDateExpiration(): void
+    {
+        [$work, $r, $e] = $this->inputs();
+        $target = $work["course_id"];
+        $work["course_id"] = self::id(22);
+        $work["course_version_id"] = self::id(23);
+        $work["completed_on"] = "2025-08-10";
+        $e["substitutions"][$target] = [
+            "course_id" => $work["course_id"],
+            "version_id" => $work["course_version_id"],
+        ];
+        $r["group_details"][self::id(4)]["definition"]["work_eligibility"] = array_replace(
+            \Domain\DegreeAudit\ValueObject\GroupWorkEligibility::DEFAULT,
+            ["max_age_months_at_evaluation" => 12],
+        );
+        self::assertSame("evaluation_date_unknown", $this->first($work, $r, $e)["status"]);
+        $work["grade"]["passes"] = false;
+        self::assertSame("not_passing", $this->first($work, $r, $e)["status"]);
+        $work["grade"]["passes"] = true;
+        $e["evaluated_on"] = "2026-08-10";
+        self::assertSame("candidate", $this->first($work, $r, $e)["status"]);
+        $e["evaluated_on"] = "2026-08-11";
+        self::assertSame("completion_expired", $this->first($work, $r, $e)["status"]);
+    }
+
     public function testApprovedReplacementMustSatisfyTheTargetsOriginAndDateRestrictions(): void
     {
         [$work, $requirements, $effective] = $this->inputs();

@@ -521,6 +521,37 @@ final class StudentDegreeProgressTest extends TestCase
             json_encode($data, JSON_THROW_ON_ERROR),
         );
     }
+    public function testReviewDateContextMustMatchThePolicyAndContainsOnlyTwoDates(): void
+    {
+        $review = $this->review("needs_review");
+        $policy = array_replace(\Domain\DegreeAudit\ValueObject\GroupWorkEligibility::DEFAULT, [
+            "max_age_months_at_evaluation" => 12,
+        ]);
+        $review["allocation"]["groups"][0]["work_eligibility"] = $policy;
+        $context = ["evaluated_on" => "2026-08-10", "earliest_completion_on" => "2025-08-10"];
+        $review["allocation"]["groups"][0]["work_evaluation_context"] = $context;
+        $review["allocation"]["issues"] = ["evaluation_date_unknown", "private-detail"];
+        $data = new StudentDegreeProgress($review)->describe();
+        self::assertSame($context, $data["allocation"]["groups"][0]["work_evaluation_context"]);
+        self::assertSame(["evaluation_date_unknown"], $data["allocation"]["eligibility_issues"]);
+        foreach (
+            [
+                [],
+                $context + ["private" => "detail"],
+                array_replace($context, ["earliest_completion_on" => "2025-08-09"]),
+                array_replace($context, ["evaluated_on" => "2026-02-30"]),
+            ] as $invalid
+        ) {
+            $review["allocation"]["groups"][0]["work_evaluation_context"] = $invalid;
+            try {
+                new StudentDegreeProgress($review);
+                self::fail("Unverified review-date context accepted.");
+            } catch (\Domain\Shared\EventSourcing\CorruptHistoryException) {
+                self::assertTrue(true);
+            }
+        }
+    }
+
     public function testSendingInstitutionLabelsArePublicButPrivateIdsAreRemoved(): void
     {
         $review = $this->review("needs_review");

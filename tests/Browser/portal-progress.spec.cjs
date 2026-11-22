@@ -34,6 +34,8 @@ async function fixture(page,options={}) {
             };
         } else throw new Error(`Unexpected private request ${path}`);
         if (options.groupEligibility && data.allocation) data.allocation.groups[0].work_eligibility = options.groupEligibility;
+        if (options.evaluationContext && data.allocation) data.allocation.groups[0].work_evaluation_context = options.evaluationContext;
+        if (options.evaluationUnknown && data.allocation) data.allocation.eligibility_issues = ['evaluation_date_unknown'];
         if (options.recencyContext && data.allocation) data.allocation.groups[0].work_eligibility_context = options.recencyContext;
         if (options.sourceUnknown && data.allocation) data.allocation.eligibility_issues = ['transfer_institution_unknown'];
         if (options.recencyUnknown && data.allocation) data.allocation.eligibility_issues = ['pursuit_start_unknown'];
@@ -602,4 +604,24 @@ test('student sending-institution rule explains exclusions and missing retained 
     await accessible(page);
     expect(f.errors).toEqual([]);
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+});
+
+
+for (const unknown of [false, true]) test(`student review-date expiration explains ${unknown ? 'a missing review date' : 'the inclusive retained date'}`, async ({page}) => {
+    const f = await fixture(page, {groupEligibility:{credit_origin:'any', completed_from:null,
+        completed_through:null,max_age_months_at_evaluation:12}, evaluationUnknown:unknown,
+        evaluationContext:{evaluated_on:unknown?null:'2026-08-10', earliest_completion_on:unknown?null:'2025-08-10'}});
+    await page.getByRole('button',{name:'Review progress · BSCS · 26/FA',exact:true}).click();
+    const content=page.locator('#campus-service-content');
+    await expect(content).toContainText('Maximum age at review: 12 calendar months');
+    await expect(content).toContainText(unknown?'The review date is unavailable; review is required.'
+        :'Reviewed on 2026-08-10; actual completion must be on or after 2025-08-10, inclusive.');
+    if (unknown) {
+        await page.getByRole('button',{name:'Open degree progress guide',exact:true}).click();
+        await expect(page.getByRole('complementary',{name:'Degree progress guide',exact:true})).toContainText('Refresh the dated progress review');
+    }
+    await page.setViewportSize({width:320,height:1000});
+    await accessible(page);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
 });

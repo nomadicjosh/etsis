@@ -245,9 +245,13 @@ final readonly class CourseMatchEvaluator
                 $candidate = [
                     "group_id" => $groupId,
                     'pursuit_started_on' => $effective['pursuit_started_on'] ?? null,
+                    'evaluated_on' => $effective['evaluated_on'] ?? null,
                     ...($definition['work_eligibility']['max_age_months_at_pursuit_start'] ?? null) !== null
                         ? ['work_eligibility_context' => new GroupWorkEligibility($definition['work_eligibility'])
                             ->recencyContext($effective['pursuit_started_on'] ?? null)] : [],
+                    ...($definition['work_eligibility']['max_age_months_at_evaluation'] ?? null) !== null
+                        ? ['work_evaluation_context' => new GroupWorkEligibility($definition['work_eligibility'])
+                            ->evaluationContext($effective['evaluated_on'] ?? null)] : [],
                     ...isset($definition["work_eligibility"])
                         ? ["work_eligibility" => $definition["work_eligibility"]]
                         : [],
@@ -378,11 +382,14 @@ final readonly class CourseMatchEvaluator
         }
         $completion = $eligibility->completionStatus(
             $work["completed_on"] ?? null,
-            $candidate['pursuit_started_on'] ?? null
+            $candidate['pursuit_started_on'] ?? null,
+            $candidate['evaluated_on'] ?? null,
         );
         if (
             $completion !== null
-            && !in_array($completion, [Status::CompletionDateUnknown, Status::PursuitStartUnknown], true)
+            && !in_array($completion, [
+                Status::CompletionDateUnknown, Status::PursuitStartUnknown, Status::EvaluationDateUnknown,
+            ], true)
         ) {
             return $completion;
         }

@@ -80,6 +80,12 @@ final readonly class DegreeProgressSnapshot implements \JsonSerializable
             ) {
                 throw new CorruptHistoryException();
             }
+            if (
+                GroupWorkEligibility::requiresEvaluationDate($component["requirements"]) &&
+                ($component["effective"]["evaluated_on"] ?? null) !== $data["as_of_date"]
+            ) {
+                throw new CorruptHistoryException();
+            }
             new EntityId($component["requirements"]["version_id"]);
             if (
                 $component["requirements"]["version_id"] !==
@@ -117,6 +123,7 @@ final readonly class DegreeProgressSnapshot implements \JsonSerializable
                         "required_courses",
                         "minimum_grade_points_milli",
                         "work_eligibility",
+                        "work_evaluation_context",
                         'work_eligibility_context',
                         "coverage",
                     ]),

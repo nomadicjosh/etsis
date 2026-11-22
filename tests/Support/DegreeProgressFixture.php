@@ -93,6 +93,7 @@ final class DegreeProgressFixture
                 $evaluator, new CourseAllocationPlanner($steps), new \Domain\DegreeAudit\Service\AllocationCoverageReview(),
                 new AllocationGapAnalyzer(),
             ),
+            $s->clock,
         );
     }
 }

@@ -19,12 +19,13 @@ final readonly class GroupWorkEligibility
         "completed_through" => null,
         "max_age_months_at_pursuit_start" => null,
         "transfer_institutions" => [],
+        "max_age_months_at_evaluation" => null,
     ];
 
     public function __construct(public array $facts = self::DEFAULT)
     {
         if (
-            !in_array(count($facts), [3, 4, 5], true) ||
+            !in_array(count($facts), [3, 4, 5, 6], true) ||
             array_diff(array_keys($facts), array_keys(self::DEFAULT)) !== [] ||
             array_diff(
                 ["credit_origin", "completed_from", "completed_through"],
@@ -34,9 +35,11 @@ final readonly class GroupWorkEligibility
         ) {
             self::invalid();
         }
-        $months = $facts["max_age_months_at_pursuit_start"] ?? null;
-        if ($months !== null && (!is_int($months) || $months < 1 || $months > 1200)) {
-            self::invalid();
+        foreach (["max_age_months_at_pursuit_start", "max_age_months_at_evaluation"] as $key) {
+            $months = $facts[$key] ?? null;
+            if ($months !== null && (!is_int($months) || $months < 1 || $months > 1200)) {
+                self::invalid();
+            }
         }
         $institutions = $facts["transfer_institutions"] ?? [];
         if (
@@ -119,12 +122,14 @@ final readonly class GroupWorkEligibility
     public function completionStatus(
         ?string $completedOn = null,
         ?string $pursuitStartedOn = null,
+        ?string $evaluatedOn = null,
     ): ?CourseMatchStatus {
         $months = $this->facts["max_age_months_at_pursuit_start"] ?? null;
         if (
             $this->facts["completed_from"] === null &&
             $this->facts["completed_through"] === null &&
-            $months === null
+            $months === null &&
+            ($this->facts["max_age_months_at_evaluation"] ?? null) === null
         ) {
             return null;
         }
@@ -153,6 +158,15 @@ final readonly class GroupWorkEligibility
                 return CourseMatchStatus::CompletionTooOld;
             }
         }
+        $evaluation = $this->evaluationContext($evaluatedOn);
+        if (($this->facts["max_age_months_at_evaluation"] ?? null) !== null) {
+            if ($evaluation["evaluated_on"] === null) {
+                return CourseMatchStatus::EvaluationDateUnknown;
+            }
+            if ($completedOn < $evaluation["earliest_completion_on"]) {
+                return CourseMatchStatus::CompletionExpired;
+            }
+        }
         return null;
     }
 
@@ -165,12 +179,31 @@ final readonly class GroupWorkEligibility
         if ($months === null || $pursuitStartedOn === null) {
             return ["pursuit_started_on" => null, "earliest_completion_on" => null];
         }
-        self::date($pursuitStartedOn);
-        $index =
-        (int) substr($pursuitStartedOn, 0, 4) * 12 +
-        (int) substr($pursuitStartedOn, 5, 2) -
-        1 -
-        $months;
+        return [
+            "pursuit_started_on" => $pursuitStartedOn,
+            "earliest_completion_on" => self::earliestCompletion($pursuitStartedOn, $months),
+        ];
+    }
+
+    /** The date belongs to this evaluation; replay supplies the retained date, never today's clock.
+     * @return array{evaluated_on:?string,earliest_completion_on:?string}
+     */
+    public function evaluationContext(?string $evaluatedOn = null): array
+    {
+        $months = $this->facts["max_age_months_at_evaluation"] ?? null;
+        if ($months === null || $evaluatedOn === null) {
+            return ["evaluated_on" => null, "earliest_completion_on" => null];
+        }
+        return [
+            "evaluated_on" => $evaluatedOn,
+            "earliest_completion_on" => self::earliestCompletion($evaluatedOn, $months),
+        ];
+    }
+
+    private static function earliestCompletion(string $reference, int $months): string
+    {
+        self::date($reference);
+        $index = (int) substr($reference, 0, 4) * 12 + (int) substr($reference, 5, 2) - 1 - $months;
         if ($index < 12) {
             $from = "0001-01-01";
         } else {
@@ -179,13 +212,42 @@ final readonly class GroupWorkEligibility
             $from =
             substr($first, 0, 8) .
             str_pad(
-                (string) min((int) substr($pursuitStartedOn, 8, 2), (int) $date->format("t")),
+                (string) min((int) substr($reference, 8, 2), (int) $date->format("t")),
                 2,
                 "0",
                 STR_PAD_LEFT,
             );
         }
-        return ["pursuit_started_on" => $pursuitStartedOn, "earliest_completion_on" => $from];
+        return $from;
+    }
+
+    /** Attach an explicit evaluation date only where a retained publication needs it. */
+    public static function atEvaluation(
+        array $requirements,
+        array $effective,
+        ?string $evaluatedOn,
+    ): array {
+        if (self::requiresEvaluationDate($requirements)) {
+            if ($evaluatedOn !== null) {
+                self::date($evaluatedOn);
+            }
+            $effective["evaluated_on"] = $evaluatedOn;
+        }
+        return $effective;
+    }
+
+    public static function requiresEvaluationDate(array $requirements): bool
+    {
+        foreach ($requirements["group_details"] ?? [] as $group) {
+            if (
+                ($group["definition"]["work_eligibility"]["max_age_months_at_evaluation"] ??
+                    null) !==
+                null
+            ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** @param array<string,mixed> $requirements Verified publication composition. */
@@ -222,7 +284,7 @@ final readonly class GroupWorkEligibility
     {
         throw new InvalidArgumentException(
             "Choose valid origin/completion rules, optional age of 1–1,200 months " .
-            "and up to 20 distinct sending institutions.",
+                "and up to 20 distinct sending institutions.",
         );
     }
 }

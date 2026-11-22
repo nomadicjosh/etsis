@@ -251,7 +251,6 @@ final readonly class DegreeProgressRecordService
     ): DegreeProgressSnapshot {
         $this->students->lock($student);
         $basis = $this->progress->capture($student, $pursuit, $budget);
-        $basis["as_of_date"] = $this->clock->now()->format("Y-m-d");
         if (strlen(json_encode($basis, JSON_THROW_ON_ERROR)) > DegreeProgressSnapshot::MAX_BYTES) {
             throw new ValidationException([
                 [

@@ -2067,3 +2067,30 @@ test("sending-institution selection is lazy retained and accessible in the group
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
+
+
+test("review-date expiration preserves the builder draft through preview and validation", async ({page}) => {
+    const f = await fixture(page);
+    await workspaceTool(page, "Course group library");
+    await page.getByRole("button",{name:"Build General education",exact:true}).click();
+    const field=page.getByLabel("Maximum age at review (months, optional)",{exact:true});
+    await expect(field).toHaveValue("");
+    await field.fill("12");
+    await page.getByRole("button",{name:"Requirements preview",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Maximum age at review: 12 calendar months");
+    await page.getByRole("button",{name:"Back to builder",exact:true}).click();
+    await expect(field).toHaveValue("12");
+    await field.fill("0");
+    await page.getByRole("button",{name:"Save group draft",exact:true}).click();
+    await expect(page.locator("dialog [role=alert]")).toContainText("review-date age limit of 1–1,200");
+    expect(f.calls.some(c=>c.path.endsWith("/save/"))).toBe(false);
+    await expect(field).toHaveValue("0");
+    await field.fill("12");
+    await page.setViewportSize({width:320,height:1000});
+    await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.getByRole("button",{name:"Save group draft",exact:true}).click();
+    expect(f.calls.find(c=>c.path.endsWith("/save/")).body.definition.work_eligibility.max_age_months_at_evaluation).toBe(12);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});

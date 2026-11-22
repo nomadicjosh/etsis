@@ -161,6 +161,35 @@ final class GroupAllocationEvaluatorTest extends TestCase
         return $rows;
     }
 
+    public function testReviewDateExpirationUsesTheSameNamedAndSavedRuleGateWithoutPartialPlans(): void
+    {
+        foreach ([false, true] as $savedRule) {
+            $g = $savedRule ? $this->ruleGroup(1, 3000, 1) : $this->group(1);
+            $g["definition"]["work_eligibility"] = array_replace(
+                \Domain\DegreeAudit\ValueObject\GroupWorkEligibility::DEFAULT,
+                ["max_age_months_at_evaluation" => 12],
+            );
+            $r = $this->requirements([self::id(1) => $g]);
+            $work = [array_replace($this->work(10), ["completed_on" => "2025-08-10"])];
+            $e = $this->effective($r);
+            $result = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r));
+            self::assertSame("needs_review", $result["outcome"]);
+            self::assertContains("evaluation_date_unknown", $result["issues"]);
+            self::assertSame([], $result["groups"][0]["placements"]);
+            $e["evaluated_on"] = "2026-08-10";
+            $result = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r));
+            self::assertSame("feasible", $result["outcome"]);
+            self::assertSame(
+                "2025-08-10",
+                $result["groups"][0]["work_evaluation_context"]["earliest_completion_on"],
+            );
+            $e["evaluated_on"] = "2026-08-11";
+            $result = $this->evaluator()->evaluate($work, $r, $e, $this->decisions($work, $r));
+            self::assertSame("infeasible", $result["outcome"]);
+            self::assertSame([], $result["groups"][0]["placements"]);
+        }
+    }
+
     public function testMissingRetainedSendingInstitutionStopsBothNamedAndSavedRulePlans(): void
     {
         foreach ([false, true] as $savedRule) {

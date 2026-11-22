@@ -112,6 +112,9 @@ final readonly class GroupAllocationEvaluator
                 ...($d['work_eligibility']['max_age_months_at_pursuit_start'] ?? null) !== null
                     ? ['work_eligibility_context' => new GroupWorkEligibility($d['work_eligibility'])
                         ->recencyContext($effective['pursuit_started_on'] ?? null)] : [],
+                ...($d['work_eligibility']['max_age_months_at_evaluation'] ?? null) !== null
+                    ? ['work_evaluation_context' => new GroupWorkEligibility($d['work_eligibility'])
+                        ->evaluationContext($effective['evaluated_on'] ?? null)] : [],
                 ...isset($d["work_eligibility"])
                     ? ["work_eligibility" => $d["work_eligibility"]]
                     : [],
@@ -199,6 +202,7 @@ final readonly class GroupAllocationEvaluator
                             'transfer_institution_unknown',
                             "completion_date_unknown",
                             'pursuit_start_unknown',
+                            'evaluation_date_unknown',
                         ],
                         true,
                     )

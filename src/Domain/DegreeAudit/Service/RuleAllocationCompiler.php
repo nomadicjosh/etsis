@@ -85,6 +85,7 @@ final readonly class RuleAllocationCompiler
                 $candidate = [
                     "group_id" => $groupId,
                     'pursuit_started_on' => $effective['pursuit_started_on'] ?? null,
+                    'evaluated_on' => $effective['evaluated_on'] ?? null,
                     ...isset($group["definition"]["work_eligibility"])
                         ? ["work_eligibility" => $group["definition"]["work_eligibility"]]
                         : [],
@@ -113,6 +114,7 @@ final readonly class RuleAllocationCompiler
                         CourseMatchStatus::ApprovalConflict,
                         CourseMatchStatus::OriginUnknown,
                         CourseMatchStatus::CompletionDateUnknown,
+                        CourseMatchStatus::EvaluationDateUnknown,
                     ],
                     true,
                 );

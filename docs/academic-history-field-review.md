@@ -4,6 +4,8 @@ Reviewed 2026-11-08 against the legacy documentation, migration definitions and 
 
 Course-group [sending-institution eligibility](degree-audit-builder.md#sending-institution-restrictions) now uses only the institution identity retained in the protected transfer-award decision or an explicitly accepted observation. Current equivalency joins never repair missing earlier source evidence. Working drafts validate reference labels; immutable publications retain their original source restrictions, selected student requirements remain explicit, and recorded progress reviews preserve their frozen basis. Known exclusions affect group placement only; unknown source evidence stops allocation without changing awarded credit/GPA. No schema, journal, report or fabricated historical fact was added.
 
+[Review-date course expiration](degree-audit-builder.md#course-expiration-at-a-progress-review) is now an optional published group policy, independent of age at pursuit start. Current/temporary progress uses one explicit evaluation date; recorded observations retain that exact date in their existing protected basis and validate consistency with the observation's as-of date. Calendar advancement can change fresh group placement without changing awarded credit, GPA or the earlier recorded result. No graduation date is inferred, and no event, row or earlier policy is backfilled.
+
 ## Sources and evidence
 
 Nested prerequisite routes now retain their counted expression in the existing course publication and accepted registration evidence. Current drafts, published rules and curated branch-status explanations remain distinct; earlier flat rules are not rewritten. See the [authoring and historical boundaries](course-publication.md#nested-prerequisite-routes).

@@ -97,6 +97,24 @@ $sourceSave = ['revision' => $aged['revision'], 'definition' => $restricted];
 if ($teachingPost($base . 'save/', $sourceSave)->getStatusCode() !== 200) {
     throw new RuntimeException('The real course-group route failed to retain the source restriction.');
 }
+$expirationDraft = json_decode((string) $readEligibility()->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$expiration = $expirationDraft['definition'];
+$expiration['work_eligibility']['max_age_months_at_evaluation'] = 0;
+$expirationSave = ['revision' => $expirationDraft['revision'], 'definition' => $expiration];
+if ($teachingPost($base . 'save/', $expirationSave)->getStatusCode() !== 422) {
+    throw new RuntimeException('An invalid review-date expiration rule was accepted.');
+}
+$expirationSave['definition']['work_eligibility']['max_age_months_at_evaluation'] = 12;
+if ($teachingPost($base . 'save/', $expirationSave)->getStatusCode() !== 200) {
+    throw new RuntimeException('The actual course-group route failed to save review-date expiration.');
+}
+$expirationRead = json_decode((string) $readEligibility()->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $expirationRead['definition']['work_eligibility']['max_age_months_at_evaluation'] !== 12
+    || $before !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('The saved expiration policy changed history or lost its duration.');
+}
 $sis->access->staff = false;
 $sis->access->grants = [];
 $sis->access->actor = $sis->user();

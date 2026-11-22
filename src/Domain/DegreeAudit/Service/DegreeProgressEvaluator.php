@@ -31,21 +31,32 @@ final readonly class DegreeProgressEvaluator
      * @param array<string,mixed> $requirements
      * @return array<string,mixed>
      */
-    public static function unadjusted(array $requirements, ?string $pursuitStartedOn = null): array
-    {
-        return [
-            ...GroupWorkEligibility::requiresPursuitStart($requirements)
-                ? ['pursuit_started_on' => $pursuitStartedOn] : [],
-            'degree' => array_intersect_key(
-                $requirements['definition'],
-                array_flip(RequirementAdjustmentDefinitionV2::DEGREE_MINIMUMS),
-            ),
-            'groups' => array_map(static fn(array $g): array => $g['definition'], $requirements['group_details']),
-            'waived_course_ids' => [],
-            'substitutions' => [],
-            'substitution_conflicts' => [],
-            'placements' => [],
-        ];
+    public static function unadjusted(
+        array $requirements,
+        ?string $pursuitStartedOn = null,
+        ?string $evaluatedOn = null,
+    ): array {
+        return GroupWorkEligibility::atEvaluation(
+            $requirements,
+            [
+                ...GroupWorkEligibility::requiresPursuitStart($requirements)
+                    ? ["pursuit_started_on" => $pursuitStartedOn]
+                    : [],
+                "degree" => array_intersect_key(
+                    $requirements["definition"],
+                    array_flip(RequirementAdjustmentDefinitionV2::DEGREE_MINIMUMS),
+                ),
+                "groups" => array_map(
+                    static fn(array $g): array => $g["definition"],
+                    $requirements["group_details"],
+                ),
+                "waived_course_ids" => [],
+                "substitutions" => [],
+                "substitution_conflicts" => [],
+                "placements" => [],
+            ],
+            $evaluatedOn,
+        );
     }
 
     /**

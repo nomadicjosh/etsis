@@ -168,3 +168,17 @@ test("sending-institution guidance retains labels and asks for real missing sour
   assert.match(text, /Review retained transfer-source evidence/);
   assert.match(text, /Today's catalog or equivalency labels cannot replace missing retained evidence/);
 });
+
+
+test("review-date expiration distinguishes the retained review date from pursuit start", () => {
+  const policy={credit_origin:"any",completed_from:null,completed_through:null,
+    max_age_months_at_evaluation:12,max_age_months_at_pursuit_start:60};
+  const text=window.degreeGroupEligibilityText(policy,
+    {pursuit_started_on:"2026-01-31",earliest_completion_on:"2021-01-31"},
+    {evaluated_on:"2026-08-10",earliest_completion_on:"2025-08-10"});
+  assert.match(text,/Pursuit began 2026-01-31/);
+  assert.match(text,/Reviewed on 2026-08-10; actual completion must be on or after 2025-08-10, inclusive/);
+  const data=review();data.allocation={outcome:"needs_review",eligibility_issues:["evaluation_date_unknown"]};
+  assert.match(window.createDegreeProgressNextSteps(node,data).textContent,/Refresh the dated progress review/);
+  assert.match(window.createDegreeProgressNextSteps(node,data).textContent,/keeps its original date/);
+});

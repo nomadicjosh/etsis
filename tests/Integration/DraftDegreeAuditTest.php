@@ -85,6 +85,7 @@ final class DraftDegreeAuditTest extends TestCase
                 new AllocationGapAnalyzer(),
             ),
             DegreeProgressFixture::service($s, $f->f->history, $f->service, $f->f->catalog->fixture->cipher, $repository),
+            $s->clock,
         );
     }
 
@@ -1122,4 +1123,38 @@ final class DraftDegreeAuditTest extends TestCase
         );
         self::assertSame($before, $this->digest($f));
     }
+    public function testDraftReviewDateExpirationUsesTheCurrentReviewWithoutAssigningRequirements(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $this->work($f);
+        [$template, $degree, $group] = $this->draft($f);
+        $d = $f->f->groups->view($group)["definition"];
+        $d["work_eligibility"]["max_age_months_at_evaluation"] = 12;
+        $f->f->groups->save($group, 0, new CourseGroupDefinitionV2($d));
+        $s = $f->f->sis;
+        $credit = $s->sql->rows("sis_academic_credit_streams", [], 1)[0];
+        $dates = $s->academicDates();
+        $proof = $dates->review(
+            $f->student,
+            new EntityId($credit["section_id"]),
+            new EntityId($credit["enrollment_id"]),
+            "2025-08-10",
+            1,
+            "Fictional actual completion.",
+        );
+        $dates->commit($f->student, new EntityId($credit["section_id"]), $proof["review_token"]);
+        $before = $this->digest($f);
+        $current = $this->service($f)->test($template, $f->student, $f->assignment, $degree);
+        self::assertSame("feasible", $current["allocation"]["outcome"]);
+        self::assertSame(
+            "2026-08-10",
+            $current["allocation"]["groups"][0]["work_evaluation_context"]["evaluated_on"],
+        );
+        self::assertSame($before, $this->digest($f));
+        $s->clock->time = $s->clock->time->modify("+1 day");
+        $fresh = $this->service($f)->test($template, $f->student, $f->assignment, $degree);
+        self::assertSame("infeasible", $fresh["allocation"]["outcome"]);
+        self::assertSame($before, $this->digest($f));
+    }
+
 }

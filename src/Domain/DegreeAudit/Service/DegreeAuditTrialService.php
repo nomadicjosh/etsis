@@ -25,6 +25,7 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\StudentRecordRepository;
 use InvalidArgumentException;
 use JsonException;
+use Domain\Shared\Service\Clock;
 
 /** Runtime-only curriculum trial. No publication, assignment, approval or result persistence. */
 final readonly class DegreeAuditTrialService
@@ -43,6 +44,7 @@ final readonly class DegreeAuditTrialService
         private UnitOfWork $transactions,
         private CombinedAllocationEvaluator $combined,
         private DegreeProgressService $assignedProgress,
+        private Clock $clock,
     ) {
     }
 
@@ -334,6 +336,7 @@ final readonly class DegreeAuditTrialService
                         "Choose specialization sources and an explicit test sharing policy together.",
                     );
                 }
+                $evaluatedOn = $this->clock->now()->format("Y-m-d");
                 $source = $resolve($budget);
                 $sources = $companions === [] ? [] : $this->companionSources($source, $companions, $budget);
                 $requirements = $source["requirements"];
@@ -344,7 +347,7 @@ final readonly class DegreeAuditTrialService
                     );
                 }
                 $start = $needsStart ? $this->requirements->pursuitStartedOn($student, $assignment, $budget) : null;
-                $effective = DegreeProgressEvaluator::unadjusted($requirements, $start);
+                $effective = DegreeProgressEvaluator::unadjusted($requirements, $start, $evaluatedOn);
                 $inputs = $this->inputs->collect($student, $assignment, $budget);
                 if ($inputs->status === AcademicInputStatus::Limited) {
                     throw new HistoryReadLimitException();
@@ -359,6 +362,7 @@ final readonly class DegreeAuditTrialService
                         $sharing ?? throw new InvalidArgumentException("Choose a test sharing policy."),
                         $budget,
                         $start,
+                        $evaluatedOn,
                     );
                     $this->authorize($student, $assignment, $actor);
                     return $result;
@@ -469,6 +473,7 @@ final readonly class DegreeAuditTrialService
         ComponentCourseSharing $sharing,
         HistoryReadBudget $budget,
         ?string $pursuitStartedOn = null,
+        ?string $evaluatedOn = null,
     ): array {
         $components = [];
         foreach ($sources as $index => $source) {
@@ -482,7 +487,7 @@ final readonly class DegreeAuditTrialService
                 "key" => $source["template_id"],
                 "kind" => $index === 0 ? "degree" : "specialization",
                 "requirements" => $r,
-                "effective" => DegreeProgressEvaluator::unadjusted($r, $pursuitStartedOn),
+                "effective" => DegreeProgressEvaluator::unadjusted($r, $pursuitStartedOn, $evaluatedOn),
             ];
         }
         $result = $this->combined->evaluate($inputs, $components, $sharing, $budget);

@@ -17,6 +17,8 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\StudentRecordRepository;
 use Domain\Student\Service\StudentSpecializationService;
 use InvalidArgumentException;
+use Domain\Shared\Service\Clock;
+use Domain\DegreeAudit\ValueObject\GroupWorkEligibility;
 
 /** Current general minimums and structural placement from one authorized, bounded input boundary. */
 final readonly class DegreeProgressService implements DegreeProgressReader
@@ -30,6 +32,7 @@ final readonly class DegreeProgressService implements DegreeProgressReader
         private UnitOfWork $transactions,
         private StudentSpecializationService $specializations,
         private CombinedAllocationEvaluator $combined,
+        private Clock $clock,
     ) {
     }
 
@@ -174,7 +177,16 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                 $this->students->lock($student);
                 $authorize();
                 $budget ??= new HistoryReadBudget();
+                $evaluatedOn = $this->clock->now()->format("Y-m-d");
                 $all = $this->adjustments->curriculumContext($student, $assignment, $budget);
+                foreach ($all["components"] as &$component) {
+                    $component["effective"] = GroupWorkEligibility::atEvaluation(
+                        $component["requirements"],
+                        $component["effective"],
+                        $evaluatedOn,
+                    );
+                }
+                unset($component);
                 $degree = $all["degree"];
                 if ($degree["requirements"] === null) {
                     return ["status" => "needs_selection"];
@@ -265,7 +277,7 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                     $basis = [
                         "student_id" => $student->value,
                         "pursuit_id" => $assignment->value,
-                        "as_of_date" => "",
+                        "as_of_date" => $evaluatedOn,
                         "sharing" => $sharing->value,
                         "context_hash" => $all["context_hash"],
                         "adjustment_version" => $all["adjustment_version"],
@@ -310,6 +322,7 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                 $this->students->lock($student);
                 $authorize();
                 $budget ??= new HistoryReadBudget();
+                $evaluatedOn = $this->clock->now()->format("Y-m-d");
                 $context = $resolve($budget);
                 $requirements = $context["requirements"];
                 if ($requirements === null) {
@@ -323,7 +336,12 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                 if ($inputs->status === AcademicInputStatus::Inconsistent) {
                     throw new CorruptHistoryException();
                 }
-                $result = $this->evaluator->evaluate($inputs, $requirements, $context["effective_minimums"], $budget);
+                $effective = GroupWorkEligibility::atEvaluation(
+                    $requirements,
+                    $context["effective_minimums"],
+                    $evaluatedOn,
+                );
+                $result = $this->evaluator->evaluate($inputs, $requirements, $effective, $budget);
                 $authorize();
                 return $result + [
                     "context" => ($context["context_fields"] ?? []) + [

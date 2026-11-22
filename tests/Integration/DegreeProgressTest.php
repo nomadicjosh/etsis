@@ -630,4 +630,33 @@ final class DegreeProgressTest extends TestCase
         self::assertSame($events, array_slice($s->sql->rows("sis_history_events"), 0, count($events)));
         self::assertSame($finance, $s->financialEvents());
     }
+    public function testReviewDateIsSharedByIndividualStaffAndOwnerProgress(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $r = $f->f;
+        $d = \Domain\DegreeAudit\ValueObject\CourseGroupDefinitionV2::blank(
+            "Fictional expiring group",
+        )->definition;
+        $d["courses"] = $r->groupDefinition["courses"];
+        $d["rules"] = $r->groupDefinition["rules"];
+        $d["min_credits_milli"] = 12000;
+        $d["work_eligibility"]["max_age_months_at_evaluation"] = 12;
+        $r->groups->save(
+            $r->group,
+            0,
+            new \Domain\DegreeAudit\ValueObject\CourseGroupDefinitionV2($d),
+        );
+        $r->definition["groups"][0]["version_id"] = $r->publishGroup()->value;
+        $revision = $r->degrees->view($r->degree)["revision"];
+        $r->degrees->save($r->degree, $revision, new AuditRequirementsV3($r->definition));
+        $f->version = new EntityId($r->publishDegree()["operation_id"]);
+        $f->assign();
+        $service = $this->service($f);
+        $staff = $service->preview($f->student, $f->assignment);
+        $owner = $service->student($f->student, $f->assignment);
+        $expected = ["evaluated_on" => "2026-08-10", "earliest_completion_on" => "2025-08-10"];
+        self::assertSame($expected, $staff["allocation"]["groups"][0]["work_evaluation_context"]);
+        self::assertSame($expected, $owner["allocation"]["groups"][0]["work_evaluation_context"]);
+    }
+
 }

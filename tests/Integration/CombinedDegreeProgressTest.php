@@ -26,6 +26,7 @@ final class CombinedDegreeProgressTest extends TestCase
         bool $linked = false,
         ?int $recencyMonths = null,
         bool $transferSource = false,
+        ?int $evaluationMonths = null,
     ): StudentSpecializationRequirementsFixture
     {
         $r = new ReusableGroupFixture();
@@ -44,6 +45,9 @@ final class CombinedDegreeProgressTest extends TestCase
         $d['rules'] = [['id' => EntityId::generate()->value,'mode' => 'choose','minimum_courses' => 1,'course_ids' => array_column($d['courses'], 'course_id')]];
         if ($recencyMonths !== null) {
             $d['work_eligibility']['max_age_months_at_pursuit_start'] = $recencyMonths;
+        }
+        if ($evaluationMonths !== null) {
+            $d['work_eligibility']['max_age_months_at_evaluation'] = $evaluationMonths;
         }
         if ($transferSource) {
             $source = ['id' => EntityId::generate()->value, 'code' => 'ALLOW', 'name' => 'Fictional permitted college'];
@@ -1429,6 +1433,85 @@ final class CombinedDegreeProgressTest extends TestCase
         self::assertTrue($this->service($f)->verifySnapshot($snapshot));
         self::assertSame($receipt, $records->confirm(...$args));
         self::assertSame($original, $records->show($f->student, $f->assignment, $args[2], "staff"));
+    }
+
+    public function testReviewDateExpirationFreezesOneDateForAllComponentsAndRecordedReplay(): void
+    {
+        $f = $this->fixture("multiple_components", evaluationMonths: 12);
+        $s = $f->r->sis;
+        [$section, $enrollment] = $this->work($f, 0);
+        $dates = $s->academicDates();
+        $proof = $dates->review(
+            $f->student,
+            $section->id,
+            $enrollment,
+            "2025-08-10",
+            1,
+            "Fictional actual completion.",
+        );
+        $dates->commit($f->student, $section->id, $proof["review_token"]);
+        $before = $this->snapshot($f);
+        $current = $this->preview($f);
+        self::assertSame("feasible", $current["outcome"]);
+        foreach ($current["components"] as $component) {
+            self::assertSame(
+                ["evaluated_on" => "2026-08-10", "earliest_completion_on" => "2025-08-10"],
+                $component["progress"]["allocation"]["groups"][0]["work_evaluation_context"],
+            );
+        }
+        self::assertSame($before, $this->snapshot($f));
+        $records = $this->recordedService($f);
+        $review = $records->review(
+            $f->student,
+            $f->assignment,
+            "Fictional dated expiration review.",
+        );
+        $args = [
+            $f->student,
+            $f->assignment,
+            new EntityId($review["operation_id"]),
+            $review["revision"],
+            $review["reason"],
+            $review["review_token"],
+        ];
+        $receipt = $records->confirm(...$args);
+        $original = $records->show($f->student, $f->assignment, $args[2], "staff");
+        $events = iterator_to_array(
+            \EventStoreFixture::framework($s->connection->queryBuilder())->getAggregateHistoryFor(
+                new \Domain\DegreeAudit\ValueObject\DegreeProgressRecordId($review["operation_id"]),
+            ),
+        );
+        $snapshot = new \Domain\DegreeAudit\ValueObject\DegreeProgressSnapshot(
+            $events[0]->payload()["snapshot"],
+        );
+        $s->clock->time = $s->clock->time->modify("+1 day");
+        $fresh = $this->preview($f);
+        self::assertSame("infeasible", $fresh["outcome"]);
+        self::assertSame(
+            "2025-08-11",
+            $fresh["components"][0]["progress"]["allocation"]["groups"][0][
+                "work_evaluation_context"
+            ]["earliest_completion_on"],
+        );
+        self::assertSame(
+            array_column(
+                $current["components"][0]["progress"]["minimums"],
+                "actual_minimum_milli",
+                "key",
+            ),
+            array_column(
+                $fresh["components"][0]["progress"]["minimums"],
+                "actual_minimum_milli",
+                "key",
+            ),
+        );
+        self::assertTrue($this->service($f)->verifySnapshot($snapshot));
+        self::assertSame($receipt, $records->confirm(...$args));
+        self::assertSame($original, $records->show($f->student, $f->assignment, $args[2], "staff"));
+        $bad = $snapshot->data;
+        $bad["components"][0]["effective"]["evaluated_on"] = "2026-08-11";
+        $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
+        new \Domain\DegreeAudit\ValueObject\DegreeProgressSnapshot($bad);
     }
 
 }
