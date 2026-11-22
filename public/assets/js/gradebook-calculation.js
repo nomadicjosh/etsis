@@ -3,7 +3,7 @@ window.createGradebookCalculation = function (ui) {
     "use strict";
     const { node } = ui;
     const percent = (value) => `${(Number(value) / 100).toFixed(2)}%`;
-    function policyText(policy) {
+    function policyText(policy, context = null) {
         if (!policy) return "Final-grade comparison policy was not recorded with this decision.";
         const labels = {
             half_up: "nearest, ties up",
@@ -11,7 +11,8 @@ window.createGradebookCalculation = function (ui) {
             floor: "round down",
             ceiling: "round up",
         };
-        return `Final-grade comparison: ${policy.cap_at_hundred ? "cap at 100% first; " : "no 100% cap; "}${policy.rounding === "none" ? "exact percentage, without rounding" : `${labels[policy.rounding]} to ${policy.decimal_places} decimal places`}. Running averages retain the original percentage. Official grades require separate confirmation.`;
+        const origin = !context ? "" : context.scope === "section" ? " Section override." : context.version ? ` Institutional policy version ${context.version}.` : " Built-in institutional default.";
+        return `Final-grade comparison: ${policy.cap_at_hundred ? "cap at 100% first; " : "no 100% cap; "}${policy.rounding === "none" ? "exact percentage, without rounding" : `${labels[policy.rounding]} to ${policy.decimal_places} decimal places`}. Running averages retain the original percentage. Official grades require separate confirmation.${origin}`;
     }
     function comparisonText(summary) {
         return summary.grading_display == null
@@ -20,6 +21,10 @@ window.createGradebookCalculation = function (ui) {
     }
     function policyEditor(setup) {
         const policy = setup.grade_policy;
+        const scope = setup.institutional_grade_policy ? node("select", {id:"gradebook-policy-scope", class:"form-select"},
+            node("option",{value:"institution"},"Use institutional policy"),
+            node("option",{value:"section"},"Use a section override")) : null;
+        if (scope) scope.value = setup.grade_policy_scope;
         const rounding = node(
             "select",
             { id: "gradebook-rounding", class: "form-select" },
@@ -54,6 +59,8 @@ window.createGradebookCalculation = function (ui) {
             "fieldset",
             { class: "my-3", "aria-describedby": "gradebook-policy-help" },
             node("legend", { class: "h6" }, "Final-grade comparison policy"),
+            scope ? node("label", {for:scope.id, class:"form-label"}, "Comparison policy source") : null,
+            scope,
             node("label", { for: rounding.id, class: "form-label" }, "Rounding rule"),
             rounding,
             node("label", { for: places.id, class: "form-label mt-2" }, "Decimal places"),
@@ -79,6 +86,7 @@ window.createGradebookCalculation = function (ui) {
         );
         element.disabled = !setup.can_manage_grade_policy;
         function serialize() {
+            if (scope?.value === "institution") return {...setup.institutional_grade_policy.rules};
             return {
                 rounding: rounding.value,
                 decimal_places: rounding.value === "none" ? null : Number(places.value),
@@ -86,12 +94,17 @@ window.createGradebookCalculation = function (ui) {
             };
         }
         function update() {
-            places.disabled = rounding.value === "none";
-            help.textContent = policyText(serialize());
+            const inherited = scope?.value === "institution";
+            rounding.disabled = inherited;
+            cap.disabled = inherited;
+            places.disabled = inherited || rounding.value === "none";
+            const context = scope ? {scope:scope.value,version:inherited ? setup.institutional_grade_policy.version : null} : null;
+            help.textContent = policyText(serialize(), context);
         }
         [rounding, places, cap].forEach((control) => control.addEventListener("change", update));
+        scope?.addEventListener("change", update);
         update();
-        return { element, serialize };
+        return { element, serialize, scope: () => scope?.value ?? "section" };
     }
     function scoreLabel(score) {
         if (score.earned_hundredths == null) return "Not graded";
@@ -298,7 +311,7 @@ window.createGradebookCalculation = function (ui) {
                 { class: "small mb-0" },
                 "Excused and ungraded work are omitted from this running average. Excused work is also omitted from grading coverage; remaining weights are normalized. Recorded zero scores count unless excused or dropped by a configured rule. This is coursework feedback; your official final grade is recorded separately.",
             ),
-            node("p", { class: "small mt-2 mb-0" }, policyText(summary.grade_policy)),
+            node("p", { class: "small mt-2 mb-0" }, policyText(summary.grade_policy, summary.grade_policy_context)),
         );
     }
     function editor(assignments, initial, changed) {
@@ -585,4 +598,78 @@ window.createGradebookCalculation = function (ui) {
         return { element, serialize, setEnabled, valid };
     }
     return { panel, assignmentLabel, scoreLabel, editor, policyEditor, policyText, comparisonText };
+};
+
+
+/* Explicit institutional publication; grade decisions retain their own applied policy evidence. */
+window.createGradeComparisonPolicy = function (ui) {
+    "use strict";
+    const {node,request,task,openDrawer}=ui;
+    let generation=0;
+    const button=(label,run)=>node("button",{type:"button",class:"btn btn-outline-primary",onclick:e=>task(run,e.currentTarget)},label);
+    async function open() {
+        const current=++generation;
+        const body=openDrawer("Institutional grade comparison policy","REVIEWED POLICY PUBLICATION");
+        const data=await request("/sis/grade-comparison-policy/");
+        if (!body.isConnected||current!==generation) return;
+        let rules=structuredClone(data.rules),reason="",draftVersion=data.version,currentRules=data.rules;
+        const guidance=()=>node("p",{},"This policy applies to sections using institutional inheritance. Explicit section overrides and posted grades keep their recorded rules. Publishing does not post grades or change running averages.");
+        function failure(error,target) {
+            if(error.status===403) {
+                ++generation;rules=null;reason="";
+                body.replaceChildren(node("p",{role:"alert"},"Policy access changed. Reopen the task after checking your access."));
+                return;
+            }
+            target.textContent=error.fields?.map(f=>f.message).join(" ")||error.message;
+        }
+        function edit() {
+            ++generation;
+            let pending=false;
+            const editor=window.createGradebookCalculation({node}).policyEditor({grade_policy:rules,can_manage_grade_policy:true});
+            const input=node("textarea",{id:"grade-comparison-reason",class:"form-control",rows:4,required:true,maxlength:1000});
+            input.value=reason;
+            const alert=node("p",{role:"alert",class:"text-danger"});
+            const submit=node("button",{type:"submit",class:"btn btn-primary"},"Review institutional policy");
+            const form=node("form",{},editor.element,node("label",{for:input.id,class:"form-label"},"Reason for policy publication"),input,alert,submit);
+            const changed=()=>{rules=editor.serialize();reason=input.value;if(pending){++generation;pending=false;}};
+            form.addEventListener("input",changed);form.addEventListener("change",changed);
+            form.addEventListener("submit",e=>{
+                e.preventDefault();if(!form.reportValidity())return;
+                rules=editor.serialize();reason=input.value;
+                const version=++generation;pending=true;
+                task(async()=>{
+                    try {
+                        const review=await request("/sis/grade-comparison-policy/review/","POST",{rules,version:draftVersion,reason});
+                        if(!body.isConnected||generation!==version)return;
+                        pending=false;
+                        const status=node("p",{role:"alert",class:"text-danger"});
+                        body.replaceChildren(node("h3",{},"Review institutional comparison policy"),guidance(),
+                            node("p",{},`Current publication: ${draftVersion||"Built-in default"}. ${window.createGradebookCalculation({node}).policyText(currentRules)}`),
+                            node("p",{},`Proposed: ${window.createGradebookCalculation({node}).policyText(review.rules)}`),node("p",{},review.reason),
+                            node("p",{},"The review expires in twenty minutes. Retry the same confirmation after an interrupted response to recover its original result."),status,
+                            button("Publish comparison policy",async()=>{
+                                try {
+                                    const result=await request("/sis/grade-comparison-policy/publish/","POST",review);
+                                    if(!body.isConnected||generation!==version)return;
+                                    ++generation;rules=null;reason="";
+                                    body.replaceChildren(node("p",{role:"status",class:"alert alert-success"},`Institutional comparison policy version ${result.version} published.`),button("Open current policy",open));
+                                }catch(error){if(body.isConnected&&generation===version)failure(error,status);}
+                            }),button("Revise policy",edit));
+                    }catch(error){pending=false;if(body.isConnected&&generation===version)failure(error,alert);}
+                },submit);
+            });
+            body.replaceChildren(node("h3",{},`Institutional comparison policy · ${draftVersion?`Version ${draftVersion}`:"Built-in default"}`),guidance(),form,
+                button("Refresh policy source",async()=>{
+                    rules=editor.serialize();reason=input.value;
+                    const revision=++generation;
+                    try {
+                        const fresh=await request("/sis/grade-comparison-policy/");
+                        if(!body.isConnected||generation!==revision)return;
+                        currentRules=fresh.rules;draftVersion=fresh.version;edit();
+                    }catch(error){if(body.isConnected&&generation===revision)failure(error,alert);}
+                }));
+        }
+        edit();
+    }
+    return {open};
 };

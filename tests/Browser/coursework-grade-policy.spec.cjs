@@ -2,7 +2,7 @@ const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const id = (n) => String(n).padStart(26, "0");
 const exact = { rounding: "none", decimal_places: null, cap_at_hundred: false };
-async function setup(page, canManage) {
+async function setup(page, canManage, inherit = false) {
     const section = id(1),
         calls = [],
         errors = [];
@@ -52,7 +52,8 @@ async function setup(page, canManage) {
                 categories: [],
                 assignments: [],
                 revision: "a".repeat(64),
-                grade_policy: exact,
+                grade_policy: inherit ? {rounding:"half_up",decimal_places:0,cap_at_hundred:true} : exact,
+                ...(inherit ? {grade_policy_scope:"institution",institutional_grade_policy:{version:1,rules:{rounding:"half_up",decimal_places:0,cap_at_hundred:true}}} : {}),
                 can_manage_grade_policy: canManage,
             };
         }
@@ -112,4 +113,28 @@ test("faculty without policy duty can save setup with the existing rules retaine
     await expect.poll(() => fixture.calls.length).toBe(1);
     expect(fixture.calls[0].data.grade_policy).toEqual(exact);
     expect(fixture.errors).toEqual([]);
+});
+
+
+test("inherited rules stay disabled until an authorized section override is selected", async ({page})=>{
+    const f=await setup(page,true,true);
+    await expect(page.getByLabel("Comparison policy source",{exact:true})).toHaveValue("institution");
+    await expect(page.getByLabel("Rounding rule",{exact:true})).toBeDisabled();
+    await expect(page.getByRole("group",{name:"Final-grade comparison policy",exact:true})).toContainText("Institutional policy version 1");
+    await page.getByLabel("Comparison policy source",{exact:true}).selectOption("section");
+    await page.getByLabel("Rounding rule",{exact:true}).selectOption("floor");
+    await page.getByLabel("Decimal places",{exact:true}).selectOption("2");
+    await page.getByLabel("Comparison policy source",{exact:true}).selectOption("institution");
+    await expect(page.getByLabel("Rounding rule",{exact:true})).toBeDisabled();
+    await page.getByLabel("Comparison policy source",{exact:true}).selectOption("section");
+    await expect(page.getByLabel("Rounding rule",{exact:true})).toHaveValue("floor");
+    await page.setViewportSize({width:320,height:900});
+    const scan=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();
+    expect(scan.violations.map(v=>v.id)).toEqual([]);
+    await page.getByRole("button",{name:"Save setup",exact:true}).click();
+    expect(f.calls[0].data.grade_policy_scope).toBe("section");
+    expect(f.calls[0].data.grade_policy).toEqual({rounding:"floor",decimal_places:2,cap_at_hundred:true});
+    await expect(page.getByLabel("Comparison policy source",{exact:true})).toHaveValue("section");
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
 });

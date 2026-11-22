@@ -28,6 +28,7 @@ final class EventClassMap
             \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class,
             \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class,
             \Domain\Registration\Waitlist\WaitlistPlaceWasChanged::class,
+            \Domain\Gradebook\Event\GradeComparisonPolicyWasPublished::class,
             \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class,
             \Domain\HumanResources\Event\TimeEntryWasDecided::class,
             \Domain\Gradebook\Event\ClassGradesWereCertified::class,

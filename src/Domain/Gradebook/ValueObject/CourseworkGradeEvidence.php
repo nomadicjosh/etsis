@@ -37,6 +37,16 @@ final readonly class CourseworkGradeEvidence implements JsonSerializable
         ) {
             array_push($keys, "grade_policy", "grading_percent");
         }
+        if (array_key_exists('grade_policy_reference', $facts)) {
+            $keys[] = 'grade_policy_reference';
+            if (
+                !isset($facts['grade_policy'], $facts['grading_percent']) ||
+                !is_array($facts['grade_policy_reference'])
+            ) {
+                self::invalid();
+            }
+            new GradeComparisonPolicyReference($facts['grade_policy_reference']);
+        }
         if (
             count($facts) !== count($keys) ||
             array_diff(array_keys($facts), $keys) !== [] ||
@@ -185,6 +195,10 @@ final readonly class CourseworkGradeEvidence implements JsonSerializable
                     ),
                 ]
                 : [],
+            ...isset($this->facts['grade_policy_reference']) ? [
+                'grade_policy_context' =>
+                new GradeComparisonPolicyReference($this->facts['grade_policy_reference'])->describe(),
+            ] : [],
             "mode" => $this->facts["mode"],
             "assignment_count" => count($this->facts["scores"]),
             "revision" => $this->revision(),

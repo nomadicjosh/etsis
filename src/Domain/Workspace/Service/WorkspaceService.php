@@ -88,6 +88,7 @@ final readonly class WorkspaceService
         "sis:gradebook:amend",
         "sis:academic-work:scope",
         "sis:scheduling:manage",
+        "sis:gradebook:calculation-policy:publish",
         "sis:hr:time-policy",
         "sis:hr:time-exception",
         "sis:hr:manage",

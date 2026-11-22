@@ -61,3 +61,61 @@ $sis->access->grants = ["sis:gradebook:calculation-policy"];
 if ($teachingPost($path, $body)->getStatusCode() !== 403) {
     throw new RuntimeException("Policy duty exposed an unrelated faculty section.");
 }
+
+$sis->access->staff = true;
+$policyPath = "/sis/grade-comparison-policy/";
+$readComparison = static function (int $status = 200) use ($app, $get, $policyPath): array {
+    $response = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri($policyPath)));
+    if (
+        $response->getStatusCode() !== $status ||
+        !str_contains($response->getHeaderLine("Cache-Control"), "no-store") ||
+        $response->hasHeader("phpdebugbar-id")
+    ) {
+        throw new RuntimeException(
+            "Institutional policy violated its status/private-response contract.",
+        );
+    }
+    return json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+};
+$sis->access->staff = false;
+foreach ([["sis:gradebook:manage"], ["sis:gradebook:calculation-policy:publish"]] as $grants) {
+    $sis->access->grants = $grants;
+    $readComparison(403);
+}
+$sis->access->grants = ["sis:gradebook:manage", "sis:gradebook:calculation-policy:publish"];
+$original = $readComparison();
+$reviewResponse = $teachingPost($policyPath . "review/", [
+    "rules" => $policy,
+    "version" => $original["version"],
+    "reason" => "Fictional institutional comparison approval.",
+]);
+$review = json_decode((string) $reviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($reviewResponse->getStatusCode() !== 200) {
+    throw new RuntimeException("The institutional comparison review route failed.");
+}
+$published = $teachingPost($policyPath . "publish/", $review);
+$receipt = json_decode((string) $published->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($published->getStatusCode() !== 200 || $readComparison()["rules"] != $policy) {
+    throw new RuntimeException("The institutional comparison publication route failed.");
+}
+$sis->access->staff = true;
+$newSection = $sis->section(faculty: $sis->access->actor);
+$newPath = "/sis/sections/" . $newSection->id->value . "/gradebook/calculation/";
+$inherited = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri($newPath)));
+$inherited = json_decode((string) $inherited->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $inherited["grade_policy_scope"] !== "institution" ||
+    $inherited["grade_policy"] != $policy ||
+    $inherited["grade_policy_reference"]["publication_id"] !== $receipt["publication_id"]
+) {
+    throw new RuntimeException("Real provider section inheritance lost its protected publication.");
+}
+$sis->clock->time = $sis->clock->time->modify("+21 minutes");
+$before = $sis->sql->rows("sis_history_events");
+$again = $teachingPost($policyPath . "publish/", $review);
+if (
+    json_decode((string) $again->getBody(), true, flags: JSON_THROW_ON_ERROR) !== $receipt ||
+    $before !== $sis->sql->rows("sis_history_events")
+) {
+    throw new RuntimeException("Institutional publication retry changed its original facts.");
+}

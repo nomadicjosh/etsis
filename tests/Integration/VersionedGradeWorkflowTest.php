@@ -54,6 +54,7 @@ final class VersionedGradeWorkflowTest extends TestCase
             $f->transactions,
             $f->audit,
             $f->academicCredits(),
+            $f->comparisonPolicies(),
         );
     }
     public function testPublicationCreatesImmutableRowsForIdenticalCodesAcrossProgramsAndVersions(): void

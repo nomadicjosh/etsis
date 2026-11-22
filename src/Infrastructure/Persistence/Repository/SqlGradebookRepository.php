@@ -28,14 +28,12 @@ final readonly class SqlGradebookRepository implements GradebookRepository
                 "weights" => [],
                 "revision" => 0,
                 "categories" => [],
-                "grade_policy" => CourseworkGradePolicy::DEFAULT,
+                "grade_policy" => null,
             ];
         }
         return [
-            "grade_policy" => new CourseworkGradePolicy(
-                $row["grade_policy_json"] === null
-                    ? CourseworkGradePolicy::DEFAULT
-                    : json_decode($row["grade_policy_json"], true, 4, JSON_THROW_ON_ERROR),
+            "grade_policy" => $row['grade_policy_json'] === null ? null : new CourseworkGradePolicy(
+                json_decode($row['grade_policy_json'], true, 4, JSON_THROW_ON_ERROR),
             )->facts,
             "mode" => $row["mode"],
             "weights" => json_decode($row["weights"], true, 4, JSON_THROW_ON_ERROR),
@@ -53,10 +51,10 @@ final readonly class SqlGradebookRepository implements GradebookRepository
         array $weights,
         int $revision,
         array $categories,
-        array $gradePolicy,
+        ?array $gradePolicy,
     ): void {
         $data = [
-            "grade_policy_json" => json_encode($gradePolicy, JSON_THROW_ON_ERROR),
+            "grade_policy_json" => $gradePolicy === null ? null : json_encode($gradePolicy, JSON_THROW_ON_ERROR),
             "mode" => $mode,
             "weights" => json_encode($weights, JSON_THROW_ON_ERROR),
             "revision" => $revision + 1,

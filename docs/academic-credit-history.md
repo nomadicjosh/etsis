@@ -453,7 +453,7 @@ Use [registered-credit correction](registered-credit-corrections.md) from the st
 
 Open **Teaching → section → Gradebook setup → Final-grade comparison policy**. Institution-authorized staff can choose the rule for that section. The protected **`sis:gradebook:calculation-policy`** duty is separate from assignment/score management, grade certification and the grade-correction approval policy. It also requires access to the section as assigned faculty or gradebook management. Administrators must grant this duty explicitly; the migration grants it to no role or user. Faculty without it can read the current rules and save assignment/category weights while preserving those rules.
 
-The default is **Exact percentage (no rounding)**, with the cap unchecked. A rounding rule requires **zero to three decimal places**:
+The built-in institutional fallback is **Exact percentage (no rounding)**, with the cap unchecked. Sections without an explicit override inherit the institution’s current reviewed policy. Existing explicitly saved section rules stay fixed until an authorized user restores inheritance. See [institutional publication and inheritance](#institutional-comparison-policy-and-section-inheritance) below. A rounding rule requires **zero to three decimal places**:
 
 | Rule | What happens |
 | --- | --- |
@@ -470,3 +470,21 @@ Save setup before requesting a fresh suggestion. Faculty and student coursework 
 Choosing **Use suggested grade**, reviewing and confirming retains the exact raw result, exact comparison result and applicable policy with the original protected grade evidence. Later setup changes invalidate pending reviews but preserve accepted decisions and their original retry receipts. Curated grade history displays the retained comparison and policy without exposing individual score inputs. Earlier evidence lacking these fields remains exactly as recorded and uses its original exact comparison; history identifies its policy as not recorded rather than applying today's configuration. Manually selected grades have no claimed coursework calculation.
 
 Working policy setup is audited CRUD. Accepted grade evidence uses the existing academic-credit stream and `sis_history_events`; no parallel policy journal or historical backfill is introduced. Existing calculation, evidence-size and replay limits still apply. Broader extra-credit allocation rules, automatic posting and institution-wide policy publication/inheritance remain future work.
+
+
+## Institutional comparison policy and section inheritance
+
+Open **Students → Comparison policy** to publish institution-wide coursework rounding and the final-grade percentage cap. The independent **`sis:gradebook:calculation-policy:publish`** duty and **`sis:gradebook:manage`** are both required. Apply **`20261122000000_AddSisGradeComparisonPolicy`** before enabling this workflow. Migration grants no role or user access and changes no existing section setup, score, grade or financial fact.
+
+Choose the proposed rounding rule, precision and cap, enter a reason and select **Review institutional policy**. Compare the current and proposed rules, then **Publish comparison policy**. **Revise policy** keeps the draft. If another publication makes the source stale, **Refresh policy source** preserves the desired rules and reason while loading the current publication. Reviews expire after twenty minutes. An interrupted accepted confirmation can be retried with its original proof, including after expiry or a later publication; it returns its original result. Publication itself posts no grade and does not change running averages.
+
+In **Teaching → section → Gradebook setup**, **Comparison policy source** offers:
+
+- **Use institutional policy**: inherit the current published rules, or the exact/no-cap fallback when none has been published. The rule controls are read-only and identify the applied institutional version. Ordinary faculty can save assignment/category weights without creating a section override.
+- **Use a section override**: authorized users select explicit section rules. This requires the existing **`sis:gradebook:calculation-policy`** duty, including when the chosen values happen to equal the inherited rules. Later institutional publications do not change this override. Switching back to inheritance also requires that duty.
+
+For example, an institution may publish nearest/ties-up rounding at zero decimal places. A section that inherits it compares 92.5% as 93%; another section can retain an explicitly authorized exact-percentage override. Saving weights in the first section does not pin those institutional rules. A new publication changes later inherited suggestions and invalidates unaccepted setup/suggested-grade reviews. It never silently changes an accepted official grade.
+
+A final-grade decision based on a coursework suggestion retains the applied point-comparison rules, raw and adjusted percentages, and the exact institutional publication reference or explicit section-override context with its existing calculation inputs. Staff history and private student feedback explain the source/version; ordinary summaries omit the internal publication identity. Earlier decisions without source evidence remain explicitly unlabelled rather than being assigned today’s policy. Retained evidence reproduces without consulting the latest institutional rules.
+
+The existing protected journal is authoritative. The singleton `sis_grade_comparison_policy_state` row is a reconstructible concurrency/projection counter, not another event store. Current reads compare its version with bounded protected history; inconsistencies or replay limits stop the calculation without inventing an observed policy. Publication, counter, required audit and operation receipt commit together, with final authority/source/expiry checks. Existing section-policy JSON values remain unchanged; null continues to mean no explicit section override. No historical backfill, automatic grade posting, report, notification or score conversion is added. Live multi-engine, long-history and institutional release qualification remain separate acceptance work.

@@ -566,6 +566,7 @@ final class AcademicCreditHistoryTest extends TestCase
             $f->transactions,
             $f->audit,
             $f->academicCredits(),
+            $f->comparisonPolicies(),
         );
         $f->access->staff = false;
         self::assertCount(1, $book->gradeHistory($student, $section)["items"]);

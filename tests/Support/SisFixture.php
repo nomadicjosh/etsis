@@ -565,6 +565,21 @@ final class SisFixture
         );
     }
 
+    public function comparisonPolicies(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Gradebook\Service\GradeComparisonPolicyService {
+        return new \Domain\Gradebook\Service\GradeComparisonPolicyService(
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->clock,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+            new \Infrastructure\Persistence\Repository\SqlGradeComparisonPolicyState($this->sql),
+        );
+    }
+
     public function gradebook(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
     ): \Domain\Gradebook\Service\GradebookService {
@@ -576,6 +591,7 @@ final class SisFixture
             $this->transactions,
             $audit ?? $this->audit,
             $this->academicCredits(),
+            $this->comparisonPolicies(),
         );
     }
 
@@ -606,6 +622,7 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlGradeChangeRepository($this->sql, $this->dropCipher),
             new \Domain\Gradebook\Service\CourseworkGradeService(
                 new \Infrastructure\Persistence\Repository\SqlGradebookRepository($this->sql),
+                $this->comparisonPolicies(),
             ),
         );
     }

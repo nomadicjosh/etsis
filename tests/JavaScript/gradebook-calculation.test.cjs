@@ -113,6 +113,7 @@ test("weighted editor validates totals and serializes hundredth-percent weights"
         mode: "weighted",
         weights: { one: 4025, two: 5975 },
         grade_policy: { rounding: "none", decimal_places: null, cap_at_hundred: false },
+        grade_policy_scope: "section",
         revision: "revision",
         categories: [],
     });
@@ -151,6 +152,7 @@ test("returning to points removes stale weights from the submitted setup", async
         mode: "points",
         weights: {},
         grade_policy: { rounding: "none", decimal_places: null, cap_at_hundred: false },
+        grade_policy_scope: "section",
         revision: "revision",
         categories: [],
     });
@@ -331,6 +333,7 @@ test("the full setup form saves categories and assignment membership through the
         mode: "category",
         weights: {},
         grade_policy: { rounding: "none", decimal_places: null, cap_at_hundred: false },
+        grade_policy_scope: "section",
         revision: "revision",
         categories: [
             {
@@ -668,4 +671,19 @@ test("shared feedback distinguishes raw averages from final-grade policy and kee
     });
     assert.equal(editor.element.disabled, true);
     assert.deepEqual(JSON.parse(JSON.stringify(editor.serialize())), policy);
+});
+
+
+test("institutional inheritance preserves override drafts and explains the applied policy source",()=>{
+    const p=presenter(),rules={rounding:"half_up",decimal_places:0,cap_at_hundred:true};
+    const e=p.policyEditor({grade_policy:rules,can_manage_grade_policy:true,grade_policy_scope:"institution",institutional_grade_policy:{rules,version:2}});
+    const find=id=>walk(e.element).find(x=>x.id===id),scope=find("gradebook-policy-scope"),rounding=find("gradebook-rounding");
+    assert.equal(rounding.disabled,true);
+    assert.deepEqual(JSON.parse(JSON.stringify(e.serialize())),rules);
+    scope.value="section";scope.events.change();rounding.value="floor";rounding.events.change();
+    assert.equal(rounding.disabled,false);assert.equal(e.scope(),"section");
+    scope.value="institution";scope.events.change();assert.equal(e.serialize().rounding,"half_up");
+    scope.value="section";scope.events.change();assert.equal(e.serialize().rounding,"floor");
+    assert.match(p.policyText(rules,{scope:"institution",version:2}),/Institutional policy version 2/);
+    assert.match(p.policyText(rules,{scope:"section",version:null}),/Section override/);
 });

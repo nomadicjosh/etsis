@@ -10,7 +10,7 @@ use Domain\Shared\ValueObject\EntityId;
 
 interface GradebookRepository
 {
-    /** @return array{grade_policy: array, mode: string, weights: array<string, int>, revision: int, categories: list<array{title: string, weight_hundredths: int, assignments: list<string>}>} */
+    /** @return array{grade_policy: array|null, mode: string, weights: array<string, int>, revision: int, categories: list<array{title: string, weight_hundredths: int, assignments: list<string>}>} */
     public function calculation(EntityId $section): array;
     /** @param array<string, int> $weights
      * @param list<array{title: string, weight_hundredths: int, assignments: list<string>}> $categories
@@ -21,7 +21,7 @@ interface GradebookRepository
         array $weights,
         int $revision,
         array $categories,
-        array $gradePolicy,
+        ?array $gradePolicy,
     ): void;
     /** @return list<array<string, mixed>> */
     public function assignments(EntityId $section, int $limit): array;

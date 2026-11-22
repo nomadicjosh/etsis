@@ -115,6 +115,7 @@ final class CampusFixture
             $f->transactions,
             $f->audit,
             $f->academicCredits(),
+            $f->comparisonPolicies(),
         );
         $transfers = new TransferService(
             new SqlTransferRepository($f->sql, $f->gradeCatalog()),

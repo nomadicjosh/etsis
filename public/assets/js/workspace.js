@@ -560,6 +560,8 @@
             tool('Load policy', () => enrollmentLoad.policy(), 'Configure enrollment load policies', 'sliders'));
         if (section === 'students' && can('sis:standing:configure')) tools.append(
             tool('Standing definitions', () => standingStudio.definitions(), 'Configure academic standing definitions', 'list-check'));
+        if (section === 'students' && can('sis:gradebook:manage') && can('sis:gradebook:calculation-policy:publish')) tools.append(
+            tool('Comparison policy', () => window.createGradeComparisonPolicy({node,request,task,openDrawer}).open(), 'Publish institutional grade comparison policy', 'sliders'));
         if (section === 'students' && can('sis:gradebook:policy')) tools.append(
             tool('Grade policy', () => teachingStudio.gradeChangePolicy(), 'Configure grade correction policy', 'sliders'));
         if (section === 'applications') tools.append(tool('Follow-up queue', () => peopleStudio.caseQueue(),

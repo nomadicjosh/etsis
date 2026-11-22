@@ -1238,6 +1238,18 @@ return static function (Psr7Router $router): void {
         ->name('sis.section.contact-hours');
     $router->post('/sis/sections/{id}/contact-hours/', [\Application\Http\Controller\SisSectionContactController::class, 'save'])
         ->name('sis.section.contact-hours.save');
+    $router->get('/sis/grade-comparison-policy/', [
+        \Application\Http\Controller\SisGradeComparisonPolicyController::class, 'view',
+    ])
+        ->name('sis.grade-comparison-policy');
+    $router->post('/sis/grade-comparison-policy/review/', [
+        \Application\Http\Controller\SisGradeComparisonPolicyController::class, 'review',
+    ])
+        ->name('sis.grade-comparison-policy.review');
+    $router->post('/sis/grade-comparison-policy/publish/', [
+        \Application\Http\Controller\SisGradeComparisonPolicyController::class, 'publish',
+    ])
+        ->name('sis.grade-comparison-policy.publish');
     $router->get('/sis/time-policy/', [\Application\Http\Controller\SisTimePolicyController::class, 'view'])
         ->name('sis.time-policy');
     $router->post('/sis/time-policy/review/', [\Application\Http\Controller\SisTimePolicyController::class, 'review'])

@@ -193,6 +193,7 @@ final class HiatusWorkflowTest extends TestCase
             $f->transactions,
             $f->audit,
             $f->academicCredits(),
+            $f->comparisonPolicies(),
         )->finalGrade($student->id, $section->id, $grade->id, 0);
         $before = $f->sql->rows("sis_academic_credits");
         $f->access->staff = false;

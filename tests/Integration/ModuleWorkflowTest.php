@@ -40,6 +40,7 @@ final class ModuleWorkflowTest extends TestCase
             $f->transactions,
             $f->audit,
             $f->academicCredits(),
+            $f->comparisonPolicies(),
         );
     }
 

@@ -44,6 +44,41 @@ final readonly class CourseworkGradePolicy
         }
     }
 
+    public static function hash(array $data): string
+    {
+        $canonical = static function (array $value) use (&$canonical): array {
+            if (!array_is_list($value)) {
+                ksort($value);
+            }
+            return array_map(
+                static fn(mixed $v): mixed => is_array($v) ? $canonical($v) : $v,
+                $value,
+            );
+        };
+        return hash(
+            "sha256",
+            json_encode(
+                $canonical($data),
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE,
+            ),
+        );
+    }
+    public static function reason(string $reason): string
+    {
+        $reason = trim($reason);
+        if (
+            $reason === '' || !mb_check_encoding($reason, 'UTF-8') || mb_strlen($reason) > 1000 ||
+            preg_match('/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/u', $reason)
+        ) {
+            throw new ValidationException([[
+                'field' => 'reason',
+                'message' => \Codefy\Framework\Helpers\trans(
+                    'Enter a clear policy publication reason of at most 1,000 characters.'
+                ),
+            ]]);
+        }
+        return $reason;
+    }
     public function apply(BigRational $percent): BigRational
     {
         if ($percent->compareTo(0) < 0) {

@@ -32,6 +32,7 @@ final readonly class GradebookService
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private \Domain\AcademicRecord\Service\InstitutionalCreditLedger $credits,
+        private GradeComparisonPolicyService $comparisonPolicies,
     ) {
     }
 
@@ -54,6 +55,7 @@ final readonly class GradebookService
         string $revision,
         array $categories = [],
         ?CourseworkGradePolicy $gradePolicy = null,
+        ?string $gradePolicyScope = null,
     ): array {
         $this->access->authenticatedUserId();
         $this->faculty($section);
@@ -64,12 +66,25 @@ final readonly class GradebookService
             $categories,
             $revision,
             $gradePolicy,
+            $gradePolicyScope,
         ): array {
             $this->registration->lockSection($section);
             $actor = $this->faculty($section);
             $context = $this->calculationContext($section);
-            $policy = $gradePolicy ?? new CourseworkGradePolicy($context["grade_policy"]);
-            $policyChanged = $policy->facts != $context["grade_policy"];
+            $scope = $gradePolicyScope ?? ($gradePolicy !== null && $gradePolicy->facts != $context['grade_policy']
+                ? 'section' : $context['grade_policy_scope']);
+            if (!in_array($scope, ['institution', 'section'], true)) {
+                throw new ValidationException([[
+                    'field' => 'grade_policy_scope',
+                    'message' => \Codefy\Framework\Helpers\trans(
+                        'Choose institutional inheritance or a section override.'
+                    ),
+                ]]);
+            }
+            $policy = $scope === 'institution'
+                ? new CourseworkGradePolicy($context['institutional_grade_policy']['rules'])
+                : ($gradePolicy ?? new CourseworkGradePolicy($context['grade_policy']));
+            $policyChanged = $policy->facts != $context['grade_policy'] || $scope !== $context['grade_policy_scope'];
             if ($policyChanged) {
                 $this->access->requirePermission("sis:gradebook:calculation-policy");
             }
@@ -97,7 +112,7 @@ final readonly class GradebookService
                 $calculation->weights,
                 $context["version"],
                 $calculation->categories,
-                $policy->facts,
+                $scope === 'institution' ? null : $policy->facts,
             );
             $saved = $this->calculationContext($section);
             $this->audit->record($actor, "gradebook.calculation.updated", $section);
@@ -124,7 +139,7 @@ final readonly class GradebookService
     /** @return array<string, mixed> */
     private function calculationContext(EntityId $section): array
     {
-        $settings = $this->repository->calculation($section);
+        $settings = $this->comparisonPolicies->resolve($this->repository->calculation($section), true);
         $assignments = $this->repository->assignments($section, GradebookCalculation::LIMIT + 1);
         if (count($assignments) > GradebookCalculation::LIMIT) {
             throw new ValidationException([
@@ -137,6 +152,9 @@ final readonly class GradebookService
         $this->calculation($settings, $assignments);
         return [
             "grade_policy" => $settings["grade_policy"],
+            'grade_policy_scope' => $settings['grade_policy_scope'],
+            'grade_policy_reference' => $settings['grade_policy_reference'],
+            'institutional_grade_policy' => $settings['institutional_grade_policy'],
             "can_manage_grade_policy" => $this->canManageGradePolicy(),
             "mode" => $settings["mode"],
             "weights" => $settings["weights"],
@@ -642,10 +660,13 @@ final readonly class GradebookService
                 ],
             ]);
         }
-        $settings = $this->repository->calculation($section);
+        $settings = $this->comparisonPolicies->resolve($this->repository->calculation($section));
         $calculation = $this->calculation($settings, $scores);
         $summary = $calculation->summarize($scores);
         $summary["grade_policy"] = $settings["grade_policy"];
+        $summary['grade_policy_context'] = new \Domain\Gradebook\ValueObject\GradeComparisonPolicyReference(
+            $settings['grade_policy_reference'],
+        )->describe();
         $dropped = array_fill_keys(
             array_column($summary["dropped_assignments"] ?? [], "assignment_id"),
             true,
@@ -667,7 +688,7 @@ final readonly class GradebookService
         $rows = $this->repository->scores($student, $section, $after, 51);
         $more = count($rows) > 50;
         $rows = array_slice($rows, 0, 50);
-        $settings = $this->repository->calculation($section);
+        $settings = $this->comparisonPolicies->resolve($this->repository->calculation($section));
         $bonus = $settings["mode"] === "weighted"
         ? $this->repository->bonusAssignmentIds($section, array_keys($settings["weights"]))
         : array_column(

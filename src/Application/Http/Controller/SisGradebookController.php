@@ -58,6 +58,7 @@ final readonly class SisGradebookController
                 $f->text("revision", 64),
                 $categories,
                 new \Domain\Gradebook\ValueObject\CourseworkGradePolicy($policy),
+                $f->optionalText("grade_policy_scope", 16),
             ),
         );
     }

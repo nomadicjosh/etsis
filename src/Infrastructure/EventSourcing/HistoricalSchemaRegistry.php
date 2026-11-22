@@ -70,6 +70,11 @@ final readonly class HistoricalSchemaRegistry
                 'root' => \Domain\Registration\Waitlist\SectionWaitlist::class,
                 'fields' => \Domain\Registration\Waitlist\SectionWaitlist::PLACE_FIELDS,
             ],
+            \Domain\Gradebook\Event\GradeComparisonPolicyWasPublished::class => [
+                'type' => 'grade_comparison_policy',
+                'root' => \Domain\Gradebook\GradeComparisonPolicy::class,
+                'fields' => \Domain\Gradebook\GradeComparisonPolicy::FIELDS,
+            ],
             \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class => [
                 'type' => 'timesheet_policy',
                 'root' => \Domain\HumanResources\TimeApprovalPolicy::class,
@@ -657,6 +662,12 @@ final readonly class HistoricalSchemaRegistry
                     $class === \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class,
                 );
             }
+            if ($class === \Domain\Gradebook\Event\GradeComparisonPolicyWasPublished::class) {
+                \Domain\Gradebook\GradeComparisonPolicy::validate($payload);
+                if ((string) $stream->aggregateId !== \Domain\Gradebook\GradeComparisonPolicy::ID) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class) {
                 \Domain\HumanResources\TimeApprovalPolicy::validate($payload);
                 if ((string) $stream->aggregateId !== \Domain\HumanResources\TimeApprovalPolicy::ID) {
@@ -1091,6 +1102,7 @@ final readonly class HistoricalSchemaRegistry
                     \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class,
                     \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class,
                     \Domain\Registration\Waitlist\WaitlistPlaceWasChanged::class,
+                    \Domain\Gradebook\Event\GradeComparisonPolicyWasPublished::class,
                     \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class,
                     \Domain\HumanResources\Event\TimeEntryWasDecided::class,
                     \Domain\Gradebook\Event\ClassGradesWereCertified::class,
@@ -1720,6 +1732,7 @@ final readonly class HistoricalSchemaRegistry
     {
         $type = match ($id->aggregateClassName()) {
             \Domain\Registration\Waitlist\SectionWaitlist::class => 'section_waitlist',
+            \Domain\Gradebook\GradeComparisonPolicy::class => 'grade_comparison_policy',
             \Domain\HumanResources\TimeApprovalPolicy::class => 'timesheet_policy',
             \Domain\HumanResources\TimeDecision::class => 'timesheet_decision',
             \Domain\Gradebook\GradeCertificationHistory::class => 'class_grade_certifications',
@@ -1776,6 +1789,7 @@ final readonly class HistoricalSchemaRegistry
     {
         $aggregateId = match ($type) {
             'section_waitlist' => new \Domain\Registration\Waitlist\WaitlistId($id),
+            'grade_comparison_policy' => new \Domain\Gradebook\ValueObject\GradeComparisonPolicyId($id),
             'timesheet_policy' => new \Domain\HumanResources\ValueObject\TimeApprovalPolicyId($id),
             'timesheet_decision' => new \Domain\HumanResources\ValueObject\TimeDecisionId($id),
             'class_grade_certifications' => new \Domain\Gradebook\ValueObject\GradeCertificationId($id),

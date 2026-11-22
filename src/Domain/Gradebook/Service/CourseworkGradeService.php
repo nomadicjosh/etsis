@@ -15,7 +15,10 @@ use Domain\Shared\ValueObject\EntityId;
 /** Internal selected-student assessment. The academic workflow authorizes and locks its callers. */
 final readonly class CourseworkGradeService
 {
-    public function __construct(private GradebookRepository $repository)
+    public function __construct(
+        private GradebookRepository $repository,
+        private GradeComparisonPolicyService $comparisonPolicies,
+    )
     {
     }
 
@@ -30,7 +33,7 @@ final readonly class CourseworkGradeService
                 "This gradebook exceeds the calculation limit. Choose a grade manually.",
             );
         }
-        $settings = $this->repository->calculation($section);
+        $settings = $this->comparisonPolicies->resolve($this->repository->calculation($section));
         $bonus = array_column(
             array_filter($scores, static fn(array $row): bool => $row["possible_hundredths"] === 0),
             "assignment_id",
@@ -66,6 +69,9 @@ final readonly class CourseworkGradeService
             "score_display" => CourseworkGradeEvidence::formatPercent($raw),
             "grading_display" => CourseworkGradeEvidence::formatPercent($score),
             "grade_policy" => $policy->facts,
+            'grade_policy_context' => new \Domain\Gradebook\ValueObject\GradeComparisonPolicyReference(
+                $settings['grade_policy_reference'],
+            )->describe(),
         ];
         if ($score->compareTo(100) > 0) {
             return $comparison +
@@ -118,6 +124,7 @@ final readonly class CourseworkGradeService
             "max_score_milli" => $grade["max_score_milli"],
             "exact_percent" => $summary["exact_percent"],
             "grade_policy" => $policy->facts,
+            "grade_policy_reference" => $settings["grade_policy_reference"],
             "grading_percent" => (string) $score,
         ];
         if (strlen(json_encode($facts, JSON_THROW_ON_ERROR)) > CourseworkGradeEvidence::MAX_BYTES) {

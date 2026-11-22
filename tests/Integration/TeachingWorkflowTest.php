@@ -34,6 +34,7 @@ final class TeachingWorkflowTest extends TestCase
             $f->transactions,
             $f->audit,
             $f->academicCredits(),
+            $f->comparisonPolicies(),
         );
     }
 
@@ -349,6 +350,7 @@ final class TeachingWorkflowTest extends TestCase
             $f->transactions,
             $f->audit,
             $f->academicCredits(),
+            $f->comparisonPolicies(),
         );
         try {
             $service->score($assignment->id, $student->id, 800, 0);
@@ -381,6 +383,7 @@ final class TeachingWorkflowTest extends TestCase
             $f->transactions,
             $f->audit,
             $f->academicCredits(),
+            $f->comparisonPolicies(),
         );
         try {
             $service->score($assignment->id, $student->id, 100, 0);

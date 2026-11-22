@@ -490,6 +490,7 @@ window.createWorkspaceTeaching = function (ui) {
                     weights,
                     revision: setup.revision,
                     grade_policy: policyEditor.serialize(),
+                    grade_policy_scope: policyEditor.scope(),
                     categories: mode.value === "category" ? categoryEditor.serialize() : [],
                 });
                 if (body.isConnected) await back();
@@ -930,7 +931,7 @@ window.createWorkspaceTeaching = function (ui) {
                     node(
                         "p",
                         { class: "small" },
-                        window.createGradebookCalculation({ node }).policyText(suggestion.grade_policy) + " Uses this record’s retained grading ranges. Approximate displays are shortened to six decimals.",
+                        window.createGradebookCalculation({ node }).policyText(suggestion.grade_policy, suggestion.grade_policy_context) + " Uses this record’s retained grading ranges. Approximate displays are shortened to six decimals.",
                     ),
                     button("Use suggested grade", () => {
                         form.elements.grade_id.value = suggestion.grade_id;
@@ -1018,7 +1019,7 @@ window.createWorkspaceTeaching = function (ui) {
                             ? node(
                                   "p",
                                   { class: "alert alert-info" },
-                                  `Using the reviewed coursework calculation: ${window.createGradebookCalculation({ node }).comparisonText(review.coursework_summary)}. ${window.createGradebookCalculation({ node }).policyText(review.coursework_summary.grade_policy)} Its inputs will be retained with the grade decision; later score edits will not change this official grade.`,
+                                  `Using the reviewed coursework calculation: ${window.createGradebookCalculation({ node }).comparisonText(review.coursework_summary)}. ${window.createGradebookCalculation({ node }).policyText(review.coursework_summary.grade_policy, review.coursework_summary.grade_policy_context)} Its inputs will be retained with the grade decision; later score edits will not change this official grade.`,
                               )
                             : null,
                         review.withdrawal_grade_correction
@@ -1784,7 +1785,7 @@ window.createWorkspaceTeaching = function (ui) {
                                   ["course_accepted", "course_corrected"].includes(item.action)
                                       ? `${item.course_code} · ${item.course_title}`
                                       : item.grade_code
-                                        ? `${item.grade_code}${item.coursework_summary ? ` · Coursework ${window.createGradebookCalculation({ node }).comparisonText(item.coursework_summary)} · ${window.createGradebookCalculation({ node }).policyText(item.coursework_summary.grade_policy)}` : ""}`
+                                        ? `${item.grade_code}${item.coursework_summary ? ` · Coursework ${window.createGradebookCalculation({ node }).comparisonText(item.coursework_summary)} · ${window.createGradebookCalculation({ node }).policyText(item.coursework_summary.grade_policy, item.coursework_summary.grade_policy_context)}` : ""}`
                                         : "—",
                                   item.action === "posting_term_corrected"
                                       ? `${item.previous_posting_term_code || "Earlier label unknown"} → ${item.posting_term_code}`
