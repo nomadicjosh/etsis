@@ -187,6 +187,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
             summary.warnings.push("Catalog totals do not check a student's credit origin or actual completion date. Run a student test.");
         if ((definition.rules || []).some(rule => rule.credit_origin && rule.credit_origin !== "any"))
             summary.warnings.push("Requirement credit origins need an actual student test; catalog totals are planning figures.");
+        if ((definition.rules || []).some(rule => Number(rule.min_course_grade_points_milli) > 0))
+            summary.warnings.push("Catalog totals do not check per-card grade minima. Run a student test.");
         const raw = definition.requirement_type === "courses" ? definition.min_courses : definition.min_credits_milli;
         let required = raw;
         if (editing) {
@@ -312,7 +314,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             plan.update(item.planning_summary || groupPlan(d, details));
             tree.append(plan.element);
         }
-        tree.append(node("p", { class: "form-text" }, [window.degreeGroupEligibilityText(d.work_eligibility), window.degreeRequirementOriginsText(d)].filter(Boolean).join(" ")));
+        tree.append(node("p", { class: "form-text" }, [window.degreeGroupEligibilityText(d.work_eligibility), window.degreeRequirementPoliciesText(d)].filter(Boolean).join(" ")));
         if (d.min_course_grade_points_milli != null)
             tree.append(
                 node(
@@ -801,6 +803,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
         }
         const used = new Set();
         for (const r of d.rules) {
+            if (Object.hasOwn(r, "min_course_grade_points_milli")) {
+                r.min_course_grade_points_milli = r.min_course_grade_points_milli === "" || r.min_course_grade_points_milli == null
+                    ? null : milli(String(r.min_course_grade_points_milli));
+                if (r.min_course_grade_points_milli !== null && (r.min_course_grade_points_milli < 0 || r.min_course_grade_points_milli > d.max_course_grade_points_milli))
+                    throw new Error("A card grade minimum must stay within the selected grading maximum.");
+            }
             r.minimum_courses =
                 r.mode === "all" ? r.course_ids.length : r.mode === "choose" ? Number(r.minimum_courses) : 0;
             if (r.mode === "credits") r.minimum_credits_milli = milli(String(r.minimum_credits_milli));
@@ -978,6 +986,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
             rules: saved.definition.rules.map((rule) => ({
                 ...structuredClone(rule),
                 ...(rule.mode === "credits" ? { minimum_credits_milli: text(rule.minimum_credits_milli) } : {}),
+                ...(Object.hasOwn(rule, "min_course_grade_points_milli")
+                    ? { min_course_grade_points_milli: rule.min_course_grade_points_milli == null ? "" : text(rule.min_course_grade_points_milli) } : {}),
             })),
             max_course_grade_points_milli: scale.maximum_milli,
             min_credits_milli: text(saved.definition.min_credits_milli),
@@ -1434,6 +1444,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 ruleOrigin.addEventListener("change", () => { r.credit_origin = ruleOrigin.value; updatePlan(); });
                 card.append(node("label", { for: ruleOrigin.id, class: "form-label" }, `Requirement ${i + 1} coursework origin`), ruleOrigin,
                     node("p", { class: "form-text" }, "This limits contributions to this card. Other cards and the group total still follow their own rules."));
+                card.append(field(`Requirement ${i + 1} minimum grade points (optional)`, r.min_course_grade_points_milli ?? "",
+                    value => { r.min_course_grade_points_milli = value; updatePlan(); },
+                    {type: "number", min: "0", max: String(model.max_course_grade_points_milli / 1000), step: "0.001"}),
+                    node("p", {class: "form-text"}, "This is the per-course grade-point value on the retained grading scale, not GPA or weighted quality points. The group minimum still applies."));
                 if (r.mode === "choose")
                     card.append(
                         field(
@@ -3845,7 +3859,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "article",
                     { class: "audit-card" },
                     node("h3", {}, group.name),
-                    node("p", { class: "form-text" }, [window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context), window.degreeRequirementOriginsText(group)].filter(Boolean).join(" ")),
+                    node("p", { class: "form-text" }, [window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context), window.degreeRequirementPoliciesText(group)].filter(Boolean).join(" ")),
                     node(
                         "p",
                         {},
@@ -4010,7 +4024,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
     }
     function groupPlacementDetails(data, group, back, offset = 0, ruleOffset = 0) {
         const body = screen(group.name, "PROPOSED COURSE-GROUP PLACEMENT");
-        body.append(node("p", {}, [window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context), window.degreeRequirementOriginsText(group)].filter(Boolean).join(" ")));
+        body.append(node("p", {}, [window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context), window.degreeRequirementPoliciesText(group)].filter(Boolean).join(" ")));
         body.append(
             node(
                 "p",

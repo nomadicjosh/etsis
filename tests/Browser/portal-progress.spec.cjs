@@ -33,6 +33,7 @@ async function fixture(page,options={}) {
                 records:Array.from({length:21},(_,index)=>({course_code:index===20?'LAST.101':'MATH.101',course_title:'Retained work <b>fictional</b>',term_code:'26/FA',term_label_retained:true,academic_state:index===0?'awaiting_grade':'completed',placement:'not_used',credit:'included',cumulative_gpa:'included',overall_gpa:'undetermined'})),
             };
         } else throw new Error(`Unexpected private request ${path}`);
+        if (options.requirementGradeFloors && data.allocation) data.allocation.groups[0].requirement_grade_floors=options.requirementGradeFloors;
         if (options.requirementOrigins && data.allocation) data.allocation.groups[0].requirement_origins=options.requirementOrigins;
         if (options.groupEligibility && data.allocation) data.allocation.groups[0].work_eligibility = options.groupEligibility;
         if (options.evaluationContext && data.allocation) data.allocation.groups[0].work_evaluation_context = options.evaluationContext;
@@ -636,6 +637,20 @@ test('student progress explains mixed requirement card origins without rejecting
     await expect(content).toContainText('Requirement 1: Institutional work only.');
     await expect(content).toContainText('Requirement 2: Institutional or transfer work.');
     await page.setViewportSize({width:320,height:1000});await accessible(page);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('student progress explains independent card grade floors with accessible point units', async ({page}) => {
+    const f=await fixture(page,{requirementGradeFloors:[{requirement:1,minimum_points_milli:2675},
+        {requirement:2,minimum_points_milli:null}]});
+    await page.getByRole('button',{name:'Review progress · BSCS · 26/FA',exact:true}).click();
+    const content=page.locator('#campus-service-content');
+    await expect(content).toContainText('Requirement 1: Per-course minimum 2.675 grade points.');
+    await expect(content).toContainText('Requirement 2: No additional per-course grade minimum. A passing grade is still required.');
+    await page.setViewportSize({width:320,height:1000});await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });

@@ -48,6 +48,14 @@ final readonly class GradingRepublicationVerifier
             $groupMinimums,
             static fn(array $g): bool => ($g["min_course_grade_points_milli"] ?? 0) > 0,
         );
+        foreach ($requirements['group_details'] ?? [] as $group) {
+            $cardGradeFloor = array_any(
+                $group['definition']['rules'],
+                static fn(array $rule): bool =>
+                    (\Domain\DegreeAudit\ValueObject\RequirementGradeFloor::fromRule($rule)->pointsMilli ?? 0) > 0,
+            );
+            $groupGradeFloors = $groupGradeFloors || $cardGradeFloor;
+        }
         $identity = $scale["source"] === "program" ? $scale["program_id"] : GradingScaleService::GLOBAL_ID;
         $requested = [];
         foreach ($work as $item) {

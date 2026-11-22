@@ -127,13 +127,21 @@ final class DraftDegreeAuditTest extends TestCase
         return [$degree, new AuditRequirementsV3($definition), $id];
     }
 
-    private function work(StudentRequirementsFixture $f): void
+    private function work(StudentRequirementsFixture $f, bool $lowerGrade = false): void
     {
         $s = $f->f->sis;
         $s->gradeScale([[
             'code' => 'A', 'min_score_milli' => 0, 'max_score_milli' => 100000,
             'points_milli' => 4000, 'passes' => true, 'counts_gpa' => true,
         ]]);
+        if ($lowerGrade) {
+            $s->gradeScale([
+                ['code' => 'A', 'min_score_milli' => 90000, 'max_score_milli' => 100000,
+                    'points_milli' => 4000, 'passes' => true, 'counts_gpa' => true],
+                ['code' => 'B', 'min_score_milli' => 0, 'max_score_milli' => 89999,
+                    'points_milli' => 3000, 'passes' => true, 'counts_gpa' => true],
+            ]);
+        }
         $c = $f->f->groupDefinition['courses'][0];
         $section = new Section(
             EntityId::generate(), new EntityId($c['course_id']), $s->term, $s->access->actor,
@@ -144,7 +152,12 @@ final class DraftDegreeAuditTest extends TestCase
         $review = $bindings->review($section->id, new EntityId($c['version_id']), 'Fictional offering');
         $bindings->commit($section->id, $review['review_token']);
         $enrollment = $s->service->register($f->student, $section->id)->id;
-        $grade = $s->academicCredits()->choices($f->student, $section->id, $enrollment)['items'][0]['id'];
+        $choices = array_column(
+            $s->academicCredits()->choices($f->student, $section->id, $enrollment)['items'],
+            'id',
+            'code',
+        );
+        $grade = $choices[$lowerGrade ? 'B' : 'A'];
         $review = $s->academicCredits()->review($f->student, $section->id, $enrollment, new EntityId($grade), 0);
         $s->academicCredits()->commit($f->student, $section->id, $review['review_token']);
     }
@@ -1175,6 +1188,31 @@ final class DraftDegreeAuditTest extends TestCase
         $result = $this->service($f)->test($template, $f->student, $f->assignment, $degree);
         self::assertSame("feasible", $result["allocation"]["outcome"]);
         self::assertSame($before, $this->digest($f));
+    }
+
+    public function testTemporaryCardGradeTrialRefreshesWithoutChangingStudentHistory(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $this->work($f, lowerGrade: true);
+        [$template, $degree, $group] = $this->draft($f);
+        $d = $f->f->groups->view($group)["definition"];
+        $d["rules"][0]["min_course_grade_points_milli"] = 3500;
+        $f->f->groups->save($group, 0, new CourseGroupDefinitionV2($d));
+        $before = $this->digest($f);
+        $result = $this->service($f)->test($template, $f->student, $f->assignment, $degree);
+        self::assertSame("infeasible", $result["allocation"]["outcome"]);
+        self::assertSame($before, $this->digest($f));
+        $d["rules"][0]["min_course_grade_points_milli"] = 3000;
+        $f->f->groups->save($group, 1, new CourseGroupDefinitionV2($d));
+        $before = $this->digest($f);
+        self::assertSame(
+            "feasible",
+            $this->service($f)->test($template, $f->student, $f->assignment, $degree)["allocation"][
+                "outcome"
+            ],
+        );
+        self::assertSame($before, $this->digest($f));
+        self::assertNull($f->service->view($f->student, $f->assignment)["selection"]);
     }
 
 }

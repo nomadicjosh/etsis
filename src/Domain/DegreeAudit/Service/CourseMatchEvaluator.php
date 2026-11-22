@@ -7,6 +7,7 @@ namespace Domain\DegreeAudit\Service;
 use Domain\DegreeAudit\ValueObject\CourseMatchStatus as Status;
 use Domain\DegreeAudit\ValueObject\GroupWorkEligibility;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
+use Domain\DegreeAudit\ValueObject\RequirementGradeFloor;
 use InvalidArgumentException;
 use Domain\DegreeAudit\ValueObject\RequirementCreditOrigin;
 
@@ -238,10 +239,14 @@ final readonly class CourseMatchEvaluator
             $modes = [];
             $origins = [];
             $restricted = false;
+            $cardRules = [];
+            $gradeRestricted = false;
             foreach ($definition["rules"] as $rule) {
                 $origin = RequirementCreditOrigin::fromRule($rule);
                 $restricted = $restricted || $origin !== RequirementCreditOrigin::Any;
+                $gradeRestricted = $gradeRestricted || (RequirementGradeFloor::fromRule($rule)->pointsMilli ?? 0) > 0;
                 foreach ($rule["course_ids"] as $courseId) {
+                    $cardRules[$courseId][] = $rule;
                     $modes[$courseId][$rule["mode"]] = true;
                     foreach ($origin->origins() as $type) {
                         $origins[$courseId][$type] = true;
@@ -252,6 +257,7 @@ final readonly class CourseMatchEvaluator
                 $id = $course["course_id"];
                 $candidate = [
                     "group_id" => $groupId,
+                    ...$gradeRestricted ? ['card_grade_rules' => $cardRules[$id] ?? []] : [],
                     ...$restricted ? ['allowed_credit_origins' => array_keys($origins[$id] ?? [])] : [],
                     'pursuit_started_on' => $effective['pursuit_started_on'] ?? null,
                     'evaluated_on' => $effective['evaluated_on'] ?? null,
@@ -431,21 +437,74 @@ final readonly class CourseMatchEvaluator
         ) {
             return Status::CourseVersionDiffers;
         }
-        $minimum = $candidate["minimum_grade_points_milli"];
-        if ($minimum !== null && $minimum > 0) {
-            if (($scale["version_id"] ?? null) === null || $grade["scale_version_id"] === null) {
-                return Status::ScaleUnknown;
+        $minimum = $this->gradeMinimumStatus(
+            $grade,
+            $candidate["minimum_grade_points_milli"],
+            $scale,
+            $identicalGradingPublications,
+        );
+        if ($minimum !== null) {
+            return $minimum;
+        }
+        if (isset($candidate['card_grade_rules'])) {
+            $qualified = false;
+            $unknown = null;
+            foreach ($candidate['card_grade_rules'] as $rule) {
+                $status = $this->cardStatus($work, $rule, $scale, $identicalGradingPublications);
+                if ($status === null) {
+                    $qualified = true;
+                    break;
+                }
+                if (in_array($status, [Status::GradeUnknown, Status::ScaleUnknown, Status::ScaleDiffers], true)) {
+                    $unknown = $status;
+                }
             }
-            if (
-                $scale["version_id"] !== $grade["scale_version_id"] &&
-                !isset($identicalGradingPublications[$grade['scale_version_id']])
-            ) {
-                return Status::ScaleDiffers;
-            }
-            if ($grade["points_milli"] < $minimum) {
-                return Status::InsufficientGrade;
+            if (!$qualified) {
+                return $unknown ?? Status::RequirementGradeInsufficient;
             }
         }
         return $transfer ?? $completion ?? Status::Candidate;
     }
+    /** Shared per-card gate after ordinary group/academic eligibility has been checked. */
+    public function cardStatus(
+        array $work,
+        array $rule,
+        ?array $scale,
+        array $identicalGradingPublications = [],
+    ): ?Status {
+        if (!RequirementCreditOrigin::fromRule($rule)->allows($work['credit_type'] ?? null)) {
+            return Status::RequirementOriginExcluded;
+        }
+        return $this->gradeMinimumStatus(
+            $work['grade'] ?? null,
+            RequirementGradeFloor::fromRule($rule)->pointsMilli,
+            $scale,
+            $identicalGradingPublications,
+        );
+    }
+
+    private function gradeMinimumStatus(
+        ?array $grade,
+        ?int $minimum,
+        ?array $scale,
+        array $identicalGradingPublications,
+    ): ?Status {
+        if ($minimum === null || $minimum === 0) {
+            return null;
+        }
+        if ($grade === null) {
+            return Status::GradeUnknown;
+        }
+        if (($scale['version_id'] ?? null) === null || ($grade['scale_version_id'] ?? null) === null) {
+            return Status::ScaleUnknown;
+        }
+        if (
+            $scale['version_id'] !== $grade['scale_version_id'] &&
+            !isset($identicalGradingPublications[$grade['scale_version_id']])
+        ) {
+            return Status::ScaleDiffers;
+        }
+        return $grade['points_milli'] < $minimum ? Status::InsufficientGrade : null;
+    }
+
 }

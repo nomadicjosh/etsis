@@ -185,10 +185,20 @@ test("review-date expiration distinguishes the retained review date from pursuit
 
 
 test("per-card origin explanations use public ordinals and keep unrestricted cards explicit", () => {
-  const text=window.degreeRequirementOriginsText({requirement_origins:[{requirement:1,credit_origin:"institutional"},
+  const text=window.degreeRequirementPoliciesText({requirement_origins:[{requirement:1,credit_origin:"institutional"},
     {requirement:2,credit_origin:"any"},{requirement:3,credit_origin:"transfer"}]});
   assert.match(text,/Requirement 1: Institutional work only/);
   assert.match(text,/Requirement 2: Institutional or transfer work/);
   assert.match(text,/Requirement 3: Transfer work only/);
-  assert.equal(window.degreeRequirementOriginsText({rules:[{mode:"pool"}]}),"");
+  assert.equal(window.degreeRequirementPoliciesText({rules:[{mode:"pool"}]}),"");
+});
+
+
+test("per-card grade explanations share exact point units across private and owner data", () => {
+  assert.match(window.degreeRequirementPoliciesText({rules:[{min_course_grade_points_milli:2675}]}),
+    /Requirement 1: Per-course minimum 2\.675 grade points/);
+  assert.match(window.degreeRequirementPoliciesText({requirement_grade_floors:[{requirement:2,minimum_points_milli:null}]}),
+    /Requirement 2: No additional per-course grade minimum. A passing grade is still required/);
+  assert.match(window.degreeRequirementPoliciesText({requirement_grade_floors:[{requirement:3,minimum_points_milli:0}]}),
+    /Requirement 3: Per-course minimum 0 grade points/);
 });

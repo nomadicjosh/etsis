@@ -124,6 +124,21 @@ final readonly class RuleAllocationCompiler
                     if (!RequirementCreditOrigin::fromRule($rule)->allows($item['credit_type'])) {
                         continue;
                     }
+                    $cardStatus = $this->matches->cardStatus(
+                        $item,
+                        $rule,
+                        $requirements['grade_scale'] ?? null,
+                        $requirements['identical_grading_publications'] ?? [],
+                    );
+                    if ($cardStatus !== null) {
+                        if (
+                            $possible && in_array($cardStatus, [CourseMatchStatus::GradeUnknown,
+                            CourseMatchStatus::ScaleUnknown, CourseMatchStatus::ScaleDiffers], true)
+                        ) {
+                            $issues[$cardStatus->value] = true;
+                        }
+                        continue;
+                    }
                     $decision = $captured[$rule['id']];
                     if ($decision === 'unknown' && $possible) {
                         $issues['rule_facts_unknown'] = true;

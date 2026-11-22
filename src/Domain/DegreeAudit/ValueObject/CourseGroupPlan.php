@@ -54,6 +54,13 @@ final readonly class CourseGroupPlan
                 "Catalog totals do not check a student's credit origin or actual completion date. Run a student test."
             );
         }
+        $hasCardGradeFloor = array_any(
+            $definition['rules'],
+            static fn(array $rule): bool => (RequirementGradeFloor::fromRule($rule)->pointsMilli ?? 0) > 0,
+        );
+        if ($hasCardGradeFloor) {
+            $warnings[] = trans_html('Catalog totals do not check per-card grade minima. Run a student test.');
+        }
         $dynamic =
         count(
             array_filter(

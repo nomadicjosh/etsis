@@ -22,12 +22,17 @@ window.degreeGroupEligibilityText = function (facts, context = null, evaluation 
                         : "The inclusive boundary uses the date of each progress review; shorter months end on their last valid day.")
             : "");
 };
-/* Public ordinals/origins only; retained cards remain independent within a mixed-source group. */
-window.degreeRequirementOriginsText = function (group) {
+/* Public requirement ordinals and policies; each retained card keeps its own gates. */
+window.degreeRequirementPoliciesText = function (group) {
     const labels = { any: "Institutional or transfer work", institutional: "Institutional work only", transfer: "Transfer work only" };
     const origins = group?.requirement_origins || (group?.rules || []).flatMap((rule, i) =>
         Object.hasOwn(rule, "credit_origin") ? [{ requirement: i + 1, credit_origin: rule.credit_origin }] : []);
-    return origins.map(item => `Requirement ${item.requirement}: ${labels[item.credit_origin] || "Review credit origin"}.`).join(" ");
+    const grades = group?.requirement_grade_floors || (group?.rules || []).flatMap((rule, i) =>
+        Object.hasOwn(rule, "min_course_grade_points_milli") ? [{requirement: i + 1, minimum_points_milli: rule.min_course_grade_points_milli}] : []);
+    return [...origins.map(item => `Requirement ${item.requirement}: ${labels[item.credit_origin] || "Review credit origin"}.`),
+        ...grades.map(item => item.minimum_points_milli == null
+            ? `Requirement ${item.requirement}: No additional per-course grade minimum. A passing grade is still required.`
+            : `Requirement ${item.requirement}: Per-course minimum ${item.minimum_points_milli / 1000} grade points.`)].join(" ");
 };
 /* Retained curriculum labels, shared by staff and private student progress. */
 window.curriculumOrganizationText = function (choice) {
@@ -469,6 +474,7 @@ window.createDegreeNamedCourseReview = function (ui, rows, resolve) {
     );
     const reasons = {
         candidate: "Eligible after this group's publication, grade and coursework eligibility checks.",
+        requirement_grade_insufficient: "This retained grade does not meet any applicable requirement card’s minimum.",
         requirement_origin_excluded: "No requirement card in this group accepts this work’s recorded origin.",
         origin_excluded: "This group's recorded credit-origin restriction excludes this work.",
         transfer_institution_excluded: "The retained sending institution is not listed for this group.",
@@ -1086,7 +1092,7 @@ window.createRecordedDegreeProgress = function ({ node, request, buttonClass = "
             if (component.input_status === "history_gaps") card.append(node("p", {}, "Earlier history was unknown for some work at this review."));
             card.append(checks, node("p", {}, `Cumulative GPA: ${component.gpa.cumulative.ready ? amount(component.gpa.cumulative.milli) : "Needs review"}. Overall GPA: ${component.gpa.overall.ready ? amount(component.gpa.overall.milli) : "Needs review"}.`));
             for (const group of component.groups) {
-                if (group.work_eligibility || group.requirement_origins?.length) card.append(node("p", {}, [window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context), window.degreeRequirementOriginsText(group)].filter(Boolean).join(" ")));
+                if (group.work_eligibility || group.requirement_origins?.length || group.requirement_grade_floors?.length) card.append(node("p", {}, [window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context), window.degreeRequirementPoliciesText(group)].filter(Boolean).join(" ")));
                 card.append(node("p", {},
                 `${group.name}: ${group.requirement_type === "courses" ? `${group.required_courses} required courses` : `${amount(group.required_credits_milli)} required credits`}. ${group.coverage ? `${group.coverage.applied_courses} courses / ${amount(group.coverage.applied_credits_milli)} credits in the recorded placement.` : "Placement not established."}`));
             }

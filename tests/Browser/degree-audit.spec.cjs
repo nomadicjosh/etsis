@@ -2125,3 +2125,37 @@ test("requirement card origins survive preview save and publication", async ({pa
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
+
+
+test("requirement card grade floors survive preview save and publication", async ({page}) => {
+    const f=await fixture(page);
+    await workspaceTool(page,"Course group library");
+    await page.getByRole("button",{name:"Build General education",exact:true}).click();
+    const floor=page.getByLabel("Requirement 1 minimum grade points (optional)",{exact:true});
+    await expect(floor).toHaveValue("");
+    await floor.fill("2.675");
+    await page.getByRole("button",{name:"Requirements preview",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Requirement 1: Per-course minimum 2.675 grade points.");
+    await page.getByRole("button",{name:"Back to builder",exact:true}).click();
+    await expect(floor).toHaveValue("2.675");
+    await floor.fill("4.001");
+    await page.getByRole("button",{name:"Save group draft",exact:true}).click();
+    expect(await floor.evaluate(input=>input.validity.rangeOverflow)).toBe(true);
+    await expect(page.locator("dialog [role=alert]")).toContainText("A card grade minimum must stay within the selected grading maximum.");
+    expect(f.calls.some(c=>c.path.endsWith("/save/"))).toBe(false);
+    await floor.fill("2.675");
+    await page.setViewportSize({width:320,height:1000});await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.getByRole("button",{name:"Save group draft",exact:true}).click();
+    await expect(page.locator(".audit-status")).toContainText("Course group draft saved.");
+    expect(f.calls.find(c=>c.path.endsWith("/save/")).body.definition.rules[0].min_course_grade_points_milli).toBe(2675);
+    await page.getByRole("button",{name:"Save & review publication",exact:true}).click();
+    await page.getByLabel("Reason for publication",{exact:true}).fill("Fictional higher-grade card approval.");
+    await page.getByRole("button",{name:"Prepare publication",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Requirement 1: Per-course minimum 2.675 grade points.");
+    await page.getByRole("button",{name:"Publish reviewed version",exact:true}).click();
+    await page.getByRole("button",{name:"Inspect version 2",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Requirement 1: Per-course minimum 2.675 grade points.");
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});

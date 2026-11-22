@@ -28,6 +28,7 @@ final class CombinedDegreeProgressTest extends TestCase
         bool $transferSource = false,
         ?int $evaluationMonths = null,
         ?string $cardOrigin = null,
+        ?int $cardGrade = null,
     ): StudentSpecializationRequirementsFixture
     {
         $r = new ReusableGroupFixture();
@@ -47,6 +48,9 @@ final class CombinedDegreeProgressTest extends TestCase
         $d['rules'] = [['id' => EntityId::generate()->value,'mode' => 'choose','minimum_courses' => 1,'course_ids' => array_column($d['courses'], 'course_id')]];
         if ($cardOrigin !== null) {
             $d['rules'][0]['credit_origin'] = $cardOrigin;
+        }
+        if ($cardGrade !== null) {
+            $d['rules'][0]['min_course_grade_points_milli'] = $cardGrade;
         }
         if ($recencyMonths !== null) {
             $d['work_eligibility']['max_age_months_at_pursuit_start'] = $recencyMonths;
@@ -1579,6 +1583,55 @@ final class CombinedDegreeProgressTest extends TestCase
             "A",
             $s->sql->one("sis_academic_credits", ["id" => $t->credit->value])["status"],
         );
+    }
+
+    public function testRecordedCardGradeFloorReproducesAfterAnAttributedGradeCorrection(): void
+    {
+        $f = $this->fixture("multiple_components", cardGrade: 3500);
+        $s = $f->r->sis;
+        [$section, $enrollment, $grades] = $this->work($f, 0, "B");
+        self::assertSame("infeasible", $this->preview($f)["outcome"]);
+        $records = $this->recordedService($f);
+        $review = $records->review($f->student, $f->assignment, "Fictional per-card grade review.");
+        $args = [
+            $f->student,
+            $f->assignment,
+            new EntityId($review["operation_id"]),
+            $review["revision"],
+            $review["reason"],
+            $review["review_token"],
+        ];
+        $receipt = $records->confirm(...$args);
+        $original = $records->show($f->student, $f->assignment, $args[2], "staff");
+        self::assertSame(
+            [["requirement" => 1, "minimum_points_milli" => 3500]],
+            $original["summary"]["components"][0]["groups"][0]["requirement_grade_floors"],
+        );
+        $stream = \EventStoreFixture::framework(
+            $s->connection->queryBuilder(),
+        )->getAggregateHistoryFor(
+            new \Domain\DegreeAudit\ValueObject\DegreeProgressRecordId($review["operation_id"]),
+        );
+        $event = iterator_to_array($stream)[0];
+        $snapshot = new \Domain\DegreeAudit\ValueObject\DegreeProgressSnapshot(
+            $event->payload()["snapshot"],
+        );
+        $correction = $s
+            ->academicCredits()
+            ->review(
+                $f->student,
+                $section->id,
+                $enrollment,
+                new EntityId($grades["A"]),
+                1,
+                reason: "Fictional reasoned grade correction.",
+            );
+        $s->academicCredits()->commit($f->student, $section->id, $correction["review_token"]);
+        self::assertSame("feasible", $this->preview($f)["outcome"]);
+        self::assertTrue($this->service($f)->verifySnapshot($snapshot));
+        $s->clock->time = $s->clock->time->modify("+1 year");
+        self::assertSame($receipt, $records->confirm(...$args));
+        self::assertSame($original, $records->show($f->student, $f->assignment, $args[2], "staff"));
     }
 
 }

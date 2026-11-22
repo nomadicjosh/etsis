@@ -12,6 +12,7 @@ use function Codefy\Framework\Helpers\trans_html;
 enum CourseMatchStatus: string
 {
     case ComponentExcluded = "component_excluded";
+    case RequirementGradeInsufficient = 'requirement_grade_insufficient';
     case RequirementOriginExcluded = 'requirement_origin_excluded';
     case OriginExcluded = "origin_excluded";
     case OriginUnknown = "origin_unknown";
@@ -50,6 +51,9 @@ enum CourseMatchStatus: string
             => trans_html("An approved course route reserves this course for another curriculum component."),
             self::PlacementRestricted
             => trans_html("An approved placement preference reserves this course for another group in this pursuit."),
+            self::RequirementGradeInsufficient => trans_html(
+                "No requirement card accepts this work at its retained grade-point minimum."
+            ),
             self::RequirementOriginExcluded => trans_html(
                 "No requirement card in this group accepts this work's recorded origin."
             ),

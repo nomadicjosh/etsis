@@ -89,7 +89,8 @@ final readonly class CourseGroupAuthoringFacts
                     static fn(string $id): int => $positions[$id],
                     $rule["course_ids"],
                 ),
-            ] + ($rule["mode"] === "credits" ? ["minimum_credits_milli" => $rule["minimum_credits_milli"]] : [])
+            ] + array_intersect_key($rule, array_flip(['credit_origin', 'min_course_grade_points_milli']))
+            + ($rule["mode"] === "credits" ? ["minimum_credits_milli" => $rule["minimum_credits_milli"]] : [])
             + (isset($rule['eligibility']) ? [
                     'saved_rule_selected' => true, 'saved_rule_requires_student_work' => true,
                 ] : []);

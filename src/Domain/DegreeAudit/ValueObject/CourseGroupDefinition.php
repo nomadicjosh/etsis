@@ -86,6 +86,10 @@ final readonly class CourseGroupDefinition
                 $keys[] = 'credit_origin';
                 RequirementCreditOrigin::fromRule($rule);
             }
+            if ($allowEligibility && array_key_exists('min_course_grade_points_milli', $rule)) {
+                $keys[] = 'min_course_grade_points_milli';
+                RequirementGradeFloor::fromRule($rule);
+            }
             self::keys($rule, $keys);
             if ($dynamic) {
                 if (!is_array($rule['eligibility']) || $rule['course_ids'] !== [] || $rule['mode'] === 'all') {

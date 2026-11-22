@@ -17,6 +17,8 @@ use Domain\DegreeAudit\ValueObject\RepeatCreditPolicy;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use JsonException;
 use Domain\DegreeAudit\ValueObject\RequirementCreditOrigin;
+use Domain\DegreeAudit\ValueObject\RequirementGradeFloor;
+use Domain\DegreeAudit\ValueObject\CourseMatchStatus;
 
 /** Structural group review for supplied verified current work, not full degree completion. */
 final readonly class GroupAllocationEvaluator
@@ -75,8 +77,9 @@ final readonly class GroupAllocationEvaluator
         }
         $labels = [];
         $namedMemberships = [];
-        $cardOrigins = [];
+        $cardRules = [];
         $restrictedGroups = [];
+        $gradeRestrictedGroups = [];
         $issues = [];
         $reuse = $requirements["definition"]["policies"]["group_reuse"] ?? null;
         $sharing = is_string($reuse) ? CourseGroupReuse::tryFrom($reuse) : null;
@@ -94,8 +97,12 @@ final readonly class GroupAllocationEvaluator
             $e = $effective["groups"][$id];
             foreach ($d['rules'] as $rule) {
                 $origin = RequirementCreditOrigin::fromRule($rule);
-                $cardOrigins[$id][$rule['id']] = $origin;
-                if ($origin !== RequirementCreditOrigin::Any) {
+                $cardRules[$id][$rule['id']] = $rule;
+                $hasGradeFloor = (RequirementGradeFloor::fromRule($rule)->pointsMilli ?? 0) > 0;
+                if ($hasGradeFloor) {
+                    $gradeRestrictedGroups[$id] = true;
+                }
+                if ($origin !== RequirementCreditOrigin::Any || $hasGradeFloor) {
                     $restrictedGroups[$id] = true;
                 }
                 if (!isset($rule['eligibility'])) {
@@ -157,7 +164,7 @@ final readonly class GroupAllocationEvaluator
                 'min_credits_milli' => $effective['groups'][$id]['min_credits_milli'],
                 'min_courses' => $effective['groups'][$id]['min_courses'] ?? 0,
                 'rules' => array_map(static function (array $rule): array {
-                    unset($rule['credit_origin']);
+                    unset($rule['credit_origin'], $rule['min_course_grade_points_milli']);
                     return $rule;
                 }, $group['definition']['rules']),
             ];
@@ -234,13 +241,30 @@ final readonly class GroupAllocationEvaluator
                             ? ($requirements['rule_memberships'][$match['group_id']][$id]
                                 ?? throw new CorruptHistoryException()) : [],
                     );
-                    $origins = $cardOrigins[$match['group_id']];
-                    $memberships = array_values(array_filter(
-                        $memberships,
-                        static fn(string $rule): bool => $origins[$rule]->allows($item['credit_type']),
-                    ));
+                    $allowed = [];
+                    foreach ($memberships as $rule) {
+                        $status = $this->matches->cardStatus(
+                            $item,
+                            $cardRules[$match['group_id']][$rule],
+                            $requirements['grade_scale'] ?? null,
+                            $requirements['identical_grading_publications'] ?? [],
+                        );
+                        if ($status === null) {
+                            $allowed[] = $rule;
+                        } elseif (
+                            in_array($status, [CourseMatchStatus::GradeUnknown,
+                            CourseMatchStatus::ScaleUnknown, CourseMatchStatus::ScaleDiffers], true)
+                        ) {
+                            $issues[$status->value] = true;
+                        }
+                    }
+                    $memberships = $allowed;
                     if ($memberships === [] && isset($restrictedGroups[$match['group_id']])) {
-                        $records[$id]['statuses']['requirement_origin_excluded'] = true;
+                        $reason = 'requirement_origin_excluded';
+                        if (isset($gradeRestrictedGroups[$match['group_id']])) {
+                            $reason = 'requirement_grade_insufficient';
+                        }
+                        $records[$id]['statuses'][$reason] = true;
                         continue;
                     }
                     sort($memberships, SORT_STRING);

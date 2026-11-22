@@ -214,12 +214,21 @@ final readonly class StudentDegreeProgress
                 }
             }
             $origins = [];
+            $gradeFloors = [];
             foreach ($value['rules'] ?? [] as $index => $rule) {
                 if (!is_array($rule)) {
                     continue;
                 }
                 if (!is_int($index) || $index < 0 || $index >= 100) {
                     throw new CorruptHistoryException();
+                }
+                if (array_key_exists('min_course_grade_points_milli', $rule)) {
+                    try {
+                        $floor = \Domain\DegreeAudit\ValueObject\RequirementGradeFloor::fromRule($rule);
+                    } catch (\InvalidArgumentException) {
+                        throw new CorruptHistoryException();
+                    }
+                    $gradeFloors[] = ['requirement' => $index + 1, 'minimum_points_milli' => $floor->pointsMilli];
                 }
                 if (array_key_exists('credit_origin', $rule)) {
                     try {
@@ -232,6 +241,9 @@ final readonly class StudentDegreeProgress
             }
             if ($origins !== []) {
                 $group['requirement_origins'] = $origins;
+            }
+            if ($gradeFloors !== []) {
+                $group['requirement_grade_floors'] = $gradeFloors;
             }
             $group["gaps"] = self::groupGaps($value, $review["allocation"]["outcome"]);
             $group["coverage"] = null;

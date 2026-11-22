@@ -120,6 +120,7 @@ final readonly class DegreeProgressSnapshot implements \JsonSerializable
                         "name",
                         "requirement_type",
                         "requirement_origins",
+                        "requirement_grade_floors",
                         "required_credits_milli",
                         "required_courses",
                         "minimum_grade_points_milli",

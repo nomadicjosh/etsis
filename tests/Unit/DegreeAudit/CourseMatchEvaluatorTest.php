@@ -97,6 +97,26 @@ final class CourseMatchEvaluatorTest extends TestCase
         self::assertSame("candidate", $this->first($work, $r, $e)["status"]);
     }
 
+    public function testCardGradeFloorUsesRetainedPointsAndTheGroupFloorStillApplies(): void
+    {
+        [$work, $r, $e] = $this->inputs();
+        $g = self::id(4);
+        $r["group_details"][$g]["definition"]["min_course_grade_points_milli"] = null;
+        $r["group_details"][$g]["definition"]["rules"][0]["min_course_grade_points_milli"] = 2675;
+        $work["grade"]["points_milli"] = 2675;
+        self::assertSame("candidate", $this->first($work, $r, $e)["status"]);
+        $work["grade"]["points_milli"] = 2674;
+        $work["quality_points_milli"] = 999999;
+        self::assertSame("requirement_grade_insufficient", $this->first($work, $r, $e)["status"]);
+        $r["group_details"][$g]["definition"]["rules"][] = [
+            "mode" => "pool",
+            "course_ids" => [$work["course_id"]],
+        ];
+        self::assertSame("candidate", $this->first($work, $r, $e)["status"]);
+        $r["group_details"][$g]["definition"]["min_course_grade_points_milli"] = 3000;
+        self::assertSame("insufficient_grade", $this->first($work, $r, $e)["status"]);
+    }
+
     public function testNamedCardOriginIsAnHonestGroupUnionAndUnknownOriginIsNotInferred(): void
     {
         [$work, $r, $e] = $this->inputs();

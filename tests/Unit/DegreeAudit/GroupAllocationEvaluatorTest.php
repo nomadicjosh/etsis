@@ -161,6 +161,115 @@ final class GroupAllocationEvaluatorTest extends TestCase
         return $rows;
     }
 
+    private function mixedGradeGroup(int $minimum = 9000): array
+    {
+        $g = $this->group(1, [1, 2, 3], $minimum);
+        $g["definition"]["rules"][] = [
+            "id" => self::id(710),
+            "mode" => "credits",
+            "minimum_courses" => 0,
+            "minimum_credits_milli" => 3000,
+            "course_ids" => [self::id(1), self::id(2), self::id(3)],
+            "min_course_grade_points_milli" => 3000,
+        ];
+        return $g;
+    }
+
+    public function testMixedCardFloorsRetainPassingLowerWorkWithoutBorrowingItForTheHigherCard(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->mixedGradeGroup()]);
+        $work = [
+            $this->work(10),
+            $this->work(11, 2, points: 2000),
+            $this->work(12, 3, points: 2000),
+        ];
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r));
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame(9000, $result["groups"][0]["coverage"]["applied_credits_milli"]);
+        self::assertSame(
+            3000,
+            $result["groups"][0]["coverage"]["rules"][self::id(710)]["applied_credits_milli"],
+        );
+        $work[0] = $this->work(10, points: 2000);
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r));
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertSame([], $result["groups"][0]["placements"]);
+    }
+
+    public function testTiedAwardsWithDifferentCardGradesKeepExactEvidenceAndDoNotDoubleCredit(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->mixedGradeGroup(6000)]);
+        $work = [$this->work(10, points: 2000), $this->work(11), $this->work(12, 2, points: 2000)];
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r));
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame(6000, $result["groups"][0]["coverage"]["applied_credits_milli"]);
+        $placements = array_column($result["groups"][0]["placements"], null, "course_id");
+        self::assertSame([[self::id(11)]], $placements[self::id(1)]["work_options"]);
+        $r["definition"]["policies"]["repeat_credit"] = "all_eligible";
+        $result = $this->evaluator()->evaluate(array_slice($work, 0, 2), $r, $this->effective($r));
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame(
+            3000,
+            $result["groups"][0]["coverage"]["rules"][self::id(710)]["applied_credits_milli"],
+        );
+        self::assertSame(6000, $result["groups"][0]["coverage"]["applied_credits_milli"]);
+    }
+
+    public function testCardGradingScaleUncertaintyStopsTheWholePlanWithoutAnImplicitConversion(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->mixedGradeGroup(3000)]);
+        $work = [$this->work(10)];
+        $work[0]["grade"]["scale_version_id"] = self::id(999);
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r));
+        self::assertSame("needs_review", $result["outcome"]);
+        self::assertContains("scale_differs", $result["issues"]);
+        self::assertSame([], $result["groups"][0]["placements"]);
+        $r["identical_grading_publications"] = [self::id(999) => true];
+        self::assertSame(
+            "feasible",
+            $this->evaluator()->evaluate($work, $r, $this->effective($r))["outcome"],
+        );
+    }
+
+    public function testSavedRuleCardFloorAppliesToItsContributionsAndKnownLowGradesExcludeUnknownPredicates(): void
+    {
+        $g = $this->ruleGroup(1);
+        $g["definition"]["rules"][0]["min_course_grade_points_milli"] = 3000;
+        $r = $this->requirements([self::id(1) => $g]);
+        $work = [$this->work(10, points: 2000)];
+        $result = $this->evaluator()->evaluate(
+            $work,
+            $r,
+            $this->effective($r),
+            $this->decisions($work, $r, ["unknown"]),
+        );
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertNotContains("rule_facts_unknown", $result["issues"]);
+        $work = [$this->work(10)];
+        self::assertSame(
+            "feasible",
+            $this->evaluator()->evaluate(
+                $work,
+                $r,
+                $this->effective($r),
+                $this->decisions($work, $r),
+            )["outcome"],
+        );
+    }
+
+    public function testOriginExclusionDoesNotInventAnUncertainGradeComparisonForThatCard(): void
+    {
+        $g = $this->mixedGradeGroup(3000);
+        $g["definition"]["rules"][1]["credit_origin"] = "institutional";
+        $r = $this->requirements([self::id(1) => $g]);
+        $work = [$this->work(10, origin: "transfer")];
+        $work[0]["grade"]["scale_version_id"] = self::id(999);
+        self::assertSame(
+            "infeasible",
+            $this->evaluator()->evaluate($work, $r, $this->effective($r))["outcome"],
+        );
+    }
+
     private function mixedOriginGroup(int $minimum = 9000): array
     {
         $g = $this->group(1, [1, 2, 3], $minimum);

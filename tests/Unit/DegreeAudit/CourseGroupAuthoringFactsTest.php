@@ -41,6 +41,8 @@ final class CourseGroupAuthoringFactsTest extends TestCase
                 "mode" => "choose",
                 "minimum_courses" => 1,
                 "course_ids" => [$first, $second],
+                "credit_origin" => "institutional",
+                "min_course_grade_points_milli" => 2675,
             ],
         ];
         $course = [
@@ -56,6 +58,8 @@ final class CourseGroupAuthoringFactsTest extends TestCase
         )->describe();
         self::assertSame([7, 8], array_column($facts["courses"], "degree_course_position"));
         self::assertSame([1, 2], $facts["rules"][0]["course_positions"]);
+        self::assertSame("institutional", $facts["rules"][0]["credit_origin"]);
+        self::assertSame(2675, $facts["rules"][0]["min_course_grade_points_milli"]);
         foreach ([$first, $second, "Excluded source text"] as $private) {
             self::assertStringNotContainsString($private, json_encode($facts));
         }

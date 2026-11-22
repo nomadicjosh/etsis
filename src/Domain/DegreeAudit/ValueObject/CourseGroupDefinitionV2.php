@@ -72,6 +72,9 @@ final readonly class CourseGroupDefinitionV2
         ) {
             self::invalid();
         }
+        foreach ($definition['rules'] as $rule) {
+            RequirementGradeFloor::fromRule($rule, $definition['max_course_grade_points_milli']);
+        }
         if (strlen(json_encode($definition, JSON_THROW_ON_ERROR)) > 49152) {
             self::invalid();
         }

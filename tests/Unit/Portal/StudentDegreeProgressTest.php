@@ -501,6 +501,33 @@ final class StudentDegreeProgressTest extends TestCase
         }
     }
 
+    public function testCardGradeFloorsExposePublicOrdinalsAndValidateRetainedValues(): void
+    {
+        $review = $this->review("needs_review");
+        $review["allocation"]["groups"][0]["rules"] = [
+            ["id" => "fictional-private-card", "min_course_grade_points_milli" => 2675],
+            ["min_course_grade_points_milli" => null],
+            ["min_course_grade_points_milli" => 0],
+            ["mode" => "pool"],
+        ];
+        $public = new StudentDegreeProgress($review)->describe();
+        self::assertSame(
+            [
+                ["requirement" => 1, "minimum_points_milli" => 2675],
+                ["requirement" => 2, "minimum_points_milli" => null],
+                ["requirement" => 3, "minimum_points_milli" => 0],
+            ],
+            $public["allocation"]["groups"][0]["requirement_grade_floors"],
+        );
+        self::assertStringNotContainsString(
+            "fictional-private-card",
+            json_encode($public, JSON_THROW_ON_ERROR),
+        );
+        $review["allocation"]["groups"][0]["rules"][0]["min_course_grade_points_milli"] = "2675";
+        $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
+        new StudentDegreeProgress($review);
+    }
+
     public function testCardOriginsExposeOnlyPublicOrdinalsAndRejectUnsupportedValues(): void
     {
         $review = $this->review("needs_review");

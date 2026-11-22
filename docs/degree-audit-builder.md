@@ -402,3 +402,20 @@ Institutional origin means the authoritative academic record's source, not a stu
 Save, preview, publication review, immutable versions and temporary student tests retain the chosen values. Catalog totals flag origin restrictions as needing an actual student test. Absent earlier card origins continue to permit either source; editing a later draft does not reinterpret a selected older publication. Repeats, sharing, grades and source evidence use the existing bounded allocator: tied institutional/transfer attempts remain distinct when they contribute to different cards, and group totals never multiply an award merely because cards overlap.
 
 [Staff/student explanations and recorded reviews](student-degree-progress.md#requirement-card-credit-origins) show these card rules without exposing raw grammar or supporting record identities. Final graduation eligibility and broader institutional residency policy remain separate roadmap work.
+
+
+## Different grade minima within a group
+
+Each requirement card has **Requirement N minimum grade points (optional)**. It sets the minimum retained grade points for each course contributing to that card. It works with **All of these**, **Choose a number**, **Take credits** and **Eligible course pool**, including saved-rule cards. The group-wide minimum, credit origin, actual-completion dates, sending-institution restrictions and other eligibility rules still apply. A lower card minimum cannot weaken the group minimum.
+
+For example, to require **9 credits with at least 3 credits earned at 3.0 grade points**, while accepting other passing work at 2.0:
+
+1. Set the group minimum to **9 credits** and its per-course grade minimum to **2.0**.
+2. Add an **Eligible course pool** containing the accepted published courses, leaving its card grade minimum blank.
+3. Add a **Take credits** card requiring **3 credits**, select the courses that may satisfy it and set that card's minimum to **3.0**. Courses may overlap the first card.
+
+A passing 2.0 course can contribute to the group total through the pool; it cannot supply the higher-grade card. A qualifying 3.0 course may satisfy the card and the total, but its credit is counted only once in that total. Combine the card minimum with **Institutional work only** when those 3 credits must also come from institutional work. No combination of overlapping cards creates new earned credit.
+
+Enter points from the selected grading definitions, for example **2.675**, not a letter, score percentage, GPA or weighted quality-point amount. The editor and server reject values above the selected grading maximum and preserve three decimal places. A blank or explicit zero adds no extra card floor; a passing grade remains necessary. Earlier cards without this setting keep their earlier behavior and are not rewritten.
+
+Positive floors require comparable retained grading evidence. Missing provenance or a different grading scale produces review-required results, without a partial placement. Republishing the exact same grading definition for the same scale identity can be verified from protected history; a different definition or identity is never converted implicitly. **Requirements preview** explains the saved policy, but catalog totals cannot verify a student's grades. Use a student test before publication and inspect the reviewed publication for the intended per-card minimum.

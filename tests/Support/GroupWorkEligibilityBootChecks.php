@@ -134,6 +134,22 @@ if (
 ) {
     throw new RuntimeException('Requirement origin lost its value or fabricated academic history.');
 }
+$gradeSave = ['revision' => $cardRead['revision'], 'definition' => $cardRead['definition']];
+$gradeSave['definition']['rules'][0]['min_course_grade_points_milli'] = 4001;
+if ($teachingPost($base . 'save/', $gradeSave)->getStatusCode() !== 422) {
+    throw new RuntimeException('An above-scale requirement grade floor entered a draft.');
+}
+$gradeSave['definition']['rules'][0]['min_course_grade_points_milli'] = 2675;
+if ($teachingPost($base . 'save/', $gradeSave)->getStatusCode() !== 200) {
+    throw new RuntimeException('A valid requirement grade floor could not be saved.');
+}
+$gradeRead = json_decode((string) $readEligibility()->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $gradeRead['definition']['rules'][0]['min_course_grade_points_milli'] !== 2675
+    || $before !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('A requirement grade floor changed history or lost precision.');
+}
 $sis->access->staff = false;
 $sis->access->grants = [];
 $sis->access->actor = $sis->user();

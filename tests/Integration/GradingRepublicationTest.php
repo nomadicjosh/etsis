@@ -59,6 +59,57 @@ final class GradingRepublicationTest extends TestCase
         return ["definition" => $f->definition, "grade_scale" => $snapshot];
     }
 
+    public function testCardOnlyFloorVerifiesTransferGradingEvenWhenGpaChecksAreDisabled(): void
+    {
+        $f = new ReusableGroupFixture();
+        $f->sis->gradeScale($this->definition());
+        $primary = $f->gradingScales()->resolve();
+        $f->sis->gradeScale(array_reverse($this->definition()));
+        $award = $f->gradingScales()->resolve();
+        $work = $this->work($f, $award["version_id"]);
+        $work["credit_type"] = "transfer";
+        $requirements = $this->requirements($f, $primary);
+        $requirements["group_details"] = [
+            [
+                "definition" => [
+                    "rules" => [
+                        [
+                            "min_course_grade_points_milli" => 3000,
+                        ],
+                    ],
+                ],
+            ],
+        ];
+        $verifier = new GradingRepublicationVerifier(new RetainedGradingReader($f->history));
+        $before = $f->digest("sis_history_events");
+        $prepared = $verifier->prepare(
+            [$work],
+            $requirements,
+            new HistoryReadBudget(maximumPages: 1),
+            gpaChecks: false,
+        );
+        self::assertSame(
+            [$award["version_id"] => true],
+            $prepared["identical_grading_publications"],
+        );
+        self::assertSame($before, $f->digest("sis_history_events"));
+        $changed = $this->definition();
+        $changed[0]["min_score_milli"] = 91000;
+        $f->sis->gradeScale($changed);
+        $later = $f->gradingScales()->resolve();
+        $other = $this->work($f, $later["version_id"]);
+        $other["credit_type"] = "transfer";
+        $before = $f->digest("sis_history_events");
+        $prepared = $verifier->prepare(
+            [$other],
+            $requirements,
+            new HistoryReadBudget(maximumPages: 1),
+            gpaChecks: false,
+        );
+        self::assertSame([], $prepared["identical_grading_publications"]);
+        self::assertSame($before, $f->digest("sis_history_events"));
+    }
+
     public function testBothDirectionsVerifyExactDefinitionsOnceAndPreserveAllRecordedFacts(): void
     {
         $f = new ReusableGroupFixture();

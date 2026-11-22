@@ -4,7 +4,7 @@ const vm=require('node:vm'),fs=require('node:fs');
 const {node,walk}=require('./support/elements.cjs');
 const wait=()=>new Promise(resolve=>setImmediate(resolve));
 const summary=()=>({as_of_date:'2026-08-10',outcome:'feasible',current_record_count:1,components:[{label:'Degree',context:{name:'Fictional degree',academic_year_code:'2026',version:1},minimums:[],gpa:{cumulative:{ready:true,milli:4000},overall:{ready:false,milli:null}},groups:[]}]});
-function fixture({owner=false,uncertain=false,deferred=false}={}) {
+function fixture({owner=false,uncertain=false,deferred=false,groups=[]}={}) {
     const window={};vm.runInNewContext(fs.readFileSync('public/assets/js/degree-progress-guide.js','utf8'),{window});
     const sent=[];let release;
     const grant={operation_id:'record',revision:'revision',reason:'Fictional reason',review_token:'private-proof',summary:summary()};
@@ -21,6 +21,7 @@ function fixture({owner=false,uncertain=false,deferred=false}={}) {
         }
         return {summary:summary(),recorded_at:'2026-08-10'};
     }},'/records/',!owner);
+    grant.summary.components[0].groups=groups;
     const find=label=>walk(c.element).find(e=>e.tag==='button'&&e.textContent===label);
     return {c,sent,find,release:()=>release(),input:()=>walk(c.element).find(e=>e.tag==='textarea'),submit:()=>walk(c.element).find(e=>e.tag==='form').events.submit({preventDefault(){}})};
 }
@@ -44,4 +45,14 @@ test('editing during a delayed review preserves the new draft and discards the o
     f.input().value='Original reason';f.input().events.input();f.submit();await wait();
     f.input().value='Changed reason';f.input().events.input();f.release();await wait();
     assert.equal(f.input().value,'Changed reason');assert.equal(f.find('Confirm recorded progress'),undefined);
+});
+
+
+test('recorded summaries explain card grade minima without requiring a group origin policy',async()=>{
+    const f=fixture({groups:[{name:'Fictional higher-grade requirement',requirement_type:'credits',
+        required_credits_milli:9000,requirement_grade_floors:[{requirement:1,minimum_points_milli:2675}]}]});
+    await f.c.start();await f.find('Record a new progress review').events.click();
+    f.input().value='Fictional retained card policy';f.input().events.input();f.submit();await wait();
+    assert.match(f.c.element.textContent,/Requirement 1: Per-course minimum 2\.675 grade points/);
+    assert.match(f.c.element.textContent,/does not certify graduation/);
 });
