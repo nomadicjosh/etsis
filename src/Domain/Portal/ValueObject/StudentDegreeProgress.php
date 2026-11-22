@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\Portal\ValueObject;
 
 use Domain\Shared\EventSourcing\CorruptHistoryException;
+use Domain\DegreeAudit\ValueObject\GroupWorkEligibility;
 
 /** Student-facing snapshot: no internal IDs, approval reasons, actors or raw requirement grammar. */
 final readonly class StudentDegreeProgress
@@ -131,7 +132,16 @@ final readonly class StudentDegreeProgress
             $data['issues'][] = $pick($issue, ['component', 'code']);
         }
         $referenceCount = 0;
-        $data["allocation"] = ["outcome" => $review["allocation"]["outcome"], "groups" => []];
+        $data["allocation"] = [
+            "outcome" => $review["allocation"]["outcome"],
+            "groups" => [],
+            "eligibility_issues" => array_values(
+                array_intersect($review["allocation"]["issues"] ?? [], [
+                    "origin_unknown",
+                    "completion_date_unknown",
+                ]),
+            ),
+        ];
         foreach ($review["allocation"]["groups"] as $value) {
             $group = $pick($value, [
                 "name",
@@ -140,10 +150,25 @@ final readonly class StudentDegreeProgress
                 "required_courses",
                 "minimum_grade_points_milli",
             ]);
-            $group['gaps'] = self::groupGaps($value, $review['allocation']['outcome']);
-            $group['coverage'] = null;
-            $group['course_review'] = self::courseReview(
-                $value['course_review'] ?? null,
+            if (array_key_exists("work_eligibility", $value)) {
+                if (!is_array($value["work_eligibility"])) {
+                    throw new CorruptHistoryException();
+                }
+                $facts = $pick($value["work_eligibility"], [
+                    "credit_origin",
+                    "completed_from",
+                    "completed_through",
+                ]);
+                try {
+                    $group["work_eligibility"] = new GroupWorkEligibility($facts)->facts;
+                } catch (\InvalidArgumentException) {
+                    throw new CorruptHistoryException();
+                }
+            }
+            $group["gaps"] = self::groupGaps($value, $review["allocation"]["outcome"]);
+            $group["coverage"] = null;
+            $group["course_review"] = self::courseReview(
+                $value["course_review"] ?? null,
                 $indices,
                 $referenceCount,
                 $review['allocation']['outcome'] === 'feasible',

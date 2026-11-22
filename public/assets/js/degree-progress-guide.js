@@ -1,3 +1,11 @@
+/* Display only the retained group restriction; dates are inclusive actual-completion boundaries. */
+window.degreeGroupEligibilityText = function (facts) {
+    const origin = { any: "Institutional or transfer work", institutional: "Institutional work only", transfer: "Transfer work only" };
+    return `${origin[facts?.credit_origin || "any"]}. ` +
+        (facts?.completed_from || facts?.completed_through
+            ? `Actual completion ${[facts.completed_from ? `on or after ${facts.completed_from}` : "", facts.completed_through ? `on or before ${facts.completed_through}` : ""].filter(Boolean).join(" and ")}. Missing completion dates require review.`
+            : "No completion-date restriction.");
+};
 /* Retained curriculum labels, shared by staff and private student progress. */
 window.curriculumOrganizationText = function (choice) {
     if (!choice || !Object.hasOwn(choice, "department")) return "Responsible department: not recorded in this publication";
@@ -229,6 +237,10 @@ window.createDegreeProgressNextSteps = function (node, data) {
                 "Review course-group placement",
                 "Open course-group details to review shortages, competing uses or unavailable evidence. A search limit or unsupported rule does not prove that completion is impossible.",
             );
+        if ([...(data.allocation?.issues || []), ...(data.allocation?.eligibility_issues || [])].includes("completion_date_unknown"))
+            add("Review actual completion dates", "Ask the registrar to verify actual completion dates for this group's retained date window. Posting terms and catalog dates cannot replace missing completion evidence.");
+        if ([...(data.allocation?.issues || []), ...(data.allocation?.eligibility_issues || [])].includes("origin_unknown"))
+            add("Review coursework origin", "Ask the registrar to verify the recorded institutional or transfer origin before applying this group's restriction.");
         if ((data.work_summary?.awaiting_grade_count || 0) > 0)
             add(
                 "Review pending grades",
@@ -427,7 +439,12 @@ window.createDegreeNamedCourseReview = function (ui, rows, resolve) {
         node("summary", { class: "h5" }, "Named-course review"),
     );
     const reasons = {
-        candidate: "Eligible after this group's course-publication and grade checks.",
+        candidate: "Eligible after this group's publication, grade and coursework eligibility checks.",
+        origin_excluded: "This group's recorded credit-origin restriction excludes this work.",
+        origin_unknown: "The recorded credit origin needed by this group is unavailable.",
+        completion_date_unknown: "Record the actual completion date before evaluating this group's date window.",
+        completed_before_window: "Completed before this group's permitted window.",
+        completed_after_window: "Completed after this group's permitted window.",
         placement_restricted: "An approved preference reserves this course for another group.",
         approval_conflict: "Course approvals conflict; registrar review is needed.",
         voided: "This award was voided.",

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Domain\DegreeAudit\Service;
 
 use Domain\DegreeAudit\ValueObject\CourseMatchStatus as Status;
+use Domain\DegreeAudit\ValueObject\GroupWorkEligibility;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use InvalidArgumentException;
 
@@ -243,6 +244,9 @@ final readonly class CourseMatchEvaluator
                 $id = $course["course_id"];
                 $candidate = [
                     "group_id" => $groupId,
+                    ...isset($definition["work_eligibility"])
+                        ? ["work_eligibility" => $definition["work_eligibility"]]
+                        : [],
                     "group_version_id" => $group["version_id"],
                     "group_name" => $definition["name"],
                     "required_course_id" => $id,
@@ -257,10 +261,16 @@ final readonly class CourseMatchEvaluator
                     "waived" => in_array($id, $effective["waived_course_ids"], true),
                     "approval_conflict" => isset($effective["substitution_conflicts"][$id]),
                 ];
-                $candidate['accepted_course_versions'] = $this->acceptedVersions($course, $effective);
-                $candidate['exception_version_ids'] = array_diff_key(
-                    $effective['accepted_course_versions'][$id] ?? [],
-                    array_fill_keys([$course['version_id'], ...($course['accepted_version_ids'] ?? [])], true),
+                $candidate["accepted_course_versions"] = $this->acceptedVersions(
+                    $course,
+                    $effective,
+                );
+                $candidate["exception_version_ids"] = array_diff_key(
+                    $effective["accepted_course_versions"][$id] ?? [],
+                    array_fill_keys(
+                        [$course["version_id"], ...$course["accepted_version_ids"] ?? []],
+                        true,
+                    ),
                 );
                 if (isset($requirements['dynamic_versions'][$groupId][$id])) {
                     $candidate['accepted_course_versions'] = $requirements['dynamic_versions'][$groupId][$id];
@@ -292,10 +302,15 @@ final readonly class CourseMatchEvaluator
      * @param array<string,mixed> $effective
      * @return array<string,true>
      */
-    public function acceptedVersions(array $reference, #[\SensitiveParameter] array $effective): array
-    {
-        $allowed = array_fill_keys([$reference['version_id'], ...($reference['accepted_version_ids'] ?? [])], true);
-        $allowed += $effective['accepted_course_versions'][$reference['course_id']] ?? [];
+    public function acceptedVersions(
+        array $reference,
+        #[\SensitiveParameter] array $effective,
+    ): array {
+        $allowed = array_fill_keys(
+            [$reference["version_id"], ...$reference["accepted_version_ids"] ?? []],
+            true,
+        );
+        $allowed += $effective["accepted_course_versions"][$reference["course_id"]] ?? [];
         return $allowed;
     }
 
@@ -340,8 +355,19 @@ final readonly class CourseMatchEvaluator
         if ($preferredGroup !== null && $candidate["group_id"] !== $preferredGroup) {
             return Status::PlacementRestricted;
         }
+        $eligibility = new GroupWorkEligibility(
+            $candidate["work_eligibility"] ?? GroupWorkEligibility::DEFAULT,
+        );
+        $origin = $eligibility->originStatus($work["credit_type"] ?? null);
+        if ($origin !== null) {
+            return $origin;
+        }
         if (!$work["grade_recorded"] && $work["completed_milli"] === 0) {
             return Status::InProgress;
+        }
+        $completion = $eligibility->completionStatus($work["completed_on"] ?? null);
+        if ($completion !== null && $completion !== Status::CompletionDateUnknown) {
+            return $completion;
         }
         $grade = $work["grade"];
         if ($grade === null) {
@@ -378,6 +404,6 @@ final readonly class CourseMatchEvaluator
                 return Status::InsufficientGrade;
             }
         }
-        return Status::Candidate;
+        return $completion ?? Status::Candidate;
     }
 }

@@ -1014,4 +1014,58 @@ final class GroupAllocationEvaluatorTest extends TestCase
         }
     }
 
+
+    public function testUnknownDatesPreventPartialPlansWhileKnownOutsideWorkProducesAnHonestShortfall(): void
+    {
+        $group = $this->group(1);
+        $group["definition"]["work_eligibility"] = [
+            "credit_origin" => "institutional",
+            "completed_from" => "2020-01-01",
+            "completed_through" => null,
+        ];
+        $r = $this->requirements([self::id(1) => $group]);
+        $e = $this->effective($r);
+        $work = $this->work(1001);
+        $unknown = $this->evaluator()->evaluate([$work], $r, $e);
+        self::assertSame("needs_review", $unknown["outcome"]);
+        self::assertContains("completion_date_unknown", $unknown["issues"]);
+        self::assertSame([], $unknown["groups"][0]["placements"]);
+        self::assertNull($unknown["groups"][0]["gaps"]);
+        $work["completed_on"] = "2019-12-31";
+        $outside = $this->evaluator()->evaluate([$work], $r, $e);
+        self::assertSame("infeasible", $outside["outcome"]);
+        self::assertSame([], $outside["groups"][0]["placements"]);
+        self::assertTrue($outside["groups"][0]["gaps"]["has_shortfall"]);
+        $work["completed_on"] = "2020-01-01";
+        $included = $this->evaluator()->evaluate([$work], $r, $e);
+        self::assertSame("feasible", $included["outcome"]);
+        self::assertSame(
+            $group["definition"]["work_eligibility"],
+            $included["groups"][0]["work_eligibility"],
+        );
+    }
+
+    public function testSavedRuleMatchingCannotBypassTheGroupsOriginOrDateWindow(): void
+    {
+        $group = $this->ruleGroup(1);
+        $group["definition"]["work_eligibility"] = [
+            "credit_origin" => "institutional",
+            "completed_from" => "2020-01-01",
+            "completed_through" => null,
+        ];
+        $r = $this->requirements([self::id(1) => $group]);
+        $e = $this->effective($r);
+        $work = $this->work(1001, origin: "transfer");
+        $result = $this->evaluator()->evaluate([$work], $r, $e, $this->decisions([$work], $r));
+        self::assertSame("infeasible", $result["outcome"]);
+        $work = $this->work(1002);
+        $result = $this->evaluator()->evaluate([$work], $r, $e, $this->decisions([$work], $r));
+        self::assertSame("needs_review", $result["outcome"]);
+        self::assertContains("completion_date_unknown", $result["issues"]);
+        $work["completed_on"] = "2020-01-01";
+        self::assertSame(
+            "feasible",
+            $this->evaluator()->evaluate([$work], $r, $e, $this->decisions([$work], $r))["outcome"],
+        );
+    }
 }

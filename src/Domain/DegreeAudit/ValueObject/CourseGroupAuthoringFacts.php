@@ -32,6 +32,7 @@ final readonly class CourseGroupAuthoringFacts
                     "min_courses",
                     "min_course_grade_points_milli",
                     "max_course_grade_points_milli",
+                    "work_eligibility",
                 ]),
             );
             $facts["program_grading_context_selected"] = $d["grade_scale_program_id"] !== null;

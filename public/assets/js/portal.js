@@ -1554,6 +1554,7 @@
                     "section",
                     { class: "portal-progress-card mb-3", "data-progress-group-index": index },
                     el("h4", { tabindex: "-1" }, group.name),
+                    el("p", {}, window.degreeGroupEligibilityText(group.work_eligibility)),
                     el(
                         "p",
                         {},

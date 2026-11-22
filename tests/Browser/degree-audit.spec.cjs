@@ -1968,3 +1968,44 @@ test("changing exception mode discards a pending baseline and labels the fresh i
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
+
+test("group coursework eligibility defaults allow both origins and retain explicit source/date rules", async ({ page }) => {
+    const f = await fixture(page);
+    await workspaceTool(page, "Course group library");
+    await page.getByRole("button", { name: "Build General education", exact: true }).click();
+    await expect(page.getByLabel("Count coursework from", { exact: true })).toHaveValue("any");
+    await page.getByLabel("Count coursework from", { exact: true }).selectOption("institutional");
+    await page.getByLabel("Completed on or after (optional)", { exact: true }).fill("2020-01-01");
+    await page.getByLabel("Completed on or before (optional)", { exact: true }).fill("2026-08-10");
+    await page.getByRole("button", { name: "Save group draft", exact: true }).click();
+    await expect(page.locator(".audit-status")).toContainText("Course group draft saved.");
+    const saved = f.calls.find(call => call.path.endsWith("/save/"));
+    expect(saved.body.definition.work_eligibility).toEqual({ credit_origin: "institutional", completed_from: "2020-01-01", completed_through: "2026-08-10" });
+    await page.getByRole("button", { name: "Requirements preview", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("Institutional work only. Actual completion on or after 2020-01-01 and on or before 2026-08-10");
+    await page.getByRole("button", { name: "Back to builder", exact: true }).click();
+    await expect(page.getByLabel("Count coursework from", { exact: true })).toHaveValue("institutional");
+    await expect(page.getByLabel("Completed on or after (optional)", { exact: true })).toHaveValue("2020-01-01");
+    await page.setViewportSize({ width: 320, height: 1000 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+test("group coursework eligibility rejects an inverted window without losing the draft", async ({ page }) => {
+    const f = await fixture(page);
+    await workspaceTool(page, "Course group library");
+    await page.getByRole("button", { name: "Build General education", exact: true }).click();
+    await page.getByLabel("Count coursework from", { exact: true }).selectOption("transfer");
+    await page.getByLabel("Completed on or after (optional)", { exact: true }).fill("2026-08-11");
+    await page.getByLabel("Completed on or before (optional)", { exact: true }).fill("2026-08-10");
+    await page.getByRole("button", { name: "Save group draft", exact: true }).click();
+    await expect(page.locator("dialog [role=alert]")).toContainText("earliest completion date must be on or before");
+    expect(f.calls.some(call => call.path.endsWith("/save/"))).toBe(false);
+    await expect(page.getByLabel("Count coursework from", { exact: true })).toHaveValue("transfer");
+    await page.getByLabel("Completed on or after (optional)", { exact: true }).fill("");
+    await page.getByRole("button", { name: "Save group draft", exact: true }).click();
+    await expect(page.locator(".audit-status")).toContainText("Course group draft saved.");
+    expect(f.calls.find(call => call.path.endsWith("/save/")).body.definition.work_eligibility).toEqual({ credit_origin: "transfer", completed_from: null, completed_through: "2026-08-10" });
+    expect(f.errors).toEqual([]);
+});

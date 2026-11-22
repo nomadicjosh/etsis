@@ -33,6 +33,7 @@ async function fixture(page,options={}) {
                 records:Array.from({length:21},(_,index)=>({course_code:index===20?'LAST.101':'MATH.101',course_title:'Retained work <b>fictional</b>',term_code:'26/FA',term_label_retained:true,academic_state:index===0?'awaiting_grade':'completed',placement:'not_used',credit:'included',cumulative_gpa:'included',overall_gpa:'undetermined'})),
             };
         } else throw new Error(`Unexpected private request ${path}`);
+        if (options.groupEligibility && data.allocation) data.allocation.groups[0].work_eligibility = options.groupEligibility;
         if (options.evidence && data.allocation) {
             data.records.forEach((record,i)=>Object.assign(record,{
                 credit_type:i===1?'transfer':'institutional',grade_state:'retained',recorded_earned_milli:3000,
@@ -535,5 +536,16 @@ test('owner combined progress shows a retained required-major label without anot
     await expect(page.getByRole('heading', { name: /Data <b>fictional<\/b> requirements/ })).toBeVisible();
     expect(f.calls.filter(c => c.path.endsWith('/degree-progress/'))).toHaveLength(1);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('portal coursework eligibility explains the retained group window while allowing transfer work', async ({page}) => {
+    const f = await fixture(page, {groupEligibility:{credit_origin:'any',completed_from:'2020-01-01',completed_through:null}});
+    await page.getByRole('button',{name:'Review progress · BSCS · 26/FA',exact:true}).click();
+    const content = page.locator('#campus-service-content');
+    await expect(content).toContainText('Institutional or transfer work. Actual completion on or after 2020-01-01');
+    await expect(content).toContainText('Missing completion dates require review');
+    await page.setViewportSize({width:320,height:1000});
+    await accessible(page);
     expect(f.errors).toEqual([]);
 });

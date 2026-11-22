@@ -269,4 +269,52 @@ final class CourseGroupQuantityTest extends TestCase
         $this->expectException(\Domain\Shared\Exception\ConcurrentModificationException::class);
         $f->groups->save($f->group, 0, new CourseGroupDefinitionV2($d));
     }
+
+    public function testEligibilityPublicationStalesReviewsAndPreservesEarlierDefinitionsAndFacts(): void
+    {
+        $f = new ReusableGroupFixture();
+        $old = $f->groups->version($f->group, $f->groupVersion);
+        $events = $f->sis->sql->rows("sis_history_events");
+        $d = $this->definition($f);
+        $d["work_eligibility"] = [
+            "credit_origin" => "institutional",
+            "completed_from" => "2020-01-01",
+            "completed_through" => null,
+        ];
+        $f->groups->save($f->group, 0, new CourseGroupDefinitionV2($d));
+        $review = $f->groups->review($f->group, "Fictional eligibility approval.");
+        $d["work_eligibility"]["completed_through"] = "2026-08-10";
+        $f->groups->save($f->group, 1, new CourseGroupDefinitionV2($d));
+        try {
+            $f->groups->publish($f->group, $review["review_token"]);
+            self::fail("A changed eligibility policy reused a publication review.");
+        } catch (\Domain\Shared\Exception\ConcurrentModificationException) {
+            self::assertSame($events, $f->sis->sql->rows("sis_history_events"));
+        }
+        $version = $f->publishGroup();
+        $published = $f->groups->version($f->group, $version);
+        self::assertEquals($d["work_eligibility"], $published["definition"]["work_eligibility"]);
+        $facts = new \Domain\DegreeAudit\ValueObject\CourseGroupAuthoringFacts(
+            new CourseGroupDefinitionV2($d),
+            $published["course_details"],
+        )->describe();
+        self::assertEquals($d["work_eligibility"], $facts["work_eligibility"]);
+        self::assertNotEmpty(
+            \Domain\DegreeAudit\ValueObject\CourseGroupPlan::forDefinition(
+                new CourseGroupDefinitionV2($d),
+                $published["course_details"],
+            )->warnings,
+        );
+        $d["work_eligibility"]["credit_origin"] = "transfer";
+        $f->groups->save($f->group, 2, new CourseGroupDefinitionV2($d));
+        $f->publishGroup();
+        self::assertSame($published, $f->groups->version($f->group, $version));
+        self::assertSame($old, $f->groups->version($f->group, $f->groupVersion));
+        foreach ($events as $event) {
+            self::assertSame(
+                $event,
+                $f->sis->sql->one("sis_history_events", ["id" => $event["id"]]),
+            );
+        }
+    }
 }

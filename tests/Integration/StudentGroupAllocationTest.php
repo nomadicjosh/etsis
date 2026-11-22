@@ -1290,4 +1290,93 @@ final class StudentGroupAllocationTest extends TestCase
         }
     }
 
+
+    public function testRetainedGroupWindowRespondsToReasonedCompletionCorrectionsAndIgnoresLaterDrafts(): void
+    {
+        $f = $this->institution();
+        $s = $f->f->sis;
+        [$section, $enrollment] = $this->work($f, 0);
+        $group = EntityId::generate();
+        $d = CourseGroupDefinitionV2::blank("Fictional recent institutional work")->definition;
+        $d["min_credits_milli"] = 3000;
+        $d["courses"] = [$f->f->groupDefinition["courses"][0]];
+        $d["rules"] = [
+            [
+                "id" => EntityId::generate()->value,
+                "mode" => "all",
+                "minimum_courses" => 1,
+                "course_ids" => [$d["courses"][0]["course_id"]],
+            ],
+        ];
+        $d["work_eligibility"] = [
+            "credit_origin" => "institutional",
+            "completed_from" => "2026-08-08",
+            "completed_through" => "2026-08-10",
+        ];
+        $f->f->groups->create($group, new CourseGroupDefinitionV2($d));
+        $review = $f->f->groups->review($group, "Fictional completion-window approval.");
+        $version = $f->f->groups->publish($group, $review["review_token"])["operation_id"];
+        $degree = $f->f->definition;
+        $degree["min_credits_milli"] = 3000;
+        $degree["min_resident_milli"] = 0;
+        $degree["groups"] = [["group_id" => $group->value, "version_id" => $version]];
+        $row = $f->f->degrees->view($f->f->degree);
+        $f->f->degrees->save($f->f->degree, $row["revision"], new AuditRequirementsV3($degree));
+        $f->version = new EntityId($f->f->publishDegree()["operation_id"]);
+        $f->assign();
+        require_once dirname(__DIR__) . "/Support/DegreeProgressFixture.php";
+        $progress = \DegreeProgressFixture::service(
+            $s,
+            $f->f->history,
+            $f->service,
+            $f->f->catalog->fixture->cipher,
+        );
+        $before = $s->sql->rows("sis_history_events");
+        $missing = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("needs_review", $missing["outcome"]);
+        self::assertContains("completion_date_unknown", $missing["issues"]);
+        $owner = new \Domain\Portal\ValueObject\StudentDegreeProgress(
+            $progress->preview($f->student, $f->assignment),
+        )->describe();
+        self::assertSame(["completion_date_unknown"], $owner["allocation"]["eligibility_issues"]);
+        self::assertEquals(
+            $d["work_eligibility"],
+            $owner["allocation"]["groups"][0]["work_eligibility"],
+        );
+        self::assertSame([], $missing["groups"][0]["placements"]);
+        self::assertSame($before, $s->sql->rows("sis_history_events"));
+        $dates = $s->academicDates();
+        $review = $dates->review(
+            $f->student,
+            $section->id,
+            $enrollment,
+            "2026-08-09",
+            1,
+            "Fictional actual completion evidence.",
+        );
+        $dates->commit($f->student, $section->id, $review["review_token"]);
+        $before = $s->sql->rows("sis_history_events");
+        $within = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("feasible", $within["outcome"]);
+        self::assertEquals($d["work_eligibility"], $within["groups"][0]["work_eligibility"]);
+        self::assertSame($before, $s->sql->rows("sis_history_events"));
+        $d["work_eligibility"]["credit_origin"] = "transfer";
+        $f->f->groups->save($group, 0, new CourseGroupDefinitionV2($d));
+        $review = $f->f->groups->review($group, "Fictional later source restriction.");
+        $f->f->groups->publish($group, $review["review_token"]);
+        self::assertSame($within, $this->service($f)->preview($f->student, $f->assignment));
+        $review = $dates->review(
+            $f->student,
+            $section->id,
+            $enrollment,
+            "2026-08-07",
+            2,
+            "Fictional correction to actual completion.",
+        );
+        $dates->commit($f->student, $section->id, $review["review_token"]);
+        $outside = $this->service($f)->preview($f->student, $f->assignment);
+        self::assertSame("infeasible", $outside["outcome"]);
+        self::assertTrue($outside["groups"][0]["gaps"]["has_shortfall"]);
+        self::assertSame([], $outside["groups"][0]["placements"]);
+    }
 }

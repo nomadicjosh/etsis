@@ -340,4 +340,80 @@ final class CourseMatchEvaluatorTest extends TestCase
         $this->expectException(\Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException::class);
         $evaluator->namedReview($r, array_fill(0, 201, $items[0]), [], [], false);
     }
+
+    public static function eligibilityCases(): array
+    {
+        return [
+            ["institutional", "institutional", "2020-01-01", "candidate"],
+            ["institutional", "transfer", "2020-01-01", "origin_excluded"],
+            ["transfer", "institutional", "2020-01-01", "origin_excluded"],
+            ["transfer", "transfer", "2024-02-29", "candidate"],
+            ["any", "institutional", null, "completion_date_unknown"],
+            ["any", "transfer", "2019-12-31", "completed_before_window"],
+            ["any", "transfer", "2024-03-01", "completed_after_window"],
+        ];
+    }
+
+    #[DataProvider("eligibilityCases")]
+    public function testOriginAndActualCompletionGateNamedAndAllocationCandidates(
+        string $requiredOrigin,
+        string $origin,
+        ?string $completed,
+        string $expected,
+    ): void {
+        [$work, $requirements, $effective] = $this->inputs();
+        $work["credit_type"] = $origin;
+        $work["completed_on"] = $completed;
+        $work["academic_on"] = "2022-01-01";
+        $requirements["group_details"][self::id(4)]["definition"]["work_eligibility"] = [
+            "credit_origin" => $requiredOrigin,
+            "completed_from" => "2020-01-01",
+            "completed_through" => "2024-02-29",
+        ];
+        self::assertSame($expected, $this->first($work, $requirements, $effective)["status"]);
+        $allocation = new CourseMatchEvaluator()->allocation([$work], $requirements, $effective);
+        self::assertSame($expected, $allocation[0]["requirement_matches"][0]["status"]);
+        // A waiver remains a waiver; it does not invent dates or change this record's credit.
+        $effective["waived_course_ids"] = [$work["course_id"]];
+        self::assertSame("waived", $this->first($work, $requirements, $effective)["status"]);
+    }
+
+    public function testApprovedReplacementMustSatisfyTheTargetsOriginAndDateRestrictions(): void
+    {
+        [$work, $requirements, $effective] = $this->inputs();
+        $target = $work["course_id"];
+        $work["course_id"] = self::id(22);
+        $work["course_version_id"] = self::id(23);
+        $work["credit_type"] = "transfer";
+        $effective["substitutions"][$target] = [
+            "course_id" => $work["course_id"],
+            "version_id" => $work["course_version_id"],
+        ];
+        $requirements["group_details"][self::id(4)]["definition"]["work_eligibility"] = [
+            "credit_origin" => "institutional",
+            "completed_from" => null,
+            "completed_through" => null,
+        ];
+        self::assertSame(
+            "origin_excluded",
+            $this->first($work, $requirements, $effective)["status"],
+        );
+    }
+    public function testUnknownCompletionDoesNotHideKnownFailureOrInsufficientGrade(): void
+    {
+        [$work, $requirements, $effective] = $this->inputs();
+        $requirements["group_details"][self::id(4)]["definition"]["work_eligibility"] = [
+            "credit_origin" => "any", "completed_from" => "2020-01-01", "completed_through" => null,
+        ];
+        $work["grade"]["points_milli"] = 2000;
+        self::assertSame("insufficient_grade", $this->first($work, $requirements, $effective)["status"]);
+        $work["grade"]["passes"] = false;
+        $work["completed_milli"] = 0;
+        $work["quality_points_milli"] = 0;
+        self::assertSame("not_passing", $this->first($work, $requirements, $effective)["status"]);
+        $work["grade_recorded"] = false;
+        $work["grade"] = null;
+        self::assertSame("in_progress", $this->first($work, $requirements, $effective)["status"]);
+    }
+
 }

@@ -8,6 +8,11 @@ namespace Domain\DegreeAudit\ValueObject;
 enum CourseMatchStatus: string
 {
     case ComponentExcluded = "component_excluded";
+    case OriginExcluded = "origin_excluded";
+    case OriginUnknown = "origin_unknown";
+    case CompletionDateUnknown = "completion_date_unknown";
+    case CompletedBeforeWindow = "completed_before_window";
+    case CompletedAfterWindow = "completed_after_window";
     case Candidate = "candidate";
     case PlacementRestricted = "placement_restricted";
     case Waived = "waived";
@@ -31,7 +36,17 @@ enum CourseMatchStatus: string
             => "An approved course route reserves this course for another curriculum component.",
             self::PlacementRestricted
             => "An approved placement preference reserves this course for another group in this pursuit.",
-            self::Candidate => "Candidate for allocation; this work has not been applied to the requirement.",
+            self::OriginExcluded => "This group requires a different recorded credit origin.",
+            self::OriginUnknown
+            => "The recorded credit origin is unavailable; this group's restriction needs review.",
+            self::CompletionDateUnknown
+            => "An actual completion date is required by this group. Posting or catalog dates cannot replace it.",
+            self::CompletedBeforeWindow
+            => "The actual completion date is before this group's permitted window.",
+            self::CompletedAfterWindow
+            => "The actual completion date is after this group's permitted window.",
+            self::Candidate
+            => "Candidate for allocation; this work has not been applied to the requirement.",
             self::Waived
             => "This course requirement is waived for this pursuit. The waiver creates no earned credit.",
             self::ApprovalConflict

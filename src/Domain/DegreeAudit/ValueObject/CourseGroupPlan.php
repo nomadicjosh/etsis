@@ -36,7 +36,20 @@ final readonly class CourseGroupPlan
         }
         $count = count($definition["courses"]);
         $warnings = [];
-        $dynamic = count(array_filter($definition['rules'], static fn(array $r): bool => isset($r['eligibility']))) > 0;
+        if (
+            isset($definition["work_eligibility"]) &&
+            $definition["work_eligibility"] != GroupWorkEligibility::DEFAULT
+        ) {
+            $warnings[] =
+            "Catalog totals do not check a student's credit origin or actual completion date. Run a student test.";
+        }
+        $dynamic =
+        count(
+            array_filter(
+                $definition["rules"],
+                static fn(array $r): bool => isset($r["eligibility"]),
+            ),
+        ) > 0;
         if ($dynamic) {
             $warnings[] = 'Listed totals exclude saved-rule matches. Run a student test to evaluate matching work.';
         } elseif ($count === 0) {

@@ -28,7 +28,17 @@ final readonly class CourseGroupDefinitionV2
             "courses",
             "rules",
         ];
-        if (count($definition) !== count($keys) || array_diff(array_keys($definition), $keys) !== []) {
+        if (array_key_exists("work_eligibility", $definition)) {
+            if (!is_array($definition["work_eligibility"])) {
+                self::invalid();
+            }
+            new GroupWorkEligibility($definition["work_eligibility"]);
+            $keys[] = "work_eligibility";
+        }
+        if (
+            count($definition) !== count($keys) ||
+            array_diff(array_keys($definition), $keys) !== []
+        ) {
             self::invalid();
         }
         if ($definition["grade_scale_program_id"] !== null) {
@@ -79,6 +89,7 @@ final readonly class CourseGroupDefinitionV2
             "min_course_grade_points_milli" => null,
             "max_course_grade_points_milli" => $maximumPointsMilli,
             "grade_scale_program_id" => null,
+            "work_eligibility" => GroupWorkEligibility::DEFAULT,
             "courses" => [],
             "rules" => [],
         ]);

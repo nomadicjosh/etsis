@@ -136,3 +136,12 @@ test("affected coursework renders lazily in twenty-record pages and focuses the 
   );
   assert.equal(walk(section).filter((e) => e.tag === "b").length, 0);
 });
+
+test("group coursework eligibility defaults permit transfer and explicit windows use completion evidence", () => {
+  assert.match(window.degreeGroupEligibilityText(), /Institutional or transfer work/);
+  assert.match(window.degreeGroupEligibilityText({credit_origin:"transfer",completed_from:"2020-01-01",completed_through:null}), /Transfer work only. Actual completion on or after 2020-01-01/);
+  const data = review();
+  data.allocation = {outcome:"needs_review",eligibility_issues:["completion_date_unknown"]};
+  assert.match(window.createDegreeProgressNextSteps(node,data).textContent, /Review actual completion dates/);
+  assert.match(window.createDegreeProgressNextSteps(node,data).textContent, /Posting terms and catalog dates cannot replace/);
+});

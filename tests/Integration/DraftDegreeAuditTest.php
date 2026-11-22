@@ -508,7 +508,7 @@ final class DraftDegreeAuditTest extends TestCase
         self::assertSame($before, $this->digest($f));
         $private = new \Domain\Portal\ValueObject\StudentDegreeProgress($published)->describe();
         self::assertArrayNotHasKey('rule_eligibility', $private);
-        self::assertStringNotContainsString('eligibility', json_encode($private));
+        self::assertStringNotContainsString('"eligibility":', json_encode($private));
     }
 
     public function testRepeatedAcceptedPublicationsKeepTheirOwnRuleCreditsInDraftAndPublishedTests(): void
@@ -1037,4 +1037,46 @@ final class DraftDegreeAuditTest extends TestCase
         self::assertSame($before, $this->digest($f));
     }
 
+
+    public function testTemporaryGroupEligibilityDoesNotRewriteOverallEarnedCreditOrSaveResults(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $this->work($f);
+        [$template, $degree, $group] = $this->draft($f);
+        $d = $f->f->groups->view($group)["definition"];
+        $d["work_eligibility"] = [
+            "credit_origin" => "institutional",
+            "completed_from" => "2020-01-01",
+            "completed_through" => null,
+        ];
+        $f->f->groups->save($group, 0, new CourseGroupDefinitionV2($d));
+        $before = $this->digest($f);
+        $result = $this->service($f)->test($template, $f->student, $f->assignment, $degree);
+        self::assertSame("needs_review", $result["allocation"]["outcome"]);
+        self::assertContains("completion_date_unknown", $result["allocation"]["issues"]);
+        self::assertSame($before, $this->digest($f));
+        $d["work_eligibility"]["credit_origin"] = "transfer";
+        $f->f->groups->save($group, 1, new CourseGroupDefinitionV2($d));
+        $before = $this->digest($f);
+        $excluded = $this->service($f)->test($template, $f->student, $f->assignment, $degree);
+        self::assertSame("infeasible", $excluded["allocation"]["outcome"]);
+        self::assertSame(
+            "origin_excluded",
+            $excluded["allocation"]["groups"][0]["course_review"][0]["attempts"][0]["status"],
+        );
+        self::assertSame("satisfied", $excluded["minimums"][0]["status"]);
+        self::assertSame($result["minimums"], $excluded["minimums"]);
+        self::assertSame($before, $this->digest($f));
+        $d["work_eligibility"] = \Domain\DegreeAudit\ValueObject\GroupWorkEligibility::DEFAULT;
+        $f->f->groups->save($group, 2, new CourseGroupDefinitionV2($d));
+        $before = $this->digest($f);
+        self::assertSame(
+            "feasible",
+            $this->service($f)->test($template, $f->student, $f->assignment, $degree)["allocation"][
+                "outcome"
+            ],
+        );
+        self::assertSame($before, $this->digest($f));
+        self::assertNull($f->service->view($f->student, $f->assignment)["selection"]);
+    }
 }

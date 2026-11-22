@@ -83,25 +83,38 @@ final readonly class RuleAllocationCompiler
                     continue;
                 }
                 $candidate = [
-                    'group_id' => $groupId,
-                    'approval_conflict' => isset($effective['substitution_conflicts'][$courseId]),
-                    'waived' => false,
-                    'expected_course_version_id' => $item['course_version_id'],
-                    'minimum_grade_points_milli' => $effective['groups'][$groupId]['min_course_grade_points_milli']
-                        ?? ($group['definition']['min_course_grade_points_milli'] ?? null),
+                    "group_id" => $groupId,
+                    ...isset($group["definition"]["work_eligibility"])
+                        ? ["work_eligibility" => $group["definition"]["work_eligibility"]]
+                        : [],
+                    "approval_conflict" => isset($effective["substitution_conflicts"][$courseId]),
+                    "waived" => false,
+                    "expected_course_version_id" => $item["course_version_id"],
+                    "minimum_grade_points_milli" =>
+                        $effective["groups"][$groupId]["min_course_grade_points_milli"] ??
+                        ($group["definition"]["min_course_grade_points_milli"] ?? null),
                 ];
                 $status = $this->matches->allocationStatus(
                     $item,
                     $candidate,
-                    $requirements['grade_scale'] ?? null,
-                    $effective['placements'][$courseId]['group_id'] ?? null,
-                    $requirements['identical_grading_publications'] ?? [],
+                    $requirements["grade_scale"] ?? null,
+                    $effective["placements"][$courseId]["group_id"] ?? null,
+                    $requirements["identical_grading_publications"] ?? [],
                 );
-                $possible = in_array($status, [
-                    CourseMatchStatus::Candidate, CourseMatchStatus::GradeUnknown,
-                    CourseMatchStatus::CourseVersionUnknown, CourseMatchStatus::ScaleUnknown,
-                    CourseMatchStatus::ScaleDiffers, CourseMatchStatus::ApprovalConflict,
-                ], true);
+                $possible = in_array(
+                    $status,
+                    [
+                        CourseMatchStatus::Candidate,
+                        CourseMatchStatus::GradeUnknown,
+                        CourseMatchStatus::CourseVersionUnknown,
+                        CourseMatchStatus::ScaleUnknown,
+                        CourseMatchStatus::ScaleDiffers,
+                        CourseMatchStatus::ApprovalConflict,
+                        CourseMatchStatus::OriginUnknown,
+                        CourseMatchStatus::CompletionDateUnknown,
+                    ],
+                    true,
+                );
                 $membership = [];
                 foreach ($dynamic as $rule) {
                     $decision = $captured[$rule['id']];

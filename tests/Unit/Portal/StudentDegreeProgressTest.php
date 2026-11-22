@@ -500,4 +500,25 @@ final class StudentDegreeProgressTest extends TestCase
             }
         }
     }
+
+    public function testGroupEligibilityKeepsOnlyPublicPolicyFactsAndCuratedMissingEvidenceCodes(): void
+    {
+        $review = $this->review("needs_review");
+        $policy = [
+            "credit_origin" => "institutional",
+            "completed_from" => "2020-01-01",
+            "completed_through" => null,
+        ];
+        $review["allocation"]["groups"][0]["work_eligibility"] = $policy + [
+            "reason" => "fictional-private-detail",
+        ];
+        $review["allocation"]["issues"] = ["completion_date_unknown", "fictional-private-detail"];
+        $data = new StudentDegreeProgress($review)->describe();
+        self::assertSame($policy, $data["allocation"]["groups"][0]["work_eligibility"]);
+        self::assertSame(["completion_date_unknown"], $data["allocation"]["eligibility_issues"]);
+        self::assertStringNotContainsString(
+            "fictional-private-detail",
+            json_encode($data, JSON_THROW_ON_ERROR),
+        );
+    }
 }

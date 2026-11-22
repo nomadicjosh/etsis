@@ -108,6 +108,9 @@ final readonly class GroupAllocationEvaluator
                 "required_credits_milli" => $e["min_credits_milli"],
                 "required_courses" => $e["min_courses"] ?? 0,
                 "minimum_grade_points_milli" => $e["min_course_grade_points_milli"] ?? null,
+                ...isset($d["work_eligibility"])
+                    ? ["work_eligibility" => $d["work_eligibility"]]
+                    : [],
                 "waived_courses" => array_values(
                     array_intersect(
                         array_column($d["courses"], "course_id"),
@@ -188,6 +191,8 @@ final readonly class GroupAllocationEvaluator
                             "scale_unknown",
                             "scale_differs",
                             "approval_conflict",
+                            "origin_unknown",
+                            "completion_date_unknown",
                         ],
                         true,
                     )
@@ -325,24 +330,34 @@ final readonly class GroupAllocationEvaluator
                     $pair = $pairs[$key];
                     $options = $evidence[$key . $this->contributionKey($placement)];
                     $workLabel = $records[$options[0][0]];
-                    $labels[$placement["group_id"]]["placements"][] = [
-                        "course_id" => $placement["course_id"],
-                        "course_code" => $workLabel["course_code"],
-                        "course_title" => $workLabel["course_title"],
-                        "target_course_id" => $placement["target_course_id"],
-                        "target_code" => ($pair['dynamic_target'] ?? false)
-                            ? $workLabel['course_code'] : $pair["required_course_code"],
-                        "target_title" => ($pair['dynamic_target'] ?? false)
-                            ? $workLabel['course_title'] : $pair["required_course_title"],
-                        "via_substitution" => $pair["via_substitution"],
-                        "credits_milli" => $placement["credits_milli"],
-                        "work_options" => $options,
-                    ] + (isset($placement['rule_credits_milli'])
-                    ? ['rule_credits_milli' => $placement['rule_credits_milli']] : []);
-                    if ($pair['dynamic_target'] ?? false) {
-                        $labels[$placement['group_id']]['courses'][$placement['target_course_id']] = [
-                            'code' => $workLabel['course_code'], 'title' => $workLabel['course_title'],
-                            'credits_milli' => $placement['credits_milli'],
+                    $labels[$placement["group_id"]]["placements"][] =
+                        [
+                            "course_id" => $placement["course_id"],
+                            "course_code" => $workLabel["course_code"],
+                            "course_title" => $workLabel["course_title"],
+                            "target_course_id" => $placement["target_course_id"],
+                            "target_code" =>
+                                $pair["dynamic_target"] ?? false
+                                    ? $workLabel["course_code"]
+                                    : $pair["required_course_code"],
+                            "target_title" =>
+                                $pair["dynamic_target"] ?? false
+                                    ? $workLabel["course_title"]
+                                    : $pair["required_course_title"],
+                            "via_substitution" => $pair["via_substitution"],
+                            "credits_milli" => $placement["credits_milli"],
+                            "work_options" => $options,
+                        ] +
+                        (isset($placement["rule_credits_milli"])
+                            ? ["rule_credits_milli" => $placement["rule_credits_milli"]]
+                            : []);
+                    if ($pair["dynamic_target"] ?? false) {
+                        $labels[$placement["group_id"]]["courses"][
+                            $placement["target_course_id"]
+                        ] = [
+                            "code" => $workLabel["course_code"],
+                            "title" => $workLabel["course_title"],
+                            "credits_milli" => $placement["credits_milli"],
                         ];
                     }
                     foreach ($options as $option) {
