@@ -83,6 +83,7 @@ final readonly class WorkspaceService
         "sis:registration:manage",
         "sis:gradebook:certify",
         "sis:gradebook:calculation-policy",
+        "sis:degree-audit:record",
         "sis:gradebook:manage",
         "sis:gradebook:amend",
         "sis:academic-work:scope",

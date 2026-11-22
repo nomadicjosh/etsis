@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 // Minimal shared HTTP setup for focused SIS checks. Included by the isolated console fixture only.
 require_once __DIR__ . "/SisFixture.php";
-$sis = new SisFixture();
+$sis = $httpSis ?? new SisFixture();
+unset($httpSis);
 $originalSubmissionActor = $sis->access->actor;
 $app->delegate(
     \Qubus\Expressive\Connection::class,

@@ -471,3 +471,36 @@ test("calculation blockers expose captured coursework with accessible local page
     expect(f.calls.filter(c => c.path === `${f.base}progress/`)).toHaveLength(1);
     expect(f.errors).toEqual([]);
 });
+
+test("recorded progress keeps a revised reason and retries the same uncertain confirmation", async ({ page }) => {
+    const f = await fixture(page,{assigned:true});
+    const records = await require('./support/recorded-progress-fixture.cjs').recordedFixture(page,'**/degree-requirements/records/**',{canRecord:true,uncertain:true,empty:true});
+    await page.getByRole('button',{name:'Recorded progress reviews',exact:true}).click();
+    await page.getByRole('button',{name:'Record a new progress review',exact:true}).click();
+    await page.getByLabel('Reason for recording this review',{exact:true}).fill('Fictional advising follow-up.');
+    await page.getByRole('button',{name:'Review progress to record',exact:true}).click();
+    await expect(page.getByRole('region',{name:'Recorded progress summary'})).toContainText('below minimum');
+    await page.getByRole('button',{name:'Revise recorded review',exact:true}).click();
+    await expect(page.getByLabel('Reason for recording this review',{exact:true})).toHaveValue('Fictional advising follow-up.');
+    await page.getByRole('button',{name:'Review progress to record',exact:true}).click();
+    await page.getByRole('button',{name:'Confirm recorded progress',exact:true}).click();
+    await expect(page.getByRole('status').filter({hasText:'Fictional connection interruption'})).toBeVisible();
+    await page.getByRole('button',{name:'Confirm recorded progress',exact:true}).click();
+    await expect(page.getByRole('status').filter({hasText:'Progress review recorded.'})).toBeVisible();
+    const commits=records.calls.filter(c=>c.path.endsWith('/confirm/'));
+    expect(commits).toHaveLength(2);expect(commits[1].data).toEqual(commits[0].data);
+    await expect(page.getByRole('region',{name:'Recorded progress summary'})).toContainText('Computing <b>fictional</b>');
+    await expect(page.getByRole('region',{name:'Recorded progress summary'}).locator('b')).toHaveCount(0);
+    await page.setViewportSize({width:320,height:1000});await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+test("recorded progress is readable without granting the recording duty", async ({ page }) => {
+    const f = await fixture(page,{assigned:true,readOnly:true});
+    await require('./support/recorded-progress-fixture.cjs').recordedFixture(page,'**/degree-requirements/records/**');
+    await page.getByRole('button',{name:'Recorded progress reviews',exact:true}).click();
+    await expect(page.getByRole('button',{name:'Record a new progress review',exact:true})).toHaveCount(0);
+    await page.getByRole('button',{name:/^Open review/}).click();
+    await expect(page.getByRole('region',{name:'Recorded progress summary'})).toContainText('Individual historical coursework is withheld');
+    expect(f.errors).toEqual([]);
+});

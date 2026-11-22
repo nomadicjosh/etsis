@@ -85,6 +85,10 @@ final readonly class HistoricalSchemaRegistry
                 'root' => \Domain\Gradebook\GradeCertificationHistory::class,
                 'fields' => \Domain\Gradebook\GradeCertificationHistory::FIELDS,
             ],
+            \Domain\DegreeAudit\Event\DegreeProgressWasRecorded::class => [
+                'type' => 'recorded_degree_progress', 'root' => \Domain\DegreeAudit\RecordedDegreeProgress::class,
+                'fields' => \Domain\DegreeAudit\RecordedDegreeProgress::FIELDS,
+            ],
             \Domain\Student\Event\EnrollmentLoadWasDetermined::class => [
                 'type' => 'enrollment_load_determination', 'root' => \Domain\Student\EnrollmentLoadDetermination::class,
                 'fields' => \Domain\Student\EnrollmentLoadDetermination::FIELDS,
@@ -667,6 +671,12 @@ final readonly class HistoricalSchemaRegistry
                     throw new CorruptHistoryException();
                 }
             }
+            if ($class === \Domain\DegreeAudit\Event\DegreeProgressWasRecorded::class) {
+                \Domain\DegreeAudit\RecordedDegreeProgress::validate($payload);
+                if ($payload['operation_id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\Student\Event\EnrollmentLoadWasDetermined::class) {
                 \Domain\Student\EnrollmentLoadDetermination::validate($payload);
                 if ($payload['operation_id'] !== (string) $stream->aggregateId) {
@@ -1068,6 +1078,7 @@ final readonly class HistoricalSchemaRegistry
                     \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class,
                     \Domain\HumanResources\Event\TimeEntryWasDecided::class,
                     \Domain\Gradebook\Event\ClassGradesWereCertified::class,
+                    \Domain\DegreeAudit\Event\DegreeProgressWasRecorded::class,
                     \Domain\Student\Event\EnrollmentLoadWasDetermined::class,
                     \Domain\Registration\Event\PrerequisitePermissionWasRecorded::class,
                     \Domain\Student\Event\EnrollmentLoadPolicyWasPublished::class,
@@ -1696,6 +1707,7 @@ final readonly class HistoricalSchemaRegistry
             \Domain\HumanResources\TimeDecision::class => 'timesheet_decision',
             \Domain\Gradebook\GradeCertificationHistory::class => 'class_grade_certifications',
             \Domain\Registration\PrerequisitePermission::class => 'prerequisite_permission',
+            \Domain\DegreeAudit\RecordedDegreeProgress::class => 'recorded_degree_progress',
             \Domain\Student\EnrollmentLoadDetermination::class => 'enrollment_load_determination',
             \Domain\Student\EnrollmentLoadPolicy::class => 'enrollment_load_policy',
             \Domain\Student\StudentStanding::class => 'student_standing',
@@ -1750,6 +1762,7 @@ final readonly class HistoricalSchemaRegistry
             'timesheet_decision' => new \Domain\HumanResources\ValueObject\TimeDecisionId($id),
             'class_grade_certifications' => new \Domain\Gradebook\ValueObject\GradeCertificationId($id),
             'prerequisite_permission' => new \Domain\Registration\ValueObject\PrerequisitePermissionId($id),
+            'recorded_degree_progress' => new \Domain\DegreeAudit\ValueObject\DegreeProgressRecordId($id),
             'enrollment_load_determination' => new \Domain\Student\ValueObject\LoadDeterminationId($id),
             'enrollment_load_policy' => new \Domain\Student\ValueObject\EnrollmentLoadPolicyId($id),
             'student_standing' => new \Domain\Student\ValueObject\StudentStandingId($id),

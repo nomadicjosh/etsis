@@ -1253,6 +1253,12 @@
                                 () => review(student.id, pursuit.id),
                                 true,
                             ),
+                            button(`Recorded reviews · ${pursuit.program_code} · ${pursuit.term_code}`, () => {
+                                ++generation;
+                                const records = window.createRecordedDegreeProgress({ node: el, request, buttonClass: "campus-button-outline" }, `/portal/api/students/${student.id}/programs/${pursuit.id}/degree-progress-records/`);
+                                result.replaceChildren(records.element);
+                                records.start();
+                            }),
                         ),
                     ),
                 );

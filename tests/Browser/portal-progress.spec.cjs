@@ -549,3 +549,17 @@ test('portal coursework eligibility explains the retained group window while all
     await accessible(page);
     expect(f.errors).toEqual([]);
 });
+
+test('portal recorded progress reopens an earlier summary without enabling academic writes', async ({page}) => {
+    const f = await fixture(page);
+    const records=await require('./support/recorded-progress-fixture.cjs').recordedFixture(page,'**/degree-progress-records/**');
+    await page.getByRole('button',{name:'Recorded reviews · BSCS · 26/FA',exact:true}).click();
+    await page.getByRole('button',{name:/^Open review/}).click();
+    const result=page.getByRole('region',{name:'Recorded progress summary'});
+    await expect(result).toContainText('Review date: 2026-08-10');
+    await expect(result).toContainText('not certify graduation');
+    await expect(page.getByRole('button',{name:'Record a new progress review',exact:true})).toHaveCount(0);
+    expect(records.calls.some(c=>c.path.endsWith('/review/')||c.path.endsWith('/confirm/'))).toBe(false);
+    await page.setViewportSize({width:320,height:1000});await accessible(page);
+    expect(f.errors).toEqual([]);
+});

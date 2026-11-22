@@ -1480,6 +1480,16 @@ return static function (Psr7Router $router): void {
             [\Application\Http\Controller\SisWorkPursuitController::class, $action]
         );
     }
+    foreach (['page/' => 'page', 'review/' => 'review', 'confirm/' => 'confirm'] as $suffix => $action) {
+        $router->post(
+            '/sis/students/{student}/programs/{assignment}/degree-requirements/records/' . $suffix,
+            [\Application\Http\Controller\SisDegreeProgressRecordController::class, $action]
+        );
+    }
+    $router->get(
+        '/sis/students/{student}/programs/{assignment}/degree-requirements/records/{id}/',
+        [\Application\Http\Controller\SisDegreeProgressRecordController::class, 'show']
+    );
     $router->post("/sis/students/{student}/programs/{assignment}/degree-requirements/progress/", [
         \Application\Http\Controller\SisAcademicWorkController::class,
         "progress",

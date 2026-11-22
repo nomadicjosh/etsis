@@ -174,6 +174,15 @@ return static function (Psr7Router $router): void {
         '/portal/api/students/{student}/programs/{pursuit}/advisors/',
         [$advising, 'owner']
     )->name('portal.advisors.owner');
+    $recordedProgress = \Application\Http\Controller\SisDegreeProgressRecordController::class;
+    $router->post(
+        '/portal/api/students/{student}/programs/{assignment}/degree-progress-records/page/',
+        [$recordedProgress, 'ownerPage']
+    );
+    $router->get(
+        '/portal/api/students/{student}/programs/{assignment}/degree-progress-records/{id}/',
+        [$recordedProgress, 'ownerShow']
+    );
     $progress = \Application\Http\Controller\PortalStudentProgressController::class;
     $router->map(["POST"], "/portal/api/students/{student}/degree-programs/", [$progress, "programs"])
         ->name("portal.degree.programs");

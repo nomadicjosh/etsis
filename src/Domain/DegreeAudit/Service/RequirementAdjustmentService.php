@@ -142,7 +142,8 @@ final readonly class RequirementAdjustmentService
                 unset($component);
             }
         }
-        return $all + ["components" => $components, "routes" => $routes, "routing_changed" => $stale];
+        return $all + ["components" => $components, "routes" => $routes, "routing_changed" => $stale,
+            "adjustment_version" => $state->playhead()];
     }
 
     /**

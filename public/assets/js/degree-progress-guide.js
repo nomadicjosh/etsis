@@ -1010,3 +1010,118 @@ window.createDegreeProgressBlockers = function (ui, data, headingLevel = 2) {
   }
   return section;
 };
+
+/* Shared private, summary-only recorded progress workflow. Drafts and proofs stay in page memory. */
+window.createRecordedDegreeProgress = function ({ node, request, buttonClass = "btn-outline-primary" }, base, allowRecording = false) {
+    const element = node("section", { class: "record-section", "aria-label": "Recorded progress reviews" });
+    const notice = node("p", { role: "status", "aria-live": "polite" });
+    const content = node("div");
+    element.append(notice, content);
+    let generation = 0, reason = "", review = null;
+    const valid = current => current === generation && element.isConnected;
+    const button = (label, action) => {
+        const b = node("button", { type: "button", class: `btn ${buttonClass} me-2 mb-2` }, label);
+        b.addEventListener("click", () => run(action, b));
+        return b;
+    };
+    async function run(action, control) {
+        if (control) control.disabled = true;
+        try { await action(); }
+        catch (error) { if (element.isConnected && (!control || control.isConnected)) notice.textContent = error.message || "This request could not be completed. Your draft is retained."; }
+        finally { if (control?.isConnected) control.disabled = false; }
+    }
+    const amount = n => n == null ? "Needs review" : String(n / 1000);
+    function summary(data) {
+        const box = node("section", { "aria-label": "Recorded progress summary" },
+            node("h3", {}, "Recorded progress summary"),
+            node("p", {}, `Review date: ${data.as_of_date}. ${data.current_record_count} academic records checked.`),
+            node("p", {}, data.outcome === "feasible" ? "A complete course-group placement was found." : "A complete course-group placement was not found."),
+            node("p", {}, "A progress review does not certify graduation or award a credential. Individual historical coursework is withheld from this summary."));
+        const names = { min_credits_milli: "Earned credits", min_resident_milli: "Institutional credits", min_cumulative_gpa_milli: "Cumulative GPA", min_overall_gpa_milli: "Overall GPA" };
+        for (const component of data.components) {
+            const card = node("section", { class: "mb-3" }, node("h4", {}, component.label),
+                node("p", {}, `${component.context.name} · ${component.context.academic_year_code} · Version ${component.context.version}`));
+            const checks = node("ul");
+            for (const check of component.minimums) {
+                const actual = check.actual_minimum_milli == null ? "Needs review" :
+                    check.actual_minimum_milli === check.actual_maximum_milli ? amount(check.actual_minimum_milli) : `${amount(check.actual_minimum_milli)}–${amount(check.actual_maximum_milli)}`;
+                checks.append(node("li", {}, `${names[check.key] || "Minimum"}: required ${amount(check.required_milli)}; observed ${actual}. ${String(check.status).replaceAll("_", " ")}.`));
+            }
+            if (component.input_status === "history_gaps") card.append(node("p", {}, "Earlier history was unknown for some work at this review."));
+            card.append(checks, node("p", {}, `Cumulative GPA: ${component.gpa.cumulative.ready ? amount(component.gpa.cumulative.milli) : "Needs review"}. Overall GPA: ${component.gpa.overall.ready ? amount(component.gpa.overall.milli) : "Needs review"}.`));
+            for (const group of component.groups) {
+                if (group.work_eligibility) card.append(node("p", {}, window.degreeGroupEligibilityText(group.work_eligibility)));
+                card.append(node("p", {},
+                `${group.name}: ${group.requirement_type === "courses" ? `${group.required_courses} required courses` : `${amount(group.required_credits_milli)} required credits`}. ${group.coverage ? `${group.coverage.applied_courses} courses / ${amount(group.coverage.applied_credits_milli)} credits in the recorded placement.` : "Placement not established."}`));
+            }
+            box.append(card);
+        }
+        return box;
+    }
+    async function page(after = null) {
+        const current = ++generation;
+        const data = await request(base + "page/", "POST", after ? { after } : {});
+        if (!valid(current)) return;
+        notice.textContent = "";
+        content.replaceChildren(node("h3", {}, "Recorded progress reviews"),
+            node("p", {}, "These dated reviews preserve earlier results. Open current degree progress for a fresh calculation."));
+        if (allowRecording && data.can_record) content.append(button("Record a new progress review", editor));
+        if (!data.items.length) content.append(node("p", {}, "No progress review has been recorded."));
+        for (const item of data.items) content.append(node("div", {},
+            node("p", {}, `${item.as_of_date} · ${item.component_count} curriculum components · Recorded ${item.recorded_at}`),
+            button(`Open review · ${item.as_of_date}`, () => show(item.id))));
+        if (after) content.append(button("First page", () => page()));
+        if (data.next_after) content.append(button("More recorded reviews", () => page(data.next_after)));
+    }
+    async function show(id) {
+        const current = ++generation;
+        const data = await request(base + id + "/");
+        if (!valid(current)) return;
+        notice.textContent = "";
+        content.replaceChildren(node("p", {}, `Recorded ${data.recorded_at}`), summary(data.summary), button("Back to recorded reviews", () => page()));
+    }
+    function editor() {
+        ++generation;
+        review = null;
+        notice.textContent = "";
+        const id = `progress-record-reason-${++window.recordedProgressSequence}`;
+        const input = node("textarea", { id, class: "form-control", required: true, maxlength: 1000, rows: 3 });
+        input.value = reason;
+        input.addEventListener("input", () => { reason = input.value; ++generation; });
+        const submit = node("button", { type: "submit", class: "btn btn-primary my-3" }, "Review progress to record");
+        const form = node("form", {}, node("label", { for: id, class: "form-label" }, "Reason for recording this review"), input, submit,
+            button("Back to recorded reviews", () => page()));
+        form.addEventListener("submit", event => {
+            event.preventDefault();
+            if (!form.reportValidity()) return;
+            const current = ++generation;
+            const submitted = reason;
+            run(async () => {
+                const data = await request(base + "review/", "POST", { reason: submitted });
+                if (!valid(current) || submitted !== reason) return;
+                review = data;
+                confirmation();
+            }, submit);
+        });
+        content.replaceChildren(form);
+        input.focus();
+    }
+    function confirmation() {
+        ++generation;
+        content.replaceChildren(summary(review.summary), node("p", {}, `Staff reason: ${review.reason}`),
+            button("Revise recorded review", editor),
+            button("Confirm recorded progress", async () => {
+                const current = ++generation;
+                const accepted = await request(base + "confirm/", "POST", {
+                    operation_id: review.operation_id, revision: review.revision, reason: review.reason, review_token: review.review_token,
+                });
+                if (!valid(current)) return;
+                notice.textContent = "Progress review recorded.";
+                review = null;
+                await show(accepted.operation_id);
+                notice.textContent = "Progress review recorded.";
+            }));
+    }
+    return { element, start: () => run(() => page()) };
+};
+window.recordedProgressSequence = 0;

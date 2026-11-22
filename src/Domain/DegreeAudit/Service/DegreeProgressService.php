@@ -99,12 +99,62 @@ final readonly class DegreeProgressService implements DegreeProgressReader
         return $this->curriculumProgress($student, $assignment, false, $budget);
     }
 
+    /** Internal protected capture; never route or serialize its data directly. */
+    public function capture(
+        EntityId $student,
+        EntityId $assignment,
+        HistoryReadBudget $budget,
+    ): array {
+        $data = $this->curriculumProgress($student, $assignment, true, $budget, true);
+        return $data["basis"] ??
+        throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "progress",
+                    "message" =>
+                        "Record a complete bounded review of the selected published curriculum first.",
+                ],
+            ]);
+    }
+
+    /** Explicit internal reproduction; ordinary recorded readers return the original accepted summary. */
+    public function verifySnapshot(
+        \Domain\DegreeAudit\ValueObject\DegreeProgressSnapshot $snapshot,
+    ): bool {
+        $d = $snapshot->data;
+        $student = new EntityId($d["student_id"]);
+        $pursuit = new EntityId($d["pursuit_id"]);
+        $actor = $this->specializations->authorizeRead($student, $pursuit);
+        return $this->transactions->run(function () use (
+            $snapshot,
+            $d,
+            $student,
+            $pursuit,
+            $actor,
+        ): bool {
+            $this->students->lock($student);
+            $this->specializations->authorizeRead($student, $pursuit, $actor);
+            $result = $this->combined->evaluate(
+                new \Domain\DegreeAudit\ValueObject\AcademicInputSet(
+                    AcademicInputStatus::from($d["result"]["input_status"]),
+                    $d["inputs"],
+                    $d["source_references"],
+                ),
+                $d["components"],
+                ComponentCourseSharing::from($d["sharing"]),
+                new HistoryReadBudget(),
+            );
+            $this->specializations->authorizeRead($student, $pursuit, $actor);
+            return $snapshot->matchesResult($result);
+        });
+    }
+
     /** @return array<string,mixed> */
     private function curriculumProgress(
         EntityId $student,
         EntityId $assignment,
         bool $staff,
         ?HistoryReadBudget $budget,
+        bool $capture = false,
     ): array {
         $actor = $staff
         ? $this->specializations->authorizeRead($student, $assignment)
@@ -119,6 +169,7 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                 $budget,
                 $staff,
                 $authorize,
+                $capture,
             ): array {
                 $this->students->lock($student);
                 $authorize();
@@ -130,13 +181,24 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                 }
                 $specializations = $all["specializations"];
                 $selected = $specializations["selection"]["specialization_ids"] ?? [];
-                if (array_key_exists('kind_limits', $specializations['program']['specializations'] ?? [])) {
+                if (
+                    array_key_exists(
+                        "kind_limits",
+                        $specializations["program"]["specializations"] ?? [],
+                    )
+                ) {
                     try {
                         new ComponentSelectionRules(
-                            $specializations['program']['specializations']['kind_limits'],
-                        )->selection($specializations['program']['specializations']['offered'], $selected);
+                            $specializations["program"]["specializations"]["kind_limits"],
+                        )->selection(
+                            $specializations["program"]["specializations"]["offered"],
+                            $selected,
+                        );
                     } catch (\Domain\Shared\Exception\ValidationException) {
-                        return ['status' => 'needs_review', 'issues' => ['component_selection_missing']];
+                        return [
+                            "status" => "needs_review",
+                            "issues" => ["component_selection_missing"],
+                        ];
                     }
                 }
 
@@ -198,7 +260,23 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                 if ($inputs->status === AcademicInputStatus::Inconsistent) {
                     throw new CorruptHistoryException();
                 }
-                return $this->combined->evaluate($inputs, $components, $sharing, $budget);
+                $result = $this->combined->evaluate($inputs, $components, $sharing, $budget);
+                if ($capture && ($result["status"] ?? null) === "review") {
+                    $basis = [
+                        "student_id" => $student->value,
+                        "pursuit_id" => $assignment->value,
+                        "as_of_date" => "",
+                        "sharing" => $sharing->value,
+                        "context_hash" => $all["context_hash"],
+                        "adjustment_version" => $all["adjustment_version"],
+                        "components" => $components,
+                        "inputs" => $inputs->items,
+                        "source_references" => $inputs->references,
+                        "result" => $result,
+                    ];
+                    return ["basis" => $basis];
+                }
+                return $result;
             });
         } catch (HistoryReadLimitException | AllocationBudgetExhaustedException) {
             $result = ["status" => "limited"];

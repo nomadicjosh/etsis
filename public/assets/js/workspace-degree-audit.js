@@ -2827,6 +2827,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
         body.append(
             actions(
                 button("Degree progress", () => degreeProgress(base, restore), "btn-primary"),
+                button("Recorded progress reviews", () => {
+                    const target = screen("Recorded progress reviews");
+                    const records = window.createRecordedDegreeProgress({ node, request }, base + "records/", true);
+                    target.append(button("Back to requirements", restore), records.element);
+                    records.start();
+                }),
                 ui.can?.("sis:student:read")
                     ? button("Combined curriculum progress", () => combinedProgress(base, restore))
                     : null,

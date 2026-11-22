@@ -911,4 +911,340 @@ final class CombinedDegreeProgressTest extends TestCase
         self::assertSame($child['parent_major'], $fresh['components'][2]['parent_major']);
     }
 
+
+    private function recordedService(
+        StudentSpecializationRequirementsFixture $f,
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\DegreeAudit\Service\DegreeProgressRecordService {
+        $s = $f->r->sis;
+        return new \Domain\DegreeAudit\Service\DegreeProgressRecordService(
+            $this->service($f),
+            new \Infrastructure\Persistence\Repository\SqlDegreeProgressRecordRepository($s->sql),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($s->sql),
+            $f->service,
+            $s->admissions,
+            $f->r->history,
+            $s->access,
+            $s->transactions,
+            $audit ?? $s->audit,
+            $s->clock,
+            new \Domain\Shared\Service\ReviewProof($f->r->catalog->fixture->cipher, $s->clock),
+        );
+    }
+
+    public function testRecordedReviewFreezesItsBasisAndOriginalRetryAfterNewAcademicFacts(): void
+    {
+        $f = $this->fixture();
+        $s = $f->r->sis;
+        $this->work($f, 0);
+        $records = $this->recordedService($f);
+        $before = $s->sql->rows("sis_history_events");
+        $review = $records->review($f->student, $f->assignment, "Fictional advising review.");
+        self::assertSame($before, $s->sql->rows("sis_history_events"));
+        self::assertArrayNotHasKey("inputs", $review);
+        $args = [
+            $f->student,
+            $f->assignment,
+            new EntityId($review["operation_id"]),
+            $review["revision"],
+            $review["reason"],
+            $review["review_token"],
+        ];
+        $receipt = $records->confirm(...$args);
+        $record = $records->show(
+            $f->student,
+            $f->assignment,
+            new EntityId($review["operation_id"]),
+            "staff",
+        );
+        self::assertEquals($review["summary"], $record["summary"]);
+        self::assertStringNotContainsString("work_ids", json_encode($record, JSON_THROW_ON_ERROR));
+        self::assertStringNotContainsString(
+            "course_review",
+            json_encode($record, JSON_THROW_ON_ERROR),
+        );
+        $events = \EventStoreFixture::framework(
+            $s->connection->queryBuilder(),
+        )->getAggregateHistoryFor(
+            new \Domain\DegreeAudit\ValueObject\DegreeProgressRecordId($review["operation_id"]),
+        );
+        $event = iterator_to_array($events)[0];
+        $snapshot = new \Domain\DegreeAudit\ValueObject\DegreeProgressSnapshot(
+            $event->payload()["snapshot"],
+        );
+        $this->work($f, 1);
+        self::assertTrue($this->service($f)->verifySnapshot($snapshot));
+        $s->clock->time = $s->clock->time->modify("+21 minutes");
+        self::assertSame($receipt, $records->confirm(...$args));
+        self::assertSame(
+            $record,
+            $records->show(
+                $f->student,
+                $f->assignment,
+                new EntityId($review["operation_id"]),
+                "staff",
+            ),
+        );
+        self::assertCount(1, $s->sql->rows("sis_degree_progress_records"));
+        $page = $records->listing($f->student, $f->assignment, "staff");
+        self::assertCount(1, $page["items"]);
+        self::assertTrue($page["can_record"]);
+    }
+
+    public static function recordingFailures(): array
+    {
+        return [["source"], ["audit"], ["actor"], ["duty"], ["expiry"]];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider("recordingFailures")]
+    public function testRecordingChecksRollBackAuditProjectionAndHistory(string $failure): void
+    {
+        $f = $this->fixture();
+        $s = $f->r->sis;
+        $this->work($f, 0);
+        $review = $this->recordedService($f)->review(
+            $f->student,
+            $f->assignment,
+            "Fictional protected reason.",
+        );
+        $tables = [
+            "sis_history_events",
+            "sis_history_operations",
+            "sis_academic_credits",
+            "sis_degree_progress_records",
+            "sis_audit",
+        ];
+        $before = array_map($s->sql->rows(...), $tables);
+        $audit = $this->createStub(\Domain\Audit\Repository\AuditTrail::class);
+        $audit->method("record")->willReturnCallback(function () use ($f, $s, $failure): void {
+            if ($failure === "source") {
+                $this->work($f, 1);
+            } elseif ($failure === "audit") {
+                throw new \RuntimeException("Fictional audit refusal.");
+            } elseif ($failure === "actor") {
+                $s->access->actor = $s->user();
+            } elseif ($failure === "duty") {
+                $s->access->staff = false;
+                $s->access->grants = ["sis:student:read"];
+            } else {
+                $s->clock->time = $s->clock->time->modify("+21 minutes");
+            }
+        });
+        try {
+            $this->recordedService($f, $audit)->confirm(
+                $f->student,
+                $f->assignment,
+                new EntityId($review["operation_id"]),
+                $review["revision"],
+                $review["reason"],
+                $review["review_token"],
+            );
+            self::fail("A changed recording context was accepted.");
+        } catch (\RuntimeException $e) {
+            self::assertSame(
+                $failure === "audit"
+                    ? \RuntimeException::class
+                    : (in_array($failure, ["actor", "duty"], true)
+                        ? AccessDeniedException::class
+                        : \Domain\Shared\Exception\ConcurrentModificationException::class),
+                $e::class,
+            );
+            self::assertSame($before, array_map($s->sql->rows(...), $tables));
+        }
+    }
+
+    public function testRecordingDutyIsIndependentAndOwnerReadsHaveNoIndividualHistoricalWork(): void
+    {
+        $f = $this->fixture();
+        $s = $f->r->sis;
+        $this->work($f, 0);
+        $records = $this->recordedService($f);
+        $s->access->staff = false;
+        $s->access->grants = ["sis:student:read"];
+        self::assertFalse($records->listing($f->student, $f->assignment, "staff")["can_record"]);
+        try {
+            $records->review($f->student, $f->assignment, "Fictional review.");
+            self::fail("Student readers gained recording authority.");
+        } catch (AccessDeniedException) {
+            self::assertSame([], $s->sql->rows("sis_degree_progress_records"));
+        }
+        $s->access->grants[] = "sis:degree-audit:record";
+        $review = $records->review($f->student, $f->assignment, "Fictional confidential reason.");
+        $records->confirm(
+            $f->student,
+            $f->assignment,
+            new EntityId($review["operation_id"]),
+            $review["revision"],
+            $review["reason"],
+            $review["review_token"],
+        );
+        $staff = $s->access->actor;
+        $s->access->actor = $s->admissions->person(
+            $s->admissions->student($f->student)->personId,
+        )->ownerUserId;
+        $s->access->grants = [];
+        $shown = $records->show(
+            $f->student,
+            $f->assignment,
+            new EntityId($review["operation_id"]),
+            "owner",
+        );
+        self::assertFalse($records->listing($f->student, $f->assignment, "owner")["can_record"]);
+        $json = json_encode($shown, JSON_THROW_ON_ERROR);
+        foreach (
+            [
+                "Fictional confidential reason",
+                "source_references",
+                "course_review",
+                "record_index",
+                "requirements_version_id",
+                "inputs",
+                "placements",
+            ] as $private
+        ) {
+            self::assertStringNotContainsString($private, $json);
+        }
+        $s->access->actor = $staff;
+        $s->access->staff = true;
+        try {
+            $records->show(
+                $f->student,
+                $f->assignment,
+                new EntityId($review["operation_id"]),
+                "owner",
+            );
+            self::fail("A staff role bypassed the owner-only route.");
+        } catch (AccessDeniedException) {
+            self::assertTrue(true);
+        }
+        $s->sql->update(
+            "sis_degree_progress_records",
+            ["source_hash" => str_repeat("0", 64)],
+            ["id" => $review["operation_id"]],
+        );
+        $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
+        $records->show($f->student, $f->assignment, new EntityId($review["operation_id"]), "staff");
+    }
+
+    public function testRecordingRejectsIncompleteSourcesAndAStaleUnacceptedReview(): void
+    {
+        $f = $this->fixture(typed: true, missingSelection: true);
+        $records = $this->recordedService($f);
+        try {
+            $records->review($f->student, $f->assignment, "Fictional unselected component.");
+            self::fail("An incomplete curriculum was recorded.");
+        } catch (\Domain\Shared\Exception\ValidationException) {
+            self::assertSame([], $f->r->sis->sql->rows("sis_degree_progress_records"));
+        }
+        $f = $this->fixture();
+        $records = $this->recordedService($f);
+        $review = $records->review($f->student, $f->assignment, "Fictional stale review.");
+        $this->work($f, 0);
+        $this->expectException(\Domain\Shared\Exception\ConcurrentModificationException::class);
+        $records->confirm(
+            $f->student,
+            $f->assignment,
+            new EntityId($review["operation_id"]),
+            $review["revision"],
+            $review["reason"],
+            $review["review_token"],
+        );
+    }
+
+    public static function invalidRecordedSnapshots(): array
+    {
+        return [
+            ["extra"],
+            ["size"],
+            ["context"],
+            ["count"],
+            ["duplicate"],
+            ["component"],
+            ["references"],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider("invalidRecordedSnapshots")]
+    public function testRecordedSnapshotsRejectUnboundedOrInconsistentCapturedBasis(
+        string $failure,
+    ): void {
+        $f = $this->fixture();
+        $this->work($f, 0);
+        $basis = $this->service($f)->capture($f->student, $f->assignment, new HistoryReadBudget());
+        $basis["as_of_date"] = "2026-08-10";
+        $snapshot = new \Domain\DegreeAudit\ValueObject\DegreeProgressSnapshot($basis);
+        self::assertSame(
+            $snapshot->fingerprint(),
+            new \Domain\DegreeAudit\ValueObject\DegreeProgressSnapshot(
+                array_reverse($basis, true),
+            )->fingerprint(),
+        );
+        self::assertStringNotContainsString(
+            "source_references",
+            json_encode($snapshot, JSON_THROW_ON_ERROR),
+        );
+        if ($failure === "extra") {
+            $basis["extra"] = true;
+        } elseif ($failure === "size") {
+            $basis["inputs"][0]["course_title"] = str_repeat("x", 262145);
+        } elseif ($failure === "context") {
+            $basis["context_hash"] = "invalid";
+        } elseif ($failure === "count") {
+            $basis["result"]["current_record_count"] = 2;
+        } elseif ($failure === "duplicate") {
+            $basis["inputs"][] = $basis["inputs"][0];
+            $basis["result"]["current_record_count"] = 2;
+        } elseif ($failure === "component") {
+            $basis["components"][0]["requirements"]["version_id"] = EntityId::generate()->value;
+        } else {
+            $basis["source_references"] = array_fill(0, 2001, []);
+        }
+        $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
+        new \Domain\DegreeAudit\ValueObject\DegreeProgressSnapshot($basis);
+    }
+
+    public function testRecordedReadRechecksTheActorAfterRequiredAccessAudit(): void
+    {
+        $f = $this->fixture();
+        $records = $this->recordedService($f);
+        $review = $records->review($f->student, $f->assignment, "Fictional recorded review.");
+        $id = new EntityId($review["operation_id"]);
+        $records->confirm(
+            $f->student,
+            $f->assignment,
+            $id,
+            $review["revision"],
+            $review["reason"],
+            $review["review_token"],
+        );
+        $audit = $this->createStub(\Domain\Audit\Repository\AuditTrail::class);
+        $audit->method("record")->willReturnCallback(function () use ($f): void {
+            $f->r->sis->access->actor = $f->r->sis->user();
+        });
+        $this->expectException(AccessDeniedException::class);
+        $this->recordedService($f, $audit)->show($f->student, $f->assignment, $id, "staff");
+    }
+    public function testRecordedReviewRetainsTheInstitutionDateAcrossUtcMidnight(): void
+    {
+        $f = $this->fixture();
+        $f->r->sis->clock->time = new \DateTimeImmutable(
+            "2026-08-10 23:55:00",
+            new \DateTimeZone("America/Los_Angeles"),
+        );
+        $records = $this->recordedService($f);
+        $review = $records->review($f->student, $f->assignment, "Fictional late local review.");
+        $id = new EntityId($review["operation_id"]);
+        $records->confirm(
+            $f->student,
+            $f->assignment,
+            $id,
+            $review["revision"],
+            $review["reason"],
+            $review["review_token"],
+        );
+        $shown = $records->show($f->student, $f->assignment, $id, "staff");
+        self::assertSame("2026-08-10", $shown["summary"]["as_of_date"]);
+        self::assertSame("2026-08-11 06:55:00", $f->r->sis->sql->rows("sis_degree_progress_records")[0]["recorded_at"]);
+    }
+
 }

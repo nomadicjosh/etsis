@@ -31,6 +31,7 @@ final class EventClassMap
             \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class,
             \Domain\HumanResources\Event\TimeEntryWasDecided::class,
             \Domain\Gradebook\Event\ClassGradesWereCertified::class,
+            \Domain\DegreeAudit\Event\DegreeProgressWasRecorded::class,
             \Domain\Student\Event\EnrollmentLoadWasDetermined::class,
             \Domain\Registration\Event\PrerequisitePermissionWasRecorded::class,
             \Domain\Student\Event\HiatusCaseWasRecorded::class,
