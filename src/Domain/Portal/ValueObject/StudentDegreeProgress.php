@@ -213,6 +213,26 @@ final readonly class StudentDegreeProgress
                     $group['work_eligibility_context'] = $expected;
                 }
             }
+            $origins = [];
+            foreach ($value['rules'] ?? [] as $index => $rule) {
+                if (!is_array($rule)) {
+                    continue;
+                }
+                if (!is_int($index) || $index < 0 || $index >= 100) {
+                    throw new CorruptHistoryException();
+                }
+                if (array_key_exists('credit_origin', $rule)) {
+                    try {
+                        $origin = \Domain\DegreeAudit\ValueObject\RequirementCreditOrigin::fromRule($rule);
+                    } catch (\InvalidArgumentException) {
+                        throw new CorruptHistoryException();
+                    }
+                    $origins[] = ['requirement' => $index + 1, 'credit_origin' => $origin->value];
+                }
+            }
+            if ($origins !== []) {
+                $group['requirement_origins'] = $origins;
+            }
             $group["gaps"] = self::groupGaps($value, $review["allocation"]["outcome"]);
             $group["coverage"] = null;
             $group["course_review"] = self::courseReview(

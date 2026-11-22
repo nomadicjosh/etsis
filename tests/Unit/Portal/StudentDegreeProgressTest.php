@@ -501,6 +501,26 @@ final class StudentDegreeProgressTest extends TestCase
         }
     }
 
+    public function testCardOriginsExposeOnlyPublicOrdinalsAndRejectUnsupportedValues(): void
+    {
+        $review = $this->review("needs_review");
+        $review["allocation"]["groups"][0]["rules"] = [
+            ["credit_origin" => "institutional", "private" => "fictional-private-note"],
+        ];
+        $public = new StudentDegreeProgress($review)->describe();
+        self::assertSame(
+            [["requirement" => 1, "credit_origin" => "institutional"]],
+            $public["allocation"]["groups"][0]["requirement_origins"],
+        );
+        self::assertStringNotContainsString(
+            "fictional-private-note",
+            json_encode($public, JSON_THROW_ON_ERROR),
+        );
+        $review["allocation"]["groups"][0]["rules"][0]["credit_origin"] = "staff_override";
+        $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
+        new StudentDegreeProgress($review);
+    }
+
     public function testGroupEligibilityKeepsOnlyPublicPolicyFactsAndCuratedMissingEvidenceCodes(): void
     {
         $review = $this->review("needs_review");

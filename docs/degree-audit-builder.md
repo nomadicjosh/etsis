@@ -383,3 +383,22 @@ Draft save, preview and reviewed immutable publication retain the rule. Changing
 Expired work remains awarded credit. The rule changes placement into this group, not the grade, transcript award or independent earned-credit/GPA policy. Missing actual completion or the required review date requires review without a speculative partial allocation. This is expiration at a **progress review**, not a graduation eligibility decision or an automatic revocation of credit. Age at a future graduation date remains a separate policy.
 
 [Recorded progress reviews](student-degree-progress.md#expiration-at-the-review-date) preserve the date and result actually reviewed. A new review may differ when the calendar advances; opening an older recorded review does not recalculate it using today's date.
+
+
+## Institutional and transfer contributions within a group
+
+Each requirement card has **Requirement N coursework origin**: **Institutional or transfer work**, **Institutional work only**, or **Transfer work only**. The setting limits contributions to that card. It applies to **All of these**, **Choose a number**, **Take credits** and **Eligible course pool**, including cards backed by a selected saved-rule revision. The group-wide **Count coursework from** rule still applies first, along with retained course/grade/date/source restrictions. A mandatory card that requires the opposite of the group-wide origin can be saved while editing but cannot be published until the contradiction is resolved.
+
+To require **3 institutional credits within a 9-credit group** while allowing transfer work for the remainder:
+
+1. Set the group minimum to **9 credits** and leave **Count coursework from** at **Institutional or transfer work**.
+2. Add an **Eligible course pool** card with the accepted published courses and leave its origin unrestricted.
+3. Add a **Take credits** card requiring **3 credits**, choose the applicable courses (they may overlap the first card), and set its origin to **Institutional work only**.
+
+A qualifying institutional course can contribute to the institutional card and the group's overall total. It is counted once in that total; the 3-credit floor does not turn a 9-credit group into 12 credits. Transfer work can still meet other eligible cards and the group total. If every card accepting a course excludes its recorded origin, that work cannot be placed in this group, although its award remains intact and it may qualify elsewhere. A transfer-only card works the same way for an institution-defined transfer pathway.
+
+Institutional origin means the authoritative academic record's source, not a student's residence, campus, department, nationality or current course catalog classification. These settings do not award or revoke credit, change GPA policy or approve a new transfer equivalency. Degree-wide institutional-credit minimums remain independent. Approved substitutes still meet the target card's origin. A named-course waiver removes that course requirement without inventing credit or automatically reducing a card credit minimum.
+
+Save, preview, publication review, immutable versions and temporary student tests retain the chosen values. Catalog totals flag origin restrictions as needing an actual student test. Absent earlier card origins continue to permit either source; editing a later draft does not reinterpret a selected older publication. Repeats, sharing, grades and source evidence use the existing bounded allocator: tied institutional/transfer attempts remain distinct when they contribute to different cards, and group totals never multiply an award merely because cards overlap.
+
+[Staff/student explanations and recorded reviews](student-degree-progress.md#requirement-card-credit-origins) show these card rules without exposing raw grammar or supporting record identities. Final graduation eligibility and broader institutional residency policy remain separate roadmap work.

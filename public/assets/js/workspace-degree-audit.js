@@ -185,6 +185,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
             definition.work_eligibility.max_age_months_at_evaluation != null ||
             definition.work_eligibility.transfer_institutions?.length))
             summary.warnings.push("Catalog totals do not check a student's credit origin or actual completion date. Run a student test.");
+        if ((definition.rules || []).some(rule => rule.credit_origin && rule.credit_origin !== "any"))
+            summary.warnings.push("Requirement credit origins need an actual student test; catalog totals are planning figures.");
         const raw = definition.requirement_type === "courses" ? definition.min_courses : definition.min_credits_milli;
         let required = raw;
         if (editing) {
@@ -310,7 +312,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             plan.update(item.planning_summary || groupPlan(d, details));
             tree.append(plan.element);
         }
-        tree.append(node("p", { class: "form-text" }, window.degreeGroupEligibilityText(d.work_eligibility)));
+        tree.append(node("p", { class: "form-text" }, [window.degreeGroupEligibilityText(d.work_eligibility), window.degreeRequirementOriginsText(d)].filter(Boolean).join(" ")));
         if (d.min_course_grade_points_milli != null)
             tree.append(
                 node(
@@ -1425,6 +1427,13 @@ window.createWorkspaceDegreeAudit = function (ui) {
                             : null,
                     ].filter(Boolean),
                 );
+                const ruleOrigin = node("select", { class: "form-select" },
+                    ...[["any", "Institutional or transfer work"], ["institutional", "Institutional work only"], ["transfer", "Transfer work only"]]
+                        .map(([value, label]) => node("option", { value, selected: (r.credit_origin || "any") === value }, label)));
+                ruleOrigin.id = `requirement-origin-${++sequence}`;
+                ruleOrigin.addEventListener("change", () => { r.credit_origin = ruleOrigin.value; updatePlan(); });
+                card.append(node("label", { for: ruleOrigin.id, class: "form-label" }, `Requirement ${i + 1} coursework origin`), ruleOrigin,
+                    node("p", { class: "form-text" }, "This limits contributions to this card. Other cards and the group total still follow their own rules."));
                 if (r.mode === "choose")
                     card.append(
                         field(
@@ -3836,7 +3845,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "article",
                     { class: "audit-card" },
                     node("h3", {}, group.name),
-                    node("p", { class: "form-text" }, window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context)),
+                    node("p", { class: "form-text" }, [window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context), window.degreeRequirementOriginsText(group)].filter(Boolean).join(" ")),
                     node(
                         "p",
                         {},
@@ -4001,7 +4010,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
     }
     function groupPlacementDetails(data, group, back, offset = 0, ruleOffset = 0) {
         const body = screen(group.name, "PROPOSED COURSE-GROUP PLACEMENT");
-        body.append(node("p", {}, window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context)));
+        body.append(node("p", {}, [window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context), window.degreeRequirementOriginsText(group)].filter(Boolean).join(" ")));
         body.append(
             node(
                 "p",

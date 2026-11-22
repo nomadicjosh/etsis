@@ -1,0 +1,423 @@
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: etSIS\n"
+"POT-Creation-Date: 2026-11-22 08:35-0800\n"
+"PO-Revision-Date: 2025-10-02 05:54-0700\n"
+"Last-Translator: \n"
+"Language-Team: Joshua Parker <joshua@joshuaparker.dev>\n"
+"Language: en_US\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Domain: etsis\n"
+"X-Generator: Poedit 3.10\n"
+"X-Poedit-Basepath: ..\n"
+"X-Poedit-KeywordsList: t__;esc_html__;esc_attr__;trans;trans_html;trans_attr;html;attr\n"
+"X-Poedit-SearchPath-0: resources/views\n"
+"X-Poedit-SearchPath-1: bootstrap\n"
+"X-Poedit-SearchPath-2: config\n"
+"X-Poedit-SearchPath-3: src\n"
+
+#: config/auth.php:51
+#: src/Application/Http/Controller/PageBuilderController.php:62
+#: src/Application/Http/Controller/WebsiteManagerController.php:43
+msgid "Access denied."
+msgstr ""
+
+#: src/Application/Http/Controller/ProfileController.php:52
+msgid "User Profile"
+msgstr ""
+
+#: src/Application/Http/Controller/WebsiteManagerController.php:86
+#: src/Application/Http/Controller/WebsiteManagerController.php:116
+msgid "Website Manager"
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:38
+msgid "Resolve every listed course publication before planning this group."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:54
+msgid "Catalog totals do not check a student's credit origin or actual completion date. Run a student test."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:66
+msgid "Listed totals exclude saved-rule matches. Run a student test to evaluate matching work."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:69
+msgid "Add published courses to plan this group."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:72
+msgid "The required course count exceeds the number of distinct listed courses."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:76
+msgid "The required credits exceed the catalog credits of the listed courses. Review this total."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:50
+msgid "An approved course route reserves this course for another curriculum component."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:52
+msgid "An approved placement preference reserves this course for another group in this pursuit."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:54
+msgid "No requirement card in this group accepts this work's recorded origin."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:56
+msgid "This group requires a different recorded credit origin."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:58
+msgid "The recorded credit origin is unavailable; this group's restriction needs review."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:60
+msgid "The recorded sending institution is not included in this group's transfer-source list."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:62
+msgid "The award has no retained sending-institution evidence; registrar review is required."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:65
+msgid "An actual completion date is required by this group. Posting or catalog dates cannot replace it."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:68
+msgid "The actual completion date is before this group's permitted window."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:70
+msgid "The actual completion date is after this group's permitted window."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:72
+msgid "The recorded pursuit start is unavailable; this group's course-age rule needs review."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:74
+msgid "The review date required by this group's expiration rule is unavailable."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:76
+msgid "This work expired under the group's age limit at the review date."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:79
+msgid "The actual completion date is too early for this group's age limit at the recorded pursuit start."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:82
+msgid "Candidate for allocation; this work has not been applied to the requirement."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:84
+msgid "This course requirement is waived for this pursuit. The waiver creates no earned credit."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:86
+msgid "The course approvals conflict. Registrar review is needed before applying work."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:87
+msgid "A voided award cannot satisfy a course requirement."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:88
+msgid "A dropped course cannot satisfy a completed-course requirement."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:89
+msgid "No final grade or earned credit is recorded yet."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:91
+msgid "The retained grade definition is unknown. Do not infer it from today’s grades."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:92
+msgid "The retained grade definition does not mark this as a passing grade."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:93
+msgid "This record has no earned credit to apply."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:95
+msgid "The earned work has no retained course publication. Review its equivalence."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:97
+msgid "The earned work uses a different course publication. Review its equivalence."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:99
+msgid "The retained grading policy is unknown; the grade-point minimum cannot be compared."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:102
+msgid "The grading publications differ. Review the grade-point comparison; no conversion is assumed."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:105
+msgid "The retained grade points are below this group’s per-course minimum."
+msgstr ""
+
+#: src/Domain/User/Service/UserService.php:70
+msgid "User added successfully."
+msgstr ""
+
+#: src/Domain/User/Service/UserService.php:80
+msgid "Could not create user. Please try again later."
+msgstr ""
+
+#: src/Domain/User/Service/UserService.php:103
+msgid "Profile was updated successfully."
+msgstr ""
+
+#: src/Domain/User/Service/UserService.php:113
+msgid "Could not update the profile."
+msgstr ""
+
+#: src/Domain/User/Service/UserService.php:136
+msgid "Password was updated successfully."
+msgstr ""
+
+#: src/Domain/User/Service/UserService.php:146
+msgid "Password could not be updated. Please try again later."
+msgstr ""
+
+#: src/Domain/User/Service/UserService.php:169
+msgid "User was deleted."
+msgstr ""
+
+#: src/Domain/User/Service/UserService.php:179
+msgid "User could not be deleted. Please try again later."
+msgstr ""
+
+#: src/Domain/User/Service/UserService.php:202
+msgid "Account created successfully."
+msgstr ""
+
+#: src/Domain/User/Service/UserService.php:214
+msgid "Could not create account. Please try again later."
+msgstr ""
+
+#: resources/views/app-layout.phtml:45 resources/views/frontend/login.phtml:12
+#: resources/views/frontend/login.phtml:27
+#: resources/views/frontend/register.phtml:37
+#: resources/views/partials/desktop-nav.phtml:12
+msgid "Login"
+msgstr ""
+
+#: resources/views/app-layout.phtml:49
+#: resources/views/partials/desktop-nav.phtml:48
+msgid "Dashboard"
+msgstr ""
+
+#: resources/views/app-layout.phtml:53
+#: resources/views/partials/desktop-nav.phtml:64
+msgid "Profile"
+msgstr ""
+
+#: resources/views/app-layout.phtml:55
+#: resources/views/partials/desktop-nav.phtml:73
+msgid "Users"
+msgstr ""
+
+#: resources/views/app-layout.phtml:59 resources/views/frontend/logout.phtml:9
+#: resources/views/partials/desktop-nav.phtml:84
+msgid "Logout"
+msgstr ""
+
+#: resources/views/backend/index.phtml:13
+msgid "Welcome"
+msgstr ""
+
+#: resources/views/backend/index.phtml:14
+msgid "You're logged into CodefyPHP. Explore your dashboard below."
+msgstr ""
+
+#: resources/views/backend/index.phtml:25
+msgid "Quick Start"
+msgstr ""
+
+#: resources/views/backend/index.phtml:27
+msgid "Access the CodefyPHP documentation to start building your next application quickly."
+msgstr ""
+
+#: resources/views/backend/index.phtml:28
+msgid "View Docs →"
+msgstr ""
+
+#: resources/views/backend/index.phtml:37
+msgid "Forum Support"
+msgstr ""
+
+#: resources/views/backend/index.phtml:40
+msgid "Visit Now →"
+msgstr ""
+
+#: resources/views/backend/index.phtml:49
+msgid "Manage Users"
+msgstr ""
+
+#: resources/views/backend/index.phtml:51
+msgid "Add or manage your team members, assign roles, and set permissions easily."
+msgstr ""
+
+#: resources/views/backend/index.phtml:52
+msgid "Manage Users →"
+msgstr ""
+
+#: resources/views/backend/manager/index.phtml:100
+#: resources/views/backend/partials/x-delete-user-modal.phtml:14
+#: resources/views/backend/partials/x-delete-user-modal.phtml:46
+msgid "Delete"
+msgstr ""
+
+#: resources/views/backend/manager/index.phtml:108
+#: resources/views/backend/partials/x-create-user-modal.phtml:101
+#: resources/views/backend/partials/x-delete-user-modal.phtml:53
+#: resources/views/backend/partials/x-edit-user-modal.phtml:81
+msgid "Cancel"
+msgstr ""
+
+#: resources/views/backend/manager/index.phtml:138
+msgid "Use Ctrl/Cmd to select multiple."
+msgstr ""
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:13
+msgid "Add New User"
+msgstr ""
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:21
+msgid "Create User"
+msgstr ""
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:37
+#: resources/views/backend/partials/x-create-user-modal.phtml:72
+msgid "characters minimum"
+msgstr ""
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:39
+#: resources/views/backend/partials/x-edit-user-modal.phtml:34
+#: resources/views/frontend/register.phtml:20
+msgid "Username"
+msgstr ""
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:43
+#: resources/views/backend/partials/x-edit-user-modal.phtml:38
+msgid "First name"
+msgstr ""
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:47
+#: resources/views/backend/partials/x-edit-user-modal.phtml:42
+msgid "Middle name"
+msgstr ""
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:51
+#: resources/views/backend/partials/x-edit-user-modal.phtml:46
+msgid "Last name"
+msgstr ""
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:55
+#: resources/views/backend/partials/x-edit-user-modal.phtml:50
+#: resources/views/backend/users.phtml:24
+#: resources/views/frontend/login.phtml:16
+#: resources/views/frontend/register.phtml:16
+msgid "Email"
+msgstr ""
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:59
+#: resources/views/backend/partials/x-edit-user-modal.phtml:54
+#: resources/views/backend/users.phtml:25
+msgid "Role"
+msgstr ""
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:61
+#: resources/views/backend/partials/x-edit-user-modal.phtml:56
+msgid "Select a role"
+msgstr ""
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:74
+#: resources/views/frontend/login.phtml:20
+#: resources/views/frontend/register.phtml:32
+msgid "Password"
+msgstr ""
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:94
+msgid "Create"
+msgstr ""
+
+#: resources/views/backend/partials/x-edit-user-modal.phtml:14
+msgid "Edit"
+msgstr ""
+
+#: resources/views/backend/partials/x-edit-user-modal.phtml:74
+msgid "Update"
+msgstr ""
+
+#: resources/views/backend/users.phtml:15
+msgid "All Users"
+msgstr ""
+
+#: resources/views/backend/users.phtml:23
+msgid "Name"
+msgstr ""
+
+#: resources/views/backend/users.phtml:26
+msgid "Actions"
+msgstr ""
+
+#: resources/views/blocked.phtml:10 resources/views/blocked.phtml:44
+msgid "Request Blocked"
+msgstr ""
+
+#: resources/views/blocked.phtml:45
+msgid "Your request was blocked by the application firewall."
+msgstr ""
+
+#: resources/views/blocked.phtml:46
+msgid "Threat type:"
+msgstr ""
+
+#: resources/views/frontend/login.phtml:25
+msgid "Remember me"
+msgstr ""
+
+#: resources/views/frontend/login.phtml:29
+msgid "Don't have an account?"
+msgstr ""
+
+#: resources/views/frontend/login.phtml:29
+#: resources/views/frontend/register.phtml:35
+msgid "Register"
+msgstr ""
+
+#: resources/views/frontend/register.phtml:12
+msgid "Create an Account"
+msgstr ""
+
+#: resources/views/frontend/register.phtml:24
+msgid "First Name"
+msgstr ""
+
+#: resources/views/frontend/register.phtml:28
+msgid "Last Name"
+msgstr ""
+
+#: resources/views/frontend/register.phtml:37
+msgid "Have an account?"
+msgstr ""
+
+#: resources/views/partials/desktop-nav.phtml:24
+msgid "Menu"
+msgstr ""

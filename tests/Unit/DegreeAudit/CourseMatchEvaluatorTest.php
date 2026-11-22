@@ -97,6 +97,27 @@ final class CourseMatchEvaluatorTest extends TestCase
         self::assertSame("candidate", $this->first($work, $r, $e)["status"]);
     }
 
+    public function testNamedCardOriginIsAnHonestGroupUnionAndUnknownOriginIsNotInferred(): void
+    {
+        [$work, $r, $e] = $this->inputs();
+        $group = self::id(4);
+        $r["group_details"][$group]["definition"]["rules"][0]["credit_origin"] = "institutional";
+        self::assertSame("origin_unknown", $this->first($work, $r, $e)["status"]);
+        $work["credit_type"] = "transfer";
+        self::assertSame("requirement_origin_excluded", $this->first($work, $r, $e)["status"]);
+        $work["credit_type"] = "institutional";
+        self::assertSame("candidate", $this->first($work, $r, $e)["status"]);
+        $r["group_details"][self::id(4)]["definition"]["rules"][] = [
+            "id" => self::id(700),
+            "mode" => "pool",
+            "minimum_courses" => 0,
+            "course_ids" => [$work["course_id"]],
+            "credit_origin" => "transfer",
+        ];
+        $work["credit_type"] = "transfer";
+        self::assertSame("candidate", $this->first($work, $r, $e)["status"]);
+    }
+
     public function testInstitutionalPointsUseTheRetainedScaleAndNotWeightedQualityPoints(): void
     {
         [$work, $requirements, $effective] = $this->inputs();

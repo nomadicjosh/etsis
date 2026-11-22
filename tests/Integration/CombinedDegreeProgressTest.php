@@ -27,14 +27,16 @@ final class CombinedDegreeProgressTest extends TestCase
         ?int $recencyMonths = null,
         bool $transferSource = false,
         ?int $evaluationMonths = null,
+        ?string $cardOrigin = null,
     ): StudentSpecializationRequirementsFixture
     {
         $r = new ReusableGroupFixture();
+        $includeTransferGrade = $transferSource || $cardOrigin !== null;
         $r->sis->gradeScale([
             ['code' => 'A','min_score_milli' => 90000,'max_score_milli' => 100000,'points_milli' => 4000,'passes' => true,'counts_gpa' => true],
             ['code' => 'B','min_score_milli' => 80000,'max_score_milli' => 89999,'points_milli' => 3000,'passes' => true,'counts_gpa' => true],
             ['code' => 'F','min_score_milli' => 0,'max_score_milli' => 79999,'points_milli' => 0,'passes' => false,'counts_gpa' => true],
-            ...($transferSource ? [['code' => 'TR', 'min_score_milli' => null, 'max_score_milli' => null,
+            ...($includeTransferGrade ? [['code' => 'TR', 'min_score_milli' => null, 'max_score_milli' => null,
                 'points_milli' => 0, 'passes' => true, 'counts_gpa' => false]] : []),
         ]);
         $row = $r->groups->view($r->group);
@@ -43,6 +45,9 @@ final class CombinedDegreeProgressTest extends TestCase
         $d['min_credits_milli'] = 3000;
         $d['courses'] = array_slice($d['courses'], 0, 2);
         $d['rules'] = [['id' => EntityId::generate()->value,'mode' => 'choose','minimum_courses' => 1,'course_ids' => array_column($d['courses'], 'course_id')]];
+        if ($cardOrigin !== null) {
+            $d['rules'][0]['credit_origin'] = $cardOrigin;
+        }
         if ($recencyMonths !== null) {
             $d['work_eligibility']['max_age_months_at_pursuit_start'] = $recencyMonths;
         }
@@ -1512,6 +1517,68 @@ final class CombinedDegreeProgressTest extends TestCase
         $bad["components"][0]["effective"]["evaluated_on"] = "2026-08-11";
         $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
         new \Domain\DegreeAudit\ValueObject\DegreeProgressSnapshot($bad);
+    }
+
+    public function testRetainedCardOriginRejectsTransferWithoutChangingAwardedCreditOrRecordedReview(): void
+    {
+        require_once dirname(__DIR__) . "/Support/TransferAwardFixture.php";
+        $f = $this->fixture("multiple_components", cardOrigin: "institutional");
+        $s = $f->r->sis;
+        $course = $f->r->groupDefinition["courses"][0];
+        $t = new TransferAwardFixture(
+            $s,
+            $f->r->catalog->fixture->cipher,
+            $f->student,
+            course: new EntityId($course["course_id"]),
+            courseVersion: new EntityId($course["version_id"]),
+        );
+        $result = $this->preview($f);
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertSame(
+            3000,
+            array_column(
+                $result["components"][0]["progress"]["minimums"],
+                "actual_minimum_milli",
+                "key",
+            )["min_credits_milli"],
+        );
+        $records = $this->recordedService($f);
+        $review = $records->review(
+            $f->student,
+            $f->assignment,
+            "Fictional retained card-origin review.",
+        );
+        $args = [
+            $f->student,
+            $f->assignment,
+            new EntityId($review["operation_id"]),
+            $review["revision"],
+            $review["reason"],
+            $review["review_token"],
+        ];
+        $receipt = $records->confirm(...$args);
+        $original = $records->show($f->student, $f->assignment, $args[2], "staff");
+        self::assertSame(
+            [["requirement" => 1, "credit_origin" => "institutional"]],
+            $original["summary"]["components"][0]["groups"][0]["requirement_origins"],
+        );
+        $events = iterator_to_array(
+            \EventStoreFixture::framework($s->connection->queryBuilder())->getAggregateHistoryFor(
+                new \Domain\DegreeAudit\ValueObject\DegreeProgressRecordId($review["operation_id"]),
+            ),
+        );
+        $snapshot = new \Domain\DegreeAudit\ValueObject\DegreeProgressSnapshot(
+            $events[0]->payload()["snapshot"],
+        );
+        $this->work($f, 0);
+        self::assertSame("feasible", $this->preview($f)["outcome"]);
+        self::assertTrue($this->service($f)->verifySnapshot($snapshot));
+        self::assertSame($receipt, $records->confirm(...$args));
+        self::assertSame($original, $records->show($f->student, $f->assignment, $args[2], "staff"));
+        self::assertSame(
+            "A",
+            $s->sql->one("sis_academic_credits", ["id" => $t->credit->value])["status"],
+        );
     }
 
 }

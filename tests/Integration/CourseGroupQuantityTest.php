@@ -22,6 +22,33 @@ final class CourseGroupQuantityTest extends TestCase
             "grade_scale_program_id" => null,
         ];
     }
+    public function testCardOriginPublicationPreservesEarlierVersionsAndOriginalReceipts(): void
+    {
+        $f = new ReusableGroupFixture();
+        $old = $f->groups->version($f->group, $f->groupVersion);
+        $d = $this->definition($f);
+        $d["rules"][0]["credit_origin"] = "institutional";
+        $f->groups->save($f->group, 0, new CourseGroupDefinitionV2($d));
+        $review = $f->groups->review($f->group, "Fictional card-origin publication.");
+        $receipt = $f->groups->publish($f->group, $review["review_token"]);
+        $version = new EntityId($receipt["operation_id"]);
+        self::assertSame(
+            "institutional",
+            $f->groups->version($f->group, $version)["definition"]["rules"][0]["credit_origin"],
+        );
+        self::assertSame($old, $f->groups->version($f->group, $f->groupVersion));
+        $d["rules"][0]["credit_origin"] = "transfer";
+        $f->groups->save($f->group, 1, new CourseGroupDefinitionV2($d));
+        $f->sis->clock->time = $f->sis->clock->time->modify("+1 day");
+        $events = $f->sis->sql->rows("sis_history_events");
+        self::assertSame($receipt, $f->groups->publish($f->group, $review["review_token"]));
+        self::assertSame($events, $f->sis->sql->rows("sis_history_events"));
+        self::assertSame(
+            "institutional",
+            $f->groups->version($f->group, $version)["definition"]["rules"][0]["credit_origin"],
+        );
+    }
+
     public function testCreditListThresholdPublishesAndReplaysWithoutChangingEarlierDefinitions(): void
     {
         $f = new ReusableGroupFixture();

@@ -16,6 +16,7 @@ use Domain\DegreeAudit\ValueObject\PolicyAttempt;
 use Domain\DegreeAudit\ValueObject\RepeatCreditPolicy;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use JsonException;
+use Domain\DegreeAudit\ValueObject\RequirementCreditOrigin;
 
 /** Structural group review for supplied verified current work, not full degree completion. */
 final readonly class GroupAllocationEvaluator
@@ -74,6 +75,8 @@ final readonly class GroupAllocationEvaluator
         }
         $labels = [];
         $namedMemberships = [];
+        $cardOrigins = [];
+        $restrictedGroups = [];
         $issues = [];
         $reuse = $requirements["definition"]["policies"]["group_reuse"] ?? null;
         $sharing = is_string($reuse) ? CourseGroupReuse::tryFrom($reuse) : null;
@@ -90,6 +93,11 @@ final readonly class GroupAllocationEvaluator
             $d = $group["definition"];
             $e = $effective["groups"][$id];
             foreach ($d['rules'] as $rule) {
+                $origin = RequirementCreditOrigin::fromRule($rule);
+                $cardOrigins[$id][$rule['id']] = $origin;
+                if ($origin !== RequirementCreditOrigin::Any) {
+                    $restrictedGroups[$id] = true;
+                }
                 if (!isset($rule['eligibility'])) {
                     foreach ($rule['course_ids'] as $course) {
                         $namedMemberships[$id][$course][] = $rule['id'];
@@ -148,7 +156,10 @@ final readonly class GroupAllocationEvaluator
                 'id' => $id,
                 'min_credits_milli' => $effective['groups'][$id]['min_credits_milli'],
                 'min_courses' => $effective['groups'][$id]['min_courses'] ?? 0,
-                'rules' => $group['definition']['rules'],
+                'rules' => array_map(static function (array $rule): array {
+                    unset($rule['credit_origin']);
+                    return $rule;
+                }, $group['definition']['rules']),
             ];
             $label = $labels[$id] ?? throw new CorruptHistoryException();
             $label['courses'] = $group['course_details'];
@@ -213,12 +224,25 @@ final readonly class GroupAllocationEvaluator
                     continue;
                 }
                 $key = $item["course_id"] . ":" . $match["group_id"] . ":" . $match["required_course_id"];
-                if (isset($requirements['rule_memberships'][$match['group_id']])) {
+                if (
+                    isset($requirements['rule_memberships'][$match['group_id']]) ||
+                    isset($restrictedGroups[$match['group_id']])
+                ) {
                     $memberships = array_merge(
                         $namedMemberships[$match['group_id']][$match['required_course_id']] ?? [],
-                        $requirements['rule_memberships'][$match['group_id']][$id]
-                            ?? throw new CorruptHistoryException(),
+                        isset($requirements['rule_memberships'][$match['group_id']])
+                            ? ($requirements['rule_memberships'][$match['group_id']][$id]
+                                ?? throw new CorruptHistoryException()) : [],
                     );
+                    $origins = $cardOrigins[$match['group_id']];
+                    $memberships = array_values(array_filter(
+                        $memberships,
+                        static fn(string $rule): bool => $origins[$rule]->allows($item['credit_type']),
+                    ));
+                    if ($memberships === [] && isset($restrictedGroups[$match['group_id']])) {
+                        $records[$id]['statuses']['requirement_origin_excluded'] = true;
+                        continue;
+                    }
                     sort($memberships, SORT_STRING);
                     $candidateMemberships[$key][$id] = $memberships;
                 }

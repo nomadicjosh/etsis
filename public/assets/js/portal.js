@@ -1571,7 +1571,7 @@
                     "section",
                     { class: "portal-progress-card mb-3", "data-progress-group-index": index },
                     el("h4", { tabindex: "-1" }, group.name),
-                    el("p", {}, window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context)),
+                    el("p", {}, [window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context, group.work_evaluation_context), window.degreeRequirementOriginsText(group)].filter(Boolean).join(" ")),
                     el(
                         "p",
                         {},

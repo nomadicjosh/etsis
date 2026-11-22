@@ -1157,4 +1157,24 @@ final class DraftDegreeAuditTest extends TestCase
         self::assertSame($before, $this->digest($f));
     }
 
+    public function testTemporaryCardOriginTrialUsesRealWorkWithoutChangingSelectedRequirements(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $this->work($f);
+        [$template, $degree, $group] = $this->draft($f);
+        $d = $f->f->groups->view($group)["definition"];
+        $d["rules"][0]["credit_origin"] = "transfer";
+        $f->f->groups->save($group, 0, new CourseGroupDefinitionV2($d));
+        $before = $this->digest($f);
+        $result = $this->service($f)->test($template, $f->student, $f->assignment, $degree);
+        self::assertSame("infeasible", $result["allocation"]["outcome"]);
+        self::assertSame($before, $this->digest($f));
+        $d["rules"][0]["credit_origin"] = "institutional";
+        $f->f->groups->save($group, 1, new CourseGroupDefinitionV2($d));
+        $before = $this->digest($f);
+        $result = $this->service($f)->test($template, $f->student, $f->assignment, $degree);
+        self::assertSame("feasible", $result["allocation"]["outcome"]);
+        self::assertSame($before, $this->digest($f));
+    }
+
 }

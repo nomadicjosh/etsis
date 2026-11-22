@@ -161,6 +161,158 @@ final class GroupAllocationEvaluatorTest extends TestCase
         return $rows;
     }
 
+    private function mixedOriginGroup(int $minimum = 9000): array
+    {
+        $g = $this->group(1, [1, 2, 3], $minimum);
+        $g["definition"]["rules"][] = [
+            "id" => self::id(700),
+            "mode" => "credits",
+            "minimum_courses" => 0,
+            "minimum_credits_milli" => 3000,
+            "course_ids" => [self::id(1), self::id(2), self::id(3)],
+            "credit_origin" => "institutional",
+        ];
+        return $g;
+    }
+
+    public function testMixedGroupAllowsTransferWhileItsInstitutionalCardRequiresItsOwnContribution(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->mixedOriginGroup()]);
+        $work = [
+            $this->work(10),
+            $this->work(11, 2, origin: "transfer"),
+            $this->work(12, 3, origin: "transfer"),
+        ];
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r));
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame(9000, $result["groups"][0]["coverage"]["applied_credits_milli"]);
+        self::assertSame(
+            3000,
+            $result["groups"][0]["coverage"]["rules"][self::id(700)]["applied_credits_milli"],
+        );
+        $work[0] = $this->work(10, origin: "transfer");
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r));
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertSame([], $result["groups"][0]["placements"]);
+    }
+
+    public function testTiedInstitutionalAndTransferAttemptsStayDistinctWithoutDoublingCredits(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->mixedOriginGroup(6000)]);
+        $work = [
+            $this->work(10, origin: "transfer"),
+            $this->work(11),
+            $this->work(12, 2, origin: "transfer"),
+        ];
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r));
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame(6000, $result["groups"][0]["coverage"]["applied_credits_milli"]);
+        $placements = array_column($result["groups"][0]["placements"], null, "course_id");
+        self::assertSame([[self::id(11)]], $placements[self::id(1)]["work_options"]);
+    }
+
+    public function testTransferCardCanBeRequiredAlongsideUnrestrictedInstitutionalWork(): void
+    {
+        $g = $this->mixedOriginGroup(6000);
+        $g["definition"]["rules"][1]["credit_origin"] = "transfer";
+        $r = $this->requirements([self::id(1) => $g]);
+        $work = [$this->work(10), $this->work(11, 2, origin: "transfer")];
+        self::assertSame(
+            "feasible",
+            $this->evaluator()->evaluate($work, $r, $this->effective($r))["outcome"],
+        );
+        $work[1] = $this->work(11, 2);
+        self::assertSame(
+            "infeasible",
+            $this->evaluator()->evaluate($work, $r, $this->effective($r))["outcome"],
+        );
+    }
+
+    public function testAllEligibleRepeatsSumOnlyTheAllowedOriginsContributionToTheCard(): void
+    {
+        $r = $this->requirements([self::id(1) => $this->mixedOriginGroup(6000)]);
+        $r["definition"]["policies"]["repeat_credit"] = "all_eligible";
+        $work = [$this->work(10, origin: "transfer"), $this->work(11)];
+        $result = $this->evaluator()->evaluate($work, $r, $this->effective($r));
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame(6000, $result["groups"][0]["coverage"]["applied_credits_milli"]);
+        self::assertSame(
+            3000,
+            $result["groups"][0]["coverage"]["rules"][self::id(700)]["applied_credits_milli"],
+        );
+        self::assertSame(
+            [[self::id(10), self::id(11)]],
+            $result["groups"][0]["placements"][0]["work_options"],
+        );
+    }
+
+    public function testInstitutionalPoolExcludesTransferFromThatGroupAndSubstitutesFollowTheTarget(): void
+    {
+        $g = $this->group(1, [1], 3000);
+        $g["definition"]["rules"][0]["credit_origin"] = "institutional";
+        $r = $this->requirements([self::id(1) => $g]);
+        $work = [$this->work(10, origin: "transfer")];
+        self::assertSame(
+            "infeasible",
+            $this->evaluator()->evaluate($work, $r, $this->effective($r))["outcome"],
+        );
+        $e = $this->effective($r);
+        $e["substitutions"][self::id(1)] = [
+            "course_id" => self::id(2),
+            "version_id" => self::id(102),
+        ];
+        $work = [$this->work(11, 2)];
+        self::assertSame("feasible", $this->evaluator()->evaluate($work, $r, $e)["outcome"]);
+        $work = [$this->work(11, 2, origin: "transfer")];
+        self::assertSame("infeasible", $this->evaluator()->evaluate($work, $r, $e)["outcome"]);
+    }
+
+    public function testSavedRuleOriginGateDoesNotGuessUnknownPredicatesForExcludedWork(): void
+    {
+        $g = $this->ruleGroup(1);
+        $g["definition"]["rules"][0]["credit_origin"] = "institutional";
+        $r = $this->requirements([self::id(1) => $g]);
+        $work = [$this->work(10, origin: "transfer")];
+        $result = $this->evaluator()->evaluate(
+            $work,
+            $r,
+            $this->effective($r),
+            $this->decisions($work, $r, ["unknown"]),
+        );
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertNotContains("rule_facts_unknown", $result["issues"]);
+        $work = [$this->work(10)];
+        self::assertSame(
+            "feasible",
+            $this->evaluator()->evaluate(
+                $work,
+                $r,
+                $this->effective($r),
+                $this->decisions($work, $r),
+            )["outcome"],
+        );
+    }
+
+    public function testAnAllCardOriginStillAllowsTheExistingNamedWaiverWithoutInventingCredit(): void
+    {
+        $g = $this->group(1, [1, 2], 6000);
+        $g["definition"]["rules"][] = [
+            "id" => self::id(700),
+            "mode" => "all",
+            "minimum_courses" => 2,
+            "course_ids" => [self::id(1), self::id(2)],
+            "credit_origin" => "institutional",
+        ];
+        $r = $this->requirements([self::id(1) => $g]);
+        $work = [$this->work(10), $this->work(11, 2, origin: "transfer")];
+        $e = $this->effective($r);
+        self::assertSame("infeasible", $this->evaluator()->evaluate($work, $r, $e)["outcome"]);
+        $e["waived_course_ids"] = [self::id(2)];
+        $result = $this->evaluator()->evaluate($work, $r, $e);
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame(6000, $result["groups"][0]["coverage"]["applied_credits_milli"]);
+    }
+
     public function testReviewDateExpirationUsesTheSameNamedAndSavedRuleGateWithoutPartialPlans(): void
     {
         foreach ([false, true] as $savedRule) {

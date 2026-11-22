@@ -182,3 +182,13 @@ test("review-date expiration distinguishes the retained review date from pursuit
   assert.match(window.createDegreeProgressNextSteps(node,data).textContent,/Refresh the dated progress review/);
   assert.match(window.createDegreeProgressNextSteps(node,data).textContent,/keeps its original date/);
 });
+
+
+test("per-card origin explanations use public ordinals and keep unrestricted cards explicit", () => {
+  const text=window.degreeRequirementOriginsText({requirement_origins:[{requirement:1,credit_origin:"institutional"},
+    {requirement:2,credit_origin:"any"},{requirement:3,credit_origin:"transfer"}]});
+  assert.match(text,/Requirement 1: Institutional work only/);
+  assert.match(text,/Requirement 2: Institutional or transfer work/);
+  assert.match(text,/Requirement 3: Transfer work only/);
+  assert.equal(window.degreeRequirementOriginsText({rules:[{mode:"pool"}]}),"");
+});

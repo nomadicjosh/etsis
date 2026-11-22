@@ -106,6 +106,19 @@ final readonly class CourseGroupDefinitionV2
     }
     public function assertPublishable(): void
     {
+        $groupOrigin = $this->definition['work_eligibility']['credit_origin'] ?? 'any';
+        foreach ($this->definition['rules'] as $rule) {
+            $origin = RequirementCreditOrigin::fromRule($rule);
+            $required = ($rule['minimum_courses'] ?? 0) > 0 || ($rule['minimum_credits_milli'] ?? 0) > 0;
+            if (
+                $required && $groupOrigin !== 'any' && $origin !== RequirementCreditOrigin::Any
+                && $origin->value !== $groupOrigin
+            ) {
+                throw new InvalidArgumentException(
+                    'A required card contradicts the group coursework origin. Review both rules.'
+                );
+            }
+        }
         $d = $this->definition;
         $dynamic = count(array_filter($d['rules'], static fn(array $r): bool => isset($r['eligibility']))) > 0;
         if (

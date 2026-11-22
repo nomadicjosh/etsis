@@ -1,0 +1,587 @@
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: etSIS\n"
+"POT-Creation-Date: 2026-11-22 08:35-0800\n"
+"PO-Revision-Date: 2026-11-22 08:35-0800\n"
+"Last-Translator: Joshua Parker <joshua@joshuaparker.dev>\n"
+"Language-Team: Joshua Parker <joshua@joshuaparker.dev>\n"
+"Language: es\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"X-Domain: etsis\n"
+"X-Generator: Poedit 3.10\n"
+"X-Poedit-Basepath: ../..\n"
+"X-Poedit-KeywordsList: "
+"t__;esc_html__;esc_attr__;trans;trans_html;trans_attr;html;attr\n"
+"X-Poedit-SearchPath-0: resources/views\n"
+"X-Poedit-SearchPath-1: bootstrap\n"
+"X-Poedit-SearchPath-2: config\n"
+"X-Poedit-SearchPath-3: src\n"
+
+#: config/auth.php:51
+#: src/Application/Http/Controller/PageBuilderController.php:62
+#: src/Application/Http/Controller/WebsiteManagerController.php:43
+msgid "Access denied."
+msgstr "Acceso denegado."
+
+#: src/Application/Http/Controller/ProfileController.php:52
+msgid "User Profile"
+msgstr "Perfil del usuario"
+
+#: src/Application/Http/Controller/WebsiteManagerController.php:86
+#: src/Application/Http/Controller/WebsiteManagerController.php:116
+msgid "Website Manager"
+msgstr "Gestor de sitios web"
+
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:38
+#, fuzzy
+msgid "Resolve every listed course publication before planning this group."
+msgstr ""
+"Resuelve todas las publicaciones de cursos listadas antes de planificar "
+"este grupo."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:54
+#, fuzzy
+msgid ""
+"Catalog totals do not check a student's credit origin or actual completion "
+"date. Run a student test."
+msgstr ""
+"Los totales del catálogo no comprueban el origen del crédito del estudiante "
+"ni la fecha real de finalización. Realiza una prueba para estudiantes."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:66
+#, fuzzy
+msgid ""
+"Listed totals exclude saved-rule matches. Run a student test to evaluate "
+"matching work."
+msgstr ""
+"Los totales listados excluyen las coincidencias de reglas guardadas. "
+"Realiza una prueba de estudiante para evaluar el trabajo coincidente."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:69
+#, fuzzy
+msgid "Add published courses to plan this group."
+msgstr "Añade cursos publicados para planificar este grupo."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:72
+#, fuzzy
+msgid ""
+"The required course count exceeds the number of distinct listed courses."
+msgstr ""
+"El número de cursos requerido supera el número de cursos listados distintos."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:76
+#, fuzzy
+msgid ""
+"The required credits exceed the catalog credits of the listed courses. "
+"Review this total."
+msgstr ""
+"Los créditos requeridos superan los créditos de catálogo de los cursos "
+"listados. Revise este total."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:50
+#, fuzzy
+msgid ""
+"An approved course route reserves this course for another curriculum "
+"component."
+msgstr ""
+"Una ruta de curso aprobada reserva este curso para otro componente "
+"curricular."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:52
+#, fuzzy
+msgid ""
+"An approved placement preference reserves this course for another group in "
+"this pursuit."
+msgstr ""
+"Una preferencia de plaza aprobada reserva este curso para otro grupo en "
+"esta búsqueda."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:54
+#, fuzzy
+msgid "No requirement card in this group accepts this work's recorded origin."
+msgstr ""
+"Ninguna tarjeta de requisito en este grupo acepta el origen registrado de "
+"esta obra."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:56
+#, fuzzy
+msgid "This group requires a different recorded credit origin."
+msgstr "Este grupo requiere un origen de crédito registrado diferente."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:58
+#, fuzzy
+msgid ""
+"The recorded credit origin is unavailable; this group's restriction needs "
+"review."
+msgstr ""
+"El origen del crédito registrado no está disponible; la restricción de este "
+"grupo necesita revisión."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:60
+#, fuzzy
+msgid ""
+"The recorded sending institution is not included in this group's transfer-"
+"source list."
+msgstr ""
+"La institución remitente registrada no está incluida en la lista de fuentes "
+"de transferencia de este grupo."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:62
+#, fuzzy
+msgid ""
+"The award has no retained sending-institution evidence; registrar review is "
+"required."
+msgstr ""
+"El premio no incluye pruebas conservadas de la institución de envío; se "
+"requiere una revisión del registrador."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:65
+#, fuzzy
+msgid ""
+"An actual completion date is required by this group. Posting or catalog "
+"dates cannot replace it."
+msgstr ""
+"Este grupo requiere una fecha de finalización real. Las fechas de "
+"publicación o de catálogo no pueden sustituirla."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:68
+#, fuzzy
+msgid "The actual completion date is before this group's permitted window."
+msgstr ""
+"La fecha real de finalización es anterior a la ventana permitida de este "
+"grupo."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:70
+#, fuzzy
+msgid "The actual completion date is after this group's permitted window."
+msgstr ""
+"La fecha real de finalización es posterior a la ventana permitida de este "
+"grupo."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:72
+#, fuzzy
+msgid ""
+"The recorded pursuit start is unavailable; this group's course-age rule "
+"needs review."
+msgstr ""
+"El inicio registrado de la persecución no está disponible; la norma de edad "
+"de este grupo necesita revisar."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:74
+#, fuzzy
+msgid ""
+"The review date required by this group's expiration rule is unavailable."
+msgstr ""
+"La fecha de revisión requerida por la regla de expiración de este grupo no "
+"está disponible."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:76
+#, fuzzy
+msgid "This work expired under the group's age limit at the review date."
+msgstr ""
+"Esta obra caducó por debajo del límite de edad del grupo en la fecha de "
+"revisión."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:79
+#, fuzzy
+msgid ""
+"The actual completion date is too early for this group's age limit at the "
+"recorded pursuit start."
+msgstr ""
+"La fecha real de finalización es demasiado temprana para el límite de edad "
+"de este grupo en el inicio registrado de la persecución."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:82
+#, fuzzy
+msgid ""
+"Candidate for allocation; this work has not been applied to the requirement."
+msgstr "Candidato a asignación; este trabajo no se ha aplicado al requisito."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:84
+#, fuzzy
+msgid ""
+"This course requirement is waived for this pursuit. The waiver creates no "
+"earned credit."
+msgstr ""
+"Este requisito de curso queda exento para esta persecución. La exención no "
+"genera créditos obtenidos."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:86
+#, fuzzy
+msgid ""
+"The course approvals conflict. Registrar review is needed before applying "
+"work."
+msgstr ""
+"Las aprobaciones de los cursos entran en conflicto. Es necesaria una "
+"revisión por parte del registro antes de solicitar trabajo."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:87
+#, fuzzy
+msgid "A voided award cannot satisfy a course requirement."
+msgstr "Una adjudicación anulada no puede cumplir un requisito de un curso."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:88
+#, fuzzy
+msgid "A dropped course cannot satisfy a completed-course requirement."
+msgstr ""
+"Un curso dado de baja no puede cumplir un requisito de curso completado."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:89
+#, fuzzy
+msgid "No final grade or earned credit is recorded yet."
+msgstr "Aún no se ha registrado ninguna nota final ni crédito obtenido."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:91
+#, fuzzy
+msgid ""
+"The retained grade definition is unknown. Do not infer it from today’s "
+"grades."
+msgstr ""
+"La definición de calificación retenida es desconocida. No la infiras a "
+"partir de las calificaciones actuales."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:92
+#, fuzzy
+msgid "The retained grade definition does not mark this as a passing grade."
+msgstr ""
+"La definición de calificación retenida no marca esto como una calificación "
+"aprobada."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:93
+#, fuzzy
+msgid "This record has no earned credit to apply."
+msgstr "Este registro no tiene crédito merecido para solicitar."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:95
+#, fuzzy
+msgid ""
+"The earned work has no retained course publication. Review its equivalence."
+msgstr ""
+"El trabajo obtenido no tiene publicación retenida del curso. Revise su "
+"equivalencia."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:97
+#, fuzzy
+msgid ""
+"The earned work uses a different course publication. Review its equivalence."
+msgstr ""
+"El trabajo obtenido utiliza una publicación diferente del curso. Revisa su "
+"equivalencia."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:99
+#, fuzzy
+msgid ""
+"The retained grading policy is unknown; the grade-point minimum cannot be "
+"compared."
+msgstr ""
+"Se desconoce la política de calificación retenida; no se puede comparar el "
+"mínimo de puntos."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:102
+#, fuzzy
+msgid ""
+"The grading publications differ. Review the grade-point comparison; no "
+"conversion is assumed."
+msgstr ""
+"Las publicaciones de calificación difieren. Revisa la comparación de "
+"puntos; no se asume conversión."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:105
+#, fuzzy
+msgid "The retained grade points are below this group’s per-course minimum."
+msgstr ""
+"Los puntos de nota retenidos están por debajo del mínimo por curso de este "
+"grupo."
+
+#: src/Domain/User/Service/UserService.php:70
+#, fuzzy
+msgid "User added successfully."
+msgstr "Usuario añadido correctamente."
+
+#: src/Domain/User/Service/UserService.php:80
+#, fuzzy
+msgid "Could not create user. Please try again later."
+msgstr "No se pudo crear el usuario. Por favor, inténtelo de nuevo más tarde."
+
+#: src/Domain/User/Service/UserService.php:103
+#, fuzzy
+msgid "Profile was updated successfully."
+msgstr "El perfil se actualizó correctamente."
+
+#: src/Domain/User/Service/UserService.php:113
+#, fuzzy
+msgid "Could not update the profile."
+msgstr "No se pudo actualizar el perfil."
+
+#: src/Domain/User/Service/UserService.php:136
+#, fuzzy
+msgid "Password was updated successfully."
+msgstr "La contraseña se actualizó correctamente."
+
+#: src/Domain/User/Service/UserService.php:146
+#, fuzzy
+msgid "Password could not be updated. Please try again later."
+msgstr ""
+"No se pudo actualizar la contraseña. Por favor, inténtelo de nuevo más "
+"tarde."
+
+#: src/Domain/User/Service/UserService.php:169
+#, fuzzy
+msgid "User was deleted."
+msgstr "El usuario fue eliminado."
+
+#: src/Domain/User/Service/UserService.php:179
+#, fuzzy
+msgid "User could not be deleted. Please try again later."
+msgstr ""
+"No se pudo eliminar el usuario. Por favor, inténtelo de nuevo más tarde."
+
+#: src/Domain/User/Service/UserService.php:202
+#, fuzzy
+msgid "Account created successfully."
+msgstr "Cuenta creada correctamente."
+
+#: src/Domain/User/Service/UserService.php:214
+#, fuzzy
+msgid "Could not create account. Please try again later."
+msgstr "No se pudo crear la cuenta. Por favor, inténtalo de nuevo más tarde."
+
+#: resources/views/app-layout.phtml:45 resources/views/frontend/login.phtml:12
+#: resources/views/frontend/login.phtml:27
+#: resources/views/frontend/register.phtml:37
+#: resources/views/partials/desktop-nav.phtml:12
+#, fuzzy
+msgid "Login"
+msgstr "Iniciar sesión"
+
+#: resources/views/app-layout.phtml:49
+#: resources/views/partials/desktop-nav.phtml:48
+msgid "Dashboard"
+msgstr "Escritorio"
+
+#: resources/views/app-layout.phtml:53
+#: resources/views/partials/desktop-nav.phtml:64
+msgid "Profile"
+msgstr "Perfil"
+
+#: resources/views/app-layout.phtml:55
+#: resources/views/partials/desktop-nav.phtml:73
+msgid "Users"
+msgstr "Usuarios"
+
+#: resources/views/app-layout.phtml:59 resources/views/frontend/logout.phtml:9
+#: resources/views/partials/desktop-nav.phtml:84
+msgid "Logout"
+msgstr "Cerrar sesión"
+
+#: resources/views/backend/index.phtml:13
+msgid "Welcome"
+msgstr "Bienvenido"
+
+#: resources/views/backend/index.phtml:14
+#, fuzzy
+msgid "You're logged into CodefyPHP. Explore your dashboard below."
+msgstr "Has iniciado sesión en CodefyPHP. Explora tu panel a continuación."
+
+#: resources/views/backend/index.phtml:25
+msgid "Quick Start"
+msgstr "Inicio rápido"
+
+#: resources/views/backend/index.phtml:27
+#, fuzzy
+msgid ""
+"Access the CodefyPHP documentation to start building your next application "
+"quickly."
+msgstr ""
+"Accede a la documentación de CodefyPHP para comenzar a construir tu próxima "
+"aplicación rápidamente."
+
+#: resources/views/backend/index.phtml:28
+#, fuzzy
+msgid "View Docs →"
+msgstr "Ver documentos →"
+
+#: resources/views/backend/index.phtml:37
+msgid "Forum Support"
+msgstr "Foro de soporte"
+
+#: resources/views/backend/index.phtml:40
+#, fuzzy
+msgid "Visit Now →"
+msgstr "Visita ahora →"
+
+#: resources/views/backend/index.phtml:49
+msgid "Manage Users"
+msgstr "Administrar Usuarios"
+
+#: resources/views/backend/index.phtml:51
+#, fuzzy
+msgid ""
+"Add or manage your team members, assign roles, and set permissions easily."
+msgstr ""
+"Añade o gestiona a los miembros de tu equipo, asigna roles y configura "
+"permisos fácilmente."
+
+#: resources/views/backend/index.phtml:52
+#, fuzzy
+msgid "Manage Users →"
+msgstr "Gestionar usuarios →"
+
+#: resources/views/backend/manager/index.phtml:100
+#: resources/views/backend/partials/x-delete-user-modal.phtml:14
+#: resources/views/backend/partials/x-delete-user-modal.phtml:46
+msgid "Delete"
+msgstr "Borrar"
+
+#: resources/views/backend/manager/index.phtml:108
+#: resources/views/backend/partials/x-create-user-modal.phtml:101
+#: resources/views/backend/partials/x-delete-user-modal.phtml:53
+#: resources/views/backend/partials/x-edit-user-modal.phtml:81
+msgid "Cancel"
+msgstr "Cancelar"
+
+#: resources/views/backend/manager/index.phtml:138
+#, fuzzy
+msgid "Use Ctrl/Cmd to select multiple."
+msgstr "Usa Ctrl/Cmd para seleccionar varios."
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:13
+msgid "Add New User"
+msgstr "Añadir nuevo usuario"
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:21
+msgid "Create User"
+msgstr "Crear Usuario"
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:37
+#: resources/views/backend/partials/x-create-user-modal.phtml:72
+#, fuzzy
+msgid "characters minimum"
+msgstr "Mínimo de caracteres"
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:39
+#: resources/views/backend/partials/x-edit-user-modal.phtml:34
+#: resources/views/frontend/register.phtml:20
+msgid "Username"
+msgstr "Nombre de usuario"
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:43
+#: resources/views/backend/partials/x-edit-user-modal.phtml:38
+msgid "First name"
+msgstr "Nombre"
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:47
+#: resources/views/backend/partials/x-edit-user-modal.phtml:42
+msgid "Middle name"
+msgstr "Segundo nombre"
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:51
+#: resources/views/backend/partials/x-edit-user-modal.phtml:46
+msgid "Last name"
+msgstr "Apellido"
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:55
+#: resources/views/backend/partials/x-edit-user-modal.phtml:50
+#: resources/views/backend/users.phtml:24
+#: resources/views/frontend/login.phtml:16
+#: resources/views/frontend/register.phtml:16
+msgid "Email"
+msgstr "Email"
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:59
+#: resources/views/backend/partials/x-edit-user-modal.phtml:54
+#: resources/views/backend/users.phtml:25
+msgid "Role"
+msgstr "Rol"
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:61
+#: resources/views/backend/partials/x-edit-user-modal.phtml:56
+msgid "Select a role"
+msgstr "Seleccione un rol"
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:74
+#: resources/views/frontend/login.phtml:20
+#: resources/views/frontend/register.phtml:32
+msgid "Password"
+msgstr "Contraseña"
+
+#: resources/views/backend/partials/x-create-user-modal.phtml:94
+msgid "Create"
+msgstr "Crear"
+
+#: resources/views/backend/partials/x-edit-user-modal.phtml:14
+msgid "Edit"
+msgstr "Editar"
+
+#: resources/views/backend/partials/x-edit-user-modal.phtml:74
+msgid "Update"
+msgstr "Actualizar"
+
+#: resources/views/backend/users.phtml:15
+msgid "All Users"
+msgstr "Todos los usuarios"
+
+#: resources/views/backend/users.phtml:23
+msgid "Name"
+msgstr "Nombre"
+
+#: resources/views/backend/users.phtml:26
+msgid "Actions"
+msgstr "Acciones"
+
+#: resources/views/blocked.phtml:10 resources/views/blocked.phtml:44
+#, fuzzy
+msgid "Request Blocked"
+msgstr "Solicitud bloqueada"
+
+#: resources/views/blocked.phtml:45
+#, fuzzy
+msgid "Your request was blocked by the application firewall."
+msgstr "Tu solicitud fue bloqueada por el firewall de la aplicación."
+
+#: resources/views/blocked.phtml:46
+#, fuzzy
+msgid "Threat type:"
+msgstr "Tipo de amenaza:"
+
+#: resources/views/frontend/login.phtml:25
+msgid "Remember me"
+msgstr "Recuérdame"
+
+#: resources/views/frontend/login.phtml:29
+msgid "Don't have an account?"
+msgstr "¿No tienes una cuenta?"
+
+#: resources/views/frontend/login.phtml:29
+#: resources/views/frontend/register.phtml:35
+msgid "Register"
+msgstr "Registrarse"
+
+#: resources/views/frontend/register.phtml:12
+msgid "Create an Account"
+msgstr "Crea una cuenta"
+
+#: resources/views/frontend/register.phtml:24
+msgid "First Name"
+msgstr "Nombre"
+
+#: resources/views/frontend/register.phtml:28
+msgid "Last Name"
+msgstr "Apellido"
+
+#: resources/views/frontend/register.phtml:37
+msgid "Have an account?"
+msgstr "¿Tiene una cuenta?"
+
+#: resources/views/partials/desktop-nav.phtml:24
+msgid "Menu"
+msgstr "Menú"
+
+#~ msgid "Home"
+#~ msgstr "Hogar"
+
+#~ msgid "Learn more"
+#~ msgstr "Mas Informacion"

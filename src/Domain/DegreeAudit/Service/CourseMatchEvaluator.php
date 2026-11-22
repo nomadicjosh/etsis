@@ -8,6 +8,7 @@ use Domain\DegreeAudit\ValueObject\CourseMatchStatus as Status;
 use Domain\DegreeAudit\ValueObject\GroupWorkEligibility;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use InvalidArgumentException;
+use Domain\DegreeAudit\ValueObject\RequirementCreditOrigin;
 
 /** Pure, bounded candidate inspection using already-verified retained inputs. */
 final readonly class CourseMatchEvaluator
@@ -235,15 +236,23 @@ final readonly class CourseMatchEvaluator
         foreach ($requirements["group_details"] as $groupId => $group) {
             $definition = $group["definition"];
             $modes = [];
+            $origins = [];
+            $restricted = false;
             foreach ($definition["rules"] as $rule) {
+                $origin = RequirementCreditOrigin::fromRule($rule);
+                $restricted = $restricted || $origin !== RequirementCreditOrigin::Any;
                 foreach ($rule["course_ids"] as $courseId) {
                     $modes[$courseId][$rule["mode"]] = true;
+                    foreach ($origin->origins() as $type) {
+                        $origins[$courseId][$type] = true;
+                    }
                 }
             }
             foreach ($definition["courses"] as $course) {
                 $id = $course["course_id"];
                 $candidate = [
                     "group_id" => $groupId,
+                    ...$restricted ? ['allowed_credit_origins' => array_keys($origins[$id] ?? [])] : [],
                     'pursuit_started_on' => $effective['pursuit_started_on'] ?? null,
                     'evaluated_on' => $effective['evaluated_on'] ?? null,
                     ...($definition['work_eligibility']['max_age_months_at_pursuit_start'] ?? null) !== null
@@ -362,6 +371,15 @@ final readonly class CourseMatchEvaluator
         }
         if ($preferredGroup !== null && $candidate["group_id"] !== $preferredGroup) {
             return Status::PlacementRestricted;
+        }
+        if (isset($candidate['allowed_credit_origins'])) {
+            $origin = $work['credit_type'] ?? null;
+            if (!in_array($origin, ['institutional', 'transfer'], true)) {
+                return Status::OriginUnknown;
+            }
+            if (!in_array($origin, $candidate['allowed_credit_origins'], true)) {
+                return Status::RequirementOriginExcluded;
+            }
         }
         $eligibility = new GroupWorkEligibility(
             $candidate["work_eligibility"] ?? GroupWorkEligibility::DEFAULT,

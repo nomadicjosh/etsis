@@ -2094,3 +2094,34 @@ test("review-date expiration preserves the builder draft through preview and val
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
+
+
+test("requirement card origins survive preview save and publication", async ({page}) => {
+    const f=await fixture(page);
+    await workspaceTool(page,"Course group library");
+    await page.getByRole("button",{name:"Build General education",exact:true}).click();
+    const origin=page.getByLabel("Requirement 1 coursework origin",{exact:true});
+    await expect(origin).toHaveValue("any");
+    await origin.selectOption("institutional");
+    await page.getByRole("group",{name:"Requirement 1 type",exact:true}).getByRole("button",{name:"Take credits",exact:true}).click();
+    await page.getByLabel("Requirement 1 credits from this list",{exact:true}).fill("3");
+    await page.getByRole("button",{name:"Requirements preview",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Requirement 1: Institutional work only.");
+    await page.getByRole("button",{name:"Back to builder",exact:true}).click();
+    await expect(origin).toHaveValue("institutional");
+    await expect(page.getByLabel("Count coursework from",{exact:true})).toHaveValue("any");
+    await page.setViewportSize({width:320,height:1000});await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.getByRole("button",{name:"Save group draft",exact:true}).click();
+    await expect(page.locator(".audit-status")).toContainText("Course group draft saved.");
+    expect(f.calls.find(c=>c.path.endsWith("/save/")).body.definition.rules[0].credit_origin).toBe("institutional");
+    await page.getByRole("button",{name:"Save & review publication",exact:true}).click();
+    await page.getByLabel("Reason for publication",{exact:true}).fill("Fictional institutional card approval.");
+    await page.getByRole("button",{name:"Prepare publication",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Requirement 1: Institutional work only.");
+    await page.getByRole("button",{name:"Publish reviewed version",exact:true}).click();
+    await page.getByRole("button",{name:"Inspect version 2",exact:true}).click();
+    await expect(page.getByRole("dialog")).toContainText("Requirement 1: Institutional work only.");
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});

@@ -115,6 +115,25 @@ if (
 ) {
     throw new RuntimeException('The saved expiration policy changed history or lost its duration.');
 }
+$cardDraft = $expirationRead['definition'];
+$cardDraft['rules'] = [['id' => EntityId::generate()->value, 'mode' => 'pool', 'minimum_courses' => 0,
+    'course_ids' => [], 'credit_origin' => 'institutional']];
+$cardSave = ['revision' => $expirationRead['revision'], 'definition' => $cardDraft];
+$invalidCard = $cardSave;
+$invalidCard['definition']['rules'][0]['credit_origin'] = 'mixed';
+if (
+    $teachingPost($base . 'save/', $invalidCard)->getStatusCode() !== 422
+    || $teachingPost($base . 'save/', $cardSave)->getStatusCode() !== 200
+) {
+    throw new RuntimeException('The actual group route failed requirement origin validation/save.');
+}
+$cardRead = json_decode((string) $readEligibility()->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $cardRead['definition']['rules'][0]['credit_origin'] !== 'institutional'
+    || $before !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Requirement origin lost its value or fabricated academic history.');
+}
 $sis->access->staff = false;
 $sis->access->grants = [];
 $sis->access->actor = $sis->user();

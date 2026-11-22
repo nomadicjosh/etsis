@@ -119,6 +119,7 @@ final readonly class DegreeProgressSnapshot implements \JsonSerializable
                     array_flip([
                         "name",
                         "requirement_type",
+                        "requirement_origins",
                         "required_credits_milli",
                         "required_courses",
                         "minimum_grade_points_milli",

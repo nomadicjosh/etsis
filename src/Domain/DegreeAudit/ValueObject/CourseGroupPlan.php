@@ -5,6 +5,9 @@ declare(strict_types=1);
 namespace Domain\DegreeAudit\ValueObject;
 
 use InvalidArgumentException;
+use Qubus\Exception\Exception;
+
+use function Codefy\Framework\Helpers\trans_html;
 
 /** Catalog planning figures, independent of student awards and completion decisions. */
 final readonly class CourseGroupPlan
@@ -18,7 +21,10 @@ final readonly class CourseGroupPlan
     ) {
     }
 
-    /** @param array<string, array<string,mixed>> $courses Resolved retained publications, keyed by course identity. */
+    /**
+     * @param array<string, array<string,mixed>> $courses Resolved retained publications, keyed by course identity.
+     * @throws Exception
+     */
     public static function forDefinition(
         CourseGroupDefinition|CourseGroupDefinitionV2 $group,
         array $courses,
@@ -29,7 +35,7 @@ final readonly class CourseGroupPlan
             $courseCredits = $courses[$reference["course_id"]]["credits_milli"] ?? null;
             if (!is_int($courseCredits) || $courseCredits < 0 || $courseCredits > 999999) {
                 throw new InvalidArgumentException(
-                    "Resolve every listed course publication before planning this group.",
+                    trans_html("Resolve every listed course publication before planning this group."),
                 );
             }
             $credits += $courseCredits;
@@ -37,12 +43,16 @@ final readonly class CourseGroupPlan
         $count = count($definition["courses"]);
         $warnings = [];
         if (
-            isset($definition["work_eligibility"]) &&
-            array_replace(GroupWorkEligibility::DEFAULT, $definition["work_eligibility"])
-                != GroupWorkEligibility::DEFAULT
+            (isset($definition["work_eligibility"]) &&
+                array_replace(GroupWorkEligibility::DEFAULT, $definition["work_eligibility"])
+                    != GroupWorkEligibility::DEFAULT) ||
+            array_any($definition['rules'], static fn(array $rule): bool =>
+                RequirementCreditOrigin::fromRule($rule) !== RequirementCreditOrigin::Any)
         ) {
             $warnings[] =
-            "Catalog totals do not check a student's credit origin or actual completion date. Run a student test.";
+            trans_html(
+                "Catalog totals do not check a student's credit origin or actual completion date. Run a student test."
+            );
         }
         $dynamic =
         count(
@@ -52,16 +62,18 @@ final readonly class CourseGroupPlan
             ),
         ) > 0;
         if ($dynamic) {
-            $warnings[] = 'Listed totals exclude saved-rule matches. Run a student test to evaluate matching work.';
+            $warnings[] = trans_html(
+                'Listed totals exclude saved-rule matches. Run a student test to evaluate matching work.'
+            );
         } elseif ($count === 0) {
-            $warnings[] = "Add published courses to plan this group.";
+            $warnings[] = trans_html("Add published courses to plan this group.");
         } elseif (($definition["requirement_type"] ?? "credits") === "courses") {
             if ($definition["min_courses"] > $count) {
-                $warnings[] = "The required course count exceeds the number of distinct listed courses.";
+                $warnings[] = trans_html("The required course count exceeds the number of distinct listed courses.");
             }
         } elseif ($definition["min_credits_milli"] > $credits) {
             $warnings[] =
-            "The required credits exceed the catalog credits of the listed courses. Review this total.";
+            trans_html("The required credits exceed the catalog credits of the listed courses. Review this total.");
         }
         return new self($count, $credits, count($definition["rules"]), $warnings);
     }

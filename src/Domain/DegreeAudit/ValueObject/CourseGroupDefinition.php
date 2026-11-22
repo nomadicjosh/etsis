@@ -82,6 +82,10 @@ final readonly class CourseGroupDefinition
             if (($rule["mode"] ?? null) === "credits") {
                 $keys[] = "minimum_credits_milli";
             }
+            if ($allowEligibility && array_key_exists('credit_origin', $rule)) {
+                $keys[] = 'credit_origin';
+                RequirementCreditOrigin::fromRule($rule);
+            }
             self::keys($rule, $keys);
             if ($dynamic) {
                 if (!is_array($rule['eligibility']) || $rule['course_ids'] !== [] || $rule['mode'] === 'all') {

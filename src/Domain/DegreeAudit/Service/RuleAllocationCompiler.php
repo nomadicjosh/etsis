@@ -7,6 +7,7 @@ namespace Domain\DegreeAudit\Service;
 use Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException;
 use Domain\DegreeAudit\ValueObject\CourseMatchStatus;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
+use Domain\DegreeAudit\ValueObject\RequirementCreditOrigin;
 
 /** Pure request-local constraints from verified work and captured predicate decisions. No publication changes. */
 final readonly class RuleAllocationCompiler
@@ -120,6 +121,9 @@ final readonly class RuleAllocationCompiler
                 );
                 $membership = [];
                 foreach ($dynamic as $rule) {
+                    if (!RequirementCreditOrigin::fromRule($rule)->allows($item['credit_type'])) {
+                        continue;
+                    }
                     $decision = $captured[$rule['id']];
                     if ($decision === 'unknown' && $possible) {
                         $issues['rule_facts_unknown'] = true;
