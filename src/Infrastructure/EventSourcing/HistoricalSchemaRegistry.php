@@ -404,6 +404,10 @@ final readonly class HistoricalSchemaRegistry
                 'type' => 'academic_credit', 'root' => \Domain\AcademicRecord\AcademicCredit::class,
                 'fields' => \Domain\AcademicRecord\ValueObject\GradeChangeSchema::RESOLUTION,
             ],
+            \Domain\AcademicRecord\Event\RegisteredCreditsWereCorrected::class => [
+                'type' => 'academic_credit', 'root' => \Domain\AcademicRecord\AcademicCredit::class,
+                'fields' => \Domain\AcademicRecord\ValueObject\RegisteredCreditCorrection::FIELDS,
+            ],
             \Domain\AcademicRecord\Event\FinalGradeWasDecided::class => [
                 "type" => "academic_credit",
                 "root" => \Domain\AcademicRecord\AcademicCredit::class,
@@ -907,6 +911,13 @@ final readonly class HistoricalSchemaRegistry
             if ($stream->type === "academic_credit") {
                 \Domain\AcademicRecord\ValueObject\AcademicEventSchema::validate($class, $payload);
                 if (
+                    $class === \Domain\AcademicRecord\Event\RegisteredCreditsWereCorrected::class &&
+                    (!is_string($metadata['registered_credits_intent'] ?? null) ||
+                        preg_match('/^[a-f0-9]{64}$/D', $metadata['registered_credits_intent']) !== 1)
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                if (
                     $class === \Domain\AcademicRecord\Event\InstitutionalCreditWasEstablished::class &&
                     $payload["credit"]["id"] !== (string) $stream->aggregateId
                 ) {
@@ -1141,6 +1152,15 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'registered_credits_intent') {
+                    if (
+                        $class !== \Domain\AcademicRecord\Event\RegisteredCreditsWereCorrected::class ||
+                        !is_string($value) || preg_match('/^[a-f0-9]{64}$/D', $value) !== 1
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'coursework') {
                     if (
                         $class !== \Domain\AcademicRecord\Event\FinalGradeWasDecided::class || !is_array($value)

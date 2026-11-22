@@ -175,6 +175,8 @@ final readonly class EnrollmentLoadService
                         "course_title" => $credit["course_title"],
                         "credits_milli" => $units,
                         "registered_at" => $facts["registered_at"],
+                        ...$channel === 'staff'
+                            ? ['enrollment_id' => $id->value, 'section_id' => $facts['section_id']] : [],
                     ];
                 }
                 $result = $base + [

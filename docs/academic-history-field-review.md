@@ -129,3 +129,8 @@ The [tracked late-withdrawal reinstatement](registration-history.md#reinstate-a-
 ### Curriculum reporting projections
 
 The normalized selected-component index derives only from recorded student choices and their exact retained program publication. Program, component/type, owner/school and required-major labels remain historical facts, while person labels and pursuit status remain explicitly current. Count distinct students rather than component rows for headcounts. Choice/requirement writes, reporting projection and required audits share one transaction; populated conversion verifies existing streams without inventing events. Ordinary reports use minimized SQL projections and checkpoint checks, never raw history. See [curriculum report setup and limits](curriculum-reporting.md).
+
+
+### Corrections to recorded registered quantities
+
+The legacy separation of registration and academic-credit quantities now has an [explicit registered-credit correction](registered-credit-corrections.md) for genuine active recorded attempts. The opening quantity remains an original fact; a new reasoned event retains old/new accepted registered units in the existing academic stream and advances its projection version. Awards, grades/GPA, original charges and enrollment/seat facts remain separate. Working staff/owner/advisor load uses the accepted correction, pending load reviews stale, and earlier determinations retain their exact quantities/policy/source versions. Unknown original quantities are not inferred; variable-credit course policies, census backdating and broader closed-attempt resolution remain separate work.

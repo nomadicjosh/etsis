@@ -54,6 +54,7 @@ final readonly class WorkspaceService
         'sis:registration:prerequisite-exception',
         'sis:load:policy',
         'sis:load:determine',
+        'sis:registration:credits:amend',
         'sis:standing:correct',
         'sis:standing:configure',
         'sis:standing:manage',

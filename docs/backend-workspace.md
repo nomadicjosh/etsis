@@ -640,3 +640,8 @@ Saved offering plans now open an inline definition chooser before publication. O
 ## Curriculum reports and student follow-through
 
 **Reports → Open Report Studio → Start from a template** now includes **Current component ownership**, **Selected student curriculum** and **Students by major and department**. Current catalog labels require catalog authority; selected labels come from exact retained publications under student-read authority. Detail rows represent components, while the headcount starter uses distinct students. Include student/pursuit references in a saved live detail report to open the exact selection workflow and return to refreshed report results. [Setup, grain, permissions, migration and limits](curriculum-reporting.md).
+
+
+## Correct registered credits from enrollment load
+
+Staff with student-read, registration management and the independent **registered-credit correction** duty can open **Student programs → Enrollment load**, choose the term and select **Registered credits · course**. The editor preserves institutional-evidence drafts through review/history/reload and confirms against exact recorded source versions. Current load changes; original registration quantity, awarded units/grade/GPA, charges and earlier load determinations remain separate. Students/advisors see current totals without correction controls or staff routing. [Workflow, authority, retained history and limits](registered-credit-corrections.md).

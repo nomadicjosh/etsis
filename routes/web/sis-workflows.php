@@ -790,6 +790,14 @@ return static function (Psr7Router $router): void {
         )
             ->name('sis.prerequisite.exceptions.' . $method);
     }
+    foreach (['view', 'review', 'confirm', 'history'] as $method) {
+        $router->map(
+            ['POST'],
+            '/sis/students/{student}/sections/{section}/enrollments/{enrollment}/registered-credits/' .
+                $method . '/',
+            [\Application\Http\Controller\SisRegisteredCreditController::class, $method],
+        )->name('sis.registered.credits.' . $method);
+    }
     $load = \Application\Http\Controller\SisEnrollmentLoadController::class;
     foreach (
         [

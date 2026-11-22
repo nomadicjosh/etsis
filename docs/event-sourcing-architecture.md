@@ -259,3 +259,8 @@ Program publication now bounds selected replay and repeats source/specialization
 ### Campus editorial content
 
 [News authoring and publication](campus-portal.md#news-editor-and-publication) remain audited CRUD. Revisions, expiring actor-bound review proofs, minimal operation receipts and final transaction checks protect genuine editorial actions without creating academic event streams. Visibility is evaluated against approved UTC boundaries on each read, including direct URLs and native news blocks. Rich-text sanitization and explicit content format preserve safe rendering and the literal meaning of earlier plain text. No old approval is inferred and no authoritative journal is added or rewritten.
+
+
+### Registered-credit quantity corrections
+
+[Registered-credit corrections](registered-credit-corrections.md) now extend the existing protected academic-credit stream and framework/domain maps. The opening registered quantity remains an original fact, a new attributed event retains the previous/current accepted load quantity, and the existing academic projection advances without changing award or financial quantities. Review binds actor/attempt/source/intent and expires; final audit/source/projection/authority checks are atomic. Current load uses accepted registered units, stale pending determinations require re-review, and earlier retained load facts remain unchanged. Unknown history is not reconstructed from current awards or catalog rows. The permission-only migration adds no journal, business-data backfill or automatic grant; variable-credit publication, census/backdating and broader closed-source resolution remain separate milestones.

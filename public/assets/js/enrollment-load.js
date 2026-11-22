@@ -4,7 +4,7 @@ window.createEnrollmentLoadReview = function (ui) {
     const { node, request, task } = ui;
     const credits = milli => (milli / 1000).toLocaleString(undefined, { maximumFractionDigits: 3 });
     let sequence = 0;
-    return function mount(container, base, { canDetermine = false, canReadDeterminations = true } = {}) {
+    return function mount(container, base, { canDetermine = false, canReadDeterminations = true, correctCredits = null } = {}) {
         const root = node("section", { class: "surface border rounded p-3 my-3", "aria-label": "Enrollment load" });
         container.append(root);
         let serial = 0;
@@ -36,12 +36,15 @@ window.createEnrollmentLoadReview = function (ui) {
             root.replaceChildren(node("h2", { class: "h5" }, `Enrollment load · ${data.term.code}`),
                 node("p", { role: "status", class: "fw-semibold" }, message),
                 node("p", { class: "form-text campus-muted" }, `${data.program.code} · ${data.program.title}. All active registrations in this term count, including registrations made before a program change.`),
-                node("p", { class: "form-text campus-muted" }, "Working review of current registrations, not an official census or financial-aid determination. Credits come from the accepted registrations; later catalog and grade changes do not replace them."));
+                node("p", { class: "form-text campus-muted" }, "Working review of current registrations, not an official census or financial-aid determination. Credits reflect recorded registrations and any explicit registered-credit corrections. Catalog and award/grade edits do not replace those quantities."));
             if (data.policy?.source && data.policy.source !== "not_configured") root.append(node("p", { class: "form-text campus-muted" },
                 data.policy.source === "program" ? "Using this program's load policy." : "Using the institutional load policy."));
             const list = node("ul", { class: "list-unstyled" });
-            for (const item of data.items) list.append(node("li", { class: "border-bottom py-2" },
-                `${item.course_code} · ${item.course_title} · ${item.credits_milli === null ? "Credits need review" : `${credits(item.credits_milli)} credits`}`));
+            for (const item of data.items) {
+                const row = node("li", { class: "border-bottom py-2" }, `${item.course_code} · ${item.course_title} · ${item.credits_milli === null ? "Credits need review" : `${credits(item.credits_milli)} credits`}`);
+                if (correctCredits && item.enrollment_id && item.section_id) row.append(button(`Registered credits · ${item.course_code}`, () => { ++serial; return correctCredits(root, item, () => review(term)); }));
+                list.append(row);
+            }
             root.append(list, node("div", { class: "d-flex flex-wrap gap-2" }, button("Refresh review", () => review(term)), button("Change term", () => choose())));
             if (canReadDeterminations) root.append(button("Recorded determinations for this term", () => history(term)));
             if (canDetermine && data.term_timing === 'current' && ['ready', 'not_registered'].includes(data.status)) determinationForm(term);
@@ -116,6 +119,84 @@ window.createWorkspaceEnrollmentLoad = function (ui) {
     const field = (label, input) => node("div", { class: "mb-3" }, node("label", { for: input.id, class: "form-label" }, label), input);
     const showBands = definition => definition === null ? "No separate credit bands" : definition.bands.map((b, i, all) =>
         `${b.label}: ${b.min_credits_milli / 1000}${all[i + 1] ? ` to under ${all[i + 1].min_credits_milli / 1000}` : " or more"} credits`).join("; ");
+    async function registeredCredits(container, student, item, back, preset = null) {
+        const panel = node("section", { "aria-label": "Registered-credit correction" });
+        container.replaceChildren(panel);
+        panel.append(node("p", { role: "status" }, "Loading registered-credit evidence…"), button("Back to enrollment load", back));
+        const base = `/sis/students/${student}/sections/${item.section_id}/enrollments/${item.enrollment_id}/registered-credits/`;
+        const data = await request(base + "view/", "POST", {});
+        if (!panel.isConnected) return;
+        const quantity = value => value === null ? "Not recorded" : (value / 1000).toLocaleString(undefined, { maximumFractionDigits: 3 });
+        const warning = "Correct the registered quantity using institutional evidence. Awarded attempted/completed credits, grades, GPA and original charges stay separate. Arrange any required academic or financial correction through its own review. This is not variable-credit registration or a backdated census.";
+        let correctionSequence = 0;
+        const current = token => panel.isConnected && token === correctionSequence;
+        const draft = preset || { credits: data.current_registered_milli === null ? "" : String(data.current_registered_milli / 1000), reason: "", acknowledged: false };
+        function edit() {
+            if (!panel.isConnected) return;
+            ++correctionSequence;
+            panel.replaceChildren(node("h3", { class: "h5" }, "Correct registered credits"),
+                node("p", {}, `${data.course_code} · ${data.course_title} · Registration term (current label) ${data.term_code}`),
+                node("p", {}, `Original registered credits: ${quantity(data.original_registered_milli)}. Current accepted registered credits: ${quantity(data.current_registered_milli)}.`),
+                node("p", {}, `Awarded attempted credits: ${quantity(data.awarded_attempted_milli)}; completed credits: ${quantity(data.awarded_completed_milli)}.`),
+                node("p", { class: "form-text" }, warning));
+            if (!data.can_correct) {
+                panel.append(node("p", { role: "status" }, "This attempt needs separate registrar resolution. Only verified active registrations without a pending grade correction can be changed here."),
+                    button("Registered-credit history", () => history()), button("Back to enrollment load", back));
+                return;
+            }
+            const amount = node("input", { id: "registered-credit-amount", type: "number", min: "0", max: "999.999", step: "0.001", required: true, class: "form-control", value: draft.credits });
+            const reason = node("textarea", { id: "registered-credit-reason", rows: "3", maxlength: "1000", required: true, class: "form-control" });
+            reason.value = draft.reason;
+            const acknowledged = node("input", { id: "registered-credit-evidence", type: "checkbox", required: true, class: "form-check-input" });
+            acknowledged.checked = draft.acknowledged;
+            amount.addEventListener("input", () => { draft.credits = amount.value; amount.setCustomValidity(""); });
+            reason.addEventListener("input", () => { draft.reason = reason.value; });
+            acknowledged.addEventListener("change", () => { draft.acknowledged = acknowledged.checked; });
+            const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review registered-credit correction");
+            const form = node("form", {}, field("Corrected registered credits", amount), field("Reason and institutional evidence", reason),
+                node("div", { class: "form-check mb-3" }, acknowledged, node("label", { for: acknowledged.id, class: "form-check-label" }, "I verified the institutional registration evidence and understand that awards and charges need separate review.")),
+                node("div", { class: "inline-actions" }, submit, button("Registered-credit history", () => history()), button("Reload registered-credit evidence", () => registeredCredits(container, student, item, back, draft)), button("Back to enrollment load", back)));
+            form.addEventListener("submit", event => { event.preventDefault(); task(async () => {
+                if (!form.reportValidity()) return;
+                if (!/^(?:0|[1-9]\d{0,2})(?:\.\d{1,3})?$/.test(draft.credits)) { amount.setCustomValidity("Use zero to 999.999 credits with at most three decimals."); amount.reportValidity(); return; }
+                const [whole, fraction = ""] = draft.credits.split(".");
+                const token = ++correctionSequence;
+                const stamp = JSON.stringify(draft);
+                const result = await request(base + "review/", "POST", { expected_version: data.expected_version, expected_position: data.expected_position,
+                    registered_milli: Number(whole) * 1000 + Number(fraction.padEnd(3, "0")), reason: draft.reason, acknowledged: draft.acknowledged });
+                if (!current(token)) return;
+                if (JSON.stringify(draft) !== stamp) { edit(); panel.prepend(node("p", { role: "status" }, "Your draft changed while reviewing. Review it again.")); return; }
+                panel.replaceChildren(node("h3", { class: "h5" }, "Review registered-credit correction"),
+                    node("p", {}, `${data.course_code} · ${quantity(result.previous_registered_milli)} → ${quantity(result.registered_milli)} registered credits`),
+                    node("p", {}, result.reason), node("p", {}, warning), node("p", { class: "form-text" }, "This correction takes effect when confirmed. The review expires after twenty minutes. Earlier load determinations remain unchanged."),
+                    button("Confirm registered-credit correction", async () => {
+                        const confirmation = ++correctionSequence;
+                        await request(base + "confirm/", "POST", { operation_id: result.operation_id, expected_version: result.expected_version, expected_position: result.expected_position,
+                            previous_registered_milli: result.previous_registered_milli, registered_milli: result.registered_milli,
+                            reason: result.reason, acknowledged: result.acknowledged, review_token: result.review_token });
+                        if (!current(confirmation)) return;
+                        panel.replaceChildren(node("p", { role: "status" }, "Registered credits corrected. Earlier registration, award and charge facts remain retained."),
+                            button("Refresh enrollment load", back), button("Review current registered credits", () => registeredCredits(container, student, item, back)));
+                    }, "btn-primary"), button("Revise correction", edit),
+                    button("Reload registered-credit evidence", () => registeredCredits(container, student, item, back, draft)), button("Back to enrollment load", back));
+            }, submit); });
+            panel.append(form);
+        }
+        async function history(cursor = null, previous = []) {
+            const token = ++correctionSequence;
+            const page = await request(base + "history/", "POST", { cursor });
+            if (!current(token)) return;
+            panel.replaceChildren(node("h3", { class: "h5" }, "Registered-credit history"), node("p", { class: "form-text" }, "Current corrections retain the original quantity. Staff reasons and raw history are excluded here."));
+            for (const entry of page.items) panel.append(node("article", { class: "surface border p-3 my-2" },
+                node("h4", { class: "h6" }, `${quantity(entry.previous_registered_milli)} → ${quantity(entry.registered_milli)} registered credits`), node("p", {}, `Recorded ${entry.recorded_at}`)));
+            if (!page.items.length) panel.append(node("p", { role: "status" }, "No registered-credit corrections on this history page."));
+            if (previous.length) panel.append(button("Previous credit history page", () => history(previous.at(-1), previous.slice(0, -1))));
+            if (page.next_cursor) panel.append(button("More credit history", () => history(page.next_cursor, [...previous, cursor])));
+            panel.append(button("Back to correction", edit), button("Back to enrollment load", back));
+        }
+        edit();
+    }
+
     async function programs(search = "", after = null, stack = []) {
         const body = openDrawer("Program load policies", "INSTITUTION SETUP");
         const page = await request("/sis/enrollment-load/policy/programs/", "POST", { search, after });
@@ -203,6 +284,8 @@ window.createWorkspaceEnrollmentLoad = function (ui) {
     }
     return { policy, open(student, pursuit) {
         const body = openDrawer("Enrollment load", "STUDENT PROGRAM");
-        mount(body, `/sis/students/${student}/programs/${pursuit}/load/`, { canDetermine: can("sis:load:determine"), canReadDeterminations: can("sis:load:determine") });
+        mount(body, `/sis/students/${student}/programs/${pursuit}/load/`, { canDetermine: can("sis:load:determine"), canReadDeterminations: can("sis:load:determine"),
+            correctCredits: can("sis:registration:credits:amend") && can("sis:registration:manage")
+                ? (container, item, back) => registeredCredits(container, student, item, back) : null });
     } };
 };

@@ -405,3 +405,8 @@ An interrupted accepted confirmation can be retried with the same proof and retu
 The existing protected journal stores both domain events. Stream heads and the existing decision indices support expected-version concurrency; authenticated accepted-event linkage supplies retries without another receipt table. Confirmation shares a 2,000-event/4 MiB/five cooperative-second replay allowance; the enrollment index reader verifies fewer than 1,000 decisions and larger histories fail closed. Existing enrollment summary pages retain their bounded first twenty decisions; full archive navigation/recovery remains separate qualification work.
 
 Apply `20261121000010_AddSisEnrollmentReinstatementPermission`. It creates only the protected duty and its self-implication, refuses a conflicting custom duty, and grants no role or user new authority. No earlier withdrawal or reinstatement event is invented. See [academic restoration facts](academic-credit-history.md#reinstate-a-tracked-late-withdrawal).
+
+
+## Registered-credit corrections
+
+[Registered-credit correction](registered-credit-corrections.md) now records an explicitly evidenced change to the load quantity of a verified active attempt. It preserves the original registration quantity and all enrollment/seat, awarded-credit/grade/GPA and billing facts. Current load reads use the latest accepted registered quantity; earlier retained determinations do not change. The independent correction duty grants no grade or financial authority. Corrected-source withdrawn attempts remain outside the unchanged-source reinstatement contract and need separate institutional resolution. No variable-credit course registration policy is inferred.

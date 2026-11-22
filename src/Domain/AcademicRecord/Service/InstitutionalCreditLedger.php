@@ -1537,6 +1537,8 @@ final readonly class InstitutionalCreditLedger
                         => "course_corrected",
                     $e instanceof \Domain\AcademicRecord\Event\InstitutionalPostingTermWasCorrected
                         => "posting_term_corrected",
+                    $e instanceof \Domain\AcademicRecord\Event\RegisteredCreditsWereCorrected
+                        => 'registered_credits_corrected',
                     $e instanceof FinalGradeWasDecided => "grade_decided",
                     $e instanceof \Domain\AcademicRecord\Event\GradeChangeWasRequested
                         => "correction_requested",
@@ -1546,6 +1548,11 @@ final readonly class InstitutionalCreditLedger
                     $e instanceof \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated => "reinstated",
                     default => throw new CorruptHistoryException(),
                 },
+                ...$e instanceof \Domain\AcademicRecord\Event\RegisteredCreditsWereCorrected
+                    ? ['registered_credit_correction' => [
+                        'previous_registered_milli' => $p['previous_registered_milli'],
+                        'registered_milli' => $p['registered_milli'],
+                    ]] : [],
                 "academic_on" => $p["academic_on"] ?? null,
                 "previous_academic_on" => $p["previous_academic_on"] ?? null,
                 "posting_term_code" => $p["term_code"] ?? null,
@@ -1604,8 +1611,9 @@ final readonly class InstitutionalCreditLedger
         EntityId $section,
         EntityId $enrollment,
         bool $allowRemoved = false,
+        ?HistoryReadBudget $budget = null,
     ): array {
-        return $this->source($enrollment, $student, $section, new HistoryReadBudget(), $allowRemoved);
+        return $this->source($enrollment, $student, $section, $budget ?? new HistoryReadBudget(), $allowRemoved);
     }
 
     /**

@@ -15,8 +15,10 @@ use Domain\AcademicRecord\Event\InstitutionalAcademicPeriodWasRecorded;
 use Domain\AcademicRecord\Event\InstitutionalCourseWasAccepted;
 use Domain\AcademicRecord\Event\InstitutionalCourseWasCorrected;
 use Domain\AcademicRecord\Event\InstitutionalPostingTermWasCorrected;
+use Domain\AcademicRecord\Event\RegisteredCreditsWereCorrected;
 use Domain\AcademicRecord\ValueObject\CreditSnapshot;
 use Domain\AcademicRecord\ValueObject\CreditUnitCorrection;
+use Domain\AcademicRecord\ValueObject\RegisteredCreditCorrection;
 use Domain\AcademicRecord\ValueObject\GradeSnapshot;
 use Domain\AcademicRecord\ValueObject\WithdrawnCreditQuantities;
 use Domain\Gradebook\ValueObject\CourseworkGradeEvidence;
@@ -38,6 +40,8 @@ final class AcademicCredit extends EventSourcedAggregate
     private ?string $academicOn = null;
     private ?string $registrationTermId = null;
     private ?array $registeredCredits = null;
+    private ?array $originalRegisteredCredits = null;
+    private array $registeredCreditCorrections = [];
     /** @var array{term_id:string,term_code:string,decision_id:string}|null */
     private ?array $postingTerm = null;
     private ?string $originalCourseVersion = null;
@@ -56,6 +60,7 @@ final class AcademicCredit extends EventSourcedAggregate
                 $event::class,
                 [
                     InstitutionalCreditWasEstablished::class,
+                    \Domain\AcademicRecord\Event\RegisteredCreditsWereCorrected::class,
                     FinalGradeWasDecided::class,
                     \Domain\AcademicRecord\Event\GradeChangeWasRequested::class,
                     \Domain\AcademicRecord\Event\GradeChangeWasResolved::class,
@@ -97,6 +102,7 @@ final class AcademicCredit extends EventSourcedAggregate
                 array_flip(["course_code", "course_title", "attempted_milli"]),
             );
         }
+        $this->originalRegisteredCredits = $this->registeredCredits;
         $this->provenance = $p["provenance"];
         $this->credit = $p["credit"];
         $this->registrationTermId = $p["credit"]["term_id"];
@@ -321,6 +327,44 @@ final class AcademicCredit extends EventSourcedAggregate
         return $this->registeredCredits;
     }
 
+    public function originalRegisteredCredits(): ?array
+    {
+        return $this->originalRegisteredCredits;
+    }
+    public function canCorrectRegisteredCredits(): bool
+    {
+        return $this->credit !== null && in_array($this->credit['status'], ['A', 'N'], true) &&
+        $this->registeredCredits !== null && $this->provenance === 'registration' &&
+        $this->pendingGradeChange === null;
+    }
+    public function registeredCreditCorrection(EntityId $operation): ?array
+    {
+        return $this->registeredCreditCorrections[$operation->value] ?? null;
+    }
+    public function whenRegisteredCreditsWereCorrected(RegisteredCreditsWereCorrected $event): void
+    {
+        $p = $event->payload();
+        RegisteredCreditCorrection::validate($p);
+        $this->assertNext($p);
+        $intent = $event->metaParam('registered_credits_intent', null);
+        if (
+            !$this->canCorrectRegisteredCredits() ||
+            isset($this->registeredCreditCorrections[$p['decision_id']]) ||
+            $this->registeredCredits['attempted_milli'] !== $p['previous_registered_milli'] ||
+            !is_string($intent) || preg_match('/^[a-f0-9]{64}$/D', $intent) !== 1
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->registeredCredits['attempted_milli'] = $p['registered_milli'];
+        ++$this->credit['version'];
+        new CreditSnapshot($this->credit);
+        $this->decision = $p['decision_id'];
+        $this->registeredCreditCorrections[$p['decision_id']] = ['intent' => $intent, 'receipt' => [
+            'operation_id' => $p['decision_id'], 'first_version' => $event->playhead(),
+            'last_version' => $event->playhead(), 'event_ids' => [(string) $event->eventId()],
+        ]];
+    }
+
     public function registrationTermId(): ?string
     {
         return $this->registrationTermId;
@@ -501,6 +545,7 @@ final class AcademicCredit extends EventSourcedAggregate
     public function canReinstate(): bool
     {
         return $this->provenance === "registration" &&
+        $this->registeredCreditCorrections === [] &&
         $this->credit !== null &&
         $this->credit["status"] === "W" &&
         $this->withdrawalBase !== null &&

@@ -1765,6 +1765,7 @@ window.createWorkspaceTeaching = function (ui) {
                                               registration: "Registration accepted",
                                               observed_existing: "Existing facts observed",
                                               grade_decided: "Grade decision",
+                                              registered_credits_corrected: "Registered credits corrected",
                                               correction_requested: "Grade correction requested",
                                               correction_approved: "Grade correction approved",
                                               correction_rejected: "Grade correction rejected",
@@ -1784,6 +1785,8 @@ window.createWorkspaceTeaching = function (ui) {
                                         : "—",
                                   item.action === "posting_term_corrected"
                                       ? `${item.previous_posting_term_code || "Earlier label unknown"} → ${item.posting_term_code}`
+                                      : item.registered_credit_correction
+                                        ? `${item.registered_credit_correction.previous_registered_milli / 1000} → ${item.registered_credit_correction.registered_milli / 1000} registered credits`
                                       : item.credit_unit_correction
                                         ? `${item.credit_unit_correction.previous_attempted_milli / 1000} → ${item.credit_unit_correction.attempted_milli / 1000} credits`
                                         : item.action === "completion_recorded"

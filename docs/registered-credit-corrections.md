@@ -1,0 +1,42 @@
+# Correct recorded registered credits
+
+Registered credits describe the quantity used for a student's enrollment load. Awarded attempted/completed credits, grades, GPA and the quantity on an original charge are separate facts. A registrar can now correct a genuinely recorded registered quantity without rewriting those other facts.
+
+This is a correction workflow using institutional evidence. It does not offer variable-credit course registration, infer a missing earlier quantity, backdate a census or automatically adjust tuition, refunds, standing or financial-aid eligibility.
+
+## Authority and supported records
+
+Grant **`sis:registration:credits:amend`** through the existing access editor only to staff authorized to correct registration quantities. They also need **`sis:registration:manage`** and **`sis:student:read`**. The new duty grants neither financial posting nor grade/award amendment authority, and the permission migration assigns it to no existing role or account. Grade-amendment authority alone is insufficient.
+
+A fresh correction requires an active staff/self-registered attempt (`A` or `N`), verified registration and institutional-credit histories, an original recorded registered quantity, and no pending grade-correction request. A posted grade does not prevent this separate registration correction. Closed/withdrawn attempts and unrecorded earlier quantities need separate registrar resolution; today's course credits or award quantity are never substituted for missing evidence. Student inactivity is not interpreted as permission to reopen an attempt.
+
+## Staff workflow
+
+1. Open **Students → a student → Student programs → Enrollment load**. Choose **Review enrollment load**, then the registration term. All active registrations in that term count, including those originally accepted under a previous pursuit.
+2. Beside the affected course, choose **Registered credits · course code**. The screen shows the original and currently accepted registered quantities, awarded attempted/completed credits and registration context. The course label comes from the original recorded registration; the term code is its current calendar label. Later academic posting-term corrections do not move the registration.
+3. Enter **Corrected registered credits**, from zero to 999.999 with at most three decimal places. Explain **Reason and institutional evidence**, then confirm that the evidence was verified and that awards/charges need separate review. An unchanged quantity is rejected. Zero remains an active zero-credit registration and does not release a seat.
+4. Choose **Review registered-credit correction**. Inspect the old/new registered quantities and the impact notice. No write occurs during review. **Revise correction** preserves the quantity, reason and acknowledgement. If the draft changes while a review is loading, a fresh review is required.
+5. Choose **Confirm registered-credit correction**. The twenty-minute actor/attempt/source-bound review takes effect at confirmation time. Staff cannot supply another effective date. Stale or rejected confirmations preserve the draft; **Reload registered-credit evidence** refreshes its source while retaining entered values. Retrying an accepted confirmation returns the original receipt, including after expiry, a later correction or a drop, without restoring an earlier quantity or another charge.
+6. Choose **Refresh enrollment load**. The working total and current institutional/program band use the corrected registered quantity. An already recorded determination retains its old total, policy and source versions. An unaccepted load review becomes stale; recording the new position requires a separate fresh determination.
+
+The correction does not change the student's enrollment/status, seat, original registration time, academic pursuit, course/offering publication, awarded quantities, grade/GPA or original billing postings. Arrange any necessary academic or financial correction through its separately authorized review. Previously prepared/issued documents remain unchanged; a source-version change may require fresh transcript preparation even when displayed award quantities are identical.
+
+## History and privacy
+
+**Registered-credit history** shows the prior/new accepted quantities with effective and recorded times. Pages scan at most twenty academic events and display the registered-credit corrections among them; a page can contain no corrections while still offering **More credit history**. Paging is frozen at the first page's committed head. **Back to correction** preserves the working draft. The ordinary academic history also labels these changes separately from awarded-credit corrections.
+
+Protected staff reasons, actors and raw event envelopes are excluded from this curated history. Students and current assigned advisors see the corrected total through their existing private load review; those responses omit staff enrollment/section routing references and expose no correction editor. Source history after an early drop remains restricted. Only a valid original accepted command may retrieve its receipt after removal; it cannot resurrect projections or expose removed course details.
+
+Private/no-store responses, framework CSRF and debug suppression apply to every new endpoint. Drafts and proofs stay in page memory. Detached requests and late confirmations cannot overwrite a revised draft or a later task. An accepted server decision remains recorded even when its response is deliberately ignored; reload the evidence before preparing another decision.
+
+## Recorded facts and limits
+
+`RegisteredCreditsWereCorrected` appends to the attempt's existing `academic_credit` stream in **`sis_history_events`**. It retains predecessor decision and old/new quantities; protected context retains the trusted actor, reason, operation and actual effective/recorded times. The original opening quantity stays independently available. The same protected storage serves domain and framework replay; no parallel event journal, copied history table or historical backfill is added.
+
+The existing academic projection advances its version while preserving award fields. Event, operation receipt, projection and required metadata audit commit or roll back together. Confirmation rechecks the complete registration/academic source, current actor/permissions, projection and expiry after the audit. Other academic changes therefore invalidate an unaccepted correction review, and accepted registered-credit changes invalidate unaccepted grade/load reviews through existing source versions.
+
+Commands and selected reads share the existing two-thousand-event/four-hundred-page replay ceiling, plus a four-MiB/five-cooperative-second allowance across registration and academic sources. Excessive, missing or inconsistent history stops the workflow without partial totals or a decision. An accepted retry additionally verifies its original single-event operation receipt. Current load determinations retain the corrected quantity and exact credit-source version; subsequent corrections do not replace them. Removed early drops and later closed-record corrections remain under their existing retention/access boundaries.
+
+A withdrawal from an attempt with registered-credit corrections is outside the existing **unchanged tracked withdrawal** reinstatement contract, even if a later correction returned the quantity to its original number. It requires separate institutional source/financial resolution. The correction never silently restores an original quantity during reinstatement.
+
+Apply **`20261121000014_AddSisRegisteredCreditPermission`** before enabling access. It adds only the protected duty and its self-implication through the portable access repository tables. It changes no earlier event, registration, award, load determination, charge or role/user grant. Current fixed-credit course setup remains unchanged. Institution-selected variable-credit publication/registration rules, census/backdated load policy, grandfathering, retrospective financial assessment and broader closed-attempt correction/reinstatement policies remain roadmap work.

@@ -20,6 +20,10 @@ final class AcademicEventSchema
     /** @param array<string,mixed> $payload */
     public static function validate(string $class, array $payload): void
     {
+        if ($class === \Domain\AcademicRecord\Event\RegisteredCreditsWereCorrected::class) {
+            RegisteredCreditCorrection::validate($payload);
+            return;
+        }
         if ($class === \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class) {
             \Domain\Registration\ValueObject\ReinstatementEventSchema::validate($payload, true);
             return;
