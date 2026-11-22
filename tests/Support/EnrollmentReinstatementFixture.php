@@ -16,8 +16,12 @@ final class EnrollmentReinstatementFixture
     public \Domain\Student\Student $student;
     public \Domain\Registration\Enrollment $enrollment;
     public array $drop;
-    public function __construct(?SisFixture $sis = null, bool $selfRegistered = false)
-    {
+    public array $registeredCorrections = [];
+    public function __construct(
+        ?SisFixture $sis = null,
+        bool $selfRegistered = false,
+        array $registeredQuantities = [],
+    ) {
         $this->sis = $s = $sis ?? new SisFixture();
         $s->gradeScale([
             [
@@ -67,6 +71,9 @@ final class EnrollmentReinstatementFixture
             !$selfRegistered,
         );
         $s->access->actor = $registrar;
+        foreach ($registeredQuantities as $quantity) {
+            $this->correctRegisteredCredits($quantity);
+        }
         $s->publishDropPolicy(
             $s->term,
             -1,
@@ -86,6 +93,56 @@ final class EnrollmentReinstatementFixture
             $r["effective_on"],
         );
     }
+    public function registeredCredits(): \Domain\AcademicRecord\Service\RegisteredCreditService
+    {
+        $s = $this->sis;
+        return new \Domain\AcademicRecord\Service\RegisteredCreditService(
+            $s->academicCredits(),
+            $s->enrollmentLedger(),
+            new \Infrastructure\Persistence\Repository\SqlAcademicCreditRepository($s->sql),
+            EventStoreFixture::history($s->connection->queryBuilder()),
+            $s->access,
+            $s->transactions,
+            $s->audit,
+            $s->clock,
+            new \Domain\Shared\Service\ReviewProof($s->dropCipher, $s->clock),
+        );
+    }
+    public function correctRegisteredCredits(int $quantity): array
+    {
+        $service = $this->registeredCredits();
+        $student = $this->student->id;
+        $section = $this->section->id;
+        $enrollment = $this->enrollment->id;
+        $v = $service->view($student, $section, $enrollment);
+        $r = $service->review(
+            $student,
+            $section,
+            $enrollment,
+            $v["expected_version"],
+            $v["expected_position"],
+            $quantity,
+            "Fictional evidenced registered-credit correction.",
+            true,
+        );
+        $args = [
+            $student,
+            $section,
+            $enrollment,
+            new EntityId($r["operation_id"]),
+            $r["expected_version"],
+            $r["expected_position"],
+            $r["previous_registered_milli"],
+            $r["registered_milli"],
+            $r["reason"],
+            $r["acknowledged"],
+            $r["review_token"],
+        ];
+        $receipt = $service->confirm(...$args);
+        $this->registeredCorrections[] = ["args" => $args, "receipt" => $receipt];
+        return $receipt;
+    }
+
     public function review(): array
     {
         return $this->sis

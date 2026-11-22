@@ -1244,9 +1244,10 @@ final readonly class InstitutionalCreditLedger
             throw new ValidationException([
                 [
                     "field" => "enrollment",
-                    "message" =>
-                        "Only an unchanged tracked withdrawal can be reinstated. " .
-                        "Resolve later academic changes and pending grade requests separately.",
+                    "message" => \Codefy\Framework\Helpers\trans(
+                        "Only a tracked withdrawal with an unchanged academic award can be reinstated. " .
+                        "Resolve later academic changes and pending grade requests separately."
+                    ),
                 ],
             ]);
         }
@@ -1267,6 +1268,9 @@ final readonly class InstitutionalCreditLedger
             "assignment_id" => $pursuit["owner_assignment_id"],
             "before" => $facts,
             "restored" => $root->reinstatementBase(),
+            ...($root->reinstatementRegisteredCredits() === null ? [] : [
+                'registered_credit_restoration' => $root->reinstatementRegisteredCredits(),
+            ]),
         ];
     }
     public function reinstate(
@@ -1294,6 +1298,9 @@ final readonly class InstitutionalCreditLedger
                 "operation_id" => $operation->value,
                 "previous_decision_id" => $root->decision(),
                 "enrollment_id" => $enrollment->id->value,
+                ...isset($basis['registered_credit_restoration']) ? [
+                    'registered_credit_restoration' => $basis['registered_credit_restoration'],
+                ] : [],
             ],
             ["__aggregate_type" => "academic_credit"],
         )->withPlayhead($root->playhead() + 1);
@@ -1568,6 +1575,12 @@ final readonly class InstitutionalCreditLedger
                         'previous_registered_milli' => $p['previous_registered_milli'],
                         'registered_milli' => $p['registered_milli'],
                     ]] : [],
+                ...isset($p['registered_credit_restoration']) ? [
+                    'registered_credit_restoration' =>
+                    new \Domain\AcademicRecord\ValueObject\RegisteredCreditRestoration(
+                        $p['registered_credit_restoration'],
+                    )->facts,
+                ] : [],
                 "academic_on" => $p["academic_on"] ?? null,
                 "previous_academic_on" => $p["previous_academic_on"] ?? null,
                 "posting_term_code" => $p["term_code"] ?? null,

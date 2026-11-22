@@ -340,6 +340,9 @@ final readonly class EnrollmentReinstatementService
             "restored_status" => $context["basis"]["status"],
             "withdrawn_at" => $context["basis"]["facts"]["status_at"],
             "attempted_milli" => $context["academic"]["restored"]["attempted_milli"],
+            ...isset($context['academic']['registered_credit_restoration']) ? [
+                'registered_credit_restoration' => $context['academic']['registered_credit_restoration'],
+            ] : [],
             "financial_effect" => "preserve_existing_postings",
         ];
     }

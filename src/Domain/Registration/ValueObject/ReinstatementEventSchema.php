@@ -33,6 +33,15 @@ final class ReinstatementEventSchema
     public static function validate(array $p, bool $academic): void
     {
         $keys = $academic ? self::ACADEMIC : self::ENROLLMENT;
+        if ($academic && array_key_exists('registered_credit_restoration', $p)) {
+            if (!is_array($p['registered_credit_restoration'])) {
+                throw new InvalidArgumentException(
+                    \Codefy\Framework\Helpers\trans('Retain verified registered-credit restoration facts.')
+                );
+            }
+            new \Domain\AcademicRecord\ValueObject\RegisteredCreditRestoration($p['registered_credit_restoration']);
+            $keys[] = 'registered_credit_restoration';
+        }
         if (count($p) !== count($keys) || array_diff(array_keys($p), $keys) !== []) {
             throw new InvalidArgumentException("Provide complete reinstatement facts.");
         }

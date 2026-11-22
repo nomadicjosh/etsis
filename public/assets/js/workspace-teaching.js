@@ -1790,6 +1790,8 @@ window.createWorkspaceTeaching = function (ui) {
                                       ? `${item.previous_posting_term_code || "Earlier label unknown"} → ${item.posting_term_code}`
                                       : item.registered_credit_correction
                                         ? `${item.registered_credit_correction.previous_registered_milli / 1000} → ${item.registered_credit_correction.registered_milli / 1000} registered credits`
+                                      : item.registered_credit_restoration
+                                        ? `Kept ${item.registered_credit_restoration.registered_milli / 1000} registered credits; originally ${item.registered_credit_restoration.original_milli / 1000}. Accepted corrections preserved: ${item.registered_credit_restoration.correction_count}.`
                                       : item.credit_unit_correction
                                         ? `${item.credit_unit_correction.previous_attempted_milli / 1000} → ${item.credit_unit_correction.attempted_milli / 1000} credits`
                                         : item.action === "completion_recorded"

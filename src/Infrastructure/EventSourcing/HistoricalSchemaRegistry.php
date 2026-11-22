@@ -952,6 +952,12 @@ final readonly class HistoricalSchemaRegistry
                 $payload["person_id"] = null;
             }
             if (
+                $class === \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class
+                && array_key_exists('registered_credit_restoration', $payload)
+            ) {
+                $definition['fields'][] = 'registered_credit_restoration';
+            }
+            if (
                 $definition["type"] !== $stream->type ||
                 $definition["root"] !== $stream->aggregateId->aggregateClassName() ||
                 count($payload) !== count($definition["fields"]) ||

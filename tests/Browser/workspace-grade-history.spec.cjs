@@ -64,7 +64,8 @@ test("registrar reviews a correction, preserves entries after expiry and reads b
                 items: [
                     {
                         version: data.cursor ? 11 : 1,
-                        action: data.cursor ? "grade_decided" : "observed_existing",
+                        action: data.cursor ? "reinstated" : "observed_existing",
+                        ...(data.cursor ? {registered_credit_restoration:{original_milli:3000,registered_milli:4500,correction_count:1}} : {}),
                         grade_code: data.cursor ? "A" : "B",
                         effective_at: "2026-08-10",
                         recorded_at: "2026-08-11",
@@ -121,6 +122,7 @@ test("registrar reviews a correction, preserves entries after expiry and reads b
     await expect
         .poll(() => calls.filter((c) => c.path.endsWith("/grade-history/")).at(-1)?.data)
         .toEqual({ cursor: "fictional-frozen-cursor" });
+    await expect(page.locator("#drawer-body")).toContainText("Kept 4.5 registered credits; originally 3. Accepted corrections preserved: 1.");
     await page.getByRole("button", { name: "Back to record", exact: true }).click();
     await page.getByRole("button", { name: "View transcript", exact: true }).click();
     await page.getByRole("button", { name: "Review final grade", exact: true }).click();

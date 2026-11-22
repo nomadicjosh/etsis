@@ -529,6 +529,15 @@ final class AcademicCredit extends EventSourcedAggregate
         if (!$this->canReinstate() || $p["enrollment_id"] !== $this->credit["source_id"]) {
             throw new CorruptHistoryException();
         }
+        $restoration = null;
+        if (array_key_exists('registered_credit_restoration', $p)) {
+            $restoration = new \Domain\AcademicRecord\ValueObject\RegisteredCreditRestoration(
+                $p['registered_credit_restoration'],
+            )->facts;
+        }
+        if ($restoration !== $this->reinstatementRegisteredCredits()) {
+            throw new CorruptHistoryException();
+        }
         $version = $this->credit["version"] + 1;
         $this->credit = array_replace($this->withdrawalBase, ["version" => $version]);
         $this->grade = null;
@@ -545,13 +554,25 @@ final class AcademicCredit extends EventSourcedAggregate
     public function canReinstate(): bool
     {
         return $this->provenance === "registration" &&
-        $this->registeredCreditCorrections === [] &&
         $this->credit !== null &&
         $this->credit["status"] === "W" &&
         $this->withdrawalBase !== null &&
         $this->decision === $this->withdrawalDecision &&
         $this->pendingGradeChange === null;
     }
+    /** Earlier corrections remain effective; reinstatement cannot select a replacement quantity. */
+    public function reinstatementRegisteredCredits(): ?array
+    {
+        if ($this->registeredCreditCorrections === []) {
+            return null;
+        }
+        return new \Domain\AcademicRecord\ValueObject\RegisteredCreditRestoration([
+            "original_milli" => $this->originalRegisteredCredits["attempted_milli"],
+            "registered_milli" => $this->registeredCredits["attempted_milli"],
+            "correction_count" => count($this->registeredCreditCorrections),
+        ])->facts;
+    }
+
     public function reinstatement(EntityId $operation): ?array
     {
         return $this->reinstatements[$operation->value] ?? null;

@@ -427,7 +427,7 @@ final class RegisteredCreditCorrectionTest extends TestCase
             self::assertSame($before, $this->facts($s));
         }
     }
-    public function testClosedCorrectedAttemptsRetainTheirReceiptButNeedExplicitReinstatementResolution(): void
+    public function testClosedCorrectedAttemptsCannotChangeQuantityOrLoseTheirOriginalReceipt(): void
     {
         $f = [$s, $student, $section, $enrollment] = $this->fixture();
         $r = $this->review($f);
@@ -454,7 +454,11 @@ final class RegisteredCreditCorrectionTest extends TestCase
         $view = $this->service($s)->view($student, $section, $enrollment);
         self::assertFalse($view["can_correct"]);
         $root = $s->academicCredits()->decisionRecord($student, $section, $enrollment)[1];
-        self::assertFalse($root->canReinstate());
+        self::assertTrue($root->canReinstate());
+        self::assertSame(
+            ['original_milli' => 3000, 'registered_milli' => 4500, 'correction_count' => 1],
+            $root->reinstatementRegisteredCredits(),
+        );
         $before = $this->facts($s);
         self::assertSame($receipt, $this->confirm($f, $r));
         try {

@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . "/EnrollmentReinstatementFixture.php";
-$f = new \Tests\Support\EnrollmentReinstatementFixture($sis);
+$f = new \Tests\Support\EnrollmentReinstatementFixture($sis, registeredQuantities: [4500]);
 $path = sprintf(
     "/sis/students/%s/sections/%s/enrollments/%s/reinstatement/",
     $f->student->id->value,
@@ -27,7 +27,13 @@ $postData = static function (
 };
 $reason = ["reason" => "Fictional reviewed withdrawal correction."];
 $review = $postData($path . "review/", $reason);
-if (!$review["can_confirm"] || $review["financial_effect"] !== "preserve_existing_postings") {
+if (
+    !$review["can_confirm"] || $review["financial_effect"] !== "preserve_existing_postings"
+    || $review['attempted_milli'] !== 3000
+    || $review['registered_credit_restoration'] !== [
+        'original_milli' => 3000, 'registered_milli' => 4500, 'correction_count' => 1,
+    ]
+) {
     throw new RuntimeException(
         "The actual reinstatement review lost its financial or eligibility contract.",
     );

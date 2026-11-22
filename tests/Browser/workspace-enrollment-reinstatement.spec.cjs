@@ -1,7 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const id = (n) => String(n).padStart(26, "0");
-async function fixture(page, mode = "retry") {
+async function fixture(page, mode = "retry", quantity = null) {
     const calls = [],
         errors = [];
     let restored = false,
@@ -88,6 +88,7 @@ async function fixture(page, mode = "retry") {
                 withdrawn_at: "2026-08-20T17:00:00Z",
                 attempted_milli: 3000,
                 financial_effect: "preserve_existing_postings",
+                ...(quantity ? {registered_credit_restoration: quantity} : {}),
                 section: {
                     code: "HIST.101.A",
                     section_version_id: null,
@@ -284,3 +285,28 @@ test("reason validation explains the field error and preserves editing", async (
     ).toBeEnabled();
     expect(f.errors).toEqual([]);
 });
+
+
+for (const [quantity,count] of [[4500,1],[0,1],[3000,2]]) {
+    test(`reinstatement reviews preserved registered quantity ${quantity} and ${count} corrections`, async ({page})=>{
+        const f=await fixture(page,"quantity",{original_milli:3000,registered_milli:quantity,correction_count:count});
+        await review(page);
+        const body=page.locator("#drawer-body");
+        await expect(body).toContainText(`Keep ${quantity/1000} registered credits. Accepted corrections: ${count}. Originally registered: 3 credits.`);
+        await expect(body).toContainText("with 3 attempted credits, no final grade and zero earned credit");
+        await expect(body).toContainText("Earlier load determinations remain unchanged");
+        await page.getByRole("button",{name:"Revise reason",exact:true}).click();
+        await expect(page.getByLabel("Reason for reinstating this withdrawal")).toHaveValue("Fictional reviewed correction <img src=x onerror=alert(1)>");
+        await page.getByRole("button",{name:"Review reinstatement",exact:true}).click();
+        await page.setViewportSize({width:320,height:900});
+        const scan=await new AxeBuilder({page}).withTags(["wcag2a","wcag2aa","wcag21aa","wcag22aa"]).analyze();
+        expect(scan.violations.map(v=>v.id)).toEqual([]);
+        expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+        await page.getByRole("button",{name:"Confirm reinstatement",exact:true}).click();
+        await expect(body).toContainText("Enrollment reinstated");
+        const confirmation=f.calls.find(c=>c.path.endsWith("/reinstatement/confirm/"));
+        expect(confirmation.data).toEqual({operation_id:id(12),revision:"a".repeat(64),reason:"Fictional reviewed correction <img src=x onerror=alert(1)>",review_token:"fictional-review-2"});
+        expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+        expect(f.errors).toEqual([]);
+    });
+}

@@ -91,3 +91,8 @@ Migration `20261120000020_CreateSisLoadDeterminations` was applied to the inspec
 ## Explicit registered-credit corrections
 
 Working load uses the quantity recorded at registration unless a registrar explicitly accepts a [registered-credit correction](registered-credit-corrections.md). This is independent of an awarded-credit/grade correction and never recalculates original charges. Staff with the new correction duty can open **Registered credits · course code** beside a load item, review evidence and deliberately confirm; students and advisors receive only the resulting current load quantities. Current bands apply when refreshed, unaccepted determination reviews become stale, and existing retained determinations keep their original amounts/policies. Unknown earlier registration quantities remain unknown.
+
+
+## Load after a reviewed reinstatement
+
+A [tracked withdrawal reinstated after registered-credit corrections](registration-history.md#reinstate-with-a-corrected-registered-quantity) resumes its latest accepted registered quantity for current load, including an explicitly corrected zero. Its original registered quantity and academic attempted/earned amounts remain separate. Earlier retained load determinations are observations and do not change. A fresh current review uses the restored active attempt and its latest verified source version; recording another current-term determination remains an explicit authorized decision under a published load policy. Reinstatement adds no tuition assessment, census reconstruction or financial-aid eligibility decision.

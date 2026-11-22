@@ -120,6 +120,10 @@ window.createEnrollmentReinstatement = function (ui) {
                             {},
                             `Withdrawn ${r.withdrawn_at}. Restore ${r.restored_status === "A" ? "staff-registration" : "self-registration"} origin with ${r.attempted_milli / 1000} attempted credits, no final grade and zero earned credit. This takes effect when accepted.`,
                         ),
+                        r.registered_credit_restoration
+                            ? node("p", {class: "alert alert-info"},
+                                `Keep ${r.registered_credit_restoration.registered_milli / 1000} registered credits. Accepted corrections: ${r.registered_credit_restoration.correction_count}. Originally registered: ${r.registered_credit_restoration.original_milli / 1000} credits. This quantity is used for current enrollment load; it does not replace the academic attempted or earned credits. Earlier load determinations remain unchanged.`)
+                            : null,
                         !r.section.section_version_id
                             ? node(
                                   "p",
