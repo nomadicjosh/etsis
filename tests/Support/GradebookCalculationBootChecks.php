@@ -33,6 +33,7 @@ $setup = json_decode(
     flags: JSON_THROW_ON_ERROR,
 );
 $saved = $teachingPost($base . "/gradebook/calculation/", [
+    "grade_policy" => \Domain\Gradebook\ValueObject\CourseworkGradePolicy::DEFAULT,
     "mode" => "weighted",
     "weights" => [$id => 10000],
     "revision" => $setup["revision"],
@@ -50,6 +51,7 @@ if (
 $path = $base . "/students/" . $student->id->value . "/gradebook-summary/";
 $current = json_decode((string) $saved->getBody(), true, flags: JSON_THROW_ON_ERROR);
 $categorySetup = $teachingPost($base . "/gradebook/calculation/", [
+    "grade_policy" => \Domain\Gradebook\ValueObject\CourseworkGradePolicy::DEFAULT,
     "mode" => "category",
     "weights" => [],
     "revision" => $current["revision"],
@@ -127,6 +129,7 @@ $categories = [
 
 if (
     $teachingPost($base . "/gradebook/calculation/", [
+        "grade_policy" => \Domain\Gradebook\ValueObject\CourseworkGradePolicy::DEFAULT,
         "mode" => "category",
         "weights" => [],
         "categories" => $categories,
@@ -143,6 +146,7 @@ $preserved = [
 ];
 if (
     $teachingPost($base . "/gradebook/calculation/", [
+        "grade_policy" => \Domain\Gradebook\ValueObject\CourseworkGradePolicy::DEFAULT,
         "mode" => "category",
         "weights" => [],
         "categories" => $categories,
@@ -198,6 +202,7 @@ if (
 }
 if (
     $teachingPost($base . "/gradebook/calculation/", [
+        "grade_policy" => \Domain\Gradebook\ValueObject\CourseworkGradePolicy::DEFAULT,
         "mode" => "weighted",
         "weights" => [$id => "10000"],
         "revision" => $setup["revision"],
@@ -251,6 +256,7 @@ if ($teachingPost($rosterPath, [])->getStatusCode() !== 403) {
 }
 if (
     $teachingPost($base . "/gradebook/calculation/", [
+        "grade_policy" => \Domain\Gradebook\ValueObject\CourseworkGradePolicy::DEFAULT,
         "mode" => "points",
         "weights" => [],
         "revision" => $setup["revision"],
@@ -427,6 +433,7 @@ $bonusSetup = json_decode(
     flags: JSON_THROW_ON_ERROR,
 );
 $bonusSave = $teachingPost($bonusBase . "/gradebook/calculation/", [
+    "grade_policy" => \Domain\Gradebook\ValueObject\CourseworkGradePolicy::DEFAULT,
     "mode" => "weighted", "weights" => [$regularId => 10000, $extraId => 1000],
     "revision" => $bonusSetup["revision"],
 ]);

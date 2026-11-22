@@ -32,6 +32,12 @@ final readonly class CourseworkGradeEvidence implements JsonSerializable
             "exact_percent",
         ];
         if (
+            array_key_exists("grade_policy", $facts) ||
+            array_key_exists("grading_percent", $facts)
+        ) {
+            array_push($keys, "grade_policy", "grading_percent");
+        }
+        if (
             count($facts) !== count($keys) ||
             array_diff(array_keys($facts), $keys) !== [] ||
             strlen(json_encode($facts, JSON_THROW_ON_ERROR)) > self::MAX_BYTES
@@ -99,9 +105,23 @@ final readonly class CourseworkGradeEvidence implements JsonSerializable
         if (array_diff_key(array_fill_keys($calculation->assignmentIds(), true), $seen) !== []) {
             self::invalid();
         }
-        $score = BigRational::of($facts["exact_percent"]);
+        $raw = BigRational::of($facts["exact_percent"]);
+        $score = $raw;
+        if (array_key_exists("grade_policy", $facts)) {
+            if (!is_array($facts["grade_policy"]) || !is_string($facts["grading_percent"])) {
+                self::invalid();
+            }
+            try {
+                $score = new CourseworkGradePolicy($facts["grade_policy"])->apply($raw);
+            } catch (\Domain\Shared\Exception\ValidationException) {
+                self::invalid();
+            }
+            if ((string) $score !== $facts["grading_percent"]) {
+                self::invalid();
+            }
+        }
         if (
-            (string) $score !== $facts["exact_percent"] ||
+            (string) $raw !== $facts["exact_percent"] ||
             $score->multipliedBy(1000)->compareTo($facts["min_score_milli"]) < 0 ||
             $score->multipliedBy(1000)->compareTo($facts["max_score_milli"]) > 0
         ) {
@@ -154,6 +174,17 @@ final readonly class CourseworkGradeEvidence implements JsonSerializable
         $score = BigRational::of($this->facts["exact_percent"]);
         return [
             "score_display" => self::formatPercent($score),
+            ...array_key_exists("grade_policy", $this->facts)
+                ? [
+                    "grade_policy" => array_replace(
+                        CourseworkGradePolicy::DEFAULT,
+                        $this->facts["grade_policy"],
+                    ),
+                    "grading_display" => self::formatPercent(
+                        BigRational::of($this->facts["grading_percent"]),
+                    ),
+                ]
+                : [],
             "mode" => $this->facts["mode"],
             "assignment_count" => count($this->facts["scores"]),
             "revision" => $this->revision(),

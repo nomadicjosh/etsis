@@ -622,19 +622,7 @@ final readonly class InstitutionalCreditLedger
                     );
                 }
                 if (isset($d["coursework"])) {
-                    $this->authority($section, false);
-                    $evidence = new CourseworkGradeEvidence($d["coursework"]);
-                    $assessment = $this->coursework->assess($student, $section, $available);
-                    $currentEvidence = $assessment["evidence"] ?? null;
-                    if (
-                        $d["amendment"] ||
-                        $currentEvidence === null ||
-                        !hash_equals($evidence->revision(), $currentEvidence->revision())
-                    ) {
-                        throw new ConcurrentModificationException(
-                            "The coursework changed. Review the final grade again.",
-                        );
-                    }
+                    $this->verifyCourseworkEvidence($student, $section, $available, $d);
                 }
                 if ($d["baseline"]) {
                     $root->acceptHistorical($base);
@@ -668,6 +656,9 @@ final readonly class InstitutionalCreditLedger
                             : "academic.grade_assigned"),
                     $id,
                 );
+                if (isset($d["coursework"])) {
+                    $this->verifyCourseworkEvidence($student, $section, $available, $d);
+                }
                 if (
                     $d["amendment"] &&
                     !$this->same($d["grade_change_policy"], $this->changes->policy(current: true))
@@ -697,6 +688,30 @@ final readonly class InstitutionalCreditLedger
             );
             return $receipt;
         });
+    }
+
+    /** @param list<array<string,mixed>> $grades
+     * @param array<string,mixed> $review
+     */
+    private function verifyCourseworkEvidence(
+        EntityId $student,
+        EntityId $section,
+        array $grades,
+        array $review,
+    ): void {
+        $this->authority($section, false);
+        $evidence = new CourseworkGradeEvidence($review["coursework"]);
+        $assessment = $this->coursework->assess($student, $section, $grades);
+        $currentEvidence = $assessment["evidence"] ?? null;
+        if (
+            $review["amendment"] ||
+            $currentEvidence === null ||
+            !hash_equals($evidence->revision(), $currentEvidence->revision())
+        ) {
+            throw new ConcurrentModificationException(
+                "The coursework changed. Review the final grade again.",
+            );
+        }
     }
 
     private function canReadCoursework(EntityId $section): bool
@@ -1520,7 +1535,7 @@ final readonly class InstitutionalCreditLedger
                     ? [
                         "coursework_summary" => array_intersect_key(
                             new CourseworkGradeEvidence($e->metaParam("coursework"))->summary(),
-                            array_flip(["score_display", "mode"]),
+                            array_flip(["score_display", "mode", "grading_display", "grade_policy"]),
                         ),
                     ]
                     : [],

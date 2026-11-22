@@ -145,10 +145,24 @@ final class CourseworkGradeTest extends TestCase
         self::assertSame($finance, $f->financialEvents());
         $history = $book->gradeHistory($student->id, $section->id);
         $decisions = array_values(
-            array_filter($history["items"], static fn(array $r): bool => $r["action"] === "grade_decided"),
+            array_filter(
+                $history["items"],
+                static fn(array $r): bool => $r["action"] === "grade_decided",
+            ),
         );
-        self::assertSame(["score_display" => "92%", "mode" => $mode], $decisions[0]["coursework_summary"]);
-        self::assertStringNotContainsString("earned_hundredths", json_encode($history, JSON_THROW_ON_ERROR));
+        self::assertSame(
+            [
+                "score_display" => "92%",
+                "grade_policy" => \Domain\Gradebook\ValueObject\CourseworkGradePolicy::DEFAULT,
+                "grading_display" => "92%",
+                "mode" => $mode,
+            ],
+            $decisions[0]["coursework_summary"],
+        );
+        self::assertStringNotContainsString(
+            "earned_hundredths",
+            json_encode($history, JSON_THROW_ON_ERROR),
+        );
     }
 
     public function testScoresAndSetupAreCheckedAtReviewAndAgainAtConfirmation(): void
@@ -266,7 +280,7 @@ final class CourseworkGradeTest extends TestCase
 
     public static function failures(): array
     {
-        return [["audit"], ["actor"], ["expiry"]];
+        return [["audit"], ["actor"], ["expiry"], ["policy"]];
     }
 
     #[DataProvider("failures")]
@@ -280,12 +294,20 @@ final class CourseworkGradeTest extends TestCase
             "sis_academic_credits",
         ]);
         $audit = $this->createStub(AuditTrail::class);
-        $audit->method("record")->willReturnCallback(function () use ($f, $failure): void {
+        $audit->method("record")->willReturnCallback(function () use ($f, $failure, $section): void {
             if ($failure === "audit") {
                 throw new \RuntimeException("Fictional audit failure.");
             }
             if ($failure === "actor") {
                 $f->access->actor = EntityId::generate();
+            } elseif ($failure === "policy") {
+                $f->sql->insert("sis_gradebook_calculations", [
+                    "id" => $section->id->value,
+                    "mode" => "points",
+                    "weights" => "[]",
+                    "revision" => 1,
+                    "grade_policy_json" => '{"rounding":"half_up","decimal_places":0,"cap_at_hundred":true}',
+                ]);
             } else {
                 $f->clock->time = $f->clock->time->modify("+21 minutes");
             }
@@ -452,5 +474,117 @@ final class CourseworkGradeTest extends TestCase
         $evidence = $this->evidence($f, new EntityId($f->sql->rows("sis_academic_credits")[0]["id"]));
         self::assertCount(500, $evidence->facts["scores"]);
         $evidence->verifyCalculation();
+    }
+    #[DataProvider("modes")]
+    public function testPolicyChangeStalesUnacceptedReviewsAndRetainsAcceptedBasisAndOriginalRetries(
+        string $mode,
+    ): void {
+        $fixture = [$f, $book, $student, $section, $a] = $this->fixture();
+        $book->score($a->id, $student->id, 9250, 1);
+        $old = $this->review($fixture);
+        $setup = $book->calculationSetup($section->id);
+        $policy = new \Domain\Gradebook\ValueObject\CourseworkGradePolicy([
+            "rounding" => "half_up",
+            "decimal_places" => 0,
+            "cap_at_hundred" => false,
+        ]);
+        $book->saveCalculation(
+            $section->id,
+            $mode,
+            $mode === "weighted" ? [$a->id->value => 10000] : [],
+            $setup["revision"],
+            $mode === "category"
+                ? [
+                    [
+                        "title" => "Exams",
+                        "weight_hundredths" => 10000,
+                        "assignments" => [$a->id->value],
+                    ],
+                ]
+                : [],
+            $policy,
+        );
+        $events = $f->sql->rows("sis_history_events");
+        $money = $f->financialEvents();
+        try {
+            $book->commitFinalGrade($student->id, $section->id, $old["review_token"]);
+            self::fail("A policy change must invalidate an unaccepted grade review.");
+        } catch (ConcurrentModificationException) {
+            self::assertSame($events, $f->sql->rows("sis_history_events"));
+        }
+        $review = $this->review($fixture);
+        self::assertSame("A", $review["grade"]["code"]);
+        self::assertSame("92.5%", $review["coursework_summary"]["score_display"]);
+        self::assertSame("93%", $review["coursework_summary"]["grading_display"]);
+        $receipt = $book->commitFinalGrade($student->id, $section->id, $review["review_token"]);
+        $credit = $f->sql->rows("sis_academic_credits")[0];
+        $evidence = $this->evidence($f, new EntityId($credit["id"]));
+        $evidence->verifyCalculation();
+        self::assertEquals($policy->facts, $evidence->facts["grade_policy"]);
+        self::assertSame("93", $evidence->facts["grading_percent"]);
+        self::assertSame("185/2", $evidence->facts["exact_percent"]);
+        self::assertSame(12000, (int) $credit["grade_points_milli"]);
+        $setup = $book->calculationSetup($section->id);
+        $book->saveCalculation(
+            $section->id,
+            "points",
+            [],
+            $setup["revision"],
+            gradePolicy: new \Domain\Gradebook\ValueObject\CourseworkGradePolicy(),
+        );
+        $f->clock->time = $f->clock->time->modify("+21 minutes");
+        self::assertSame(
+            $receipt,
+            $book->commitFinalGrade($student->id, $section->id, $review["review_token"]),
+        );
+        self::assertSame($credit, $f->sql->rows("sis_academic_credits")[0]);
+        self::assertSame($money, $f->financialEvents());
+        $decisions = array_values(
+            array_filter(
+                $book->gradeHistory($student->id, $section->id)["items"],
+                static fn(array $row): bool => $row["action"] === "grade_decided",
+            ),
+        );
+        self::assertSame($policy->facts, $decisions[0]["coursework_summary"]["grade_policy"]);
+        self::assertSame("93%", $decisions[0]["coursework_summary"]["grading_display"]);
+        self::assertStringNotContainsString("scores", json_encode($decisions, JSON_THROW_ON_ERROR));
+    }
+
+    public function testExplicitCapEnablesBonusSuggestionWithoutChangingWorkingAverageOrOwnerScope(): void
+    {
+        [$f, $book, $student, $section, $a] = $this->fixture();
+        $assignment = $book->assignment($a->id);
+        $book->editAssignment($a->id, $a->title, 10000, $a->dueOn, $assignment["revision"], 2000);
+        $book->score($a->id, $student->id, 11000, 1);
+        self::assertFalse(
+            $book->gradeChoices($student->id, $section->id)["coursework"]["available"],
+        );
+        $setup = $book->calculationSetup($section->id);
+        $policy = new \Domain\Gradebook\ValueObject\CourseworkGradePolicy([
+            "rounding" => "none",
+            "decimal_places" => null,
+            "cap_at_hundred" => true,
+        ]);
+        $book->saveCalculation(
+            $section->id,
+            "points",
+            [],
+            $setup["revision"],
+            gradePolicy: $policy,
+        );
+        $suggestion = $book->gradeChoices($student->id, $section->id)["coursework"];
+        self::assertTrue($suggestion["available"]);
+        self::assertSame("110%", $suggestion["score_display"]);
+        self::assertSame("100%", $suggestion["grading_display"]);
+        self::assertSame("A", $suggestion["grade_code"]);
+        $f->access->staff = false;
+        $f->access->grants = [];
+        $f->access->actor = $f->admissions->person($student->personId)->ownerUserId;
+        $summary = $book->summary($student->id, $section->id);
+        self::assertSame(11000, $summary["percent_hundredths"]);
+        self::assertSame($policy->facts, $summary["grade_policy"]);
+        $f->access->actor = $f->user();
+        $this->expectException(AccessDeniedException::class);
+        $book->summary($student->id, $section->id);
     }
 }

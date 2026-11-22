@@ -8,6 +8,8 @@ use DateTimeImmutable;
 use DomainException;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Audit\Repository\AuditTrail;
+use Domain\Gradebook\ValueObject\CourseworkGradePolicy;
+use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Gradebook\Assignment;
 use Domain\Gradebook\AssignmentScore;
 use Domain\Gradebook\Repository\GradebookRepository;
@@ -51,13 +53,26 @@ final readonly class GradebookService
         array $weights,
         string $revision,
         array $categories = [],
+        ?CourseworkGradePolicy $gradePolicy = null,
     ): array {
         $this->access->authenticatedUserId();
         $this->faculty($section);
-        return $this->transactions->run(function () use ($section, $mode, $weights, $categories, $revision): array {
+        return $this->transactions->run(function () use (
+            $section,
+            $mode,
+            $weights,
+            $categories,
+            $revision,
+            $gradePolicy,
+        ): array {
             $this->registration->lockSection($section);
             $actor = $this->faculty($section);
             $context = $this->calculationContext($section);
+            $policy = $gradePolicy ?? new CourseworkGradePolicy($context["grade_policy"]);
+            $policyChanged = $policy->facts != $context["grade_policy"];
+            if ($policyChanged) {
+                $this->access->requirePermission("sis:gradebook:calculation-policy");
+            }
             $calculation = $this->calculation(
                 ["mode" => $mode, "weights" => $weights, "categories" => $categories],
                 $context["assignments"],
@@ -82,10 +97,27 @@ final readonly class GradebookService
                 $calculation->weights,
                 $context["version"],
                 $calculation->categories,
+                $policy->facts,
             );
+            $saved = $this->calculationContext($section);
             $this->audit->record($actor, "gradebook.calculation.updated", $section);
             $this->sameFaculty($section, $actor);
-            return $this->calculationContext($section);
+            if (
+                $policyChanged &&
+                $this->access->requirePermission("sis:gradebook:calculation-policy")->value !==
+                    $actor->value
+            ) {
+                throw new AccessDeniedException(
+                    "The gradebook policy account changed. Reload setup.",
+                );
+            }
+            $current = $this->calculationContext($section);
+            if ($saved !== $current) {
+                throw new ConcurrentModificationException(
+                    "Gradebook setup changed during the required audit. Reload setup.",
+                );
+            }
+            return $current;
         });
     }
 
@@ -104,6 +136,8 @@ final readonly class GradebookService
         }
         $this->calculation($settings, $assignments);
         return [
+            "grade_policy" => $settings["grade_policy"],
+            "can_manage_grade_policy" => $this->canManageGradePolicy(),
             "mode" => $settings["mode"],
             "weights" => $settings["weights"],
             "categories" => $settings["categories"],
@@ -111,6 +145,16 @@ final readonly class GradebookService
             "assignments" => $assignments,
             "revision" => hash("sha256", json_encode([$settings, $assignments], JSON_THROW_ON_ERROR)),
         ];
+    }
+
+    private function canManageGradePolicy(): bool
+    {
+        try {
+            $this->access->requirePermission("sis:gradebook:calculation-policy");
+            return true;
+        } catch (AccessDeniedException) {
+            return false;
+        }
     }
 
     /** @param array<string,mixed> $settings
@@ -359,7 +403,9 @@ final readonly class GradebookService
     ): array {
         $enrollment = $this->gradeEnrollment($student, $section);
         if ($expectedEnrollment !== null && $expectedEnrollment->value !== $enrollment->id->value) {
-            throw new ConcurrentModificationException('The registration changed. Reload the grading record.');
+            throw new ConcurrentModificationException(
+                "The registration changed. Reload the grading record.",
+            );
         }
         return $this->credits->review(
             $student,
@@ -599,6 +645,7 @@ final readonly class GradebookService
         $settings = $this->repository->calculation($section);
         $calculation = $this->calculation($settings, $scores);
         $summary = $calculation->summarize($scores);
+        $summary["grade_policy"] = $settings["grade_policy"];
         $dropped = array_fill_keys(
             array_column($summary["dropped_assignments"] ?? [], "assignment_id"),
             true,

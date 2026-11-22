@@ -36,6 +36,8 @@ async function editor(bonus = false) {
     const setup = {
         mode: "points",
         weights: {},
+        grade_policy: { rounding: "none", decimal_places: null, cap_at_hundred: false },
+        can_manage_grade_policy: true,
         revision: "revision",
         categories: [],
         assignments: [
@@ -110,6 +112,7 @@ test("weighted editor validates totals and serializes hundredth-percent weights"
     assert.deepEqual(JSON.parse(JSON.stringify(e.sent[0])), {
         mode: "weighted",
         weights: { one: 4025, two: 5975 },
+        grade_policy: { rounding: "none", decimal_places: null, cap_at_hundred: false },
         revision: "revision",
         categories: [],
     });
@@ -147,6 +150,7 @@ test("returning to points removes stale weights from the submitted setup", async
     assert.deepEqual(JSON.parse(JSON.stringify(e.sent[0])), {
         mode: "points",
         weights: {},
+        grade_policy: { rounding: "none", decimal_places: null, cap_at_hundred: false },
         revision: "revision",
         categories: [],
     });
@@ -326,6 +330,7 @@ test("the full setup form saves categories and assignment membership through the
     assert.deepEqual(JSON.parse(JSON.stringify(e.sent[0])), {
         mode: "category",
         weights: {},
+        grade_policy: { rounding: "none", decimal_places: null, cap_at_hundred: false },
         revision: "revision",
         categories: [
             {
@@ -631,4 +636,36 @@ test("shared bonus-only feedback explains optional work and points that cannot y
     assert.match(panel.textContent, /1 optional scores not entered/);
     assert.match(panel.textContent, /5 recorded bonus points are not applied yet/);
     assert.doesNotMatch(panel.textContent, /Infinity|NaN/);
+});
+
+test("shared feedback distinguishes raw averages from final-grade policy and keeps older absence explicit", () => {
+    const p = presenter();
+    const policy = {
+        rounding: "half_up",
+        decimal_places: 0,
+        cap_at_hundred: true,
+    };
+    assert.match(
+        p.panel({
+            mode: "points",
+            percent_hundredths: 11000,
+            coverage_hundredths: 10000,
+            pending: 0,
+            excluded: 0,
+            grade_policy: policy,
+        }).textContent,
+        /110.00%/,
+    );
+    assert.match(p.policyText(policy), /cap at 100% first; nearest, ties up to 0 decimal places/);
+    assert.match(p.policyText(null), /not recorded with this decision/);
+    assert.equal(
+        p.comparisonText({ score_display: "110%", grading_display: "100%" }),
+        "110% raw · 100% for grade comparison",
+    );
+    const editor = p.policyEditor({
+        grade_policy: policy,
+        can_manage_grade_policy: false,
+    });
+    assert.equal(editor.element.disabled, true);
+    assert.deepEqual(JSON.parse(JSON.stringify(editor.serialize())), policy);
 });

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Infrastructure\Persistence\Repository;
 
 use DateTimeImmutable;
+use Domain\Gradebook\ValueObject\CourseworkGradePolicy;
 use Domain\Gradebook\Assignment;
 use Domain\Gradebook\AssignmentScore;
 use Domain\Gradebook\Repository\GradebookRepository;
@@ -22,9 +23,20 @@ final readonly class SqlGradebookRepository implements GradebookRepository
     {
         $row = $this->sql->rows("sis_gradebook_calculations", ["id" => $section->value], 1)[0] ?? null;
         if ($row === null) {
-            return ["mode" => "points", "weights" => [], "revision" => 0, "categories" => []];
+            return [
+                "mode" => "points",
+                "weights" => [],
+                "revision" => 0,
+                "categories" => [],
+                "grade_policy" => CourseworkGradePolicy::DEFAULT,
+            ];
         }
         return [
+            "grade_policy" => new CourseworkGradePolicy(
+                $row["grade_policy_json"] === null
+                    ? CourseworkGradePolicy::DEFAULT
+                    : json_decode($row["grade_policy_json"], true, 4, JSON_THROW_ON_ERROR),
+            )->facts,
             "mode" => $row["mode"],
             "weights" => json_decode($row["weights"], true, 4, JSON_THROW_ON_ERROR),
             "revision" => (int) $row["revision"],
@@ -40,9 +52,11 @@ final readonly class SqlGradebookRepository implements GradebookRepository
         string $mode,
         array $weights,
         int $revision,
-        array $categories = [],
+        array $categories,
+        array $gradePolicy,
     ): void {
         $data = [
+            "grade_policy_json" => json_encode($gradePolicy, JSON_THROW_ON_ERROR),
             "mode" => $mode,
             "weights" => json_encode($weights, JSON_THROW_ON_ERROR),
             "revision" => $revision + 1,

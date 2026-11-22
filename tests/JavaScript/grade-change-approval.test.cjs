@@ -9,6 +9,7 @@ Element.prototype.removeAttribute = function (key) {
 };
 function fixture(overrides = {}) {
     const window = {};
+    vm.runInNewContext(fs.readFileSync("public/assets/js/gradebook-calculation.js", "utf8"), { window });
     vm.runInNewContext(fs.readFileSync("public/assets/js/workspace-teaching.js", "utf8"), { window });
     let body, pending;
     const sent = [];
@@ -153,6 +154,7 @@ test("late request reads cannot populate a closed private drawer", async () => {
         });
     // The factory captures its transport, so instantiate it with the delayed request.
     const window = {};
+    vm.runInNewContext(fs.readFileSync("public/assets/js/gradebook-calculation.js", "utf8"), { window });
     vm.runInNewContext(fs.readFileSync("public/assets/js/workspace-teaching.js", "utf8"), { window });
     const component = window.createWorkspaceTeaching(f.ui);
     const pending = component.gradeChangeRecord("request");
@@ -195,6 +197,7 @@ test("missing withdrawn-grade editor requires evidence and explains limits witho
         };
     };
     const window = {};
+    vm.runInNewContext(fs.readFileSync("public/assets/js/gradebook-calculation.js", "utf8"), { window });
     vm.runInNewContext(fs.readFileSync("public/assets/js/workspace-teaching.js", "utf8"), { window });
     const component = window.createWorkspaceTeaching(f.ui);
     await component.recordFinalGrade({ id: "section" }, { student_id: "student" }, () => {});
@@ -261,6 +264,7 @@ async function courseworkFixture(overrides = {}) {
             grade_id: "grade-b",
             grade_code: "B",
             score_display: "92%",
+            grade_policy: { rounding: "none", decimal_places: null, cap_at_hundred: false },
             revision: "first",
             ...overrides,
         },
@@ -278,6 +282,7 @@ async function courseworkFixture(overrides = {}) {
         return {};
     };
     const window = {};
+    vm.runInNewContext(fs.readFileSync("public/assets/js/gradebook-calculation.js", "utf8"), { window });
     vm.runInNewContext(fs.readFileSync("public/assets/js/workspace-teaching.js", "utf8"), { window });
     const component = window.createWorkspaceTeaching(f.ui);
     await component.recordFinalGrade({ id: "section" }, { student_id: "student" }, () => {});
@@ -287,7 +292,7 @@ test("a coursework suggestion requires explicit selection, review and confirmati
     const f = await courseworkFixture();
     const form = walk(f.body()).find((e) => e.tag === "form");
     assert.match(f.body().textContent, /92% → B/);
-    assert.match(f.body().textContent, /No rounding across grade boundaries or automatic posting/);
+    assert.match(f.body().textContent, /exact percentage, without rounding/);
     assert.equal(
         f.sent.some((r) => r.path.endsWith("/review/") || r.path.endsWith("/commit/")),
         false,
@@ -361,4 +366,15 @@ test("an unavailable suggestion stays manual and renders its explanation as text
     form.events.submit({ preventDefault() {} });
     await f.done();
     assert.equal("coursework_revision" in f.sent.at(-1).data, false);
+});
+
+test("coursework selection explains both the raw and policy-adjusted percentage", async () => {
+    const f = await courseworkFixture({
+        score_display: "92.5%", grading_display: "93%", grade_code: "A", grade_id: "grade-a",
+        grade_policy: { rounding: "half_up", decimal_places: 0, cap_at_hundred: false },
+    });
+    assert.match(f.body().textContent, /92.5% raw · 93% for grade comparison/);
+    assert.match(f.body().textContent, /nearest, ties up to 0 decimal places/);
+    await f.click("Use suggested grade");
+    assert.match(f.body().textContent, /Selected A from 92.5% raw · 93% for grade comparison/);
 });

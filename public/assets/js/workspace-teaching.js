@@ -429,6 +429,7 @@ window.createWorkspaceTeaching = function (ui) {
                 ),
             );
         }
+        const policyEditor = window.createGradebookCalculation({ node }).policyEditor(setup);
         const categoryEditor = window
             .createGradebookCalculation({ node })
             .editor(setup.assignments, setup.categories || [], update);
@@ -445,6 +446,7 @@ window.createWorkspaceTeaching = function (ui) {
             status,
             fields,
             categoryEditor.element,
+            policyEditor.element,
         );
         const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save setup");
         form.append(node("div", { class: "inline-actions" }, save, button("Back to section", back)));
@@ -487,6 +489,7 @@ window.createWorkspaceTeaching = function (ui) {
                     mode: mode.value,
                     weights,
                     revision: setup.revision,
+                    grade_policy: policyEditor.serialize(),
                     categories: mode.value === "category" ? categoryEditor.serialize() : [],
                 });
                 if (body.isConnected) await back();
@@ -913,8 +916,8 @@ window.createWorkspaceTeaching = function (ui) {
                 "p",
                 { role: "status", "aria-live": "polite", class: "mb-2" },
                 suggestion.available
-                    ? `${suggestion.score_display} → ${suggestion.grade_code}`
-                    : `${suggestion.score_display ? `${suggestion.score_display} · ` : ""}${suggestion.message}`,
+                    ? `${window.createGradebookCalculation({ node }).comparisonText(suggestion)} → ${suggestion.grade_code}`
+                    : `${suggestion.score_display ? `${window.createGradebookCalculation({ node }).comparisonText(suggestion)} · ` : ""}${suggestion.message}`,
             );
             const card = node(
                 "section",
@@ -927,12 +930,12 @@ window.createWorkspaceTeaching = function (ui) {
                     node(
                         "p",
                         { class: "small" },
-                        "Uses the exact coursework average and this record's retained grading ranges. No rounding across grade boundaries or automatic posting. The displayed percentage is shortened to six decimals.",
+                        window.createGradebookCalculation({ node }).policyText(suggestion.grade_policy) + " Uses this record’s retained grading ranges. Approximate displays are shortened to six decimals.",
                     ),
                     button("Use suggested grade", () => {
                         form.elements.grade_id.value = suggestion.grade_id;
                         courseworkRevision = suggestion.revision;
-                        message.textContent = `Selected ${suggestion.grade_code} from ${suggestion.score_display}. Review before confirming; the accepted calculation will be retained.`;
+                        message.textContent = `Selected ${suggestion.grade_code} from ${window.createGradebookCalculation({ node }).comparisonText(suggestion)}. Review before confirming; the accepted calculation will be retained.`;
                     }),
                     button(
                         "Choose manually",
@@ -1015,7 +1018,7 @@ window.createWorkspaceTeaching = function (ui) {
                             ? node(
                                   "p",
                                   { class: "alert alert-info" },
-                                  `Using the reviewed coursework calculation: ${review.coursework_summary.score_display}. Its inputs will be retained with the grade decision; later score edits will not change this official grade.`,
+                                  `Using the reviewed coursework calculation: ${window.createGradebookCalculation({ node }).comparisonText(review.coursework_summary)}. ${window.createGradebookCalculation({ node }).policyText(review.coursework_summary.grade_policy)} Its inputs will be retained with the grade decision; later score edits will not change this official grade.`,
                               )
                             : null,
                         review.withdrawal_grade_correction
@@ -1781,7 +1784,7 @@ window.createWorkspaceTeaching = function (ui) {
                                   ["course_accepted", "course_corrected"].includes(item.action)
                                       ? `${item.course_code} · ${item.course_title}`
                                       : item.grade_code
-                                        ? `${item.grade_code}${item.coursework_summary ? ` · Coursework ${item.coursework_summary.score_display}` : ""}`
+                                        ? `${item.grade_code}${item.coursework_summary ? ` · Coursework ${window.createGradebookCalculation({ node }).comparisonText(item.coursework_summary)} · ${window.createGradebookCalculation({ node }).policyText(item.coursework_summary.grade_policy)}` : ""}`
                                         : "—",
                                   item.action === "posting_term_corrected"
                                       ? `${item.previous_posting_term_code || "Earlier label unknown"} → ${item.posting_term_code}`

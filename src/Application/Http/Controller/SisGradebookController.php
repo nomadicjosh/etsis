@@ -32,6 +32,15 @@ final readonly class SisGradebookController
         $f = FormInput::from($request);
         $body = $request->getParsedBody();
         $weights = is_array($body) ? $body["weights"] ?? null : null;
+        $policy = is_array($body) ? $body["grade_policy"] ?? null : null;
+        if (!is_array($policy)) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                [
+                    "field" => "grade_policy",
+                    "message" => "Supply the reviewed final-grade comparison policy.",
+                ],
+            ]);
+        }
         $categories = is_array($body) ? $body["categories"] ?? [] : [];
         if (!is_array($weights) || !is_array($categories)) {
             throw new \Domain\Shared\Exception\ValidationException([
@@ -48,6 +57,7 @@ final readonly class SisGradebookController
                 $weights,
                 $f->text("revision", 64),
                 $categories,
+                new \Domain\Gradebook\ValueObject\CourseworkGradePolicy($policy),
             ),
         );
     }

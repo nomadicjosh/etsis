@@ -355,4 +355,13 @@ final class ConsoleBootstrapTest extends TestCase
         $process->run();
         self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
     }
+    public function testCourseworkPolicyUsesActualProvidersCsrfAndIndependentAuthority(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-coursework-grade-policy']);
+        $process->setTimeout(10);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
 }

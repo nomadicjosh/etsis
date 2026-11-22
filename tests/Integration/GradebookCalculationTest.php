@@ -491,4 +491,91 @@ final class GradebookCalculationTest extends TestCase
             [array_fill(0, 21, $group)],
         ];
     }
+    public function testPolicyDutyIsIndependentAndWeightsOnlySavesPreserveTheSavedPolicy(): void
+    {
+        [$f, $service, , $section] = $this->fixture();
+        $setup = $service->calculationSetup($section->id);
+        $policy = new \Domain\Gradebook\ValueObject\CourseworkGradePolicy([
+            "rounding" => "half_even",
+            "decimal_places" => 1,
+            "cap_at_hundred" => true,
+        ]);
+        $f->access->staff = false;
+        self::assertFalse($service->calculationSetup($section->id)["can_manage_grade_policy"]);
+        try {
+            $service->saveCalculation(
+                $section->id,
+                "points",
+                [],
+                $setup["revision"],
+                gradePolicy: $policy,
+            );
+            self::fail("Assigned faculty must not gain policy authority implicitly.");
+        } catch (AccessDeniedException) {
+            self::assertSame([], $f->sql->rows("sis_gradebook_calculations"));
+        }
+        $f->access->grants = ["sis:gradebook:calculation-policy"];
+        $saved = $service->saveCalculation(
+            $section->id,
+            "points",
+            [],
+            $setup["revision"],
+            gradePolicy: $policy,
+        );
+        self::assertTrue($saved["can_manage_grade_policy"]);
+        $f->access->grants = [];
+        $saved = $service->saveCalculation($section->id, "points", [], $saved["revision"]);
+        self::assertSame($policy->facts, $saved["grade_policy"]);
+        self::assertFalse($saved["can_manage_grade_policy"]);
+        $f->access->actor = $f->user();
+        $f->access->grants = ["sis:gradebook:calculation-policy"];
+        $this->expectException(AccessDeniedException::class);
+        $service->calculationSetup($section->id);
+    }
+
+    public static function policyAuditChanges(): array
+    {
+        return [["permission"], ["source"]];
+    }
+
+    #[DataProvider("policyAuditChanges")]
+    public function testPolicyWritesRollBackWhenDutyOrSourceChangesDuringRequiredAudit(
+        string $change,
+    ): void {
+        [$f, , , $section] = $this->fixture();
+        $f->access->staff = false;
+        $f->access->grants = ["sis:gradebook:calculation-policy"];
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method("record")->willReturnCallback(function () use ($f, $change, $section): void {
+            if ($change === "permission") {
+                $f->access->grants = [];
+            } else {
+                $f->sql->update(
+                    "sis_gradebook_calculations",
+                    ["revision" => 9],
+                    ["id" => $section->id->value],
+                );
+            }
+        });
+        $service = $this->service($f, $audit);
+        $setup = $service->calculationSetup($section->id);
+        $before = $f->sql->rows("sis_history_events");
+        try {
+            $service->saveCalculation(
+                $section->id,
+                "points",
+                [],
+                $setup["revision"],
+                gradePolicy: new \Domain\Gradebook\ValueObject\CourseworkGradePolicy([
+                    "rounding" => "half_up",
+                    "decimal_places" => 0,
+                    "cap_at_hundred" => false,
+                ]),
+            );
+            self::fail("A changed policy source or duty committed during audit.");
+        } catch (AccessDeniedException | ConcurrentModificationException) {
+            self::assertSame([], $f->sql->rows("sis_gradebook_calculations"));
+            self::assertSame($before, $f->sql->rows("sis_history_events"));
+        }
+    }
 }

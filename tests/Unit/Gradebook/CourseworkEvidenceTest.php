@@ -8,6 +8,7 @@ use Brick\Math\BigRational;
 use Brick\Math\Internal\Calculator\NativeCalculator;
 use Brick\Math\Internal\CalculatorRegistry;
 use Domain\Gradebook\ValueObject\CourseworkGradeEvidence;
+use Domain\Gradebook\ValueObject\CourseworkGradePolicy;
 use Domain\Gradebook\ValueObject\GradebookCalculation;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
@@ -162,5 +163,33 @@ final class CourseworkEvidenceTest extends TestCase
         self::assertNotNull($calculation->summarize($scores)["percent_hundredths"]);
         $this->expectException(\Domain\Gradebook\Exception\CourseworkCalculationLimitException::class);
         $calculation->summarize($scores, true);
+    }
+    public function testOlderEvidenceKeepsItsOriginalShapeAndNewEvidenceRejectsPolicyTampering(): void
+    {
+        $facts = $this->facts();
+        $old = new CourseworkGradeEvidence($facts);
+        self::assertSame($facts, $old->facts);
+        self::assertArrayNotHasKey("grade_policy", $old->summary());
+        $facts["grade_policy"] = CourseworkGradePolicy::DEFAULT;
+        $facts["grading_percent"] = "92";
+        $current = new CourseworkGradeEvidence($facts);
+        $current->verifyCalculation();
+        self::assertNotSame($old->revision(), $current->revision());
+        self::assertSame("92%", $current->summary()["grading_display"]);
+        self::assertSame(
+            $current->revision(),
+            new CourseworkGradeEvidence(array_reverse($facts, true))->revision(),
+        );
+        $facts["grading_percent"] = "93";
+        $this->expectException(InvalidArgumentException::class);
+        new CourseworkGradeEvidence($facts);
+    }
+
+    public function testPolicyAndGradingPercentageMustBeRecordedTogether(): void
+    {
+        $facts = $this->facts();
+        $facts["grade_policy"] = CourseworkGradePolicy::DEFAULT;
+        $this->expectException(InvalidArgumentException::class);
+        new CourseworkGradeEvidence($facts);
     }
 }

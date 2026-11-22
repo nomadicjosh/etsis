@@ -3,6 +3,96 @@ window.createGradebookCalculation = function (ui) {
     "use strict";
     const { node } = ui;
     const percent = (value) => `${(Number(value) / 100).toFixed(2)}%`;
+    function policyText(policy) {
+        if (!policy) return "Final-grade comparison policy was not recorded with this decision.";
+        const labels = {
+            half_up: "nearest, ties up",
+            half_even: "nearest, ties to even",
+            floor: "round down",
+            ceiling: "round up",
+        };
+        return `Final-grade comparison: ${policy.cap_at_hundred ? "cap at 100% first; " : "no 100% cap; "}${policy.rounding === "none" ? "exact percentage, without rounding" : `${labels[policy.rounding]} to ${policy.decimal_places} decimal places`}. Running averages retain the original percentage. Official grades require separate confirmation.`;
+    }
+    function comparisonText(summary) {
+        return summary.grading_display == null
+            ? summary.score_display
+            : `${summary.score_display} raw · ${summary.grading_display} for grade comparison`;
+    }
+    function policyEditor(setup) {
+        const policy = setup.grade_policy;
+        const rounding = node(
+            "select",
+            { id: "gradebook-rounding", class: "form-select" },
+            ...Object.entries({
+                none: "Exact percentage (no rounding)",
+                half_up: "Nearest, ties up",
+                half_even: "Nearest, ties to even",
+                floor: "Round down",
+                ceiling: "Round up",
+            }).map(([value, label]) => node("option", { value }, label)),
+        );
+        rounding.value = policy.rounding;
+        const places = node(
+            "select",
+            { id: "gradebook-decimals", class: "form-select" },
+            ...[0, 1, 2, 3].map((value) => node("option", { value: String(value) }, String(value))),
+        );
+        places.value = String(policy.decimal_places ?? 0);
+        const cap = node("input", {
+            id: "gradebook-cap",
+            type: "checkbox",
+            class: "form-check-input",
+        });
+        cap.checked = policy.cap_at_hundred;
+        const help = node("p", {
+            class: "form-text",
+            id: "gradebook-policy-help",
+            role: "status",
+            "aria-live": "polite",
+        });
+        const element = node(
+            "fieldset",
+            { class: "my-3", "aria-describedby": "gradebook-policy-help" },
+            node("legend", { class: "h6" }, "Final-grade comparison policy"),
+            node("label", { for: rounding.id, class: "form-label" }, "Rounding rule"),
+            rounding,
+            node("label", { for: places.id, class: "form-label mt-2" }, "Decimal places"),
+            places,
+            node(
+                "div",
+                { class: "form-check mt-3" },
+                cap,
+                node(
+                    "label",
+                    { for: cap.id, class: "form-check-label" },
+                    "Cap the final-grade percentage at 100% before rounding",
+                ),
+            ),
+            help,
+            !setup.can_manage_grade_policy
+                ? node(
+                      "p",
+                      { class: "form-text" },
+                      "Changing these rules requires the coursework grading policy duty. You can still save assignment and category weights.",
+                  )
+                : null,
+        );
+        element.disabled = !setup.can_manage_grade_policy;
+        function serialize() {
+            return {
+                rounding: rounding.value,
+                decimal_places: rounding.value === "none" ? null : Number(places.value),
+                cap_at_hundred: cap.checked,
+            };
+        }
+        function update() {
+            places.disabled = rounding.value === "none";
+            help.textContent = policyText(serialize());
+        }
+        [rounding, places, cap].forEach((control) => control.addEventListener("change", update));
+        update();
+        return { element, serialize };
+    }
     function scoreLabel(score) {
         if (score.earned_hundredths == null) return "Not graded";
         return score.possible_hundredths === 0
@@ -208,6 +298,7 @@ window.createGradebookCalculation = function (ui) {
                 { class: "small mb-0" },
                 "Excused and ungraded work are omitted from this running average. Excused work is also omitted from grading coverage; remaining weights are normalized. Recorded zero scores count unless excused or dropped by a configured rule. This is coursework feedback; your official final grade is recorded separately.",
             ),
+            node("p", { class: "small mt-2 mb-0" }, policyText(summary.grade_policy)),
         );
     }
     function editor(assignments, initial, changed) {
@@ -493,5 +584,5 @@ window.createGradebookCalculation = function (ui) {
         setEnabled(false);
         return { element, serialize, setEnabled, valid };
     }
-    return { panel, assignmentLabel, scoreLabel, editor };
+    return { panel, assignmentLabel, scoreLabel, editor, policyEditor, policyText, comparisonText };
 };

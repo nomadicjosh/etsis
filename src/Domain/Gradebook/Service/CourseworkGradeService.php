@@ -8,6 +8,7 @@ use Brick\Math\BigRational;
 use Domain\Gradebook\Repository\GradebookRepository;
 use Domain\Gradebook\ValueObject\CourseworkGradeEvidence;
 use Domain\Gradebook\ValueObject\GradebookCalculation;
+use Domain\Gradebook\ValueObject\CourseworkGradePolicy;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 
@@ -58,9 +59,17 @@ final readonly class CourseworkGradeService
                 "Complete the included regular work and review unapplied bonus points before using a suggestion.",
             );
         }
-        $score = BigRational::of($summary["exact_percent"]);
+        $policy = new CourseworkGradePolicy($settings["grade_policy"]);
+        $raw = BigRational::of($summary["exact_percent"]);
+        $score = $policy->apply($raw);
+        $comparison = [
+            "score_display" => CourseworkGradeEvidence::formatPercent($raw),
+            "grading_display" => CourseworkGradeEvidence::formatPercent($score),
+            "grade_policy" => $policy->facts,
+        ];
         if ($score->compareTo(100) > 0) {
-            return self::unavailable(
+            return $comparison +
+            self::unavailable(
                 "This average exceeds 100%. Apply institutional policy and choose a grade manually.",
                 $score,
             );
@@ -78,8 +87,10 @@ final readonly class CourseworkGradeService
             }
         }
         if (count($matched) !== 1) {
-            return self::unavailable(
-                "The exact average has no single match in the retained grading ranges. Choose a grade manually.",
+            return $comparison +
+            self::unavailable(
+                "The policy-adjusted average has no single match in the retained grading ranges. " .
+                    "Choose a grade manually.",
                 $score,
             );
         }
@@ -106,9 +117,12 @@ final readonly class CourseworkGradeService
             "min_score_milli" => $grade["min_score_milli"],
             "max_score_milli" => $grade["max_score_milli"],
             "exact_percent" => $summary["exact_percent"],
+            "grade_policy" => $policy->facts,
+            "grading_percent" => (string) $score,
         ];
         if (strlen(json_encode($facts, JSON_THROW_ON_ERROR)) > CourseworkGradeEvidence::MAX_BYTES) {
-            return self::unavailable(
+            return $comparison +
+            self::unavailable(
                 "This gradebook needs manual grade review. Its working average remains available.",
                 $score,
             );
