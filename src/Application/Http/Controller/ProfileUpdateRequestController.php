@@ -28,11 +28,13 @@ final readonly class ProfileUpdateRequestController
     {
         $form = new FormInput($request->getQueryParams());
         $after = $form->optionalText('after', 26);
+        $area = $form->optionalText('area', 20);
         return new JsonResponse($this->service->listing(
             $person,
             $staff,
             $form->boolean('finished'),
-            $after === null || $after === '' ? null : new EntityId($after)
+            $after === null || $after === '' ? null : new EntityId($after),
+            $area === '' ? null : $area,
         ));
     }
     public function create(ServerRequest $request, string $id): ResponseInterface

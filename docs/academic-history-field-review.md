@@ -6,6 +6,8 @@ Course-group [sending-institution eligibility](degree-audit-builder.md#sending-i
 
 [Review-date course expiration](degree-audit-builder.md#course-expiration-at-a-progress-review) is now an optional published group policy, independent of age at pursuit start. Current/temporary progress uses one explicit evaluation date; recorded observations retain that exact date in their existing protected basis and validate consistency with the observation's as-of date. Calendar advancement can change fresh group placement without changing awarded credit, GPA or the earlier recorded result. No graduation date is inferred, and no event, row or earlier policy is backfilled.
 
+[Educational-background follow-up](person-identity-and-accounts.md#education-follow-up-beside-an-application) now connects the existing person education editor/review to encrypted working profile requests and education-only staff/applicant queues. Only actual detail/review decisions append person education events; request creation, owner replies and closure append no fabricated profile or academic fact. Closing follow-up does not verify educational credentials or decide admission. Existing person/account ownership, history and accepted retries remain separate and unchanged; no schema or report was added.
+
 ## Sources and evidence
 
 Nested prerequisite routes now retain their counted expression in the existing course publication and accepted registration evidence. Current drafts, published rules and curated branch-status explanations remain distinct; earlier flat rules are not rewritten. See the [authoring and historical boundaries](course-publication.md#nested-prerequisite-routes).

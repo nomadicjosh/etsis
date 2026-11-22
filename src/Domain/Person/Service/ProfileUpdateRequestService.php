@@ -35,18 +35,25 @@ final readonly class ProfileUpdateRequestService
         bool $staff,
         bool $finished = false,
         ?EntityId $after = null,
+        ?string $area = null,
     ): array {
         $actor = $this->authorization->actor();
         $person = $this->authorization->person($actor, $id, $staff);
+        if ($area !== null && !isset(ProfileUpdateRequest::AREAS[$area])) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                ['field' => 'area', 'message' => 'Choose an available profile update area.'],
+            ]);
+        }
         return $this->transactions->run(function () use (
             $actor,
             $person,
             $staff,
             $finished,
             $after,
+            $area,
         ): array {
             $this->history->verify($person);
-            $rows = $this->requests->page($person->id, $staff ? null : $actor, $finished, $after);
+            $rows = $this->requests->page($person->id, $staff ? null : $actor, $finished, $after, $area);
             $items = array_slice($rows, 0, 10);
             $this->audit->record($actor, "person.profile_requests_read", $person->id);
             $this->authorization->person($actor, $person->id, $staff);
@@ -59,7 +66,7 @@ final readonly class ProfileUpdateRequestService
                 ),
                 "next_after" => count($rows) > 10 ? end($items)->facts()["id"] : null,
                 "new_id" => EntityId::generate()->value,
-                "areas" => ProfileUpdateRequest::AREAS,
+                "areas" => $area === null ? ProfileUpdateRequest::AREAS : [$area => ProfileUpdateRequest::AREAS[$area]],
             ];
         });
     }

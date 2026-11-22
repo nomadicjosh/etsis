@@ -53,14 +53,15 @@ test('the applicant shortcut keeps the existing draft review queue progress and 
     const state = await fixture(page), drawer = page.locator('#drawer-body');
     await drawer.getByRole('button', { name: 'Message applicant', exact: true }).click();
     await expect(drawer).toContainText('To: Fictional Applicant · EXAMPLE.');
-    await drawer.getByLabel('Subject', { exact: true }).fill('Your application next steps');
-    await drawer.getByLabel('Message', { exact: true }).fill('Sign in to review your next steps.');
+    await drawer.getByRole('textbox', { name: 'Subject', exact: true }).fill('Your application next steps');
+    await drawer.getByRole('textbox', { name: 'Message', exact: true }).fill('Sign in to review your next steps.');
     await drawer.getByRole('button', { name: 'Save and continue', exact: false }).click();
     await expect(drawer.getByRole('region', { name: 'Selected recipients' })).toContainText('Fictional Applicant');
     await expect(drawer.getByRole('button', { name: 'Back to application', exact: true })).toBeVisible();
     await drawer.getByRole('button', { name: 'Review message and recipients', exact: true }).click();
     await drawer.getByRole('button', { name: 'Confirm recipient queue', exact: true }).click();
-    await expect(drawer.getByRole('progressbar', { name: 'Confirmed sends' })).toBeVisible();
+    await expect(drawer.getByRole('progressbar', { name: 'Confirmed sends' }))
+        .toHaveAttribute('aria-valuetext', '0 of 1 messages confirmed sent');
     expect(state.calls.find(call => call.path.endsWith('/queue/')).data.recipients).toEqual([{ user_id: user }]);
     expect(state.calls.some(call => /delivery-confirm|\/dispatch\//.test(call.path))).toBe(false);
     await drawer.getByRole('button', { name: 'Back to application', exact: true }).click();
@@ -75,7 +76,7 @@ test('starting a message preserves unfinished applicant casework', async ({ page
     await drawer.getByText('Routing & next steps', { exact: true }).click();
     await drawer.getByLabel('Private staff notes', { exact: true }).fill('Fictional unfinished note.');
     await drawer.getByRole('button', { name: 'Message applicant', exact: true }).click();
-    await expect(drawer).toContainText('Save casework before starting a message.');
+    await expect(drawer).toContainText('Save casework before starting another task.');
     await expect(drawer.getByLabel('Private staff notes', { exact: true })).toHaveValue('Fictional unfinished note.');
     expect(state.calls.some(call => call.path.startsWith('/sis/campaigns/'))).toBe(false);
     expect(state.errors).toEqual([]);

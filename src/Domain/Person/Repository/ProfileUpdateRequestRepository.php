@@ -12,6 +12,12 @@ interface ProfileUpdateRequestRepository
     public function find(EntityId $person, EntityId $id): ?ProfileUpdateRequest;
     public function pending(EntityId $person, string $area): bool;
     /** @return list<ProfileUpdateRequest> */
-    public function page(EntityId $person, ?EntityId $owner, bool $finished, ?EntityId $after): array;
+    public function page(
+        EntityId $person,
+        ?EntityId $owner,
+        bool $finished,
+        ?EntityId $after,
+        ?string $area = null,
+    ): array;
     public function save(ProfileUpdateRequest $request, ?int $expectedVersion): void;
 }

@@ -94,6 +94,155 @@ final class ProfileUpdateRequestTest extends TestCase
         self::assertSame([], $s->sql->rows('sis_students'));
     }
 
+    public function testEducationOnlyPagesApplyTheFilterBeforeTheOwnerAndCursorLimit(): void
+    {
+        $c = new CampusFixture();
+        $s = $c->sis;
+        $owner = $s->user();
+        $person = $s->student($owner)->personId;
+        $requests = $this->service($c);
+        $before = $this->journal($c);
+        for ($i = 0; $i < 12; $i++) {
+            foreach (["contact", "education"] as $area) {
+                $id = EntityId::generate();
+                $requests->request($person, $id, $area, "Fictional bounded follow-up.");
+                $requests->act($person, $id, true, "close", 0, "Fictional resolution.");
+            }
+        }
+        $s->access->actor = $owner;
+        $s->access->staff = false;
+        $s->access->grants = [];
+        $page = $requests->listing(null, false, true, area: "education");
+        self::assertCount(10, $page["items"]);
+        self::assertSame(["education" => "Educational background"], $page["areas"]);
+        self::assertSame(
+            ["education"],
+            array_values(array_unique(array_column($page["items"], "area"))),
+        );
+        $next = $requests->listing(
+            null,
+            false,
+            true,
+            new EntityId($page["next_after"]),
+            "education",
+        );
+        self::assertCount(2, $next["items"]);
+        self::assertNull($next["next_after"]);
+        self::assertCount(
+            12,
+            array_unique(array_column([...$page["items"], ...$next["items"]], "id")),
+        );
+        self::assertSame($before, $this->journal($c));
+        $this->rejects(
+            fn() => $requests->listing(null, false, area: "credential_award"),
+            \Domain\Shared\Exception\ValidationException::class,
+        );
+        $s->access->actor = $s->user();
+        $this->rejects(
+            fn() => $requests->listing($person, false, true, area: "education"),
+            AccessDeniedException::class,
+        );
+    }
+
+    public function testEducationFollowUpConnectsOwnerCorrectionAndIndependentAdmissionsReview(): void
+    {
+        $c = new CampusFixture();
+        $s = $c->sis;
+        $staff = $s->access->actor;
+        $owner = $s->user();
+        $person = $s->student($owner)->personId;
+        $entry = [
+            "key" => "school_one",
+            "institution" => "Fictional College",
+            "start_date" => "2020-08-01",
+            "end_date" => "2024-05-01",
+        ];
+        $c->education->staffSave($person, [$entry], 0, "Fictional supplied education.");
+        $c->education->review(
+            $person,
+            "school_one",
+            "changes_requested",
+            1,
+            "Please correct the attendance end date.",
+        );
+        $education = $c->education->staffView($person);
+        $before = $this->journal($c);
+        $id = EntityId::generate();
+        $requests = $this->service($c);
+        $receipt = $requests->request(
+            $person,
+            $id,
+            "education",
+            "Correct your education dates, then respond here.",
+        );
+        self::assertSame($before, $this->journal($c));
+        self::assertSame($education, $c->education->staffView($person));
+        $requests->request(
+            $person,
+            EntityId::generate(),
+            "contact",
+            "Check your contact details too.",
+        );
+        $this->rejects(
+            fn() => $requests->request(
+                $person,
+                EntityId::generate(),
+                "education",
+                "Duplicate request.",
+            ),
+            ConcurrentModificationException::class,
+        );
+        $s->access->actor = $owner;
+        $s->access->staff = false;
+        $s->access->grants = [];
+        $entry["end_date"] = "2024-06-01";
+        $c->education->save([$entry], 2, "Fictional corrected attendance date.");
+        $updated = $c->education->view($person);
+        self::assertSame("unreviewed", $updated["entries"][0]["review_status"]);
+        $before = $this->journal($c);
+        $requests->act(null, $id, false, "respond", 0, "The end date is corrected.");
+        self::assertSame($before, $this->journal($c));
+        self::assertSame($updated, $c->education->view($person));
+        $this->rejects(
+            fn() => $requests->act(null, $id, false, "close", 1, "Owner approval."),
+            AccessDeniedException::class,
+        );
+        $s->access->actor = $staff;
+        $s->access->staff = true;
+        $requests->act($person, $id, true, "close", 1, "Reviewed the supplied correction.");
+        self::assertSame($before, $this->journal($c));
+        self::assertSame(
+            "unreviewed",
+            $c->education->staffView($person)["entries"][0]["review_status"],
+        );
+        $c->education->review(
+            $person,
+            "school_one",
+            "reviewed",
+            3,
+            "Fictional separate background review.",
+        );
+        self::assertSame(
+            "reviewed",
+            $c->education->staffView($person)["entries"][0]["review_status"],
+        );
+        self::assertSame(
+            $receipt,
+            $requests->request(
+                $person,
+                $id,
+                "education",
+                "Correct your education dates, then respond here.",
+            ),
+        );
+        $stored = $s->sql->rows("sis_profile_update_requests");
+        self::assertStringNotContainsString(
+            "Correct your education dates",
+            json_encode($stored, JSON_THROW_ON_ERROR),
+        );
+        self::assertSame("closed", $requests->listing($person, true, true)["items"][0]["status"]);
+    }
+
     public function testStaffOwnerAndReviewerCompleteFollowUpWithoutAnotherProfileAuthority(): void
     {
         $c = new CampusFixture();
@@ -382,7 +531,7 @@ final class ProfileUpdateRequestTest extends TestCase
         $service = $this->service($c);
         foreach (
             [
-                ["education", "Use education review instead."],
+                ["credential_award", "Use the credential decision workflow instead."],
                 ["contact", ""],
                 ["contact", str_repeat("x", 1001)],
                 ["contact", "Private\x00message"],

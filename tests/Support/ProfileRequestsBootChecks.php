@@ -12,7 +12,7 @@ $id = \Domain\Shared\ValueObject\EntityId::generate();
 $events = $sis->sql->rows("sis_history_events");
 $created = $teachingPost($base, [
     "request_id" => $id->value,
-    "area" => "addresses",
+    "area" => "education",
     "message" => "Fictional private next step.",
 ]);
 if ($created->getStatusCode() !== 200) {
@@ -42,6 +42,34 @@ if (
     !str_contains($ownRead->getHeaderLine("Cache-Control"), "no-store")
 ) {
     throw new RuntimeException("Owner request listing leaked internal data or failed ownership.");
+}
+if ($events !== $sis->sql->rows('sis_history_events')) {
+    throw new RuntimeException('Education follow-up fabricated profile facts before an actual edit.');
+}
+$education = $teachingPost('/portal/api/education/', [
+    'version' => 0, 'reason' => '', 'entries' => [
+        ['key' => 'school_one', 'institution' => 'Fictional corrected school'],
+    ],
+]);
+if ($education->getStatusCode() !== 200) {
+    throw new RuntimeException('The owner education edit failed through the actual protected provider.');
+}
+$events = $sis->sql->rows('sis_history_events');
+$filtered = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    '/portal/api/profile-update-requests/?area=education',
+))->withQueryParams(['area' => 'education']));
+$filteredData = json_decode((string) $filtered->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $filtered->getStatusCode() !== 200 || count($filteredData['items']) !== 1
+    || $filteredData['items'][0]['area'] !== 'education'
+) {
+    throw new RuntimeException('The real owner education-only follow-up route failed.');
+}
+$invalidFilter = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    '/portal/api/profile-update-requests/?area=credential_award',
+))->withQueryParams(['area' => 'credential_award']));
+if ($invalidFilter->getStatusCode() !== 422) {
+    throw new RuntimeException('An unknown follow-up area filter was accepted.');
 }
 $response = $teachingPost("/portal/api/profile-update-requests/" . $id->value . "/respond/", [
     "version" => 0,

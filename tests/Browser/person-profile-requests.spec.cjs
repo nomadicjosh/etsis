@@ -5,12 +5,15 @@ async function accessible(page) {
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(result.violations.map(item => ({ id: item.id, targets: item.nodes.map(node => node.target) }))).toEqual([]);
 }
-async function fixture(page, owner = false, { stale = false, delayed = null } = {}) {
-    const calls = [], errors = [], person = id(10), user = id(11);
+async function fixture(page, owner = false, { stale = false, delayed = null, area = 'addresses', denyRefresh = false, workspace = 'contact' } = {}) {
+    const calls = [], errors = [], fetches = [], person = id(10), user = id(11);
     const endpoint = owner ? '/portal/api/profile-update-requests/' : `/sis/ui/people/${person}/update-requests/`;
-    let rows = owner ? [{ id: id(30), area: 'addresses', status: 'requested', version: 0,
+    let rows = owner ? [{ id: id(30), area, status: 'requested', version: 0,
         instructions: 'Fictional <script>unsafe()</script> address correction', response: null, resolution: null,
         created_at: '2026-11-20T12:00:00Z' }] : [];
+    let reads = 0;
+    let education = { version: 1, entries: [{key:'school_one',institution:'Fictional School',
+        start_date:'2020-08-01',end_date:'2024-05-01',review_status:'changes_requested',feedback:'Correct the final attendance date.'}] };
     const contact = { preferred_name: 'Fictional', phone: '001234', address: '', version: 0, mailing_managed: false };
     page.on('pageerror', e => errors.push(e.message));
     await page.route(/\/(?:sis\/|portal\/api\/).*/, async route => {
@@ -18,6 +21,7 @@ async function fixture(page, owner = false, { stale = false, delayed = null } = 
         const raw = req.postData();
         const data = !raw ? null : req.headers()['content-type']?.includes('application/json') ? JSON.parse(raw)
             : JSON.parse(new URLSearchParams(raw).get('_workspace_json'));
+        if (!data) fetches.push(path);
         let result = {};
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path.startsWith('/sis/ui/data/')) result = { items: [{ id: person, owner_user_id: user,
@@ -33,6 +37,24 @@ async function fixture(page, owner = false, { stale = false, delayed = null } = 
             new_ids: Array.from({ length: 10 }, (_, n) => id(100 + n)), today: '2026-11-20',
             purposes: { mailing: 'Mailing' }, countries: { US: 'United States' }, earlier_mailing_address: '', mailing_address: '' };
         else if (path.endsWith('/emergency-contacts/')) result = { contacts: [], version: 0 };
+        else if (path.endsWith('/education/review/')) {
+            calls.push({path,data,csrf:req.headers()['x-csrf-token']});
+            education={version:education.version+1,entries:education.entries.map(entry=>({...entry,
+                review_status:data.review_status,feedback:data.reason}))};
+            result={status:'saved'};
+        }
+        else if (path === `/sis/applications/${person}/review/`) result={
+            application:{id:{value:person},status:'submitted',version:0},
+            person:{id:{value:person},givenName:'Fictional',familyName:'Person',institutionalId:{value:'S-FICTIONAL'}},
+            labels:{program_code:'ARTS.UG',program_title:'Fictional Arts',term_code:'26/FA'},
+        };
+        else if (path.endsWith('/education/')) {
+            if (data) {
+                calls.push({path,data,csrf:req.headers()['x-csrf-token']});
+                education={version:education.version+1,entries:data.entries.map(entry=>({...entry,review_status:'unreviewed',feedback:''}))};
+            }
+            result=education;
+        }
         else if (path.startsWith(endpoint)) {
             if (data) {
                 calls.push({ path, data, csrf: req.headers()['x-csrf-token'] });
@@ -47,7 +69,8 @@ async function fixture(page, owner = false, { stale = false, delayed = null } = 
                     else { row.status = data.action === 'close' ? 'closed' : 'cancelled'; row.resolution = data.message; }
                 }
                 result = { status: 'saved' };
-            } else result = { items: rows.filter(row => ['closed', 'cancelled'].includes(row.status) === (url.searchParams.get('finished') === '1')),
+            } else if (denyRefresh && reads++ > 0) return route.fulfill({status:403,json:{error:'Access removed.'}});
+            else result = { items: rows.filter(row => ['closed', 'cancelled'].includes(row.status) === (url.searchParams.get('finished') === '1')),
                 next_after: null, new_id: id(50 + calls.length), areas: {} };
         }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
@@ -55,15 +78,15 @@ async function fixture(page, owner = false, { stale = false, delayed = null } = 
     if (owner) await page.goto('/portal/student/profile/');
     else {
         await page.goto('/admin/');
-        await page.locator('.workspace-nav-link[data-workspace="people"]').click();
+        await page.locator(`.workspace-nav-link[data-workspace="${workspace === 'application' ? 'applications':'people'}"]`).click();
         await page.getByLabel('Search this workspace').fill('Fictional');
         await page.getByLabel('Search this workspace').press('Enter');
         await page.getByRole('button', { name: 'Fictional Person', exact: true }).click();
-        await page.getByRole('button', { name: 'Contact information', exact: true }).click();
+        if (workspace !== 'application') await page.getByRole('button', { name: workspace === 'education' ? 'Educational background':'Contact information', exact: true }).click();
     }
-    return { calls, errors, panel: page.getByRole('region', { name: 'Profile update requests', exact: true }) };
+    return { calls, errors, fetches, panel: page.getByRole('region', { name: 'Profile update requests', exact: true }) };
 }
-for (const area of ['contact', 'addresses', 'emergency_contacts']) test(`staff requests and closes ${area} follow-up while contact drafts survive`, async ({ page }) => {
+for (const area of ['contact', 'addresses', 'emergency_contacts', 'education']) test(`staff requests and closes ${area} follow-up while contact drafts survive`, async ({ page }) => {
     const f = await fixture(page);
     await page.getByLabel('Phone number', { exact: true }).fill('Draft phone');
     await f.panel.getByRole('button', { name: 'Request a profile update', exact: true }).click();
@@ -113,5 +136,102 @@ test('stale owner response leaves the private draft available for a deliberate r
     await f.panel.getByRole('button', { name: 'Refresh requests', exact: true }).click();
     await expect(f.panel.getByLabel('Update for staff', { exact: true })).toHaveValue('Fictional stale reply');
     expect(f.calls).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('owner education follow-up opens the existing draft and keeps edits separate from the reply', async ({page}) => {
+    const f=await fixture(page,true,{area:'education'});
+    await f.panel.getByRole('button',{name:'Open educational background',exact:true}).click();
+    const editor=page.getByRole('region',{name:'Institutions attended editor',exact:true});
+    await expect(editor.locator('summary').first()).toBeFocused();
+    await editor.getByText('Fictional School',{exact:true}).click();
+    await editor.getByLabel('Attended through',{exact:true}).fill('2024-06-01');
+    await f.panel.getByLabel('Update for staff',{exact:true}).fill('Fictional reply draft');
+    await f.panel.getByRole('button',{name:'Open educational background',exact:true}).click();
+    await expect(editor.getByLabel('Attended through',{exact:true})).toHaveValue('2024-06-01');
+    await expect(f.panel.getByLabel('Update for staff',{exact:true})).toHaveValue('Fictional reply draft');
+    await editor.getByLabel('Reason for update',{exact:true}).fill('Fictional corrected attendance.');
+    await editor.getByRole('button',{name:'Save background',exact:true}).click();
+    await expect(editor).toContainText('Not yet reviewed');
+    await expect(f.panel).toContainText('Update requested');
+    expect(f.calls.filter(c=>c.path.endsWith('/respond/'))).toHaveLength(0);
+    await f.panel.getByRole('button',{name:'Send update for review',exact:true}).click();
+    await expect(f.panel).toContainText('Ready for staff review');
+    expect(f.calls.find(c=>c.path.endsWith('/education/')).data.entries[0].end_date).toBe('2024-06-01');
+    expect(f.calls.find(c=>c.path.endsWith('/respond/')).data.message).toBe('Fictional reply draft');
+    await page.setViewportSize({width:320,height:1000}); await accessible(page);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('denied education-request refresh clears private instructions and unfinished replies', async ({page}) => {
+    const f=await fixture(page,true,{area:'education',denyRefresh:true});
+    await f.panel.getByLabel('Update for staff',{exact:true}).fill('Fictional private draft');
+    await f.panel.getByRole('button',{name:'Refresh requests',exact:true}).click();
+    await expect(f.panel).toContainText('Private request details cleared');
+    await expect(f.panel.getByRole('article')).toHaveCount(0);
+    await expect(f.panel.getByRole('textbox')).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('staff education follow-up preserves request instructions and education drafts', async ({page}) => {
+    const f=await fixture(page,false,{workspace:'education'});
+    const editor=page.getByRole('region',{name:'Institutions attended editor',exact:true});
+    await editor.getByRole('button',{name:'Request an education update',exact:true}).click();
+    await expect(f.panel.getByLabel('Information to update',{exact:true})).toHaveValue('education');
+    await f.panel.getByLabel('Instructions visible to the owner',{exact:true}).fill('Fictional education draft');
+    await editor.getByRole('button',{name:'Request an education update',exact:true}).click();
+    await expect(f.panel.getByLabel('Information to update',{exact:true})).toHaveValue('education');
+    await expect(f.panel.getByLabel('Instructions visible to the owner',{exact:true})).toHaveValue('Fictional education draft');
+    await editor.getByText('Fictional School',{exact:true}).click();
+    await editor.getByLabel('Attended through',{exact:true}).fill('2024-06-01');
+    await editor.getByRole('button',{name:'Request an education update',exact:true}).click();
+    await expect(editor).toContainText('Your draft is still here');
+    await expect(editor.getByLabel('Attended through',{exact:true})).toHaveValue('2024-06-01');
+    expect(f.calls).toHaveLength(0);
+    await page.setViewportSize({width:320,height:1000}); await accessible(page);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('admissions education review hands off to an explicit request without deciding admission', async ({page}) => {
+    const f=await fixture(page,false,{workspace:'application'});
+    expect(f.fetches.some(path=>path.endsWith('/update-requests/'))).toBe(false);
+    const editor=page.getByRole('region',{name:'Institutions attended editor',exact:true});
+    await page.getByRole('button',{name:'Institutions attended',exact:true}).click();
+    await editor.getByText('Fictional School',{exact:true}).click();
+    await editor.getByText('Review entry',{exact:true}).click();
+    await editor.getByLabel('Message to applicant',{exact:true}).fill('Fictional education dates need correction.');
+    await editor.getByRole('button',{name:'Request changes',exact:true}).click();
+    await expect(editor).toContainText('Fictional education dates need correction.');
+    await editor.getByRole('button',{name:'Request an education update',exact:true}).click();
+    await expect(f.panel.getByLabel('Information to update',{exact:true})).toHaveValue('education');
+    await f.panel.getByLabel('Instructions visible to the owner',{exact:true}).fill('Review the attendance dates, then reply here.');
+    await f.panel.getByRole('button',{name:'Send profile update request',exact:true}).click();
+    await expect(f.panel).toContainText('Update requested');
+    expect(f.calls.map(c=>c.data.area||c.data.review_status)).toEqual(['changes_requested','education']);
+    await page.setViewportSize({width:320,height:1000}); await accessible(page);
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('late education reply cannot restore details after a denied refresh', async ({page}) => {
+    let release;
+    const pending=new Promise(resolve=>{release=resolve;});
+    const f=await fixture(page,true,{area:'education',denyRefresh:true,delayed:()=>pending});
+    await f.panel.getByLabel('Update for staff',{exact:true}).fill('Fictional pending reply');
+    await f.panel.getByRole('button',{name:'Send update for review',exact:true}).click();
+    await expect(f.panel.getByRole('button',{name:'Send update for review',exact:true})).toBeDisabled();
+    await f.panel.getByRole('button',{name:'Refresh requests',exact:true}).click();
+    await expect(f.panel).toContainText('Private request details cleared');
+    const response=page.waitForResponse(response=>response.url().includes('/respond/')&&response.status()===200);
+    release();await response;
+    await page.evaluate(()=>new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))));
+    await expect(f.panel.getByRole('article')).toHaveCount(0);
+    await expect(f.panel.getByRole('textbox')).toHaveCount(0);
+    await expect(f.panel).toContainText('Private request details cleared');
     expect(f.errors).toEqual([]);
 });

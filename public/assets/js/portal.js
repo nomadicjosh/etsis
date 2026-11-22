@@ -694,17 +694,18 @@
             window.createPersonEmergencyContacts({ node: el, request, task, notify: notice })
                 .open(emergency, '/portal/api/emergency-contacts/'), event.currentTarget) }, 'Manage emergency contacts'));
         container.append(surface('Emergency contacts', emergency));
+        const education = el('div');
+        const educationEditor = window.createPersonEducation({ node: el, request, task, notify: notice })
+            .mount(education, '/portal/api/education/');
         const profileRequests = el('section', { 'aria-label': 'Profile update requests' });
         container.append(surface('Requested updates', profileRequests));
         window.createPersonProfileRequests({ node: el, request, task, notify: notice }).mount(
             profileRequests, '/portal/api/profile-update-requests/', { openEditor: area => {
+                if (area === 'education') return educationEditor.open();
                 if (area === 'contact') form.elements.preferred_name.focus();
                 else (area === 'addresses' ? addresses : emergency).querySelector('button')?.click();
             } },
         );
-        const education = el('div');
-        window.createPersonEducation({ node: el, request, task, notify: notice })
-            .mount(education, '/portal/api/education/');
         container.append(surface('Educational background', education));
 
     }
@@ -805,11 +806,21 @@
         refreshApplications(); container.append(saved);
         if (config.signedIn) {
             const education = el('div');
-            window.createPersonEducation({ node: el, request, task, notify: notice })
+            const editor = window.createPersonEducation({ node: el, request, task, notify: notice })
                 .mount(education, '/portal/api/education/');
+            const updates = el('section', { 'aria-label': 'Education update requests' });
+            const open = el('button', { type: 'button', class: 'btn campus-button-outline', onclick: () => {
+                updates.replaceChildren();
+                window.createPersonProfileRequests({ node: el, request, task, notify: notice }).mount(
+                    updates, '/portal/api/profile-update-requests/', {
+                        area: 'education', openEditor: () => editor.open(),
+                    },
+                );
+            } }, 'Education update requests');
+            updates.append(open);
             container.append(surface('Educational background',
                 el('p', { class: 'campus-muted' }, 'Keep institutions attended in one place for your applications. Open the list to check admissions feedback or requested changes.'),
-                education));
+                education, updates));
         }
         let statusRequest = 0;
         const status = el('p', { class: 'campus-muted mb-0', role: 'status', 'aria-atomic': 'true' });

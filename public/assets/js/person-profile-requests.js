@@ -3,15 +3,16 @@
     'use strict';
     let sequence = 0;
     const statuses = { requested: 'Update requested', responded: 'Ready for staff review', closed: 'Closed', cancelled: 'Cancelled' };
-    const areas = { contact: 'Contact information', addresses: 'Dated addresses', emergency_contacts: 'Emergency contacts' };
+    const areas = { contact: 'Contact information', addresses: 'Dated addresses', emergency_contacts: 'Emergency contacts', education: 'Educational background' };
     window.createPersonProfileRequests = ({ node, request, task, notify }) => ({
-        mount(container, endpoint, { staff = false, openEditor = () => {} } = {}) {
+        mount(container, endpoint, { staff = false, openEditor = () => {}, area = null } = {}) {
+            const availableAreas = area ? { [area]: areas[area] } : areas;
             const identity = `profile-requests-${++sequence}`;
             const active = node('div');
             const controls = node('div', { class: 'd-flex gap-2 flex-wrap mb-3' });
             const status = node('p', { role: 'status', 'aria-live': 'polite', class: 'form-text' });
             const formArea = node('div');
-            let finished = false, next = null, generation = 0, currentNewId = null, createForm = null;
+            let finished = false, next = null, generation = 0, currentNewId = null, createForm = null, creating = false, createButton = null, accessGeneration = 0;
             const drafts = new Map();
             const button = (label, handler) => node('button', { type: 'button', class: 'btn btn-outline-primary',
                 onclick: event => task(handler, event.currentTarget) }, label);
@@ -76,18 +77,21 @@
                     event.preventDefault();
                     task(async () => {
                         if (!form.reportValidity()) return;
+                        const scope = accessGeneration;
                         const data = { version: item.version, message: input.value, ...(staff ? { action: action.value } : {}) };
                         const path = `${endpoint}${encodeURIComponent(item.id)}/${staff ? 'resolve' : 'respond'}/`;
                         input.disabled = true;
                         if (action) action.disabled = true;
                         try {
                             await request(path, 'POST', data);
+                        } catch (error) {
+                            clearDenied(error); throw error;
                         } finally {
                             input.disabled = false;
                             if (action) action.disabled = false;
                         }
+                        if (!container.isConnected || scope !== accessGeneration) return;
                         drafts.delete(item.id);
-                        if (!container.isConnected) return;
                         notify(staff ? 'Request outcome saved.' : 'Your update is ready for staff review.');
                         await load();
                     }, save);
@@ -95,16 +99,24 @@
                 box.append(form);
                 return box;
             }
+            function clearDenied(error) {
+                if (![401, 403].includes(error.status) || !container.isConnected) return;
+                generation++; accessGeneration++; creating = false;
+                drafts.clear(); currentNewId = null; next = null;
+                createForm = null; createButton?.remove(); createButton = null;
+                formArea.replaceChildren(); active.replaceChildren(); more.hidden = true;
+                status.textContent = 'Private request details cleared. Refresh after access is restored.';
+            }
             function createEditor() {
                 if (!staff || createForm) return;
                 const add = button('Request a profile update', () => {
                     createForm.hidden = false;
                     createForm.querySelector('select').focus();
                 });
-                controls.append(add);
+                controls.append(add); createButton = add;
                 createForm = node('form', { class: 'mb-4', hidden: true });
                 const area = node('select', { id: `${identity}-area`, name: 'area', class: 'form-select' },
-                    ...Object.entries(areas).map(([key, label]) => node('option', { value: key }, label)));
+                    ...Object.entries(availableAreas).map(([key, label]) => node('option', { value: key }, label)));
                 createForm.append(node('label', { for: area.id, class: 'form-label' }, 'Information to update'), area);
                 const message = messageField(createForm, 'Instructions visible to the owner', 'instructions');
                 const save = node('button', { type: 'submit', class: 'btn btn-primary mt-2' }, 'Send profile update request');
@@ -112,12 +124,15 @@
                 createForm.addEventListener('submit', event => {
                     event.preventDefault();
                     task(async () => {
-                        if (!createForm.reportValidity() || !currentNewId) return;
+                        if (creating || !createForm.reportValidity() || !currentNewId) return;
+                        creating = true;
+                        const scope = accessGeneration;
                         const data = { request_id: currentNewId, area: area.value, message: message.value };
                         area.disabled = message.disabled = true;
                         try { await request(endpoint, 'POST', data); }
-                        finally { area.disabled = message.disabled = false; }
-                        if (!container.isConnected) return;
+                        catch (error) { clearDenied(error); throw error; }
+                        finally { if (scope === accessGeneration) creating = false; area.disabled = message.disabled = false; }
+                        if (!container.isConnected || scope !== accessGeneration) return;
                         message.value = '';
                         createForm.hidden = true;
                         currentNewId = null;
@@ -132,8 +147,14 @@
             async function load(append = false) {
                 const token = ++generation;
                 const query = new URLSearchParams({ finished: finished ? '1' : '0' });
+                if (area) query.set('area', area);
                 if (append && next) query.set('after', next);
-                const result = await request(`${endpoint}?${query}`);
+                let result;
+                try { result = await request(`${endpoint}?${query}`); }
+                catch (error) {
+                    if (token === generation) clearDenied(error);
+                    throw error;
+                }
                 if (!container.isConnected || token !== generation) return;
                 if (!currentNewId) currentNewId = result.new_id;
                 if (!append) active.replaceChildren();
@@ -145,7 +166,41 @@
                 status.textContent = append ? 'Older requests loaded.' : 'Requests refreshed.';
                 createEditor();
             }
+            const beforeLeave = () => {
+                const input = [...container.querySelectorAll('textarea')].find(field => field.value.trim());
+                if (creating || input || [...drafts.values()].some(draft => draft.message?.trim())) {
+                    status.textContent = creating ? 'Wait for the current request before leaving.'
+                        : 'Your request draft is still here. Save or clear it before leaving.';
+                    (input || refresh).focus();
+                    return false;
+                }
+                return true;
+            };
             task(load, refresh);
+            return {
+                beforeLeave,
+                async compose(area = 'contact') {
+                    if (!staff || !availableAreas[area] || !container.isConnected) return false;
+                    if (!createForm) await load();
+                    if (!createForm || !container.isConnected) return false;
+                    const field = createForm.querySelector('select');
+                    const message = createForm.querySelector('textarea');
+                    if (creating) {
+                        status.textContent = 'Wait for the current request before starting another.';
+                        return false;
+                    }
+                    if (field.value !== area && message.value.trim()) {
+                        createForm.hidden = false;
+                        status.textContent = 'Your current request instructions are still here. Save or clear them before choosing another area.';
+                        message.focus();
+                        return false;
+                    }
+                    field.value = area;
+                    createForm.hidden = false;
+                    message.focus();
+                    return true;
+                },
+            };
         },
     });
 })();

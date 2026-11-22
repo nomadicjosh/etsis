@@ -243,10 +243,16 @@ window.createWorkspacePeople = function (ui) {
             window.createPersonEmergencyContacts({ node, request, task, notify })
                 .open(emergency, `/sis/ui/people/${id}/emergency-contacts/`)));
         body.append(emergency);
+        const educationArea = node('div', { class: 'mt-4' });
+        const educationEditor = window.createPersonEducation({ node, request, task, notify }).mount(
+            educationArea, `/sis/ui/people/${id}/education/`, { canReview: can('sis:admissions:manage') },
+        );
+        body.append(educationArea);
         const requests = node("section", { class: "mt-4", 'aria-label': 'Profile update requests' });
         body.append(requests);
         window.createPersonProfileRequests({ node, request, task, notify }).mount(
             requests, `/sis/ui/people/${id}/update-requests/`, { staff: true, openEditor: area => {
+                if (area === 'education') return educationEditor.open();
                 if (area === 'contact') form.elements.preferred_name.focus();
                 else (area === 'addresses' ? addresses : emergency).querySelector('button')?.click();
             } },
@@ -254,11 +260,35 @@ window.createWorkspacePeople = function (ui) {
 
 
     }
+    function educationWorkflow(body, person, open = false, beforeNavigate = () => true) {
+        const id = personId(person);
+        const area = node('div', { class: 'record-section mt-3' });
+        const requests = node('section', { class: 'mt-4', 'aria-label': 'Profile update requests' });
+        body.append(area, requests);
+        let editor, followUp = null;
+        function openRequests() {
+            if (followUp) return followUp;
+            requests.replaceChildren();
+            followUp = window.createPersonProfileRequests({ node, request, task, notify }).mount(
+                requests, `/sis/ui/people/${id}/update-requests/`, { staff: true, area: 'education', openEditor: requestedArea => {
+                    if (requestedArea === 'education') return editor.open();
+                    if (beforeNavigate() && editor.beforeLeave() && followUp.beforeLeave()) return contact(person);
+                } },
+            );
+            return followUp;
+        }
+        requests.append(button('Education update requests', openRequests));
+        editor = window.createPersonEducation({ node, request, task, notify }).mount(
+            area, `/sis/ui/people/${id}/education/`, {
+                canReview: can('sis:admissions:manage'), open,
+                requestUpdate: () => openRequests().compose('education'),
+            },
+        );
+        return { beforeLeave: () => editor.beforeLeave() && (followUp?.beforeLeave() ?? true) };
+    }
     function education(person) {
         const body = openDrawer('Educational background', 'PERSON');
-        window.createPersonEducation({ node, request, task, notify }).mount(
-            body, `/sis/ui/people/${personId(person)}/education/`, { canReview: can('sis:admissions:manage'), open: true },
-        );
+        educationWorkflow(body, person, true);
     }
     async function password(person, record) {
         const id = personId(person);
@@ -425,11 +455,7 @@ window.createWorkspacePeople = function (ui) {
         }));
         body.append(casework);
         if (can('sis:person:manage')) {
-            const education = node('div', { class: 'record-section mt-3' });
-            background = window.createPersonEducation({ node, request, task, notify }).mount(
-                education, `/sis/ui/people/${person.id.value}/education/`, { canReview: can('sis:admissions:manage') },
-            );
-            body.append(education);
+            background = educationWorkflow(body, person, false, mayLeave);
         }
         if (submission) {
             const section = node('section', { class: 'record-section' });

@@ -60,6 +60,7 @@ final readonly class SqlProfileUpdateRequestRepository implements ProfileUpdateR
         ?EntityId $owner,
         bool $finished,
         ?EntityId $after,
+        ?string $area = null,
     ): array {
         $q = $this->sql->quote(...);
         $where = $q("person_id") . " = ? AND " . $q("status") . " IN (?, ?)";
@@ -70,6 +71,10 @@ final readonly class SqlProfileUpdateRequestRepository implements ProfileUpdateR
         if ($owner !== null) {
             $where .= " AND " . $q("owner_user_id") . " = ?";
             $parameters[] = $owner->value;
+        }
+        if ($area !== null) {
+            $where .= ' AND ' . $q('area') . ' = ?';
+            $parameters[] = $area;
         }
         if ($after !== null) {
             $where .= " AND " . $q("id") . " < ?";

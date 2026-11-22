@@ -18,6 +18,7 @@ final class ProfileUpdateRequest
         "contact" => "Contact information",
         "addresses" => "Dated addresses",
         "emergency_contacts" => "Emergency contacts",
+        "education" => "Educational background",
     ];
 
     private function __construct(#[\SensitiveParameter] private array $data)
@@ -53,7 +54,7 @@ final class ProfileUpdateRequest
             throw new ValidationException([
                 [
                     "field" => "area",
-                    "message" => "Choose contact, addresses or emergency contacts.",
+                    "message" => "Choose contact, addresses, emergency contacts or educational background.",
                 ],
             ]);
         }

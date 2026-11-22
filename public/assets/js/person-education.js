@@ -14,7 +14,7 @@
     };
     let sequence = 0;
     window.createPersonEducation = ({ node, request, task, notify }) => ({
-        mount(container, endpoint, { canReview = false, open = false } = {}) {
+        mount(container, endpoint, { canReview = false, open = false, requestUpdate = null } = {}) {
             const identity = `education-editor-${++sequence}`;
             const content = node('section', { id: identity, hidden: true, 'aria-label': 'Institutions attended editor' });
             const toggle = node('button', { type: 'button', class: 'btn btn-outline-primary',
@@ -187,13 +187,16 @@
                     list, node('div', { class: 'mb-3' }, node('label', { for: reasonId, class: 'form-label' },
                         record.version > 0 ? 'Reason for update' : 'Reason for update (optional)'), reason),
                     status, node('div', { class: 'd-flex flex-wrap gap-2' }, add, save));
+                if (requestUpdate) controls.append(node('button', { type: 'button', class: 'btn btn-outline-primary mt-3',
+                    onclick: event => task(() => leave() && requestUpdate(), event.currentTarget),
+                }, 'Request an education update'));
                 leave = () => {
-                    if (pending) { status.textContent = 'Wait for the current save before starting a message.'; return false; }
+                    if (pending) { status.textContent = 'Wait for the current save before starting another task.'; return false; }
                     const changed = draft.changed(read());
                     const unfinished = [...form.querySelectorAll('textarea')].find(input => input.value.trim());
                     if (changed || unfinished) {
                         form.querySelectorAll('details').forEach(card => { card.open = true; });
-                        status.textContent = 'Save or clear background changes and finish review feedback before starting a message. Your draft is still here.';
+                        status.textContent = 'Save or clear background changes and finish review feedback before starting another task. Your draft is still here.';
                         (changed ? save : unfinished).focus(); return false;
                     }
                     return true;
@@ -206,7 +209,14 @@
             });
             container.replaceChildren(toggle, content);
             if (open) task(load, toggle);
-            return { beforeLeave: () => !expanded || leave() };
+            return {
+                beforeLeave: () => !expanded || leave(),
+                async open() {
+                    if (!expanded) await load();
+                    if (!expanded || !container.isConnected) return;
+                    (content.querySelector('summary') || content.querySelector('button') || toggle).focus();
+                },
+            };
         },
     });
 })();

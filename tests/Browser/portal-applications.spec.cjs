@@ -22,7 +22,7 @@ async function fixture(page, { applications = [
     row(first, receipt, 'DIP.ART', 'Studio Arts', 'accepted'),
     row(second, otherReceipt, 'BS.SCI', 'Applied Science', 'matriculated'),
     row(direct, null, 'BA.HIST', 'History'),
-], answer = null, refresh = null, education = null, nextSteps = null } = {}) {
+], answer = null, refresh = null, education = null, nextSteps = null, profileRequests = null } = {}) {
     const reads = [], writes = [], errors = [], overviewReads = [], statusReads = [];
     const me = { person: { id: person }, applications, students: [], contact: {}, accounts: [], news: [] };
     page.on('pageerror', error => errors.push(error.message));
@@ -34,6 +34,10 @@ async function fixture(page, { applications = [
             if (nextSteps) return nextSteps(route);
             json = { office: '', next_step: '', items: [] };
         }
+        else if (path.startsWith('/portal/api/profile-update-requests/')) {
+            if (profileRequests) return profileRequests(route);
+            json={items:[],next_after:null,new_id:id(90),areas:{education:'Educational background'}};
+        }
         else if (path === '/portal/api/education/') {
             if (education) return education(route);
             json = { entries: [], version: 0 };
@@ -43,6 +47,13 @@ async function fixture(page, { applications = [
             statusReads.push(path);
             if (refresh && statusReads.length > 1) return refresh(route, statusReads.length - 1, me);
             json = { person_id: person, items: me.applications };
+        }
+        else if (/^\/portal\/api\/applications\/[^/]+\/answers\/$/.test(path)) {
+            expect(req.method()).toBe('GET');
+            if (answer) return answer(route, path, reads.length);
+            const application=path.split('/')[4];
+            json=record(application, application===first
+                ? '<img src=x onerror=alert(1)>\nFictional original plan.' : 'Fictional second plan.');
         }
         else if (path.includes('/sis/form-submissions/')) {
             expect(req.method()).toBe('GET');
@@ -82,7 +93,7 @@ test('owners open retained answers on demand without losing a new application or
     const list = page.getByRole('table', { name: 'Your admissions applications' });
     await expect(list).toContainText('DIP.ART · Studio Arts');
     await expect(list).toContainText('No form answers');
-    await expect(list.getByRole('row').filter({ hasText: 'DIP.ART' })).toContainText('next steps for this program');
+    await expect(list.getByRole('row').filter({ hasText: 'DIP.ART' })).toContainText('your next steps');
     const studentRow = list.getByRole('row').filter({ hasText: 'BS.SCI' });
     await expect(studentRow).toContainText('Student record linked');
     await expect(studentRow.getByRole('link', { name: 'My campus', exact: true })).toHaveAttribute('href', '/portal/student/');
@@ -91,8 +102,8 @@ test('owners open retained answers on demand without losing a new application or
     const trigger = list.getByRole('button', { name: /View answers for DIP.ART/ });
     await trigger.focus(); await page.keyboard.press('Enter');
     const viewer = page.locator('.campus-application-answers');
-    await expect(viewer.getByRole('heading', { name: 'Original Arts application' })).toBeFocused();
-    await expect(viewer.getByRole('status')).toHaveText('Your submitted answers are ready.');
+    await expect(viewer.getByRole('heading', { name: 'Original Arts application' }).first()).toBeFocused();
+    await expect(viewer.getByRole('status').filter({hasText:'Your submitted answers are ready.'})).toHaveText('Your submitted answers are ready.');
     await expect(viewer.getByRole('group', { name: 'Your next chapter' })).toBeVisible();
     await expect(viewer.locator('[data-answer-key="previous"] dd')).toHaveText('No');
     await expect(viewer.locator('[data-answer-key="credits"] dd')).toHaveText('0');
@@ -156,7 +167,7 @@ test('closing or selecting another application prevents late reads from restorin
     const late = page.waitForResponse(`**/sis/form-submissions/${receipt}/`);
     gates[1](); await (await late).finished();
     await expect(viewer).not.toContainText('Fictional late first answer.');
-    await expect(viewer.getByRole('heading', { name: 'Original Science application' })).toBeVisible();
+    await expect(viewer.getByRole('heading', { name: 'Original Science application' }).first()).toBeVisible();
     await expect(firstButton).toHaveAttribute('aria-expanded', 'false');
     expect(reads).toHaveLength(3); expect(errors).toEqual([]);
 });
@@ -317,4 +328,53 @@ test('applicant next steps load on demand without replacing an unfinished applic
     await expect(page.getByRole('textbox', { name: 'New application note', exact: true })).toHaveValue('Unsaved fictional new answer.');
     expect(requests).toHaveLength(1); expect(state.writes).toEqual([]); expect(state.errors).toEqual([]);
     await accessible(page);
+});
+
+
+test('applicant education follow-up stays beside an unfinished application and uses the existing editor', async ({page}) => {
+    const educationWrites=[], replies=[];
+    let responded=false;
+    let background={version:1,entries:[{key:'college_one',institution:'Fictional College',
+        start_date:'2020-08-01',end_date:'2024-05-01',review_status:'changes_requested',feedback:'Check attendance.'}]};
+    const state=await fixture(page,{
+        education:async route=>{
+            const req=route.request();
+            if (req.method()==='POST') {
+                const data=JSON.parse(new URLSearchParams(req.postData()).get('_workspace_json'));
+                educationWrites.push(data);background={version:2,entries:data.entries.map(entry=>({...entry,review_status:'unreviewed',feedback:''}))};
+                return route.fulfill({json:{status:'saved'}});
+            }
+            return route.fulfill({json:background});
+        },
+        profileRequests:async route=>{
+            const req=route.request();
+            if (req.method()==='POST') {
+                expect(req.headers()['x-csrf-token']).toBe('fictional-test-token');
+                replies.push(JSON.parse(new URLSearchParams(req.postData()).get('_workspace_json')));
+                responded=true;return route.fulfill({json:{status:'saved'}});
+            }
+            expect(new URL(req.url()).searchParams.get('area')).toBe('education');
+            return route.fulfill({json:{items:[{id:id(91),area:'education',status:responded?'responded':'requested',
+                version:responded?1:0,instructions:'Please correct the attendance date.',response:responded?'Dates corrected.':null,
+                created_at:'2026-11-21T12:00:00Z'}],next_after:null,new_id:id(92),areas:{education:'Educational background'}}});
+        },
+    });
+    await openNewApplication(page);
+    await page.getByRole('button',{name:'Education update requests',exact:true}).click();
+    const updates=page.getByRole('region',{name:'Education update requests',exact:true});
+    await updates.getByRole('button',{name:'Open educational background',exact:true}).click();
+    const editor=page.getByRole('region',{name:'Institutions attended editor',exact:true});
+    await editor.getByText('Fictional College',{exact:true}).click();
+    await editor.getByLabel('Attended through',{exact:true}).fill('2024-06-01');
+    await editor.getByLabel('Reason for update',{exact:true}).fill('Fictional corrected attendance.');
+    await editor.getByRole('button',{name:'Save background',exact:true}).click();
+    await expect(editor).toContainText('Not yet reviewed');
+    await updates.getByLabel('Update for staff',{exact:true}).fill('Dates corrected.');
+    await updates.getByRole('button',{name:'Send update for review',exact:true}).click();
+    await expect(updates).toContainText('Ready for staff review');
+    await expect(page.getByRole('textbox',{name:'New application note',exact:true})).toHaveValue('Unsaved fictional new answer.');
+    expect(educationWrites).toHaveLength(1);expect(replies).toHaveLength(1);expect(state.writes).toHaveLength(0);
+    await page.setViewportSize({width:320,height:1000});await accessible(page);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(state.errors).toEqual([]);
 });
