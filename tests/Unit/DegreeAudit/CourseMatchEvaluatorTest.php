@@ -416,4 +416,41 @@ final class CourseMatchEvaluatorTest extends TestCase
         self::assertSame("in_progress", $this->first($work, $requirements, $effective)["status"]);
     }
 
+    public function testCourseAgeChecksUseTheRecordedPursuitStartAndPreserveGradePrecedence(): void
+    {
+        [$work, $requirements, $effective] = $this->inputs();
+        $policy = \Domain\DegreeAudit\ValueObject\GroupWorkEligibility::DEFAULT;
+        $policy["max_age_months_at_pursuit_start"] = 60;
+        $requirements["group_details"][self::id(4)]["definition"]["work_eligibility"] = $policy;
+        $work["completed_on"] = "2021-08-10";
+        self::assertSame(
+            "pursuit_start_unknown",
+            $this->first($work, $requirements, $effective)["status"],
+        );
+        $work["grade"]["passes"] = false;
+        self::assertSame("not_passing", $this->first($work, $requirements, $effective)["status"]);
+        $work["grade"]["passes"] = true;
+        $work["grade"]["points_milli"] = 1000;
+        self::assertSame(
+            "insufficient_grade",
+            $this->first($work, $requirements, $effective)["status"],
+        );
+        $work["grade"]["points_milli"] = 2800;
+        $effective["pursuit_started_on"] = "2026-08-10";
+        self::assertSame("candidate", $this->first($work, $requirements, $effective)["status"]);
+        $work["completed_on"] = "2021-08-09";
+        self::assertSame(
+            "completion_too_old",
+            $this->first($work, $requirements, $effective)["status"],
+        );
+        $effective["substitutions"] = [
+            self::id(1) => ["course_id" => self::id(77), "version_id" => self::id(78)],
+        ];
+        $work["course_id"] = self::id(77);
+        $work["course_version_id"] = self::id(78);
+        self::assertSame(
+            "completion_too_old",
+            $this->first($work, $requirements, $effective)["status"],
+        );
+    }
 }

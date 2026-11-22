@@ -117,6 +117,7 @@ final readonly class DegreeProgressSnapshot implements \JsonSerializable
                         "required_courses",
                         "minimum_grade_points_milli",
                         "work_eligibility",
+                        'work_eligibility_context',
                         "coverage",
                     ]),
                 );

@@ -139,6 +139,7 @@ final readonly class StudentDegreeProgress
                 array_intersect($review["allocation"]["issues"] ?? [], [
                     "origin_unknown",
                     "completion_date_unknown",
+                    'pursuit_start_unknown',
                 ]),
             ),
         ];
@@ -158,11 +159,29 @@ final readonly class StudentDegreeProgress
                     "credit_origin",
                     "completed_from",
                     "completed_through",
+                    'max_age_months_at_pursuit_start',
                 ]);
                 try {
                     $group["work_eligibility"] = new GroupWorkEligibility($facts)->facts;
                 } catch (\InvalidArgumentException) {
                     throw new CorruptHistoryException();
+                }
+                if (($facts['max_age_months_at_pursuit_start'] ?? null) !== null) {
+                    $context = $value['work_eligibility_context'] ?? null;
+                    if (!is_array($context) || count($context) !== 2) {
+                        throw new CorruptHistoryException();
+                    }
+                    try {
+                        $expected = new GroupWorkEligibility($facts)->recencyContext(
+                            $context['pursuit_started_on'] ?? null
+                        );
+                    } catch (\InvalidArgumentException | \TypeError) {
+                        throw new CorruptHistoryException();
+                    }
+                    if ($context != $expected) {
+                        throw new CorruptHistoryException();
+                    }
+                    $group['work_eligibility_context'] = $expected;
                 }
             }
             $group["gaps"] = self::groupGaps($value, $review["allocation"]["outcome"]);

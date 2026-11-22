@@ -1068,4 +1068,37 @@ final class GroupAllocationEvaluatorTest extends TestCase
             $this->evaluator()->evaluate([$work], $r, $e, $this->decisions([$work], $r))["outcome"],
         );
     }
+    public function testNamedAndSavedRuleWorkShareCourseAgeGatesWithoutPartialPlacement(): void
+    {
+        foreach ([$this->group(1), $this->ruleGroup(1)] as $group) {
+            $group["definition"]["work_eligibility"] = array_replace(
+                \Domain\DegreeAudit\ValueObject\GroupWorkEligibility::DEFAULT,
+                ["max_age_months_at_pursuit_start" => 60],
+            );
+            $r = $this->requirements([self::id(1) => $group]);
+            $e = $this->effective($r);
+            $work = $this->work(1001);
+            $work["completed_on"] = "2021-08-10";
+            $decisions = [];
+            if (isset($group["definition"]["rules"][0]["eligibility"])) {
+                $decisions = $this->decisions([$work], $r);
+            }
+            $unknown = $this->evaluator()->evaluate([$work], $r, $e, $decisions);
+            self::assertSame("needs_review", $unknown["outcome"]);
+            self::assertContains("pursuit_start_unknown", $unknown["issues"]);
+            self::assertSame([], $unknown["groups"][0]["placements"]);
+            $e["pursuit_started_on"] = "2026-08-10";
+            $included = $this->evaluator()->evaluate([$work], $r, $e, $decisions);
+            self::assertSame("feasible", $included["outcome"]);
+            self::assertSame(
+                "2021-08-10",
+                $included["groups"][0]["work_eligibility_context"]["earliest_completion_on"],
+            );
+            $work["completed_on"] = "2021-08-09";
+            $outside = $this->evaluator()->evaluate([$work], $r, $e, $decisions);
+            self::assertSame("infeasible", $outside["outcome"]);
+            self::assertTrue($outside["groups"][0]["gaps"]["has_shortfall"]);
+            self::assertSame([], $outside["groups"][0]["placements"]);
+        }
+    }
 }

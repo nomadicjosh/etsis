@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\DegreeAudit\Service;
 
+use Domain\DegreeAudit\ValueObject\GroupWorkEligibility;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Service\StudentSpecializationService;
@@ -35,6 +36,13 @@ final readonly class StudentCurriculumContext
             retainEarlier: true,
             only: $specialization,
         );
+        if (
+            GroupWorkEligibility::requiresPursuitStart(
+                $all['requirements'][$specialization->value] ?? []
+            )
+        ) {
+            $all['pursuit_started_on'] = $this->degrees->pursuitStartedOn($student, $assignment, $budget);
+        }
         return self::specialization($student, $assignment, $specialization, $all);
     }
 
@@ -52,6 +60,7 @@ final readonly class StudentCurriculumContext
             "requirements" => $all["requirements"][$id->value] ?? null,
             "specialization_id" => $id->value,
             "cohort_changed" => $all["cohort_changed"],
+            'pursuit_started_on' => $all['pursuit_started_on'] ?? null,
         ];
     }
     /**
@@ -62,6 +71,7 @@ final readonly class StudentCurriculumContext
     {
         $degree = $this->degrees->view($student, $assignment, $budget);
         $specializations = $this->specializations->evaluationContext($student, $assignment, $budget);
+        $specializations['pursuit_started_on'] = $degree['selection']['pursuit_started_on'] ?? null;
         $bindings = array_map(static fn(array $p): string => $p["decision_id"], $specializations["bindings"]);
         ksort($bindings, SORT_STRING);
         $fingerprint = [

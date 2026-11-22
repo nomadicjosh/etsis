@@ -60,6 +60,25 @@ if (
         "Eligibility working saves failed concurrency or wrote academic history.",
     );
 }
+$latest = json_decode((string) $readEligibility()->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$recency = $latest['definition'];
+$recency['work_eligibility']['max_age_months_at_pursuit_start'] = 0;
+$ageCommand = ['revision' => $latest['revision'], 'definition' => $recency];
+if ($teachingPost($base . 'save/', $ageCommand)->getStatusCode() !== 422) {
+    throw new RuntimeException('A zero-month course-age rule was accepted.');
+}
+$recency['work_eligibility']['max_age_months_at_pursuit_start'] = 60;
+$ageCommand['definition'] = $recency;
+if ($teachingPost($base . 'save/', $ageCommand)->getStatusCode() !== 200) {
+    throw new RuntimeException('A valid course-age rule could not be saved through the real provider.');
+}
+$aged = json_decode((string) $readEligibility()->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $aged['definition']['work_eligibility']['max_age_months_at_pursuit_start'] !== 60
+    || $before !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('The actual coursework age rule lost its policy or rewrote academic history.');
+}
 $sis->access->staff = false;
 $sis->access->grants = [];
 $sis->access->actor = $sis->user();

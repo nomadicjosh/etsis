@@ -180,7 +180,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
             warnings: [],
         };
         if (definition.work_eligibility && (definition.work_eligibility.credit_origin !== "any" ||
-            definition.work_eligibility.completed_from || definition.work_eligibility.completed_through))
+            definition.work_eligibility.completed_from || definition.work_eligibility.completed_through ||
+            definition.work_eligibility.max_age_months_at_pursuit_start != null))
             summary.warnings.push("Catalog totals do not check a student's credit origin or actual completion date. Run a student test.");
         const raw = definition.requirement_type === "courses" ? definition.min_courses : definition.min_credits_milli;
         let required = raw;
@@ -780,6 +781,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
         if (d.work_eligibility) {
             d.work_eligibility.completed_from = d.work_eligibility.completed_from || null;
             d.work_eligibility.completed_through = d.work_eligibility.completed_through || null;
+            const age = d.work_eligibility.max_age_months_at_pursuit_start;
+            if (age != null && (!Number.isInteger(age) || age < 1 || age > 1200))
+                throw new Error("Enter a course-age limit of 1–1,200 whole months, or leave it blank.");
             if (d.work_eligibility.completed_from && d.work_eligibility.completed_through &&
                 d.work_eligibility.completed_from > d.work_eligibility.completed_through)
                 throw new Error("The earliest completion date must be on or before the latest date.");
@@ -1060,7 +1064,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         origin.value = eligibility.credit_origin;
         const eligibilityHelp = node("p", { class: "form-text", role: "status", "aria-live": "polite" });
         function changeEligibility(key, value) {
-            eligibility[key] = value || null;
+            eligibility[key] = value === "" ? null : value;
             model.work_eligibility = eligibility;
             eligibilityHelp.textContent = window.degreeGroupEligibilityText(eligibility);
         }
@@ -1071,6 +1075,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
             node("label", { for: origin.id, class: "form-label" }, "Count coursework from"), origin,
             field("Completed on or after (optional)", eligibility.completed_from, v => changeEligibility("completed_from", v), { type: "date" }),
             field("Completed on or before (optional)", eligibility.completed_through, v => changeEligibility("completed_through", v), { type: "date" }),
+            field("Maximum age before pursuit start (months, optional)", eligibility.max_age_months_at_pursuit_start,
+                v => changeEligibility("max_age_months_at_pursuit_start", v === "" ? null : Number(v)),
+                { type: "number", min: 1, max: 1200, step: 1 }),
             eligibilityHelp,
             node("p", { class: "form-text" }, "Use actual recorded completion dates. These rules restrict this group; they do not change awarded credits or cumulative GPA."));
         inspector.append(
@@ -3767,7 +3774,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "article",
                     { class: "audit-card" },
                     node("h3", {}, group.name),
-                    node("p", { class: "form-text" }, window.degreeGroupEligibilityText(group.work_eligibility)),
+                    node("p", { class: "form-text" }, window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context)),
                     node(
                         "p",
                         {},
@@ -3932,7 +3939,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
     }
     function groupPlacementDetails(data, group, back, offset = 0, ruleOffset = 0) {
         const body = screen(group.name, "PROPOSED COURSE-GROUP PLACEMENT");
-        body.append(node("p", {}, window.degreeGroupEligibilityText(group.work_eligibility)));
+        body.append(node("p", {}, window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context)));
         body.append(
             node(
                 "p",
@@ -4568,7 +4575,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "div",
                     { class: "mb-3" },
                     node("h4", { class: "h6" }, match.group_name),
-                    node("p", { class: "form-text" }, window.degreeGroupEligibilityText(match.work_eligibility)),
+                    node("p", { class: "form-text" }, window.degreeGroupEligibilityText(match.work_eligibility, match.work_eligibility_context)),
                     node(
                         "p",
                         {},

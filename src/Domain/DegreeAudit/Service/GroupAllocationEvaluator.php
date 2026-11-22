@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\DegreeAudit\Service;
 
+use Domain\DegreeAudit\ValueObject\GroupWorkEligibility;
 use Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException;
 use Domain\DegreeAudit\ValueObject\AllocationProblem;
 use Domain\DegreeAudit\ValueObject\AllocationPreparation;
@@ -108,6 +109,9 @@ final readonly class GroupAllocationEvaluator
                 "required_credits_milli" => $e["min_credits_milli"],
                 "required_courses" => $e["min_courses"] ?? 0,
                 "minimum_grade_points_milli" => $e["min_course_grade_points_milli"] ?? null,
+                ...($d['work_eligibility']['max_age_months_at_pursuit_start'] ?? null) !== null
+                    ? ['work_eligibility_context' => new GroupWorkEligibility($d['work_eligibility'])
+                        ->recencyContext($effective['pursuit_started_on'] ?? null)] : [],
                 ...isset($d["work_eligibility"])
                     ? ["work_eligibility" => $d["work_eligibility"]]
                     : [],
@@ -193,6 +197,7 @@ final readonly class GroupAllocationEvaluator
                             "approval_conflict",
                             "origin_unknown",
                             "completion_date_unknown",
+                            'pursuit_start_unknown',
                         ],
                         true,
                     )

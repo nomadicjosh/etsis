@@ -15,15 +15,24 @@ final readonly class GroupWorkEligibility
         "credit_origin" => "any",
         "completed_from" => null,
         "completed_through" => null,
+        "max_age_months_at_pursuit_start" => null,
     ];
 
     public function __construct(public array $facts = self::DEFAULT)
     {
         if (
-            count($facts) !== 3 ||
+            !in_array(count($facts), [3, 4], true) ||
             array_diff(array_keys($facts), array_keys(self::DEFAULT)) !== [] ||
+            array_diff(
+                ["credit_origin", "completed_from", "completed_through"],
+                array_keys($facts),
+            ) !== [] ||
             !in_array($facts["credit_origin"] ?? null, ["any", "institutional", "transfer"], true)
         ) {
+            self::invalid();
+        }
+        $months = $facts["max_age_months_at_pursuit_start"] ?? null;
+        if ($months !== null && (!is_int($months) || $months < 1 || $months > 1200)) {
             self::invalid();
         }
         foreach (["completed_from", "completed_through"] as $key) {
@@ -52,9 +61,16 @@ final readonly class GroupWorkEligibility
         return $origin === $this->facts["credit_origin"] ? null : CourseMatchStatus::OriginExcluded;
     }
 
-    public function completionStatus(?string $completedOn = null): ?CourseMatchStatus
-    {
-        if ($this->facts["completed_from"] === null && $this->facts["completed_through"] === null) {
+    public function completionStatus(
+        ?string $completedOn = null,
+        ?string $pursuitStartedOn = null,
+    ): ?CourseMatchStatus {
+        $months = $this->facts["max_age_months_at_pursuit_start"] ?? null;
+        if (
+            $this->facts["completed_from"] === null &&
+            $this->facts["completed_through"] === null &&
+            $months === null
+        ) {
             return null;
         }
         if ($completedOn === null) {
@@ -73,7 +89,63 @@ final readonly class GroupWorkEligibility
         ) {
             return CourseMatchStatus::CompletedAfterWindow;
         }
+        if ($months !== null) {
+            $context = $this->recencyContext($pursuitStartedOn);
+            if ($context["pursuit_started_on"] === null) {
+                return CourseMatchStatus::PursuitStartUnknown;
+            }
+            if ($completedOn < $context["earliest_completion_on"]) {
+                return CourseMatchStatus::CompletionTooOld;
+            }
+        }
         return null;
+    }
+
+    /** Calendar-month subtraction clamps to the last valid day; the boundary is inclusive.
+     * @return array{pursuit_started_on:?string,earliest_completion_on:?string}
+     */
+    public function recencyContext(?string $pursuitStartedOn = null): array
+    {
+        $months = $this->facts["max_age_months_at_pursuit_start"] ?? null;
+        if ($months === null || $pursuitStartedOn === null) {
+            return ["pursuit_started_on" => null, "earliest_completion_on" => null];
+        }
+        self::date($pursuitStartedOn);
+        $index =
+        (int) substr($pursuitStartedOn, 0, 4) * 12 +
+        (int) substr($pursuitStartedOn, 5, 2) -
+        1 -
+        $months;
+        if ($index < 12) {
+            $from = "0001-01-01";
+        } else {
+            $first = sprintf("%04d-%02d-01", intdiv($index, 12), ($index % 12) + 1);
+            $date = new DateTimeImmutable($first, new DateTimeZone("UTC"));
+            $from =
+            substr($first, 0, 8) .
+            str_pad(
+                (string) min((int) substr($pursuitStartedOn, 8, 2), (int) $date->format("t")),
+                2,
+                "0",
+                STR_PAD_LEFT,
+            );
+        }
+        return ["pursuit_started_on" => $pursuitStartedOn, "earliest_completion_on" => $from];
+    }
+
+    /** @param array<string,mixed> $requirements Verified publication composition. */
+    public static function requiresPursuitStart(array $requirements): bool
+    {
+        foreach ($requirements["group_details"] ?? [] as $group) {
+            if (
+                ($group["definition"]["work_eligibility"]["max_age_months_at_pursuit_start"] ??
+                    null) !==
+                null
+            ) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static function date(mixed $value): void
@@ -94,7 +166,7 @@ final readonly class GroupWorkEligibility
     private static function invalid(): never
     {
         throw new InvalidArgumentException(
-            "Choose a credit origin and valid inclusive completion dates in order.",
+            "Choose a credit origin, valid inclusive completion dates and an optional age of 1–1,200 whole months.",
         );
     }
 }

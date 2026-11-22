@@ -24,6 +24,7 @@ final class CombinedDegreeProgressTest extends TestCase
         bool $missingSelection = false,
         bool $organized = false,
         bool $linked = false,
+        ?int $recencyMonths = null,
     ): StudentSpecializationRequirementsFixture
     {
         $r = new ReusableGroupFixture();
@@ -38,6 +39,9 @@ final class CombinedDegreeProgressTest extends TestCase
         $d['min_credits_milli'] = 3000;
         $d['courses'] = array_slice($d['courses'], 0, 2);
         $d['rules'] = [['id' => EntityId::generate()->value,'mode' => 'choose','minimum_courses' => 1,'course_ids' => array_column($d['courses'], 'course_id')]];
+        if ($recencyMonths !== null) {
+            $d['work_eligibility']['max_age_months_at_pursuit_start'] = $recencyMonths;
+        }
         $r->groups->save($r->group, $row['revision'], new CourseGroupDefinitionV2($d));
         $r->groupVersion = $r->publishGroup();
         $r->groupDefinition = $d;
@@ -1247,4 +1251,112 @@ final class CombinedDegreeProgressTest extends TestCase
         self::assertSame("2026-08-11 06:55:00", $f->r->sis->sql->rows("sis_degree_progress_records")[0]["recorded_at"]);
     }
 
+    public function testRecencyUsesOneRetainedPursuitStartAcrossDegreeAndSelectedComponents(): void
+    {
+        $f = $this->fixture("multiple_components", recencyMonths: 12);
+        $s = $f->r->sis;
+        [$section, $enrollment] = $this->work($f, 0);
+        $dates = $s->academicDates();
+        $review = $dates->review(
+            $f->student,
+            $section->id,
+            $enrollment,
+            "2025-01-31",
+            1,
+            "Fictional actual completion.",
+        );
+        $dates->commit($f->student, $section->id, $review["review_token"]);
+        $before = $s->sql->rows("sis_history_events");
+        $result = $this->preview($f);
+        self::assertSame("feasible", $result["outcome"]);
+        foreach ($result["components"] as $component) {
+            $context = $component["progress"]["allocation"]["groups"][0]["work_eligibility_context"];
+            self::assertSame("2026-01-31", $context["pursuit_started_on"]);
+            self::assertSame("2025-01-31", $context["earliest_completion_on"]);
+        }
+        $selected = new EntityId($f->choices["DATA"]["id"]);
+        $single = $this->service($f)->specialization($f->student, $f->assignment, $selected);
+        self::assertSame("feasible", $single["allocation"]["outcome"]);
+        self::assertSame(
+            "2025-01-31",
+            $single["allocation"]["groups"][0]["work_eligibility_context"][
+                "earliest_completion_on"
+            ],
+        );
+        self::assertSame($before, $s->sql->rows("sis_history_events"));
+        $owner = new \Domain\Portal\ValueObject\StudentDegreeProgress($result)->describe();
+        self::assertSame(
+            "2025-01-31",
+            $owner["components"][0]["progress"]["allocation"]["groups"][0][
+                "work_eligibility_context"
+            ]["earliest_completion_on"],
+        );
+        $row = $f->r->groups->view($f->r->group);
+        $later = $row["definition"];
+        $later["work_eligibility"]["max_age_months_at_pursuit_start"] = 24;
+        $f->r->groups->save($f->r->group, $row["revision"], new CourseGroupDefinitionV2($later));
+        $f->r->publishGroup();
+        self::assertSame($result, $this->preview($f));
+    }
+    public function testRecordedRecencyContextReproducesAfterARealCompletionCorrection(): void
+    {
+        $f = $this->fixture("multiple_components", recencyMonths: 12);
+        $s = $f->r->sis;
+        [$section, $enrollment] = $this->work($f, 0);
+        $dates = $s->academicDates();
+        $review = $dates->review(
+            $f->student,
+            $section->id,
+            $enrollment,
+            "2025-01-31",
+            1,
+            "Fictional actual completion.",
+        );
+        $dates->commit($f->student, $section->id, $review["review_token"]);
+        $records = $this->recordedService($f);
+        $review = $records->review(
+            $f->student,
+            $f->assignment,
+            "Fictional retained recency observation.",
+        );
+        $args = [
+            $f->student,
+            $f->assignment,
+            new EntityId($review["operation_id"]),
+            $review["revision"],
+            $review["reason"],
+            $review["review_token"],
+        ];
+        $receipt = $records->confirm(...$args);
+        $original = $records->show($f->student, $f->assignment, $args[2], "staff");
+        self::assertSame(
+            "2025-01-31",
+            $original["summary"]["components"][0]["groups"][0]["work_eligibility_context"][
+                "earliest_completion_on"
+            ],
+        );
+        $stream = \EventStoreFixture::framework(
+            $s->connection->queryBuilder(),
+        )->getAggregateHistoryFor(
+            new \Domain\DegreeAudit\ValueObject\DegreeProgressRecordId($review["operation_id"]),
+        );
+        $event = iterator_to_array($stream)[0];
+        $snapshot = new \Domain\DegreeAudit\ValueObject\DegreeProgressSnapshot(
+            $event->payload()["snapshot"],
+        );
+        $change = $dates->review(
+            $f->student,
+            $section->id,
+            $enrollment,
+            "2025-01-30",
+            2,
+            "Fictional reasoned correction.",
+        );
+        $dates->commit($f->student, $section->id, $change["review_token"]);
+        self::assertSame("infeasible", $this->preview($f)["outcome"]);
+        self::assertTrue($this->service($f)->verifySnapshot($snapshot));
+        $s->clock->time = $s->clock->time->modify("+1 year");
+        self::assertSame($receipt, $records->confirm(...$args));
+        self::assertSame($original, $records->show($f->student, $f->assignment, $args[2], "staff"));
+    }
 }

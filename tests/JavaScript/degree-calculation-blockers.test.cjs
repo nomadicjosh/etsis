@@ -145,3 +145,14 @@ test("group coursework eligibility defaults permit transfer and explicit windows
   assert.match(window.createDegreeProgressNextSteps(node,data).textContent, /Review actual completion dates/);
   assert.match(window.createDegreeProgressNextSteps(node,data).textContent, /Posting terms and catalog dates cannot replace/);
 });
+
+
+test("course-age guidance uses retained calendar dates and explains missing pursuit evidence", () => {
+  const policy = {credit_origin:"any",completed_from:null,completed_through:null,max_age_months_at_pursuit_start:60};
+  assert.match(window.degreeGroupEligibilityText(policy,{pursuit_started_on:"2026-08-10",earliest_completion_on:"2021-08-10"}), /2021-08-10, inclusive/);
+  assert.match(window.degreeGroupEligibilityText(policy,{pursuit_started_on:null,earliest_completion_on:null}), /pursuit start is unavailable/);
+  const data = review();
+  data.allocation = {outcome:"needs_review",eligibility_issues:["pursuit_start_unknown"]};
+  assert.match(window.createDegreeProgressNextSteps(node,data).textContent, /Review the recorded pursuit start/);
+  assert.match(window.createDegreeProgressNextSteps(node,data).textContent, /Today's date, term starts/);
+});

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\DegreeAudit\Service;
 
+use Domain\DegreeAudit\ValueObject\GroupWorkEligibility;
 use Domain\DegreeAudit\ValueObject\AcademicGpaScope;
 use Domain\DegreeAudit\ValueObject\AllocationPreparation;
 use Domain\DegreeAudit\ValueObject\AllocationResult;
@@ -30,9 +31,11 @@ final readonly class DegreeProgressEvaluator
      * @param array<string,mixed> $requirements
      * @return array<string,mixed>
      */
-    public static function unadjusted(array $requirements): array
+    public static function unadjusted(array $requirements, ?string $pursuitStartedOn = null): array
     {
         return [
+            ...GroupWorkEligibility::requiresPursuitStart($requirements)
+                ? ['pursuit_started_on' => $pursuitStartedOn] : [],
             'degree' => array_intersect_key(
                 $requirements['definition'],
                 array_flip(RequirementAdjustmentDefinitionV2::DEGREE_MINIMUMS),

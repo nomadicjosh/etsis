@@ -1,10 +1,17 @@
 /* Display only the retained group restriction; dates are inclusive actual-completion boundaries. */
-window.degreeGroupEligibilityText = function (facts) {
+window.degreeGroupEligibilityText = function (facts, context = null) {
     const origin = { any: "Institutional or transfer work", institutional: "Institutional work only", transfer: "Transfer work only" };
     return `${origin[facts?.credit_origin || "any"]}. ` +
         (facts?.completed_from || facts?.completed_through
             ? `Actual completion ${[facts.completed_from ? `on or after ${facts.completed_from}` : "", facts.completed_through ? `on or before ${facts.completed_through}` : ""].filter(Boolean).join(" and ")}. Missing completion dates require review.`
-            : "No completion-date restriction.");
+            : facts?.max_age_months_at_pursuit_start != null ? "No fixed completion-date window." : "No completion-date restriction.") +
+        (facts?.max_age_months_at_pursuit_start != null
+            ? ` Maximum age: ${facts.max_age_months_at_pursuit_start} calendar months before the recorded pursuit start. ` +
+                (context?.pursuit_started_on
+                    ? `Pursuit began ${context.pursuit_started_on}; actual completion must be on or after ${context.earliest_completion_on}, inclusive.`
+                    : context ? "The recorded pursuit start is unavailable; review is required."
+                        : "The inclusive boundary uses the pursuit start; a shorter month ends on its last valid day.")
+            : "");
 };
 /* Retained curriculum labels, shared by staff and private student progress. */
 window.curriculumOrganizationText = function (choice) {
@@ -238,7 +245,9 @@ window.createDegreeProgressNextSteps = function (node, data) {
                 "Open course-group details to review shortages, competing uses or unavailable evidence. A search limit or unsupported rule does not prove that completion is impossible.",
             );
         if ([...(data.allocation?.issues || []), ...(data.allocation?.eligibility_issues || [])].includes("completion_date_unknown"))
-            add("Review actual completion dates", "Ask the registrar to verify actual completion dates for this group's retained date window. Posting terms and catalog dates cannot replace missing completion evidence.");
+            add("Review actual completion dates", "Ask the registrar to verify actual completion dates for this group's retained date or course-age rule. Posting terms and catalog dates cannot replace missing completion evidence.");
+        if ([...(data.allocation?.issues || []), ...(data.allocation?.eligibility_issues || [])].includes("pursuit_start_unknown"))
+            add("Review the recorded pursuit start", "Ask the registrar to review the actual pursuit start selected with degree requirements. Today's date, term starts and anticipated completion cannot replace it. Temporary tests use that same recorded date.");
         if ([...(data.allocation?.issues || []), ...(data.allocation?.eligibility_issues || [])].includes("origin_unknown"))
             add("Review coursework origin", "Ask the registrar to verify the recorded institutional or transfer origin before applying this group's restriction.");
         if ((data.work_summary?.awaiting_grade_count || 0) > 0)
@@ -442,7 +451,9 @@ window.createDegreeNamedCourseReview = function (ui, rows, resolve) {
         candidate: "Eligible after this group's publication, grade and coursework eligibility checks.",
         origin_excluded: "This group's recorded credit-origin restriction excludes this work.",
         origin_unknown: "The recorded credit origin needed by this group is unavailable.",
-        completion_date_unknown: "Record the actual completion date before evaluating this group's date window.",
+        completion_date_unknown: "Record the actual completion date before evaluating this group's date or age rule.",
+        pursuit_start_unknown: "Review the actual pursuit start before evaluating this group's course-age limit.",
+        completion_too_old: "Completed too early for this group's age limit at the recorded pursuit start.",
         completed_before_window: "Completed before this group's permitted window.",
         completed_after_window: "Completed after this group's permitted window.",
         placement_restricted: "An approved preference reserves this course for another group.",
@@ -1050,7 +1061,7 @@ window.createRecordedDegreeProgress = function ({ node, request, buttonClass = "
             if (component.input_status === "history_gaps") card.append(node("p", {}, "Earlier history was unknown for some work at this review."));
             card.append(checks, node("p", {}, `Cumulative GPA: ${component.gpa.cumulative.ready ? amount(component.gpa.cumulative.milli) : "Needs review"}. Overall GPA: ${component.gpa.overall.ready ? amount(component.gpa.overall.milli) : "Needs review"}.`));
             for (const group of component.groups) {
-                if (group.work_eligibility) card.append(node("p", {}, window.degreeGroupEligibilityText(group.work_eligibility)));
+                if (group.work_eligibility) card.append(node("p", {}, window.degreeGroupEligibilityText(group.work_eligibility, group.work_eligibility_context)));
                 card.append(node("p", {},
                 `${group.name}: ${group.requirement_type === "courses" ? `${group.required_courses} required courses` : `${amount(group.required_credits_milli)} required credits`}. ${group.coverage ? `${group.coverage.applied_courses} courses / ${amount(group.coverage.applied_credits_milli)} credits in the recorded placement.` : "Placement not established."}`));
             }

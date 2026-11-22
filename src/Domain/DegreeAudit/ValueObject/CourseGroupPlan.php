@@ -38,7 +38,8 @@ final readonly class CourseGroupPlan
         $warnings = [];
         if (
             isset($definition["work_eligibility"]) &&
-            $definition["work_eligibility"] != GroupWorkEligibility::DEFAULT
+            array_replace(GroupWorkEligibility::DEFAULT, $definition["work_eligibility"])
+                != GroupWorkEligibility::DEFAULT
         ) {
             $warnings[] =
             "Catalog totals do not check a student's credit origin or actual completion date. Run a student test.";

@@ -57,6 +57,22 @@ final readonly class StudentRequirementsService
     {
         $this->scope($student, $assignment, verify: false);
     }
+    /** Read the actual selected pursuit date without resolving catalog publications or inferring a start. */
+    public function pursuitStartedOn(EntityId $student, EntityId $assignment, HistoryReadBudget $budget): ?string
+    {
+        $this->authorizeRead($student, $assignment);
+        return $this->transactions->run(function () use ($student, $assignment, $budget): ?string {
+            $this->records->lock($student);
+            $scope = $this->scope($student, $assignment, $budget);
+            $selected = $this->state($assignment, $budget)->selection();
+            if ($selected !== null) {
+                $this->assertStudentScope($scope, $selected);
+            }
+            $this->authorizeRead($student, $assignment);
+            return $selected['pursuit_started_on'] ?? null;
+        });
+    }
+
     /** @return array<string, mixed> */
     public function view(EntityId $student, EntityId $assignment, ?HistoryReadBudget $budget = null): array
     {

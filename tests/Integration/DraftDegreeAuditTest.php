@@ -1079,4 +1079,47 @@ final class DraftDegreeAuditTest extends TestCase
         self::assertSame($before, $this->digest($f));
         self::assertNull($f->service->view($f->student, $f->assignment)["selection"]);
     }
+    public function testRecencyTrialNeedsAnActualSelectedPursuitStartAndNeverInfersItFromToday(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $this->work($f);
+        [$template, $degree, $group] = $this->draft($f);
+        $d = $f->f->groups->view($group)["definition"];
+        $d["work_eligibility"]["max_age_months_at_pursuit_start"] = 12;
+        $f->f->groups->save($group, 0, new CourseGroupDefinitionV2($d));
+        $s = $f->f->sis;
+        $credit = $s->sql->rows("sis_academic_credit_streams", [], 1)[0];
+        $change = $s
+            ->academicDates()
+            ->review(
+                $f->student,
+                new EntityId($credit["section_id"]),
+                new EntityId($credit["enrollment_id"]),
+                "2025-01-31",
+                1,
+                "Fictional actual completion.",
+            );
+        $s->academicDates()->commit(
+            $f->student,
+            new EntityId($credit["section_id"]),
+            $change["review_token"],
+        );
+        $before = $this->digest($f);
+        $unknown = $this->service($f)->test($template, $f->student, $f->assignment, $degree);
+        self::assertSame("needs_review", $unknown["allocation"]["outcome"]);
+        self::assertContains("pursuit_start_unknown", $unknown["allocation"]["issues"]);
+        self::assertSame($before, $this->digest($f));
+        $f->assign();
+        $before = $this->digest($f);
+        $known = $this->service($f)->test($template, $f->student, $f->assignment, $degree);
+        self::assertSame(
+            "2026-01-31",
+            $known["allocation"]["groups"][0]["work_eligibility_context"]["pursuit_started_on"],
+        );
+        self::assertSame(
+            "2025-01-31",
+            $known["allocation"]["groups"][0]["work_eligibility_context"]["earliest_completion_on"],
+        );
+        self::assertSame($before, $this->digest($f));
+    }
 }

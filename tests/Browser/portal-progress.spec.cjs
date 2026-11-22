@@ -34,6 +34,8 @@ async function fixture(page,options={}) {
             };
         } else throw new Error(`Unexpected private request ${path}`);
         if (options.groupEligibility && data.allocation) data.allocation.groups[0].work_eligibility = options.groupEligibility;
+        if (options.recencyContext && data.allocation) data.allocation.groups[0].work_eligibility_context = options.recencyContext;
+        if (options.recencyUnknown && data.allocation) data.allocation.eligibility_issues = ['pursuit_start_unknown'];
         if (options.evidence && data.allocation) {
             data.records.forEach((record,i)=>Object.assign(record,{
                 credit_type:i===1?'transfer':'institutional',grade_state:'retained',recorded_earned_milli:3000,
@@ -562,4 +564,26 @@ test('portal recorded progress reopens an earlier summary without enabling acade
     expect(records.calls.some(c=>c.path.endsWith('/review/')||c.path.endsWith('/confirm/'))).toBe(false);
     await page.setViewportSize({width:320,height:1000});await accessible(page);
     expect(f.errors).toEqual([]);
+});
+
+
+for (const unknown of [false, true]) test(`student course-age explanation uses ${unknown ? 'an explicit unknown pursuit start' : 'the retained pursuit start and inclusive boundary'}`, async ({page}) => {
+    const f = await fixture(page, {
+        groupEligibility: { credit_origin: 'any', completed_from: null, completed_through: null, max_age_months_at_pursuit_start: 60 },
+        recencyContext: { pursuit_started_on: unknown ? null : '2026-08-10', earliest_completion_on: unknown ? null : '2021-08-10' },
+        recencyUnknown: unknown,
+    });
+    await page.getByRole('button', {name:'Review progress · BSCS · 26/FA',exact:true}).click();
+    await expect(page.locator('#campus-service-content')).toContainText('Maximum age: 60 calendar months before the recorded pursuit start');
+    await expect(page.locator('#campus-service-content')).toContainText(unknown
+        ? 'The recorded pursuit start is unavailable; review is required.'
+        : 'Pursuit began 2026-08-10; actual completion must be on or after 2021-08-10, inclusive.');
+    if (unknown) {
+        await page.getByRole('button', {name:'Open degree progress guide',exact:true}).click();
+        await expect(page.getByRole('complementary', {name:'Degree progress guide',exact:true})).toContainText('Review the recorded pursuit start');
+    }
+    await page.setViewportSize({width:320,height:812});
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
 });

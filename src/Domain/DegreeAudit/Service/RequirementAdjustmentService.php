@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\DegreeAudit\Service;
 
+use Domain\DegreeAudit\ValueObject\GroupWorkEligibility;
 use DateTimeImmutable;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Service\MessageCipher;
@@ -1442,9 +1443,11 @@ final readonly class RequirementAdjustmentService
                     "or restore total credits before revoking its related exception.",
             );
         }
+        $pursuitStart = $parent['pursuit_started_on'] ?? $parent['selection']['pursuit_started_on'] ?? null;
         return [
             "degree" => $degree,
             "groups" => $groups,
+            ...GroupWorkEligibility::requiresPursuitStart($r) ? ['pursuit_started_on' => $pursuitStart] : [],
             "waived_course_ids" => array_keys($waiverApprovals),
             "substitutions" => $substitutions,
             "accepted_course_versions" => $acceptedVersions,

@@ -2009,3 +2009,30 @@ test("group coursework eligibility rejects an inverted window without losing the
     expect(f.calls.find(call => call.path.endsWith("/save/")).body.definition.work_eligibility).toEqual({ credit_origin: "transfer", completed_from: null, completed_through: "2026-08-10" });
     expect(f.errors).toEqual([]);
 });
+
+
+test("course-age limit survives preview and rejects invalid months without losing the draft", async ({ page }) => {
+    const f = await fixture(page);
+    await workspaceTool(page, "Course group library");
+    await page.getByRole("button", { name: "Build General education", exact: true }).click();
+    const age = page.getByLabel("Maximum age before pursuit start (months, optional)", { exact: true });
+    await expect(age).toHaveValue("");
+    await age.fill("60");
+    await page.getByRole("button", { name: "Requirements preview", exact: true }).click();
+    await expect(page.getByRole("dialog")).toContainText("Maximum age: 60 calendar months before the recorded pursuit start");
+    await page.getByRole("button", { name: "Back to builder", exact: true }).click();
+    await expect(age).toHaveValue("60");
+    await age.fill("0");
+    await page.getByRole("button", { name: "Save group draft", exact: true }).click();
+    await expect(page.locator("dialog [role=alert]")).toContainText("course-age limit of 1–1,200 whole months");
+    expect(f.calls.some(call => call.path.endsWith("/save/"))).toBe(false);
+    await expect(age).toHaveValue("0");
+    await age.fill("60");
+    await page.getByRole("button", { name: "Save group draft", exact: true }).click();
+    expect(f.calls.find(call => call.path.endsWith("/save/")).body.definition.work_eligibility.max_age_months_at_pursuit_start).toBe(60);
+    await page.setViewportSize({ width: 320, height: 1000 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});

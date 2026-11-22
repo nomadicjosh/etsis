@@ -521,4 +521,49 @@ final class StudentDegreeProgressTest extends TestCase
             json_encode($data, JSON_THROW_ON_ERROR),
         );
     }
+    public function testRecencyContextIsMinimizedAndUnknownPursuitStartIsExplicit(): void
+    {
+        $review = $this->review("needs_review");
+        $review["allocation"]["issues"] = ["pursuit_start_unknown", "fictional-private-detail"];
+        $review["allocation"]["groups"][0]["work_eligibility"] = array_replace(
+            \Domain\DegreeAudit\ValueObject\GroupWorkEligibility::DEFAULT,
+            ["max_age_months_at_pursuit_start" => 60],
+        );
+        $review["allocation"]["groups"][0]["work_eligibility_context"] = [
+            "pursuit_started_on" => null,
+            "earliest_completion_on" => null,
+        ];
+        $owner = new StudentDegreeProgress($review)->describe();
+        self::assertSame(["pursuit_start_unknown"], $owner["allocation"]["eligibility_issues"]);
+        self::assertNull(
+            $owner["allocation"]["groups"][0]["work_eligibility_context"]["pursuit_started_on"],
+        );
+        self::assertStringNotContainsString("fictional-private-detail", json_encode($owner));
+    }
+    public function testRecencyContextMustAgreeWithTheRetainedRuleAndCannotCarryPrivateFields(): void
+    {
+        foreach (
+            [
+                ["pursuit_started_on" => "2026-08-10", "earliest_completion_on" => "2000-01-01"],
+                [
+                    "pursuit_started_on" => "2026-08-10",
+                    "earliest_completion_on" => "2021-08-10",
+                    "private" => "secret",
+                ],
+            ] as $context
+        ) {
+            $review = $this->review();
+            $review["allocation"]["groups"][0]["work_eligibility"] = array_replace(
+                \Domain\DegreeAudit\ValueObject\GroupWorkEligibility::DEFAULT,
+                ["max_age_months_at_pursuit_start" => 60],
+            );
+            $review["allocation"]["groups"][0]["work_eligibility_context"] = $context;
+            try {
+                new StudentDegreeProgress($review)->describe();
+                self::fail("Invalid recency context reached the owner view.");
+            } catch (\Domain\Shared\EventSourcing\CorruptHistoryException) {
+                self::assertTrue(true);
+            }
+        }
+    }
 }

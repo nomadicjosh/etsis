@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\DegreeAudit\Service;
 
+use Domain\DegreeAudit\ValueObject\GroupWorkEligibility;
 use Domain\Catalog\Service\PublishedCourseReader;
 use Domain\Catalog\ValueObject\ComponentCourseSharing;
 use Domain\DegreeAudit\Exception\AllocationBudgetExhaustedException;
@@ -336,7 +337,14 @@ final readonly class DegreeAuditTrialService
                 $source = $resolve($budget);
                 $sources = $companions === [] ? [] : $this->companionSources($source, $companions, $budget);
                 $requirements = $source["requirements"];
-                $effective = DegreeProgressEvaluator::unadjusted($requirements);
+                $needsStart = GroupWorkEligibility::requiresPursuitStart($requirements);
+                foreach ($sources as $companion) {
+                    $needsStart = $needsStart || GroupWorkEligibility::requiresPursuitStart(
+                        $companion['requirements']
+                    );
+                }
+                $start = $needsStart ? $this->requirements->pursuitStartedOn($student, $assignment, $budget) : null;
+                $effective = DegreeProgressEvaluator::unadjusted($requirements, $start);
                 $inputs = $this->inputs->collect($student, $assignment, $budget);
                 if ($inputs->status === AcademicInputStatus::Limited) {
                     throw new HistoryReadLimitException();
@@ -350,6 +358,7 @@ final readonly class DegreeAuditTrialService
                         [$source, ...$sources],
                         $sharing ?? throw new InvalidArgumentException("Choose a test sharing policy."),
                         $budget,
+                        $start,
                     );
                     $this->authorize($student, $assignment, $actor);
                     return $result;
@@ -459,6 +468,7 @@ final readonly class DegreeAuditTrialService
         array $sources,
         ComponentCourseSharing $sharing,
         HistoryReadBudget $budget,
+        ?string $pursuitStartedOn = null,
     ): array {
         $components = [];
         foreach ($sources as $index => $source) {
@@ -472,7 +482,7 @@ final readonly class DegreeAuditTrialService
                 "key" => $source["template_id"],
                 "kind" => $index === 0 ? "degree" : "specialization",
                 "requirements" => $r,
-                "effective" => DegreeProgressEvaluator::unadjusted($r),
+                "effective" => DegreeProgressEvaluator::unadjusted($r, $pursuitStartedOn),
             ];
         }
         $result = $this->combined->evaluate($inputs, $components, $sharing, $budget);

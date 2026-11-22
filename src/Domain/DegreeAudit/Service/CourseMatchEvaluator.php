@@ -244,6 +244,10 @@ final readonly class CourseMatchEvaluator
                 $id = $course["course_id"];
                 $candidate = [
                     "group_id" => $groupId,
+                    'pursuit_started_on' => $effective['pursuit_started_on'] ?? null,
+                    ...($definition['work_eligibility']['max_age_months_at_pursuit_start'] ?? null) !== null
+                        ? ['work_eligibility_context' => new GroupWorkEligibility($definition['work_eligibility'])
+                            ->recencyContext($effective['pursuit_started_on'] ?? null)] : [],
                     ...isset($definition["work_eligibility"])
                         ? ["work_eligibility" => $definition["work_eligibility"]]
                         : [],
@@ -365,8 +369,14 @@ final readonly class CourseMatchEvaluator
         if (!$work["grade_recorded"] && $work["completed_milli"] === 0) {
             return Status::InProgress;
         }
-        $completion = $eligibility->completionStatus($work["completed_on"] ?? null);
-        if ($completion !== null && $completion !== Status::CompletionDateUnknown) {
+        $completion = $eligibility->completionStatus(
+            $work["completed_on"] ?? null,
+            $candidate['pursuit_started_on'] ?? null
+        );
+        if (
+            $completion !== null
+            && !in_array($completion, [Status::CompletionDateUnknown, Status::PursuitStartUnknown], true)
+        ) {
             return $completion;
         }
         $grade = $work["grade"];

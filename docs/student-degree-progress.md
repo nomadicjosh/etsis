@@ -219,6 +219,14 @@ When otherwise eligible work needs an actual date that is missing, the result re
 
 Only the retained group definition governs the review. Later working edits and publications do not alter an earlier student selection. The dates are fixed calendar boundaries, not rolling expiration or an inference from a term/catalog/event date. Temporary authoring tests share these rules and leave academic facts, assignments, charges and history unchanged. Full retained evaluations and graduation decisions remain separate roadmap work.
 
+### Course-age requirements
+
+A group may also retain a [maximum course age at pursuit start](degree-audit-builder.md#course-age-at-the-recorded-pursuit-start). Staff and student cards display the month limit, recorded pursuit start and inclusive earliest completion date. For a **2026-08-10** pursuit start and **60-month** limit, **2021-08-10** qualifies; an earlier completion does not qualify for that group. Shorter destination months use their last valid day. The rule does not expire work based on today's date and leaves overall credit/GPA treatment separate.
+
+If the actual completion date or recorded pursuit start is missing, otherwise eligible work needs registrar review; no date is inferred from terms, catalogs, posting times or anticipated completion. The local guide identifies the missing evidence. Staff use the existing actual-completion correction or degree-requirements selection/review workflow, then refresh progress. Temporary tests use the same actual reference. A known age exclusion can support a shortage, while missing evidence prevents a partial plan. Pending and known failed work retain their own explanations.
+
+The degree and selected curriculum components use the same recorded pursuit start. Later group drafts/publications leave already selected requirements unchanged. A recorded progress observation retains its earlier date context and result after later corrections; deliberately refreshed progress/new observations remain separate facts. This is not graduation eligibility or an automatic credential decision.
+
 ## Recorded progress reviews
 
 Open **Student programs → selected pursuit → Degree requirements → Recorded progress reviews**. Staff with the independent **`sis:degree-audit:record`** duty and student-read access can choose **Record a new progress review**, enter a reason, review the captured summary and explicitly confirm. Reading progress, assigning requirements and authoring curricula do not grant this new duty; administrators must assign it deliberately. An unmet minimum or an infeasible placement can be recorded honestly. Recording a review does not certify graduation eligibility, award a credential, change academic credit or alter financial accounts.
