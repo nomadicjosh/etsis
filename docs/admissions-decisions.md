@@ -2,6 +2,14 @@
 
 Implemented 2026-11-09. Acceptance and rejection now use reviewed, attributed decisions in the existing protected event journal. They precede the separate [initial matriculation workflow](student-matriculation.md). This stage tracks actual decisions made from now on; it does not reconstruct earlier decisions or original submission dates.
 
+## Check application history
+
+Authorized support staff open **Admissions → Open application → More → Check application history**. This deliberately runs the [selected application verifier](event-history-foundation.md#selected-admissions-application-verification) with a 200-event allowance. It needs all three duties: `sis:admissions:manage`, `sis:history:verify` and `sis:audit:read`; owners gain no access through their application. Super-linked people retain the existing super-administrator boundary. The ordinary **Application history** action remains the separate admissions timeline.
+
+The result explains verified evidence, earlier history gaps, a concurrent change, a reached limit or a component requiring operator review. It displays no application answers, private reasons, credentials or raw journal content. A restricted support reference records the observed status/count/time; **Previous checks**, **Older checks** and **Refresh previous checks** use the same scoped ten-row receipt history as other record checks. Earlier results describe their observed point, not a continuing guarantee about today's application.
+
+Finish or discard unfinished casework before leaving its editor. **Back to record** returns to application review. Closing a pending drawer suppresses its late result, and losing support authority clears displayed results/history. The shared campus appearance, Bootstrap actions/icons, keyboard focus and narrow/enlarged-text layouts apply. Running a check never approves a decision, changes answers, creates a student, repairs an index or grants access; the separately authorized support receipt/audit commit together after fresh actor/duty/routing checks. Deployment operators can use the linked read-only command without creating a receipt.
+
 ## Staff workflow
 
 Open **Admissions → an application** and review the submitted answers and program. For a submitted application, choose **Accept application** or **Reject application**, enter a reason and select **Review admissions decision**.

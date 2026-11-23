@@ -8,6 +8,7 @@ use DateTimeZone;
 use Domain\AcademicRecord\Repository\AcademicProjectionVerifier;
 use Domain\Access\Repository\AccessRepository;
 use Domain\Admissions\Repository\AdmissionsRepository;
+use Domain\Admissions\Repository\ApplicationProjectionVerifier;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Finance\Repository\AccountProjectionVerifier;
 use Domain\Finance\ValueObject\AccountId;
@@ -34,6 +35,7 @@ final readonly class HistoryCheckService
         private PersonProjectionVerifier $persons,
         private AcademicProjectionVerifier $academics,
         private AccountProjectionVerifier $accounts,
+        private ApplicationProjectionVerifier $applications,
         private AdmissionsRepository $admissions,
         private PersonProfileRepository $people,
         private StudentRecordRepository $students,
@@ -57,11 +59,13 @@ final readonly class HistoryCheckService
         }
         $student = match ($kind) {
             HistoryCheckSubject::Person => null,
+            HistoryCheckSubject::Application => null,
             HistoryCheckSubject::Student => $id,
             HistoryCheckSubject::Account => $this->receipts->accountStudent($id),
         };
         $person = $this->admissions->person(
-            $student === null ? $id : $this->admissions->student($student)->personId,
+            $kind === HistoryCheckSubject::Application ? $this->admissions->application($id)->personId
+                : ($student === null ? $id : $this->admissions->student($student)->personId),
         );
         if (
             $actor->value !== $this->access->authenticatedUserId()->value ||
@@ -141,6 +145,9 @@ final readonly class HistoryCheckService
                         HistoryCheckReceipt::EVENT_LIMIT,
                     )
                     ->describe(),
+                HistoryCheckSubject::Application => $this->applications
+                    ->verify($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)
+                    ->describe(),
             };
             if (
                 ($result[$scope->kind->referenceKey()] ?? null) !== $scope->subject->value ||
@@ -169,6 +176,9 @@ final readonly class HistoryCheckService
         $this->people->lock($scope->person);
         if ($scope->student !== null) {
             $this->students->lock($scope->student);
+        }
+        if ($scope->kind === HistoryCheckSubject::Application) {
+            $this->admissions->lockApplication($scope->subject);
         }
     }
 

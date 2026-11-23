@@ -34,6 +34,6 @@ final readonly class HistoryCheckController
     private function kind(string $kind): HistoryCheckSubject
     {
         return HistoryCheckSubject::tryFrom($kind) ??
-        throw new \InvalidArgumentException("Choose person, student or account history.");
+        throw new \InvalidArgumentException("Choose person, student, account or application history.");
     }
 }

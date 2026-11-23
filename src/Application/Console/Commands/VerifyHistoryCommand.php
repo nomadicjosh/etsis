@@ -7,6 +7,7 @@ namespace Application\Console\Commands;
 use Codefy\Framework\Application;
 use Codefy\Framework\Console\ConsoleCommand;
 use Domain\AcademicRecord\Repository\AcademicProjectionVerifier;
+use Domain\Admissions\Repository\ApplicationProjectionVerifier;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Finance\Repository\AccountProjectionVerifier;
 use Domain\Finance\ValueObject\AccountId;
@@ -30,6 +31,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
         ['student', null, 'required', 'Check one student’s available academic sources and projections; no cursor.'],
         ['account', null, 'required', 'Verify one financial account and its balance/posting projections; no cursor.'],
         ['person', null, 'required', 'Compare one person’s profile projections with protected history; no cursor.'],
+        ['application', null, 'required', 'Compare one admissions application with protected history; no cursor.'],
     ];
     public function __construct(Application $codefy)
     {
@@ -54,8 +56,16 @@ final class VerifyHistoryCommand extends ConsoleCommand
             $account = $this->getOptions('account');
             $student = $this->getOptions('student');
             $person = $this->getOptions('person');
-            if (count(array_filter([$account, $student, $person], static fn(mixed $id): bool => $id !== null)) > 1) {
+            $application = $this->getOptions('application');
+            $subjects = [$account, $student, $person, $application];
+            if (count(array_filter($subjects, static fn(mixed $id): bool => $id !== null)) > 1) {
                 throw new InvalidArgumentException();
+            }
+            if ($application !== null) {
+                if (!is_string($application) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
+                    throw new InvalidArgumentException();
+                }
+                return $this->application(new EntityId($application), $events, $json);
             }
             if ($person !== null) {
                 if (!is_string($person) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
@@ -86,7 +96,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 $json,
                 "invalid_input",
                 "Use --streams=1..50, --events=1..2000 and a valid optional verification cursor. "
-                    . 'Use one of --person=ULID, --account=ULID or --student=ULID with --events and optional --json.',
+                    . 'Use one of --person=ULID, --account=ULID, --student=ULID or --application=ULID '
+                    . 'with --events and optional --json.',
                 self::INVALID,
             );
         } catch (HistoryVerificationFailedException $exception) {
@@ -201,6 +212,32 @@ final class VerifyHistoryCommand extends ConsoleCommand
             $this->terminalRaw('No records were changed. Earlier observations and unrecorded components do not '
                 . 'establish complete history. Changed or limited checks must be repeated in a controlled review. '
                 . 'This checks profile projections and linked account names, not credentials or every retry receipt.');
+        }
+        return match ($result->status) {
+            'verified' => self::SUCCESS,
+            'history_gaps', 'changed', 'limited' => 3,
+            default => self::FAILURE,
+        };
+    }
+
+    private function application(EntityId $application, int $events, bool $json): int
+    {
+        $result = $this->codefy->make(ApplicationProjectionVerifier::class)->verify($application, $events);
+        if ($json) {
+            $this->terminalRaw(json_encode($result->describe(), JSON_THROW_ON_ERROR));
+        } else {
+            $this->terminalRaw(sprintf(
+                'Application check: %s; %d events checked.',
+                $result->status,
+                $result->events,
+            ));
+            if ($result->issues !== []) {
+                $this->terminalRaw('Components requiring review: ' . implode(', ', $result->issues) . '.');
+            }
+            $this->terminalRaw('No records were changed. Earlier observations do not establish complete history. '
+                . 'Changed or limited results are incomplete. This checks the selected application, retained '
+                . 'answer artifacts and intake projection, not credentials, file contents, every retry receipt '
+                . 'or downstream student/program projections.');
         }
         return match ($result->status) {
             'verified' => self::SUCCESS,

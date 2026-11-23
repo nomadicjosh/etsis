@@ -1093,3 +1093,31 @@ msgstr ""
 #: resources/views/partials/desktop-nav.phtml:24
 msgid "Menu"
 msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:8
+msgid "Admissions application"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:9
+msgid "Check application history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:10
+msgid "Application facts and history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:11
+msgid "Application intake projection"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:12
+msgid "Business records were not changed. A restricted support receipt was recorded."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:15
+msgid "Run one selected-record observation with a 200-event allowance and bounded replay. It does not repair data, approve admissions, academic or financial decisions, verify external settlement, or certify archive completeness or restore readiness."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:23
+msgid "Previous results describe their recorded observation, not a continuing guarantee about the current record. No event payloads, application answers, private profile values, financial amounts or credentials are displayed."
+msgstr ""

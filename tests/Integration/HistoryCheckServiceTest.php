@@ -36,6 +36,7 @@ final class HistoryCheckServiceTest extends TestCase
         ?PersonProjectionVerifier $people = null,
         ?AuditTrail $audit = null,
         ?AcademicProjectionVerifier $academics = null,
+        ?\Domain\Admissions\Repository\ApplicationProjectionVerifier $applications = null,
     ): HistoryCheckService {
         $s = $c->sis;
         return new HistoryCheckService(
@@ -71,6 +72,11 @@ final class HistoryCheckServiceTest extends TestCase
                 $s->sql,
                 \EventStoreFixture::history($s->connection->queryBuilder()),
             ),
+            $applications ?? new \Infrastructure\Projection\SqlApplicationProjectionVerifier(
+                $s->sql,
+                $s->admissions,
+                $s->decisionLedger(),
+            ),
             $s->admissions,
             new SqlPersonProfileRepository($s->sql),
             new SqlStudentRecordRepository($s->sql),
@@ -102,7 +108,8 @@ final class HistoryCheckServiceTest extends TestCase
             staffRecorded: true,
         );
         $s->saveAccount($a);
-        return [$c, $student, new EntityId((string) $a->aggregateId())];
+        $application = $s->submissionService()->apply(EntityId::generate(), $student->personId, $s->program, $s->term);
+        return [$c, $student, new EntityId((string) $a->aggregateId()), $application];
     }
 
     private function facts(CampusFixture $c): array
@@ -112,6 +119,8 @@ final class HistoryCheckServiceTest extends TestCase
             "sis_history_streams",
             "sis_history_operations",
             "sis_persons",
+            "sis_applications",
+            "sis_application_intake",
             "sis_students",
             "sis_academic_credits",
             "sis_enrollments",
@@ -134,9 +143,52 @@ final class HistoryCheckServiceTest extends TestCase
         self::fail("A forbidden support operation was accepted.");
     }
 
+    public function testApplicationRoutingChangeSuppressesTheResultAndSupportReceipt(): void
+    {
+        [$c, , , $application] = $this->fixture();
+        $s = $c->sis;
+        $other = $s->legacyPerson($s->user(), 'Other', 'Fictional person');
+        $provider = $this->createStub(\Domain\Admissions\Repository\ApplicationProjectionVerifier::class);
+        $provider->method('verify')->willReturnCallback(function () use ($s, $application, $other) {
+            $s->sql->update('sis_applications', ['person_id' => $other->id->value], ['id' => $application->id->value]);
+            return new \Domain\Admissions\ValueObject\ApplicationProjectionCheck(
+                'verified',
+                $application->id,
+                1,
+                1,
+                0,
+                earlierHistoryUnknown: false,
+            );
+        });
+        $this->rejects(
+            fn () => $this->service($c, applications: $provider)->run(
+                HistoryCheckSubject::Application,
+                $application->id,
+            ),
+            ConcurrentModificationException::class,
+        );
+        self::assertSame([], $s->sql->rows('sis_history_checks'));
+    }
+
+    public function testApplicationSupportReceiptAndAuditRollBackTogether(): void
+    {
+        [$c, , , $application] = $this->fixture();
+        $before = $this->facts($c);
+        $audit = $this->createMock(AuditTrail::class);
+        $audit->expects(self::once())->method('record')->willThrowException(
+            new \RuntimeException('Audit unavailable.'),
+        );
+        $this->rejects(
+            fn () => $this->service($c, audit: $audit)->run(HistoryCheckSubject::Application, $application->id),
+            \RuntimeException::class,
+        );
+        self::assertSame([], $c->sis->sql->rows('sis_history_checks'));
+        self::assertSame($before, $this->facts($c));
+    }
+
     public function testRealProfileAcademicAndFinancialChecksRetainOnlyMinimalReceiptsWithoutChangingFacts(): void
     {
-        [$c, $student, $account] = $this->fixture();
+        [$c, $student, $account, $application] = $this->fixture();
         $s = $c->sis;
         $service = $this->service($c);
         $before = $this->facts($c);
@@ -144,6 +196,7 @@ final class HistoryCheckServiceTest extends TestCase
             [HistoryCheckSubject::Person, $student->personId, "history_gaps"],
             [HistoryCheckSubject::Student, $student->id, "observed_empty"],
             [HistoryCheckSubject::Account, $account, "verified"],
+            [HistoryCheckSubject::Application, $application->id, "verified"],
         ];
         foreach ($cases as [$kind, $id, $status]) {
             $result = $service->run($kind, $id);
@@ -171,7 +224,7 @@ final class HistoryCheckServiceTest extends TestCase
                 self::assertStringNotContainsString($private, json_encode($result));
             }
         }
-        self::assertCount(3, $s->sql->rows("sis_history_checks"));
+        self::assertCount(4, $s->sql->rows("sis_history_checks"));
         foreach ($s->sql->rows("sis_history_checks") as $row) {
             $keys = array_keys($row);
             sort($keys);
@@ -197,7 +250,7 @@ final class HistoryCheckServiceTest extends TestCase
 
     public function testEveryContextNeedsAllIndependentDutiesEvenForTheOwner(): void
     {
-        [$c, $student, $account] = $this->fixture();
+        [$c, $student, $account, $application] = $this->fixture();
         $s = $c->sis;
         $s->access->actor = $s->admissions->person($student->personId)->ownerUserId;
         $s->access->staff = false;
@@ -207,6 +260,7 @@ final class HistoryCheckServiceTest extends TestCase
                 [HistoryCheckSubject::Person, $student->personId],
                 [HistoryCheckSubject::Student, $student->id],
                 [HistoryCheckSubject::Account, $account],
+                [HistoryCheckSubject::Application, $application->id],
             ] as [$kind, $id]
         ) {
             $all = ["sis:history:verify", "sis:audit:read", ...$kind->permissions()];
@@ -223,7 +277,7 @@ final class HistoryCheckServiceTest extends TestCase
 
     public function testSuperProtectedSourcesRequireSuperSupportAuthority(): void
     {
-        [$c, $student, $account] = $this->fixture();
+        [$c, $student, $account, $application] = $this->fixture();
         $s = $c->sis;
         $roles = new SqlAccessRepository($s->sql);
         $owner = $s->admissions->person($student->personId)->ownerUserId;
@@ -239,6 +293,7 @@ final class HistoryCheckServiceTest extends TestCase
                 [HistoryCheckSubject::Person, $student->personId],
                 [HistoryCheckSubject::Student, $student->id],
                 [HistoryCheckSubject::Account, $account],
+                [HistoryCheckSubject::Application, $application->id],
             ] as [$kind, $id]
         ) {
             $this->rejects(fn() => $service->run($kind, $id), AccessDeniedException::class);

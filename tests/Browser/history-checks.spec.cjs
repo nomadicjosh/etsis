@@ -3,7 +3,7 @@ const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const { recordAction } = require('./support/workspace-actions.cjs');
 const id = n => String(n).padStart(26, '0');
-const person = id(1), student = id(2), account = id(3), owner = id(4), program = id(5), term = id(6);
+const person = id(1), student = id(2), account = id(3), owner = id(4), program = id(5), term = id(6), application = id(7);
 async function fixture(page, kind, { denied = false, delay = null } = {}) {
     const calls = [], errors = [], receipts = [];
     page.on('pageerror', error => errors.push(error.message));
@@ -17,10 +17,16 @@ async function fixture(page, kind, { denied = false, delay = null } = {}) {
         else if (path.startsWith('/sis/ui/data/')) result = { items: path.includes('/people/')
             ? [{ id: person, owner_user_id: owner, given_name: 'Fictional', family_name: 'Person', institutional_id: 'S-FICTIONAL' }]
             : path.includes('/students/') ? [{ id: student, person_id: person, given_name: 'Fictional', family_name: 'Person', institutional_id: 'S-FICTIONAL', active: true }]
+            : path.includes('/applications/') ? [{ id: application, given_name: 'Fictional', family_name: 'Person', status: 'submitted' }]
             : [{ id: account, name: 'Fictional account', currency: 'USD' }], next_after: null };
         else if (path === `/sis/ui/people/${person}/`) result = { person: { id: { value: person }, ownerUserId: { value: owner }, givenName: 'Fictional', familyName: 'Person', institutionalId: { value: 'S-FICTIONAL' } }, students: [], employees: [], accounts: [], applications: [] };
         else if (path === `/sis/students/${student}/`) result = { id: student, person_id: person, given_name: 'Fictional', family_name: 'Person', institutional_id: 'S-FICTIONAL', active: true, primary_program: { id: program, code: 'BS.CS', title: 'Computing' }, entry_term: { id: term, code: '26/FA' }, revision: 'student' };
         else if (path === `/sis/accounts/${account}/`) result = { id: account, institutional_id: 'S-FICTIONAL', balance_minor: 1000, currency: 'USD', position: 1, entries: [], active_charge_total_minor: 1000 };
+        else if (path === `/sis/applications/${application}/review/`) result = {
+            application: { id: { value: application }, status: 'submitted' },
+            person: { id: { value: person }, givenName: 'Fictional', familyName: 'Person', institutionalId: { value: 'S-FICTIONAL' } },
+            labels: { program_code: 'ARTS-UG', program_title: 'Arts', term_code: '26/FA' },
+        };
         else if (path.includes('/history-checks/')) {
             if (denied) return route.fulfill({ status: 403, json: { error: 'Current support duty is required.' } });
             if (path.endsWith('/run/')) {
@@ -34,22 +40,26 @@ async function fixture(page, kind, { denied = false, delay = null } = {}) {
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto('/admin/');
-    const dataset = { person: 'people', student: 'students', account: 'accounts' }[kind];
+    const dataset = { person: 'people', student: 'students', account: 'accounts', application: 'applications' }[kind];
     await page.locator(`.workspace-nav-link[data-workspace="${dataset}"]`).click();
     await page.getByLabel('Search this workspace').fill('Fictional');
     await page.getByLabel('Search this workspace').press('Enter');
     await page.getByRole('button', { name: kind === 'account' ? 'Fictional account' : 'Fictional Person', exact: true }).click();
     return { calls, errors };
 }
-for (const kind of ['person', 'student', 'account']) {
+for (const kind of ['person', 'student', 'account', 'application']) {
     test(`${kind} support check is explicit, bounded and separate from source facts`, async ({ page }) => {
         const { calls, errors } = await fixture(page, kind);
-        const label = { person: 'Check profile history', student: 'Check academic history', account: 'Check account history' }[kind];
+        const label = { person: 'Check profile history', student: 'Check academic history', account: 'Check account history', application: 'Check application history' }[kind];
         if (kind === 'account') await page.getByRole('button', { name: label, exact: true }).click();
         else await recordAction(page, label);
         await expect(page.getByRole('region', { name: 'Previous history checks', exact: true })).toContainText('No previous checks');
         expect(calls.some(c => c.path.endsWith('/run/'))).toBe(false);
-        await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+        const run = page.getByRole('button', { name: 'Run history check', exact: true });
+        if (kind === 'application') {
+            await run.focus();
+            await page.keyboard.press('Enter');
+        } else await run.click();
         const result = page.getByRole('region', { name: 'Current check result', exact: true });
         await expect(result).toContainText('Support reference:');
         await expect(result).toContainText('maximum 200');
@@ -94,6 +104,42 @@ test('lost support authority clears a displayed earlier check result', async ({ 
     await recordAction(page, 'Check academic history');
     await page.getByRole('button', { name: 'Run history check', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toContainText('Support reference:');
+    await page.route('**/history-checks/**', route => route.fulfill({ status: 403, json: { error: 'Current support duty is required.' } }));
+    await page.getByRole('button', { name: 'Refresh previous checks', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toBeEmpty();
+    await expect(page.getByRole('region', { name: 'Previous history checks', exact: true })).toBeEmpty();
+    expect(errors).toEqual([]);
+});
+
+test('application check returns to its record and discards a late result', async ({ page }) => {
+    let requested, release;
+    const pending = new Promise(resolve => { requested = resolve; });
+    const held = new Promise(resolve => { release = resolve; });
+    const { errors } = await fixture(page, 'application', { delay: async () => { requested(); await held; } });
+    await recordAction(page, 'Check application history');
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+    await pending;
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    const finished = page.waitForResponse(response => response.url().endsWith('/run/'));
+    release(); await finished;
+    await expect(page.getByRole('group', { name: 'Application tasks', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toHaveCount(0);
+    expect(errors).toEqual([]);
+});
+
+test('application check clears prior results after authority loss and preserves narrow enlarged layouts', async ({ page }) => {
+    const { errors } = await fixture(page, 'application');
+    await recordAction(page, 'Check application history');
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toContainText('Support reference:');
+    await page.screenshot({ path: '/tmp/etsis-application-check-desktop.png' });
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(axe.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) }))).toEqual([]);
+    await page.getByRole('button', { name: 'Run history check', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/etsis-application-check-phone.png' });
     await page.route('**/history-checks/**', route => route.fulfill({ status: 403, json: { error: 'Current support duty is required.' } }));
     await page.getByRole('button', { name: 'Refresh previous checks', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toBeEmpty();

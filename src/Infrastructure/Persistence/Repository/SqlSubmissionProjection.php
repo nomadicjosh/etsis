@@ -18,19 +18,7 @@ final readonly class SqlSubmissionProjection implements SubmissionProjection
 
     public function project(SubmissionFact $fact): void
     {
-        $utc = new DateTimeZone('UTC');
-        $data = [
-            'id' => $fact->application->value,
-            'source_event_id' => $fact->event->value,
-            'submitted_on' => $fact->submittedAt->format('Y-m-d'),
-            'submitted_at' => $fact->submittedAt->setTimezone($utc)->format('Y-m-d\TH:i:s.u\Z'),
-            'submission_timezone' => $fact->submittedAt->getTimezone()->getName(),
-            'recorded_on' => $fact->recordedAt->setTimezone($utc)->format('Y-m-d'),
-            'recorded_at' => $fact->recordedAt->setTimezone($utc)->format('Y-m-d\TH:i:s.u\Z'),
-            'channel' => $fact->channel,
-            'submitted_term_id' => $fact->entryTerm->value,
-            'submitted_term_code' => $fact->entryTermCode,
-        ];
+        $data = self::data($fact);
         $existing = $this->sql->rows('sis_application_intake', ['id' => $fact->application->value], 1)[0] ?? null;
         if ($existing === null) {
             $this->sql->insert('sis_application_intake', $data);
@@ -47,9 +35,39 @@ final readonly class SqlSubmissionProjection implements SubmissionProjection
             }
         }
         if ($fill !== []) {
-            // Populate missing index fields only after verifying the actual original submission event and
-            // existing index.
+            // Fill only after the actual submission event and existing index have been verified.
             $this->sql->update('sis_application_intake', $fill, ['id' => $fact->application->value]);
         }
+    }
+
+    /** Read only: missing index values are drift, never an invitation to repair during a diagnostic. */
+    public function verify(SubmissionFact $fact): void
+    {
+        $actual = $this->sql->rows('sis_application_intake', ['id' => $fact->application->value], 2);
+        if (count($actual) !== 1) {
+            throw new CorruptHistoryException();
+        }
+        foreach (self::data($fact) as $key => $value) {
+            if (!array_key_exists($key, $actual[0]) || $actual[0][$key] !== $value) {
+                throw new CorruptHistoryException();
+            }
+        }
+    }
+
+    private static function data(SubmissionFact $fact): array
+    {
+        $utc = new DateTimeZone('UTC');
+        return [
+            'id' => $fact->application->value,
+            'source_event_id' => $fact->event->value,
+            'submitted_on' => $fact->submittedAt->format('Y-m-d'),
+            'submitted_at' => $fact->submittedAt->setTimezone($utc)->format('Y-m-d\TH:i:s.u\Z'),
+            'submission_timezone' => $fact->submittedAt->getTimezone()->getName(),
+            'recorded_on' => $fact->recordedAt->setTimezone($utc)->format('Y-m-d'),
+            'recorded_at' => $fact->recordedAt->setTimezone($utc)->format('Y-m-d\TH:i:s.u\Z'),
+            'channel' => $fact->channel,
+            'submitted_term_id' => $fact->entryTerm->value,
+            'submitted_term_code' => $fact->entryTermCode,
+        ];
     }
 }

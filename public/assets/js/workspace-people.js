@@ -415,6 +415,10 @@ window.createWorkspacePeople = function (ui) {
             "aria-label": "Application tasks",
         });
         const extra = [button("Application history", () => mayLeave() && decisionHistory(row))];
+        if (can('sis:admissions:manage') && can('sis:audit:read') && can('sis:history:verify')) {
+            const label = ui.historyCheckLabels?.['Check application history'] || 'Check application history';
+            extra.push(button(label, () => mayLeave() && ui.historyChecks().open('application', row.id, () => application(row))));
+        }
         if (can("sis:person:manage"))
             extra.push(button("Open person record", () => mayLeave() && openPerson(person.id.value)));
         if (app.status === "submitted")

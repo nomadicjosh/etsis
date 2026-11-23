@@ -18,6 +18,7 @@ use Domain\Gradebook\ValueObject\PublishedGradeId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Security\StudentAccess;
@@ -39,6 +40,19 @@ final readonly class AdmissionDecisionLedger
     public function verify(AdmissionApplication $a): int
     {
         return $this->load($a)["root"]->playhead();
+    }
+    /** Internal read-only inspection; callers capture/recheck projections around this shared replay. */
+    public function inspect(AdmissionApplication $a, HistoryReadBudget $budget): array
+    {
+        $loaded = $this->load($a, budget: $budget);
+        $matriculation = $loaded['matriculation_position'];
+        if ($a->status === ApplicationStatus::Matriculated && $loaded['root']->application() === null) {
+            $matriculation = $this->verifyMatriculation($a, $a->version - 1, $budget, true);
+        }
+        return ['decision_position' => $loaded['root']->playhead(),
+            'matriculation_position' => $matriculation,
+            'earlier_history_unknown' => $loaded['root']->submission() === null,
+            'submission_fact' => $loaded['submission_fact']];
     }
     public function retainsDocument(AdmissionApplication $application, EntityId $document): bool
     {
@@ -563,9 +577,11 @@ final readonly class AdmissionDecisionLedger
         AdmissionApplication $a,
         ?EntityId $operation = null,
         ?EntityId $receiptActor = null,
+        ?HistoryReadBudget $budget = null,
     ): array {
         $root = AdmissionDecision::root(new AdmissionDecisionId($a->id->value));
-        $budget = new \Domain\Shared\EventSourcing\HistoryReadBudget(25, 500);
+        $budget ??= new HistoryReadBudget(25, 500);
+        $matriculationPosition = 0;
         $evidence = [];
         $cursor = null;
         $receipt = null;
@@ -693,7 +709,7 @@ final readonly class AdmissionDecisionLedger
                 if ($facts["status"] !== "accepted" || $a->version !== $facts["version"] + 1) {
                     throw new CorruptHistoryException();
                 }
-                $this->verifyMatriculation($a, $facts["version"]);
+                $matriculationPosition = $this->verifyMatriculation($a, $facts["version"], $budget);
                 $expected["status"] = "accepted";
                 $expected["version"] = $facts["version"];
             }
@@ -717,26 +733,33 @@ final readonly class AdmissionDecisionLedger
             "birth_recorded_at" => $birthRecordedAt,
             'submission_fact' => $submissionFact,
             'evidence_documents' => $evidence,
+            'matriculation_position' => $matriculationPosition,
         ];
     }
     /**
      * @throws TypeException
      */
-    private function verifyMatriculation(AdmissionApplication $a, int $version): void
-    {
+    private function verifyMatriculation(
+        AdmissionApplication $a,
+        int $version,
+        HistoryReadBudget $budget,
+        bool $allowUnrecorded = false,
+    ): int {
         $root = Matriculation::root(new MatriculationId($a->id->value));
-        $page = $this->history->page(
+        $page = $budget->page(
+            $this->history,
             new StreamReference(new MatriculationId($a->id->value), "matriculation"),
-            null,
-            2,
         );
-        if ($page->nextCursor !== null) {
+        if ($page->nextCursor !== null || count($page->events) > 2) {
             throw new CorruptHistoryException();
         }
         foreach ($page->events as $stored) {
             $root->acceptHistorical($stored->event);
         }
         $f = $root->facts();
+        if ($f === null && $allowUnrecorded && $root->playhead() === 0) {
+            return 0;
+        }
         if (
             $f === null ||
             $f["accepted_version"] !== $version ||
@@ -746,6 +769,7 @@ final readonly class AdmissionDecisionLedger
         ) {
             throw new CorruptHistoryException();
         }
+        return $root->playhead();
     }
     /** @return array<string,mixed> */
     private function result(AdmissionDecision $root, string $at): array

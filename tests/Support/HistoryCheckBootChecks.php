@@ -18,6 +18,12 @@ $supportAccount->post(
     staffRecorded: true,
 );
 $sis->saveAccount($supportAccount);
+$supportApplication = $sis->submissionService()->apply(
+    \Domain\Shared\ValueObject\EntityId::generate(),
+    $supportStudent->personId,
+    $sis->program,
+    $sis->term,
+);
 $supportEvents = array_map($sis->sql->rows(...), [
     "sis_history_events",
     "sis_history_streams",
@@ -27,6 +33,8 @@ $supportEvents = array_map($sis->sql->rows(...), [
     "sis_student_accounts",
     "sis_account_entries",
     "sis_account_balances",
+    "sis_applications",
+    "sis_application_intake",
 ]);
 $supportBase = "/sis/history-checks/";
 $supportRead = static function (string $path, array $data) use ($teachingPost): array {
@@ -46,6 +54,7 @@ $supportCases = [
     "person" => $supportStudent->personId->value,
     "student" => $supportStudent->id->value,
     "account" => (string) $supportAccount->aggregateId(),
+    "application" => $supportApplication->id->value,
 ];
 foreach ($supportCases as $kind => $id) {
     $base = $supportBase . $kind . "/" . $id . "/";
@@ -60,7 +69,7 @@ foreach ($supportCases as $kind => $id) {
     if (
         ($checked["event_limit"] ?? null) !== 200 ||
         !isset($checked["receipt"]["reference"]) ||
-        ($kind === "account" && ($checked["result"]["status"] ?? null) !== "verified")
+        (in_array($kind, ['account', 'application'], true) && ($checked["result"]["status"] ?? null) !== "verified")
     ) {
         throw new RuntimeException("The selected support check lost its fixed scope or allowance.");
     }
@@ -102,6 +111,8 @@ if (
             "sis_student_accounts",
             "sis_account_entries",
             "sis_account_balances",
+            "sis_applications",
+            "sis_application_intake",
         ])
 ) {
     throw new RuntimeException("Support checks changed source facts or accepted an unknown scope.");
