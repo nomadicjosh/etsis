@@ -1,0 +1,49 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_html;
+
+?>
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title><?= trans_html('Account creation paused') ?> · etsis</title>
+        <link rel="stylesheet" href="/assets/vendor/bootstrap.min.css" />
+        <link rel="stylesheet" href="/assets/vendor/icons/bootstrap-icons.min.css" />
+        <link rel="stylesheet" href="/assets/css/workspace.css" />
+    </head>
+    <body>
+        <a class="skip-link" href="#registration-pause"><?= trans_html('Skip to account information') ?></a>
+        <main class="account-shell" id="registration-pause">
+            <section class="surface p-4 p-md-5" aria-labelledby="registration-pause-title">
+                <p class="eyebrow"><?= trans_html('CAMPUS ACCOUNT') ?></p>
+                <h1 class="h2" id="registration-pause-title">
+                    <?php if ($limited) : ?>
+                        <?= trans_html('Please wait before trying again') ?>
+                    <?php else : ?>
+                        <?= trans_html('Account creation is temporarily unavailable') ?>
+                    <?php endif; ?>
+                </h1>
+                <p class="mt-3"><?= $this->esc($message) ?></p>
+                <p class="muted-text">
+                    <?= trans_html('Wait at least this many seconds before trying again:') ?>
+                    <strong><?= $this->esc((string) $retryAfter) ?></strong>.
+                    <?= trans_html('Returning to the form will not resubmit your details.') ?>
+                </p>
+                <div class="d-flex flex-wrap gap-2 mt-4">
+                    <a class="btn btn-primary" href="<?= $this->esc($loginPath) ?>">
+                        <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>
+                        <?= trans_html('Sign in to your account') ?>
+                    </a>
+                    <a class="btn btn-outline-secondary" href="/register/">
+                        <i class="bi bi-arrow-left" aria-hidden="true"></i>
+                        <?= trans_html('Return to account creation') ?>
+                    </a>
+                </div>
+            </section>
+        </main>
+    </body>
+</html>

@@ -20,7 +20,7 @@ final class PrivateErrorResponse
         string $message,
         array $errors = []
     ): ResponseInterface {
-        if (!self::html($request)) {
+        if (!self::acceptsHtml($request)) {
             return new JsonResponse(['error' => $message] + ($errors === [] ? [] : ['errors' => $errors]), $status);
         }
         $title = match ($status) {
@@ -43,7 +43,7 @@ final class PrivateErrorResponse
         ]);
     }
 
-    private static function html(ServerRequestInterface $request): bool
+    public static function acceptsHtml(ServerRequestInterface $request): bool
     {
         $path = rawurldecode($request->getUri()->getPath());
         if (

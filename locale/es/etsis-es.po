@@ -2,8 +2,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: etSIS\n"
-"POT-Creation-Date: 2026-11-22 08:35-0800\n"
-"PO-Revision-Date: 2026-11-22 08:35-0800\n"
+"POT-Creation-Date: 2026-11-22 20:45-0800\n"
+"PO-Revision-Date: 2026-11-22 20:45-0800\n"
 "Last-Translator: Joshua Parker <joshua@joshuaparker.dev>\n"
 "Language-Team: Joshua Parker <joshua@joshuaparker.dev>\n"
 "Language: es\n"
@@ -26,6 +26,543 @@ msgstr ""
 msgid "Access denied."
 msgstr "Acceso denegado."
 
+#: resources/views/backend/workspace/document-hold-labels.php:10
+#, fuzzy
+msgid ""
+"Holds do not share files, extend applicant access, or restore removed files."
+msgstr ""
+"Las retenciones no comparten archivos, no extienden el acceso de "
+"solicitantes ni restauran los archivos eliminados."
+
+#: resources/views/backend/workspace/document-hold-labels.php:12
+#: resources/views/backend/workspace/document-retention-labels.php:90
+#, fuzzy
+#| msgid "Have an account?"
+msgid "Unavailable account"
+msgstr "Cuenta no disponible"
+
+#: resources/views/backend/workspace/document-hold-labels.php:13
+#, fuzzy
+msgid "Document preservation"
+msgstr "Preservación documental"
+
+#: resources/views/backend/workspace/document-hold-labels.php:15
+#, fuzzy
+msgid "Holds protect existing and future admissions files from removal."
+msgstr ""
+"Mantiene la protección de los archivos de admisión existentes y futuros de "
+"la eliminación."
+
+#: resources/views/backend/workspace/document-hold-labels.php:18
+#, fuzzy
+msgid "Finish or cancel the document hold change first."
+msgstr "Finaliza o cancela primero el cambio de retención del documento."
+
+#: resources/views/backend/workspace/document-hold-labels.php:20
+#, fuzzy
+msgid "This application"
+msgstr "Esta aplicación"
+
+#: resources/views/backend/workspace/document-hold-labels.php:21
+#, fuzzy
+msgid "All applications for this person"
+msgstr "Todas las solicitudes para esta persona"
+
+#: resources/views/backend/workspace/document-hold-labels.php:22
+#, fuzzy
+msgid "Document hold review"
+msgstr "Revisión de retención de documentos"
+
+#: resources/views/backend/workspace/document-hold-labels.php:23
+#, fuzzy
+msgid "Review hold change"
+msgstr "Revisar el cambio de retención"
+
+#: resources/views/backend/workspace/document-hold-labels.php:24
+#, fuzzy
+msgid "Cancel hold change"
+msgstr "Cancelar cambio de retención"
+
+#: resources/views/backend/workspace/document-hold-labels.php:25
+#, fuzzy
+msgid "Reason for hold"
+msgstr "Motivo de la retención"
+
+#: resources/views/backend/workspace/document-hold-labels.php:26
+#, fuzzy
+msgid "Reason for release"
+msgstr "Motivo de la liberación"
+
+#: resources/views/backend/workspace/document-hold-labels.php:27
+#, fuzzy
+msgid "Reviewing document hold…"
+msgstr "Revisando la retención del documento..."
+
+#: resources/views/backend/workspace/document-hold-labels.php:29
+#, fuzzy
+msgid "Confirm this hold. File holds and decision evidence remain separate."
+msgstr ""
+"Confirme esta retención. Las retenciones de expedientes y las pruebas de "
+"decisión permanecen separadas."
+
+#: resources/views/backend/workspace/document-hold-labels.php:32
+#, fuzzy
+msgid ""
+"Release this scope’s hold. Other holds, deadlines and decision evidence "
+"still apply."
+msgstr ""
+"Libera la retención de este alcance. Otras retenciones, plazos y pruebas de "
+"decisión siguen aplicándose."
+
+#: resources/views/backend/workspace/document-hold-labels.php:34
+#, fuzzy
+msgid "Confirm hold"
+msgstr "Confirmar retención"
+
+#: resources/views/backend/workspace/document-hold-labels.php:35
+#, fuzzy
+msgid "Confirm release"
+msgstr "Confirmar lanzamiento"
+
+#: resources/views/backend/workspace/document-hold-labels.php:36
+#, fuzzy
+msgid "Saving document hold…"
+msgstr "Guardando documentos en retención..."
+
+#: resources/views/backend/workspace/document-hold-labels.php:37
+#, fuzzy
+msgid "Document hold change saved."
+msgstr "Cambio de retención de documento guardado."
+
+#: resources/views/backend/workspace/document-hold-labels.php:38
+#, fuzzy
+msgid "Revise hold change"
+msgstr "Revisar cambio de retención"
+
+#: resources/views/backend/workspace/document-hold-labels.php:39
+#: resources/views/backend/workspace/document-retention-labels.php:79
+#, fuzzy
+msgid "Review ready. Confirm or revise this change."
+msgstr "Lista para la revisión. Confirme o revise este cambio."
+
+#: resources/views/backend/workspace/document-hold-labels.php:40
+#, fuzzy
+msgid "Hold active"
+msgstr "Mantener activo"
+
+#: resources/views/backend/workspace/document-hold-labels.php:41
+#, fuzzy
+msgid "No active hold"
+msgstr "Sin retención activa"
+
+#: resources/views/backend/workspace/document-hold-labels.php:42
+#, fuzzy
+msgid "Release application hold"
+msgstr "Liberar la retención de la aplicación"
+
+#: resources/views/backend/workspace/document-hold-labels.php:43
+#, fuzzy
+msgid "Place application hold"
+msgstr "Colocar una retención de aplicación"
+
+#: resources/views/backend/workspace/document-hold-labels.php:44
+#, fuzzy
+msgid "Release person hold"
+msgstr "Liberar persona retenida"
+
+#: resources/views/backend/workspace/document-hold-labels.php:45
+#, fuzzy
+msgid "Place person hold"
+msgstr "Colocar una persona en espera"
+
+#: resources/views/backend/workspace/document-hold-labels.php:46
+#, fuzzy
+msgid "Hold history"
+msgstr "Historial de la Holding"
+
+#: resources/views/backend/workspace/document-hold-labels.php:47
+#, fuzzy
+msgid "Hold released"
+msgstr "Bloqueo liberado"
+
+#: resources/views/backend/workspace/document-hold-labels.php:48
+#, fuzzy
+msgid "No document hold decisions recorded."
+msgstr "No se registraron decisiones de retención de documentos."
+
+#: resources/views/backend/workspace/document-hold-labels.php:49
+#, fuzzy
+msgid "Loading hold history…"
+msgstr "Historial de retención de carga..."
+
+#: resources/views/backend/workspace/document-hold-labels.php:50
+#, fuzzy
+msgid "Hold history loaded."
+msgstr "Mantén el historial cargado."
+
+#: resources/views/backend/workspace/document-hold-labels.php:51
+#, fuzzy
+msgid "Newer holds"
+msgstr "Holds más recientes"
+
+#: resources/views/backend/workspace/document-hold-labels.php:52
+#, fuzzy
+msgid "Earlier holds"
+msgstr "Mantiendas anteriores"
+
+#: resources/views/backend/workspace/document-hold-labels.php:54
+#, fuzzy
+msgid "A case or person hold protects this file from removal."
+msgstr ""
+"Un caso o una retención de persona protege este archivo de su eliminación."
+
+#: resources/views/backend/workspace/document-retention-labels.php:9
+#, fuzzy
+msgid "Applicant access ends (UTC)"
+msgstr "Finaliza el acceso del solicitante (UTC)"
+
+#: resources/views/backend/workspace/document-retention-labels.php:11
+#, fuzzy
+msgid "Manual extensions also extend applicant access to a shared file."
+msgstr ""
+"Las extensiones manuales también amplían el acceso del solicitante a un "
+"archivo compartido."
+
+#: resources/views/backend/workspace/document-retention-labels.php:13
+#, fuzzy
+msgid "ADMISSIONS SETTINGS"
+msgstr "ENTORNOS DE ENTRADA"
+
+#: resources/views/backend/workspace/document-retention-labels.php:14
+#, fuzzy
+msgid "Add retention category"
+msgstr "Añadir categoría de retención"
+
+#: resources/views/backend/workspace/document-retention-labels.php:15
+#, fuzzy
+msgid "Available for new selections"
+msgstr "Disponible para nuevas selecciones"
+
+#: resources/views/backend/workspace/document-retention-labels.php:16
+#, fuzzy
+msgid "Back to Admissions"
+msgstr "Volver a admisiones"
+
+#: resources/views/backend/workspace/document-retention-labels.php:17
+#, fuzzy
+msgid "Cancel classification"
+msgstr "Cancelar clasificación"
+
+#: resources/views/backend/workspace/document-retention-labels.php:19
+#, fuzzy
+msgid ""
+"Categories set future upload defaults. Existing files keep their recorded "
+"basis and deadlines."
+msgstr ""
+"Las categorías establecen los valores predeterminados de carga futuros. Los "
+"archivos existentes mantienen su base registrada y sus plazos."
+
+#: resources/views/backend/workspace/document-retention-labels.php:21
+msgid "Category code"
+msgstr "Código de categoría"
+
+#: resources/views/backend/workspace/document-retention-labels.php:22
+msgid "Category name"
+msgstr "Nombre de categoría"
+
+#: resources/views/backend/workspace/document-retention-labels.php:23
+#, fuzzy
+msgid "Choose a retention category"
+msgstr "Elige una categoría de retención"
+
+#: resources/views/backend/workspace/document-retention-labels.php:24
+#, fuzzy
+msgid "Classification history"
+msgstr "Historial de clasificación"
+
+#: resources/views/backend/workspace/document-retention-labels.php:25
+#, fuzzy
+msgid "Classify document"
+msgstr "Clasificar documento"
+
+#: resources/views/backend/workspace/document-retention-labels.php:26
+#, fuzzy
+msgid "Configure document retention"
+msgstr "Configurar la retención de documentos"
+
+#: resources/views/backend/workspace/document-retention-labels.php:27
+#, fuzzy
+msgid "Confirm retention change"
+msgstr "Confirmar el cambio de retención"
+
+#: resources/views/backend/workspace/document-retention-labels.php:28
+#, fuzzy
+msgid "Current deadline"
+msgstr "Fecha límite actual"
+
+#: resources/views/backend/workspace/document-retention-labels.php:29
+#, fuzzy
+msgid "Current policy revision"
+msgstr "Revisión actual de la política"
+
+#: resources/views/backend/workspace/document-retention-labels.php:31
+#, fuzzy
+msgid ""
+"Days run from the original upload. A shorter category never reduces the "
+"existing deadline."
+msgstr ""
+"Los días transcorren desde la carga original. Una categoría más corta nunca "
+"reduce la fecha límite existente."
+
+#: resources/views/backend/workspace/document-retention-labels.php:33
+msgid "Default"
+msgstr "Por defecto"
+
+#: resources/views/backend/workspace/document-retention-labels.php:34
+#, fuzzy
+msgid "Default for new uploads"
+msgstr "Predeterminado para nuevas cargas"
+
+#: resources/views/backend/workspace/document-retention-labels.php:35
+#, fuzzy
+msgid "Deployment fallback"
+msgstr "Respaldo de despliegue"
+
+#: resources/views/backend/workspace/document-retention-labels.php:36
+#, fuzzy
+msgid "Deployment fallback (uncategorized)"
+msgstr "Respaldo de despliegue (sin categorizar)"
+
+#: resources/views/backend/workspace/document-retention-labels.php:37
+#, fuzzy
+msgid "Deployment fallback days"
+msgstr "Días de reserva para el despliegue"
+
+#: resources/views/backend/workspace/document-retention-labels.php:38
+#, fuzzy
+msgid "Discard retention changes"
+msgstr "Cambios en la retención de descartes"
+
+#: resources/views/backend/workspace/document-retention-labels.php:39
+#, fuzzy
+msgid "Document category"
+msgstr "Categoría de documento"
+
+#: resources/views/backend/workspace/document-retention-labels.php:40
+#, fuzzy
+msgid "Document retention"
+msgstr "Retención de documentos"
+
+#: resources/views/backend/workspace/document-retention-labels.php:41
+#, fuzzy
+msgid "Document retention could not be loaded."
+msgstr "No se pudo cargar la retención de documentos."
+
+#: resources/views/backend/workspace/document-retention-labels.php:42
+#, fuzzy
+msgid "Earlier decisions"
+msgstr "Decisiones anteriores"
+
+#: resources/views/backend/workspace/document-retention-labels.php:43
+#, fuzzy
+msgid "Earlier policies"
+msgstr "Políticas anteriores"
+
+#: resources/views/backend/workspace/document-retention-labels.php:44
+#, fuzzy
+msgid "Earlier retention basis unknown"
+msgstr "Se desconoce la base de retención anterior"
+
+#: resources/views/backend/workspace/document-retention-labels.php:45
+#, fuzzy
+msgid "Earlier retention decisions were not recorded."
+msgstr "No se registraron decisiones anteriores de retención."
+
+#: resources/views/backend/workspace/document-retention-labels.php:47
+#, fuzzy
+msgid "Existing file deadlines and holds will not change."
+msgstr "Los plazos y bloqueos de archivo existentes no cambiarán."
+
+#: resources/views/backend/workspace/document-retention-labels.php:50
+#, fuzzy
+msgid "File access, existing holds and decision evidence stay unchanged."
+msgstr ""
+"El acceso a los archivos, las retenciones existentes y las pruebas de "
+"decisión permanecen sin cambios."
+
+#: resources/views/backend/workspace/document-retention-labels.php:53
+#, fuzzy
+msgid "Finish or discard retention changes before starting another task."
+msgstr ""
+"Finaliza o descarta los cambios de retención antes de iniciar otra tarea."
+
+#: resources/views/backend/workspace/document-retention-labels.php:55
+#, fuzzy
+msgid "Initial upload policy"
+msgstr "Política inicial de carga"
+
+#: resources/views/backend/workspace/document-retention-labels.php:56
+#, fuzzy
+msgid "Loading document retention…"
+msgstr "Cargando la retención de documentos..."
+
+#: resources/views/backend/workspace/document-retention-labels.php:57
+#, fuzzy
+msgid "Loading retention history…"
+msgstr "Historial de retención de carga..."
+
+#: resources/views/backend/workspace/document-retention-labels.php:58
+msgid "New category"
+msgstr "Nueva categoría"
+
+#: resources/views/backend/workspace/document-retention-labels.php:59
+#, fuzzy
+msgid "Newer decisions"
+msgstr "Decisiones más recientes"
+
+#: resources/views/backend/workspace/document-retention-labels.php:60
+#, fuzzy
+msgid "Policy revision"
+msgstr "Revisión de políticas"
+
+#: resources/views/backend/workspace/document-retention-labels.php:61
+#, fuzzy
+msgid "Proposed deadline"
+msgstr "Fecha límite propuesta"
+
+#: resources/views/backend/workspace/document-retention-labels.php:62
+#, fuzzy
+msgid "Reason for classification"
+msgstr "Motivo de la clasificación"
+
+#: resources/views/backend/workspace/document-retention-labels.php:63
+#, fuzzy
+msgid "Reason for policy change"
+msgstr "Motivo del cambio de política"
+
+#: resources/views/backend/workspace/document-retention-labels.php:64
+#, fuzzy
+msgid "Refresh retention policy"
+msgstr "Actualizar la política de retención"
+
+#: resources/views/backend/workspace/document-retention-labels.php:65
+#, fuzzy
+msgid "Remove unsaved category"
+msgstr "Eliminar categoría no guardada"
+
+#: resources/views/backend/workspace/document-retention-labels.php:66
+#, fuzzy
+msgid "Retain through"
+msgstr "Conservar hasta"
+
+#: resources/views/backend/workspace/document-retention-labels.php:67
+#, fuzzy
+msgid "Retained policy"
+msgstr "Política retenida"
+
+#: resources/views/backend/workspace/document-retention-labels.php:68
+#, fuzzy
+msgid "Retained retention decisions"
+msgstr "Decisiones de retención"
+
+#: resources/views/backend/workspace/document-retention-labels.php:69
+#, fuzzy
+msgid "Retention access is no longer available."
+msgstr "El acceso de retención ya no está disponible."
+
+#: resources/views/backend/workspace/document-retention-labels.php:70
+#, fuzzy
+msgid "Retention category"
+msgstr "Categoría de retención"
+
+#: resources/views/backend/workspace/document-retention-labels.php:71
+#, fuzzy
+msgid "Retention change saved."
+msgstr "Cambio de retención guardado."
+
+#: resources/views/backend/workspace/document-retention-labels.php:72
+#, fuzzy
+msgid "Retention days from upload"
+msgstr "Días de retención desde la subida"
+
+#: resources/views/backend/workspace/document-retention-labels.php:73
+#, fuzzy
+msgid "Retention history loaded."
+msgstr "Historial de retención cargado."
+
+#: resources/views/backend/workspace/document-retention-labels.php:74
+#, fuzzy
+msgid "Retention review"
+msgstr "Revisión de retención"
+
+#: resources/views/backend/workspace/document-retention-labels.php:75
+msgid "Retired"
+msgstr "Retirado"
+
+#: resources/views/backend/workspace/document-retention-labels.php:76
+#, fuzzy
+msgid "Retry document retention"
+msgstr "Reintentar retención de documentos"
+
+#: resources/views/backend/workspace/document-retention-labels.php:77
+#, fuzzy
+msgid "Review document classification"
+msgstr "Revisar la clasificación del documento"
+
+#: resources/views/backend/workspace/document-retention-labels.php:78
+#, fuzzy
+msgid "Review institutional retention"
+msgstr "Revisar la retención institucional"
+
+#: resources/views/backend/workspace/document-retention-labels.php:80
+#, fuzzy
+msgid "Review retention change"
+msgstr "Cambio en la retención de revisión"
+
+#: resources/views/backend/workspace/document-retention-labels.php:81
+#, fuzzy
+msgid "Reviewing retention change…"
+msgstr "Revisando el cambio de retención..."
+
+#: resources/views/backend/workspace/document-retention-labels.php:82
+#, fuzzy
+msgid "Revise retention change"
+msgstr "Revisar el cambio de retención"
+
+#: resources/views/backend/workspace/document-retention-labels.php:83
+#, fuzzy
+msgid "Staff classification"
+msgstr "Clasificación del personal"
+
+#: resources/views/backend/workspace/document-retention-labels.php:85
+#, fuzzy
+msgid "The 25-category limit is reached. Existing identities must be retained."
+msgstr ""
+"Se ha alcanzado el límite de 25 categorías. Deben conservarse las "
+"identidades existentes."
+
+#: resources/views/backend/workspace/document-retention-labels.php:88
+#, fuzzy
+msgid "The request did not finish. Your review is still available."
+msgstr "La solicitud no terminó. Tu reseña sigue disponible."
+
+#: resources/views/backend/workspace/document-retention-labels.php:91
+#, fuzzy
+msgid "Untitled category"
+msgstr "Categoría sin título"
+
+#: resources/views/backend/workspace/document-retention-labels.php:93
+#, fuzzy
+msgid "Upload availability and scanner approval remain deployment controls."
+msgstr ""
+"La disponibilidad de carga y la aprobación del escáner siguen siendo los "
+"controles de despliegue."
+
+#: resources/views/backend/workspace/document-retention-labels.php:95
+#, fuzzy
+msgid "days from upload"
+msgstr "días desde la subida"
+
 #: src/Application/Http/Controller/ProfileController.php:52
 msgid "User Profile"
 msgstr "Perfil del usuario"
@@ -35,12 +572,61 @@ msgstr "Perfil del usuario"
 msgid "Website Manager"
 msgstr "Gestor de sitios web"
 
+#: src/Application/Http/Response/MaintenanceResponse.php:45
+#: src/Application/Http/Response/MaintenanceResponse.php:66
+#, fuzzy
+msgid ""
+"The service is temporarily paused for maintenance. Please try again shortly."
+msgstr ""
+"El servicio queda temporalmente pausado por mantenimiento. Por favor, "
+"inténtelo de nuevo en breve."
+
+#: src/Application/Http/Response/MaintenanceResponse.php:65
+msgid "Temporarily unavailable"
+msgstr "Temporalmente no disponible"
+
+#: src/Application/Http/Response/MaintenanceResponse.php:67
+#, fuzzy
+msgid "Super administrator sign-in"
+msgstr "Inicio de sesión del superadministrador"
+
+#: src/Application/Http/Response/RegistrationPauseResponse.php:32
+#, fuzzy
+msgid ""
+"Too many account creation attempts. Please wait before trying again. You can "
+"still sign in if you already have a campus account."
+msgstr ""
+"Demasiados intentos de creación de cuenta. Por favor, espera antes de "
+"intentarlo de nuevo. Aún puedes iniciar sesión si ya tienes una cuenta en el "
+"campus."
+
+#: src/Application/Http/Response/RegistrationPauseResponse.php:36
+#, fuzzy
+msgid ""
+"Account creation is temporarily unavailable. Please wait before trying "
+"again. You can still sign in if you already have a campus account."
+msgstr ""
+"La creación de cuenta está temporalmente no disponible. Por favor, espere "
+"antes de intentarlo de nuevo. Aún puedes iniciar sesión si ya tienes una "
+"cuenta en el campus."
+
+#: src/Domain/AcademicRecord/Service/InstitutionalCreditLedger.php:1248
+#, fuzzy
+msgid ""
+"Only a tracked withdrawal with an unchanged academic award can be "
+"reinstated. Resolve later academic changes and pending grade requests "
+"separately."
+msgstr ""
+"Solo se puede restablecer una retirada registrada con una beca académica sin "
+"cambios. Resuelve por separado los cambios académicos posteriores y las "
+"solicitudes de calificación pendientes."
+
 #: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:38
 #, fuzzy
 msgid "Resolve every listed course publication before planning this group."
 msgstr ""
-"Resuelve todas las publicaciones de cursos listadas antes de planificar "
-"este grupo."
+"Resuelve todas las publicaciones de cursos listadas antes de planificar este "
+"grupo."
 
 #: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:54
 #, fuzzy
@@ -51,28 +637,35 @@ msgstr ""
 "Los totales del catálogo no comprueban el origen del crédito del estudiante "
 "ni la fecha real de finalización. Realiza una prueba para estudiantes."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:66
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:62
+#, fuzzy
+msgid "Catalog totals do not check per-card grade minima. Run a student test."
+msgstr ""
+"Los totales del catálogo no comprueban los mínimos de calificación por "
+"tarjeta. Realiza una prueba para estudiantes."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:73
 #, fuzzy
 msgid ""
 "Listed totals exclude saved-rule matches. Run a student test to evaluate "
 "matching work."
 msgstr ""
-"Los totales listados excluyen las coincidencias de reglas guardadas. "
-"Realiza una prueba de estudiante para evaluar el trabajo coincidente."
+"Los totales listados excluyen las coincidencias de reglas guardadas. Realiza "
+"una prueba de estudiante para evaluar el trabajo coincidente."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:69
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:76
 #, fuzzy
 msgid "Add published courses to plan this group."
 msgstr "Añade cursos publicados para planificar este grupo."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:72
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:79
 #, fuzzy
 msgid ""
 "The required course count exceeds the number of distinct listed courses."
 msgstr ""
 "El número de cursos requerido supera el número de cursos listados distintos."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:76
+#: src/Domain/DegreeAudit/ValueObject/CourseGroupPlan.php:83
 #, fuzzy
 msgid ""
 "The required credits exceed the catalog credits of the listed courses. "
@@ -81,7 +674,7 @@ msgstr ""
 "Los créditos requeridos superan los créditos de catálogo de los cursos "
 "listados. Revise este total."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:50
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:51
 #, fuzzy
 msgid ""
 "An approved course route reserves this course for another curriculum "
@@ -90,28 +683,36 @@ msgstr ""
 "Una ruta de curso aprobada reserva este curso para otro componente "
 "curricular."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:52
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:53
 #, fuzzy
 msgid ""
 "An approved placement preference reserves this course for another group in "
 "this pursuit."
 msgstr ""
-"Una preferencia de plaza aprobada reserva este curso para otro grupo en "
-"esta búsqueda."
+"Una preferencia de plaza aprobada reserva este curso para otro grupo en esta "
+"búsqueda."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:54
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:55
+#, fuzzy
+msgid ""
+"No requirement card accepts this work at its retained grade-point minimum."
+msgstr ""
+"Ninguna tarjeta de requisito acepta este trabajo con el mínimo de "
+"calificación conservada."
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:58
 #, fuzzy
 msgid "No requirement card in this group accepts this work's recorded origin."
 msgstr ""
 "Ninguna tarjeta de requisito en este grupo acepta el origen registrado de "
 "esta obra."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:56
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:60
 #, fuzzy
 msgid "This group requires a different recorded credit origin."
 msgstr "Este grupo requiere un origen de crédito registrado diferente."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:58
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:62
 #, fuzzy
 msgid ""
 "The recorded credit origin is unavailable; this group's restriction needs "
@@ -120,7 +721,7 @@ msgstr ""
 "El origen del crédito registrado no está disponible; la restricción de este "
 "grupo necesita revisión."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:60
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:64
 #, fuzzy
 msgid ""
 "The recorded sending institution is not included in this group's transfer-"
@@ -129,7 +730,7 @@ msgstr ""
 "La institución remitente registrada no está incluida en la lista de fuentes "
 "de transferencia de este grupo."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:62
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:66
 #, fuzzy
 msgid ""
 "The award has no retained sending-institution evidence; registrar review is "
@@ -138,7 +739,7 @@ msgstr ""
 "El premio no incluye pruebas conservadas de la institución de envío; se "
 "requiere una revisión del registrador."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:65
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:69
 #, fuzzy
 msgid ""
 "An actual completion date is required by this group. Posting or catalog "
@@ -147,21 +748,21 @@ msgstr ""
 "Este grupo requiere una fecha de finalización real. Las fechas de "
 "publicación o de catálogo no pueden sustituirla."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:68
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:72
 #, fuzzy
 msgid "The actual completion date is before this group's permitted window."
 msgstr ""
 "La fecha real de finalización es anterior a la ventana permitida de este "
 "grupo."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:70
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:74
 #, fuzzy
 msgid "The actual completion date is after this group's permitted window."
 msgstr ""
 "La fecha real de finalización es posterior a la ventana permitida de este "
 "grupo."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:72
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:76
 #, fuzzy
 msgid ""
 "The recorded pursuit start is unavailable; this group's course-age rule "
@@ -170,7 +771,7 @@ msgstr ""
 "El inicio registrado de la persecución no está disponible; la norma de edad "
 "de este grupo necesita revisar."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:74
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:78
 #, fuzzy
 msgid ""
 "The review date required by this group's expiration rule is unavailable."
@@ -178,14 +779,14 @@ msgstr ""
 "La fecha de revisión requerida por la regla de expiración de este grupo no "
 "está disponible."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:76
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:80
 #, fuzzy
 msgid "This work expired under the group's age limit at the review date."
 msgstr ""
 "Esta obra caducó por debajo del límite de edad del grupo en la fecha de "
 "revisión."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:79
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:83
 #, fuzzy
 msgid ""
 "The actual completion date is too early for this group's age limit at the "
@@ -194,13 +795,13 @@ msgstr ""
 "La fecha real de finalización es demasiado temprana para el límite de edad "
 "de este grupo en el inicio registrado de la persecución."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:82
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:86
 #, fuzzy
 msgid ""
 "Candidate for allocation; this work has not been applied to the requirement."
 msgstr "Candidato a asignación; este trabajo no se ha aplicado al requisito."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:84
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:88
 #, fuzzy
 msgid ""
 "This course requirement is waived for this pursuit. The waiver creates no "
@@ -209,7 +810,7 @@ msgstr ""
 "Este requisito de curso queda exento para esta persecución. La exención no "
 "genera créditos obtenidos."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:86
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:90
 #, fuzzy
 msgid ""
 "The course approvals conflict. Registrar review is needed before applying "
@@ -218,23 +819,23 @@ msgstr ""
 "Las aprobaciones de los cursos entran en conflicto. Es necesaria una "
 "revisión por parte del registro antes de solicitar trabajo."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:87
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:91
 #, fuzzy
 msgid "A voided award cannot satisfy a course requirement."
 msgstr "Una adjudicación anulada no puede cumplir un requisito de un curso."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:88
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:92
 #, fuzzy
 msgid "A dropped course cannot satisfy a completed-course requirement."
 msgstr ""
 "Un curso dado de baja no puede cumplir un requisito de curso completado."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:89
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:93
 #, fuzzy
 msgid "No final grade or earned credit is recorded yet."
 msgstr "Aún no se ha registrado ninguna nota final ni crédito obtenido."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:91
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:95
 #, fuzzy
 msgid ""
 "The retained grade definition is unknown. Do not infer it from today’s "
@@ -243,19 +844,19 @@ msgstr ""
 "La definición de calificación retenida es desconocida. No la infiras a "
 "partir de las calificaciones actuales."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:92
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:96
 #, fuzzy
 msgid "The retained grade definition does not mark this as a passing grade."
 msgstr ""
 "La definición de calificación retenida no marca esto como una calificación "
 "aprobada."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:93
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:97
 #, fuzzy
 msgid "This record has no earned credit to apply."
 msgstr "Este registro no tiene crédito merecido para solicitar."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:95
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:99
 #, fuzzy
 msgid ""
 "The earned work has no retained course publication. Review its equivalence."
@@ -263,7 +864,7 @@ msgstr ""
 "El trabajo obtenido no tiene publicación retenida del curso. Revise su "
 "equivalencia."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:97
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:101
 #, fuzzy
 msgid ""
 "The earned work uses a different course publication. Review its equivalence."
@@ -271,7 +872,7 @@ msgstr ""
 "El trabajo obtenido utiliza una publicación diferente del curso. Revisa su "
 "equivalencia."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:99
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:103
 #, fuzzy
 msgid ""
 "The retained grading policy is unknown; the grade-point minimum cannot be "
@@ -280,21 +881,79 @@ msgstr ""
 "Se desconoce la política de calificación retenida; no se puede comparar el "
 "mínimo de puntos."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:102
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:106
 #, fuzzy
 msgid ""
 "The grading publications differ. Review the grade-point comparison; no "
 "conversion is assumed."
 msgstr ""
-"Las publicaciones de calificación difieren. Revisa la comparación de "
-"puntos; no se asume conversión."
+"Las publicaciones de calificación difieren. Revisa la comparación de puntos; "
+"no se asume conversión."
 
-#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:105
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:109
 #, fuzzy
 msgid "The retained grade points are below this group’s per-course minimum."
 msgstr ""
 "Los puntos de nota retenidos están por debajo del mínimo por curso de este "
 "grupo."
+
+#: src/Domain/DegreeAudit/ValueObject/RequirementCreditOrigin.php:41
+#, fuzzy
+msgid "Choose institutional, transfer or either origin for a requirement."
+msgstr ""
+"Elige institucional, traslado o cualquiera de los dos de origen según el "
+"requisito."
+
+#: src/Domain/DegreeAudit/ValueObject/RequirementGradeFloor.php:31
+#, fuzzy
+msgid "Choose a card grade-point minimum within the selected grading maximum."
+msgstr ""
+"Elige un mínimo de puntos de calificación en tarjeta dentro del máximo de "
+"calificación seleccionado."
+
+#: src/Domain/Gradebook/Service/GradeComparisonPolicyService.php:55
+#, fuzzy
+msgid ""
+"The grade-comparison policy changed or its source disagrees. Refresh it."
+msgstr ""
+"La política de comparación de calificaciones ha cambiado o su fuente no está "
+"de acuerdo. Refrescala."
+
+#: src/Domain/Gradebook/Service/GradeComparisonPolicyService.php:94
+#, fuzzy
+msgid "The grade-comparison policy changed. Reload it."
+msgstr "La política de comparación de grados ha cambiado. Recárguelo."
+
+#: src/Domain/Gradebook/Service/GradeComparisonPolicyService.php:141
+#, fuzzy
+msgid "The grade-comparison policy source changed. Refresh it."
+msgstr ""
+"La fuente de la política de comparación de calificaciones ha cambiado. "
+"Actualícalo."
+
+#: src/Domain/Gradebook/Service/GradeComparisonPolicyService.php:187
+#, fuzzy
+msgid "The grade-comparison policy changed. Review again."
+msgstr ""
+"La política de comparación de calificaciones ha cambiado. Revisa de nuevo."
+
+#: src/Domain/Gradebook/Service/GradebookService.php:80
+#, fuzzy
+msgid "Choose institutional inheritance or a section override."
+msgstr "Elige herencia institucional o una anulación por sección."
+
+#: src/Domain/Gradebook/ValueObject/CourseworkGradePolicy.php:76
+#, fuzzy
+msgid "Enter a clear policy publication reason of at most 1,000 characters."
+msgstr ""
+"Introduzca una razón clara de publicación de la política de como máximo "
+"1.000 caracteres."
+
+#: src/Domain/Registration/ValueObject/ReinstatementEventSchema.php:39
+#, fuzzy
+msgid "Retain verified registered-credit restoration facts."
+msgstr ""
+"Conserva datos verificados sobre la restauración de crédito registrado."
 
 #: src/Domain/User/Service/UserService.php:70
 #, fuzzy
@@ -325,8 +984,7 @@ msgstr "La contraseña se actualizó correctamente."
 #, fuzzy
 msgid "Password could not be updated. Please try again later."
 msgstr ""
-"No se pudo actualizar la contraseña. Por favor, inténtelo de nuevo más "
-"tarde."
+"No se pudo actualizar la contraseña. Por favor, inténtelo de nuevo más tarde."
 
 #: src/Domain/User/Service/UserService.php:169
 #, fuzzy
@@ -348,6 +1006,12 @@ msgstr "Cuenta creada correctamente."
 #, fuzzy
 msgid "Could not create account. Please try again later."
 msgstr "No se pudo crear la cuenta. Por favor, inténtalo de nuevo más tarde."
+
+#: src/Infrastructure/Persistence/Repository/SqlGradeComparisonPolicyState.php:46
+#, fuzzy
+msgid "The institutional grade-comparison policy changed. Review again."
+msgstr ""
+"La política institucional de comparación de grados cambió. Revise de nuevo."
 
 #: resources/views/app-layout.phtml:45 resources/views/frontend/login.phtml:12
 #: resources/views/frontend/login.phtml:27
@@ -376,6 +1040,50 @@ msgstr "Usuarios"
 #: resources/views/partials/desktop-nav.phtml:84
 msgid "Logout"
 msgstr "Cerrar sesión"
+
+#: resources/views/backend/errors/registration.phtml:13
+#, fuzzy
+msgid "Account creation paused"
+msgstr "Creación de cuenta pausada"
+
+#: resources/views/backend/errors/registration.phtml:19
+#, fuzzy
+msgid "Skip to account information"
+msgstr "Saltar a la información de la cuenta"
+
+#: resources/views/backend/errors/registration.phtml:22
+#, fuzzy
+msgid "CAMPUS ACCOUNT"
+msgstr "CUENTA DEL CAMPUS"
+
+#: resources/views/backend/errors/registration.phtml:25
+#, fuzzy
+msgid "Please wait before trying again"
+msgstr "Por favor, espera antes de intentarlo de nuevo"
+
+#: resources/views/backend/errors/registration.phtml:27
+#, fuzzy
+msgid "Account creation is temporarily unavailable"
+msgstr "La creación de cuenta está temporalmente no disponible"
+
+#: resources/views/backend/errors/registration.phtml:32
+#, fuzzy
+msgid "Wait at least this many seconds before trying again:"
+msgstr "Espera al menos estos segundos antes de intentarlo de nuevo:"
+
+#: resources/views/backend/errors/registration.phtml:34
+#, fuzzy
+msgid "Returning to the form will not resubmit your details."
+msgstr "Volver al formulario no hará que vuelvas a enviar tus datos."
+
+#: resources/views/backend/errors/registration.phtml:39
+msgid "Sign in to your account"
+msgstr "Inicie sesión en su cuenta"
+
+#: resources/views/backend/errors/registration.phtml:43
+#, fuzzy
+msgid "Return to account creation"
+msgstr "Volver a la creación de cuenta"
 
 #: resources/views/backend/index.phtml:13
 msgid "Welcome"
@@ -464,6 +1172,7 @@ msgstr "Mínimo de caracteres"
 
 #: resources/views/backend/partials/x-create-user-modal.phtml:39
 #: resources/views/backend/partials/x-edit-user-modal.phtml:34
+#: resources/views/frontend/portal/auth.phtml:82
 #: resources/views/frontend/register.phtml:20
 msgid "Username"
 msgstr "Nombre de usuario"
@@ -504,6 +1213,7 @@ msgstr "Seleccione un rol"
 
 #: resources/views/backend/partials/x-create-user-modal.phtml:74
 #: resources/views/frontend/login.phtml:20
+#: resources/views/frontend/portal/auth.phtml:126
 #: resources/views/frontend/register.phtml:32
 msgid "Password"
 msgstr "Contraseña"
@@ -531,6 +1241,75 @@ msgstr "Nombre"
 #: resources/views/backend/users.phtml:26
 msgid "Actions"
 msgstr "Acciones"
+
+#: resources/views/backend/workspace/imports.phtml:9
+#, fuzzy
+msgid "CATALOG OPERATIONS"
+msgstr "OPERACIONES DEL CATÁLOGO"
+
+#: resources/views/backend/workspace/imports.phtml:10
+msgid "Import data"
+msgstr "Importar datos"
+
+#: resources/views/backend/workspace/imports.phtml:11
+#, fuzzy
+msgid "Map CSV columns, review each row, and confirm the import."
+msgstr "Mapea columnas CSV, revisa cada fila y confirma la importación."
+
+#: resources/views/backend/workspace/imports.phtml:28
+#, fuzzy
+msgid "IMPORT SETUP"
+msgstr "CONFIGURACIÓN DE IMPORTACIÓN"
+
+#: resources/views/backend/workspace/imports.phtml:29
+#, fuzzy
+msgid "Choose your source data"
+msgstr "Elige tus datos de origen"
+
+#: resources/views/backend/workspace/imports.phtml:36
+#, fuzzy
+msgid "Destination & source"
+msgstr "Destino y origen"
+
+#: resources/views/backend/workspace/imports.phtml:72
+msgid "CSV file"
+msgstr "Archivo CSV"
+
+#: resources/views/backend/workspace/imports.phtml:99
+#, fuzzy
+msgid "COLUMN MAPPING"
+msgstr "MAPEO DE COLUMNAS"
+
+#: resources/views/backend/workspace/imports.phtml:100
+#, fuzzy
+msgid "Match source columns to fields"
+msgstr "Emparejar columnas de origen con campos"
+
+#: resources/views/backend/workspace/imports.phtml:164
+#, fuzzy
+msgid "Review import rows"
+msgstr "Revisar filas importadas"
+
+#: resources/views/backend/workspace/imports.phtml:220
+msgid "CONFIRMED"
+msgstr "CONFIRMADO"
+
+#: resources/views/backend/workspace/imports.phtml:221
+msgid "Import complete"
+msgstr "Importación completada"
+
+#: resources/views/backend/workspace/index.phtml:230
+msgid "Overview"
+msgstr "Resumen"
+
+#: resources/views/backend/workspace/index.phtml:230
+msgid "Workspace"
+msgstr "Espacio de trabajo"
+
+#: resources/views/backend/workspace/index.phtml:317
+#, fuzzy
+msgid "Loading workspace…"
+msgstr "Cargando espacio de trabajo..."
 
 #: resources/views/blocked.phtml:10 resources/views/blocked.phtml:44
 #, fuzzy
@@ -560,6 +1339,132 @@ msgstr "¿No tienes una cuenta?"
 msgid "Register"
 msgstr "Registrarse"
 
+#: resources/views/frontend/portal/auth.phtml:10
+#, fuzzy
+msgid "See you soon."
+msgstr "Nos vemos pronto."
+
+#: resources/views/frontend/portal/auth.phtml:11
+#, fuzzy
+msgid "Your next chapter starts with you."
+msgstr "Tu próximo capítulo empieza contigo."
+
+#: resources/views/frontend/portal/auth.phtml:12
+#, fuzzy
+msgid "Good to have you back."
+msgstr "Me alegra tenerte de vuelta."
+
+#: resources/views/frontend/portal/auth.phtml:15
+#, fuzzy
+msgid "Ready to sign out of your campus account?"
+msgstr "¿Listo para cerrar sesión en tu cuenta del campus?"
+
+#: resources/views/frontend/portal/auth.phtml:16
+#, fuzzy
+msgid ""
+"Your applications, academic life, and next steps. All in one welcoming place."
+msgstr ""
+"Tus solicitudes, tu vida académica y tus próximos pasos. Todo en un solo "
+"lugar acogedor."
+
+#: resources/views/frontend/portal/auth.phtml:18
+#, fuzzy
+msgid "Sign out securely"
+msgstr "Cerrar sesión de forma segura"
+
+#: resources/views/frontend/portal/auth.phtml:19
+#: resources/views/frontend/portal/auth.phtml:164
+#, fuzzy
+#| msgid "Create an Account"
+msgid "Create your campus account"
+msgstr "Crea tu cuenta de campus"
+
+#: resources/views/frontend/portal/auth.phtml:20
+#, fuzzy
+msgid "Sign in to your campus"
+msgstr "Inicia sesión en tu campus"
+
+#: resources/views/frontend/portal/auth.phtml:23
+msgid "Sign out"
+msgstr "Cerrar sesión"
+
+#: resources/views/frontend/portal/auth.phtml:24
+msgid "Create account"
+msgstr "Crear una cuenta"
+
+#: resources/views/frontend/portal/auth.phtml:25
+msgid "Sign in"
+msgstr "Iniciar sesión"
+
+#: resources/views/frontend/portal/auth.phtml:30
+#, fuzzy
+msgid "A CAMPUS CONNECTED AROUND YOU"
+msgstr "UN CAMPUS CONECTADO A TU ALREDEDOR"
+
+#: resources/views/frontend/portal/auth.phtml:41
+#, fuzzy
+msgid ""
+"Maintenance is in progress. Only super administrators can sign in until the "
+"system reopens."
+msgstr ""
+"El mantenimiento está en curso. Solo los superadministradores pueden iniciar "
+"sesión hasta que el sistema se reabra."
+
+#: resources/views/frontend/portal/auth.phtml:47
+#, fuzzy
+msgid ""
+"We couldn’t sign you in. Check your email address and password, then try "
+"again."
+msgstr ""
+"No pudimos iniciar sesión contigo. Comprueba tu dirección de correo "
+"electrónico y contraseña, y luego inténtalo de nuevo."
+
+#: resources/views/frontend/portal/auth.phtml:53
+#, fuzzy
+msgid ""
+"Already have a campus account? Sign in to keep your person record and "
+"applications together."
+msgstr ""
+"¿Ya tienes una cuenta en el campus? Inicia sesión para mantener tu historial "
+"personal y tus solicitudes juntos."
+
+#: resources/views/frontend/portal/auth.phtml:64
+msgid "Email address"
+msgstr "Dirección de correo electrónico"
+
+#: resources/views/frontend/portal/auth.phtml:100
+msgid "Given name"
+msgstr "Nombre"
+
+#: resources/views/frontend/portal/auth.phtml:112
+msgid "Family name"
+msgstr "Apellido"
+
+#: resources/views/frontend/portal/auth.phtml:146
+#, fuzzy, php-format
+msgid "Use at least %s characters. A memorable passphrase works well."
+msgstr ""
+"Usa al menos %s caracteres. Una frase de contraseña memorable funciona bien."
+
+#: resources/views/frontend/portal/auth.phtml:158
+#, fuzzy
+msgid "Return to my campus"
+msgstr "Volver a mi campus"
+
+#: resources/views/frontend/portal/auth.phtml:160
+#: resources/views/frontend/register.phtml:37
+msgid "Have an account?"
+msgstr "¿Tiene una cuenta?"
+
+#: resources/views/frontend/portal/auth.phtml:161
+#, fuzzy
+msgid "Sign in to apply"
+msgstr "Iniciar sesión para solicitar"
+
+#: resources/views/frontend/portal/auth.phtml:163
+msgid "New here?"
+msgstr "¿Eres nuevo aquí?"
+
 #: resources/views/frontend/register.phtml:12
 msgid "Create an Account"
 msgstr "Crea una cuenta"
@@ -571,10 +1476,6 @@ msgstr "Nombre"
 #: resources/views/frontend/register.phtml:28
 msgid "Last Name"
 msgstr "Apellido"
-
-#: resources/views/frontend/register.phtml:37
-msgid "Have an account?"
-msgstr "¿Tiene una cuenta?"
 
 #: resources/views/partials/desktop-nav.phtml:24
 msgid "Menu"

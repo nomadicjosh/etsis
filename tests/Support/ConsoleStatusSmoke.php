@@ -92,6 +92,14 @@ try {
         $_SERVER['HTTP_HOST'] = 'campus.example.invalid';
         $_SERVER['HTTPS'] = 'on';
     }
+    if (($argv[1] ?? '') === 'check-registration-throttle') {
+        $_SERVER['DOCUMENT_ROOT'] = $fixture . '/public';
+        $_SERVER['SCRIPT_NAME'] = '/index.php';
+        $_SERVER['REQUEST_METHOD'] = 'POST';
+        $_SERVER['REQUEST_URI'] = '/create/';
+        $_SERVER['HTTP_HOST'] = 'campus.example.invalid';
+        $_SERVER['HTTPS'] = 'on';
+    }
     $app = \Codefy\Framework\Helpers\get_fresh_bootstrap();
     if (($argv[1] ?? '') === 'check-maintenance') {
         require __DIR__ . '/MaintenanceBootChecks.php';
@@ -142,6 +150,7 @@ try {
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-registration-throttle') {
             $kernel->bootstrap();
+            $app->configContainer->setConfigKey('app', ['crypto_key' => str_repeat('fictional-registration-key-', 2)]);
             $app->configContainer->setConfigKey('throttle', [
                 'max_attempts' => 5, 'ttl' => 600,
                 'registration' => ['max_attempts' => 1, 'ttl' => 600],
@@ -155,7 +164,12 @@ try {
                     return new \Laminas\Diactoros\Response\JsonResponse(['ok' => true]);
                 },
             );
-            $request = new \Qubus\Http\ServerRequest(['REMOTE_ADDR' => '192.0.2.15'], [], '/create/', 'POST')
+            $request = new \Qubus\Http\ServerRequest(
+                ['REMOTE_ADDR' => '192.0.2.15'],
+                [],
+                'https://campus.example.invalid/create/',
+                'POST',
+            )
                 ->withHeader('Accept', 'text/html');
             $allowed = $middleware->process($request, $handler);
             $limited = $middleware->process($request, $handler);
@@ -166,6 +180,37 @@ try {
             ) {
                 throw new RuntimeException('The registration throttle alias/cache boundary did not resolve correctly.');
             }
+            // Actual /create/ routing: CSRF rejects first, then the exhausted counter stops controller resolution.
+            $app->router->baseMiddleware = ['sis.privacy', 'csrf.protection', 'bind.request', 'php.debugbar'];
+            $routed = $request->withHeader('Accept', 'application/json')->withAttribute(
+                \Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::CSRF_SESSION_ATTRIBUTE,
+                'fictionalcsrftoken',
+            );
+            if ($app->router->match($routed)->getStatusCode() !== 403) {
+                throw new RuntimeException('Public registration bypassed framework CSRF.');
+            }
+            $routed = $routed->withHeader('X-CSRF-Token', 'fictionalcsrftoken');
+            $blocked = $app->router->match($routed);
+            if (
+                $blocked->getStatusCode() !== 429 || $blocked->hasHeader('phpdebugbar-id')
+                || !str_contains($blocked->getHeaderLine('Cache-Control'), 'private, no-store')
+            ) {
+                throw new RuntimeException('The actual registration route lost its private counter guard.');
+            }
+            $identifier = hash_hmac(
+                'sha256',
+                'public-registration:' . inet_pton('192.0.2.15'),
+                str_repeat('fictional-registration-key-', 2),
+            );
+            $app->make(\Application\Http\Security\RegistrationCounterLock::class)->run(
+                $identifier,
+                static function () use ($app, $routed): void {
+                    $busy = $app->router->match($routed);
+                    if ($busy->getStatusCode() !== 503 || $busy->getHeaderLine('Retry-After') !== '5') {
+                        throw new RuntimeException('The actual registration route did not fail closed on a busy lock.');
+                    }
+                },
+            );
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-admission-readiness') {
             $kernel->bootstrap();
