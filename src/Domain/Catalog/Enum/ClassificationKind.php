@@ -14,6 +14,13 @@ enum ClassificationKind: string
     case Campus = "campus";
     case School = "school";
     case FieldOfStudy = "field_of_study";
+    case ReportingGroup = "reporting_group";
+
+    /** @return list<self> */
+    public static function sectionKinds(): array
+    {
+        return [self::InstructionalMethod, self::Campus, self::ReportingGroup];
+    }
 
     /** @return list<self> */
     public static function courseKinds(): array

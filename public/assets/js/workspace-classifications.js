@@ -2,7 +2,14 @@
 window.createWorkspaceClassifications = function (ui) {
     "use strict";
     const { node, request, task, buildForm, formData, openDrawer, actionMenu, badge } = ui;
+    const reportingText = (key, fallback) => ui.reportingLabels?.[key] || fallback;
+    const groupText = (kind, key, fallback) => kind === 'reporting_group' ? reportingText(key, fallback) : fallback;
     const kinds = {
+        reporting_group: {
+            singular: reportingText('group', 'Reporting group'),
+            plural: reportingText('groups', 'Reporting groups'),
+            detail: reportingText('group_help', 'An optional institutional reporting period or group shared by related sections. It does not change instructional terms, dates, credits, charges or census rules.'),
+        },
         school: {
             singular: "School/college",
             plural: "Schools & colleges",
@@ -57,7 +64,7 @@ window.createWorkspaceClassifications = function (ui) {
     const glyphs = {
         school: "buildings", field_of_study: "bookmark", department: "diagram-3",
         academic_level: "mortarboard", course_level: "layers", instructional_method: "easel2",
-        campus: "geo-alt", award: "award",
+        campus: "geo-alt", award: "award", reporting_group: "collection",
     };
 
     async function library(
@@ -70,13 +77,13 @@ window.createWorkspaceClassifications = function (ui) {
         backLabel = "Back to course classifications",
     ) {
         const category = kinds[kind];
-        const sectionKind = ["instructional_method", "campus"].includes(kind);
+        const sectionKind = ["instructional_method", "campus", "reporting_group"].includes(kind);
         const extendedProgramKind = ["school", "field_of_study"].includes(kind);
-        const visibleKinds = sectionKind ? ["instructional_method", "campus"] : extendedProgramKind
+        const visibleKinds = sectionKind ? ["instructional_method", "campus", "reporting_group"] : extendedProgramKind
             ? ["school", "field_of_study"] : ["department", "academic_level", "course_level", "award"];
         const body = openDrawer(
             choose
-                ? `Choose ${category.singular.toLowerCase()}`
+                ? groupText(kind, "choose_group", `Choose ${category.singular.toLowerCase()}`)
                 : sectionKind
                   ? category.plural
                   : extendedProgramKind ? "Schools & fields" : kind === "award"
@@ -143,7 +150,7 @@ window.createWorkspaceClassifications = function (ui) {
             value: search,
         });
         const field = node("div", { class: "classification-search-field" },
-            node("label", { for: input.id, class: "form-label" }, `Find ${category.plural.toLowerCase()}`),
+            node("label", { for: input.id, class: "form-label" }, groupText(kind, "find_groups", `Find ${category.plural.toLowerCase()}`)),
             input,
         );
         const clear = button("Clear", () => library(kind, "", null, [], choose, back, backLabel), "btn-outline-secondary");
@@ -168,7 +175,7 @@ window.createWorkspaceClassifications = function (ui) {
             library(kind, search, after, stack, choose, back, backLabel);
         body.append(
             form,
-            node("div", { class: "inline-actions mb-3" }, button(`Add ${category.singular.toLowerCase()}`, () =>
+            node("div", { class: "inline-actions mb-3" }, button(groupText(kind, "add_group", `Add ${category.singular.toLowerCase()}`), () =>
                 editor(kind, null, choose || refresh, refresh),
             )),
             node("p", { class: "form-text", role: "status" }, `${data.items.length} ${data.items.length === 1 ? "classification" : "classifications"} on this page.`),
@@ -190,7 +197,7 @@ window.createWorkspaceClassifications = function (ui) {
         data.items.forEach((row) => {
             const active = row.active === true || Number(row.active) === 1;
             const actions = node("div", { class: "classification-record-actions" },
-                button(`Edit ${row.code}`, () => editor(kind, row, refresh, refresh), "btn-outline-secondary"));
+                button(`${groupText(kind, "edit", "Edit")} ${row.code}`, () => editor(kind, row, refresh, refresh), "btn-outline-secondary"));
             const card = node(
                 "article",
                 { class: "classification-record-card", "aria-label": `${category.singular} ${row.code}` },
@@ -205,7 +212,7 @@ window.createWorkspaceClassifications = function (ui) {
             if (choose && active)
                 actions.prepend(
                     button(
-                        `Choose ${row.code}`,
+                        `${groupText(kind, "choose", "Choose")} ${row.code}`,
                         () => choose(row),
                         "btn-primary",
                     ),
@@ -218,12 +225,12 @@ window.createWorkspaceClassifications = function (ui) {
     async function editor(kind, row, saved, back, draft = null, school = row?.school || null) {
         const category = kinds[kind];
         const body = openDrawer(
-            `${row ? "Edit" : "Add"} ${category.singular.toLowerCase()}`,
+            groupText(kind, row ? "edit_group" : "add_group", `${row ? "Edit" : "Add"} ${category.singular.toLowerCase()}`),
             "REFERENCE SETUP",
         );
         const fields = [
-            ["code", `${category.singular} code`],
-            ["title", `${category.singular} name`],
+            ["code", groupText(kind, "group_code", `${category.singular} code`)],
+            ["title", groupText(kind, "group_name", `${category.singular} name`)],
             ["active", "Available for new assignments", "checkbox"],
         ];
         const form = await buildForm(fields, draft || row || { active: true });
@@ -262,16 +269,16 @@ window.createWorkspaceClassifications = function (ui) {
                 await saved(result);
             }, save);
         });
-        body.append(form, button(`Back to ${category.plural.toLowerCase()}`, back));
+        body.append(form, button(groupText(kind, "back_groups", `Back to ${category.plural.toLowerCase()}`), back));
     }
 
     async function assignment(target, id, saved = false) {
         const isSection = target === "section";
         const categoryKeys = isSection
-            ? ["instructional_method", "campus"]
+            ? ["instructional_method", "campus", "reporting_group"]
             : ["department", "academic_level", "course_level"];
         const path = `/sis/${isSection ? "sections" : "courses"}/${id}/classifications/`;
-        const loading = openDrawer(isSection ? "Method & campus" : "Course departments & levels", "DRAFT CLASSIFICATIONS");
+        const loading = openDrawer(isSection ? reportingText("section_setup", "Section classifications") : "Course departments & levels", "DRAFT CLASSIFICATIONS");
         loading.append(node("p", { role: "status", class: "form-text" }, "Loading current classifications…"));
         const current = await request(path);
         if (!loading.isConnected) return;
@@ -281,7 +288,7 @@ window.createWorkspaceClassifications = function (ui) {
                 JSON.stringify(choices) !==
                 JSON.stringify(current.classifications);
             const body = openDrawer(
-                isSection ? "Method & campus" : "Course departments & levels",
+                isSection ? reportingText("section_setup", "Section classifications") : "Course departments & levels",
                 isSection ? "SECTION SETUP" : "DRAFT CLASSIFICATIONS",
             );
             body.append(
@@ -314,14 +321,15 @@ window.createWorkspaceClassifications = function (ui) {
             for (const kind of categoryKeys) {
                 const category = kinds[kind],
                     value = choices[kind];
+                const controls = node("div", { class: "d-flex flex-wrap gap-2 mt-auto" });
                 const card = node(
                     "section",
                     {
-                        class: "surface p-3 h-100",
+                        class: "surface p-3 h-100 d-flex flex-column",
                         "aria-label": category.singular,
                     },
                     node("h3", { class: "h5 text-break" }, category.singular),
-                    node("p", { class: "text-secondary" }, category.detail),
+                    node("p", { class: "text-secondary flex-grow-1" }, category.detail),
                     node(
                         "p",
                         { class: "text-break" },
@@ -329,8 +337,12 @@ window.createWorkspaceClassifications = function (ui) {
                             ? `${value.code} — ${value.title}`
                             : "Not specified",
                     ),
-                    button(`Choose ${category.singular.toLowerCase()}`, () =>
-                        library(
+                    controls,
+                );
+                controls.append(
+                    button(
+                        groupText(kind, "choose_group", `Choose ${category.singular.toLowerCase()}`),
+                        () => library(
                             kind,
                             "",
                             null,
@@ -351,9 +363,9 @@ window.createWorkspaceClassifications = function (ui) {
                     ),
                 );
                 if (value)
-                    card.append(
+                    controls.append(
                         button(
-                            `Clear ${category.singular.toLowerCase()}`,
+                            groupText(kind, "clear_group", `Clear ${category.singular.toLowerCase()}`),
                             () => {
                                 choices[kind] = null;
                                 render();
@@ -364,9 +376,7 @@ window.createWorkspaceClassifications = function (ui) {
                     node(
                         "div",
                         {
-                            class: isSection
-                                ? "col-12 col-xl-6"
-                                : "col-12 col-xl-4",
+                            class: "col-12 col-xl-4",
                         },
                         card,
                     ),

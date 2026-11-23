@@ -383,6 +383,30 @@ final class AcademicReportSchema
                         "retained_offering",
                         "instructional_method_title",
                     ),
+                    "retained_reporting_group_id" => $field(
+                        "Retained reporting group reference",
+                        "string",
+                        "retained_offering",
+                        "reporting_group_id",
+                    ),
+                    "retained_reporting_group_code" => $field(
+                        "Retained reporting group code",
+                        "string",
+                        "retained_offering",
+                        "reporting_group_code",
+                    ),
+                    "retained_reporting_group_title" => $field(
+                        "Retained reporting group name",
+                        "string",
+                        "retained_offering",
+                        "reporting_group_title",
+                    ),
+                    "retained_reporting_group_recorded" => $field(
+                        "Reporting group choice recorded in accepted offering",
+                        "boolean",
+                        "retained_offering",
+                        "reporting_group_recorded",
+                    ),
                     "retained_campus_code" => $field(
                         "Retained campus/site code",
                         "string",
@@ -497,6 +521,12 @@ final class AcademicReportSchema
                     "id",
                 ),
                 "current_campus" => $join("sis_catalog_classifications", "section_setup", "campus_id", "id"),
+                "current_reporting_group" => ["label" => "Current section reporting group"] + $join(
+                    "sis_catalog_classifications",
+                    "section_setup",
+                    "reporting_group_id",
+                    "id",
+                ),
                 "term" => $join("sis_terms", "section", "term_id", "id"),
                 "delivery" => $join("sis_section_delivery", "section", "id", "section_id"),
                 "enrollment" => $join("sis_enrollments", "section", "id", "section_id", $studentRead) + [
@@ -516,6 +546,24 @@ final class AcademicReportSchema
                     "Current instructional method name",
                     "string",
                     "current_method",
+                    "title",
+                ),
+                "current_reporting_group_id" => $field(
+                    "Current reporting group reference",
+                    "string",
+                    "current_reporting_group",
+                    "id",
+                ),
+                "current_reporting_group_code" => $field(
+                    "Current reporting group code",
+                    "string",
+                    "current_reporting_group",
+                    "code",
+                ),
+                "current_reporting_group_title" => $field(
+                    "Current reporting group name",
+                    "string",
+                    "current_reporting_group",
                     "title",
                 ),
                 "current_campus_code" => $field("Current campus/site code", "string", "current_campus", "code"),

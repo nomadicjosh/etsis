@@ -7,7 +7,7 @@ Implemented 2026-11-09. Authorized catalog staff can review and retain a section
 1. Open **Academic catalog → Sections → a section → Published section details**.
 2. If necessary, use **Choose course definition** first. Retain an explicitly selected published course version, then choose **Publish section details** from that screen. The publication workflow verifies both the binding decision and its cached course definition against protected history.
 3. Enter **Instruction starts on** and **Instruction ends on**, with a reason for publication. The first setup suggests the term dates; staff must review the actual instructional period. Later setup starts from the latest section publication's dates.
-4. Choose **Review section publication**. Check the section, instructional dates, term and term dates, capacity, delivery, instructional method, campus/site, faculty, section fee and retained course reference. Reviewing writes no publication.
+4. Choose **Review section publication**. Check the section, instructional dates, term and term dates, capacity, delivery, instructional method, campus/site, reporting group, faculty, section fee and retained course reference. Reviewing writes no publication.
 5. Use **Revise section publication** to change dates or reason without losing the draft. **Publish reviewed section details** records the decision and required audit together.
 6. Open **View section publications** to inspect retained versions. History is paged, oldest first. Paging preserves unsaved date/reason entries in page memory; browser storage is not used.
 
@@ -19,7 +19,7 @@ Publication takes effect on confirmation. Staff cannot backdate its decision tim
 
 In **Academic catalog → Curriculum**, use **Instructional methods** and **Campuses & sites** to create your institution's definitions. A method describes the teaching format, such as lecture, seminar or laboratory. Delivery mode still separately means in person, online or hybrid. A campus/site is optional and does not reserve or require a room. No institution-specific definitions are seeded.
 
-Open **Sections → a section → Method & campus** to choose both references in one editor. Search results are bounded, and returning from a search preserves the other choice. You can add a definition while choosing it, clear either choice and save once. **Review publication** becomes available after saving. This reuses the course-classification library/editor; ordinary reference setup and draft assignments remain audited CRUD.
+Open **Sections → a section → Section classifications** to choose these references and an optional reporting group in one editor. Search results are bounded, and returning from a search preserves the other choices. You can add a definition while choosing it, clear any choice and save once. **Review publication** becomes available after saving. This reuses the course-classification library/editor; ordinary reference setup and draft assignments remain audited CRUD.
 
 New section-publication reviews display the exact method/campus labels being retained. Confirmation records their ULIDs, codes and names as protected `offering_classifications` metadata on the existing `SectionDefinitionWasPublished` event. Its original schema-1 payload remains unchanged. Publication reasons remain protected and are not included in the curated history page. Reference edits or assignment changes after review require a fresh review; an accepted retry returns the original publication without rewriting it.
 
@@ -32,6 +32,36 @@ Existing publications without this metadata remain **Not recorded in this public
 Migration `20261117000012` creates `sis_section_classifications` for draft identities and `sis_section_version_classes` for retained publication labels. The migration does not change events, older caches or student records, and does not infer assignments. Snapshot identities intentionally have no foreign key to a mutable reference definition. The existing section-publication lock order extends to reference identities in sorted order after section/course/term locks. Current-row reads protect reviews after waiting for locks; publication, its caches and required audit remain one transaction.
 
 Report Studio exposes **Current instructional method** and **Current campus/site** code/name fields on sections. Academic-credit reports expose **Retained instructional method** and **Retained campus/site** fields through the student's accepted offering reference. These use indexed one-to-one joins, not current reference labels or event replay. Earlier unknown references remain blank. A removed early drop does not reappear because its retained routing exists. Ordinary reporting cannot expose raw events or protected publication reasons.
+
+## Reporting groups
+
+Implemented November 23, 2026. A reporting group is an optional institution-defined period or label shared by sections. For example, sections in instructional terms **26/FA-A** and **26/FA-B** can both belong to **2026-FA — Fall reporting**. Each section keeps its own instructional term and dates; the common group provides an additional reporting relationship.
+
+1. Open **Academic catalog → Curriculum → Reporting groups**. Create the institution's code and name. Definitions have stable ULID identities; codes are labels, not relationships inferred from section names or dates. Retire definitions when they should no longer be assigned.
+2. Open **Sections → a section → Section classifications**. Choose the group alongside method and campus/site, then **Save section setup**. Search, paging and creating a definition preserve the other draft choices. A section can explicitly have no group.
+3. Choose **Review publication**, review the exact group code/name with the offering dates, and publish the reviewed section details. Publishing retains the group identity and labels; editing a reference later does not relabel that publication.
+4. For a selected offering, use the existing reviewed initial selection or **Amend offering for future registrations** as appropriate. Changing an assigned group ID pauses new registrations until a matching publication is deliberately selected. Earlier students and accepted retries keep their original offering references. Renaming or retiring the same reference alone preserves registration under its retained identity.
+
+Group assignment does not change credits, CEUs, charges, registration/drop deadlines, census dates, student load or degree requirements. It does not declare a student's official reporting period or attendance location. There is no automatic term-level default or inferred assignment. Templates and draft offering plans do not choose a group automatically; plan publication retains the saved section choices through the existing review/activation flow.
+
+### Current and retained reporting fields
+
+The existing Report Studio **Sections, teaching & enrollment counts** source exposes **Current reporting group reference/code/name** from current section setup. The existing academic-credit source exposes **Retained reporting group reference/code/name** from each institutional credit's accepted offering, plus **Reporting group choice recorded in accepted offering**. These extend existing student-related sources; no additional report template or dataset is created.
+
+| Retained evidence | Recorded field | Group fields |
+| --- | --- | --- |
+| New publication with a selected group | Yes | Accepted identity, code and name |
+| New publication explicitly without a group | Yes | Empty |
+| Earlier classification snapshot without this relationship | No | Empty; earlier choice is unknown |
+| No retained classification snapshot or no institutional offering link | Empty | Empty; no choice is inferred |
+
+Use stable group references when combining short sessions. Credits remain credit rows; use distinct student references for headcounts and review the chosen dataset grain. A student's multiple credits can belong to the same group. Transfer work and earlier unknown facts are not assigned a group from today's setup. Current reference edits can change current section-report labels while accepted academic-credit labels remain unchanged.
+
+### Migration and preservation
+
+Apply **`20261123000000_AddSisSectionReportingGroups`** before using this workflow. It adds a nullable current reference and nullable retained identity/code/name, with a recorded flag defaulting to zero for earlier snapshots. It changes no existing event, registration, term, credit, publication or assignment. Earlier two-field `offering_classifications` metadata remains exactly two fields; new publications explicitly include `reporting_group`, even when blank. Both use the same protected journal and reconstructible cache. Malformed retained combinations fail verification; normal reads do not repair them.
+
+Catalog management, private responses, CSRF, stale revisions, sorted reference locks and final source/authority/required-audit checks use the existing boundaries. Fictional integration checks cover different short-session terms sharing a group, current versus retained labels, future amendments, original retries, unknown earlier evidence and audit/source rollback. Portable migration checks cover five schema dialects and a populated earlier SQLite schema. Native MariaDB application and history-preservation checks are recorded in the handoff; live multi-engine qualification remains open.
 
 ## Facts retained
 

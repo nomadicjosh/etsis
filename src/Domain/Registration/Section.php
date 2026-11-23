@@ -26,6 +26,7 @@ final readonly class Section
         public ?EntityId $instructionalMethodId = null,
         public ?EntityId $campusId = null,
         public int $minimumEnrollment = 0,
+        public ?EntityId $reportingGroupId = null,
     ) {
         if (trim($code) === '' || strlen($code) > 80 || $capacity < 1 || $capacity > 100000 || $fee->minor < 0) {
             throw new InvalidArgumentException('A section requires a code, positive capacity and nonnegative fees.');

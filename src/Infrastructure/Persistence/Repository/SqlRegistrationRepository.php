@@ -154,6 +154,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             $r['minimum_enrollment'] === null ? 0 :
                 (filter_var($r['minimum_enrollment'], FILTER_VALIDATE_INT) === false ?
                     throw new \Domain\Shared\EventSourcing\CorruptHistoryException() : (int) $r['minimum_enrollment']),
+            isset($classes["reporting_group_id"]) ? new EntityId($classes["reporting_group_id"]) : null,
         );
     }
 

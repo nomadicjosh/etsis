@@ -1261,3 +1261,87 @@ msgstr ""
 #: resources/views/backend/workspace/history-check-labels.php:20
 msgid "Check retained load history"
 msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:8
+msgid "Reporting group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:9
+msgid "Reporting groups"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:10
+msgid "Choose reporting group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:11
+msgid "Clear reporting group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:12
+msgid "Find reporting groups"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:13
+msgid "Add reporting group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:14
+msgid "Edit reporting group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:15
+msgid "Reporting group code"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:16
+msgid "Reporting group name"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:17
+msgid "Back to reporting groups"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:18
+msgid "Choose"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:20
+msgid "An optional institutional reporting period or group shared by related sections. It does not change instructional terms, dates, credits, charges or census rules."
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:24
+msgid "Section classifications"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:25
+msgid "Current section reporting group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:26
+msgid "Current reporting group reference"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:27
+msgid "Current reporting group code"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:28
+msgid "Current reporting group name"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:29
+msgid "Retained reporting group reference"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:30
+msgid "Retained reporting group code"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:31
+msgid "Retained reporting group name"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:32
+msgid "Reporting group choice recorded in accepted offering"
+msgstr ""

@@ -13,23 +13,35 @@ final readonly class SectionClassifications
     public function __construct(
         public ?ClassificationSnapshot $instructionalMethod = null,
         public ?ClassificationSnapshot $campus = null,
+        public ?ClassificationSnapshot $reportingGroup = null,
+        public bool $reportingGroupRecorded = true,
     ) {
+        if (!$reportingGroupRecorded && $reportingGroup !== null) {
+            throw new InvalidArgumentException('An unrecorded reporting group must stay unknown.');
+        }
     }
 
     /** @param array<string, mixed> $data */
     public static function fromArray(array $data): self
     {
         $values = [];
-        if (count($data) !== 2) {
+        if (!in_array(count($data), [2, 3], true)) {
             throw new InvalidArgumentException(
-                "Provide both section classification fields.",
+                "Provide the complete retained section classifications.",
             );
         }
+        $recorded = array_key_exists('reporting_group', $data);
         $kinds = [ClassificationKind::InstructionalMethod, ClassificationKind::Campus];
+        if ($recorded) {
+            $kinds[] = ClassificationKind::ReportingGroup;
+        }
+        if (count($data) !== count($kinds)) {
+            throw new InvalidArgumentException('Use only the retained section classification fields.');
+        }
         foreach ($kinds as $kind) {
             if (!array_key_exists($kind->value, $data)) {
                 throw new InvalidArgumentException(
-                    "Provide both section classification fields.",
+                    "Provide the complete retained section classifications.",
                 );
             }
             $value = $data[$kind->value];
@@ -43,7 +55,7 @@ final readonly class SectionClassifications
             ? null
             : ClassificationSnapshot::fromArray($value);
         }
-        return new self(...$values);
+        return new self($values[0], $values[1], $values[2] ?? null, $recorded);
     }
 
     /** @return array<string, array{id: string, code: string, title: string}|null> */
@@ -52,6 +64,6 @@ final readonly class SectionClassifications
         return [
             "instructional_method" => $this->instructionalMethod?->describe(),
             "campus" => $this->campus?->describe(),
-        ];
+        ] + ($this->reportingGroupRecorded ? ['reporting_group' => $this->reportingGroup?->describe()] : []);
     }
 }

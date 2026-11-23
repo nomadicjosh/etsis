@@ -33,7 +33,7 @@ final readonly class SqlSectionClassificationRepository implements SectionClassi
             static fn(EntityId $id): string => $id->value,
             $additional,
         );
-        foreach (["instructional_method_id", "campus_id"] as $key) {
+        foreach (["instructional_method_id", "campus_id", "reporting_group_id"] as $key) {
             if (($row[$key] ?? null) !== null) {
                 $ids[] = $row[$key];
             }
@@ -53,10 +53,7 @@ final readonly class SqlSectionClassificationRepository implements SectionClassi
             $section->value,
         ) ?? [];
         $values = [];
-        $kinds = [
-            ClassificationKind::InstructionalMethod,
-            ClassificationKind::Campus,
-        ];
+        $kinds = ClassificationKind::sectionKinds();
         foreach ($kinds as $kind) {
             $id = $row[$kind->value . "_id"] ?? null;
             $value =
@@ -83,6 +80,7 @@ final readonly class SqlSectionClassificationRepository implements SectionClassi
             "instructional_method_id" =>
                 $values->instructionalMethod?->id->value,
             "campus_id" => $values->campus?->id->value,
+            "reporting_group_id" => $values->reportingGroup?->id->value,
         ];
         if (
             $this->sql->current(

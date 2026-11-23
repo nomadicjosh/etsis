@@ -113,16 +113,29 @@ if (
 ) {
     throw new RuntimeException("Instructional method setup failed.");
 }
+$groupResponse = $teachingPost('/sis/catalog/classifications/reporting_group/save/', [
+    'code' => 'FA-2026', 'title' => 'Fictional fall reporting', 'active' => true,
+    'id' => null, 'revision' => null,
+]);
+$groupRow = json_decode((string) $groupResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($groupResponse->getStatusCode() !== 200 || !is_string($groupRow['id'] ?? null)) {
+    throw new RuntimeException('Reporting-group reference setup did not resolve through its private provider.');
+}
 $eventsBeforeClassification = $sis->sql->rows("sis_history_events");
 $classificationCommand = [
     "instructional_method_id" => $methodRow["id"],
     "campus_id" => null,
+    "reporting_group_id" => $groupRow["id"],
     "revision" => $classificationSetup["revision"],
 ];
 if (
     $teachingPost(
         $classificationBase,
         array_diff_key($classificationCommand, ["campus_id" => true]),
+    )->getStatusCode() !== 422 ||
+    $teachingPost(
+        $classificationBase,
+        array_diff_key($classificationCommand, ["reporting_group_id" => true]),
     )->getStatusCode() !== 422 ||
     $teachingPost(
         $classificationBase,
@@ -173,7 +186,8 @@ $publicationProof = $sectionPublisher->review(
 if (
     ($publicationProof["classifications"]["instructional_method"]["id"] ??
         null) !==
-    $methodRow["id"]
+    $methodRow["id"] ||
+    ($publicationProof['classifications']['reporting_group']['id'] ?? null) !== $groupRow['id']
 ) {
     throw new RuntimeException(
         "Publication providers omitted the saved instructional method.",

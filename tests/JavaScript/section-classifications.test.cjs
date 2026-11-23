@@ -14,7 +14,7 @@ async function fixture(section = true) {
     const campus = { id: 'campus', code: 'MAIN', title: '<img> Fictional Campus', active: true };
     const method = { id: 'method', code: 'LEC', title: 'Lecture', active: true };
     let current = { section: { id: 'section', code: 'MATH.101.A' }, course: { code: 'MATH.101', title: 'Fictional Algebra' },
-        revision: 'fictional-revision', classifications: section ? { instructional_method: null, campus: null } : { department: null, academic_level: null, course_level: null } };
+        revision: 'fictional-revision', classifications: section ? { instructional_method: null, campus: null, reporting_group: null } : { department: null, academic_level: null, course_level: null } };
     const ui = window.createWorkspaceClassifications({ node, openDrawer: () => { body.replaceChildren(); return body; },
         badge: value => node('span', {}, value),
         actionMenu: (label, entries) => node('div', {}, node('button', {}, label), ...entries),
@@ -22,7 +22,7 @@ async function fixture(section = true) {
         request: async (path, verb, data) => {
             calls.push({ path, verb, data });
             if (path.includes('/page/')) return { items: path.includes('/campus/') ? [campus] : [method], next_after: null };
-            if (verb === 'POST') { current = { ...current, classifications: { instructional_method: data.instructional_method_id ? method : null, campus: data.campus_id ? campus : null } }; return {}; }
+            if (verb === 'POST') { current = { ...current, classifications: { instructional_method: data.instructional_method_id ? method : null, campus: data.campus_id ? campus : null, reporting_group: null } }; return {}; }
             return current;
         }, buildForm: async () => node('form'), formData: () => ({}),
     });
@@ -48,9 +48,9 @@ test('section draft choices survive searches until one combined save, then publi
     assert.equal(f.find('Review publication').disabled, false);
     await f.click('Review publication'); assert.deepEqual(f.publications, ['section']);
 });
-test('reference setup presents the two section categories without requiring campus or room selection', async () => {
+test('reference setup presents section categories without requiring campus or room selection', async () => {
     const f = await fixture(); await f.ui.library('campus');
-    assert.ok(f.find('Instructional methods')); assert.ok(f.find('Campuses & sites'));
+    assert.ok(f.find('Instructional methods')); assert.ok(f.find('Campuses & sites')); assert.ok(f.find('Reporting groups'));
     assert.equal(f.find('Departments'), undefined);
     assert.match(f.body.textContent, /leave it blank when it does not apply/);
 });

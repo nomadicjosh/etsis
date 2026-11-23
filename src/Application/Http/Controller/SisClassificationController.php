@@ -94,10 +94,10 @@ final readonly class SisClassificationController
         string $id,
     ): ResponseInterface {
         $body = $request->getParsedBody();
-        foreach (["instructional_method_id", "campus_id"] as $key) {
+        foreach (["instructional_method_id", "campus_id", "reporting_group_id"] as $key) {
             if (!is_array($body) || !array_key_exists($key, $body)) {
                 throw new InvalidArgumentException(
-                    "Provide both section classification choices.",
+                    "Provide all three section classification choices.",
                 );
             }
         }
@@ -106,6 +106,7 @@ final readonly class SisClassificationController
             new EntityId($id),
             $input->optionalId("instructional_method_id"),
             $input->optionalId("campus_id"),
+            $input->requiredNullableId("reporting_group_id"),
             $input->text("revision", 64),
         );
         return new JsonResponse(["status" => "saved"]);

@@ -144,10 +144,22 @@ window.createWorkspaceReportStudio = function (ui) {
         return body;
     }
     window.addEventListener("pagehide", cleanup);
+    async function reportCatalog() {
+        const catalog = await request("/sis/report-studio/catalog/");
+        for (const dataset of catalog.datasets) {
+            for (const [key, field] of Object.entries(dataset.fields)) {
+                if (ui.reportingLabels?.[key]) field.label = ui.reportingLabels[key];
+            }
+            for (const [key, relation] of Object.entries(dataset.relationships || {})) {
+                if (ui.reportingLabels?.[key]) relation.label = ui.reportingLabels[key];
+            }
+        }
+        return catalog;
+    }
     async function start() {
         const pendingView = openSpace("Report Studio", "REPORTING");
         pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading report details…"));
-        const catalog = await request("/sis/report-studio/catalog/");
+        const catalog = await reportCatalog();
         if (!pendingView.isConnected) return;
         const body = openSpace("Report Studio", "TURN A QUESTION INTO A CLEAR ANSWER");
         const surface = node("section", { class: "report-studio report-launch" });
@@ -2888,14 +2900,14 @@ window.createWorkspaceReportStudio = function (ui) {
         if (saved.can_manage && !frozen)
             recordTools.append(
                 button("Edit", async () => {
-                    const catalog = await request("/sis/report-studio/catalog/"),
+                    const catalog = await reportCatalog(),
                         dataset = catalog.datasets.find((d) => d.id === saved.definition.dataset);
                     if (!dataset) throw new Error("This source is no longer available to your account.");
                     await edit(dataset, saved.definition, saved);
                 }),
             );
         if (saved.can_manage && frozen) recordTools.append(button("Make a copy", async () => {
-            const catalog = await request("/sis/report-studio/catalog/");
+            const catalog = await reportCatalog();
             const dataset = catalog.datasets.find(item => item.id === saved.definition.dataset);
             if (!dataset) throw new Error("This source is no longer available to your account.");
             await edit(dataset, saved.definition);

@@ -274,7 +274,8 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                     ? json_encode($definition->definition->data['contact_hours'], JSON_THROW_ON_ERROR) : null],
         );
         if ($definition->classifications !== null) {
-            $row = ["id" => $definition->publication->value];
+            $row = ["id" => $definition->publication->value,
+                "reporting_group_recorded" => (int) $definition->classifications->reportingGroupRecorded];
             $classes = $definition->classifications->describe();
             foreach ($classes as $kind => $value) {
                 foreach (["id", "code", "title"] as $field) {
@@ -298,7 +299,20 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
             return null;
         }
         $values = [];
-        foreach (["instructional_method", "campus"] as $kind) {
+        $recorded = $this->integer($row['reporting_group_recorded']);
+        if (!in_array($recorded, [0, 1], true)) {
+            throw new CorruptHistoryException();
+        }
+        if (
+            $recorded === 0 && ($row['reporting_group_id'] !== null
+            || $row['reporting_group_code'] !== null || $row['reporting_group_title'] !== null)
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $kinds = $recorded === 1
+        ? ['instructional_method', 'campus', 'reporting_group']
+        : ['instructional_method', 'campus'];
+        foreach ($kinds as $kind) {
             if ($row[$kind . "_id"] === null) {
                 if (
                     $row[$kind . "_code"] !== null ||

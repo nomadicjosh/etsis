@@ -47,10 +47,12 @@ final readonly class PublishedSectionDefinition
     public function matchesClassifications(
         ?EntityId $method,
         ?EntityId $campus,
+        ?EntityId $reportingGroup,
     ): bool {
         return $method?->value ===
         $this->classifications?->instructionalMethod?->id->value &&
-        $campus?->value === $this->classifications?->campus?->id->value;
+        $campus?->value === $this->classifications?->campus?->id->value &&
+        $reportingGroup?->value === $this->classifications?->reportingGroup?->id->value;
     }
 
     public function matchesOffering(
@@ -71,6 +73,7 @@ final readonly class PublishedSectionDefinition
         $this->matchesClassifications(
             $section->instructionalMethodId,
             $section->campusId,
+            $section->reportingGroupId,
         ) &&
         $d["fee_minor"] === $section->fee->minor &&
         $d["currency"] === $section->fee->currency;

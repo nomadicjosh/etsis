@@ -1440,9 +1440,9 @@ window.createWorkspaceCatalog = function (ui) {
             ["Section fee", money(definition.fee_minor, definition.currency)],
         ];
         if (facultyLabel !== null) fields.push(["Faculty", facultyLabel]);
-        for (const [key, label] of [["instructional_method", "Instructional method"], ["campus", "Campus/site"]]) {
+        for (const [key, label] of [["instructional_method", "Instructional method"], ["campus", "Campus/site"], ["reporting_group", ui.reportingLabels?.group || "Reporting group"]]) {
             const value = classifications?.[key];
-            fields.push([label, classifications === null ? "Not recorded in this publication" : value ? `${value.code} — ${value.title}` : "Not specified"]);
+            fields.push([label, classifications === null || !Object.hasOwn(classifications, key) ? "Not recorded in this publication" : value ? `${value.code} — ${value.title}` : "Not specified"]);
         }
         const details = node("dl", { class: "row g-2" });
         for (const [label, value] of fields) {

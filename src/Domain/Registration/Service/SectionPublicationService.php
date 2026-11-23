@@ -368,10 +368,13 @@ final readonly class SectionPublicationService
                 $section,
             );
             $this->authorize($actor);
-            if ($r["expires_at"] <= $this->clock->now()->getTimestamp() ||
+            if (
+                $r["expires_at"] <= $this->clock->now()->getTimestamp() ||
                 $this->contactHours->snapshot($section) !== $r["definition"]["contact_hours"]
             ) {
-                throw new ConcurrentModificationException("Contact time or its policy changed. Review the offering again.");
+                throw new ConcurrentModificationException(
+                    "Contact time or its policy changed. Review the offering again."
+                );
             }
             return $receipt;
         });
@@ -767,6 +770,7 @@ final readonly class SectionPublicationService
         return $definition->matchesClassifications(
             $classes->instructionalMethod?->id,
             $classes->campus?->id,
+            $classes->reportingGroup?->id,
         );
     }
 
@@ -1118,8 +1122,8 @@ final readonly class SectionPublicationService
         }
         if ($recordContact) {
             $data['contact_hours'] = array_key_exists('contact_hours', $retainedContact)
-                ? $retainedContact['contact_hours']
-                : $this->contactHours->snapshot(new EntityId($row['id']));
+            ? $retainedContact['contact_hours']
+            : $this->contactHours->snapshot(new EntityId($row['id']));
         }
         return new SectionDefinitionV1($data)->data;
     }

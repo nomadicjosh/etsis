@@ -47,10 +47,11 @@ final readonly class SectionClassificationService
         EntityId $section,
         ?EntityId $method,
         ?EntityId $campus,
+        ?EntityId $reportingGroup,
         string $revision,
     ): void {
         $actor = $this->access->requirePermission("sis:catalog:manage");
-        $ids = ["instructional_method" => $method, "campus" => $campus];
+        $ids = ["instructional_method" => $method, "campus" => $campus, "reporting_group" => $reportingGroup];
         $this->transactions->run(function () use (
             $section,
             $ids,
@@ -69,7 +70,7 @@ final readonly class SectionClassificationService
                     "Reload the section classifications before saving.",
                 );
             }
-            $values = [];
+            $values = $sources = [];
             foreach ($ids as $kind => $id) {
                 $row = $id === null ? null : $this->references->get($id);
                 if (
@@ -86,6 +87,7 @@ final readonly class SectionClassificationService
                         ],
                     ]);
                 }
+                $sources[$kind] = $row;
                 $values[$kind] =
                     $row === null
                         ? null
@@ -104,6 +106,14 @@ final readonly class SectionClassificationService
                 $section,
             );
             $this->authorize($actor);
+            if ($this->sections->current($section)->describe() !== $values) {
+                throw new ConcurrentModificationException('The section references changed before saving completed.');
+            }
+            foreach ($ids as $kind => $id) {
+                if ($id !== null && $this->references->get($id) !== $sources[$kind]) {
+                    throw new ConcurrentModificationException('A selected definition changed before saving completed.');
+                }
+            }
         });
     }
 

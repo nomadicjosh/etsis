@@ -2314,7 +2314,7 @@ window.createWorkspaceOperations = function (ui) {
                     "collection",
                     [
                         button("Course definition", () => ui.catalog().sectionDefinition(row.id)),
-                        button("Method & campus", () => ui.classifications().section(row.id)),
+                        button(ui.reportingLabels?.section_setup || "Section classifications", () => ui.classifications().section(row.id)),
                         button("Contact hours", () => ui.catalog().contactHours(row, () => openRecord(sectionName, row))),
                         button("Published section details", () => ui.catalog().sectionPublications(row.id, null, [], null,
                             () => openRecord(sectionName, row, origin))),
