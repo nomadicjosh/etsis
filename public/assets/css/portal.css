@@ -58,6 +58,7 @@
 .campus-fragment h2,
 .campus-fragment h3 {
     font-family: var(--campus-heading);
+    overflow-wrap: anywhere;
     color: var(--campus-ink);
     font-weight: 500;
     line-height: 1.13;
@@ -894,20 +895,6 @@
 .campus-site .modal-body,
 .campus-site .modal-header {
     padding: 25px;
-}
-.campus-toast {
-    position: fixed;
-    left: 50%;
-    bottom: 25px;
-    transform: translateX(-50%);
-    max-width: min(90vw, 600px);
-    padding: 15px 24px;
-    background: #193e35;
-    color: #fff;
-    border-radius: 8px;
-    z-index: 2000;
-    box-shadow: 0 6px 24px #193e3529;
-    font-size: 0.9rem;
 }
 .campus-auth {
     max-width: 540px;

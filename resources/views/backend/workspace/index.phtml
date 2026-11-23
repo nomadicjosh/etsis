@@ -65,7 +65,7 @@ $client = [
     "transcript_standing_labels" => require __DIR__ . "/transcript-standing-labels.php",
     "section_reporting_labels" => require __DIR__ . "/section-reporting-labels.php",
     "waitlist_bypass_labels" => require __DIR__ . "/waitlist-bypass-labels.php",
-    "notification_labels" => require __DIR__ . "/notification-labels.php",
+    "notification_labels" => require dirname(__DIR__, 2) . "/shared/notification-labels.php",
 ];
 ?>
 <!doctype html>
@@ -81,6 +81,7 @@ $client = [
         <link rel="stylesheet" href="/assets/vendor/icons/bootstrap-icons.min.css" />
         <link rel="stylesheet" href="/assets/vendor/query-builder.min.css" />
         <link rel="stylesheet" href="/assets/css/workspace.css" />
+        <link rel="stylesheet" href="/assets/css/notifications.css" />
         <link rel="stylesheet" href="/assets/css/application-form.css" />
         <link rel="stylesheet" href="/assets/css/degree-progress.css" />
         <link rel="stylesheet" href="/assets/css/review-guide.css" />
@@ -591,6 +592,11 @@ $client = [
                 </div>
             </div>
         </div>
-        <div id="workspace-status" class="workspace-notification-stack" role="status" aria-live="polite" aria-atomic="false"></div>
+        <div
+            id="workspace-status"
+            class="workspace-notification-stack"
+            role="status"
+            aria-live="polite"
+            aria-atomic="false"></div>
     </body>
 </html>

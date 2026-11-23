@@ -2,6 +2,8 @@
 
 The portal uses Bootstrap 5, local assets, and Vihzhuo native PHP blocks. It reads the existing academic and event-sourced financial services. No demonstration students, balances, or news are installed in the institution database.
 
+Signed-in pages now share the [notification bell, recent action feedback and optional sound choices](workspace-notifications.md#student-and-applicant-portal) with the staff workspace. Choose Message, Warm success, Bird, Piano or Short tone and test it; sound defaults off. Only display/sound preferences persist in this browser. Recent messages clear when leaving the page and do not replace Admissions updates, Booking updates or request status.
+
 ## Public campus events
 
 See the consolidated [public campus event workflow](public-campus-events.md) for publishing, the calendar, Vihzhuo blocks, permissions and cancellation behavior.

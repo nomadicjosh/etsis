@@ -2,8 +2,13 @@
 
 declare(strict_types=1);
 
+// phpcs:disable Generic.WhiteSpace.ScopeIndent -- Follow the enclosing HTML indentation in this mixed template.
+
 use Codefy\Framework\Proxy\Codefy;
 use Vihzhuo\Core\ThemeContext;
+
+use function Codefy\Framework\Helpers\trans_attr;
+use function Codefy\Framework\Helpers\trans_html;
 
 $esc = static fn(mixed $value): string => htmlspecialchars(
     (string) $value,
@@ -35,6 +40,10 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
         <link rel="stylesheet" href="/assets/css/degree-progress.css" />
         <link rel="stylesheet" href="/assets/css/review-guide.css" />
         <link rel="stylesheet" href="<?= $esc($themeAsset) ?>" />
+        <?php if ($signedIn) : ?>
+            <link rel="stylesheet" href="/assets/css/notifications.css" />
+            <script defer src="/assets/js/workspace-notifications.js"></script>
+        <?php endif; ?>
         <script defer src="/assets/vendor/bootstrap.bundle.min.js"></script>
         <script defer src="/assets/js/review-guidance.js"></script>
         <script defer src="/assets/js/application-form.js"></script>
@@ -82,6 +91,22 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
                         <small>LEARNING. POSSIBILITY. YOU.</small>
                     </span>
                 </a>
+                <?php if ($signedIn) : ?>
+                    <button
+                        id="campus-notifications-open"
+                        class="workspace-notification-trigger ms-auto mx-3"
+                        type="button"
+                        aria-haspopup="dialog"
+                        aria-expanded="false"
+                        aria-label="<?= trans_attr('Recent notifications') ?>">
+                        <i class="bi bi-bell" aria-hidden="true"></i>
+                        <span
+                            data-notification-count
+                            class="workspace-notification-count"
+                            aria-hidden="true"
+                            hidden></span>
+                    </button>
+                <?php endif; ?>
                 <button
                     class="navbar-toggler"
                     type="button"
@@ -175,6 +200,29 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
                 </div>
             </div>
         </div>
-        <div id="campus-notice" class="campus-toast" role="status" aria-live="polite" hidden></div>
+        <?php if ($signedIn) : ?>
+            <?php
+            $notificationLabels = require dirname(__DIR__, 5) . '/resources/views/shared/notification-labels.php';
+            $notificationLabels['recent'] = trans_html('Recent notifications');
+            $notificationLabels['notification'] = trans_html('Campus notification');
+            $notificationLabels['empty'] = trans_html('There are no notifications from this page.');
+            $notificationLabels['session_help'] = trans_html(
+                'Recent action feedback stays only in this page. Reloading or signing out clears it. '
+                . 'Check the relevant service for your current records and request status.',
+            );
+            ?>
+            <script id="campus-notification-config" type="application/json">
+                <?= json_encode(
+                    $notificationLabels,
+                    JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR,
+                ) ?>
+            </script>
+            <div
+                id="campus-notice"
+                class="workspace-notification-stack"
+                role="status"
+                aria-live="polite"
+                aria-atomic="false"></div>
+        <?php endif; ?>
     </body>
 </html>

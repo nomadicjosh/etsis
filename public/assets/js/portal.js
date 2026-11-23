@@ -8,6 +8,13 @@
     const config = one('#campus-config')
         ? JSON.parse(one('#campus-config').textContent)
         : {};
+    const notificationLabels = one('#campus-notification-config')
+        ? JSON.parse(one('#campus-notification-config').textContent) : {};
+    const notifications = one('#campus-notifications-open') ? window.createWorkspaceNotifications({
+        node: el, stack: one('#campus-notice'), trigger: one('#campus-notifications-open'),
+        bootstrap: window.bootstrap, labels: notificationLabels,
+    }) : null;
+    const feedbackText = (key, fallback) => notificationLabels[key] || fallback;
     let me = null;
     let addToRegistrationPlan = null;
     let dialogOpener = null;
@@ -92,6 +99,7 @@
                           _workspace_json: JSON.stringify(data || {}),
                       }).toString(),
         });
+        if ([401, 403].includes(response.status)) notifications?.clear();
         if (response.status === 401) {
             if (!pageLeaving) {
                 pageLeaving = true;
@@ -168,13 +176,7 @@
     }
 
     function notice(message) {
-        const box = one('#campus-notice');
-        if (!box) return;
-        box.textContent = message;
-        box.hidden = false;
-        setTimeout(() => {
-            box.hidden = true;
-        }, 7000);
+        if (!pageLeaving) notifications?.notify(message);
     }
 
     async function task(callback, button) {
@@ -659,7 +661,7 @@
                         version: me.contact.version,
                     });
                     await refreshMe();
-                    notice('Your contact information is up to date.');
+                    notice(feedbackText('contact_saved', 'Your contact information is up to date.'));
                 },
                 one('[type="submit"]', form),
             );
@@ -964,7 +966,7 @@
                             await reloadApplications();
                             if (pageLeaving || !saved.isConnected) return;
                             notice(
-                                'Application submitted. Here’s to your next chapter.',
+                                feedbackText('application_submitted', 'Application submitted. Here’s to your next chapter.'),
                             );
                         },
                     });
@@ -1782,7 +1784,7 @@
                                     ) return;
                                     dialog(
                                         `${item.course_code} — assignment scores`,
-                                        window.createGradebookCalculation({ node }).panel(scores.summary),
+                                        window.createGradebookCalculation({ node: el }).panel(scores.summary),
                                         scores.items.length
                                             ? table(
                                                   [
@@ -1802,7 +1804,7 @@
                                                       score.possible_hundredths === 0 ? 'Bonus only' : Number(
                                                           score.possible_hundredths,
                                                       ) / 100,
-                                                      window.createGradebookCalculation({ node }).assignmentLabel(score),
+                                                      window.createGradebookCalculation({ node: el }).assignmentLabel(score),
                                                   ]),
                                                   'Your assignment scores',
                                               )
@@ -1841,7 +1843,7 @@
             onComplete: async () => {
                 bootstrap.Modal.getInstance(one('#campus-dialog')).hide();
                 notice(
-                    'Your section was changed. The original course charges were reversed and replacement charges applied together.',
+                    feedbackText('section_changed', 'Your section was changed. The original course charges were reversed and replacement charges applied together.'),
                 );
                 await renderService();
             },
@@ -1890,7 +1892,9 @@
                                                 if (finished) return;
                                                 finished = true;
                                                 bootstrap.Modal.getInstance(one('#campus-dialog')).hide();
-                                                notice(receipt.academic_records_removed ? 'Your course was removed. Its course charge was reversed if present. Any account credit is reviewed separately for a cash refund.' : `Your course stays on your record with grade ${receipt.grade_code} and zero earned credits. Its course charge is retained.`);
+                                                notice(receipt.academic_records_removed
+                                                    ? feedbackText('course_removed', 'Your course was removed. Its course charge was reversed if present. Any account credit is reviewed separately for a cash refund.')
+                                                    : feedbackText('course_withdrawn', 'Your course stays on your record with grade {grade} and zero earned credits. Its course charge is retained.').replace('{grade}', receipt.grade_code));
                                                 await renderService();
                                             };
                                             dialog('Review your registration change',
@@ -1986,7 +1990,7 @@
                     onComplete: async (result) => {
                         selected.clear();
                         bootstrap.Modal.getInstance(one('#campus-dialog')).hide();
-                        notice(`${result.created} course sections registered together.`);
+                        notice(feedbackText('sections_registered', '{count} course sections registered together.').replace('{count}', result.created));
                         await renderService();
                     },
                 }),
@@ -2133,7 +2137,7 @@
                     });
                     if (!form.isConnected || pageLeaving || dialogGeneration !== portalDialogGeneration) return;
                     bootstrap.Modal.getInstance(one('#campus-dialog')).hide();
-                    notice('You’re registered. Your semester is taking shape.');
+                    notice(feedbackText('registered', 'You’re registered. Your semester is taking shape.'));
                     await renderService();
                 },
                 one('[type="submit"]', form),
@@ -2275,7 +2279,7 @@
                         recipient: recipient.disabled ? '' : recipient.value,
                     });
                     notice(
-                        'Your request is with the registrar. Follow its progress below.',
+                        feedbackText('transcript_requested', 'Your request is with the registrar. Follow its progress below.'),
                     );
                     await renderService();
                 },
@@ -2305,7 +2309,7 @@
                                               version: Number(item.version),
                                           },
                                       );
-                                      notice('Transcript request cancelled.');
+                                      notice(feedbackText('transcript_cancelled', 'Transcript request cancelled.'));
                                       await renderService();
                                   })
                                 : '—',
@@ -2606,7 +2610,7 @@
             me = { person: { id: context.person_id }, applications: context.items };
         } else if (!['timetable', 'bookings', 'admissionsupdates'].includes(config.section)) await refreshMe();
         const restoreFocus = container.contains(document.activeElement);
-        const content = document.createDocumentFragment();
+        const content = el('div');
         const actions = {
             overview,
             profile,

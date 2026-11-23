@@ -31,8 +31,22 @@ async function mockServices(page, options = {}) {
         else if (path === '/portal/api/applications/') result = { person_id: person, items: me.applications };
         else if (path === '/portal/api/programs/') result = { items: [{ id: program, code: 'BS.CS', title: 'Computer Science', form_id: formId }], next_after: null };
         else if (path === '/portal/api/courses/') result = { items: [course], next_after: null };
+        else if (path === '/portal/api/registration/review/') result = {
+            operation_id: id(16), revision: 'a'.repeat(64), review_token: 'fictional-registration-review',
+            section: { id: section, code: course.section_code, course_code: course.course_code,
+                course_title: course.title, credits_milli: 3000, active: true, seats_remaining: 17,
+                prerequisite_courses: [] },
+            students: [{ id: student, issues: [], readiness: [], enrollment_id: null,
+                prerequisites: { status: 'not_required', course_statuses: [], missing_count: 0 },
+                schedule: { status: 'clear', blocked: false, conflict_count: 0, unpublished_count: 0, conflicts: [] },
+                charges: { currency: 'USD', total_minor: 15000, items: [], problems: [] } }],
+        };
         else if (path.includes('/transcript/')) result = { items: transcript };
-        else if (path.includes('/scores/')) result = { items: [{ title: 'Fictional problem set', earned_hundredths: 9500, possible_hundredths: 10000 }] };
+        else if (path.includes('/scores/')) result = {
+            summary: { mode: 'points', percent_hundredths: 9500, coverage_hundredths: 10000,
+                pending: 0, excused: 0, excluded: 0, dropped: 0 },
+            items: [{ title: 'Fictional problem set', earned_hundredths: 9500, possible_hundredths: 10000 }],
+        };
         else if (path === '/portal/api/emergency-contacts/') {
             if (data && rejectEmergency) {
                 rejectEmergency = false;
@@ -128,7 +142,8 @@ test('student applications, records, registration and accounts stay in one acces
     await accessible(page);
     await page.getByRole('button', { name: 'Confirm registration', exact: true }).click();
     await expect(page.locator('#campus-notice')).toContainText('registered');
-    expect(mutations.at(-1).data).toEqual({ student_id: student, section_id: section });
+    expect(mutations.at(-1).data).toEqual({ student_id: student, section_id: section,
+        operation_id: id(16), revision: 'a'.repeat(64), review_token: 'fictional-registration-review' });
     await page.goto('/portal/student/transcripts/');
     await page.getByRole('button', { name: 'Request official transcript' }).click();
     await expect(page.locator('#campus-service-content')).toContainText('pending');

@@ -1,33 +1,11 @@
 'use strict';
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
+const installAudio = require('./helpers/notification-audio.cjs');
 async function fixture(page, options = {}) {
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    await page.addInitScript(({ blocked, delayed }) => {
-        let factory;
-        Object.defineProperty(window, 'createWorkspaceNotifications', { configurable: true,
-            get: () => factory, set: value => { factory = ui => {
-                const api = value(ui); window.testNotifications = api; return api;
-            }; } });
-        window.testTones = 0; window.testAudioContexts = 0; window.testClosedAudio = 0;
-        window.testResumeCallbacks = [];
-        window.AudioContext = class {
-            constructor() { this.state = 'suspended'; this.currentTime = 0; ++window.testAudioContexts; }
-            resume() {
-                if (blocked) return Promise.reject(new Error('Fictional browser sound restriction'));
-                if (delayed) return new Promise(resolve => window.testResumeCallbacks.push(() => {
-                    this.state = 'running'; resolve();
-                }));
-                this.state = 'running'; return Promise.resolve();
-            }
-            close() { this.state = 'closed'; ++window.testClosedAudio; return Promise.resolve(); }
-            createOscillator() { return { frequency: { setValueAtTime() {} }, connect() {}, disconnect() {},
-                start() { ++window.testTones; }, stop() { this.onended?.(); } }; }
-            createGain() { return { gain: { setValueAtTime() {}, linearRampToValueAtTime() {},
-                exponentialRampToValueAtTime() {} }, connect() {}, disconnect() {} }; }
-        };
-    }, { blocked: !!options.blocked, delayed: !!options.delayed });
+    await installAudio(page, options);
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
         if (options.denied && path.includes('/data/people/')) return route.fulfill({ status: 403,
@@ -106,7 +84,7 @@ test('sound is opt-in, rate-limited and muted independently of visual feedback',
     expect(await page.evaluate(() => window.testTones)).toBe(2);
     expect(await page.evaluate(() => window.testClosedAudio)).toBeGreaterThan(0);
     const stored = await page.evaluate(() => JSON.parse(localStorage.getItem('etsis.workspace.notification-preferences')));
-    expect(stored).toEqual({ sound: false, keep_visible: false });
+    expect(stored).toEqual({ sound: false, keep_visible: false, sound_id: 'tone' });
     expect(f.errors).toEqual([]);
 });
 test('blocked sound and browser storage leave visual feedback usable', async ({ page }) => {
@@ -130,7 +108,7 @@ test('only preferences survive reload and private recent messages do not', async
     await emit(page, 'Fictional private student feedback.');
     const storage = await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } }));
     expect(storage).toEqual({ local: { 'etsis.workspace.notification-preferences':
-        JSON.stringify({ sound: false, keep_visible: true }) }, session: {} });
+        JSON.stringify({ sound: false, keep_visible: true, sound_id: 'tone' }) }, session: {} });
     await page.reload();
     await trigger(page).click();
     await expect(dialog(page)).not.toContainText('Fictional private student feedback.');
@@ -219,5 +197,139 @@ test('delayed audio unlock cannot amplify a burst or play after muting', async (
     await page.getByLabel('Play notification sounds', { exact: true }).uncheck();
     await page.evaluate(() => window.testResumeCallbacks.splice(0).forEach(resume => resume()));
     expect(await page.evaluate(() => window.testTones)).toBe(1);
+    expect(f.errors).toEqual([]);
+});
+test('all four local sounds are selectable, lazy, cached and stopped when changed or muted', async ({ page }) => {
+    await page.clock.install();
+    const requests = [];
+    page.on('request', request => {
+        if (request.url().includes('/assets/sounds/')) requests.push(new URL(request.url()).pathname);
+    });
+    const f = await fixture(page);
+    await trigger(page).click();
+    const choice = page.getByLabel('Notification sound', { exact: true });
+    await choice.selectOption('message');
+    expect(requests).toEqual([]);
+    expect(await page.evaluate(() => window.testAudioContexts)).toBe(0);
+    const files = { message: 'message-notification-4.wav', warm: 'warm-success-notification.wav',
+        bird: 'bird_notification.mp3', piano: 'piano-notification-5b.mp3' };
+    for (const [value, filename] of Object.entries(files)) {
+        await choice.selectOption(value);
+        await page.getByRole('button', { name: 'Test notification sound', exact: true }).click();
+        await expect(dialog(page)).toContainText('Sound preview played.');
+        expect(requests.at(-1)).toBe(`/assets/sounds/${filename}`);
+    }
+    expect(await page.evaluate(() => window.testDecoded)).toBe(4);
+    await page.getByRole('button', { name: 'Test notification sound', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.testFileSounds)).toBe(5);
+    expect(requests).toHaveLength(4);
+    expect(await page.evaluate(() => window.testDecoded)).toBe(4);
+    await page.clock.fastForward(2100);
+    await emit(page, 'Fictional feedback during a longer sound.');
+    await emit(page, 'Fictional burst during a longer sound.');
+    expect(await page.evaluate(() => window.testFileSounds)).toBe(5);
+    await page.getByLabel('Play notification sounds', { exact: true }).uncheck();
+    expect(await page.evaluate(() => window.testStoppedFiles)).toBe(5);
+    await page.reload();
+    await trigger(page).click();
+    await expect(choice).toHaveValue('piano');
+    await expect(page.getByLabel('Play notification sounds', { exact: true })).not.toBeChecked();
+    expect(requests).toHaveLength(4);
+    expect(f.errors).toEqual([]);
+});
+test('failed and delayed asset loads do not block visual feedback or play an obsolete choice', async ({ page }) => {
+    const f = await fixture(page);
+    await page.route('**/assets/sounds/*', route => route.fulfill({ status: 404, body: '' }));
+    await trigger(page).click();
+    const choice = page.getByLabel('Notification sound', { exact: true });
+    await choice.selectOption('message');
+    await page.getByRole('button', { name: 'Test notification sound', exact: true }).click();
+    await expect(dialog(page)).toContainText('Sound is unavailable. Visual notifications will still appear.');
+    expect(await page.evaluate(() => window.testFileSounds)).toBe(0);
+    await page.unroute('**/assets/sounds/*');
+    let release;
+    const arrived = new Promise(resolve => { release = resolve; });
+    let complete;
+    const delay = new Promise(resolve => { complete = resolve; });
+    await page.route('**/assets/sounds/*', async route => { release(); await delay;
+        await route.fulfill({ body: Buffer.from('fictional audio'), contentType: 'audio/wav' }); });
+    await page.getByRole('button', { name: 'Test notification sound', exact: true }).click();
+    await arrived;
+    await choice.selectOption('tone');
+    complete();
+    await expect(dialog(page)).not.toContainText('Preparing sound…');
+    await page.getByRole('button', { name: 'Test notification sound', exact: true }).click();
+    await expect(dialog(page)).toContainText('Sound preview played.');
+    expect(await page.evaluate(() => window.testFileSounds)).toBe(0);
+    await page.keyboard.press('Escape');
+    await emit(page, 'Fictional action still completed.');
+    await expect(page.locator('#workspace-status')).toContainText('Fictional action still completed.');
+    expect(f.errors).toEqual([]);
+});
+test('legacy preferences preserve choices safely and stored URLs cannot select an audio source', async ({ page }) => {
+    await page.addInitScript(() => localStorage.setItem('etsis.workspace.notification-preferences',
+        JSON.stringify({ sound: true, keep_visible: true })));
+    await fixture(page);
+    await trigger(page).click();
+    await expect(page.getByLabel('Play notification sounds', { exact: true })).toBeChecked();
+    await expect(page.getByLabel('Keep notifications on screen until dismissed', { exact: true })).toBeChecked();
+    await expect(page.getByLabel('Notification sound', { exact: true })).toHaveValue('tone');
+    await page.getByLabel('Notification sound', { exact: true }).selectOption('bird');
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem('etsis.workspace.notification-preferences'))))
+        .toEqual({ sound: true, keep_visible: true, sound_id: 'bird' });
+    await page.addInitScript(() => localStorage.setItem('etsis.workspace.notification-preferences',
+        JSON.stringify({ sound: false, keep_visible: false, sound_id: 'https://example.invalid/private' })));
+    await page.reload();
+    await trigger(page).click();
+    await expect(page.getByLabel('Notification sound', { exact: true })).toHaveValue('tone');
+});
+test('shipped sound files decode locally without playing any device audio', async ({ page }) => {
+    await fixture(page);
+    const results = await page.evaluate(async () => {
+        const context = new OfflineAudioContext(2, 1, 44100), results = [];
+        for (const name of ['message-notification-4.wav', 'warm-success-notification.wav',
+            'bird_notification.mp3', 'piano-notification-5b.mp3']) {
+            const response = await fetch(`/assets/sounds/${name}`, { credentials: 'omit' });
+            const bytes = await response.arrayBuffer();
+            const buffer = await context.decodeAudioData(bytes);
+            results.push({ name, bytes: bytes.byteLength, duration: buffer.duration });
+        }
+        return results;
+    });
+    expect(results).toHaveLength(4);
+    for (const result of results) {
+        expect(result.bytes).toBeLessThan(2 * 1024 * 1024);
+        expect(result.duration).toBeGreaterThan(0);
+        expect(result.duration).toBeLessThan(8);
+    }
+});
+test('sound loading times out and hidden tabs or clearing feedback stop file playback', async ({ page }) => {
+    await page.clock.install();
+    const f = await fixture(page);
+    let arrived, release;
+    const loading = new Promise(resolve => { arrived = resolve; });
+    const delayed = new Promise(resolve => { release = resolve; });
+    await page.route('**/assets/sounds/*', async route => { arrived(); await delayed; await route.abort(); });
+    await trigger(page).click();
+    await page.getByLabel('Notification sound', { exact: true }).selectOption('bird');
+    await page.getByRole('button', { name: 'Test notification sound', exact: true }).click();
+    await loading;
+    await page.clock.fastForward(8100);
+    await expect(dialog(page)).toContainText('Sound is unavailable. Visual notifications will still appear.');
+    release(); await page.unroute('**/assets/sounds/*');
+    await page.getByRole('button', { name: 'Test notification sound', exact: true }).click();
+    await expect(dialog(page)).toContainText('Sound preview played.');
+    await page.evaluate(() => {
+        Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+    });
+    expect(await page.evaluate(() => window.testStoppedFiles)).toBe(1);
+    await emit(page, 'Fictional background feedback.');
+    expect(await page.evaluate(() => window.testFileSounds)).toBe(1);
+    await page.evaluate(() => { delete document.hidden; });
+    await page.getByRole('button', { name: 'Test notification sound', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => window.testFileSounds)).toBe(2);
+    await page.getByRole('button', { name: 'Clear recent notifications', exact: true }).click();
+    expect(await page.evaluate(() => window.testStoppedFiles)).toBe(2);
     expect(f.errors).toEqual([]);
 });

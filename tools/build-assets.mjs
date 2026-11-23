@@ -102,4 +102,14 @@ for (const obsolete of [
 ]) {
     await rm(new URL(obsolete, assets), { force: true });
 }
-console.log("Built self-hosted workspace assets.");
+const soundAssets = new URL("public/assets/sounds/", root);
+await mkdir(soundAssets, { recursive: true });
+for (const filename of [
+    "message-notification-4.wav",
+    "warm-success-notification.wav",
+    "bird_notification.mp3",
+    "piano-notification-5b.mp3",
+]) {
+    await copyFile(new URL(`resources/sounds/${filename}`, root), new URL(filename, soundAssets));
+}
+console.log("Built self-hosted workspace assets and notification sounds.");

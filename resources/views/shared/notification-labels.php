@@ -17,6 +17,15 @@ return [
         . 'Recorded decisions and background job status remain in their own workspaces.',
     ),
     'sound' => trans_html('Play notification sounds'),
+    'sound_choice' => trans_html('Notification sound'),
+    'sound_help' => trans_html('Choose a sound, then test it. Changing this choice does not play audio.'),
+    'sound_tone' => trans_html('Short tone'),
+    'sound_message' => trans_html('Message'),
+    'sound_warm' => trans_html('Warm success'),
+    'sound_bird' => trans_html('Bird'),
+    'sound_piano' => trans_html('Piano'),
+    'sound_loading' => trans_html('Preparing sound…'),
+    'sound_played' => trans_html('Sound preview played.'),
     'keep_visible' => trans_html('Keep notifications on screen until dismissed'),
     'preference_help' => trans_html(
         'Only these display and sound preferences are saved in this browser. '
@@ -36,4 +45,20 @@ return [
     'delivery_queued' => trans_html('Background delivery confirmed. You can leave this screen.'),
     'delivery_held' => trans_html('Delivery needs review. Unconfirmed messages will not be retried automatically.'),
     'delivery_blocked' => trans_html('Delivery stopped. Review access, recipients and institutional mail settings.'),
+    'contact_saved' => trans_html('Your contact information is up to date.'),
+    'application_submitted' => trans_html('Application submitted. Here’s to your next chapter.'),
+    'section_changed' => trans_html(
+        'Your section was changed. The original course charges were reversed and replacement charges applied together.',
+    ),
+    'course_removed' => trans_html(
+        'Your course was removed. Its course charge was reversed if present. '
+        . 'Any account credit is reviewed separately for a cash refund.',
+    ),
+    'course_withdrawn' => trans_html(
+        'Your course stays on your record with grade {grade} and zero earned credits. Its course charge is retained.',
+    ),
+    'sections_registered' => trans_html('{count} course sections registered together.'),
+    'registered' => trans_html('You’re registered. Your semester is taking shape.'),
+    'transcript_requested' => trans_html('Your request is with the registrar. Follow its progress below.'),
+    'transcript_cancelled' => trans_html('Transcript request cancelled.'),
 ];

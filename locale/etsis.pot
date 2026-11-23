@@ -1494,98 +1494,186 @@ msgstr ""
 msgid "Newer bypass decisions"
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:8
+#: resources/views/shared/notification-labels.php:8
 msgid "Recent workspace notifications"
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:9
+#: resources/views/shared/notification-labels.php:9
 msgid "Workspace notification"
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:10
+#: resources/views/shared/notification-labels.php:10
 msgid "Close notifications"
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:11
+#: resources/views/shared/notification-labels.php:11
 msgid "Dismiss notification"
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:12
+#: resources/views/shared/notification-labels.php:12
 msgid "Clear recent notifications"
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:13
+#: resources/views/shared/notification-labels.php:13
 msgid "There are no notifications from this workspace session."
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:14
+#: resources/views/shared/notification-labels.php:14
 msgid "Recent action feedback stays only in this page. Reloading or signing out clears it. Recorded decisions and background job status remain in their own workspaces."
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:18
+#: resources/views/shared/notification-labels.php:18
 msgid "Play notification sounds"
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:19
+#: resources/views/shared/notification-labels.php:19
 msgid "Keep notifications on screen until dismissed"
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:20
+#: resources/views/shared/notification-labels.php:20
 msgid "Only these display and sound preferences are saved in this browser. Notification messages and campus records are never saved here."
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:24
+#: resources/views/shared/notification-labels.php:24
 msgid "Test notification sound"
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:25
+#: resources/views/shared/notification-labels.php:25
 msgid "Sound is unavailable. Visual notifications will still appear."
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:26
+#: resources/views/shared/notification-labels.php:26
 msgid "Completed"
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:28
+#: resources/views/shared/notification-labels.php:28
 msgid "Needs attention"
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:29
+#: resources/views/shared/notification-labels.php:29
 msgid "Export queued. Its download will be available after preparation finishes."
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:30
+#: resources/views/shared/notification-labels.php:30
 msgid "Your report export is ready. Open the export controls to download it."
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:31
+#: resources/views/shared/notification-labels.php:31
 msgid "The report export could not finish. Review its status before trying again."
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:32
+#: resources/views/shared/notification-labels.php:32
 msgid "Report export cancelled."
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:33
+#: resources/views/shared/notification-labels.php:33
 msgid "Delivery processing finished. Review confirmed sends and closed outcomes."
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:34
+#: resources/views/shared/notification-labels.php:34
 msgid "Recipients queued. No messages have been sent."
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:35
+#: resources/views/shared/notification-labels.php:35
 msgid "Background delivery confirmed. You can leave this screen."
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:36
+#: resources/views/shared/notification-labels.php:36
 msgid "Delivery needs review. Unconfirmed messages will not be retried automatically."
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:37
+#: resources/views/shared/notification-labels.php:37
 msgid "Delivery stopped. Review access, recipients and institutional mail settings."
 msgstr ""
 
-#: resources/views/backend/workspace/notification-labels.php:8
+#: resources/views/shared/notification-labels.php:8
 msgid "Notifications"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:20
+msgid "Notification sound"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:21
+msgid "Choose a sound, then test it. Changing this choice does not play audio."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:22
+msgid "Short tone"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:23
+msgid "Message"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:24
+msgid "Warm success"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:25
+msgid "Bird"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:26
+msgid "Piano"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:27
+msgid "Preparing sound…"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:28
+msgid "Sound preview played."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:48
+msgid "Your contact information is up to date."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:49
+msgid "Application submitted. Here’s to your next chapter."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:50
+msgid "Your section was changed. The original course charges were reversed and replacement charges applied together."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:53
+msgid "Your course was removed. Its course charge was reversed if present. Any account credit is reviewed separately for a cash refund."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:57
+msgid "Your course stays on your record with grade {grade} and zero earned credits. Its course charge is retained."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:60
+msgid "{count} course sections registered together."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:61
+msgid "You’re registered. Your semester is taking shape."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:62
+msgid "Your request is with the registrar. Follow its progress below."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:63
+msgid "Transcript request cancelled."
+msgstr ""
+
+#: public/themes/campus-harbor/layouts/portal/view.php:101
+msgid "Recent notifications"
+msgstr ""
+
+#: public/themes/campus-harbor/layouts/portal/view.php:207
+msgid "Campus notification"
+msgstr ""
+
+#: public/themes/campus-harbor/layouts/portal/view.php:208
+msgid "There are no notifications from this page."
+msgstr ""
+
+#: public/themes/campus-harbor/layouts/portal/view.php:209
+msgid "Recent action feedback stays only in this page. Reloading or signing out clears it. Check the relevant service for your current records and request status."
 msgstr ""
