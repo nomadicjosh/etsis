@@ -78,8 +78,10 @@ final readonly class SqlTranscriptReleasePolicyRepository implements TranscriptR
         $data = json_decode($packet, true, 12, JSON_THROW_ON_ERROR);
         if (
             !is_array($data) ||
-            !in_array(count($data), [4, 5], true) ||
-            array_diff(array_keys($data), ["kind", "id", "revision", "checks", "include_standing"]) !== [] ||
+            !in_array(count($data), [4, 5, 6], true) ||
+            array_diff(array_keys($data), [
+                "kind", "id", "revision", "checks", "include_standing", "standing_definitions",
+            ]) !== [] ||
             (array_key_exists("include_standing", $data) && !is_bool($data["include_standing"])) ||
             ($data["kind"] ?? null) !== "transcript-release-policy" ||
             ($data["id"] ?? null) !== self::POLICY_ID ||
@@ -88,6 +90,11 @@ final readonly class SqlTranscriptReleasePolicyRepository implements TranscriptR
         ) {
             throw new \RuntimeException("The institutional release policy could not be verified.");
         }
-        return new TranscriptReleasePolicy($revision, $data["checks"], $data["include_standing"] ?? false);
+        return new TranscriptReleasePolicy(
+            $revision,
+            $data["checks"],
+            $data["include_standing"] ?? false,
+            $data['standing_definitions'] ?? null,
+        );
     }
 }

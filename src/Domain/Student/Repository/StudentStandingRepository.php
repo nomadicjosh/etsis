@@ -10,6 +10,8 @@ interface StudentStandingRepository
 {
     public function definitions(string $search, ?EntityId $after, bool $activeOnly): array;
     public function definition(EntityId $id): array;
+    /** @param list<string> $ids At most twenty-five identities; ordinary read without source locks. */
+    public function definitionLabels(array $ids): array;
     public function lockDefinition(EntityId $id): void;
     public function saveDefinition(
         EntityId $id,

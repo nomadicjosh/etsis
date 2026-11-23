@@ -1,6 +1,7 @@
 /* Reviewed, immutable transcript documents and separately recorded delivery evidence. */
 window.createWorkspaceTranscripts = function (ui) {
     "use strict";
+    const text = value => ui.standingLabels?.[value] || value;
     const {
         node,
         request,
@@ -86,6 +87,8 @@ window.createWorkspaceTranscripts = function (ui) {
             node("h3", { class: "h5" }, title),
             node("p", { class: "form-text" }, `Setup revision ${evidence.revision} · Confirmed ${evidence.confirmed_at}`),
             node("p", { class: "form-text" }, evidence.include_standing ? "Academic standing selected in this institutional setup." : "Academic standing not selected in this institutional setup."),
+            evidence.include_standing && evidence.standing_definitions ? node('p', { class: 'form-text' },
+                text('This setup selects particular standing definitions for new preparations.')) : null,
             evidence.checks.length ? node("ul", {}, ...evidence.checks.map((check) =>
                 node("li", {}, node("strong", {}, check.label), check.details ? ` — ${check.details}` : "")))
                 : node("p", {}, "No additional institutional checks applied."));
@@ -97,19 +100,42 @@ window.createWorkspaceTranscripts = function (ui) {
         const standing = node("input", { id: "transcript-standing", type: "checkbox", class: "form-check-input",
             checked: saved.include_standing === true });
         const list = node("div");
-        let rows = [], adding = false;
+        let rows = [], adding = false, saving = false, notice = '';
         const status = node("p", { class: "form-text", role: "status" });
+        const selectionArea = node('div', { class: 'record-field-group mb-3' });
+        const selection = window.createTranscriptStandingSelection({ node, request, task,
+            labels: ui.standingLabels, container: selectionArea, saved, enabled: () => standing.checked,
+            changed: () => update(), denied });
+        const draft = () => ({ checks: rows.map(row => ({ id: row.id, label: row.label.value.trim(),
+            details: row.details.value.trim(), stage: row.stage.value })), include_standing: standing.checked,
+            standing_definitions: selection.valid() ? selection.value() : null });
+        function denied() {
+            if (body.isConnected) body.replaceChildren(node('p', { role: 'alert', class: 'form-text' },
+                text('Transcript setup is no longer available. Reopen it after access is restored.')));
+        }
         const save = button("Save setup", async () => {
-            const checks = rows.map((row) => ({ id: row.id, label: row.label.value.trim(),
-                details: row.details.value.trim(), stage: row.stage.value }));
-            if (checks.some((check) => !check.label)) {
-                status.textContent = "Give every check a title before saving.";
+            const captured = draft();
+            if (captured.checks.some((check) => !check.label)) {
+                notice = "Give every check a title before saving.";
                 rows.find((row) => !row.label.value.trim())?.label.focus();
                 return;
             }
-            await request("/sis/transcript-policy/", "POST", { revision: saved.revision, checks, include_standing: standing.checked });
-            if (!body.isConnected) return;
-            await policy();
+            if (standing.checked && !selection.valid()) {
+                notice = text('Choose at least one definition or include all standings.');
+                document.getElementById('transcript-standing-mode')?.focus();
+                return;
+            }
+            saving = true; update();
+            try {
+                const result = await request("/sis/transcript-policy/", "POST", { revision: saved.revision, ...captured });
+                if (!body.isConnected) return;
+                saved.revision = result.revision;
+                if (JSON.stringify(draft()) === JSON.stringify(captured)) { await policy(); return; }
+                notice = text('Transcript setup saved. Newer edits are still unsaved.');
+            } catch (error) {
+                if ([401, 403].includes(error.status)) denied();
+                throw error;
+            } finally { saving = false; update(); }
         }, "btn-primary", update);
         const add = button("Add check", async () => {
             if (adding || rows.length >= 12) return;
@@ -122,9 +148,10 @@ window.createWorkspaceTranscripts = function (ui) {
             } finally { adding = false; update(); }
         }, "btn-outline-primary", update);
         function update() {
-            status.textContent = `${rows.length} of 12 checks · Setup revision ${saved.revision}`;
+            const message = `${notice ? `${notice} ` : ''}${rows.length} of 12 checks · Setup revision ${saved.revision}`;
+            if (status.textContent !== message) status.textContent = message;
             add.disabled = adding || rows.length >= 12;
-            save.disabled = adding;
+            save.disabled = adding || saving || selection.pending();
         }
         function append(check, focus = false) {
             const label = node("input", { id: `release-title-${check.id}`, type: "text", class: "form-control",
@@ -151,12 +178,14 @@ window.createWorkspaceTranscripts = function (ui) {
             node("div", { class: "form-check mb-3" }, standing, node("label", { for: standing.id, class: "form-check-label" },
                 "Include recorded academic standing")),
             node("p", { class: "form-text" }, "Off by default. When enabled, new transcripts include retained standing labels and dates under the selected primary pursuit, through preparation day. Staff reasons and policy references stay private. Issued originals do not change."),
-            node("h3", { class: "h5" }, "Release checks"), node("p", {}, "Set the confirmations your office requires before preparation, delivery, or both. " +
+            selectionArea, node("h3", { class: "h5" }, "Release checks"), node("p", {}, "Set the confirmations your office requires before preparation, delivery, or both. " +
             "These are staff checks; they do not automatically block transcripts based on balances or registration holds."),
             node("p", { class: "form-text" }, "Changes apply to new confirmations. Earlier documents and confirmations retain their original checks. " +
                 "If setup changes while you edit, reload it before saving again."), status, list,
             node("div", { class: "inline-actions" }, add, save, button("Reload setup", policy, "btn-link")));
         saved.checks.forEach((check) => append(check));
+        standing.addEventListener('change', () => selection.refresh());
+        selection.refresh();
         update();
     }
 
@@ -206,10 +235,13 @@ window.createWorkspaceTranscripts = function (ui) {
                 : null,
             snapshot.standing ? node("section", { class: "record-section", "aria-label": "Transcript academic standing" },
                 node("h3", { class: "h5" }, "Recorded academic standing"),
+                snapshot.standing.filtered ? node('p', { class: 'form-text' },
+                    text('This document includes institution-selected standing definitions.')) : null,
                 node("p", { class: "form-text" }, `Selected primary pursuit · Recorded periods through ${snapshot.standing.through}. Earlier unrecorded standing is not inferred.`),
                 snapshot.standing.periods.length ? node("ul", {}, ...snapshot.standing.periods.map(row => node("li", { class: "text-break" },
                     `${row.code} · ${row.title} · ${row.starts_on} through ${row.ends_on || "open"}`)))
-                    : node("p", {}, "No standing is recorded through this date.")) : null,
+                    : node("p", {}, snapshot.standing.filtered ? text('No selected academic standing is included through this date.')
+                        : "No standing is recorded through this date.")) : null,
             grid(
                 ["Term", "Course", "Title", "Attempted", "Earned", "Grade", "History"],
                 snapshot.credits.map((row) => [

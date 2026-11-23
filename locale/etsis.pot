@@ -1121,3 +1121,99 @@ msgstr ""
 #: resources/views/backend/workspace/history-check-labels.php:23
 msgid "Previous results describe their recorded observation, not a continuing guarantee about the current record. No event payloads, application answers, private profile values, financial amounts or credentials are displayed."
 msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:9
+msgid "Remove"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:12
+msgid "All recorded standing definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:15
+msgid "Selected standing definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:18
+msgid "Unavailable definition"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:21
+msgid "Find definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:24
+msgid "More definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:27
+msgid "Previous definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:30
+msgid "Available standing definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:33
+msgid "Find a standing definition"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:36
+msgid "Standings to include"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:39
+msgid "Choose up to 25 standing definitions. Retired definitions can still identify earlier recorded periods. Transcripts keep the original recorded labels."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:43
+msgid "Choose at least one definition or include all standings."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:46
+msgid "Remove selection"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:49
+msgid "Loading standing definitions…"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:52
+msgid "Retired definition"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:55
+msgid "Choose the definitions to include. Other recorded standings will be omitted."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:58
+msgid "No standing definitions match this search."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:61
+msgid "Standing definitions could not be loaded. Your choices are kept; try again."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:64
+msgid "Transcript setup is no longer available. Reopen it after access is restored."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:67
+msgid "Transcript setup saved."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:70
+msgid "Transcript setup saved. Newer edits are still unsaved."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:73
+msgid "This setup selects particular standing definitions for new preparations."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:76
+msgid "This document includes institution-selected standing definitions."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:79
+msgid "No selected academic standing is included through this date."
+msgstr ""

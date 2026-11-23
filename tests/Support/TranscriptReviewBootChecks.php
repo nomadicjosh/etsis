@@ -26,21 +26,43 @@ $app->delegate(
     },
 );
 $policyPath = '/sis/transcript-policy/';
-$policyResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $policyPath)));
+$policyResponse = $app->router->match($get->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $policyPath),
+));
 $policy = json_decode((string) $policyResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
     $policyResponse->getStatusCode() !== 200 ||
-    $policy !== ['revision' => 0, 'checks' => [], 'include_standing' => false] ||
+    $policy !== ['revision' => 0, 'checks' => [], 'include_standing' => false, 'standing_definitions' => null] ||
     !str_contains($policyResponse->getHeaderLine('Cache-Control'), 'no-store')
 ) {
     throw new RuntimeException('The institutional release policy read lost its private provider boundary.');
 }
 $checkId = \Domain\Shared\ValueObject\EntityId::generate()->value;
-$policyCommand = ['revision' => 0, 'include_standing' => true, 'checks' => [
+$standingChoice = $sis->standingService()->saveDefinition(null, 'SHOW', 'Fictional transcript annotation', false, null);
+$choicesPath = $policyPath . 'standings/?search=annotation';
+$choicesResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $choicesPath,
+))->withQueryParams(['search' => 'annotation']));
+$choices = json_decode((string) $choicesResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $choicesResponse->getStatusCode() !== 200 || array_column($choices['items'], 'id') !== [$standingChoice['id']]
+    || $choicesResponse->hasHeader('phpdebugbar-id')
+    || !str_contains($choicesResponse->getHeaderLine('Cache-Control'), 'private, no-store')
+) {
+    throw new RuntimeException('Transcript standing choices lost their scoped private lookup.');
+}
+if (
+    $teachingPost($policyPath, ['revision' => 0, 'include_standing' => true, 'checks' => []])->getStatusCode() !== 422
+) {
+    throw new RuntimeException('A transcript setup command omitted its explicit standing selection.');
+}
+$policyCommand = ['revision' => 0, 'include_standing' => true, 'standing_definitions' => null, 'checks' => [
     ['id' => $checkId, 'label' => 'Review fictional authorization',
     'details' => 'Use a fictional office record.', 'stage' => 'both']]];
-if ($teachingPost($policyPath, $policyCommand)->getStatusCode() !== 200 ||
-    $teachingPost($policyPath, $policyCommand)->getStatusCode() !== 409) {
+if (
+    $teachingPost($policyPath, $policyCommand)->getStatusCode() !== 200 ||
+    $teachingPost($policyPath, $policyCommand)->getStatusCode() !== 409
+) {
     throw new RuntimeException('Release-check setup bypassed its expected revision.');
 }
 $confirmation = ['revision' => 1, 'checks' => [$checkId]];
@@ -183,14 +205,15 @@ if (
 }
 
 $sis->access->grants = ['sis:transcript:manage', 'sis:student:read'];
+$disabledPolicy = ['revision' => 1, 'checks' => [], 'include_standing' => false, 'standing_definitions' => null];
 if (
-    $teachingPost($policyPath, ['revision' => 1, 'checks' => [], 'include_standing' => false])->getStatusCode() !== 403
+    $teachingPost($policyPath, $disabledPolicy)->getStatusCode() !== 403
 ) {
     throw new RuntimeException('Ordinary transcript operators changed institutional policy.');
 }
 $sis->access->grants[] = 'sis:transcript:policy';
 if (
-    $teachingPost($policyPath, ['revision' => 1, 'checks' => [], 'include_standing' => false])->getStatusCode() !== 200
+    $teachingPost($policyPath, $disabledPolicy)->getStatusCode() !== 200
 ) {
     throw new RuntimeException('Explicit policy authority could not update release checks.');
 }
@@ -199,8 +222,12 @@ $checkResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
     'https://campus.example.invalid/sis/transcript-policy/check-id/'
 )));
 $checkResult = json_decode((string) $checkResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
-if ($checkResponse->getStatusCode() !== 200 || !is_string($checkResult['id'] ?? null) ||
-    !str_contains($checkResponse->getHeaderLine('Cache-Control'), 'no-store') || $checkResponse->hasHeader('phpdebugbar-id')) {
+if (
+    $checkResponse->getStatusCode() !== 200 ||
+    !is_string($checkResult['id'] ?? null) ||
+    !str_contains($checkResponse->getHeaderLine('Cache-Control'), 'no-store') ||
+    $checkResponse->hasHeader('phpdebugbar-id')
+) {
     throw new RuntimeException('Transcript setup identities incorrectly required unrelated financial authority.');
 }
 new \Domain\Shared\ValueObject\EntityId($checkResult['id']);

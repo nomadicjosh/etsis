@@ -25,13 +25,14 @@ final readonly class StudentStandingLedger implements TranscriptStandingSource
     ) {
     }
 
-    public function snapshot(EntityId $student, EntityId $pursuit, string $through): array
+    public function snapshot(EntityId $student, EntityId $pursuit, string $through, ?array $definitions = null): array
     {
         StandingPeriods::date($through);
         $head = $this->latest($student, $pursuit);
         $rows = $head === null ? [] : new StandingPeriods($head->event->payload()["rows"])->rows;
         $rows = array_values(
-            array_filter($rows, static fn(array $row): bool => $row["starts_on"] <= $through),
+            array_filter($rows, static fn(array $row): bool => $row["starts_on"] <= $through
+                && ($definitions === null || in_array($row['definition_id'], $definitions, true))),
         );
         usort($rows, static fn(array $a, array $b): int => strcmp($a["starts_on"], $b["starts_on"]));
         return [
@@ -45,7 +46,7 @@ final readonly class StudentStandingLedger implements TranscriptStandingSource
                 ),
                 $rows,
             ),
-        ];
+        ] + ($definitions === null ? [] : ['filtered' => true]);
     }
 
     public function latest(EntityId $student, EntityId $pursuit): ?\Domain\Shared\EventSourcing\StoredEvent

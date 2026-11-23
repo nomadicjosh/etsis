@@ -1,8 +1,14 @@
+<?php
+
+use function Codefy\Framework\Helpers\trans_html;
+
+?>
 <!doctype html>
 <html lang="en">
     <head>
         <meta charset="utf-8">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+        <meta http-equiv="Content-Security-Policy"
+            content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
         <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>Academic transcript</title>
         <style>
@@ -65,8 +71,8 @@
                 ) ?></dd>
                 <dt>Primary program at preparation</dt>
                 <dd><?= $escape($document["program"]["code"]) ?> — <?= $escape(
-     $document["program"]["title"],
- ) ?></dd>
+                    $document["program"]["title"],
+                ) ?></dd>
                 <dt>Catalog year</dt>
                 <dd><?= $escape(
                     $document["catalog"]["year_code"] ?? "Catalog needs review",
@@ -76,7 +82,8 @@
                 ($document["academic_verification"]["status"] ?? null) ===
                 "history_gaps"
             ): ?>
-                <p>Some earlier academic history was not recorded. Current-state observations are identified; missing earlier decisions remain unknown.</p>
+                <p>Some earlier academic history was not recorded.
+                    Current-state observations are identified; missing earlier decisions remain unknown.</p>
             <?php endif; ?>
             <?php if (
                 !empty(
@@ -102,8 +109,15 @@
                         <?= $escape($document['standing']['through']) ?>.
                         Earlier unrecorded standing is not inferred.
                     </p>
+                    <?php if (!empty($document['standing']['filtered'])): ?>
+                        <p><?= trans_html('This document includes institution-selected standing definitions.') ?></p>
+                    <?php endif; ?>
                     <?php if ($document['standing']['periods'] === []): ?>
-                        <p>No standing is recorded through this date.</p>
+                        <?php if (!empty($document['standing']['filtered'])): ?>
+                            <p><?= trans_html('No selected academic standing is included through this date.') ?></p>
+                        <?php else: ?>
+                            <p>No standing is recorded through this date.</p>
+                        <?php endif; ?>
                     <?php else: ?>
                         <ul>
                             <?php foreach ($document['standing']['periods'] as $period): ?>
@@ -189,7 +203,10 @@
                     ? "Not yet available"
                     : $credits($document["totals"]["gpa_milli"]) ?></dd>
             </dl>
-            <p>Grades and credit values reflect the academic record at preparation. In-progress courses have no final grade. GPA includes only posted grades configured to count toward GPA; values are displayed to three decimal places.</p>
+            <p>Grades and credit values reflect the academic record at preparation.
+                In-progress courses have no final grade.
+                GPA includes only posted grades configured to count toward GPA;
+                values are displayed to three decimal places.</p>
             <footer>
                 <p>Document reference: <?= $escape(
                     $document["document_id"] ?? "Preview only",

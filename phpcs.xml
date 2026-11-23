@@ -16,6 +16,9 @@
     <rule ref="Squiz.ControlStructures.ControlSignature.SpaceAfterKeyword">
         <exclude-pattern>*/resources/views/*.phtml</exclude-pattern>
     </rule>
+    <rule ref="PSR12.ControlStructures.ControlStructureSpacing.CloseParenthesisIndent">
+        <exclude-pattern>*/resources/views/*.phtml</exclude-pattern>
+    </rule>
     <rule ref="PSR1.Classes.ClassDeclaration.MissingNamespace">
         <exclude-pattern>database/migrations/*</exclude-pattern>
     </rule>

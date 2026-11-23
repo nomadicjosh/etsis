@@ -54,7 +54,7 @@ test('release check setup preserves stale edits, supports keyboard use and keeps
     expect(saves[0].data).toEqual(saves[1].data);
     expect(saves[1].data.checks[0]).toEqual({ id: id(11), label: 'Review release authorization',
         details: 'Verify the fictional authorization reference.', stage: 'both' });
-    expect(saves[2].data).toEqual({ revision: 1, checks: [], include_standing: true });
+    expect(saves[2].data).toEqual({ revision: 1, checks: [], include_standing: true, standing_definitions: null });
     await expect(page.getByLabel('Include recorded academic standing', { exact: true })).toBeChecked();
     expect(calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(calls.some(call => call.path.includes('/documents/'))).toBe(false);

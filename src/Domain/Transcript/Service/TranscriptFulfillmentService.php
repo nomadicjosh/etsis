@@ -402,6 +402,7 @@ final readonly class TranscriptFulfillmentService
                         $routing["student"],
                         $payload["document"]["standing"]["through"] ?? null,
                         isset($payload["document"]["standing"]),
+                        $payload['release_review']['policy']['standing_definitions'] ?? null,
                     );
                 } catch (ValidationException $error) {
                     $verificationFailed = true;
@@ -661,6 +662,7 @@ final readonly class TranscriptFulfillmentService
             new EntityId($current["student_id"]),
             $retained["document"]["standing"]["through"] ?? null,
             isset($retained["document"]["standing"]),
+            $retained['release_review']['policy']['standing_definitions'] ?? null,
         );
         $academic = $this->academicRevision($snapshot);
         if (
@@ -740,8 +742,12 @@ final readonly class TranscriptFulfillmentService
     }
 
     /** @return array<string, mixed> */
-    private function snapshot(EntityId $student, ?string $standingThrough = null, ?bool $includeStanding = null): array
-    {
+    private function snapshot(
+        EntityId $student,
+        ?string $standingThrough = null,
+        ?bool $includeStanding = null,
+        ?array $standingDefinitions = null,
+    ): array {
         $s = $this->admissions->student($student);
         $person = $this->admissions->person($s->personId);
         $rows = $this->records->creditLabels($student);
@@ -805,11 +811,17 @@ final readonly class TranscriptFulfillmentService
                 ];
             }
             $verified = $this->academicInputs->verify($student, $budget);
-            $standing = ($includeStanding ?? $this->releasePolicies->current()->includeStanding)
+            if ($includeStanding === null) {
+                $standingPolicy = $this->releasePolicies->current();
+                $includeStanding = $standingPolicy->includeStanding;
+                $standingDefinitions = $standingPolicy->standingDefinitions;
+            }
+            $standing = $includeStanding
             ? $this->standing->snapshot(
                 $student,
                 new EntityId($primary["assignment_id"]),
                 $standingThrough ?? $this->clock->now()->format("Y-m-d"),
+                $standingDefinitions,
             )
             : null;
         } catch (CorruptHistoryException) {
@@ -1075,7 +1087,8 @@ final readonly class TranscriptFulfillmentService
         return new TranscriptReleasePolicy(
             $context['release_policy']['revision'],
             $context['release_policy']['checks'],
-            $context['release_policy']['include_standing'] ?? false
+            $context['release_policy']['include_standing'] ?? false,
+            $context['release_policy']['standing_definitions'] ?? null,
         );
     }
 

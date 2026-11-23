@@ -724,6 +724,7 @@ return static function (Psr7Router $router): void {
         ])
         ->name("sis.transcript.fulfillment.review");
     $router->get('/sis/transcript-policy/check-id/', [SisTranscriptReleasePolicyController::class, 'checkId']);
+    $router->get('/sis/transcript-policy/standings/', [SisTranscriptReleasePolicyController::class, 'standings']);
     $router->get('/sis/transcript-policy/', [SisTranscriptReleasePolicyController::class, 'current']);
     $router->post('/sis/transcript-policy/', [SisTranscriptReleasePolicyController::class, 'save']);
     $router->post('/sis/transcript-requests/{id}/preview/', [SisTranscriptFulfillmentController::class, 'preview']);

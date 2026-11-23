@@ -57,6 +57,26 @@ final readonly class SqlStudentStandingRepository implements StudentStandingRepo
         $this->sql->lock("sis_standing_definitions", $id->value, "version");
     }
 
+    public function definitionLabels(array $ids): array
+    {
+        if (!array_is_list($ids) || count($ids) > 25) {
+            throw new \InvalidArgumentException('Use up to twenty-five standing references.');
+        }
+        foreach ($ids as $id) {
+            new EntityId($id);
+        }
+        if ($ids === []) {
+            return [];
+        }
+        $q = $this->sql->quote(...);
+        return array_map($this->normalize(...), $this->sql->fetch(
+            'SELECT * FROM ' . $q('sis_standing_definitions') . ' WHERE ' . $q('id')
+            . ' IN (' . implode(', ', array_fill(0, count($ids), '?')) . ') ORDER BY ' . $q('id'),
+            $ids,
+            25,
+        ));
+    }
+
     public function saveDefinition(
         EntityId $id,
         string $code,

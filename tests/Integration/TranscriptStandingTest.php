@@ -22,7 +22,7 @@ final class TranscriptStandingTest extends TestCase
         require_once dirname(__DIR__) . "/Support/TranscriptFixture.php";
     }
 
-    private function enable(TranscriptFixture $t, bool $enabled = true): void
+    private function enable(TranscriptFixture $t, bool $enabled = true, ?array $definitions = null): void
     {
         $repo = new SqlTranscriptReleasePolicyRepository($t->sis->sql, $t->campus->cipher);
         $service = new TranscriptReleasePolicyService(
@@ -31,9 +31,10 @@ final class TranscriptStandingTest extends TestCase
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($t->sis->sql),
             $t->sis->transactions,
             $t->sis->audit,
+            new \Infrastructure\Persistence\Repository\SqlStudentStandingRepository($t->sis->sql),
         );
         $current = $repo->current();
-        $service->save($current->revision, $current->checks, $enabled);
+        $service->save($current->revision, $current->checks, $enabled, $definitions);
     }
 
     private function fixture(): array
@@ -110,6 +111,89 @@ final class TranscriptStandingTest extends TestCase
         $document = new EntityId($review["operation_id"]);
         $result = $service->prepare($request, $document, $review["revision"], true, $review["review_token"]);
         return [$document, $review, $result];
+    }
+
+    public function testPreparedSelectionSurvivesPolicyAndLabelChanges(): void
+    {
+        [$t, $request, $student, $pursuit, $row, $good] = $this->fixture();
+        $other = $t->sis->standingService()->saveDefinition(null, 'REVIEW', 'Excluded fictional standing', true, null);
+        $row['ends_on'] = '2026-08-04';
+        $otherRow = array_replace($row, [
+            'id' => EntityId::generate()->value, 'definition_id' => $other['id'], 'code' => $other['code'],
+            'title' => $other['title'], 'starts_on' => '2026-08-05', 'ends_on' => null,
+        ]);
+        $this->standing($t, $student, $pursuit, [$row, $otherRow]);
+        $t->sis->standingService()->saveDefinition(new EntityId($good['id']), 'RENAMED', 'New library title', false, 1);
+        $this->enable($t, definitions: [$good['id']]);
+        $service = $t->service();
+        [$document, $review, $accepted] = $this->prepare($service, $request);
+        $view = $service->view($request, $document);
+        self::assertSame([$good['id']], $view['preparation_release']['standing_definitions']);
+        self::assertTrue($view['snapshot']['standing']['filtered']);
+        self::assertSame(['GOOD'], array_column($view['snapshot']['standing']['periods'], 'code'));
+        $original = $service->html($request, $document);
+        $pdf = $service->pdf($request, $document);
+        self::assertStringStartsWith('%PDF-', $pdf);
+        self::assertStringContainsString('Fictional &lt;b&gt;Good standing&lt;/b&gt;', $original);
+        foreach (['Excluded fictional standing', 'New library title', 'Private fictional'] as $private) {
+            self::assertStringNotContainsString($private, $original);
+        }
+        $this->enable($t, definitions: [$other['id']]);
+        self::assertFalse($service->view($request, $document)['academic_changed']);
+        self::assertSame($original, $service->html($request, $document));
+        self::assertSame($pdf, $service->pdf($request, $document));
+        self::assertSame($accepted, $service->prepare(
+            $request,
+            $document,
+            $review['revision'],
+            true,
+            $review['review_token'],
+        ));
+        $fresh = $service->review($request);
+        self::assertSame(['REVIEW'], array_column($fresh['snapshot']['standing']['periods'], 'code'));
+        $otherRow['ends_on'] = '2026-08-09';
+        $this->standing($t, $student, $pursuit, [$row, $otherRow]);
+        self::assertFalse($service->view($request, $document)['academic_changed']);
+        $delivery = $service->reviewDelivery($request, $document, 1, $t->sis->clock->now(), 'Fictional pickup.');
+        self::assertArrayHasKey('review_token', $delivery);
+        self::assertSame($original, $service->html($request, $document));
+    }
+
+    public function testNoSelectedPeriodsDoesNotClaimThatNoStandingWasRecorded(): void
+    {
+        [$t, $request] = $this->fixture();
+        $unused = $t->sis->standingService()->saveDefinition(null, 'HONORS', 'Fictional honors', true, null);
+        $this->enable($t, definitions: [$unused['id']]);
+        $service = $t->service($this->renderer());
+        [$document] = $this->prepare($service, $request);
+        self::assertSame([], $service->view($request, $document)['snapshot']['standing']['periods']);
+        $html = $service->html($request, $document);
+        self::assertStringContainsString('No selected academic standing is included through this date.', $html);
+        self::assertStringNotContainsString('No standing is recorded through this date.', $html);
+        $this->enable($t);
+        self::assertCount(1, $service->review($request)['snapshot']['standing']['periods']);
+        self::assertSame($html, $service->html($request, $document));
+    }
+
+    public function testASelectionOnlySetupChangeInvalidatesAnUnacceptedPreparation(): void
+    {
+        [$t, $request, , , , $good] = $this->fixture();
+        $this->enable($t);
+        $service = $t->service($this->renderer());
+        $review = $service->review($request);
+        $this->enable($t, definitions: [$good['id']]);
+        try {
+            $service->prepare(
+                $request,
+                new EntityId($review['operation_id']),
+                $review['revision'],
+                true,
+                $review['review_token'],
+            );
+            self::fail('Changed selection was not reviewed.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame([], $t->sis->sql->rows('sis_transcript_documents'));
+        }
     }
 
     public function testDisabledStandingDoesNotReadTheOptionalSourceOrChangeEarlierDocumentsWhenEnabledLater(): void

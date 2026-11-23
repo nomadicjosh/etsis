@@ -14,12 +14,15 @@ final readonly class TranscriptReleasePolicy
 {
     /** @var list<array{id:string,label:string,details:string,stage:string}> */
     public array $checks;
+    /** @var list<string>|null Null includes all recorded standing identities. */
+    public ?array $standingDefinitions;
 
     /** @param list<array{id:string,label:string,details:string,stage:string}> $checks */
     public function __construct(
         public int $revision = 0,
         array $checks = [],
         public bool $includeStanding = false,
+        ?array $standingDefinitions = null,
     ) {
         if ($revision < 0 || $revision > 2000000000 || !array_is_list($checks) || count($checks) > 12) {
             self::invalid();
@@ -48,6 +51,29 @@ final readonly class TranscriptReleasePolicy
         if (count(array_unique($ids)) !== count($ids)) {
             self::invalid();
         }
+        if ($standingDefinitions !== null) {
+            if (
+                !array_is_list($standingDefinitions) || count($standingDefinitions) < 1
+                || count($standingDefinitions) > 25
+            ) {
+                self::invalidStandings();
+            }
+            foreach ($standingDefinitions as $id) {
+                if (!is_string($id)) {
+                    self::invalidStandings();
+                }
+                try {
+                    new EntityId($id);
+                } catch (\InvalidArgumentException) {
+                    self::invalidStandings();
+                }
+            }
+            if (count(array_unique($standingDefinitions)) !== count($standingDefinitions)) {
+                self::invalidStandings();
+            }
+            sort($standingDefinitions, SORT_STRING);
+        }
+        $this->standingDefinitions = $standingDefinitions;
         $this->checks = array_map(
             static fn(array $c): array => [
                 "id" => $c["id"],
@@ -59,13 +85,14 @@ final readonly class TranscriptReleasePolicy
         );
     }
 
-    /** @return array{revision:int,checks:array,include_standing:bool} */
+    /** @return array{revision:int,checks:array,include_standing:bool,standing_definitions:?array} */
     public function describe(): array
     {
         return [
             "revision" => $this->revision,
             "checks" => $this->checks,
             "include_standing" => $this->includeStanding,
+            "standing_definitions" => $this->standingDefinitions,
         ];
     }
 
@@ -130,8 +157,10 @@ final readonly class TranscriptReleasePolicy
             ($evidence["actor_id"] ?? null) !== $actor ||
             ($evidence["confirmed_at"] ?? null) !== $at ||
             !is_array($evidence["policy"] ?? null) ||
-            !in_array(count($evidence["policy"]), [2, 3], true) ||
-            array_diff(array_keys($evidence["policy"]), ["revision", "checks", "include_standing"]) !== [] ||
+            !in_array(count($evidence["policy"]), [2, 3, 4], true) ||
+            array_diff(array_keys($evidence["policy"]), [
+                "revision", "checks", "include_standing", "standing_definitions",
+            ]) !== [] ||
             (array_key_exists("include_standing", $evidence["policy"]) &&
                 !is_bool($evidence["policy"]["include_standing"])) ||
             !is_int($evidence["policy"]["revision"] ?? null) ||
@@ -146,6 +175,7 @@ final readonly class TranscriptReleasePolicy
             $evidence["policy"]["revision"],
             $evidence["policy"]["checks"],
             $evidence["policy"]["include_standing"] ?? false,
+            $evidence["policy"]["standing_definitions"] ?? null,
         );
         $confirmation = new TranscriptReleaseConfirmation($policy->revision, $evidence["confirmed"]);
         if ($confirmation->checks !== $evidence["confirmed"]) {
@@ -163,13 +193,23 @@ final readonly class TranscriptReleasePolicy
             $evidence["policy"]["revision"],
             $evidence["policy"]["checks"],
             $evidence["policy"]["include_standing"] ?? false,
+            $evidence["policy"]["standing_definitions"] ?? null,
         );
         return [
             "revision" => $policy->revision,
             "confirmed_at" => $evidence["confirmed_at"],
             "checks" => $policy->required($evidence["stage"]),
             "include_standing" => $policy->includeStanding,
+            "standing_definitions" => $policy->standingDefinitions,
         ];
+    }
+
+    private static function invalidStandings(): never
+    {
+        throw new ValidationException([
+            ['field' => 'standing_definitions',
+                'message' => 'Choose all standings or one to twenty-five distinct standing definitions.'],
+        ]);
     }
 
     private static function invalid(): never
