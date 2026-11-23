@@ -165,6 +165,10 @@ $client = [
         <script defer src="/assets/js/workspace-catalog.js"></script>
         <script defer src="/assets/js/workspace-classifications.js"></script>
         <script defer src="/assets/js/workspace-programs.js"></script>
+        <script id="curriculum-ownership-labels" type="application/json"><?= json_encode(
+            require dirname(__DIR__, 2) . '/shared/curriculum-ownership-labels.php',
+            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR,
+        ) ?></script>
         <script defer src="/assets/js/degree-progress-guide.js"></script>
         <script defer src="/assets/js/workspace-degree-audit.js"></script>
         <script defer src="/assets/js/workspace-course-rules.js"></script>

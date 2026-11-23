@@ -153,10 +153,10 @@ final readonly class SpecializationPolicyService
     {
         $ids = [];
         foreach ($this->specializations->offered($program) as $choice) {
-            if ($choice["department"] !== null) {
-                $ids[] = $choice["department"]["id"];
-                if ($choice["department"]["school"] !== null) {
-                    $ids[] = $choice["department"]["school"]["id"];
+            foreach (array_filter([$choice['department'], ...$choice['additional_departments']]) as $owner) {
+                $ids[] = $owner['id'];
+                if ($owner['school'] !== null) {
+                    $ids[] = $owner['school']['id'];
                 }
             }
         }

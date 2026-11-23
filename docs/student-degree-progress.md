@@ -204,6 +204,8 @@ The authoring test screen can now [compare exact assigned publications with appr
 
 Combined curriculum cards and staff component drilldowns show the responsible department and its school/college from the component's exact retained program publication. An English major and History minor can therefore show different departments within the same broad degree. A later reference rename or departmental move does not change those assigned labels. Explicit unassigned ownership remains distinct from **Not recorded in this publication** for earlier publications. Students receive codes and titles without internal organization identifiers. These are academic responsibility labels; they grant no staff access and change no credits, GPA, placement or sharing rules. See [organization setup and publication](program-publication.md#departments-and-curriculum-ownership).
 
+For [jointly owned components](program-publication.md#joint-department-ownership), the same captured cards also show **Additional responsible departments**, including each department's own retained college. They reuse the existing private progress response and local drilldowns. A newly published empty list displays **none**; an earlier publication lacking the list displays **not recorded in this publication**. A later draft edit cannot replace those labels. Student views omit internal department/school identifiers, perform no additional organization fetch and store no curriculum data in the browser. Joint owners do not create additional components or change academic calculations.
+
 
 ### Retained required-major relationships
 

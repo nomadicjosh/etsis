@@ -15,6 +15,10 @@ async function fixture(page, options = {}) {
         { id: id(11), kind: 'campus', code: 'WEST', title: 'Fictional West Campus', active: true },
         { id: id(5), kind: 'award', code: 'BA', title: 'Bachelor of Arts <script>fictional</script>', active: true },
     ];
+    if (options.jointOwners) for (let index = 0; index < 6; index++) rows.push({
+        id: id(60 + index), kind: 'department', code: `JOINT.${index}`, title: `Fictional joint department ${index}`,
+        active: true, school_id: id(70 + index), school: { id: id(70 + index), code: `COL.${index}`, title: `Fictional joint college ${index} <b>example</b>` },
+    });
     let reviews = 0, accepted = null;
     const specializations = options.specializations ? Array.from({length:23},(_,i)=>({id:id(30+i),program_id:id(1),code:`FOCUS.${String(i).padStart(2,'0')}`,title:`Fictional specialization ${i} <b>example</b>`,description:'A fictional description.',revision:1,active:true,kind:'specialization'})) : [];
     if (options.linked) specializations[0].kind = 'major';
@@ -26,7 +30,7 @@ async function fixture(page, options = {}) {
         institution = { ...institution, maximum: 3, default_maximum: 2 };
         programPolicy = { ...programPolicy, minimum: 1, maximum: 2, kind_limits: { major: { minimum: 1, maximum: 1 }, concentration: { minimum: 0, maximum: 1 } } };
     }
-    const specializationSnapshot = () => ({program_id:id(1),component_sharing:programPolicy.component_sharing,kind_limits:programPolicy.kind_limits,institution:{revision:institution.revision,maximum:institution.maximum,default_maximum:institution.default_maximum},program:{revision:programPolicy.revision,minimum:programPolicy.minimum,maximum:programPolicy.maximum},effective:{minimum:programPolicy.minimum,maximum:programPolicy.maximum??institution.default_maximum},offered:specializations.filter(s=>s.active).map(({id,code,title,description,revision,kind,department,parent_major})=>({id,code,title,description,revision,kind,department:department??null,parent_major:parent_major??null}))});
+    const specializationSnapshot = () => ({program_id:id(1),component_sharing:programPolicy.component_sharing,kind_limits:programPolicy.kind_limits,institution:{revision:institution.revision,maximum:institution.maximum,default_maximum:institution.default_maximum},program:{revision:programPolicy.revision,minimum:programPolicy.minimum,maximum:programPolicy.maximum},effective:{minimum:programPolicy.minimum,maximum:programPolicy.maximum??institution.default_maximum},offered:specializations.filter(s=>s.active).map(({id,code,title,description,revision,kind,department,parent_major,additional_departments})=>({id,code,title,description,revision,kind,department:department??null,parent_major:parent_major??null,additional_departments:additional_departments??[]}))});
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -52,7 +56,7 @@ async function fixture(page, options = {}) {
         } else if (path === `/sis/programs/${id(1)}/specializations/save/`) {
             if (specializationFailure) {specializationFailure=false;await route.fulfill({status:409,json:{error:'Reload this specialization before saving your changes.'}});return;}
             const previous=data.id?specializations.find(row=>row.id===data.id):null;
-            result={...data,id:previous?.id||id(99),program_id:id(1),code:data.code.trim().toUpperCase(),revision:(previous?.revision||0)+1,parent_major:data.parent_major_id ? (({id,code,title})=>({id,code,title}))(specializations.find(row=>row.id===data.parent_major_id)) : null,department:data.department_id ? rows.find(row => row.id === data.department_id) : null};
+            result={...data,id:previous?.id||id(99),program_id:id(1),code:data.code.trim().toUpperCase(),revision:(previous?.revision||0)+1,parent_major:data.parent_major_id ? (({id,code,title})=>({id,code,title}))(specializations.find(row=>row.id===data.parent_major_id)) : null,department:data.department_id ? rows.find(row => row.id === data.department_id) : null,additional_departments:(data.additional_department_ids||[]).map(owner=>rows.find(row=>row.id===owner))};
             if(previous) Object.assign(previous,result);else specializations.push(result);
         } else if (path === `/sis/programs/${id(1)}/specializations/policy/`) {
             if(data){
@@ -682,6 +686,84 @@ test('component department selection preserves edits and publication retains its
     await expect(context).toContainText('Responsible department: SCI — Sciences');
     await expect(context).toContainText('College of Arts <b>fictional</b>');
     await accessible(page); expect(f.errors).toEqual([]);
+});
+
+test('joint owners preserve a linked draft, survive save failure and retain their own colleges in review', async ({ page }) => {
+    const f = await fixture(page, { specializations: true, linked: true, jointOwners: true, specializationFailure: true });
+    await page.getByRole('button', { name: 'Majors, minors & specializations', exact: true }).click();
+    await page.getByRole('button', { name: 'Add a curriculum component', exact: true }).click();
+    await page.getByRole('combobox', { name: 'Curriculum component type', exact: true }).selectOption('concentration');
+    await page.getByRole('textbox', { name: 'Component code', exact: true }).fill('WRITING');
+    await page.getByRole('textbox', { name: 'Component title', exact: true }).fill('Joint writing <b>draft</b>');
+    await page.getByRole('button', { name: 'Choose required major', exact: true }).click();
+    await page.getByRole('button', { name: 'Use major FOCUS.00', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose responsible department', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose SCI', exact: true }).click();
+    await page.getByRole('button', { name: 'Add responsible department', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to curriculum component', exact: true }).click();
+    for (const code of ['SCI', 'JOINT.0', 'JOINT.0', 'JOINT.1']) {
+        await page.getByRole('button', { name: 'Add responsible department', exact: true }).click();
+        await page.getByRole('button', { name: `Choose ${code}`, exact: true }).click();
+        if (code === 'SCI') await expect(page.getByRole('status').filter({ hasText: 'That department is already selected' })).toBeVisible();
+    }
+    await expect(page.getByRole('textbox', { name: 'Component title', exact: true })).toHaveValue('Joint writing <b>draft</b>');
+    await expect(page.getByRole('region', { name: 'Required major relationship', exact: true })).toContainText('Requires major: FOCUS.00');
+    await expect(page.getByRole('button', { name: 'Remove department JOINT.0', exact: true })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Save curriculum component', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Component title', exact: true })).toHaveValue('Joint writing <b>draft</b>');
+    await expect(page.getByRole('button', { name: 'Remove department JOINT.1', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Save curriculum component', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Add a curriculum component', exact: true })).toBeVisible();
+    const saves = f.calls.filter(c => c.path.endsWith('/specializations/save/'));
+    expect(saves.map(c => c.data.additional_department_ids)).toEqual([[id(60), id(61)], [id(60), id(61)]]);
+    expect(saves[1].data).toMatchObject({ parent_major_id: id(30), department_id: id(3), kind: 'concentration', title: 'Joint writing <b>draft</b>' });
+    await page.getByRole('button', { name: 'Back to program details', exact: true }).click();
+    await page.getByRole('button', { name: 'Publish for an academic year', exact: true }).click();
+    await page.getByLabel('Reason for program publication', { exact: true }).fill('Fictional joint ownership review.');
+    await page.getByRole('button', { name: 'Choose academic year', exact: true }).click();
+    await page.getByRole('button', { name: 'Use academic year 2024-2025', exact: true }).click();
+    await page.getByRole('button', { name: 'Review program publication', exact: true }).click();
+    const context = page.getByRole('region', { name: 'Published specialization choices and policy', exact: true });
+    await context.locator('summary').click();
+    await context.getByRole('button', { name: 'More offered specializations', exact: true }).click();
+    for (const number of [0, 1]) await expect(context).toContainText(`Fictional joint college ${number} <b>example</b>`);
+    await expect(context.locator('b')).toHaveCount(0);
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+test('joint owners have a five-choice bound, explicit removal and safe promotion at narrow enlarged text', async ({ page }) => {
+    const f = await fixture(page, { jointOwners: true });
+    await page.getByRole('button', { name: 'Majors, minors & specializations', exact: true }).click();
+    await page.getByRole('button', { name: 'Add a curriculum component', exact: true }).click();
+    await page.getByRole('textbox', { name: 'Component code', exact: true }).fill('JOINT');
+    await page.getByRole('textbox', { name: 'Component title', exact: true }).fill('Joint curriculum');
+    for (let number = 0; number < 5; number++) {
+        await page.getByRole('button', { name: 'Add responsible department', exact: true }).click();
+        await page.getByRole('button', { name: `Choose JOINT.${number}`, exact: true }).click();
+    }
+    await expect(page.getByRole('button', { name: 'Add responsible department', exact: true })).toBeDisabled();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+    await page.getByRole('button', { name: 'Remove department JOINT.4', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Add responsible department', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Choose responsible department', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose JOINT.0', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Remove department JOINT.0', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Additional responsible departments', exact: true })).toContainText('removed from the additional list');
+    await page.getByRole('button', { name: 'Remove department JOINT.1', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('button', { name: 'Remove department JOINT.1', exact: true })).toHaveCount(0);
+    await accessible(page);
+    await page.getByRole('region', { name: 'Additional responsible departments', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/etsis-joint-ownership-mobile.png' });
+    await page.getByRole('button', { name: 'Save curriculum component', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Add a curriculum component', exact: true })).toBeVisible();
+    expect(f.calls.find(c => c.path.endsWith('/specializations/save/')).data).toMatchObject({
+        department_id: id(60), additional_department_ids: [id(62), id(63)], title: 'Joint curriculum',
+    });
+    expect(await page.evaluate(() => [...Object.keys(localStorage), ...Object.keys(sessionStorage)].some(key => /owner|department|curriculum/i.test(key)))).toBe(false);
+    expect(f.errors).toEqual([]);
 });
 
 test('department school chooser preserves the reference draft and saves the explicit affiliation', async ({ page }) => {

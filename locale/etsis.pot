@@ -2333,3 +2333,46 @@ msgstr ""
 #: resources/views/backend/manager/site-labels.php:9
 msgid "Inspect saved design"
 msgstr ""
+#: resources/views/shared/curriculum-ownership-labels.php:8
+msgid "Responsible department"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:9
+msgid "not recorded in this publication"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:10
+msgid "not assigned"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:11
+msgid "School/college"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:12
+msgid "Additional responsible departments"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:13
+msgid "none"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:14
+msgid "Add responsible department"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:15
+msgid "Remove department"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:16
+msgid "Add up to five other departments that jointly own this curriculum component. Each department keeps its own school/college. These choices grant no access or eligibility."
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:20
+msgid "That department is already selected for this component."
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:23
+msgid "The chosen responsible department was removed from the additional list."
+msgstr ""

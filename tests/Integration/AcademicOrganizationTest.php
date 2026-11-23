@@ -209,7 +209,7 @@ final class AcademicOrganizationTest extends TestCase
         );
         $snapshot = $review["specializations"];
         foreach ($snapshot["offered"] as &$choice) {
-            unset($choice["department"]);
+            unset($choice["department"], $choice['additional_departments']);
         }
         unset($choice);
         $old = new \Domain\Catalog\ValueObject\ProgramSpecializationSnapshot($snapshot)->data;

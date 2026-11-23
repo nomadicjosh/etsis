@@ -77,6 +77,7 @@ final readonly class ProgramSpecializationSnapshot
                 ...array_key_exists("kind", $row) ? ["kind"] : [],
                 ...array_key_exists("department", $row) ? ["department"] : [],
                 ...array_key_exists("parent_major", $row) ? ["parent_major"] : [],
+                ...array_key_exists('additional_departments', $row) ? ['additional_departments'] : [],
             ]);
             if (
                 array_key_exists("kind", $row) &&
@@ -87,6 +88,15 @@ final readonly class ProgramSpecializationSnapshot
             }
             if (array_key_exists("department", $row) && $row["department"] !== null) {
                 new DepartmentDefinition($row["department"]);
+            }
+            if (array_key_exists('additional_departments', $row)) {
+                if (!array_key_exists('department', $row) || !is_array($row['additional_departments'])) {
+                    throw new InvalidArgumentException('Retain complete primary and additional curriculum ownership.');
+                }
+                new AdditionalDepartments(
+                    $row['additional_departments'],
+                    $row['department'] === null ? null : new EntityId($row['department']['id'])
+                );
             }
             $value = new ProgramSpecialization(
                 new EntityId($row["id"]),

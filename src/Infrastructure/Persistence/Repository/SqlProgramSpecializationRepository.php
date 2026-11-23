@@ -78,6 +78,7 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
             "id" => $id->value,
             "program_id" => $program->value,
         ]);
+        $row = $this->withJointIds([$row])[0];
         return new ProgramSpecialization(
             $id,
             $program,
@@ -91,6 +92,7 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
                 : \Domain\Catalog\ValueObject\CurriculumComponentKind::from($row["kind"]),
             $row["department_id"] === null ? null : new EntityId($row["department_id"]),
             $row["parent_major_id"] === null ? null : new EntityId($row["parent_major_id"]),
+            array_map(static fn (string $id): EntityId => new EntityId($id), $row['additional_department_ids']),
         );
     }
 
@@ -111,6 +113,7 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
             ]);
         }
         $row = $value->describe();
+        unset($row['additional_department_ids']);
         $row["active"] = (int) $value->active;
         if ($create) {
             $this->sql->insert("sis_program_specializations", $row);
@@ -120,6 +123,24 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
                 "id" => $value->id->value,
                 "program_id" => $value->programId->value,
             ]);
+        }
+        $current = $this->sql->rows('sis_component_departments', ['component_id' => $value->id->value], 6);
+        if (count($current) > 5) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        $ids = $value->describe()['additional_department_ids'];
+        foreach ($current as $reference) {
+            if (!in_array($reference['department_id'], $ids, true)) {
+                $this->sql->execute('DELETE FROM ' . $this->sql->quote('sis_component_departments')
+                    . ' WHERE ' . $this->sql->quote('id') . ' = ?', [$reference['id']]);
+            }
+        }
+        $existing = array_column($current, 'department_id');
+        foreach ($ids as $department) {
+            if (!in_array($department, $existing, true)) {
+                $this->sql->insert('sis_component_departments', ['id' => EntityId::generate()->value,
+                    'component_id' => $value->id->value, 'department_id' => $department]);
+            }
         }
     }
 
@@ -155,6 +176,7 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
                 "description" => $row["description"],
                 "revision" => (int) $row["revision"],
                 "department" => $row["department"],
+                'additional_departments' => $row['additional_departments'],
                 "parent_major" => $row["parent_major"],
             ],
             $this->withMajors($this->withDepartments($rows)),
@@ -205,7 +227,12 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
 
     private function withDepartments(array $rows): array
     {
+        $rows = $this->withJointIds($rows);
         $ids = array_values(array_unique(array_filter(array_column($rows, "department_id"))));
+        foreach ($rows as $row) {
+            $ids = array_merge($ids, $row['additional_department_ids']);
+        }
+        $ids = array_values(array_unique($ids));
         $departments = [];
         if ($ids !== []) {
             $q = $this->sql->quote(...);
@@ -234,19 +261,15 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
                         implode(",", array_fill(0, count($ids), "?")) .
                         ")",
                     $ids,
-                    100,
+                    601,
                 ),
                 null,
                 "id",
             );
         }
-        foreach ($rows as &$row) {
-            $row["department"] = null;
-            if ($row["department_id"] === null) {
-                continue;
-            }
+        $definition = static function (string $id) use ($departments): array {
             $d =
-            $departments[$row["department_id"]] ??
+            $departments[$id] ??
             throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
             if (
                 $d["kind"] !== "department" ||
@@ -254,7 +277,7 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
             ) {
                 throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
             }
-            $row["department"] = new \Domain\Catalog\ValueObject\DepartmentDefinition([
+            return new \Domain\Catalog\ValueObject\DepartmentDefinition([
                 "id" => $d["id"],
                 "code" => $d["code"],
                 "title" => $d["title"],
@@ -267,6 +290,42 @@ final readonly class SqlProgramSpecializationRepository implements ProgramSpecia
                             "title" => $d["school_ref_title"],
                         ],
             ])->data;
+        };
+        foreach ($rows as &$row) {
+            $row['department'] = $row['department_id'] === null ? null : $definition($row['department_id']);
+            $row['additional_departments'] = new \Domain\Catalog\ValueObject\AdditionalDepartments(
+                array_map($definition, $row['additional_department_ids']),
+                $row['department_id'] === null ? null : new EntityId($row['department_id']),
+            )->definitions;
+        }
+        unset($row);
+        return $rows;
+    }
+
+    private function withJointIds(array $rows): array
+    {
+        $owners = [];
+        if ($rows !== []) {
+            $q = $this->sql->quote(...);
+            $ids = array_column($rows, 'id');
+            $references = $this->sql->fetch('SELECT ' . $q('component_id') . ', ' . $q('department_id')
+                . ' FROM ' . $q('sis_component_departments') . ' WHERE ' . $q('component_id')
+                . ' IN (' . implode(',', array_fill(0, count($ids), '?')) . ')', $ids, 501);
+            if (count($references) > 500) {
+                throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+            }
+            foreach ($references as $reference) {
+                $owners[$reference['component_id']][] = new EntityId($reference['department_id']);
+            }
+        }
+        foreach ($rows as &$row) {
+            $row['additional_department_ids'] = array_map(
+                static fn (EntityId $id): string => $id->value,
+                \Domain\Catalog\ValueObject\AdditionalDepartments::ids(
+                    $owners[$row['id']] ?? [],
+                    $row['department_id'] === null ? null : new EntityId($row['department_id'])
+                )
+            );
         }
         unset($row);
         return $rows;

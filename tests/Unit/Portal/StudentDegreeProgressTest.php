@@ -9,6 +9,24 @@ use PHPUnit\Framework\TestCase;
 
 final class StudentDegreeProgressTest extends TestCase
 {
+    public function testJointDepartmentLabelsKeepTheirCollegesWithoutExposingInternalReferences(): void
+    {
+        $review = $this->combined();
+        $department = ['id' => \Domain\Shared\ValueObject\EntityId::generate()->value,
+            'code' => 'LING', 'title' => 'Fictional Languages',
+            'school' => ['id' => \Domain\Shared\ValueObject\EntityId::generate()->value,
+                'code' => 'ARTS', 'title' => 'Fictional Arts college']];
+        $review['components'][1]['progress']['context']['specialization']['department'] = null;
+        $review['components'][1]['progress']['context']['specialization']['additional_departments'] = [$department];
+        $component = new StudentDegreeProgress($review)->describe()['components'][1];
+        self::assertSame('Fictional Languages', $component['additional_departments'][0]['title']);
+        self::assertSame('Fictional Arts college', $component['additional_departments'][0]['school']['title']);
+        self::assertArrayNotHasKey('id', $component['additional_departments'][0]);
+        self::assertArrayNotHasKey('id', $component['additional_departments'][0]['school']);
+        self::assertArrayNotHasKey('additional_departments', new StudentDegreeProgress($this->combined())
+            ->describe()['components'][1]);
+    }
+
     private function review(string $outcome = "feasible"): array
     {
         $secret = "fictional-staff-only-detail";

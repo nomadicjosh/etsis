@@ -63,8 +63,9 @@ final readonly class ProgramSpecializationService
         $actor = $this->access->requirePermission("sis:catalog:manage");
         $this->programs->get("programs", $program);
         $value = $this->specializations->get($program, $id);
+        $result = $this->presentation($value);
         $this->authorize($actor);
-        return $this->presentation($value);
+        return $result;
     }
 
     /** Nullable identity/revision are required command inputs; null explicitly requests a new reference.
@@ -80,6 +81,7 @@ final readonly class ProgramSpecializationService
         CurriculumComponentKind $kind = CurriculumComponentKind::Specialization,
         ?EntityId $department = null,
         ?EntityId $parentMajor = null,
+        array $additionalDepartments = [],
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
         if (
@@ -115,6 +117,7 @@ final readonly class ProgramSpecializationService
             $kind,
             $department,
             $parentMajor,
+            $additionalDepartments,
         );
         return $this->transactions->run(function () use (
             $program,
@@ -133,10 +136,13 @@ final readonly class ProgramSpecializationService
                     "Reload this specialization before saving your changes.",
                 );
             }
-            $previous =
-                $id === null ? null : $this->specializations->get($program, $id)->departmentId;
+            $old = $id === null ? null : $this->specializations->get($program, $id);
+            $previous = $old?->departmentId;
+            $previousOwners = array_filter([$previous, ...($old?->additionalDepartmentIds ?? [])]);
+            $newOwners = array_filter([$value->departmentId, ...$value->additionalDepartmentIds]);
+            $oldIds = array_map(static fn (EntityId $owner): string => $owner->value, $previousOwners);
             $references = [];
-            foreach (array_filter([$previous, $value->departmentId]) as $reference) {
+            foreach ([...$previousOwners, ...$newOwners] as $reference) {
                 $references[] = $reference->value;
                 $school = $this->classifications->get($reference)["school_id"];
                 if ($school !== null) {
@@ -147,15 +153,15 @@ final readonly class ProgramSpecializationService
             foreach (array_unique($references) as $reference) {
                 $this->classifications->lock(new EntityId($reference));
             }
-            $departmentBefore = $this->department($value->departmentId, $previous);
-            if (
-                $departmentBefore !== null &&
-                $departmentBefore["school"] !== null &&
-                !in_array($departmentBefore["school"]["id"], $references, true)
-            ) {
-                throw new ConcurrentModificationException(
-                    "The department moved schools while saving. Review its organization again.",
-                );
+            $ownersBefore = [];
+            foreach ($newOwners as $owner) {
+                $definition = $this->department($owner, in_array($owner->value, $oldIds, true) ? $owner : null);
+                if ($definition['school'] !== null && !in_array($definition['school']['id'], $references, true)) {
+                    throw new ConcurrentModificationException(
+                        'A department moved schools while saving. Review its organization again.',
+                    );
+                }
+                $ownersBefore[$owner->value] = $definition;
             }
             $oldParent =
                 $id === null ? null : $this->specializations->get($program, $id)->parentMajorId;
@@ -174,17 +180,22 @@ final readonly class ProgramSpecializationService
                     "The component changed before saving completed.",
                 );
             }
-            if ($this->department($value->departmentId, $previous) !== $departmentBefore) {
-                throw new ConcurrentModificationException(
-                    "The responsible department changed before saving completed.",
-                );
+            foreach ($newOwners as $owner) {
+                if (
+                    $this->department($owner, in_array($owner->value, $oldIds, true) ? $owner : null)
+                    !== $ownersBefore[$owner->value]
+                ) {
+                    throw new ConcurrentModificationException('Curriculum ownership changed before saving completed.');
+                }
             }
             if ($this->parent($value, $oldParent) !== $majorBefore) {
                 throw new ConcurrentModificationException(
                     "The required major changed before saving completed.",
                 );
             }
-            return $this->presentation($value);
+            $result = $this->presentation($value);
+            $this->authorize($actor);
+            return $result;
         });
     }
 
@@ -201,6 +212,10 @@ final readonly class ProgramSpecializationService
                         array_flip(["id", "code", "title"]),
                     ),
             "department" => $this->department($value->departmentId, $value->departmentId),
+            'additional_departments' => array_map(
+                fn (EntityId $id): array => $this->department($id, $id),
+                $value->additionalDepartmentIds
+            ),
         ];
     }
     private function parent(ProgramSpecialization $value, ?EntityId $previous): ?array
@@ -261,7 +276,10 @@ final readonly class ProgramSpecializationService
 
     private function authorize(EntityId $actor): void
     {
-        if ($this->access->requirePermission("sis:catalog:manage")->value !== $actor->value) {
+        if (
+            $this->access->requirePermission("sis:catalog:manage")->value !== $actor->value
+            || $this->access->authenticatedUserId()->value !== $actor->value
+        ) {
             throw new AccessDeniedException("Access denied.");
         }
     }

@@ -126,6 +126,10 @@ async function fixture(page,options={}) {
                     { kind: "specialization", label: options.typed ? "Major DATA" : "Specialization DATA", ...(options.typed ? { department: { code: "ENG", title: "Fictional English <department>", school: { code: "ARTS", title: "Fictional Arts <college>" } } } : {}), progress: specialization },
                     ...(options.typed ? [{ kind: "specialization", label: options.linked ? "Concentration ART" : "Minor ART", parent_major: options.linked ? { code: "DATA", title: "Original <b>major</b>" } : null, progress: specialization }] : [])] };
         }
+        if (options.jointOwners && data.mode === 'combined_curriculum') data.components[1].additional_departments = [
+            { code: 'LING', title: 'Retained Linguistics <department>', school: { code: 'LANG', title: 'Retained Languages <college>' } },
+            { code: 'HIST', title: 'Retained History', school: null },
+        ];
         if (options.calculationBlockers && data.records) {
             data.issues = [{component:'overall',code:'chronology_unknown'}];
             data.policy = {attempt_order:'academic_period'};
@@ -534,6 +538,21 @@ test("owner combined progress names the major and minor and keeps drilldowns in 
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 });
 
+
+test('owner combined progress retains joint departments and their colleges with no extra request or browser storage', async ({ page }) => {
+    const f = await fixture(page, { combined: true, typed: true, jointOwners: true });
+    await page.getByRole('button', { name: 'Review progress · BSCS · 26/FA', exact: true }).click();
+    await expect(page.locator('body')).toContainText('Additional responsible departments: LING — Retained Linguistics <department> (School/college: LANG — Retained Languages <college>); HIST — Retained History');
+    await expect(page.locator('body')).toContainText('Additional responsible departments: not recorded in this publication');
+    await expect(page.locator('body department, body college')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Review Major DATA', exact: true }).click();
+    await expect(page.getByRole('heading', { name: /Data <b>fictional<\/b> requirements/ })).toBeVisible();
+    expect(f.calls.filter(c => c.path.endsWith('/degree-progress/'))).toHaveLength(1);
+    await page.setViewportSize({ width: 320, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
 
 test('owner combined progress shows a retained required-major label without another request', async ({ page }) => {
     const f = await fixture(page, { combined: true, typed: true, linked: true });

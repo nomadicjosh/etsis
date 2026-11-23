@@ -669,12 +669,32 @@ window.createWorkspacePrograms = function (ui) {
     }
 
     async function editSpecialization(program, id, back, state = null) {
-        const pendingView = openDrawer("Program specialization", "ACADEMIC CATALOG");
-        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
+        const pendingView = openDrawer(
+            "Program specialization",
+            "ACADEMIC CATALOG",
+        );
+        pendingView.append(
+            node(
+                "p",
+                { role: "status", class: "form-text" },
+                "Loading catalog details…",
+            ),
+        );
         const base = `/sis/programs/${program}/specializations/`;
-        const value = state?.value || (id
-            ? await request(`${base}${id}/`)
-            : { id: null, revision: null, code: "", title: "", description: null, active: true, kind: "specialization", department: null });
+        const value =
+            state?.value ||
+            (id
+                ? await request(`${base}${id}/`)
+                : {
+                        id: null,
+                        revision: null,
+                        code: "",
+                        title: "",
+                        description: null,
+                        active: true,
+                        kind: "specialization",
+                        department: null,
+                    });
         if (!pendingView.isConnected) return;
         const body = openDrawer(
             id ? "Edit specialization" : "Add specialization",
@@ -688,18 +708,37 @@ window.createWorkspacePrograms = function (ui) {
             ),
         );
         const fields = [
-            ["kind", "Curriculum component type", "choice", [{ value: "major", label: "Major" }, { value: "minor", label: "Minor" }, { value: "concentration", label: "Concentration" }, { value: "track", label: "Track" }, { value: "specialization", label: "Specialization" }]],
+            [
+                "kind",
+                "Curriculum component type",
+                "choice",
+                [
+                    { value: "major", label: "Major" },
+                    { value: "minor", label: "Minor" },
+                    { value: "concentration", label: "Concentration" },
+                    { value: "track", label: "Track" },
+                    { value: "specialization", label: "Specialization" },
+                ],
+            ],
             ["code", "Component code"],
             ["title", "Component title"],
             ["description", "Component description", "textarea", "", false],
         ];
-        const form = await buildForm(fields, state?.draft || value, { layout: "curriculum_component" });
+        const form = await buildForm(fields, state?.draft || value, {
+            layout: "curriculum_component",
+        });
         if (!body.isConnected) return;
         const department = state ? state.department : value.department || null;
+        const additionalDepartments = state
+            ? state.additionalDepartments || []
+            : value.additional_departments || [];
+        const ownerLabels = window.curriculumOwnershipLabels || {};
+        const ownerText = (key, fallback) => ownerLabels[key] || fallback;
         const parentMajor = state ? state.parentMajor : value.parent_major || null;
         form.elements.namedItem("code").maxLength = 80;
         form.elements.namedItem("code").pattern = "[A-Za-z0-9][A-Za-z0-9._-]{0,79}";
-        form.elements.namedItem("code").title = "Use letters, numbers, dots, underscores or hyphens.";
+        form.elements.namedItem("code").title =
+            "Use letters, numbers, dots, underscores or hyphens.";
         form.elements.namedItem("description").maxLength = 10000;
         const active = node("input", {
             id: "program-specialization-active",
@@ -707,60 +746,251 @@ window.createWorkspacePrograms = function (ui) {
             class: "form-check-input",
         });
         active.checked = state?.active ?? value.active;
-        const capture = () => ({ value, department, parentMajor, active: active.checked, draft: formData(form, fields) });
-        const restore = (choice = department) => editSpecialization(program, id, back, { ...capture(), department: choice });
-        const restoreParent = (choice = parentMajor) => editSpecialization(program, id, back, { ...capture(), parentMajor: choice });
-        form.append(node("section", { class: "record-section", "aria-label": "Component department" },
-            node("h3", { class: "h6" }, "Responsible department"),
-            node("p", {}, window.curriculumOrganizationText({ department })),
-            node("p", { class: "form-text" }, "Choose the academic unit responsible for this component. It is independent of the program's department; a broad program may leave its own department blank. This choice grants no access."),
-            button("Choose responsible department", () => ui.references().library("department", "", null, [], restore, () => restore(), "Back to curriculum component")),
-            department ? button("Clear responsible department", () => restore(null)) : null));
-        const majorPicker = button("Choose required major", () => chooseParentMajor(program, restoreParent, () => restoreParent()));
+        const capture = () => ({
+            value,
+            department,
+            additionalDepartments,
+            parentMajor,
+            ownershipNotice: state?.ownershipNotice || "",
+            active: active.checked,
+            draft: formData(form, fields),
+        });
+        const restore = (choice = department) =>
+            editSpecialization(program, id, back, {
+                ...capture(),
+                department: choice,
+                additionalDepartments: additionalDepartments.filter(
+                    (item) => item.id !== choice?.id,
+                ),
+                ownershipNotice: additionalDepartments.some(
+                    (item) => item.id === choice?.id,
+                )
+                    ? ownerText(
+                            "promoted",
+                            "The chosen responsible department was removed from the additional list.",
+                        )
+                    : "",
+            });
+        const restoreAdditional = (choices) =>
+            editSpecialization(program, id, back, {
+                ...capture(),
+                additionalDepartments: choices,
+            });
+        const restoreParent = (choice = parentMajor) =>
+            editSpecialization(program, id, back, {
+                ...capture(),
+                parentMajor: choice,
+            });
+        form.append(
+            node(
+                "section",
+                { class: "record-section", "aria-label": "Component department" },
+                node("h3", { class: "h6" }, "Responsible department"),
+                node(
+                    "p",
+                    {},
+                    window.curriculumOrganizationText({
+                        department,
+                        additional_departments: additionalDepartments,
+                    }),
+                ),
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Choose the academic unit responsible for this component. It is independent of the program's department; a broad program may leave its own department blank. This choice grants no access.",
+                ),
+                button("Choose responsible department", () =>
+                    ui
+                        .references()
+                        .library(
+                            "department",
+                            "",
+                            null,
+                            [],
+                            restore,
+                            () => restore(),
+                            "Back to curriculum component",
+                        ),
+                ),
+                department
+                    ? button("Clear responsible department", () => restore(null))
+                    : null,
+            ),
+        );
+        const ownerSection = node(
+            "section",
+            {
+                class: "record-section",
+                "aria-label": ownerText(
+                    "additional",
+                    "Additional responsible departments",
+                ),
+            },
+            node(
+                "h3",
+                { class: "h6" },
+                ownerText("additional", "Additional responsible departments"),
+            ),
+            node(
+                "p",
+                { class: "form-text" },
+                ownerText(
+                    "help",
+                    "Add up to five other departments that jointly own this curriculum component. Each department keeps its own school/college. These choices grant no access or eligibility.",
+                ),
+            ),
+        );
+        if (state?.ownershipNotice)
+            ownerSection.append(node("p", { role: "status" }, state.ownershipNotice));
+        for (const owner of additionalDepartments)
+            ownerSection.append(
+                node(
+                    "div",
+                    {
+                        class:
+                            "d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2",
+                    },
+                    node("span", {}, `${owner.code} — ${owner.title}`),
+                    button(
+                        `${ownerText("remove", "Remove department")} ${owner.code}`,
+                        () =>
+                            restoreAdditional(
+                                additionalDepartments.filter((item) => item.id !== owner.id),
+                            ),
+                    ),
+                ),
+            );
+        const addOwner = button(
+            ownerText("add", "Add responsible department"),
+            () =>
+                ui.references().library(
+                    "department",
+                    "",
+                    null,
+                    [],
+                    (choice) => {
+                        if (
+                            choice.id === department?.id ||
+                            additionalDepartments.some((item) => item.id === choice.id)
+                        ) {
+                            return editSpecialization(program, id, back, {
+                                ...capture(),
+                                ownershipNotice: ownerText(
+                                    "duplicate",
+                                    "That department is already selected for this component.",
+                                ),
+                            });
+                        }
+                        return restoreAdditional([...additionalDepartments, choice]);
+                    },
+                    () => restoreAdditional(additionalDepartments),
+                    "Back to curriculum component",
+                ),
+        );
+        addOwner.disabled = additionalDepartments.length >= 5;
+        ownerSection.append(addOwner);
+        form.append(ownerSection);
+        const majorPicker = button("Choose required major", () =>
+            chooseParentMajor(program, restoreParent, () => restoreParent()),
+        );
         const majorNotice = node("p", { role: "status", class: "form-text" });
         const kindInput = form.elements.namedItem("kind");
         const refreshMajor = () => {
-            const supported = ["concentration", "track", "specialization"].includes(kindInput.value);
+            const supported = ["concentration", "track", "specialization"].includes(
+                kindInput.value,
+            );
             majorPicker.disabled = !supported;
             majorNotice.textContent = supported
                 ? "Optional. Choose one required major, or leave this component independent. Program count/type limits still apply."
-                : parentMajor ? "Clear the required-major relationship before changing this component into a major or minor." : "Major and minor components do not require another major.";
-            kindInput.setCustomValidity(!supported && parentMajor ? "Clear this component's required major before changing its type." : "");
+                : parentMajor
+                    ? "Clear the required-major relationship before changing this component into a major or minor."
+                    : "Major and minor components do not require another major.";
+            kindInput.setCustomValidity(
+                !supported && parentMajor
+                    ? "Clear this component's required major before changing its type."
+                    : "",
+            );
         };
         kindInput.addEventListener("change", refreshMajor);
         refreshMajor();
-        form.append(node("section", { class: "record-section", "aria-label": "Required major relationship" },
-            node("h3", { class: "h6" }, "Required major"),
-            node("p", {}, window.curriculumMajorText({ parent_major: parentMajor })), majorNotice, majorPicker,
-            parentMajor ? button("Clear required major", () => restoreParent(null)) : null));
-        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save curriculum component");
+        form.append(
+            node(
+                "section",
+                {
+                    class: "record-section",
+                    "aria-label": "Required major relationship",
+                },
+                node("h3", { class: "h6" }, "Required major"),
+                node(
+                    "p",
+                    {},
+                    window.curriculumMajorText({ parent_major: parentMajor }),
+                ),
+                majorNotice,
+                majorPicker,
+                parentMajor
+                    ? button("Clear required major", () => restoreParent(null))
+                    : null,
+            ),
+        );
+        const save = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Save curriculum component",
+        );
         form.append(
             node(
                 "div",
                 { class: "form-check my-3" },
                 active,
-                node("label", { for: active.id, class: "form-check-label" }, "Active specialization"),
+                node(
+                    "label",
+                    { for: active.id, class: "form-check-label" },
+                    "Active specialization",
+                ),
             ),
-            node("div", { class: "d-flex flex-wrap gap-2" }, save, button("Cancel specialization changes", back)),
+            node(
+                "div",
+                { class: "d-flex flex-wrap gap-2" },
+                save,
+                button("Cancel specialization changes", back),
+            ),
         );
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
                 if (!form.reportValidity()) return;
                 const draft = formData(form, fields);
-                await request(`${base}save/`, "POST", {
+                const payload = {
                     id: value.id,
                     revision: value.revision,
                     kind: draft.kind,
                     department_id: department?.id ?? null,
                     parent_major_id: parentMajor?.id ?? null,
+                    additional_department_ids: additionalDepartments.map(
+                        (item) => item.id,
+                    ),
                     code: draft.code,
                     title: draft.title,
                     description: form.elements.namedItem("description").value || null,
                     active: active.checked,
+                };
+                const controls = Array.from(
+                    form.querySelectorAll("input, textarea, select, button"),
+                    (control) => [control, control.disabled],
+                );
+                controls.forEach(([control]) => {
+                    control.disabled = true;
                 });
-                if (!body.isConnected) return;
-                await back("Specialization saved.");
+                try {
+                    await request(`${base}save/`, "POST", payload);
+                    if (!body.isConnected) return;
+                    await back("Specialization saved.");
+                } finally {
+                    controls.forEach(([control, disabled]) => {
+                        if (control.isConnected) control.disabled = disabled;
+                    });
+                }
             }, save);
         });
         body.append(form);

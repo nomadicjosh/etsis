@@ -234,7 +234,7 @@ final class CurriculumReportTest extends TestCase
         )->retained(new EntityId($f->programVersion));
         unset($program["specializations"]["kind_limits"]);
         foreach ($program["specializations"]["offered"] as &$choice) {
-            unset($choice["kind"], $choice["department"], $choice["parent_major"]);
+            unset($choice["kind"], $choice["department"], $choice["parent_major"], $choice['additional_departments']);
         }
         unset($choice);
         $rows = \Domain\Student\ValueObject\SelectedCurriculumRows::from(

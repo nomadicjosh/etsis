@@ -40,7 +40,7 @@ test("combined progress keeps one captured joint plan through component, group a
     ).toBe(true);
     await studio
         .getByRole("button", {
-            name: "Inspect specialization data component",
+            name: "Inspect component (type not recorded) data component",
             exact: true,
         })
         .focus();

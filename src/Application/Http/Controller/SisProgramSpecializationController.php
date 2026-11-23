@@ -115,6 +115,11 @@ final readonly class SisProgramSpecializationController
                     ),
                 $input->optionalId("department_id"),
                 $input->optionalId("parent_major_id"),
+                array_map(
+                    static fn (mixed $id): EntityId => is_string($id) ? new EntityId($id)
+                    : throw new InvalidArgumentException('Choose additional department identities.'),
+                    $input->values('additional_department_ids', 5)
+                ),
             ),
         );
     }

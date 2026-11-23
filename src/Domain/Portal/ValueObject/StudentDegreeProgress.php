@@ -42,6 +42,11 @@ final readonly class StudentDegreeProgress
                     'progress' => $progress,
                     ...$specialization !== null && array_key_exists('department', $specialization)
                         ? ['department' => self::department($specialization['department'])] : [],
+                    ...$specialization !== null && array_key_exists('additional_departments', $specialization)
+                        ? ['additional_departments' => array_map(
+                            self::department(...),
+                            $specialization['additional_departments']
+                        )] : [],
                     ...$specialization !== null && array_key_exists('parent_major', $specialization)
                         ? ['parent_major' => self::major($specialization['parent_major'])] : [],
                 ];

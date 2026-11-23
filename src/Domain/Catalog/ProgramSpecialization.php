@@ -11,6 +11,8 @@ use InvalidArgumentException;
 /** Program-owned authoring reference. Academic use requires a separate retained publication. */
 final readonly class ProgramSpecialization
 {
+    /** @var list<EntityId> */
+    public array $additionalDepartmentIds;
     public function __construct(
         public EntityId $id,
         public EntityId $programId,
@@ -22,7 +24,12 @@ final readonly class ProgramSpecialization
         public ?\Domain\Catalog\ValueObject\CurriculumComponentKind $kind = null,
         public ?EntityId $departmentId = null,
         public ?EntityId $parentMajorId = null,
+        array $additionalDepartmentIds = [],
     ) {
+        $this->additionalDepartmentIds = \Domain\Catalog\ValueObject\AdditionalDepartments::ids(
+            $additionalDepartmentIds,
+            $departmentId,
+        );
         $errors = [];
         if (preg_match('/^[A-Z0-9][A-Z0-9._-]{0,79}$/D', $code) !== 1) {
             $errors[] = [
@@ -63,7 +70,7 @@ final readonly class ProgramSpecialization
         }
     }
 
-    /** @return array<string,scalar|null> */
+    /** @return array<string,mixed> */
     public function describe(): array
     {
         return [
@@ -77,6 +84,10 @@ final readonly class ProgramSpecialization
             "kind" => $this->kind?->value,
             "department_id" => $this->departmentId?->value,
             "parent_major_id" => $this->parentMajorId?->value,
+            'additional_department_ids' => array_map(
+                static fn (EntityId $id): string => $id->value,
+                $this->additionalDepartmentIds
+            ),
         ];
     }
 }

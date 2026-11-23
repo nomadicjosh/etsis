@@ -36,12 +36,34 @@ window.degreeRequirementPoliciesText = function (group) {
 };
 /* Retained curriculum labels, shared by staff and private student progress. */
 window.curriculumOrganizationText = function (choice) {
-    if (!choice || !Object.hasOwn(choice, "department")) return "Responsible department: not recorded in this publication";
-    const department = choice.department;
-    if (!department) return "Responsible department: not assigned";
-    return `Responsible department: ${department.code} — ${department.title}. ` +
-        (department.school ? `School/college: ${department.school.code} — ${department.school.title}` : "School/college: not assigned");
+    const labels = window.curriculumOwnershipLabels || {};
+    const t = (key, fallback) => labels[key] || fallback;
+    const department = choice?.department;
+    const describe = (owner) =>
+        `${owner.code} — ${owner.title}` +
+        (owner.school
+            ? ` (${t("school", "School/college")}: ${owner.school.code} — ${owner.school.title})`
+            : "");
+    const primary =
+        !choice || !Object.hasOwn(choice, "department")
+            ? t("unknown", "not recorded in this publication")
+            : department
+                ? `${department.code} — ${department.title}. ${t("school", "School/college")}: ` +
+                    (department.school
+                        ? `${department.school.code} — ${department.school.title}`
+                        : t("unassigned", "not assigned"))
+                : t("unassigned", "not assigned");
+    const additional =
+        !choice || !Object.hasOwn(choice, "additional_departments")
+            ? t("unknown", "not recorded in this publication")
+            : choice.additional_departments.length
+                ? choice.additional_departments.map(describe).join("; ")
+                : t("none", "none");
+    return `${t("primary", "Responsible department")}: ${primary}. ${t("additional", "Additional responsible departments")}: ${additional}`;
 };
+window.curriculumOwnershipLabels = JSON.parse(
+    document.getElementById("curriculum-ownership-labels")?.textContent || "{}",
+);
 window.curriculumMajorText = function (choice) {
     if (!choice || !Object.hasOwn(choice, "parent_major")) return "Required-major relationship: not recorded in this publication";
     return choice.parent_major ? `Requires major: ${choice.parent_major.code} — ${choice.parent_major.title}` : "Required major: none";
