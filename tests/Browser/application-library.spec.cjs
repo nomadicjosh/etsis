@@ -156,3 +156,85 @@ test('visible field icons support keyboard use and mobile library selection focu
     await page.screenshot({ path: 'test-results/form-library-mobile.png', fullPage: true });
     expect(errors).toEqual([]);
 });
+
+const preferenceKey = 'etsis.form-library.collapses';
+async function storedPreferences(page) {
+    return page.evaluate(key => JSON.parse(localStorage.getItem(key) || '{}'), preferenceKey);
+}
+test('explicit library visibility survives reload and automatic phone closure does not overwrite it', async ({ page }) => {
+    const { errors } = await fixture(page);
+    await page.getByRole('button', { name: 'Hide library', exact: true }).click();
+    await page.reload(); await expect(page.locator('#form-library-panel')).toBeHidden();
+    await expect(page.getByRole('button', { name: 'Show library', exact: true })).toHaveAttribute('aria-expanded', 'false');
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.getByRole('button', { name: 'Show library', exact: true }).click();
+    await page.locator('.form-library-item').first().click();
+    await expect(page.locator('#form-library-panel')).toBeHidden();
+    expect((await storedPreferences(page)).library).toBe(true);
+    await page.reload(); await expect(page.locator('#form-library-panel')).toBeVisible();
+    expect(errors).toEqual([]);
+});
+test('saved-form collapsibles restore separately and local storage contains only display preferences', async ({ page }) => {
+    const { errors } = await fixture(page);
+    await page.locator('.form-library-item').first().click();
+    await page.locator('.designer-settings > summary').click();
+    await page.getByRole('button', { name: 'Collapse field 1', exact: true }).click();
+    await expect.poll(async () => Object.values((await storedPreferences(page)).forms || {})[0]?.fields[0]).toBe(true);
+    await expect(page.locator('#designer-state')).toHaveText('Draft');
+    await page.locator('.form-library-item').nth(1).click();
+    await expect(page.getByRole('button', { name: 'Collapse field 1', exact: true })).toHaveAttribute('aria-expanded', 'true');
+    await page.locator('.form-library-item').first().click();
+    await expect(page.getByRole('button', { name: 'Expand field 1', exact: true })).toHaveAttribute('aria-expanded', 'false');
+    await page.reload(); await page.locator('.form-library-item').first().click();
+    await page.getByRole('button', { name: 'Expand field 1', exact: true }).click();
+    await expect(page.locator('.designer-settings')).toHaveJSProperty('open', true);
+    await page.getByLabel('Question or field label', { exact: true }).fill('Private unsaved fictional question');
+    const encoded = await page.evaluate(key => localStorage.getItem(key), preferenceKey);
+    for (const forbidden of ['Private unsaved', 'Question', 'question', 'Fictional form', id(47), level, 'Professional diploma']) expect(encoded).not.toContain(forbidden);
+    const preferences = JSON.parse(encoded);
+    expect(Object.keys(preferences).sort()).toEqual(['forms']);
+    expect(Object.keys(preferences.forms).every(key => /^[a-f0-9]{64}$/.test(key))).toBe(true);
+    expect(Object.values(preferences.forms).every(value => Object.keys(value).sort().join(',') === 'containers,fields,settings'
+        && Object.values(value).every(items => items.every(item => typeof item === 'boolean')))).toBe(true);
+    expect(await page.evaluate(() => sessionStorage.length)).toBe(0); expect(errors).toEqual([]);
+});
+test('container and field settings remain collapsed or expanded through a redraw and reload', async ({ page }) => {
+    const { errors } = await fixture(page);
+    await page.route(`**/sis/forms/${id(47)}/`, route => route.fulfill({ json: { id: id(47), name: 'Fictional saved layout', status: 'draft', version: 0,
+        academic_level_id: level, program_id: null,
+        fields: [{ key: 'question', label: 'Question', type: 'text', options: [], help: '', required: false, show_when: null }],
+        layout: [{ key: 'identity', label: 'Fictional section', help: '', columns: [['question']] }],
+    } }));
+    await page.locator('.form-library-item').first().click();
+    await page.locator('.form-container-settings > summary').click();
+    await page.locator('.designer-settings > summary').click();
+    await page.getByRole('button', { name: 'Duplicate field 1', exact: true }).click();
+    await expect(page.locator('.form-container-settings')).toHaveJSProperty('open', false);
+    await expect(page.locator('.designer-settings').first()).toHaveJSProperty('open', true);
+    await expect.poll(async () => Object.values((await storedPreferences(page)).forms || {})[0]?.containers[0]).toBe(false);
+    await page.reload(); await page.locator('.form-library-item').first().click();
+    await expect(page.locator('.form-container-settings')).toHaveJSProperty('open', false);
+    await expect(page.locator('.designer-settings')).toHaveJSProperty('open', true); expect(errors).toEqual([]);
+});
+test('bulk collapse and expand persist for the saved form without marking its definition dirty', async ({ page }) => {
+    const { errors } = await fixture(page); await page.locator('.form-library-item').first().click();
+    await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
+    await page.reload(); await page.locator('.form-library-item').first().click();
+    await expect(page.getByRole('button', { name: 'Expand field 1', exact: true })).toHaveAttribute('aria-expanded', 'false');
+    await page.getByRole('button', { name: 'Expand all', exact: true }).click();
+    await page.reload(); await page.locator('.form-library-item').first().click();
+    await expect(page.getByRole('button', { name: 'Collapse field 1', exact: true })).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#designer-state')).toHaveText('Draft'); expect(errors).toEqual([]);
+});
+test('blocked preference storage leaves the form library and designer usable', async ({ page }) => {
+    await page.addInitScript(key => {
+        const get = Storage.prototype.getItem, set = Storage.prototype.setItem;
+        Storage.prototype.getItem = function(name) { if (name === key) throw new DOMException('Blocked fictional preferences', 'SecurityError'); return get.call(this, name); };
+        Storage.prototype.setItem = function(name, value) { if (name === key) throw new DOMException('Blocked fictional preferences', 'SecurityError'); return set.call(this, name, value); };
+    }, preferenceKey);
+    const { errors } = await fixture(page);
+    await page.getByRole('button', { name: 'Hide library', exact: true }).click(); await page.getByRole('button', { name: 'Show library', exact: true }).click();
+    await page.locator('.form-library-item').first().click(); await page.getByRole('button', { name: 'Collapse field 1', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Expand field 1', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.length)).toBe(0); expect(errors).toEqual([]);
+});

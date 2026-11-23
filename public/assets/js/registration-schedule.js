@@ -385,7 +385,14 @@ window.createRegistrationSchedule = function (ui) {
 window.createRegistrationPlanReview = function (ui) {
     const { node, request, money, open, button, isCurrent = () => true } = ui;
     const presenter = window.createRegistrationSchedule({ node });
-    return async function reviewPlan({ student, sections, reviewUrl, commitUrl, onComplete, onRevise }) {
+    return async function reviewPlan({
+        student,
+        sections,
+        reviewUrl,
+        commitUrl,
+        onComplete,
+        onRevise,
+    }) {
         const command = { student_id: student, section_ids: [...sections] };
         const body = open("Review schedule");
         body.append(
@@ -410,11 +417,15 @@ window.createRegistrationPlanReview = function (ui) {
         );
         confirm.disabled = !review.can_confirm;
         body.append(
-            confirm,
-            button("Refresh schedule review", () =>
-                reviewPlan({ student, sections, reviewUrl, commitUrl, onComplete, onRevise }),
+            node(
+                "div",
+                { class: "d-flex flex-wrap gap-2 my-3" },
+                confirm,
+                button("Refresh schedule review", () =>
+                    reviewPlan({ student, sections, reviewUrl, commitUrl, onComplete, onRevise }),
+                ),
+                button("Revise selection", onRevise),
             ),
-            button("Revise selection", onRevise),
             node(
                 "p",
                 { class: "form-text" },
@@ -434,7 +445,11 @@ window.createSectionChange = function (ui) {
         let searchValue = "";
         async function choose(after = null) {
             const body = open("Change section");
-            const busy = node("p", { role: "status" }, "Finding sections of the same course and term…");
+            const busy = node(
+                "p",
+                { role: "status" },
+                "Finding sections of the same course and term…",
+            );
             body.append(busy);
             const page = await request(`${baseUrl}choices/`, "POST", {
                 ...selection,
@@ -452,15 +467,19 @@ window.createSectionChange = function (ui) {
             });
             const form = node(
                 "form",
-                { class: "mb-3" },
+                { class: "record-form-section mb-3" },
                 node("label", { for: inputId, class: "form-label" }, "Find a section"),
                 input,
             );
             form.append(
-                button("Search", async () => {
-                    searchValue = input.value.trim();
-                    await choose();
-                }),
+                node(
+                    "div",
+                    { class: "d-flex flex-wrap gap-2 mt-3" },
+                    button("Search", async () => {
+                        searchValue = input.value.trim();
+                        await choose();
+                    }),
+                ),
             );
             form.addEventListener("submit", (event) => {
                 event.preventDefault();
@@ -483,7 +502,11 @@ window.createSectionChange = function (ui) {
                 ),
             );
             body.replaceChildren(
-                node("p", {}, `Current section: ${page.from_code}. Add/drop ends ${page.grace_ends_on}.`),
+                node(
+                    "p",
+                    {},
+                    `Current section: ${page.from_code}. Add/drop ends ${page.grace_ends_on}.`,
+                ),
                 node(
                     "p",
                     {},
@@ -500,14 +523,19 @@ window.createSectionChange = function (ui) {
                         "No matching sections. Try another search or contact the registrar.",
                     ),
                 );
-            if (page.next_after) body.append(button("Next sections", () => choose(page.next_after)));
+            if (page.next_after)
+                body.append(button("Next sections", () => choose(page.next_after)));
             if (after) body.append(button("First page", () => choose()));
             if (onBack) body.append(button("Back", onBack));
         }
         async function review(to) {
             const body = open("Review section change");
             body.append(
-                node("p", { role: "status" }, "Checking the replacement and original charge reversal…"),
+                node(
+                    "p",
+                    { role: "status" },
+                    "Checking the replacement and original charge reversal…",
+                ),
                 button("Choose another section", () => choose()),
             );
             const command = { ...selection, to_section_id: to };
@@ -564,9 +592,13 @@ window.createSectionChange = function (ui) {
             );
             confirm.disabled = !result.can_confirm;
             body.append(
-                confirm,
-                button("Refresh review", () => review(to)),
-                button("Choose another section", () => choose()),
+                node(
+                    "div",
+                    { class: "d-flex flex-wrap gap-2 my-3" },
+                    confirm,
+                    button("Refresh review", () => review(to)),
+                    button("Choose another section", () => choose()),
+                ),
                 node(
                     "p",
                     { class: "form-text" },

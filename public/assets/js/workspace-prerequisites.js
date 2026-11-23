@@ -56,7 +56,7 @@ window.createWorkspacePrerequisites = function (ui) {
                         count.setCustomValidity("Enter a count from one through the number of branches.");
                     } else branch.minimum = Number(count.value);
                 });
-                const section = node("section", { class: "surface border rounded p-2 mb-2", "aria-label": `Rule branch ${index}` },
+                const section = node("section", { class: "rule-branch", "aria-label": `Rule branch ${index}` },
                     node("label", { for: id, class: "form-label fw-semibold" }, parent ? `Branch ${index}` : "Overall rule"), mode, countField);
                 for (const [position, child] of branch.children.entries()) {
                     const name = typeof child === "number" ? `Requirement ${child + 1}` : `Nested branch ${index}.${position + 1}`;
@@ -79,6 +79,8 @@ window.createWorkspacePrerequisites = function (ui) {
                     };
                     const up = button("↑", () => move(-1), "btn-outline-secondary btn-sm", `Move ${name} up`);
                     const down = button("↓", () => move(1), "btn-outline-secondary btn-sm", `Move ${name} down`);
+                    up.replaceChildren(node("i", { class: "bi bi-arrow-up", "aria-hidden": "true" }));
+                    down.replaceChildren(node("i", { class: "bi bi-arrow-down", "aria-hidden": "true" }));
                     up.disabled = position === 0; down.disabled = position === branch.children.length - 1;
                     section.append(node("div", { class: "border-top pt-2 mt-2" },
                         node("div", { class: "d-flex flex-wrap align-items-center gap-2 mb-2" }, check,

@@ -101,6 +101,7 @@ test('a finance task connects statements and verified entries, preserving the no
     await expect(drawer.getByRole('table', { name: 'Account entries', exact: true }).locator('tbody tr')).toHaveCount(25);
     await drawer.getByRole('button', { name: 'Next account entries', exact: true }).click();
     await expect(drawer.getByRole('table', { name: 'Account entries', exact: true }).locator('tbody tr')).toHaveCount(2);
+    await drawer.getByRole('button', { name: 'Back to billing accounts', exact: true }).click();
     await drawer.getByRole('button', { name: 'Back to finance task', exact: true }).click();
     await drawer.getByRole('button', { name: 'Complete finance review', exact: true }).click();
     await drawer.getByLabel('Private finance reason / outcome').fill('Fictional reviewed source entry.');

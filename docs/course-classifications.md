@@ -5,10 +5,14 @@ Departments, academic levels and course levels are independent reference definit
 ## Set up the library
 
 1. Open **Academic catalog → Departments & levels**.
-2. Choose **Departments**, **Academic levels** or **Course levels**. For example, an institution might define Sciences, Undergraduate and Introductory respectively.
+2. Open **Change category** and choose **Departments**, **Academic levels** or **Course levels**. The menu marks the current category. For example, an institution might define Sciences, Undergraduate and Introductory respectively.
 3. Add a code and name. Codes can contain letters, digits, dots, underscores, slashes and hyphens, up to 40 characters; codes are normalized to uppercase. Names allow up to 191 characters and display as literal text.
 4. Use the search to find existing entries. An empty search browses a bounded page; additional pages are loaded explicitly. Codes are unique within their category, so the same code can have independent meanings in different categories.
 5. Edit an entry to rename it or clear **Available for new assignments** to retire it. Retirement preserves existing assignments and publications. An entry cannot be moved to another category or deleted through the interface.
+
+Library cards keep each code, name, availability and applicable school/college affiliation together. **Search** uses the entered query; **Clear** resets the query and page. Paging appears above the records, with a count for the current page. **Back to departments**, **Back to academic levels** and the corresponding category returns reopen the same search/page after editing. Returning without saving does not save the editor's unfinished changes.
+
+Choosers keep their required category fixed and offer **Choose …** only for active definitions. An editor's school/college chooser retains its unsaved department fields. The same library layout serves schools/colleges, fields of study, degrees/awards, instructional methods and campuses/sites in their existing workflows. Closing during a save does not undo an accepted server save; reopen the record to inspect current values. A delayed result does not reopen a closed drawer.
 
 ## Assign a course
 

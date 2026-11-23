@@ -1,4 +1,4 @@
-/* Campus workspace. Private records stay in memory; nothing is persisted in browser storage. */
+/* Campus workspace. Private records stay in memory; browser storage holds disclosure preferences only. */
 (() => {
     'use strict';
     const config = JSON.parse(document.getElementById('workspace-config').textContent);
@@ -10,6 +10,10 @@
     const icon = name => node('i', { class: `bi bi-${name}`, 'aria-hidden': 'true' });
     const clear = element => { disposeActionMenus(element); element.replaceChildren(); };
     let actionMenuSequence = 0;
+    let surfaces = null;
+    let currentRecordReturn = null;
+    let drawerTaskNavigation = null;
+    let personTabsObserver = null;
     const currencyCodes = new Set(Intl.supportedValuesOf('currency'));
     const currencyOptions = [...new Set(['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY', ...currencyCodes])];
     const currencyDigits = currency => currencyCodes.has(currency)
@@ -49,6 +53,18 @@
     let formDraft = { id: null, version: null, status: 'draft', fields: [], layout: [] };
     let savingFormDraft = null;
     const collapsedFormFields = new Set();
+    const expandedFormSettings = new Set();
+    const collapsedContainerSettings = new Set();
+    const formPreferences = window.createApplicationFormPreferences();
+    let formPresentation = formPreferences.transient(), formDisplayTouched = false;
+    function rememberFormPresentation() {
+        if (!formDisplayTouched) return;
+        formPresentation.write({
+            fields: formDraft.fields.map(field => collapsedFormFields.has(field.key)),
+            settings: formDraft.fields.map(field => expandedFormSettings.has(field.key)),
+            containers: (formDraft.layout || []).map(container => !collapsedContainerSettings.has(container.key)),
+        });
+    }
     const formEdits = { past: [], future: [], current: null, group: null };
     let formConditions = null;
     let formLoadSerial = 0;
@@ -71,8 +87,12 @@
         for (const child of children.flat()) {
             if (child !== null && child !== undefined) element.append(child instanceof Node ? child : document.createTextNode(String(child)));
         }
+        if (tag === 'button' && children.length === 1 && typeof children[0] === 'string')
+            surfaces?.decorateButton(element, children[0]);
         return element;
     }
+
+    surfaces = window.createWorkspaceSurfaces({node, task, bootstrap});
 
     async function send(path, method = 'GET', data, accept = 'application/json') {
         const multipart = typeof FormData !== 'undefined' && data instanceof FormData;
@@ -190,6 +210,7 @@
     }
 
     function disposeActionMenus(root) {
+        surfaces?.disposeMenus(root);
         root?.querySelectorAll('[data-workspace-menu]').forEach(toggle => bootstrap.Dropdown.getInstance(toggle)?.dispose());
     }
 
@@ -214,6 +235,7 @@
             const danger = control.matches('.btn-danger, .btn-outline-danger') || entry.danger;
             control.classList.remove(...[...control.classList].filter(name => name === 'btn' || name.startsWith('btn-')));
             control.classList.add('dropdown-item');
+            if (!control.querySelector('.bi')) control.prepend(icon('arrow-right'));
             if (danger) control.classList.add('workspace-danger');
             control.addEventListener('click', () => {
                 bootstrap.Dropdown.getInstance(toggle)?.hide();
@@ -223,7 +245,7 @@
         }
         const wrapper = node('div', { class: 'dropdown workspace-action-menu' }, toggle, items);
         // Fixed positioning keeps row actions inside the viewport when a table scrolls horizontally.
-        new bootstrap.Dropdown(toggle, { popperConfig: config => ({ ...config, strategy: 'fixed' }) });
+        surfaces.dropdown(toggle);
         return wrapper;
     }
 
@@ -274,36 +296,36 @@
     const historyChecks = window.createWorkspaceHistoryChecks({ node, request, task, openDrawer });
     const operations = window.createWorkspaceOperations({ waitlists: () => waitlistStudio, historyChecks: () => historyChecks, node, request, task, can, table, badge, money, moneyInput, recordSummary, actionMenu, disposeActionMenus, buildForm, formData, openDrawer, notify, openRecord, createRecord, navigate, datasets, courseDrops: () => courseDropStudio, catalog: () => catalogStudio, classifications: () => classificationStudio, prerequisites: () => prerequisiteStudio, programs: () => programStudio, degreeAudit: () => degreeAuditStudio, calendar: () => academicCalendarStudio, batchRegistration: () => batchRegistration, teaching: () => teachingStudio, restrictions: () => restrictionStudio, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const courseDropStudio = window.createWorkspaceCourseDrops({ node, request, task, openDrawer, notify, buildForm, formData });
-    const academicCalendarStudio = window.createWorkspaceAcademicCalendar({ node, request, task, buildForm, formData, openDrawer, table, badge, notify, refreshTerms: async () => { drawer.hide(); if (datasets[current]) await loadDirectory(); } });
-    const degreeAuditStudio = window.createWorkspaceDegreeAudit({ node, request, task, can, closeDrawer: () => drawer.hide() });
+    const academicCalendarStudio = window.createWorkspaceAcademicCalendar({ node, request, task, buildForm, formData, openDrawer, table, badge, notify, recordSummary, refreshTerms: async () => { drawer.hide(); if (datasets[current]) await loadDirectory(); } });
+    const degreeAuditStudio = window.createWorkspaceDegreeAudit({ taskNavigation: surfaces.taskNavigation, node, request, task, can, closeDrawer: () => drawer.hide() });
     const courseRuleStudio = window.createWorkspaceCourseRules({ node, request, task, can, openDrawer, closeDrawer: () => drawer.hide(), table });
     const catalogStudio = window.createWorkspaceCatalog({ prerequisites: () => prerequisiteStudio, templates: () => offeringTemplates, deliveryModes, node, request, task, buildForm, formData, openDrawer, table, money, openRecord, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const prerequisiteStudio = window.createWorkspacePrerequisites({ node, request, task, openDrawer, catalog: () => catalogStudio });
-    const classificationStudio = window.createWorkspaceClassifications({ node, request, task, buildForm, formData, openDrawer, publications: course => catalogStudio.publications(course), sectionPublications: section => catalogStudio.sectionPublications(section) });
+    const classificationStudio = window.createWorkspaceClassifications({ node, request, task, buildForm, formData, openDrawer, actionMenu, badge, publications: course => catalogStudio.publications(course), sectionPublications: section => catalogStudio.sectionPublications(section) });
     const programStudio = window.createWorkspacePrograms({ node, request, task, buildForm, formData, openDrawer, degreeAudit: () => degreeAuditStudio, references: () => classificationStudio, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
-    const offeringTemplates = window.createWorkspaceOfferingTemplates({ node, request, task, table, badge, money, buildForm, formData, openDrawer, notify, catalog: () => catalogStudio });
+    const offeringTemplates = window.createWorkspaceOfferingTemplates({ node, request, task, table, badge, money, actionMenu, buildForm, formData, openDrawer, notify, catalog: () => catalogStudio });
     const waitlistStudio = window.createSectionWaitlist({ node, request, task, table, can, openDrawer,
         register: (student, section, back) => batchRegistration.single(student, back, { section_id: section }) });
-    const batchRegistration = window.createWorkspaceRegistration({ node, request, task, can, table, money, recordSummary, buildForm, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const batchRegistration = window.createWorkspaceRegistration({ node, request, task, can, table, money, recordSummary, buildForm, openDrawer, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const moodleStudio = window.createWorkspaceMoodle({ node, request, task, can });
     const moodlePeople = window.createWorkspaceMoodlePeople({ node, request, task, can, openDrawer, openPerson });
     const moodleRequests = window.createWorkspaceMoodleRequests({ node, request, task, can, openDrawer, openPerson });
-    const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions, offices: () => restrictionStudio.officeSetup() });
-    const peopleStudio = window.createWorkspacePeople({ node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, recordSummary, actionMenu, historyPanel, messageRecord: operations.messageRecord, flow: operations.flow, loginUrl: config.login_url || '/login/' });
-    const teachingStudio = window.createWorkspaceTeaching({ node, request, requestFile, task, can, recordSummary, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
+    const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions, offices: () => restrictionStudio.officeSetup({ label: 'Back to roles & access', run: async () => { drawer.hide(); await loadAccess(); } }) });
+    const peopleStudio = window.createWorkspacePeople({ closeDrawer: () => drawer.hide(), node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, recordSummary, actionMenu, historyPanel, messageRecord: operations.messageRecord, flow: operations.flow, loginUrl: config.login_url || '/login/' });
+    const teachingStudio = window.createWorkspaceTeaching({ actionMenu, node, request, requestFile, task, can, recordSummary, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
     const schedulingStudio = window.createWorkspaceScheduling({ openCalendar: () => { drawer.hide(); return navigate('calendar', current !== 'calendar'); }, node, request, task, can, recordSummary, actionMenu, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve(),
         composeAnnouncement: (preset, back) => createRecord('campaigns', preset, { back,
             explanation: 'Review this copy of the published invitation and dates before saving. Later event changes are not copied into this message. Saving creates an encrypted draft; choose recipients and confirm delivery in Communications.' }) });
     const employmentStudio = window.createWorkspaceEmployment({ node, request, task, can, recordSummary, actionMenu, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, openPerson, buildForm, formData, notify, table, badge, historyPanel, positions: () => positionStudio, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
-    const timeReviewPolicy = window.createTimeReviewPolicy({ node, request, task, openDrawer, table });
-    const hrSetup = window.createWorkspaceHrSetup({ node, request, task, openDrawer, table, badge, notify });
-    const positionStudio = window.createWorkspacePositions({ node, request, task, can, openDrawer, table, badge,
+    const timeReviewPolicy = window.createTimeReviewPolicy({ node, request, task, openDrawer, table, recordSummary, backToWorkspace: () => drawer.hide() });
+    const hrSetup = window.createWorkspaceHrSetup({ node, request, task, openDrawer, badge, notify, actionMenu });
+    const positionStudio = window.createWorkspacePositions({ node, request, task, can, openDrawer, recordSummary, actionMenu, badge,
         flow: operations.flow, amounts: hrSetup.amounts, openEmployee: id => employmentStudio.employee(id), notify });
     const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, recordSummary, actionMenu, buildForm, formData, notify, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId), closeDrawer: () => drawer.hide() });
     const importStudio = window.createWorkspaceImports({ node, table, request, notify, number, task, can, recordSummary, subjects: () => catalogStudio.subjects(), classifications: kind => classificationStudio.library(kind) });
     const transcriptStudio = window.createWorkspaceTranscripts({ node, request, requestHtml, requestFile, task, can, recordSummary, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
-    const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, money,
-        buildForm, formData, openDrawer, account: (id, back) => operations.openAccount(id, back) });
+    const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, money, recordSummary, actionMenu,
+        buildForm, formData, openDrawer, account: (id, back, label) => operations.openAccount(id, back, label) });
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const transferAwardStudio = window.createWorkspaceTransferAwards({ node, request, task, table, recordSummary, actionMenu, buildForm, formData, openDrawer, back: id => transferStudio.record('equivalencies', id) });
     const prerequisitePermissions = window.createWorkspacePrerequisitePermissions({ node, request, task, can, openDrawer });
@@ -390,6 +412,7 @@
         drawer.hide();
         current = section;
         generation++;
+        $one('#workspace-loading').hidden = true;
         $one('#workspace-alert').hidden = true;
         $all('[data-panel]').forEach(panel => { panel.hidden = panel.dataset.panel !== (datasets[section] ? 'directory' : section); });
         $all('[data-workspace]').forEach(link => {
@@ -441,7 +464,7 @@
         task(() => navigate(link.dataset.workspace));
     });
     window.addEventListener('popstate', () => task(() => navigate(location.pathname.match(/workspace\/([^/]+)/)?.[1] || 'overview', false)));
-    window.addEventListener('pagehide', () => { cleanupFormConditions(); formLayoutEditor.cleanup(); disposeActionMenus(document); $one('#drawer-body').replaceChildren(); $one('#directory-results').replaceChildren(); listRows = []; importStudio.clear(); formDraft = { id: null, version: null, status: 'draft', fields: [], layout: [] }; collapsedFormFields.clear(); formEdits.past = []; formEdits.future = []; formEdits.current = null; formEdits.group = null; $one('#workspace-main').replaceChildren(); $one('#person-search-results').replaceChildren(); });
+    window.addEventListener('pagehide', () => { cleanupFormConditions(); formLayoutEditor.cleanup(); disposeActionMenus(document); $one('#drawer-body').replaceChildren(); $one('#directory-results').replaceChildren(); listRows = []; importStudio.clear(); formDraft = { id: null, version: null, status: 'draft', fields: [], layout: [] }; collapsedFormFields.clear(); expandedFormSettings.clear(); collapsedContainerSettings.clear(); formPresentation = formPreferences.transient(); formDisplayTouched = false; formEdits.past = []; formEdits.future = []; formEdits.current = null; formEdits.group = null; $one('#workspace-main').replaceChildren(); $one('#person-search-results').replaceChildren(); });
     window.addEventListener('pageshow', event => { if (event.persisted) location.reload(); });
     window.addEventListener('beforeunload', event => { if (dirty || !teachingStudio.canLeave()) { event.preventDefault(); event.returnValue = ''; } });
     listen('#discard-draft', 'click', async () => {
@@ -561,7 +584,7 @@
         if (section === 'students' && can('sis:standing:configure')) tools.append(
             tool('Standing definitions', () => standingStudio.definitions(), 'Configure academic standing definitions', 'list-check'));
         if (section === 'students' && can('sis:gradebook:manage') && can('sis:gradebook:calculation-policy:publish')) tools.append(
-            tool('Comparison policy', () => window.createGradeComparisonPolicy({node,request,task,openDrawer}).open(), 'Publish institutional grade comparison policy', 'sliders'));
+            tool('Comparison policy', () => window.createGradeComparisonPolicy({node,request,task,openDrawer,closeDrawer: () => drawer.hide()}).open(), 'Publish institutional grade comparison policy', 'sliders'));
         if (section === 'students' && can('sis:gradebook:policy')) tools.append(
             tool('Grade policy', () => teachingStudio.gradeChangePolicy(), 'Configure grade correction policy', 'sliders'));
         if (section === 'applications') tools.append(tool('Follow-up queue', () => peopleStudio.caseQueue(),
@@ -624,7 +647,7 @@
         if (section === 'calendar') {
             listRows = []; nextAfter = null;
             $one('#directory-more').hidden = true;
-            $one('#record-count').textContent = 'Weekly calendar';
+            $one('#record-count').textContent = 'Week and month views';
             const target = node('div');
             $one('#directory-results').replaceChildren(target);
             await schedulingStudio.calendar(target, () => token === directoryRequest && navigation === generation && current === section);
@@ -701,7 +724,20 @@
     listen('#directory-create', 'click', () => current === 'applications' ? startApplication() : createRecord(current));
     document.addEventListener('click', event => { if (event.target.closest('[data-action="new-person"]')) task(() => createRecord('people')); });
 
-    function openDrawer(title, eyebrow = 'CONNECTED RECORD') {
+    function recordReturn(incoming, alreadyOpen) {
+        if (!incoming) return null;
+        const previous = alreadyOpen ? currentRecordReturn : null;
+        let ancestor = previous;
+        while (ancestor && ancestor.key !== incoming.key) ancestor = ancestor.parent;
+        const trail = [{...incoming, parent: ancestor ? ancestor.parent : previous}];
+        let parent = trail[0].parent;
+        while (parent && trail.length < 8) {trail.push(parent);parent = parent.parent;}
+        let result = null;
+        for (let index = trail.length - 1; index >= 0; index--) result = {...trail[index], parent:result};
+        return result;
+    }
+
+    function openDrawer(title, eyebrow = 'CONNECTED RECORD', options = {}) {
         if (!teachingStudio.canLeave()) throw new Error('Save or discard your worksheet changes before opening another task.');
         cleanupFormConditions();
         relationalStudio?.cleanup();
@@ -709,9 +745,16 @@
         $one('#drawer-title').textContent = title; $one('#drawer-eyebrow').textContent = eyebrow;
         const alreadyOpen = $one('#record-drawer').matches('.show, .showing');
         if (!alreadyOpen) drawerOpener = document.activeElement;
-        const content = node('div');
+        surfaces.closeMenus();
+        drawerTaskNavigation?.dispose();
+        personTabsObserver?.disconnect(); personTabsObserver = null;
+        if (Object.hasOwn(options, 'record')) currentRecordReturn = recordReturn(options.record, alreadyOpen);
+        else if (!alreadyOpen) currentRecordReturn = null;
+        const content = node('div', {class:'record-task-content'});
+        const parent = Object.hasOwn(options, 'record') ? currentRecordReturn?.parent : currentRecordReturn;
+        drawerTaskNavigation = surfaces.taskNavigation(content, title, parent);
         disposeActionMenus($one('#drawer-body'));
-        $one('#drawer-body').replaceChildren(content); drawer.show();
+        $one('#drawer-body').replaceChildren(drawerTaskNavigation.element, content); drawer.show();
         if (alreadyOpen) {
             $one('#drawer-title').tabIndex = -1;
             $one('#drawer-title').focus({ preventScroll: true });
@@ -722,6 +765,9 @@
         if (!teachingStudio.canLeave()) event.preventDefault();
     });
     $one('#record-drawer').addEventListener('hidden.bs.offcanvas', () => {
+        if ($one('#record-drawer').matches('.show, .showing')) return;
+        drawerTaskNavigation?.dispose(); drawerTaskNavigation = null; currentRecordReturn = null;
+        personTabsObserver?.disconnect(); personTabsObserver = null;
         cleanupFormConditions();
         if (!relationalStudio?.isOpen()) relationalStudio?.cleanup();
         disposeActionMenus($one('#drawer-body'));
@@ -746,8 +792,9 @@
         if (section === 'bookingcategories') return schedulingStudio.categoryForm();
         if (section === 'journals') return operations.createJournal();
         const definition = datasets[section];
-        const operation = ['people', 'billing'].includes(section) ? (await request('/sis/ui/operation-id/')).id : null;
         const body = openDrawer(definition.action, definition.title.toUpperCase());
+        const operation = ['people', 'billing'].includes(section) ? (await request('/sis/ui/operation-id/')).id : null;
+        if (!body.isConnected) return;
         if (back) body.append(node('button', { type: 'button', class: 'btn btn-link mb-3',
             onclick: () => task(back) }, backLabel));
         if (explanation) body.append(node('p', { class: 'form-text' }, explanation));
@@ -842,6 +889,34 @@
     }
 
     const formLayouts = {
+        application_start: [
+            { title: 'Applicant', fields: ['person_id'], wide: ['person_id'] },
+            { title: 'Program & intake', fields: ['program_id', 'entry_term_id'], wide: ['program_id', 'entry_term_id'] },
+        ],
+        student_hiatus: [
+            { title: 'Hiatus type & dates', fields: ['code', 'starts_on', 'ends_on'], wide: ['code'] },
+            { title: 'Private registrar comment', fields: ['note'], wide: ['note'] },
+        ],
+        student_hiatus_return: [{ title: 'Return decision', fields: ['return_on', 'note'], wide: ['note'] }],
+        curriculum_component: [
+            { title: 'Component identity', fields: ['kind', 'code', 'title'], wide: ['kind', 'title'] },
+            { title: 'Description', fields: ['description'], wide: ['description'] },
+        ],
+        journal: [
+            { title: 'Journal details', fields: ['reference', 'posted_on', 'currency'], wide: ['reference'] },
+            { title: 'Posting reason', fields: ['reason'], wide: ['reason'] },
+        ],
+        ledger: [{ title: 'Ledger account', fields: ['code', 'name', 'type'], wide: ['name'] }],
+        billing: [
+            { title: 'Fee identity', fields: ['code', 'name', 'kind'], wide: ['name'] },
+            { title: 'Amount & application', fields: ['amount_minor', 'currency', 'pricing_basis', 'program_id'], wide: ['pricing_basis', 'program_id'] },
+        ],
+        booking_calendar: [{
+            title: 'Find meetings',
+            description: 'Choose a date and narrow the meetings shown in the calendar.',
+            fields: ['date', 'location', 'building_id', 'category_id', 'search'],
+            wide: ['search'],
+        }],
         transfer_catalog: [{ title: 'Transfer catalog details', fields: ['code', 'name', 'title'], wide: ['name', 'title'] }],
         transfer_equivalency: [
             { title: 'Receiving course', fields: ['course_id'], wide: ['course_id'] },
@@ -859,7 +934,21 @@
         ],
         transfer_course: [{ title: 'Course acceptance', fields: ['course_version_id', 'effective_on', 'reason'], wide: ['course_version_id', 'reason'] }],
         transfer_details: [{ title: 'Transfer academic details', fields: ['term_id', 'completed_on', 'academic_on', 'effective_on', 'reason'], wide: ['reason'] }],
-        registration_group: [{ title: 'Section & students', fields: ['section_id', 'student_id'], wide: ['section_id', 'student_id'] }],
+        registration_group: [
+            { title: 'Course section', fields: ['section_id'], wide: ['section_id'] },
+            { title: 'Build the student group', fields: ['student_id'], wide: ['student_id'] },
+        ],
+        registration_section: [{ title: 'Course section', fields: ['section_id'], wide: ['section_id'] }],
+        registration_receipt: [{ title: 'Completed registration', fields: ['operation_id'], wide: ['operation_id'] }],
+        registration_window: [
+            { title: 'Registration window', fields: ['opens_at', 'closes_at'] },
+            { title: 'Course limit', fields: ['course_limit'], wide: ['course_limit'] },
+            { title: 'Publication reason', fields: ['reason'], wide: ['reason'] },
+        ],
+        registration_policy: [
+            { title: 'Published meeting overlaps', fields: ['mode', 'faculty_mode'], wide: ['mode', 'faculty_mode'] },
+            { title: 'Co-requisite decisions', fields: ['prior_completion', 'drop_mode'], wide: ['prior_completion', 'drop_mode'] },
+        ],
         restriction: [
             { title: 'Hold responsibility', fields: ['office_id', 'code'], wide: ['office_id', 'code'] },
             { title: 'Dates & registration', fields: ['starts_on', 'ends_on', 'severity', 'blocks_staff'], wide: ['severity', 'blocks_staff'] },
@@ -1095,22 +1184,68 @@
         return result;
     }
 
-    async function openPerson(id) {
-        const body = openDrawer('Person workspace', 'PERSON RECORD');
+    function personConnection(section, row, person, index) {
+        const labels = {
+            students: ['Student record', 'Open student record', 'mortarboard', 'Academic activity and program history.'],
+            applications: ['Application', 'Open application', 'inbox', 'Admissions review and recorded decisions.'],
+            accounts: ['Student account', 'Open account', 'wallet2', 'Account statement and recorded transactions.'],
+            employees: ['Employment record', 'Open employment record', 'briefcase', 'Position assignments and time review.'],
+        };
+        const [kind, action, glyph, description] = labels[section];
+        const title = section === 'employees' && row.job_title ? row.job_title : `${kind} ${index + 1}`;
+        const heading = node('h3', {}, title);
+        const status = row.status ? String(row.status).replaceAll('_', ' ').replace(/^./u, value => value.toUpperCase())
+            : section === 'employees' && row.active != null ? (Number(row.active) ? 'Time submissions enabled' : 'Time submissions paused')
+            : section === 'students' && row.active != null ? (Number(row.active) ? 'Active' : 'Inactive') : null;
+        return node('article', { class: 'person-connection-card', 'aria-label': `${kind} ${index + 1}` },
+            node('div', { class: 'person-connection-heading' },
+                node('span', { class: 'icon-soft', 'aria-hidden': 'true' }, icon(glyph)),
+                node('div', { class: 'person-connection-identity' }, node('p', { class: 'eyebrow' }, kind), heading),
+                status ? badge(status) : row.currency ? badge(row.currency) : null),
+            node('p', { class: 'form-text' }, description),
+            node('div', { class: 'person-connection-footer' },
+                node('button', {
+                    class: 'btn btn-sm btn-outline-primary', type: 'button',
+                    'aria-label': `${action}: ${title}`,
+                    onclick: event => task(() => openRecord(section, { ...row, given_name: person.givenName, family_name: person.familyName }), event.currentTarget),
+                }, action, icon('arrow-right'))));
+    }
+
+    async function openPerson(id, selectedTab = 'overview') {
+        let activeTab = selectedTab;
+        const body = openDrawer('Person workspace', 'PERSON RECORD', {record:{key:`person:${id}`,label:'Person record',run:()=>openPerson(id,activeTab)}});
         body.append(node('p', { class: 'muted-text' }, 'Loading person record…'));
-        const data = await request(`/sis/ui/people/${id}/`); const person = data.person; clear(body);
+        const data = await request(`/sis/ui/people/${id}/`);
+        if (!body.isConnected) return;
+        const person = data.person; clear(body);
         body.append(node('div', { class: 'record-profile' }, node('span', { class: 'avatar large', 'aria-hidden': 'true' }, `${person.givenName[0]}${person.familyName[0]}`), node('div', {}, node('h3', {}, `${person.givenName} ${person.familyName}`), badge(person.institutionalId.value))));
-        const tabs = node('div', { class: 'workspace-tabs', role: 'tablist', 'aria-label': 'Person record sections' });
-        const panes = node('div');
+        const tabs = node('div', { class: 'workspace-tabs person-record-tabs', role: 'tablist', 'aria-label': 'Person record sections' });
+        const panes = node('div', { class: 'person-record-panels' });
+        const revealActiveTab = () => {
+            const selected = tabs.querySelector('[aria-selected="true"]');
+            if (!selected || !tabs.isConnected) return;
+            const bounds = tabs.getBoundingClientRect(), active = selected.getBoundingClientRect();
+            if (active.left < bounds.left) tabs.scrollLeft -= bounds.left - active.left;
+            else if (active.right > bounds.right) tabs.scrollLeft += active.right - bounds.right;
+        };
         const available = [['overview', 'Overview'], ...(data.students ? [['students', 'Academics']] : []), ...(data.applications ? [['applications', 'Admissions']] : []), ...(data.accounts ? [['accounts', 'Accounts']] : []), ...(data.employees ? [['employees', 'Employment']] : []), ...(can('admin:access:manage') ? [['access', 'Access']] : [])];
         available.forEach(([key, label], index) => {
-            const panel = node('div', { id: `person-panel-${key}`, role: 'tabpanel', 'aria-labelledby': `person-tab-${key}`, hidden: index !== 0 });
+            const panel = node('div', { id: `person-panel-${key}`, role: 'tabpanel', tabindex: '0', 'aria-labelledby': `person-tab-${key}`, hidden: index !== 0 });
             const button = node('button', { type: 'button', id: `person-tab-${key}`, role: 'tab', 'aria-controls': panel.id, 'aria-selected': index === 0 ? 'true' : 'false', tabindex: index === 0 ? '0' : '-1', class: index === 0 ? 'active' : '' }, label);
-            button.addEventListener('click', () => { [...tabs.children].forEach(tab => { tab.classList.toggle('active', tab === button); tab.setAttribute('aria-selected', tab === button ? 'true' : 'false'); tab.tabIndex = tab === button ? 0 : -1; }); [...panes.children].forEach(item => { item.hidden = item !== panel; }); });
+            button.addEventListener('click', () => {
+                activeTab = key;
+                [...tabs.children].forEach(tab => {
+                    tab.classList.toggle('active', tab === button);
+                    tab.setAttribute('aria-selected', tab === button ? 'true' : 'false');
+                    tab.tabIndex = tab === button ? 0 : -1;
+                });
+                [...panes.children].forEach(item => { item.hidden = item !== panel; });
+                revealActiveTab();
+            });
             button.addEventListener('keydown', event => { if (['ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(event.key)) { event.preventDefault(); const all = [...tabs.children]; const next = all[event.key === 'Home' ? 0 : event.key === 'End' ? all.length - 1 : (all.indexOf(button) + (event.key === 'ArrowRight' ? 1 : all.length - 1)) % all.length]; next.click(); next.focus(); } });
             if (key === 'overview') {
                 panel.append(node('dl', { class: 'detail-list' }, node('div', {}, node('dt', {}, 'Institutional ID'), node('dd', {}, person.institutionalId.value)), node('div', {}, node('dt', {}, 'Sign-in account'), node('dd', {}, person.ownerUserId ? 'Linked' : 'Not linked'))));
-                const actions = node('div', { class: 'inline-actions' });
+                const actions = node('div', { class: 'inline-actions', role: 'group', 'aria-label': 'Person tasks' });
                 const extra = [];
                 if (can('sis:person:manage') && (!person.ownerUserId || can('admin:edit:user'))) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.editProfile(person)) }, 'Edit person profile'));
                 if (can('sis:person:manage')) actions.append(node('button', { class: 'btn btn-outline-primary', type: 'button', onclick: () => task(() => peopleStudio.contact(person)) }, 'Contact information'));
@@ -1147,17 +1282,17 @@
                 } else panel.append(node('p', { class: 'muted-text' }, 'Enable sign-in access on this person before assigning roles.'));
             } else {
                 const rows = data[key] || [];
-                if (!rows.length) panel.append(emptyState('Nothing here yet.', 'As this person’s journey grows, the connected records will appear here.'));
-                else rows.forEach(row => {
-                    const wrapper = node('div', { class: 'record-section' }, node('h3', {}, key === 'employees' ? row.job_title : key === 'applications' ? 'Application' : key === 'accounts' ? 'Student account' : 'Student record'));
-                    if (row.status) wrapper.append(badge(row.status));
-                    const action = node('button', { class: 'btn btn-sm btn-outline-primary mt-3', type: 'button', onclick: () => task(() => openRecord(key, { ...row, given_name: person.givenName, family_name: person.familyName })) }, 'Open workspace ', icon('arrow-right'));
-                    wrapper.append(action); panel.append(wrapper);
-                });
+                panel.append(node('p', { class: 'person-connection-count' }, `${rows.length} connected ${rows.length === 1 ? 'record' : 'records'} on this page`));
+                if (!rows.length) panel.append(emptyState('No connected records.', 'Records appear here when this person gains this capability.'));
+                else panel.append(node('div', { class: 'person-connection-list' }, rows.map((row, index) => personConnection(key, row, person, index))));
             }
             tabs.append(button); panes.append(panel);
         });
         body.append(tabs, panes);
+        const selected = available.findIndex(([key]) => key === activeTab);
+        tabs.children[selected < 0 ? 0 : selected].click();
+        personTabsObserver = new ResizeObserver(revealActiveTab);
+        personTabsObserver.observe(tabs);
     }
 
     async function accountSetup(person) {
@@ -1192,7 +1327,8 @@
         if (section === 'applications') return peopleStudio.application(row);
         if (section === 'portal') return editCampusContent(row.id);
         if (section === 'transcripts') return reviewTranscript(row.id);
-        const body = openDrawer(section === 'campaigns' ? 'Message details' : recordLabel(row), datasets[section]?.title.toUpperCase() || 'RECORD');
+        const body = openDrawer(section === 'campaigns' ? 'Message details' : recordLabel(row), datasets[section]?.title.toUpperCase() || 'RECORD',
+            {record:{key:`${section === 'programs' ? 'program' : section}:${row.id}`,label:recordLabel(row),run:()=>openRecord(section,row,origin)}});
         if (section === 'campaigns' && origin.back) body.append(node('button', { type: 'button',
             class: 'btn btn-link mb-3', onclick: () => task(origin.back) }, origin.backLabel));
         if (section === 'sections' && origin.back) body.append(node('button', { type: 'button',
@@ -1381,17 +1517,23 @@
         removeDefault: reviewFormDisable,
         active: () => current === 'forms' ? generation : null,
     });
-    function showFormLibrary(visible) {
+    function showFormLibrary(visible, remember = false) {
         $one('#form-library-panel').hidden = !visible;
         $one('#form-studio-layout').classList.toggle('library-hidden', !visible);
         $one('#form-library-toggle').setAttribute('aria-expanded', String(visible));
         $one('[data-form-library-label]').textContent = visible ? 'Hide library' : 'Show library';
+        if (remember) formPreferences.showLibrary(visible);
     }
-    showFormLibrary(!matchMedia('(max-width: 767px)').matches);
-    listen('#form-library-toggle', 'click', () => showFormLibrary($one('#form-library-panel').hidden));
+    showFormLibrary(formPreferences.library(!matchMedia('(max-width: 767px)').matches));
+    listen('#form-library-toggle', 'click', () => showFormLibrary($one('#form-library-panel').hidden, true));
 
     const formLayoutEditor = window.createApplicationLayoutEditor({ node, icon, openDrawer, task,
         draft: () => formDraft, changed: formChanged, render: renderDesigner,
+        settingsOpen: container => !collapsedContainerSettings.has(container.key),
+        settingsChanged: (container, open) => {
+            if (open) collapsedContainerSettings.delete(container.key); else collapsedContainerSettings.add(container.key);
+            formDisplayTouched = true; rememberFormPresentation();
+        },
         announce: message => { $one('#form-sort-status').textContent = message; },
         closeDrawer: after => { $one('#record-drawer').addEventListener('hidden.bs.offcanvas', after, { once: true }); drawer.hide(); },
     });
@@ -1429,6 +1571,7 @@
     async function loadDraft(id, targetLabel = '') {
         const serial = ++formLoadSerial, version = generation;
         const record = await request(`/sis/forms/${id}/`);
+        const presentation = await formPreferences.record(record.id);
         if (serial !== formLoadSerial || version !== generation || current !== 'forms' || dirty) return;
         formDraft = { ...record, id: record.status === 'published' ? null : record.id, version: record.status === 'published' ? null : record.version, status: 'draft', fields: structuredClone(record.fields), layout: structuredClone(record.layout || []) };
         $one('#form-name').value = record.name;
@@ -1439,7 +1582,17 @@
             select.value = value || '';
         }
         syncFormScope();
-        collapsedFormFields.clear(); resetFormEdits();
+        collapsedFormFields.clear(); expandedFormSettings.clear(); collapsedContainerSettings.clear();
+        formPresentation = presentation; formDisplayTouched = presentation.stored;
+        const displayed = presentation.snapshot();
+        formDraft.fields.forEach((field, index) => {
+            if (displayed.fields[index]) collapsedFormFields.add(field.key);
+            if (displayed.settings[index]) expandedFormSettings.add(field.key);
+        });
+        formDraft.layout.forEach((container, index) => {
+            if (displayed.containers[index] === false) collapsedContainerSettings.add(container.key);
+        });
+        resetFormEdits();
         $one('#designer-state').textContent = record.status === 'published' ? 'New revision' : 'Draft';
         $one('#designer-save-status').textContent = record.status === 'published' ? 'The published form stays unchanged. Save this as a new revision.' : 'You are editing an unpublished draft.';
         dirty = false; renderDesigner(); updateFormPublication();
@@ -1675,6 +1828,7 @@
                 content.hidden = !content.hidden;
                 if (content.hidden) collapsedFormFields.add(field.key); else collapsedFormFields.delete(field.key);
                 toggle.setAttribute('aria-expanded', String(!content.hidden)); toggle.setAttribute('aria-label', `${content.hidden ? 'Expand' : 'Collapse'} field ${index + 1}`);
+                formDisplayTouched = true; rememberFormPresentation();
                 toggle.replaceChildren(icon(content.hidden ? 'chevron-down' : 'chevron-up'));
             } }, icon(content.hidden ? 'chevron-down' : 'chevron-up'));
             controls.append(toggle); heading.append(controls);
@@ -1693,6 +1847,7 @@
                         control.setCustomValidity(valid ? '' : 'Use a unique key with lowercase letters, numbers and underscores.');
                         if (valid && previous !== field.key) {
                             if (collapsedFormFields.delete(previous)) collapsedFormFields.add(field.key);
+                            if (expandedFormSettings.delete(previous)) expandedFormSettings.add(field.key);
                             cards.delete(previous); cards.set(field.key, card); card.dataset.fieldKey = field.key;
                             refreshConditionProblems();
                         }
@@ -1719,11 +1874,20 @@
                 node('span', { class: 'muted-text' }, field.show_when ? 'Conditional visibility' : 'Always visible'),
                 node('button', { class: 'btn btn-sm btn-outline-primary', type: 'button', 'data-field-conditions': '', 'aria-label': `Edit conditions for field ${index + 1}`, onclick: () => editFormConditions(field) }, 'Edit conditions'),
                 ...(problem ? [node('p', { class: 'text-danger mb-0', role: 'status', 'data-field-condition-problem': '' }, problem)] : [])));
-            content.append(node('details', { class: 'designer-settings col-12' }, node('summary', {}, 'Field settings'), node('div', { class: 'row g-3 designer-setting-fields' }, input('key', 'Stable field key'), ...formSettingControls(field, index))));
+            const settings = node('details', { class: 'designer-settings col-12', open: expandedFormSettings.has(field.key) }, node('summary', {}, 'Field settings'), node('div', { class: 'row g-3 designer-setting-fields' }, input('key', 'Stable field key'), ...formSettingControls(field, index)));
+            let settingsWasOpen = settings.open;
+            settings.addEventListener('toggle', () => {
+                if (!settings.isConnected || settings.open === settingsWasOpen) return;
+                settingsWasOpen = settings.open;
+                if (settings.open) expandedFormSettings.add(field.key); else expandedFormSettings.delete(field.key);
+                formDisplayTouched = true; rememberFormPresentation();
+            });
+            content.append(settings);
             const card = node('section', { class: 'designer-field', 'data-field-key': field.key, 'aria-labelledby': title.id }, heading, content);
             cards.set(field.key, card);
         });
         formLayoutEditor.render(container, cards);
+        rememberFormPresentation();
         if (focusIndex !== null) {
             const field = container.querySelectorAll('.designer-field')[focusIndex];
             const selector = focusControl === 'remove' ? '[data-field-remove]' : focusControl === 'drag' ? '.form-field-drag' : focusControl === 'conditions' ? '[data-field-conditions]' : focusControl === 'label' ? 'input' : `[data-field-move="${focusControl}"]:not(:disabled)`;
@@ -1735,6 +1899,7 @@
     function newFormFieldKey() { return `field_${crypto.randomUUID().replaceAll('-', '').slice(0, 28)}`; }
 
     for (const [selector, collapse] of [['#form-collapse-fields', true], ['#form-expand-fields', false]]) listen(selector, 'click', () => {
+        formDisplayTouched = true;
         for (const field of formDraft.fields) { if (collapse) collapsedFormFields.add(field.key); else collapsedFormFields.delete(field.key); }
         renderDesigner();
     });
@@ -1759,7 +1924,9 @@
     function resetFormStudio(focus = true) {
         cleanupFormConditions();
         formLoadSerial++; formDraft = { id: null, version: null, status: 'draft', fields: [], layout: [] };
-        collapsedFormFields.clear(); $one('#form-name').value = ''; $one('#form-program').value = ''; $one('#form-level').value = '';
+        collapsedFormFields.clear(); expandedFormSettings.clear(); collapsedContainerSettings.clear();
+        formPresentation = formPreferences.transient(); formDisplayTouched = false;
+        $one('#form-name').value = ''; $one('#form-program').value = ''; $one('#form-level').value = '';
         formLibrary.select(null); syncFormScope(); resetFormEdits(); dirty = false;
         $one('#designer-state').textContent = 'New draft';
         $one('#designer-save-status').textContent = 'A draft is visible only to form administrators.';
@@ -1802,6 +1969,11 @@
         if (source !== formDraft) return false;
         const unchanged = JSON.stringify(input) === JSON.stringify({ ...formTarget(), name: $one('#form-name').value, fields: formDraft.fields, layout: formDraft.layout || [] });
         formDraft = unchanged ? record : { ...formDraft, id: record.id, version: record.version };
+        const displayedDraft = formDraft;
+        void formPreferences.record(record.id).then(presentation => {
+            if (formDraft !== displayedDraft) return;
+            formPresentation = presentation; rememberFormPresentation();
+        });
         formEdits.current = formEditSnapshot(); formEdits.group = null; trimFormEdits(); updateFormEdits();
         if (unchanged) renderDesigner();
         dirty = !unchanged;
@@ -1893,21 +2065,60 @@
         body.append(node('p', { class: 'muted-text' }, 'Preview only. Nothing you enter here is submitted.'), applicationControls(formDraft.fields, true, formDraft.layout || []));
     });
 
-    async function startApplication(personId, personLabel = '') {
-        const body = openDrawer('Start an application', 'A NEW BEGINNING');
-        const fields = [...(personId ? [] : [['person_id', 'Person', 'lookup', 'people']]), ['program_id', 'Academic program', 'lookup', 'programs'], ['entry_term_id', 'Entry term', 'lookup', 'terms']];
-        const selector = await buildForm(fields);
-        selector.append(node('button', { class: 'btn btn-primary', type: 'submit' }, 'Open program application ', icon('arrow-right')));
-        selector.addEventListener('submit', event => { event.preventDefault(); task(async () => {
-            if (!selector.reportValidity()) return;
-            const data = formData(selector, fields); const form = await request(`/sis/forms/programs/${data.program_id}/active/`);
-            if (!selector.isConnected || fields.some(([key]) => selector.elements.namedItem(key).value !== data[key])) return;
-            const context = [['Person', personLabel || selector.elements.namedItem('person_id').selectedOptions[0].label],
-                ['Academic program', selector.elements.namedItem('program_id').selectedOptions[0].label],
-                ['Entry term', selector.elements.namedItem('entry_term_id').selectedOptions[0].label]];
-            clear(body); await renderSubmission(body, form, personId || data.person_id, data.entry_term_id, context);
-        }, $one('[type="submit"]', selector)); });
-        body.append(selector);
+    async function startApplication(personId = null, personLabel = '') {
+        const body = openDrawer('Start an application', 'ADMISSIONS INTAKE');
+        body.classList.add('admission-start-panel');
+        body.append(node('button', { type: 'button', class: 'btn btn-link mb-3',
+            onclick: () => task(() => personId ? openPerson(personId) : drawer.hide()) },
+            personId ? 'Back to person record' : 'Back to Admissions'));
+        const introduction = node('p', { class: 'form-text' }, 'Choose the applicant, academic program and entry term. The next step opens the program’s published application for you to complete and review.');
+        const setup = node('section', { 'aria-label': 'Application setup' });
+        const stage = node('section', { hidden: true, 'aria-label': 'Program application' });
+        const content = node('div');
+        const back = node('button', { type: 'button', class: 'btn btn-outline-secondary mb-3' }, 'Back to application setup');
+        const returnToSetup = () => {
+            stage.hidden = true; setup.hidden = false; introduction.hidden = false;
+            back.replaceChildren(icon('arrow-left'), node('span', {}, 'Back to application setup'));
+            selector.querySelector('select')?.focus();
+        };
+        back.addEventListener('click', returnToSetup);
+        stage.append(back, content);
+        body.append(introduction, setup, stage);
+        const fields = [...(personId ? [] : [['person_id', 'Person', 'lookup', 'people']]),
+            ['program_id', 'Academic program', 'lookup', 'programs'], ['entry_term_id', 'Entry term', 'lookup', 'terms']];
+        const selector = await buildForm(fields, {}, { layout: 'application_start' });
+        if (!body.isConnected) return;
+        if (personId) setup.append(recordSummary([['Applicant', personLabel || 'Selected person record']]));
+        const status = node('p', { role: 'status', class: 'form-text' });
+        const open = node('button', { class: 'btn btn-primary', type: 'submit' }, 'Open program application ', icon('arrow-right'));
+        selector.append(node('p', { class: 'form-text' }, 'Returning to the same published form keeps your unfinished answers. A different person, program, entry term or published form starts fresh.'), status, open);
+        setup.append(selector);
+        let cached = null;
+        selector.addEventListener('submit', event => {
+            event.preventDefault();
+            task(async () => {
+                if (!selector.reportValidity()) return;
+                const data = formData(selector, fields);
+                status.textContent = 'Loading the published application…';
+                let form;
+                try { form = await request(`/sis/forms/programs/${data.program_id}/active/`); }
+                catch (error) { if (!body.isConnected) return; if (error.status === 403) { cached = null; content.replaceChildren(); } throw error; }
+                finally { if (status.isConnected) status.textContent = ''; }
+                if (!body.isConnected || fields.some(([key]) => selector.elements.namedItem(key).value !== data[key])) return;
+                const context = [['Person', personLabel || selector.elements.namedItem('person_id').selectedOptions[0].label],
+                    ['Academic program', selector.elements.namedItem('program_id').selectedOptions[0].label],
+                    ['Entry term', selector.elements.namedItem('entry_term_id').selectedOptions[0].label]];
+                const key = JSON.stringify([personId || data.person_id, data.program_id, data.entry_term_id, form.id]);
+                setup.hidden = true; introduction.hidden = true; stage.hidden = false;
+                if (cached === key && content.childElementCount) {
+                    content.querySelector('h3')?.focus(); return;
+                }
+                cached = key; clear(content);
+                await renderSubmission(content, form, personId || data.person_id, data.entry_term_id, context, () => {
+                    cached = null; back.replaceChildren(icon('plus-circle'), node('span', {}, 'Start another application'));
+                });
+            }, open);
+        });
     }
     async function loadApplicantSelect() {
         const [programs, terms] = await Promise.all([options('programs'), options('terms')]);
@@ -1922,7 +2133,7 @@
         if (programId !== $one('#apply-program').value || termId !== $one('#apply-term').value) return;
         const container = $one('#applicant-form'); clear(container); await renderSubmission(container, form, person.id, termId, context);
     });
-    async function renderSubmission(container, form, personId, termId, context = []) {
+    async function renderSubmission(container, form, personId, termId, context = [], onComplete = null) {
         const title = node('h3', { class: 'application-review-title mb-4', tabindex: '-1' }, form.name);
         container.append(title);
         if (context.length) container.append(recordSummary(context));
@@ -1932,6 +2143,8 @@
                 entry_term_id: termId, answers,
             }),
             complete: () => {
+                if (!container.isConnected) return;
+                onComplete?.();
                 clear(container); container.append(emptyState('You’re one step closer.', 'Your application has been submitted. The admissions team can now review your program-specific form.', 'check2-circle'));
                 notify('Application submitted. Here’s to your next chapter.');
             },
@@ -1974,13 +2187,19 @@
                 ],
                 lang: { add_rule: 'Add condition', add_group: 'Add group', conditions: { AND: 'All (AND)', OR: 'Any (OR)' } },
             });
-            $('#student-rule-builder').on('afterAddRule.queryBuilder afterUpdateRuleFilter.queryBuilder afterUpdateRuleOperator.queryBuilder afterSetRules.queryBuilder', accessibleRules);
+            $('#student-rule-builder').on(
+                'afterAddRule.queryBuilder afterAddGroup.queryBuilder afterCreateRuleFilters.queryBuilder ' +
+                'afterCreateRuleOperators.queryBuilder afterCreateRuleInput.queryBuilder ' +
+                'afterUpdateRuleFilter.queryBuilder afterUpdateRuleOperator.queryBuilder afterSetRules.queryBuilder',
+                accessibleRules,
+            );
             accessibleRules(); ruleInitialized = true;
         }
         const rules = await records('rules');
         populate($one('#rule-saved'), rules.items.map(item => ({ value: item.id, label: item.name })), 'Start a new rule');
     }
     function accessibleRules() {
+        $all('i', $one('#student-rule-builder')).forEach(icon => icon.setAttribute('aria-hidden', 'true'));
         $all('.rule-filter-container select', $one('#student-rule-builder')).forEach(select => select.setAttribute('aria-label', 'Condition field'));
         $all('.rule-operator-container select', $one('#student-rule-builder')).forEach(select => select.setAttribute('aria-label', 'Comparison'));
         $all('.rule-value-container input, .rule-value-container select', $one('#student-rule-builder')).forEach(input => input.setAttribute('aria-label', 'Condition value'));
@@ -2015,26 +2234,37 @@
     listen('#access-new-role', 'click', () => createAccessDefinition('roles'));
     listen('#access-new-permission', 'click', () => createAccessDefinition('permissions'));
 
-    function definitionActions(body, kind, definition) {
+    function definitionActions(body, kind, definition, {back = null, complete = null} = {}) {
+        const backLabel = kind === 'roles' ? 'Back to role' : 'Back to permission';
         const edit = node('button', { type: 'button', class: 'btn btn-outline-primary', onclick: () => task(async () => {
             const surface = openDrawer(`Edit ${definition.name}`, 'CUSTOM ACCESS DEFINITION');
             const fields = [['description', 'Description', 'text', '', false]];
             const form = await buildForm(fields, definition);
+            if (!surface.isConnected) return;
             const save = node('button', { type: 'submit', class: 'btn btn-primary' }, 'Save description'); form.append(save);
             form.addEventListener('submit', event => { event.preventDefault(); task(async () => {
                 await request(`/sis/access/${kind}/${definition.id}/`, 'PATCH', { description: form.elements.description.value });
-                notify('Description updated.'); drawer.hide(); await loadAccess();
+                if (!surface.isConnected) return;
+                notify('Description updated.');
+                if (complete) await complete();
+                else {drawer.hide(); await loadAccess();}
             }, save); });
             surface.append(form);
+            if (back) surface.append(node('button', {type:'button',class:'btn btn-outline-secondary',onclick:()=>task(back)}, backLabel));
         }) }, 'Edit description');
         const remove = node('button', { type: 'button', class: 'btn btn-outline-danger', onclick: () => {
             const surface = openDrawer(`Delete ${definition.name}?`, 'CUSTOM ACCESS DEFINITION');
             surface.append(node('p', {}, 'Deleting this definition also removes its assignments. Review affected access before confirming.'));
+            if (back) surface.append(node('button', {type:'button',class:'btn btn-outline-secondary',onclick:()=>task(back)}, backLabel));
             surface.append(node('button', { type: 'button', class: 'btn btn-danger', onclick: event => task(async () => {
-                await request(`/sis/access/${kind}/${definition.id}/`, 'DELETE'); notify('Custom definition deleted.'); drawer.hide(); await loadAccess();
+                await request(`/sis/access/${kind}/${definition.id}/`, 'DELETE');
+                if (!surface.isConnected) return;
+                notify('Custom definition deleted.');
+                if (complete) await complete();
+                else {drawer.hide(); await loadAccess();}
             }, event.currentTarget) }, 'Confirm deletion'));
         } }, 'Delete definition');
-        body.append(node('div', { class: 'inline-actions' },
+        body.append(node('div', { class: 'inline-actions access-definition-actions' },
             actionMenu('Definition actions', [edit, remove], { context: `Definition actions for ${definition.name}` })));
     }
     async function personAccess(container, userId) { return accessStudio.person(container, userId); }

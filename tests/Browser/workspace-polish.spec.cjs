@@ -281,7 +281,7 @@ test('booking menus and compact meeting actions retain context and require confi
     const f = await fixture(page);
     await page.locator('.workspace-nav-link[data-workspace="bookings"]').click();
     await page.getByRole('button', { name: 'Welcome seminar', exact: true }).click();
-    await expect(page.locator('#drawer-body .record-summary')).toContainText('Campus library');
+    await expect(page.locator('#drawer-body > .record-task-content > .record-summary')).toContainText('Campus library');
     await expect(page.getByRole('button', { name: /^Reschedule meeting on / })).toHaveText('Reschedule');
     const cancel = page.getByRole('button', { name: /^Cancel meeting on / });
     await expect(cancel).toHaveText('Cancel meeting');
@@ -308,7 +308,9 @@ test('application tasks precede the answers and decisions still require a reason
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     const tasks = page.getByRole('group', { name: 'Application tasks', exact: true });
     await expect(tasks.getByRole('button', { name: 'Accept application', exact: true })).toBeVisible();
-    const beforeAnswers = await tasks.evaluate(element => Boolean(element.compareDocumentPosition(document.querySelector('.application-answers')) & Node.DOCUMENT_POSITION_FOLLOWING));
+    const answers = page.getByRole('button', {name:'Application answers',exact:true});
+    await expect(answers).toBeVisible();
+    const beforeAnswers = await tasks.evaluate((element, target) => Boolean(element.compareDocumentPosition(target) & Node.DOCUMENT_POSITION_FOLLOWING), await answers.elementHandle());
     expect(beforeAnswers).toBe(true);
     const toggle = page.getByRole('button', { name: 'More application actions', exact: true });
     await toggle.focus(); await page.keyboard.press('ArrowDown');
@@ -338,20 +340,24 @@ for (const readOnly of [false, true]) {
         await page.getByLabel('Search this workspace', { exact: true }).fill('Alex');
         await page.getByLabel('Search this workspace', { exact: true }).press('Enter');
         await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
-        const programs = page.getByRole('table', { name: 'Program assignments', exact: true });
-        const current = programs.getByRole('row').filter({ hasText: 'BA.ENG' });
-        const former = programs.getByRole('row').filter({ hasText: 'BS.CS' });
+        const programs = page.getByRole('group', { name: 'Program assignments', exact: true });
+        const current = programs.getByRole('article').filter({ hasText: 'BA.ENG' });
+        const former = programs.getByRole('article').filter({ hasText: 'BS.CS' });
         await expect(current.getByText('Primary', { exact: true })).toBeVisible();
-        await expect(former).toContainText('closed');
+        await expect(former).toContainText('Closed');
         await expect(current.getByRole('button', { name: 'Degree requirements', exact: true })).toBeVisible();
         await expect(current.getByRole('button', { name: 'Specializations', exact: true })).toBeVisible();
         if (readOnly) {
-            await expect(programs.locator('[data-workspace-menu]')).toHaveCount(0);
+            await expect(programs.locator('[data-workspace-menu]')).toHaveCount(2);
+            for (const label of ['Close assignment','Reopen assignment','Make primary'])
+                await expect(programs.getByRole('button', {name:label,exact:true,includeHidden:true})).toHaveCount(0);
             await expect(page.getByRole('button', { name: 'Change program', exact: true, includeHidden: true })).toHaveCount(0);
         } else {
             const toggle = former.getByRole('button', { name: 'More actions for BS.CS · 25/FA', exact: true });
             await toggle.focus(); await page.keyboard.press('ArrowDown');
-            await expect(former.getByRole('button', { name: 'Program status history', exact: true })).toBeFocused();
+            const menu = page.locator('#' + await toggle.getAttribute('aria-controls'));
+            await expect(menu.getByRole('button').first()).toBeFocused();
+            await expect(former.getByRole('button', { name: 'Program status history', exact: true })).toBeVisible();
             await expect(former.getByRole('button', { name: 'Reopen assignment', exact: true })).toBeVisible();
             await expect(current.getByRole('button', { name: 'Close assignment', exact: true, includeHidden: true })).toHaveCount(0);
             await page.keyboard.press('Escape'); await expect(toggle).toBeFocused();

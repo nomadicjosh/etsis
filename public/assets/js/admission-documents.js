@@ -69,7 +69,7 @@
         },
         mount(container, application, { staff = false, toggleTarget = null, label = '' } = {}) {
             const base = `${staff ? '/sis' : '/portal/api'}/applications/${application}/documents/`;
-            const content = node('section', { hidden: true, class: 'mt-3', 'aria-label': 'Application documents' });
+            const content = node('section', { hidden: true, class: 'admission-workbench mt-3', 'aria-label': 'Application documents' });
             const toggle = node('button', { type: 'button', class: 'btn btn-outline-primary',
                 'aria-expanded': 'false', 'aria-controls': `admission-documents-${++sequence}` }, 'Documents');
             content.id = toggle.getAttribute('aria-controls');
@@ -78,13 +78,20 @@
             const alive = ticket => ticket === serial && container.isConnected;
             async function load() {
                 const ticket = ++serial;
-                const data = await request(base);
-                if (!alive(ticket)) return;
-                draw(data, ticket);
+                const loading = node('p', { role: 'status', class: 'form-text' }, 'Loading application documents…');
+                content.append(loading);
+                try {
+                    const data = await request(base);
+                    if (!alive(ticket)) return;
+                    draw(data, ticket);
+                } catch (error) {
+                    if (alive(ticket) && error.status === 403) content.replaceChildren(node('p', { role: 'status' }, 'Application documents are no longer available with your current access.'));
+                    throw error;
+                } finally { loading.remove(); }
             }
             function draw(data, ticket) {
                 const status = node('p', { role: 'status', 'aria-atomic': 'true', class: 'form-text' });
-                const controls = node('fieldset', {}, node('legend', { class: 'h5', tabindex: '-1' }, label ? `Application documents · ${label}` : 'Application documents'));
+                const controls = node('fieldset', { class: 'record-form-section' }, node('legend', { class: 'h5', tabindex: '-1' }, label ? `Application documents · ${label}` : 'Application documents'));
                 const helpId = `document-help-${++sequence}`;
                 const introduction = node('p', { id: helpId, class: 'form-text' }, 'PDF, JPEG and PNG · up to 5 MiB each. Files stay private and need a background safety scan before download. Admissions reviews the checklist separately.');
                 controls.append(introduction);

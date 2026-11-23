@@ -531,6 +531,7 @@ test('the Students source opens with useful columns and supports preview, save a
     const f = await fixture(page, { students: true });
     await page.getByRole('button', { name: 'Start report: Students & current primary program', exact: true }).click();
     const studio = page.locator('dialog.report-studio');
+    await expect(studio.getByRole('button', { name: 'Back to reports', exact: true }).locator('.bi')).toHaveCount(1);
     await expect(studio.locator('.report-local-error')).toBeHidden();
     await expect(studio.getByLabel('Column 1 label', { exact: true })).toHaveValue('Institutional ID');
     await expect(studio.getByLabel('Column 2 label', { exact: true })).toHaveValue('Student full name');
@@ -557,6 +558,8 @@ test('the Students source opens with useful columns and supports preview, save a
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(f.calls.every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(f.errors).toEqual([]);
+    await studio.getByRole('button', { name: 'Back to reports', exact: true }).click();
+    await expect(studio).toHaveCount(0);
 });
 
 for (const never of [false, true]) {

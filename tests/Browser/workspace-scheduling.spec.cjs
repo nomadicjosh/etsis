@@ -178,11 +178,11 @@ test('recurring room requests review paged meetings, preserve drafts after a sta
     await page.setViewportSize({ width: 375, height: 812 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.getByRole('button', { name: 'Submit recurring request', exact: true }).click();
-    await expect(page.getByRole('table', { name: 'Booking meetings', exact: true }).locator('tbody tr')).toHaveCount(20);
+    await expect(page.getByRole('region', { name: 'Booking meetings', exact: true }).getByRole('article')).toHaveCount(20);
     await expect(page.locator('#drawer-body')).toContainText(`${state.slotCount} active meetings.`);
     await page.getByRole('button', { name: 'Next booking meetings', exact: true }).click();
     await page.getByRole('button', { name: 'Next booking meetings', exact: true }).click();
-    await expect(page.getByRole('table', { name: 'Booking meetings', exact: true }).locator('tbody tr')).toHaveCount(state.slotCount - 40);
+    await expect(page.getByRole('region', { name: 'Booking meetings', exact: true }).getByRole('article')).toHaveCount(state.slotCount - 40);
     const submitted = state.calls.filter(call => call.path.endsWith('/planning/request/'));
     expect(submitted[0].data).toEqual(submitted[1].data);
     expect(submitted[1].data).toMatchObject({ id: id(2), pattern: { weekdays: [1, 3], excluded_dates: ['2026-03-11'],

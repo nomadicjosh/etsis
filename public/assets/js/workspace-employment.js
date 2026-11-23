@@ -46,8 +46,11 @@ window.createWorkspaceEmployment = function (ui) {
     const name = (person) => `${person.given_name} ${person.family_name}`;
 
     async function employee(id) {
+        const pendingView = openDrawer("Employment record", "CONNECTED WORKSPACE");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const record = await request(`/sis/employees/${id}/`);
-        const body = openDrawer(name(record), "EMPLOYMENT & TIME");
+        if (!pendingView.isConnected) return;
+        const body = openDrawer(name(record), "EMPLOYMENT & TIME", {record:{key:`employee:${id}`,label:name(record),run:()=>employee(id)}});
         const actions = node("div", {
             class: "inline-actions",
             role: "group",
@@ -501,7 +504,10 @@ window.createWorkspaceEmployment = function (ui) {
         await load(selected);
     }
     async function entry(id, weekly = null) {
+        const pendingView = openDrawer("Time entry", "CONNECTED WORKSPACE");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const record = await request(`/sis/timesheets/${id}/`);
+        if (!pendingView.isConnected) return;
         const body = openDrawer(name(record), "TIME ENTRY REVIEW");
         if (can("sis:audit:read"))
             body.append(button("View audit history", () => showAudit("timesheets", id)));

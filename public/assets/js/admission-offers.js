@@ -6,7 +6,7 @@
         mount(container, application, { staff = false, canIssue = false, canPolicy = false, toggleTarget = null, label = '', beforeChange = () => true } = {}) {
             const base = `${staff ? '/sis' : '/portal/api'}/applications/${application}/offer/`;
             const id = `admission-offer-${++sequence}`;
-            const content = node('section', { id, hidden: true, class: 'record-section mt-3', 'aria-label': 'Admission offer' });
+            const content = node('section', { id, hidden: true, class: 'record-section admission-workbench mt-3', 'aria-label': 'Admission offer' });
             const status = node('p', { role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true', class: 'form-text mt-2' });
             const body = node('div'); content.append(status, body);
             const toggle = node('button', { type: 'button', class: 'btn btn-outline-secondary',
@@ -62,7 +62,7 @@
                 const start = action => {
                     if (!beforeChange() || !leave()) return;
                     dirty = false; editor.replaceChildren(); status.textContent = '';
-                    const form = node('form'), controls = node('fieldset'), preview = node('div', { class: 'mt-3' });
+                    const form = node('form', { class: 'record-form' }), controls = node('fieldset', { class: 'record-form-section' }), preview = node('div', { class: 'mt-3' });
                     controls.append(node('legend', { class: 'h6' }, ({ issue: 'Issue admission offer', accept: 'Accept offer', decline: 'Decline offer', cancel: 'Cancel offer' })[action]));
                     const fields = {};
                     if (action === 'issue') {

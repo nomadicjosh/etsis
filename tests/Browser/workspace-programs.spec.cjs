@@ -106,7 +106,10 @@ async function fixture(page, options = {}) {
 async function accessible(page) {
     await page.setViewportSize({ width: 375, height: 812 });
     const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
-    expect(scan.violations.map(item => item.id)).toEqual([]);
+    expect(scan.violations.map(item => ({
+        id: item.id,
+        nodes: item.nodes.map(node => ({ target: node.target, summary: node.failureSummary })),
+    }))).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 }
 

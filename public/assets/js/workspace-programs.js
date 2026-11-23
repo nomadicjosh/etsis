@@ -64,6 +64,7 @@ window.createWorkspacePrograms = function (ui) {
             const body = openDrawer(
                 "Program details",
                 "EDIT TOGETHER → REVIEW → PUBLISH FOR AN ACADEMIC YEAR",
+                {record:{key:`program:${id}`,label:current.definition.code,run:()=>open(id)}},
             );
             body.append(
                 node(
@@ -370,7 +371,10 @@ window.createWorkspacePrograms = function (ui) {
     }
 
     async function setup(id, draft = { year: null, reason: "" }) {
+        const pendingView = openDrawer("Publish program details", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const current = await request(`/sis/programs/${id}/details/`);
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Publish program details", "ACADEMIC YEAR → REVIEW → CONFIRM");
         body.append(
             details(current.definition),
@@ -429,10 +433,13 @@ window.createWorkspacePrograms = function (ui) {
     }
 
     async function years(id, draft, search = "", after = null, stack = []) {
+        const pendingView = openDrawer("Choose program academic year", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const data = await request("/sis/academic-years/", "POST", {
             search,
             ...(after ? { after } : {}),
         });
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Choose program academic year", "EXISTING ACADEMIC YEARS");
         body.append(
             node(
@@ -496,10 +503,13 @@ window.createWorkspacePrograms = function (ui) {
     }
 
     async function reviewProgram(id, draft) {
+        const pendingView = openDrawer("Review program publication", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const review = await request(`/sis/programs/${id}/publication/review/`, "POST", {
             academic_year_id: draft.year.id,
             reason: draft.reason,
         });
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Review program publication", "REVIEW → CONFIRM");
         body.append(
             node(
@@ -542,8 +552,11 @@ window.createWorkspacePrograms = function (ui) {
     }
 
     async function specializations(program, back, state = { search: "", after: null, stack: [] }, notice = "") {
+        const pendingView = openDrawer("Majors, minors & specializations", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const base = `/sis/programs/${program}/specializations/`;
         const data = await request(`${base}page/`, "POST", { search: state.search, after: state.after });
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Majors, minors & specializations", "FOCUSED PATHS WITHIN AN ACADEMIC PROGRAM");
         const restore = (notice = "") => specializations(program, back, state, notice);
         body.append(
@@ -656,10 +669,13 @@ window.createWorkspacePrograms = function (ui) {
     }
 
     async function editSpecialization(program, id, back, state = null) {
+        const pendingView = openDrawer("Program specialization", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const base = `/sis/programs/${program}/specializations/`;
         const value = state?.value || (id
             ? await request(`${base}${id}/`)
             : { id: null, revision: null, code: "", title: "", description: null, active: true, kind: "specialization", department: null });
+        if (!pendingView.isConnected) return;
         const body = openDrawer(
             id ? "Edit specialization" : "Add specialization",
             "PROGRAM SPECIALIZATION SETUP",
@@ -677,7 +693,7 @@ window.createWorkspacePrograms = function (ui) {
             ["title", "Component title"],
             ["description", "Component description", "textarea", "", false],
         ];
-        const form = await buildForm(fields, state?.draft || value);
+        const form = await buildForm(fields, state?.draft || value, { layout: "curriculum_component" });
         if (!body.isConnected) return;
         const department = state ? state.department : value.department || null;
         const parentMajor = state ? state.parentMajor : value.parent_major || null;
@@ -750,8 +766,11 @@ window.createWorkspacePrograms = function (ui) {
         body.append(form);
     }
     async function specializationPolicy(program, back, notice = "") {
+        const pendingView = openDrawer("Specialization selection policy", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const path = `/sis/programs/${program}/specializations/policy/`;
         const data = await request(path);
+        if (!pendingView.isConnected) return;
         const body = openDrawer(
             "Specialization selection policy",
             "INSTITUTION BOUNDARIES → PROGRAM REQUIREMENTS",
@@ -869,7 +888,7 @@ window.createWorkspacePrograms = function (ui) {
                 "Choose whether the same completed course can satisfy the degree and selected specializations. Sharing across groups inside a component is configured in its requirements. Overall credits and GPA are counted once. Publish the program to retain this choice; earlier publications stay unchanged. Independent component reviews do not apply this cross-component rule."),
         );
         const typeRules = {};
-        const typed = node("fieldset", { class: "mt-3" }, node("legend", { class: "h5" }, "Limits by curriculum type"), node("p", {}, "Optional limits apply in addition to the overall program maximum. For example, require one major and allow one optional minor. Unchecked types use the overall limits. Publish the program to retain these rules."));
+        const typed = node("fieldset", { class: "record-form-section mt-3" }, node("legend", {}, "Limits by curriculum type"), node("p", {}, "Optional limits apply in addition to the overall program maximum. For example, require one major and allow one optional minor. Unchecked types use the overall limits. Publish the program to retain these rules."));
         for (const kind of ["major", "minor", "concentration", "track", "specialization"]) {
             const rule = data.settings.kind_limits?.[kind];
             const enabled = node("input", { id: `component-rule-${kind}`, type: "checkbox", class: "form-check-input", checked: !!rule });
@@ -1075,7 +1094,10 @@ window.createWorkspacePrograms = function (ui) {
         return section;
     }
     async function history(id, back, cursor = null, stack = []) {
+        const pendingView = openDrawer("Published program details", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const data = await request(`/sis/programs/${id}/publication/page/`, "POST", cursor ? { cursor } : {});
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Published program details", "RETAINED ACADEMIC DEFINITIONS");
         body.append(
             node(

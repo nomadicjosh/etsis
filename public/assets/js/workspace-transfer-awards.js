@@ -79,7 +79,9 @@ window.createWorkspaceTransferAwards = function (ui) {
         );
     }
     async function record(student, award) {
-        const body = openDrawer("Posted transfer credit", "REGISTRAR REVIEW");
+        const body = openDrawer("Posted transfer credit", "REGISTRAR REVIEW", {
+            record: { key: `transfer-award:${student}:${award}`, label: "Posted transfer credit", run: () => record(student, award) },
+        });
         body.append(node("p", { role: "status" }, "Loading the retained award…"));
         const value = await request(endpoint(student, award));
         if (!body.isConnected) return;
@@ -91,18 +93,17 @@ window.createWorkspaceTransferAwards = function (ui) {
         body.replaceChildren(
             button("Back to equivalency", () => ui.back(value.equivalency_id), "btn-link mb-3"),
             identity(value),
-            actions,
-            grid(
-                ["Earned credits", "Grade", "Status"],
-                [
-                    [
-                        value.credit.completed_milli / 1000,
-                        value.credit.status === "V" ? "Voided" : value.grade_code || "—",
-                        state(value.credit),
-                    ],
-                ],
-                "Current transfer award",
+            node(
+                "section",
+                { class: "record-section", "aria-label": "Current transfer award" },
+                node("h3", {}, "Current award"),
+                recordSummary([
+                    ["Earned credits", value.credit.completed_milli / 1000],
+                    ["Grade", value.credit.status === "V" ? "Voided" : value.grade_code || "—"],
+                    ["Status", state(value.credit)],
+                ]),
             ),
+            actions,
             node(
                 "p",
                 { class: "form-text" },
@@ -403,7 +404,10 @@ window.createWorkspaceTransferAwards = function (ui) {
         });
     }
     async function courseHistory(student, award, cursor = null, stack = []) {
+        const pendingView = openDrawer("Accepted-course history", "CONNECTED WORKSPACE");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const data = await request(endpoint(student, award) + "accepted-course/history/", "POST", { cursor });
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Accepted course history", "RETAINED TRANSFER DECISIONS");
         body.append(button("Back to award", () => record(student, award)));
         if (data.earlier_history_unknown)
@@ -561,7 +565,10 @@ window.createWorkspaceTransferAwards = function (ui) {
         });
     }
     async function periodHistory(student, award, cursor = null, stack = []) {
+        const pendingView = openDrawer("Transfer academic dates", "CONNECTED WORKSPACE");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const data = await request(endpoint(student, award) + "source-period/history/", "POST", { cursor });
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Academic history", "PRIVATE TRANSFER CHRONOLOGY");
         body.append(
             button("Back to award", () => record(student, award)),
@@ -783,7 +790,10 @@ window.createWorkspaceTransferAwards = function (ui) {
         );
     }
     async function history(student, award, after = "", stack = []) {
+        const pendingView = openDrawer("Transfer award history", "CONNECTED WORKSPACE");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const result = await request(endpoint(student, award) + "history/", "POST", { after });
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Transfer correction history", "PRIVATE REGISTRAR HISTORY");
         body.append(
             button("Back to award", () => record(student, award)),

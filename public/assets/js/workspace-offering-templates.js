@@ -1,7 +1,19 @@
 /* Term-neutral configuration; preparing an offering never writes sections or reserves rooms. */
 window.createWorkspaceOfferingTemplates = function (ui) {
     "use strict";
-    const { node, request: transport, task, table, badge, money, buildForm, formData, openDrawer, notify } = ui;
+    const {
+        node,
+        request: transport,
+        task,
+        table,
+        badge,
+        money,
+        buildForm,
+        formData,
+        openDrawer,
+        notify,
+        actionMenu,
+    } = ui;
     let activeBody = null;
     async function request(...args) {
         const scope = activeBody;
@@ -11,7 +23,11 @@ window.createWorkspaceOfferingTemplates = function (ui) {
             if (error.status === 403 && scope?.isConnected) {
                 document.querySelector("#drawer-title").textContent = "Offering templates";
                 scope.replaceChildren(
-                    node("p", {}, "Template configuration is no longer available with your current access."),
+                    node(
+                        "p",
+                        {},
+                        "Template configuration is no longer available with your current access.",
+                    ),
                 );
             }
             throw error;
@@ -41,10 +57,17 @@ window.createWorkspaceOfferingTemplates = function (ui) {
     ];
     const clean = (row) =>
         Object.fromEntries(
-            keys.filter(key => key !== "minimum_enrollment" || row.minimum_enrollment > 0).map((key) => [
-                key,
-                row[key] ?? (key === "faculty_user_id" ? null : key === "delivery_mode" ? "unspecified" : row[key]),
-            ]),
+            keys
+                .filter((key) => key !== "minimum_enrollment" || row.minimum_enrollment > 0)
+                .map((key) => [
+                    key,
+                    row[key] ??
+                        (key === "faculty_user_id"
+                            ? null
+                            : key === "delivery_mode"
+                              ? "unspecified"
+                              : row[key]),
+                ]),
         );
     const button = (label, run, primary = false) =>
         node(
@@ -78,7 +101,9 @@ window.createWorkspaceOfferingTemplates = function (ui) {
         );
     }
     function warnings(body, rows) {
-        const messages = rows.flatMap((row) => (row.warnings || []).map((message) => `${row.code}: ${message}`));
+        const messages = rows.flatMap((row) =>
+            (row.warnings || []).map((message) => `${row.code}: ${message}`),
+        );
         if (messages.length)
             body.append(
                 node(
@@ -94,11 +119,16 @@ window.createWorkspaceOfferingTemplates = function (ui) {
             );
     }
     async function page(active = true, search = "", after = null, stack = []) {
+        const pendingView = openPanel("Offering templates", "REUSABLE DEFAULTS");
+        pendingView.append(
+            node("p", { role: "status", class: "form-text" }, "Loading offering template…"),
+        );
         const result = await request(`${base}page/`, "POST", {
             active,
             ...(search ? { search } : {}),
             ...(after ? { after } : {}),
         });
+        if (!pendingView.isConnected) return;
         const body = openPanel("Offering templates", "REUSE SETUP · REVIEW EACH TERM");
         body.append(
             node(
@@ -109,7 +139,11 @@ window.createWorkspaceOfferingTemplates = function (ui) {
         );
         const fields = [["search", "Find a template", "search", "", false]];
         const form = await buildForm(fields, { search });
-        const find = node("button", { type: "submit", class: "btn btn-outline-primary" }, "Find templates");
+        const find = node(
+            "button",
+            { type: "submit", class: "btn btn-outline-primary" },
+            "Find templates",
+        );
         form.append(find);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
@@ -131,10 +165,23 @@ window.createWorkspaceOfferingTemplates = function (ui) {
                 ? grid(
                       ["Template", "Sections", "Status", "Action"],
                       result.items.map((row) => [
-                          button(row.name, () => record(row.id)),
+                          button(row.name, () =>
+                              record(row.id, () => page(active, search, after, stack)),
+                          ),
                           row.section_count,
                           badge(row.active ? "Active" : "Retired"),
-                          row.active ? button(`Use ${row.name}`, () => chooseTerm(row), true) : "Restore before using",
+                          row.active
+                              ? button(
+                                    `Use ${row.name}`,
+                                    () =>
+                                        chooseTerm(row, () =>
+                                            record(row.id, () =>
+                                                page(active, search, after, stack),
+                                            ),
+                                        ),
+                                    true,
+                                )
+                              : "Restore before using",
                       ]),
                       "Offering templates",
                   )
@@ -145,14 +192,29 @@ window.createWorkspaceOfferingTemplates = function (ui) {
                   ),
         );
         if (stack.length)
-            body.append(button("Previous template page", () => page(active, search, stack.at(-1), stack.slice(0, -1))));
+            body.append(
+                button("Previous template page", () =>
+                    page(active, search, stack.at(-1), stack.slice(0, -1)),
+                ),
+            );
         if (result.next_after)
-            body.append(button("Next template page", () => page(active, search, result.next_after, [...stack, after])));
+            body.append(
+                button("Next template page", () =>
+                    page(active, search, result.next_after, [...stack, after]),
+                ),
+            );
     }
     async function fromPlan(rows, target = null) {
-        return editor({ id: null, version: -1, name: "", active: true, ...target, sections: rows.map(clean) });
+        return editor({
+            id: null,
+            version: -1,
+            name: "",
+            active: true,
+            ...target,
+            sections: rows.map(clean),
+        });
     }
-    async function editor(value) {
+    async function editor(value, returnTo = () => page()) {
         const body = openPanel(
             value.id ? "Revise offering template" : "Save as reusable template",
             "SECTION DEFAULTS · NO TERM OR STUDENT DATA",
@@ -167,8 +229,13 @@ window.createWorkspaceOfferingTemplates = function (ui) {
         );
         const fields = [["name", "Template name"]];
         const form = await buildForm(fields, value);
+        if (!body.isConnected) return;
         form.elements.name.maxLength = 120;
-        const review = node("button", { type: "submit", class: "btn btn-primary" }, "Review template");
+        const review = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review template",
+        );
         form.append(review);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
@@ -180,15 +247,13 @@ window.createWorkspaceOfferingTemplates = function (ui) {
                     ...(value.id ? { template_id: value.id } : {}),
                 };
                 const plan = await request(`${base}review/`, "POST", command);
-                await confirm(plan, command);
+                if (!body.isConnected || !form.isConnected) return;
+                await confirm(plan, command, returnTo);
             }, review);
         });
-        body.append(
-            form,
-            button("Back to templates", () => page()),
-        );
+        body.append(form, button("Back to templates", returnTo));
     }
-    async function confirm(plan, draft) {
+    async function confirm(plan, draft, returnTo = () => page()) {
         const body = openPanel("Review reusable defaults", "TEMPLATE CONFIGURATION");
         const command = {
             version: plan.version,
@@ -200,12 +265,15 @@ window.createWorkspaceOfferingTemplates = function (ui) {
         body.append(node("h3", {}, plan.name), summary(plan.sections));
         warnings(body, plan.sections);
         const change = button("Change template name", () =>
-            editor({
-                id: plan.version < 0 ? null : plan.id,
-                version: plan.version,
-                name: plan.name,
-                sections: draft.sections,
-            }),
+            editor(
+                {
+                    id: plan.version < 0 ? null : plan.id,
+                    version: plan.version,
+                    name: plan.name,
+                    sections: draft.sections,
+                },
+                returnTo,
+            ),
         );
         body.append(
             node(
@@ -224,14 +292,16 @@ window.createWorkspaceOfferingTemplates = function (ui) {
                         if (error.status && error.status < 500) change.disabled = false;
                         throw error;
                     }
+                    if (!body.isConnected) return;
                     notify("Reusable offering template saved.");
-                    await record(plan.id);
+                    await record(plan.id, returnTo);
                 },
                 true,
             ),
             button("Check saved template", async () => {
                 await request(`${base}${plan.id}/receipts/${plan.operation_id}/`);
-                await record(plan.id);
+                if (!body.isConnected) return;
+                await record(plan.id, returnTo);
             }),
         );
         body.append(
@@ -242,8 +312,13 @@ window.createWorkspaceOfferingTemplates = function (ui) {
             ),
         );
     }
-    async function record(id) {
+    async function record(id, back = () => page()) {
+        const pendingView = openPanel("Offering templates", "REUSABLE DEFAULTS");
+        pendingView.append(
+            node("p", { role: "status", class: "form-text" }, "Loading offering template…"),
+        );
         const value = await request(`${base}${id}/`);
+        if (!pendingView.isConnected) return;
         const body = openPanel(value.name, "REUSABLE OFFERING DEFAULTS");
         body.append(
             badge(value.active ? "Active" : "Retired"),
@@ -255,7 +330,9 @@ window.createWorkspaceOfferingTemplates = function (ui) {
             summary(value.sections),
         );
         warnings(body, value.sections);
-        if (value.active) body.append(button("Use for a new term", () => chooseTerm(value), true));
+        const reopen = () => record(id, back);
+        if (value.active)
+            body.append(button("Use for a new term", () => chooseTerm(value, reopen), true));
         body.append(
             button("Revise defaults in offering planner", () =>
                 ui.catalog().templateDraft(null, value.sections.map(clean), {
@@ -264,19 +341,38 @@ window.createWorkspaceOfferingTemplates = function (ui) {
                     name: value.name,
                 }),
             ),
-            button("Rename template", () => editor(value)),
-            button(value.active ? "Retire template" : "Restore template", () => status(value)),
-            button("Change history", () => history(value)),
-            button("All templates", () => page()),
+            actionMenu("More template actions", [
+                { label: "Rename template", icon: "pencil", run: () => editor(value, back) },
+                {
+                    label: value.active ? "Retire template" : "Restore template",
+                    icon: value.active ? "archive" : "arrow-counterclockwise",
+                    run: () => status(value, reopen),
+                },
+                {
+                    label: "Change history",
+                    icon: "clock-history",
+                    run: () => history(value, null, [], reopen),
+                },
+            ]),
+            button("Back to templates", back),
         );
     }
-    async function chooseTerm(value) {
+    async function chooseTerm(value, back = () => record(value.id)) {
+        const pendingView = openPanel("Offering templates", "REUSABLE DEFAULTS");
+        pendingView.append(
+            node("p", { role: "status", class: "form-text" }, "Loading offering template…"),
+        );
         const current = value.sections ? value : await request(`${base}${value.id}/`);
+        if (!pendingView.isConnected) return;
         const body = openPanel("Prepare a new term", "TEMPLATE → EDITABLE PLAN");
         body.append(node("h3", {}, current.name));
         const fields = [["term_id", "Offering term", "lookup", "terms"]];
         const form = await buildForm(fields);
-        const next = node("button", { type: "submit", class: "btn btn-primary" }, "Load editable defaults");
+        const next = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Load editable defaults",
+        );
         form.append(next);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
@@ -285,6 +381,7 @@ window.createWorkspaceOfferingTemplates = function (ui) {
                     version: current.version,
                     term_id: formData(form, fields).term_id,
                 });
+                if (!body.isConnected || !form.isConnected) return;
                 await ui.catalog().templateDraft(plan.term.id, plan.sections);
             }, next);
         });
@@ -295,19 +392,29 @@ window.createWorkspaceOfferingTemplates = function (ui) {
                 "Nothing is saved yet. Review faculty, delivery, capacity, pricing and year-specific codes in the planner. Room booking and publication remain separate.",
             ),
             form,
-            button("Back to template", () => record(current.id)),
+            button("Back to template", back),
         );
     }
-    async function status(value) {
+    async function status(value, back = () => record(value.id)) {
+        const pendingView = openPanel("Offering templates", "REUSABLE DEFAULTS");
+        pendingView.append(
+            node("p", { role: "status", class: "form-text" }, "Loading offering template…"),
+        );
         const op = (await request("/sis/ui/operation-id/")).id;
+        if (!pendingView.isConnected) return;
         const body = openPanel(
             value.active ? "Retire offering template" : "Restore offering template",
             "TEMPLATE AVAILABILITY",
         );
         const fields = [["note", "Reason for this change", "textarea"]];
         const form = await buildForm(fields);
+        if (!body.isConnected) return;
         form.elements.note.maxLength = 2000;
-        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Confirm status change");
+        const save = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Confirm status change",
+        );
         let command = null;
         form.addEventListener("submit", (event) => {
             event.preventDefault();
@@ -329,7 +436,8 @@ window.createWorkspaceOfferingTemplates = function (ui) {
                     throw error;
                 }
                 notify("Template status updated.");
-                await record(value.id);
+                if (!body.isConnected || !form.isConnected) return;
+                await back();
             }, save);
         });
         form.append(save);
@@ -342,19 +450,26 @@ window.createWorkspaceOfferingTemplates = function (ui) {
                     ? "Retirement removes this template from future selections. Previously prepared plans and sections remain unchanged."
                     : "Restoring makes this template available for future plans. Each offering still needs a fresh review.",
             ),
+            button("Back to template", back),
             form,
             button("Check saved status change", async () => {
                 await request(`${base}${value.id}/receipts/${op}/`);
-                await record(value.id);
+                if (!body.isConnected || !form.isConnected) return;
+                await back();
             }),
         );
     }
-    async function history(value, cursor = null, stack = []) {
+    async function history(value, cursor = null, stack = [], back = () => record(value.id)) {
+        const pendingView = openPanel("Offering templates", "REUSABLE DEFAULTS");
+        pendingView.append(
+            node("p", { role: "status", class: "form-text" }, "Loading offering template…"),
+        );
         const page = await request(
             `${base}${value.id}/history/`,
             "POST",
             cursor === null ? {} : { after_version: cursor },
         );
+        if (!pendingView.isConnected) return;
         const body = openPanel("Template change history", "CONFIGURATION HISTORY");
         body.append(
             node("h3", {}, value.name),
@@ -372,10 +487,18 @@ window.createWorkspaceOfferingTemplates = function (ui) {
             ),
         );
         if (stack.length)
-            body.append(button("Previous change page", () => history(value, stack.at(-1), stack.slice(0, -1))));
+            body.append(
+                button("Previous change page", () =>
+                    history(value, stack.at(-1), stack.slice(0, -1), back),
+                ),
+            );
         if (page.next_after_version !== null)
-            body.append(button("Next change page", () => history(value, page.next_after_version, [...stack, cursor])));
-        body.append(button("Back to template", () => record(value.id)));
+            body.append(
+                button("Next change page", () =>
+                    history(value, page.next_after_version, [...stack, cursor], back),
+                ),
+            );
+        body.append(button("Back to template", back));
     }
     return { page, fromPlan, record };
 };

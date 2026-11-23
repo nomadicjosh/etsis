@@ -13,11 +13,14 @@ window.createWorkspaceCourseDrops = function (ui) {
             label,
         );
     async function review(student, section, back) {
+        const pendingView = openDrawer("Review course drop", "RECORD REVIEW");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const plan = await request(
             `/sis/students/${student}/sections/${section}/drop-review/`,
             "POST",
             {},
         );
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Review course drop", "REGISTRATION");
         const early = plan.outcome.delete_records;
         body.append(
@@ -60,7 +63,7 @@ window.createWorkspaceCourseDrops = function (ui) {
         );
         let finished = false;
         const finish = async (receipt) => {
-            if (finished) return;
+            if (finished || !body.isConnected) return;
             finished = true;
             notify(
                 receipt.academic_records_removed

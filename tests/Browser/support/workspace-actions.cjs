@@ -14,7 +14,11 @@ async function chooseAction(root, name, last = false) {
     await control.click();
 }
 async function revealAction(root, name, last = false) {
-    const matches = root.getByRole('button', { name, exact: typeof name === 'string', includeHidden: true });
+    // Playwright's includeHidden name calculation includes decorative icon-font glyphs.
+    const label = typeof name === 'string'
+        ? new RegExp(`^[\\s\\uE000-\\uF8FF]*${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'u')
+        : name;
+    const matches = root.getByRole('button', { name: label, includeHidden: true });
     const control = last ? matches.last() : matches.first();
     await control.waitFor({ state: 'attached' });
     const menu = control.locator('xpath=ancestor::div[contains(concat(" ", normalize-space(@class), " "), " workspace-action-menu ")][1]');

@@ -246,3 +246,30 @@ test('online location filtering shows class context without room requests and su
     expect(state.calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(state.errors).toEqual([]);
 });
+
+test('calendar filters and week cards use a bounded responsive workspace layout', async ({ page }) => {
+    await page.setViewportSize({ width: 1920, height: 1000 });
+    const state = await fixture(page);
+    const calendar = page.getByRole('region', { name: 'Calendar schedule', exact: true });
+    const form = calendar.locator('.booking-calendar-filters');
+    await expect(form.getByRole('group', { name: 'Find meetings', exact: true })).toBeVisible();
+    expect((await form.boundingBox()).width).toBeLessThanOrEqual(961);
+    const days = calendar.locator('.booking-week-day'); await expect(days).toHaveCount(7);
+    expect(Math.abs((await days.first().boundingBox()).y - (await days.last().boundingBox()).y)).toBeLessThan(1);
+    expect((await days.first().boundingBox()).width).toBeLessThan(250);
+    await page.screenshot({ path: '/tmp/etsis-calendar-desktop.png' });
+    for (const width of [1440, 768, 375, 320]) {
+        await page.setViewportSize({ width, height: 1000 });
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        expect(await calendar.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    }
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await calendar.evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(scan.violations.map(item => ({ id: item.id, targets: item.nodes.map(node => node.target) }))).toEqual([]);
+    await calendar.getByRole('button', { name: 'View week', exact: true }).scrollIntoViewIfNeeded();
+    await expect(calendar.getByRole('button', { name: 'View week', exact: true })).toBeInViewport();
+    await page.screenshot({ path: '/tmp/etsis-calendar-phone.png' });
+    expect(state.errors).toEqual([]);
+});

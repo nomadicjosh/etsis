@@ -38,6 +38,8 @@ async function fill(page) {
 }
 test('institutional publication retains revised rules and retries the original reviewed proof',async({page})=>{
     const f=await fixture(page);await fill(page);
+    await expect(page.locator('#record-drawer')).not.toHaveClass(/showing/u);
+    await page.screenshot({path:'/tmp/etsis-comparison-policy-desktop.png'});
     await page.getByRole('button',{name:'Review institutional policy',exact:true}).click();
     await expect(page.locator('#drawer-body')).toContainText('Proposed:');
     await expect(page.locator('#drawer-body')).toContainText('Explicit section overrides and posted grades keep their recorded rules');
@@ -47,6 +49,7 @@ test('institutional publication retains revised rules and retries the original r
     await page.setViewportSize({width:320,height:900});
     const scan=await new AxeBuilder({page}).withTags(['wcag2a','wcag2aa','wcag21aa','wcag22aa']).analyze();expect(scan.violations.map(v=>v.id)).toEqual([]);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+    await page.screenshot({path:'/tmp/etsis-comparison-policy-phone.png'});
     await page.getByRole('button',{name:'Review institutional policy',exact:true}).click();
     await expect(page.locator('#drawer-body img')).toHaveCount(0);
     await page.getByRole('button',{name:'Publish comparison policy',exact:true}).click();
@@ -55,6 +58,8 @@ test('institutional publication retains revised rules and retries the original r
     await expect(page.locator('#drawer-body')).toContainText('version 1 published');
     const confirms=f.calls.filter(c=>c.path.endsWith('/publish/'));expect(confirms).toHaveLength(2);expect(confirms[0]).toEqual(confirms[1]);
     expect(confirms[0].csrf).toBe('fictional-test-token');expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);expect(f.errors).toEqual([]);
+    await page.getByRole('button',{name:'Back to students',exact:true}).click();
+    await expect(page.locator('#record-drawer')).not.toBeVisible();
 });
 test('refreshing an institutional policy source preserves the desired rules and reason',async({page})=>{
     const f=await fixture(page,'stale');await fill(page);

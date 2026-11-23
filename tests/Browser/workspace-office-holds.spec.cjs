@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
+const { recordAction } = require('./support/workspace-actions.cjs');
 const id = n => String(n).padStart(26, '0');
 const data = request => request.postData() ? JSON.parse(new URLSearchParams(request.postData()).get('_workspace_json')) : {};
 const accessible = async page => {
@@ -105,7 +106,7 @@ test('administrators configure offices and dated delegates without assigning rol
     await page.getByLabel('Delegation ends').fill('2026-08-20');
     await accessible(page);
     await page.getByRole('button', { name: 'Save office delegation' }).click();
-    await expect(page.getByRole('table', { name: 'Office delegates' })).toContainText('Jamie Example');
+    await expect(page.getByRole('list', { name: 'Office delegates' })).toContainText('Jamie Example');
     await page.getByRole('button', { name: 'Edit delegation' }).click();
     await page.getByLabel('Enable this delegation').uncheck();
     await page.getByRole('button', { name: 'Save office delegation' }).click();
@@ -115,10 +116,10 @@ test('administrators configure offices and dated delegates without assigning rol
     ]);
     expect(calls.some(call => call.path.includes('/sis/access/'))).toBe(false);
     await page.getByRole('button', { name: 'Back to offices' }).click();
-    await page.getByRole('button', { name: 'Edit office' }).click();
+    await recordAction(page, 'Edit office');
     await page.getByLabel('Active office').uncheck();
     await page.getByRole('button', { name: 'Save office', exact: true }).click();
-    await expect(page.getByRole('table', { name: 'Institution offices' })).toContainText('Retired');
+    await expect(page.getByRole('list', { name: 'Institution offices' })).toContainText('Retired');
     await page.setViewportSize({ width: 320, height: 812 });
     await accessible(page);
     expect(errors).toEqual([]);

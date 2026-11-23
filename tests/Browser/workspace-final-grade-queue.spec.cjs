@@ -152,6 +152,7 @@ async function fixture(
         .fill("Example");
     await page.getByRole("button", { name: "Apply filters", exact: true }).click();
     await expect(page.locator('section[aria-label="Section roster"] tbody tr')).toHaveCount(2);
+    if (!worksheet) await page.getByRole("button", {name:"More class actions",exact:true}).click();
     await page
         .getByRole("button", { name: worksheet ? "Final-grade worksheet" : "Review ungraded", exact: true })
         .click();

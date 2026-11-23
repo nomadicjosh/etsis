@@ -304,28 +304,31 @@ window.createWorkspaceTeaching = function (ui) {
             return;
         }
         if (!first.can_grade) return;
-        panel.prepend(
+        panel.querySelector("h3").after(
             node(
                 "div",
                 { class: "inline-actions mb-3" },
                 button("Take attendance", () => takeAttendance(row, back), "btn-primary"),
-                button("Section contact hours", () => window.createSectionContactHours(ui).open(row, back, false)),
                 button("Final-grade worksheet", () => finalGradeSheet(row, back, filters.search)),
-                ui.can("sis:gradebook:certify")
-                    ? button("Class grade certification", () => {
-                          certification ??= window.createGradeCertification(ui);
-                          return certification.open(row, back);
-                      })
-                    : null,
-                button("Review ungraded", () => gradeQueue(row, back, filters.search)),
+                ui.actionMenu("Class actions", [
+                    {heading:"Review & certification"},
+                    button("Review ungraded", () => gradeQueue(row, back, filters.search)),
+                    ...(ui.can("sis:gradebook:certify") ? [button("Class grade certification", () => {
+                        certification ??= window.createGradeCertification(ui);
+                        return certification.open(row, back);
+                    })] : []),
+                    {divider:true},
+                    {heading:"Section setup"},
+                    button("Section contact hours", () => window.createSectionContactHours(ui).open(row, back, false)),
+                ], {context:"More class actions",icon:"sliders"}),
             ),
         );
         const assignments = area("Assignments");
         body.append(assignments);
-        assignments.append(
+        assignments.append(node("div", {class:"inline-actions",role:"group","aria-label":"Assignment tasks"},
+            button("Add assignment", () => assignmentForm(null, row, back), "btn-primary"),
             button("Gradebook setup", () => calculationSetup(row, back)),
-            button("Add assignment", () => assignmentForm(null, row, back)),
-        );
+        ));
         await pages(
             assignments,
             (after) =>
@@ -1290,15 +1293,19 @@ window.createWorkspaceTeaching = function (ui) {
         });
     }
     async function reviewCoursePublication(sectionRow, student, back) {
+        const pendingView = openDrawer("Review course publication", "CONNECTED WORKSPACE");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const choices = await request(
             `/sis/sections/${sectionRow.id}/students/${student.student_id}/grade-choices/`,
             "POST",
             {},
         );
+        if (!pendingView.isConnected) return;
         if (!choices.can_amend)
             throw new Error("This review requires current academic-amendment and student-record access.");
         if (!choices.can_accept_course && !choices.can_correct_course) {
-            const body = openDrawer("Course publication", "RETAINED ACADEMIC REFERENCE");
+            if (!pendingView.isConnected) return;
+        const body = openDrawer("Course publication", "RETAINED ACADEMIC REFERENCE");
             body.append(
                 node(
                     "p",

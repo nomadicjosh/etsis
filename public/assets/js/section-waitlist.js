@@ -65,9 +65,10 @@ window.createSectionWaitlist = function (ui) {
             required: true,
         });
         const error = node("div", { role: "alert", class: "text-danger" });
-        const form = node(
-            "form",
-            { class: "record-form", "aria-label": "Section waitlist policy" },
+        const availability = node(
+            "fieldset",
+            { class: "record-form-section" },
+            node("legend", { class: "h6" }, "Section availability"),
             node(
                 "div",
                 { class: "form-check" },
@@ -80,12 +81,23 @@ window.createSectionWaitlist = function (ui) {
             ),
             node("label", { for: limit.id, class: "form-label" }, "Maximum active requests"),
             limit,
+        );
+        const publication = node(
+            "fieldset",
+            { class: "record-form-section" },
+            node("legend", { class: "h6" }, "Policy decision"),
             node(
                 "label",
                 { for: reason.id, class: "form-label" },
                 "Reason for this section policy",
             ),
             reason,
+        );
+        const form = node(
+            "form",
+            { class: "record-form", "aria-label": "Section waitlist policy" },
+            availability,
+            publication,
             error,
         );
         const submit = node(
@@ -93,7 +105,7 @@ window.createSectionWaitlist = function (ui) {
             { type: "submit", class: "btn btn-primary" },
             "Review waitlist policy",
         );
-        form.append(submit);
+        form.append(node("div", { class: "d-flex flex-wrap gap-2 my-3" }, submit));
         const edit = () =>
             body.replaceChildren(
                 explanation(),

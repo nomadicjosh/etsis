@@ -41,7 +41,7 @@ window.createCampusContentPublication = function (ui) {
         let serial = 0,
             proof = null,
             committing = false;
-        const form = node("form", {});
+        const form = node("form", { class: "record-form" });
         const from = node("input", {
             id: `${prefix}-from`,
             type: "datetime-local",
@@ -156,8 +156,9 @@ window.createCampusContentPublication = function (ui) {
                         : "Return this draft with a note for its author. It remains hidden.",
             ),
         );
+        const fields = node("fieldset", { class: "record-form-section" }, node("legend", {}, action === "approve" ? "Publication window" : "Author response"));
         if (action === "approve")
-            form.append(
+            fields.append(
                 field("Start publishing", from),
                 field("Stop publishing", until),
                 node(
@@ -166,7 +167,8 @@ window.createCampusContentPublication = function (ui) {
                     `Dates use your browser's time zone: ${Intl.DateTimeFormat().resolvedOptions().timeZone}. Leave the start blank for immediate publication and the end blank to keep it available.`,
                 ),
             );
-        if (action === "return") form.append(field("Note to author", note));
+        if (action === "return") fields.append(field("Note to author", note));
+        if (["approve", "return"].includes(action)) form.append(fields);
         body.append(form, status, node("div", { class: "d-flex flex-wrap gap-2" }, updateButton, confirm));
         form.addEventListener("submit", (event) => {
             event.preventDefault();

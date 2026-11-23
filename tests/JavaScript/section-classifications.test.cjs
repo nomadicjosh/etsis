@@ -1,7 +1,13 @@
 'use strict';
 const test = require('node:test'), assert = require('node:assert/strict');
 const fs = require('node:fs'), vm = require('node:vm');
-const { node, walk } = require('./support/elements.cjs');
+const { node: element, walk } = require('./support/elements.cjs');
+const node = (...args) => {
+    const value = element(...args);
+    value.classList = { add: (...tokens) => value.setAttribute('class',
+        [...new Set([...(value.getAttribute('class') || '').split(/\s+/u).filter(Boolean), ...tokens])].join(' ')) };
+    return value;
+};
 async function fixture(section = true) {
     const window = {}, body = node('div'), calls = [], publications = [];
     vm.runInNewContext(fs.readFileSync('public/assets/js/workspace-classifications.js', 'utf8'), { window }, { timeout: 500 });
@@ -10,6 +16,8 @@ async function fixture(section = true) {
     let current = { section: { id: 'section', code: 'MATH.101.A' }, course: { code: 'MATH.101', title: 'Fictional Algebra' },
         revision: 'fictional-revision', classifications: section ? { instructional_method: null, campus: null } : { department: null, academic_level: null, course_level: null } };
     const ui = window.createWorkspaceClassifications({ node, openDrawer: () => { body.replaceChildren(); return body; },
+        badge: value => node('span', {}, value),
+        actionMenu: (label, entries) => node('div', {}, node('button', {}, label), ...entries),
         task: run => run(), publications: id => publications.push(id), sectionPublications: id => publications.push(id),
         request: async (path, verb, data) => {
             calls.push({ path, verb, data });
@@ -44,7 +52,7 @@ test('reference setup presents the two section categories without requiring camp
     const f = await fixture(); await f.ui.library('campus');
     assert.ok(f.find('Instructional methods')); assert.ok(f.find('Campuses & sites'));
     assert.equal(f.find('Departments'), undefined);
-    assert.match(f.body.textContent, /online sections can leave this blank/);
+    assert.match(f.body.textContent, /leave it blank when it does not apply/);
 });
 test('course assignments continue through the same shared editor with course-specific categories', async () => {
     const f = await fixture(false);

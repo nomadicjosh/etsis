@@ -47,6 +47,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
             label,
         );
     function close() {
+        taskNavigation?.dispose();
+        taskNavigation = null;
         dialog?.close();
         dialog?.remove();
         dialog = null;
@@ -54,7 +56,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
             .find((el) => el?.isConnected && !el.disabled && el.getClientRects().length)
             ?.focus({ preventScroll: true });
     }
+    let taskNavigation = null;
     function screen(title, eyebrow = "ACADEMIC REQUIREMENTS") {
+        taskNavigation?.dispose();
         opener = dialog ? opener : lastTrigger || document.activeElement;
         dialog?.close();
         dialog?.remove();
@@ -64,6 +68,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             "aria-labelledby": "degree-audit-title",
         });
         const body = node("div", { class: "report-workbench-body" });
+        taskNavigation = ui.taskNavigation?.(body, title) || null;
         dialog.append(
             node(
                 "header",
@@ -82,6 +87,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 tabindex: "-1",
                 hidden: true,
             }),
+            taskNavigation?.element,
             body,
         );
         dialog.addEventListener("cancel", (e) => {
@@ -526,11 +532,14 @@ window.createWorkspaceDegreeAudit = function (ui) {
         if (data[cursorKey]) target.append(button("Next page", () => run(data[cursorKey], [...stack, after])));
     }
     async function library(query = "", after = null, stack = [], back = null) {
+        const pendingView = screen("Course group library", "REUSABLE BUILDING BLOCKS");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
         const result = await post("/sis/course-groups/page/", {
             published_only: false,
             ...(query ? { search: query } : {}),
             ...(after ? { after } : {}),
         });
+        if (!pendingView.isConnected) return;
         const body = screen("Course group library", "REUSABLE BUILDING BLOCKS");
         body.append(
             node(
@@ -558,12 +567,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     node("h2", { class: "h5" }, g.name),
                     node("p", { class: "form-text" }, `Working draft · revision ${g.revision}`),
                     actions(
-                        button(`Build ${g.name}`, async () =>
-                            groupEditor(
-                                await request(`/sis/course-groups/${g.id}/`),
-                                back || (() => library(query, after, stack)),
-                            ),
-                        ),
+                        button(`Build ${g.name}`, async () => {
+                            const saved = await request(`/sis/course-groups/${g.id}/`);
+                            if (!body.isConnected) return;
+                            groupEditor(saved, back || (() => library(query, after, stack)));
+                        }),
                         button("Version history", () =>
                             history("group", g.id, null, back || (() => library(query, after, stack))),
                         ),
@@ -603,6 +611,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                                 rules: [],
                             },
                         });
+                        if (!body.isConnected) return;
                         groupEditor(result, back);
                     },
                     "btn-primary",
@@ -616,8 +625,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
             ? `/sis/programs/${program}/specializations/${specialization}/degree-audits/`
             : `/sis/programs/${program}/degree-audits/`;
     async function launch(program, after = null, stack = [], specialization = null, back = null) {
-        const result = await post(auditScopePath(program, specialization) + "page/", after ? { after } : {}),
-            body = screen(specialization ? "Specialization audit builder" : "Degree audit builder");
+        const pendingView = screen(specialization ? "Specialization audit builder" : "Degree audit builder");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
+        const result = await post(auditScopePath(program, specialization) + "page/", after ? { after } : {});
+        if (!pendingView.isConnected) return;
+        const body = screen(specialization ? "Specialization audit builder" : "Degree audit builder");
         const directory = () => launch(program, after, stack, specialization, back);
         if (specialization)
             body.append(
@@ -654,12 +666,15 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     node("h2", { class: "h5" }, row.name || "Degree requirements"),
                     node("p", {}, `Draft revision ${row.revision}`),
                     actions(
-                        button(`Edit ${row.academic_year_code} requirements`, async () =>
-                            degreeEditor(await request(`/sis/degree-audits/${row.id}/`), null, directory),
-                        ),
+                        button(`Edit ${row.academic_year_code} requirements`, async () => {
+                            const saved = await request(`/sis/degree-audits/${row.id}/`);
+                            if (!body.isConnected) return;
+                            degreeEditor(saved, null, directory);
+                        }),
                         ui.can("sis:student:read")
                             ? button(`Test ${row.academic_year_code} audit`, async () => {
                                   const saved = await request(`/sis/degree-audits/${row.id}/`);
+                                  if (!body.isConnected) return;
                                   auditTrial(saved, saved.definition, directory);
                               })
                             : null,
@@ -681,12 +696,15 @@ window.createWorkspaceDegreeAudit = function (ui) {
         specialization = null,
         back = null,
     ) {
+        const pendingView = screen(source ? "Clone requirements to another academic year" : "Choose an academic year");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
         specialization = specialization || source?.specialization_id || null;
         query = query.trim();
         const result = await post("/sis/academic-years/", {
             ...(query ? { search: query } : {}),
             ...(after ? { after } : {}),
         });
+        if (!pendingView.isConnected) return;
         const body = screen(source ? "Clone requirements to another academic year" : "Choose an academic year");
         body.append(
             node(
@@ -714,6 +732,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                                   academic_year_id: y.id,
                                   ...(specialization ? { specialization_id: specialization } : {}),
                               });
+                        if (!body.isConnected) return;
                         degreeEditor(row, null, () => launch(program, null, [], specialization, back));
                     }),
                 ),
@@ -2629,9 +2648,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
         );
     }
     async function history(kind, id, program, back, cursor = null, stack = []) {
+        const pendingView = screen("Published requirement versions");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
         const base = kind === "group" ? `/sis/course-groups/${id}/` : `/sis/degree-audits/${id}/`,
-            result = await post(`${base}versions/`, cursor ? { cursor } : {}),
-            body = screen("Published requirement versions");
+            result = await post(`${base}versions/`, cursor ? { cursor } : {});
+        if (!pendingView.isConnected) return;
+        const body = screen("Published requirement versions");
         body.append(
             node(
                 "p",
@@ -2685,9 +2707,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
     }
     const pursuitLabel = (p) => `${p.program_code} · ${p.program_title} · Entry ${p.entry_term_code} · ${p.status}`;
     async function workPursuits(student, receiving, back, after = null, stack = [], state = null) {
+        const pendingView = screen("Work attribution & reuse", "REGISTRAR REVIEW");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
         state ||= { selected: new Map(), reason: "", backLabel: "Back to requirements" };
         const base = `/sis/students/${student}/academic-work-pursuits/`;
         const data = await post(base, { assignment_id: receiving, ...(after ? { after } : {}) });
+        if (!pendingView.isConnected) return;
         const body = screen("Work attribution & reuse", "REGISTRAR REVIEW");
         body.append(node("p", {}, "Each academic record belongs to one program pursuit. Earlier coursework can support another pursuit only after a separate reuse approval. Attribution and reuse do not change grades, earned credits, bills or the original record."));
         const canApprove = data.receiving?.status === "active";
@@ -2831,7 +2856,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
         body.append(form, button("Back to work selection", back));
     }
     async function scopeTarget(base, work, action, back, after = null, stack = []) {
+        const pendingView = screen(action === "attribute" ? "Choose the original pursuit" : "Correct the original pursuit", "WORK ATTRIBUTION");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
         const data = await post(`${base}pursuits/`, after ? { after } : {});
+        if (!pendingView.isConnected) return;
         const body = screen(action === "attribute" ? "Choose the original pursuit" : "Correct the original pursuit", "WORK ATTRIBUTION");
         body.append(node("p", {}, `${work.course_code} · ${work.course_title}`),
             node("p", {}, "Use the student's academic evidence to choose the pursuit this record belongs to. Closed and completed pursuits remain available. Today's primary program is not evidence of earlier ownership."));
@@ -2875,9 +2903,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
         body.append(form, button("Back to work attribution", back));
     }
     async function studentRequirements(studentId, assignmentId, back) {
+        const pendingView = screen("Student degree requirements", "RETAINED PROGRAM REQUIREMENTS");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
         const base = `/sis/students/${studentId}/programs/${assignmentId}/degree-requirements/`;
-        const data = await request(base),
-            body = screen("Student degree requirements", "RETAINED PROGRAM REQUIREMENTS");
+        const data = await request(base);
+        if (!pendingView.isConnected) return;
+        const body = screen("Student degree requirements", "RETAINED PROGRAM REQUIREMENTS");
         const restore = () => studentRequirements(studentId, assignmentId, back);
         body.append(
             node(
@@ -4438,7 +4469,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
         body.append(pages);
     }
     async function verifyAcademicInputs(base, back) {
+        const pendingView = screen("Academic input verification", "STUDENT ACADEMIC RECORDS");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
         const data = await post(`${base}academic-work/verify/`, {});
+        if (!pendingView.isConnected) return;
         const body = screen("Academic input verification", "STUDENT ACADEMIC RECORDS");
         const limited = data.status === "limited";
         const gaps = data.status === "history_gaps";
@@ -4484,7 +4518,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
         );
     }
     async function academicWork(base, back, after = null, stack = [], matching = false) {
+        const pendingView = screen(matching ? "Requirement matches" : "Academic work", "STUDENT ACADEMIC RECORDS");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
         const data = await post(`${base}academic-work/${matching ? "matches/" : ""}`, after ? { after } : {});
+        if (!pendingView.isConnected) return;
         const body = screen(matching ? "Requirement matches" : "Academic work", "STUDENT ACADEMIC RECORDS");
         body.append(
             node(
@@ -4687,7 +4724,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
         return section;
     }
     async function studentChoices(base, current, back) {
+        const pendingView = screen("Choose student degree requirements", "REGISTRAR REVIEW");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
         const initial = await post(`${base}choices/`);
+        if (!pendingView.isConnected) return;
         let body = screen("Choose student degree requirements", "REGISTRAR REVIEW");
         const returnToChoices = () => {
             const previous = body;
@@ -4812,8 +4852,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
         await page(initial);
     }
     async function studentHistory(base, back, cursor = null, stack = []) {
-        const data = await post(`${base}history/`, cursor ? { cursor } : {}),
-            body = screen("Student requirement assignment history");
+        const pendingView = screen("Student requirement assignment history");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
+        const data = await post(`${base}history/`, cursor ? { cursor } : {});
+        if (!pendingView.isConnected) return;
+        const body = screen("Student requirement assignment history");
         body.append(
             node(
                 "p",
@@ -4944,8 +4987,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
         return { waived_course_ids: data.effective_minimums.waived_course_ids, replacements, publications };
     }
     async function adjustedRequirements(base, back, withApprovals = true, backLabel = "Back to student exceptions") {
-        const data = await request(`${base}preview/`),
-            body = screen("Requirements with approvals", "ONE STUDENT · ONE PROGRAM PURSUIT");
+        const pendingView = screen("Requirements with approvals", "ONE STUDENT · ONE PROGRAM PURSUIT");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
+        const data = await request(`${base}preview/`);
+        if (!pendingView.isConnected) return;
+        const body = screen("Requirements with approvals", "ONE STUDENT · ONE PROGRAM PURSUIT");
         body.append(
             node(
                 "p",
@@ -5036,10 +5082,13 @@ window.createWorkspaceDegreeAudit = function (ui) {
         show(withApprovals);
     }
     async function studentExceptions(studentId, assignmentId, back, componentBase = null, routing = false) {
+        const pendingView = screen(routing ? "Course routing" : "Student exceptions", "ONE STUDENT · ONE PROGRAM PURSUIT");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
         const base = componentBase || `/sis/students/${studentId}/programs/${assignmentId}/degree-adjustments/`,
             data = await request(routing ? `${base}routing/` : base);
-        const restore = () => studentExceptions(studentId, assignmentId, back, componentBase, routing),
-            body = screen(routing ? "Course routing" : "Student exceptions", "ONE STUDENT · ONE PROGRAM PURSUIT");
+        const restore = () => studentExceptions(studentId, assignmentId, back, componentBase, routing);
+        if (!pendingView.isConnected) return;
+        const body = screen(routing ? "Course routing" : "Student exceptions", "ONE STUDENT · ONE PROGRAM PURSUIT");
         if (data.component)
             body.append(node("h2", { class: "h4" }, `Specialization ${data.component.code} · ${data.component.title}`));
         if (routing)
@@ -5879,8 +5928,11 @@ window.createWorkspaceDegreeAudit = function (ui) {
         );
     }
     async function exceptionHistory(base, back, cursor = null, stack = []) {
-        const data = await post(`${base}history/`, cursor ? { cursor } : {}),
-            body = screen("Student exception history");
+        const pendingView = screen("Student exception history");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
+        const data = await post(`${base}history/`, cursor ? { cursor } : {});
+        if (!pendingView.isConnected) return;
+        const body = screen("Student exception history");
         body.append(
             node(
                 "p",
@@ -5914,7 +5966,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
         body.append(button("Back to student exceptions", back));
     }
     async function gradingContext(select, back, query = "") {
+        const pendingView = screen("Choose a grading context");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
         const rows = await post("/sis/ui/data/programs/", query ? { search: query } : {});
+        if (!pendingView.isConnected) return;
         const body = screen("Choose a grading context");
         body.append(
             node(
@@ -5936,6 +5991,8 @@ window.createWorkspaceDegreeAudit = function (ui) {
         body.append(button("Back to group draft", back));
     }
     async function gradingScale(program = null, back = null, state = null) {
+        const pendingView = screen(program ? "Program grading scale" : "Global grading scale", "GRADING POLICY");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
         const base = program ? `/sis/programs/${program}/grading-scale/` : "/sis/grading-scales/global/";
         const data = state?.data || (await request(base));
         let rows =
@@ -5950,6 +6007,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         let reason = state?.reason || "",
             active = state?.active ?? 0;
         const restore = () => gradingScale(program, back, { data, rows, inherit, reason, active });
+        if (!pendingView.isConnected) return;
         const body = screen(program ? "Program grading scale" : "Global grading scale", "GRADING POLICY");
         let validationErrors = [];
         function markScaleErrors() {

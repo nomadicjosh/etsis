@@ -96,7 +96,7 @@
         }
         function mount(container, applicationId, { managePresets = false } = {}) {
             const identity = `casework-${++sequence}`;
-            const content = node('section', { id: identity, hidden: true, 'aria-label': 'Application checklist and follow-up' });
+            const content = node('section', { id: identity, hidden: true, class: 'admission-workbench', 'aria-label': 'Application checklist and follow-up' });
             let generation = 0, expanded = false, leave = () => true;
             const endpoint = `/sis/applications/${applicationId}/casework/`;
             const toggle = button('Checklist & follow-up', async () => {
@@ -117,9 +117,9 @@
             container.replaceChildren(toggle, content);
             function render(packet, ticket) {
                 const alive = () => ticket === generation && container.isConnected;
-                const wrapper = node('fieldset', { class: 'mt-3' }, node('legend', { class: 'h5' }, 'Checklist & follow-up'));
+                const wrapper = node('fieldset', { class: 'record-form-section mt-3' }, node('legend', {}, 'Checklist & follow-up'));
                 const status = node('p', { role: 'status', class: 'form-text', 'aria-atomic': 'true' });
-                const form = node('form');
+                const form = node('form', { class: 'record-form' });
                 if (packet.readiness) wrapper.append(window.createAdmissionReadiness({ node }).staff(packet.readiness));
                 const value = packet.case;
                 const editor = itemEditor(form, value.items);
@@ -242,7 +242,7 @@
                     if (!alive() || serial !== presetRequest || searchText !== search.value.trim()) return;
                     presetSearch = searchText;
                     const cards = data.items.map(item => {
-                        const card = node('div', { class: 'border rounded p-3 mb-2' }, node('h3', { class: 'h6' }, item.name),
+                        const card = node('div', { class: 'surface admission-preset-card' }, node('h3', { class: 'h6' }, item.name),
                             node('p', { class: 'form-text' }, `${item.program_id ? 'This program' : 'All programs'} · ${Number(item.enabled) ? 'Enabled' : 'Disabled'}`));
                         if (Number(item.enabled)) card.append(button('Use checklist', async () => {
                             if (pending) return;
@@ -265,7 +265,7 @@
                             const editing = ++presetEditRequest;
                             const preset = await request(`/sis/admissions/checklists/${item.id}/`);
                             if (alive() && editing === presetEditRequest && !pending) editPreset(preset);
-                        }, 'btn-outline-secondary ms-2'));
+                        }, 'btn-outline-secondary'));
                         return card;
                     });
                     if (!after) results.replaceChildren(); results.append(...cards);
@@ -274,7 +274,7 @@
                     if (data.next_after) { const more = button('More presets', () => listPresets(data.next_after)); more.dataset.morePresets = ''; results.append(more); }
                 }
                 function editPreset(preset) {
-                    const f = node('form');
+                    const f = node('form', { class: 'record-form admission-preset-form' });
                     const name = field(f, 'preset.name', 'Preset name', preset.values.name); name.required = true;
                     const global = check(f, 'preset.program_id', 'Available to all programs', preset.values.program_id === null);
                     f.append(node('p', { class: 'form-text' }, 'When unchecked, use this preset only for this application’s program.'));
@@ -282,7 +282,7 @@
                     const items = itemEditor(f, preset.values.items, true, 'preset.');
                     const submit = node('button', { type: 'submit', class: 'btn btn-primary mt-3' }, 'Save preset');
                     f.append(node('p', { class: 'form-text' }, 'Use generic labels and instructions. Progress, dates, assignments and private case notes are not copied. Existing applications keep their own working copies.'), submit,
-                        button('Close preset', () => { presetEditRequest++; presetEditor.replaceChildren(); }, 'btn-link'));
+                        button('Back to checklist draft', () => { presetEditRequest++; presetEditor.replaceChildren(); }, 'btn-link'));
                     f.addEventListener('submit', event => {
                         event.preventDefault(); if (pending) return;
                         items.expand(); if (!f.reportValidity()) return;
@@ -320,7 +320,7 @@
             content.replaceChildren(node('h3', { class: 'h5' }, 'Your next steps'),
                 node('p', {}, data.next_step || 'Admissions has not added a specific next step. Contact the office with questions.'),
                 data.office ? node('p', { class: 'form-text' }, `Office: ${data.office}`) : null,
-                ...data.items.map(item => node('div', { class: 'border rounded p-3 mb-2' },
+                ...data.items.map(item => node('div', { class: 'surface admission-preset-card' },
                     node('h4', { class: 'h6' }, item.label), node('p', {}, labels[item.status] || 'Check with admissions'),
                     node('p', { class: 'form-text' }, item.needed ? 'Requested for review' : 'Additional item'),
                     item.instructions ? node('p', {}, item.instructions) : null,
@@ -359,46 +359,72 @@
                     } });
             return { beforeLeave: () => documentEditor.beforeLeave() && offerEditor.beforeLeave() && withdrawalEditor.beforeLeave() };
         }
-        function queue(container, openApplication) {
-            const filters = node('div', { class: 'd-flex flex-wrap gap-3 align-items-end mb-3' });
-            const scope = select(filters, 'casework_scope', 'Assignment', 'all', [['all', 'All open'], ['mine', 'Assigned to me'], ['unassigned', 'Unassigned']]);
-            const due = check(filters, 'casework_due', 'Due today or earlier', false);
-            const status = node('p', { role: 'status', class: 'form-text' }), list = node('div');
-            let generation = 0, stack = [], filterKey = '';
-            async function load(after = '', previous = []) {
-                const selectedScope = scope.value, selectedDue = due.checked;
-                const selectedKey = JSON.stringify([selectedScope, selectedDue]);
-                if (after && selectedKey !== filterKey) return load();
-                const ticket = ++generation;
-                status.textContent = 'Loading follow-up queue…';
-                try {
-                    const query = new URLSearchParams({ scope: selectedScope, due: selectedDue ? '1' : '0' });
-                    if (after) query.set('after', after);
-                    const data = await request(`/sis/admissions/follow-ups/?${query}`);
-                    if (ticket !== generation || !container.isConnected) return;
-                    if (selectedKey !== JSON.stringify([scope.value, due.checked])) {
-                        status.textContent = 'Filters changed. Choose Refresh queue to load matching results.'; return;
-                    }
-                    filterKey = selectedKey;
-                    stack = previous;
-                    list.replaceChildren(...data.items.map(item => node('article', { class: 'border rounded p-3 mb-3' },
-                        node('h3', { class: 'h5' }, `${item.given_name} ${item.family_name}`),
-                        node('p', { class: 'form-text' }, `${item.institutional_id} · ${item.office || 'Office not set'} · ${item.assignee_name}`),
-                        node('p', {}, `${item.work_status === 'waiting' ? 'Waiting' : 'Open'}${item.next_due_on ? ' · Follow up: ' + item.next_due_on : ''}`),
-                        button('Open application', () => openApplication({ id: item.application_id })))));
-                    if (!data.items.length) list.append(node('p', {}, 'No casework matches these filters.'));
-                    const pages = node('nav', { class: 'd-flex flex-wrap gap-2', 'aria-label': 'Follow-up queue pages' });
-                    if (stack.length) pages.append(button('Previous', () => { const earlier = [...stack]; return load(earlier.pop(), earlier); }));
-                    if (data.next_after) pages.append(button('Next', () => load(data.next_after, [...stack, after])));
-                    list.append(pages); status.textContent = `${data.items.length} casework records · Institution date: ${data.today}`;
-                } catch (error) {
-                    if (ticket !== generation || !container.isConnected) return;
-                    status.textContent = 'Could not refresh the queue. Previous results are still shown.'; throw error;
-                }
+        function queue(container, openApplication, initial = null) {
+            const state = initial || { scope: 'all', due: false, after: '', stack: [] };
+            let accepted = { ...state, stack: [...state.stack] }, nextAfter = null, busy = false;
+            const filters = node('form', { class: 'admission-queue-filter' });
+            const fields = node('div', { class: 'admission-queue-fields' });
+            const scope = select(fields, 'casework_scope', 'Assignment', state.scope,
+                [['all', 'All open'], ['mine', 'Assigned to me'], ['unassigned', 'Unassigned']]);
+            const due = check(fields, 'casework_due', 'Due today or earlier', state.due);
+            const refresh = node('button', { type: 'submit', class: 'btn btn-primary' }, 'Refresh queue');
+            const status = node('p', { role: 'status', class: 'form-text', tabindex: '-1' });
+            const list = node('ul', { class: 'admission-followup-list', 'aria-label': 'Admissions follow-up cases' });
+            const key = value => JSON.stringify([value.scope, value.due]);
+            const criteria = () => ({ scope: scope.value, due: due.checked, after: '', stack: [] });
+            const changed = () => key(criteria()) !== key(accepted);
+            const control = (label, run) => {
+                const item = node('button', { type: 'button', class: 'btn btn-outline-primary' }, label);
+                item.addEventListener('click', () => { if (!busy) task(run); }); return item;
+            };
+            const previous = control('Previous', () => load({ ...accepted, after: accepted.stack.at(-1), stack: accepted.stack.slice(0, -1) }, true));
+            const next = control('Next', () => load({ ...accepted, after: nextAfter, stack: [...accepted.stack, accepted.after] }, true));
+            const paging = node('nav', { class: 'inline-actions mb-3', 'aria-label': 'Follow-up queue pages' }, previous, next);
+            filters.append(node('fieldset', { class: 'record-form-section' },
+                node('legend', {}, 'Find follow-up work'), fields,
+                node('div', { class: 'inline-actions' }, refresh),
+                node('p', { class: 'form-text mb-0 mt-3' }, 'Follow-up is paused for withdrawn applications. Unfinished tasks return when an application returns to review.')));
+            filters.addEventListener('submit', event => { event.preventDefault(); if (!busy) task(() => load(criteria(), true)); });
+            function controls() {
+                refresh.disabled = busy;
+                previous.disabled = busy || changed() || !accepted.stack.length;
+                next.disabled = busy || changed() || !nextAfter;
+                list.inert = busy; list.setAttribute('aria-busy', String(busy));
             }
-            filters.append(button('Refresh queue', () => load()));
-            filters.append(node('p', { class: 'form-text w-100' }, 'Follow-up is paused for withdrawn applications. Unfinished tasks return when an application returns to review.'));
-            container.replaceChildren(filters, status, list); task(() => load());
+            [scope, due].forEach(input => input.addEventListener('change', () => {
+                if (changed()) status.textContent = 'Filters changed. Refresh queue to load matching results.';
+                controls();
+            }));
+            async function load(candidate = criteria(), focus = false) {
+                if (busy) return;
+                busy = true; controls(); status.textContent = 'Loading follow-up queue…';
+                try {
+                    const query = new URLSearchParams({ scope: candidate.scope, due: candidate.due ? '1' : '0' });
+                    if (candidate.after) query.set('after', candidate.after);
+                    const data = await request(`/sis/admissions/follow-ups/?${query}`);
+                    if (!container.isConnected) return;
+                    if (key(candidate) !== key(criteria())) {
+                        status.textContent = 'Filters changed. Refresh queue to load matching results.'; return;
+                    }
+                    accepted = { ...candidate, stack: [...candidate.stack] }; nextAfter = data.next_after;
+                    list.replaceChildren(...data.items.map(item => node('li', {}, node('article', { class: 'surface admission-followup-card' },
+                        node('h3', { class: 'h6' }, `${item.given_name} ${item.family_name}`),
+                        node('p', { class: 'form-text' }, `${item.institutional_id} · ${item.office || 'Office not set'} · ${item.assignee_name || 'Unassigned'}`),
+                        node('p', {}, `${item.work_status === 'waiting' ? 'Waiting' : 'Open'}${item.next_due_on ? ' · Follow up: ' + item.next_due_on : ''}`),
+                        button('Open application', () => openApplication({ id: item.application_id }, { ...accepted, stack: [...accepted.stack] }))))));
+                    if (!data.items.length) list.append(node('li', {}, node('p', {}, 'No casework matches these filters.')));
+                    status.textContent = `${data.items.length} casework record${data.items.length === 1 ? "" : "s"} · Institution date: ${data.today}`;
+                    if (focus) status.focus({ preventScroll: true });
+                } catch (error) {
+                    if (!container.isConnected) return;
+                    if (error.status === 403) {
+                        filters.hidden = true; paging.hidden = true; list.replaceChildren();
+                        status.textContent = 'The follow-up queue is no longer available with your current access.';
+                    } else status.textContent = 'Could not refresh the queue. Previous results are still shown.';
+                    throw error;
+                } finally { busy = false; if (container.isConnected) controls(); }
+            }
+            container.append(filters, status, paging, list); task(() => load(state));
         }
         function updates(target) {
             const container = node('div'); target.append(container);

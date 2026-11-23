@@ -50,6 +50,7 @@ async function editor(bonus = false) {
         can: () => false,
         node,
         table: () => node("table"),
+        actionMenu: (label, entries) => node("div", {}, ...entries.filter(entry => entry.tag)),
         badge: (text) => node("span", {}, text),
         recordSummary: () => node("div"),
         task: (run) => (pending = Promise.resolve().then(run)),

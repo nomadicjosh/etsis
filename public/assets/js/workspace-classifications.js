@@ -1,7 +1,7 @@
 /* Reference setup uses bounded searches; unsaved course choices stay in page memory. */
 window.createWorkspaceClassifications = function (ui) {
     "use strict";
-    const { node, request, task, buildForm, formData, openDrawer } = ui;
+    const { node, request, task, buildForm, formData, openDrawer, actionMenu, badge } = ui;
     const kinds = {
         school: {
             singular: "School/college",
@@ -54,6 +54,11 @@ window.createWorkspaceClassifications = function (ui) {
             },
             label,
         );
+    const glyphs = {
+        school: "buildings", field_of_study: "bookmark", department: "diagram-3",
+        academic_level: "mortarboard", course_level: "layers", instructional_method: "easel2",
+        campus: "geo-alt", award: "award",
+    };
 
     async function library(
         kind = "department",
@@ -79,6 +84,8 @@ window.createWorkspaceClassifications = function (ui) {
                     : "Departments & levels",
             "ACADEMIC CATALOG",
         );
+        const loading = node("p", { role: "status", class: "form-text" }, "Loading classifications…");
+        body.append(loading);
         const data = await request(
             `/sis/catalog/classifications/${kind}/page/`,
             "POST",
@@ -88,17 +95,19 @@ window.createWorkspaceClassifications = function (ui) {
             },
         );
         if (!body.isConnected) return;
+        loading.remove();
+        const heading = node("div", { class: "classification-library-heading" },
+            node("h3", { class: "h5 text-break" }, category.plural));
         if (!choose) {
             const navigation = node("div", {
-                class: "d-flex flex-wrap gap-2 mb-3",
                 role: "group",
                 "aria-label": "Classification category",
             });
-            Object.entries(kinds)
+            const entries = Object.entries(kinds)
                 .filter(
                     ([key]) => visibleKinds.includes(key),
                 )
-                .forEach(([key, value]) => {
+                .map(([key, value]) => {
                     const tab = button(
                         value.plural,
                         () => library(key),
@@ -108,20 +117,24 @@ window.createWorkspaceClassifications = function (ui) {
                         "aria-pressed",
                         key === kind ? "true" : "false",
                     );
-                    navigation.append(tab);
+                    tab.prepend(node("i", { class: `bi bi-${key === kind ? "check2" : glyphs[key]}`, "aria-hidden": "true" }));
+                    return tab;
                 });
-            body.append(navigation);
+            navigation.append(actionMenu("Change category", entries, {
+                icon: "collection",
+            }));
+            heading.append(navigation);
         }
         body.append(
-            node("h3", { class: "h5 text-break" }, category.plural),
-            node("p", {}, category.detail),
+            heading,
+            node("p", { class: "form-text" }, category.detail),
             node(
                 "p",
                 { class: "text-secondary" },
                 "Retire a definition to stop new assignments. Earlier published academic definitions and student records keep their original labels.",
             ),
         );
-        const form = node("form", { class: "mb-3" });
+        const form = node("form", { class: "classification-library-search" });
         const input = node("input", {
             id: "classification-search",
             type: "search",
@@ -129,19 +142,22 @@ window.createWorkspaceClassifications = function (ui) {
             maxlength: 100,
             value: search,
         });
-        form.append(
-            node(
-                "label",
-                { for: input.id, class: "form-label" },
-                `Find ${category.plural.toLowerCase()}`,
-            ),
+        const field = node("div", { class: "classification-search-field" },
+            node("label", { for: input.id, class: "form-label" }, `Find ${category.plural.toLowerCase()}`),
             input,
+        );
+        const clear = button("Clear", () => library(kind, "", null, [], choose, back, backLabel), "btn-outline-secondary");
+        clear.setAttribute("aria-label", "Clear classification search");
+        clear.classList.add("workspace-icon-control");
+        clear.prepend(node("i", { class: "bi bi-x-lg", "aria-hidden": "true" }));
+        clear.disabled = !search;
+        input.addEventListener("input", () => { clear.disabled = !input.value && !search; });
+        form.append(field, node("div", { class: "classification-search-actions" },
             node(
                 "button",
-                { type: "submit", class: "btn btn-primary mt-2" },
-                "Search classifications",
-            ),
-        );
+                { type: "submit", class: "btn btn-primary", "aria-label": "Search classifications" },
+                "Search",
+            ), clear));
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(() =>
@@ -152,10 +168,17 @@ window.createWorkspaceClassifications = function (ui) {
             library(kind, search, after, stack, choose, back, backLabel);
         body.append(
             form,
-            button(`Add ${category.singular.toLowerCase()}`, () =>
+            node("div", { class: "inline-actions mb-3" }, button(`Add ${category.singular.toLowerCase()}`, () =>
                 editor(kind, null, choose || refresh, refresh),
-            ),
+            )),
+            node("p", { class: "form-text", role: "status" }, `${data.items.length} ${data.items.length === 1 ? "classification" : "classifications"} on this page.`),
         );
+        const pages = node("nav", { class: "inline-actions mb-3", "aria-label": "Classification pages" });
+        if (stack.length) pages.append(button("Previous classifications", () =>
+            library(kind, search, stack.at(-1), stack.slice(0, -1), choose, back, backLabel)));
+        if (data.next_after) pages.append(button("More classifications", () =>
+            library(kind, search, data.next_after, [...stack, after], choose, back, backLabel)));
+        if (pages.childElementCount) body.append(pages);
         if (!data.items.length)
             body.append(
                 node(
@@ -165,18 +188,22 @@ window.createWorkspaceClassifications = function (ui) {
                 ),
             );
         data.items.forEach((row) => {
+            const active = row.active === true || Number(row.active) === 1;
+            const actions = node("div", { class: "classification-record-actions" },
+                button(`Edit ${row.code}`, () => editor(kind, row, refresh, refresh), "btn-outline-secondary"));
             const card = node(
-                "div",
-                { class: "surface p-3 mb-2" },
-                node("h4", { class: "h5 text-break" }, `${row.code} — ${row.title}`),
-                node("p", {}, row.active ? "Active" : "Retired"),
-                kind === "department" ? node("p", {}, row.school ? `School/college: ${row.school.code} — ${row.school.title}` : "School/college not assigned") : null,
-                button(`Edit ${row.code}`, () =>
-                    editor(kind, row, refresh, refresh),
-                ),
+                "article",
+                { class: "classification-record-card", "aria-label": `${category.singular} ${row.code}` },
+                node("div", { class: "classification-record-heading" },
+                    node("span", { class: "icon-soft", "aria-hidden": "true" }, node("i", { class: `bi bi-${glyphs[kind]}` })),
+                    node("h4", {}, node("strong", {}, row.code), node("span", {}, row.title)),
+                    badge(active ? "Active" : "Retired")),
+                kind === "department" ? node("p", { class: "form-text" }, row.school ? `School/college: ${row.school.code} — ${row.school.title}` : "School/college not assigned") : null,
+                !active ? node("p", { class: "form-text" }, "Unavailable for new assignments. Earlier recorded uses retain their labels.") : null,
+                actions,
             );
-            if (choose && row.active)
-                card.append(
+            if (choose && active)
+                actions.prepend(
                     button(
                         `Choose ${row.code}`,
                         () => choose(row),
@@ -185,34 +212,6 @@ window.createWorkspaceClassifications = function (ui) {
                 );
             body.append(card);
         });
-        if (stack.length)
-            body.append(
-                button("Previous classifications", () =>
-                    library(
-                        kind,
-                        search,
-                        stack.at(-1),
-                        stack.slice(0, -1),
-                        choose,
-                        back,
-                        backLabel,
-                    ),
-                ),
-            );
-        if (data.next_after)
-            body.append(
-                button("More classifications", () =>
-                    library(
-                        kind,
-                        search,
-                        data.next_after,
-                        [...stack, after],
-                        choose,
-                        back,
-                        backLabel,
-                    ),
-                ),
-            );
         if (back) body.append(button(backLabel, back));
     }
 
@@ -259,10 +258,11 @@ window.createWorkspaceClassifications = function (ui) {
                         school_id: kind === "department" ? school?.id ?? null : null,
                     },
                 );
+                if (!body.isConnected) return;
                 await saved(result);
             }, save);
         });
-        body.append(form, button("Back to classifications", back));
+        body.append(form, button(`Back to ${category.plural.toLowerCase()}`, back));
     }
 
     async function assignment(target, id, saved = false) {
@@ -271,7 +271,10 @@ window.createWorkspaceClassifications = function (ui) {
             ? ["instructional_method", "campus"]
             : ["department", "academic_level", "course_level"];
         const path = `/sis/${isSection ? "sections" : "courses"}/${id}/classifications/`;
+        const loading = openDrawer(isSection ? "Method & campus" : "Course departments & levels", "DRAFT CLASSIFICATIONS");
+        loading.append(node("p", { role: "status", class: "form-text" }, "Loading current classifications…"));
         const current = await request(path);
+        if (!loading.isConnected) return;
         const choices = { ...current.classifications };
         function render() {
             const changed =
@@ -382,6 +385,7 @@ window.createWorkspaceClassifications = function (ui) {
                         ...values,
                         revision: current.revision,
                     });
+                    if (!body.isConnected) return;
                     await assignment(target, id, true);
                 },
                 "btn-primary",

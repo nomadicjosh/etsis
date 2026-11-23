@@ -112,7 +112,7 @@ window.createWorkspaceReportStudio = function (ui) {
         dialog = node("dialog", { class: "report-workbench report-studio", "aria-labelledby": "report-studio-title" });
         const current = dialog;
         const close = button("Back to reports", () => cleanup(), "btn-outline-primary");
-        close.prepend(icon("arrow-left"));
+        if (!close.querySelector(".bi")) close.prepend(icon("arrow-left"));
         const header = node(
             "header",
             { class: "report-workbench-heading" },
@@ -145,7 +145,10 @@ window.createWorkspaceReportStudio = function (ui) {
     }
     window.addEventListener("pagehide", cleanup);
     async function start() {
+        const pendingView = openSpace("Report Studio", "REPORTING");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading report details…"));
         const catalog = await request("/sis/report-studio/catalog/");
+        if (!pendingView.isConnected) return;
         const body = openSpace("Report Studio", "TURN A QUESTION INTO A CLEAR ANSWER");
         const surface = node("section", { class: "report-studio report-launch" });
         body.append(surface);
@@ -2452,6 +2455,7 @@ window.createWorkspaceReportStudio = function (ui) {
                         });
                         try {
                             const reportId = saved?.id || (await request("/sis/ui/operation-id/")).id;
+                            if (!surface.isConnected) return;
                             const operationId = saved ? (await request("/sis/ui/operation-id/")).id : reportId;
                             pending = {
                                 report_id: reportId,
@@ -2465,6 +2469,7 @@ window.createWorkspaceReportStudio = function (ui) {
                             throw error;
                         }
                     }
+                    if (!surface.isConnected) return;
                     check.hidden = false;
                     status.textContent = `Saving report. If the connection is interrupted, retry or check the saved report. Reference: ${pending.report_id}`;
                     try {
@@ -2786,7 +2791,10 @@ window.createWorkspaceReportStudio = function (ui) {
         await load(state.offset);
     }
     async function settings(id) {
+        const pendingView = openSpace("Report settings", "REPORTING");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading report details…"));
         const saved = await request(`/sis/report-studio/${id}/settings/`);
+        if (!pendingView.isConnected) return;
         const body = openSpace(`${saved.name} · Report settings`, "RESULTS & AUTOMATIC EXPIRY");
         const lifecycle = saved.lifecycle || { mode: "dynamic", expires_at: null };
         const form = node("form"), modes = node("fieldset", { class: "record-section" }, node("legend", { class: "h5" }, "How should results behave?"));
@@ -2849,7 +2857,10 @@ window.createWorkspaceReportStudio = function (ui) {
         body.append(button("Reload report settings", () => settings(id)), button("Back to report", () => record(id)));
     }
     async function record(id) {
+        const pendingView = openSpace("Saved report", "REPORTING");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading report details…"));
         const saved = await request(`/sis/report-studio/${id}/`);
+        if (!pendingView.isConnected) return;
         const body = openSpace(saved.name, saved.can_manage ? "SAVED REPORT · CREATOR WORKSPACE" : "SHARED WITH YOU");
         body.classList.add("report-saved-view");
         body.append(

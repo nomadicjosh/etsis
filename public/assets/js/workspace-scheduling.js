@@ -112,6 +112,22 @@ window.createWorkspaceScheduling = function (ui) {
             },
             table(headers, rows, caption),
         );
+    function meetingCard(title, startsAt, endsAt, status, details, actions, label, format = meetingTime) {
+        return node(
+            "article",
+            { class: "scheduling-meeting-card", "aria-label": label },
+            node("div", { class: "scheduling-meeting-heading" },
+                node("span", { class: "icon-soft", "aria-hidden": "true" },
+                    node("i", { class: "bi bi-calendar-event" })),
+                node("h4", {}, title), badge(status)),
+            details,
+            recordSummary([
+                ["Starts", node("time", { datetime: startsAt }, format(startsAt))],
+                ["Ends", node("time", { datetime: endsAt }, format(endsAt))],
+            ]),
+            actions ? node("div", { class: "scheduling-meeting-footer" }, actions) : null,
+        );
+    }
     const note = () =>
         node(
             "p",
@@ -150,9 +166,14 @@ window.createWorkspaceScheduling = function (ui) {
             ? "No approved booking overlaps this window. Availability may change before approval."
             : "An approved booking overlaps this window. Review the room agenda or choose another time.";
     }
-    async function room(id, startsAt = null) {
+    async function room(id, startsAt = null, savedAgenda = null) {
+        const pending = openDrawer("Room workspace", "ROOM & AGENDA");
+        pending.append(node("p", { role: "status", class: "form-text" }, "Loading room details…"));
         const record = await request(`/sis/rooms/${id}/`);
-        const body = openDrawer(roomLabel(record), "ROOM & AGENDA");
+        if (!pending.isConnected) return;
+        let currentAgenda = savedAgenda;
+        const returnToRoom = () => room(id, startsAt, currentAgenda);
+        const body = openDrawer(roomLabel(record), "ROOM & AGENDA", {record:{key:`room:${id}`,label:roomLabel(record),run:returnToRoom}});
         body.append(
             recordSummary([
                 ["Room code", record.code],
@@ -163,9 +184,11 @@ window.createWorkspaceScheduling = function (ui) {
         const actions = node(
             "div",
             { class: "inline-actions", role: "group", "aria-label": "Room tasks" },
-            button("Room timetable", () => timetable(id), "btn-primary"),
-            button("Edit room details", () => roomForm(record)),
+            button("Room timetable", () => timetable(id, null, null, false, 'week', returnToRoom), "btn-primary"),
+            button("Edit room details", () => roomForm(record, {}, returnToRoom)),
         );
+        if (record.building_id)
+            actions.append(button("Open building", () => building(record.building_id), "btn-outline-secondary"));
         if (can("sis:audit:read"))
             actions.append(
                 button("View audit history", () => showAudit("rooms", id), "btn-outline-secondary"),
@@ -183,22 +206,26 @@ window.createWorkspaceScheduling = function (ui) {
         starts.setHours(0, 0, 0, 0);
         const ends = new Date(starts);
         ends.setDate(ends.getDate() + 1);
-        const form = await buildForm(dateFields, {
+        const form = await buildForm(dateFields, savedAgenda ? {
+            starts_at: local(new Date(savedAgenda.window.starts_at)),
+            ends_at: local(new Date(savedAgenda.window.ends_at)),
+        } : {
             starts_at: local(starts),
             ends_at: local(ends),
         }, { layout: 'agenda_window' });
+        if (!body.isConnected) return;
         const status = node("p", {
             role: "status",
             "aria-live": "polite",
             class: "form-text",
         });
         const content = node("div");
-        const pages = node("div", { class: "inline-actions mt-3" });
+        const pages = node("nav", { class: "inline-actions my-3", "aria-label": "Room agenda pages" });
         let window = null;
-        let after = "";
+        let after = savedAgenda?.after || "";
         let nextAfter = null;
         let serial = 0;
-        const previousCursors = [];
+        const previousCursors = [...(savedAgenda?.previousCursors || [])];
         const previous = button("Previous agenda page", async () => {
             after = previousCursors.pop() || "";
             await load();
@@ -216,25 +243,21 @@ window.createWorkspaceScheduling = function (ui) {
                 after,
             });
             if (!body.isConnected || current !== serial) return;
+            currentAgenda = { window: { ...window }, after, previousCursors: [...previousCursors] };
             nextAfter = result.next_after;
             previous.disabled = previousCursors.length === 0;
             next.disabled = !nextAfter;
             content.replaceChildren(
                 result.items.length
-                    ? grid(
-                          ["Booking", "Category", "Course section", "Status", "Starts", "Ends"],
-                          result.items.map((item) => [
-                              button(item.title, () =>
-                                  booking(item.booking_id),
-                              ),
-                              categoryBadge(item),
-                              item.section_code ? `${item.section_code} · ${item.section_term_code}` : '—',
-                              badge(item.status),
-                              display(item.starts_at),
-                              display(item.ends_at),
-                          ]),
-                          "Room agenda",
-                      )
+                    ? node("section", { class: "scheduling-meeting-list", "aria-label": "Room agenda" },
+                          result.items.map((item) => meetingCard(
+                              button(item.title, () => booking(item.booking_id,
+                                  { label: "Back to room agenda", open: returnToRoom }), "btn-link"),
+                              item.starts_at, item.ends_at, item.status,
+                              node("div", { class: "scheduling-meeting-context" }, categoryBadge(item),
+                                  item.section_code ? node("span", {}, `${item.section_code} · ${item.section_term_code}`) : null),
+                              null, item.title, display,
+                          )))
                     : node(
                           "p",
                           {},
@@ -290,13 +313,13 @@ window.createWorkspaceScheduling = function (ui) {
             status.textContent = "";
             form.elements.ends_at.setCustomValidity("");
         });
-        body.append(form, status, content, pages);
+        body.append(form, status, pages, content);
         window = formData(form, dateFields);
         await load();
     }
     let lastCalendar = null, timetableSerial = 0;
-    async function timetable(roomId, date = null, selected = null, approvedOnly = false, view = 'week') {
-        return calendarView({ roomId, date, selected, approvedOnly, view });
+    async function timetable(roomId, date = null, selected = null, approvedOnly = false, view = 'week', roomBack = null) {
+        return calendarView({ roomId, date, selected, approvedOnly, view, roomBack });
     }
     async function calendar(target, isCurrent = () => true) {
         const loading = node('p', { role: 'status' }, 'Loading booking calendar…');
@@ -313,9 +336,9 @@ window.createWorkspaceScheduling = function (ui) {
         }
     }
     async function calendarView({ roomId = null, date = null, selected = null, approvedOnly = false,
-        view = 'week', target = null, isCurrent = () => true, filters = {} }) {
+        view = 'week', target = null, isCurrent = () => true, filters = {}, roomBack = null }) {
         const body = roomId ? openDrawer('Room timetable', 'SPACES & SCHEDULING')
-            : node('section', { class: 'record-section' });
+            : node('section', { class: 'booking-calendar', 'aria-label': 'Calendar schedule' });
         if (target) target.replaceChildren(body);
         const active = () => body.isConnected && isCurrent();
         const fields = [['date', 'Calendar date', 'date'], ...(roomId ? [] : [
@@ -326,7 +349,7 @@ window.createWorkspaceScheduling = function (ui) {
                 { value: 'all', label: 'All locations' }, { value: 'room', label: 'Rooms' }, { value: 'online', label: 'Online' },
             ]],
         ])];
-        const form = await buildForm(fields, { location: 'all', ...filters, ...(date ? { date } : {}) });
+        const form = await buildForm(fields, { location: 'all', ...filters, ...(date ? { date } : {}) }, { layout: roomId ? null : 'booking_calendar' });
         if (!active()) return;
         const input = form.elements.date;
         if (!roomId) form.classList.add('booking-calendar-filters');
@@ -389,7 +412,7 @@ window.createWorkspaceScheduling = function (ui) {
                 .filter(item => !filter.checked || item.status === 'approved');
             page = Math.min(page, Math.max(0, Math.ceil(items.length / 20) - 1));
             const month = result.view === 'month';
-            const days = node('div', { class: month ? 'booking-month mb-4' : 'row g-2 mb-4',
+            const days = node('div', { class: month ? 'booking-month mb-4' : roomId ? 'row g-2 mb-4' : 'booking-week mb-4',
                 role: 'group', 'aria-label': 'Choose a timetable day' });
             if (month) {
                 for (const label of ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])
@@ -413,7 +436,7 @@ window.createWorkspaceScheduling = function (ui) {
                         node('span', { class: 'booking-month-count' }, `${item.counts.requested} requested`));
                 } else dayButton.append(node('span', { class: 'd-block small mt-1' },
                     `${item.counts.approved} approved · ${item.counts.requested} requested`));
-                days.append(node('div', { class: month ? 'booking-month-day' : 'col-12 col-sm-6' }, dayButton));
+                days.append(node('div', { class: month ? 'booking-month-day' : roomId ? 'col-12 col-sm-6' : 'booking-week-day' }, dayButton));
             }
             const dayHeading = node('h4', { class: 'h6', tabindex: '-1' }, dateLabel(day.date));
             const summary = node('p', { class: 'form-text' },
@@ -421,7 +444,7 @@ window.createWorkspaceScheduling = function (ui) {
             const listing = items.length ? grid(['Booking', 'Category', 'Course section', ...(!roomId ? ['Room', 'Building'] : []), 'Status', 'Starts', 'Ends'],
                 items.slice(page * 20, (page + 1) * 20).map(item => [
                     button(item.title, () => booking(item.booking_id, roomId
-                        ? { label: 'Back to room timetable', open: () => timetable(roomId, result.from, selected, filter.checked, view) }
+                        ? { label: 'Back to room timetable', open: () => timetable(roomId, result.from, selected, filter.checked, view, roomBack) }
                         : { label: 'Back to calendar', open: () => ui.openCalendar() })),
                     categoryBadge(item),
                     item.section_code ? `${item.section_code} · ${item.section_term_code}` : '—',
@@ -493,7 +516,7 @@ window.createWorkspaceScheduling = function (ui) {
         filter.addEventListener('change', () => { page = 0; draw(); });
         body.append(heading, node('p', { class: 'form-text' },
             'Times use the institution’s timezone. Requested bookings do not reserve the room. Approval checks availability again.'),
-            roomId ? button('Back to room agenda', () => room(roomId)) :
+            roomId ? button('Back to room agenda', roomBack || (() => room(roomId))) :
                 node('p', { class: 'form-text' }, 'Search meeting purposes, rooms, buildings, categories or retained section/term codes. A building filter excludes room-free online meetings. Up to 500 matching meetings are shown, with complete counts for the chosen filters.'),
             modes, controls, form, filterField, status, content);
         await load(date);
@@ -693,10 +716,16 @@ window.createWorkspaceScheduling = function (ui) {
         });
         await sectionHint(form);
     }
-    async function booking(id, back = null) {
+    async function booking(id, back = null, selectedPage = 0) {
+        const pending = openDrawer("Booking details", "SPACE REQUEST");
+        pending.append(node("p", { role: "status", class: "form-text" }, "Loading booking details…"));
         const record = await request(`/sis/bookings/${id}/`);
+        if (!pending.isConnected) return;
         const place = record.room_id ? await request(`/sis/rooms/${record.room_id}/`) : null;
-        const body = openDrawer(record.title, "SPACE REQUEST");
+        if (!pending.isConnected) return;
+        let page = Math.max(0, Math.min(selectedPage, Math.ceil(record.occurrences.length / 20) - 1));
+        const returnToBooking = () => booking(id, back, page);
+        const body = openDrawer(record.title, "SPACE REQUEST", {record:{key:`booking:${id}`,label:record.title,run:returnToBooking}});
         if (back) body.append(button(back.label, back.open));
         const actions = node("div", {
             class: "inline-actions",
@@ -744,7 +773,7 @@ window.createWorkspaceScheduling = function (ui) {
                     const form = await buildForm(fields, { category_id: record.category_id || "" });
                     if (!edit.isConnected) return;
                     form.append(
-                        button("Back to booking", () => booking(id, back)),
+                        button("Back to booking", returnToBooking),
                         node("button", { type: "submit", class: "btn btn-primary" }, "Save category"),
                     );
                     form.addEventListener("submit", (event) => {
@@ -757,7 +786,7 @@ window.createWorkspaceScheduling = function (ui) {
                             if (!edit.isConnected) return;
                             notify("Booking category saved.");
                             await ui.refreshDirectory();
-                            await booking(id, back);
+                            await returnToBooking();
                         }, form.querySelector('[type="submit"]'));
                     });
                     edit.append(
@@ -774,13 +803,13 @@ window.createWorkspaceScheduling = function (ui) {
         if (extra.length) actions.append(actionMenu("More", extra, { context: "More booking actions" }));
         if (actions.childElementCount) body.append(actions);
         const content = node('div'), status = node('p', { role: 'status', class: 'form-text', tabindex: '-1' });
-        let page = 0;
         const previous = button('Previous booking meetings', () => { page--; draw(true); });
         const next = button('Next booking meetings', () => { page++; draw(true); });
         function draw(focus = false) {
-            content.replaceChildren(grid(['Starts', 'Ends', 'Status', 'Actions'],
-                record.occurrences.slice(page * 20, (page + 1) * 20).map(occurrence => [
-                    meetingTime(occurrence.starts_at), meetingTime(occurrence.ends_at), badge(occurrence.status),
+            content.replaceChildren(node('section', { class: 'scheduling-meeting-list', 'aria-label': 'Booking meetings' },
+                record.occurrences.slice(page * 20, (page + 1) * 20).map((occurrence, index) => meetingCard(
+                    `Meeting ${page * 20 + index + 1}`, occurrence.starts_at, occurrence.ends_at,
+                    occurrence.status, null,
                     occurrence.status === 'cancelled'
                         ? node('div', {},
                             node('p', { class: 'small mb-2' }, occurrence.cancelled_at
@@ -788,36 +817,43 @@ window.createWorkspaceScheduling = function (ui) {
                             occurrence.replacement_booking_id ? button('View replacement',
                                 () => booking(occurrence.replacement_booking_id, back), 'btn-outline-secondary',
                                 `View replacement for ${meetingTime(occurrence.starts_at)}`) : null)
-                        : node('div', { class: 'booking-meeting-actions' },
+                        : node('div', { class: 'booking-meeting-actions', role: 'group', 'aria-label': `Actions for meeting ${page * 20 + index + 1}` },
                             can('sis:scheduling:manage') ? button('Reschedule',
-                                () => reschedule(record, occurrence, place, back), 'btn-outline-primary',
+                                () => reschedule(record, occurrence, place, back, returnToBooking), 'btn-outline-primary',
                                 `Reschedule meeting on ${meetingTime(occurrence.starts_at)}`) : null,
                             button('Cancel meeting', () => {
                             const panel = openDrawer('Cancel one meeting', 'SPACE REQUEST');
                             panel.append(node('p', { class: 'private-text' }, record.title),
                                 node('p', {}, `${meetingTime(occurrence.starts_at)} through ${meetingTime(occurrence.ends_at)}`),
                                 node('p', {}, 'This cancels only this meeting and releases its reservation. Other meetings keep their current approval. The original date stays in this booking’s history.'),
-                                button('Back to booking', () => booking(id, back)),
+                                button('Back to booking', returnToBooking),
                                 button('Confirm meeting cancellation', async () => {
                                     await request(`/sis/bookings/${id}/occurrences/${occurrence.id}/cancel/`, 'POST',
                                         { version: record.version });
                                     if (!panel.isConnected) return;
                                     notify('Meeting cancelled.');
                                     await ui.refreshDirectory();
-                                    await booking(id, back);
+                                    await returnToBooking();
                                 }, 'btn-primary'));
                             panel.querySelector('button').focus();
                         }, 'btn-outline-danger', `Cancel meeting on ${meetingTime(occurrence.starts_at)}`)),
-                ]), 'Booking meetings'));
-            status.textContent = `Meetings ${page * 20 + 1}–${Math.min((page + 1) * 20, record.occurrences.length)} of ${record.occurrences.length}.`;
+                    `Meeting ${page * 20 + index + 1}`,
+                )), record.occurrences.length ? null : node('p', {}, 'No meetings in this booking.')));
+            status.textContent = record.occurrences.length
+                ? `Meetings ${page * 20 + 1}–${Math.min((page + 1) * 20, record.occurrences.length)} of ${record.occurrences.length}.`
+                : 'No meetings in this booking.';
             const active = record.occurrences.filter(item => item.status !== 'cancelled').length;
             status.textContent += ` ${active} active ${active === 1 ? 'meeting' : 'meetings'}.`;
             previous.disabled = page === 0; next.disabled = (page + 1) * 20 >= record.occurrences.length;
             if (focus) status.focus();
         }
-        body.append(content, status, node('div', { class: 'inline-actions' }, previous, next));
+        const meetings = node('section', { class: 'record-section', 'aria-label': 'Booking schedule' },
+            node('h3', {}, 'Meetings'),
+            node('nav', { class: 'inline-actions mb-3', 'aria-label': 'Booking meeting pages' }, previous, next),
+            status, content);
+        body.append(meetings);
         draw();
-        const decisions = node('div', { class: 'inline-actions', role: 'group', 'aria-label': 'Booking decisions' });
+        const decisions = node('div', { class: 'inline-actions my-3', role: 'group', 'aria-label': 'Booking decisions' });
         if (record.status === "requested")
             decisions.append(
                 button(
@@ -830,7 +866,7 @@ window.createWorkspaceScheduling = function (ui) {
                             () => ({ version: record.version }),
                             async () => {
                                 await ui.refreshDirectory();
-                                await booking(id, back);
+                                await returnToBooking();
                             },
                             {},
                             place ? "Approval reserves the remaining active meetings. Overlapping approved bookings prevent approval."
@@ -849,14 +885,14 @@ window.createWorkspaceScheduling = function (ui) {
                         () => ({ version: record.version }),
                         async () => {
                             await ui.refreshDirectory();
-                            await booking(id, back);
+                            await returnToBooking();
                         },
                         {},
                         "Cancellation applies to every occurrence, releases approved times and keeps the booking history.",
                     ), 'btn-outline-danger',
                 ),
             );
-        if (decisions.childElementCount) body.append(decisions);
+        if (decisions.childElementCount) body.insertBefore(decisions, meetings);
     }
     async function publicEvent(record, back) {
         const body = openDrawer('Public campus event', 'SPACES & SCHEDULING');
@@ -938,7 +974,7 @@ window.createWorkspaceScheduling = function (ui) {
         });
         body.append(edit, preview, node('a', { href: '/portal/events/', class: 'd-inline-block mt-3' }, 'Open the public campus calendar'));
     }
-    async function reschedule(record, occurrence, place, back) {
+    async function reschedule(record, occurrence, place, back, returnToBooking = () => booking(record.id, back)) {
         const body = openDrawer('Reschedule one meeting', 'SPACES & SCHEDULING');
         const fields = [...(!record.section || ['online', 'hybrid'].includes(record.section.delivery_mode) ? [onlineField] : []),
             ['room_id', 'New room', 'lookup', 'rooms'], ...dateFields];
@@ -953,7 +989,7 @@ window.createWorkspaceScheduling = function (ui) {
         const reviewButton = node('button', { type: 'submit', class: 'btn btn-primary' }, 'Review new meeting');
         let epoch = 0;
         for (const event of ['input', 'change']) form.addEventListener(event, () => { ++epoch; status.textContent = ''; });
-        form.append(reviewButton, button('Back to booking', () => booking(record.id, back)));
+        form.append(reviewButton, button('Back to booking', returnToBooking));
         body.append(node('p', { class: 'private-text' }, record.title),
             node('p', {}, `Current meeting: ${roomLabel(place)} · ${meetingTime(occurrence.starts_at)} through ${meetingTime(occurrence.ends_at)}`),
             node('p', { class: 'form-text' },
@@ -990,16 +1026,20 @@ window.createWorkspaceScheduling = function (ui) {
                             : `No approved conflict at review. The replacement will be ${review.status}. Confirmation checks again and preserves the original meeting history.`)
                             : 'An approved booking overlaps the new meeting. Choose another room or time. The current reservation is unchanged.'),
                     button('Back to new meeting', () => { preview.hidden = true; form.hidden = false; reviewButton.focus(); }),
-                    button('Back to booking', () => booking(record.id, back)), confirm);
+                    button('Back to booking', returnToBooking), confirm);
                 form.hidden = true; preview.hidden = false;
                 preview.querySelector('button').focus();
             }, reviewButton);
         });
     }
     async function building(id) {
+        const pending = openDrawer('Building details', 'BUILDING');
+        pending.append(node('p', { role: 'status', class: 'form-text' }, 'Loading building details…'));
         const record = await request(`/sis/buildings/${id}/`);
-        const body = openDrawer(`${record.code} · ${record.name}`, 'BUILDING');
-        body.append(node('p', {}, 'Rooms reference this building by its stable identity. Renaming it preserves room and booking links.'),
+        if (!pending.isConnected) return;
+        const body = openDrawer(`${record.code} · ${record.name}`, 'BUILDING', {record:{key:`building:${id}`,label:record.code,run:()=>building(id)}});
+        body.append(recordSummary([['Building code', record.code], ['Building name', record.name]]),
+            node('p', {class:'form-text'}, 'Rooms reference this building by its stable identity. Renaming it preserves room and booking links.'),
             button('Edit building details', () => buildingForm(record)));
     }
     async function buildingForm(record = null, saved = null, back = null) {
@@ -1025,7 +1065,7 @@ window.createWorkspaceScheduling = function (ui) {
         });
         body.append(form);
     }
-    async function roomForm(record = null, preset = {}) {
+    async function roomForm(record = null, preset = {}, back = null) {
         const fields = [['code', 'Room code'], ['name', 'Room name'],
             ['building_id', 'Building', 'lookup', 'buildings'], ['capacity', 'Capacity', 'number']];
         const body = openDrawer(record ? 'Edit room details' : 'Add a room', 'SPACES & SCHEDULING');
@@ -1037,9 +1077,9 @@ window.createWorkspaceScheduling = function (ui) {
             'Use a short unique code and a descriptive name, for example LIB.101 and Quiet study room. Choose its building; booking links stay connected when room details change.'));
         form.append(button('Add a building', () => {
             const draft = formData(form, fields);
-            return buildingForm(null, id => roomForm(record, { ...draft, building_id: id }), () => roomForm(record, draft));
+            return buildingForm(null, id => roomForm(record, { ...draft, building_id: id }, back), () => roomForm(record, draft, back));
         }));
-        if (record) form.append(button('Back to room agenda', () => room(record.id)));
+        if (record) form.append(button('Back to room agenda', back || (() => room(record.id))));
         form.append(node('button', { type: 'submit', class: 'btn btn-primary' }, record ? 'Save room details' : 'Save room'));
         form.addEventListener('submit', event => {
             event.preventDefault();
@@ -1049,7 +1089,8 @@ window.createWorkspaceScheduling = function (ui) {
                     { ...formData(form, fields), ...(record ? { revision: record.revision } : {}) });
                 if (!body.isConnected) return;
                 notify('Room saved.'); await ui.refreshDirectory();
-                await room(result.id || record.id);
+                if (back) await back();
+                else await room(result.id || record.id);
             }, form.querySelector('[type="submit"]'));
         });
         body.append(form);

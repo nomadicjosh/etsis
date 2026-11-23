@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
+const id = n => `01K000000000000000000000${String(n).padStart(2, '0')}`;
 const program = '01K00000000000000000000001', term = '01K00000000000000000000002', person = '01K00000000000000000000003';
 const formId = '01K00000000000000000000008', receipt = '01K00000000000000000000009', application = '01K00000000000000000000010';
 const fields = [
@@ -32,6 +33,10 @@ async function fixture(page) {
             expect(req.headers()['x-csrf-token']).toBe('fictional-test-token');
             writes.push(JSON.parse(new URLSearchParams(req.postData()).get('_workspace_json')));
             json = { status: 'submitted' };
+        } else if (path === `/sis/applications/${application}/answers/`) {
+            json = { form: { id: formId, name: 'Original Arts application', fields, layout },
+                answers: { goals: '<img src=x onerror=alert(1)>\nOriginal retained answer', previous: false, college: 'Recorded at submission', credits: 0, unlisted: 'Do not show unlisted answers' },
+                versions: [], can_revise: false, can_request: false };
         } else if (path === `/sis/applications/${application}/review/`) {
             json = {
                 application: { id: { value: application }, status: 'submitted' },
@@ -104,4 +109,66 @@ test('admissions read retains original sections, values and plain text without r
     await page.screenshot({ path: 'test-results/application-staff-review-mobile.png' });
     expect(writes).toHaveLength(0);
     expect(errors).toEqual([]);
+});
+
+test('returning to application setup retains selections and resumes the same unfinished answers', async ({ page }) => {
+    const { writes, errors } = await fixture(page); await page.locator('#directory-create').click();
+    const body = page.locator('#drawer-body');
+    await body.getByRole('combobox', { name: 'Person', exact: true }).selectOption(person);
+    await body.getByRole('combobox', { name: 'Academic program', exact: true }).selectOption(program);
+    await body.getByRole('combobox', { name: 'Entry term', exact: true }).selectOption(term);
+    await body.getByRole('button', { name: 'Open program application' }).click();
+    await body.getByRole('textbox', { name: 'Your plans', exact: true }).fill('Unsaved fictional application plans.');
+    await body.getByRole('button', { name: 'Back to application setup', exact: true }).click();
+    await expect(body.getByRole('combobox', { name: 'Academic program', exact: true })).toHaveValue(program);
+    await body.getByRole('button', { name: 'Open program application' }).click();
+    await expect(body.getByRole('textbox', { name: 'Your plans', exact: true })).toHaveValue('Unsaved fictional application plans.');
+    expect(writes).toHaveLength(0); expect(errors).toEqual([]);
+});
+test('application setup has grouped applicant and intake fields with phone and enlarged-text reflow', async ({ page }) => {
+    const { writes, errors } = await fixture(page); await page.locator('#directory-create').click();
+    await expect(page.getByRole('group', { name: 'Applicant', exact: true })).toBeVisible(); await expect(page.getByRole('group', { name: 'Program & intake', exact: true })).toBeVisible();
+    await expect(page.locator('#record-drawer')).not.toHaveClass(/showing|hiding/);
+    await expect(page.getByRole('combobox', { name: 'Person', exact: true })).toBeVisible();
+    await page.screenshot({ path: '/tmp/etsis-admission-start-desktop.png', animations: 'disabled' });
+    await page.setViewportSize({ width: 320, height: 800 }); await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    expect(await page.locator('#drawer-body').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true); await accessible(page);
+    await page.getByRole('group', { name: 'Program & intake', exact: true }).scrollIntoViewIfNeeded(); await page.screenshot({ path: '/tmp/etsis-admission-start-phone.png' });
+    await page.getByRole('button', { name: 'Back to Admissions', exact: true }).click(); await expect(page.locator('#record-drawer')).toBeHidden();
+    expect(writes).toHaveLength(0); expect(errors).toEqual([]);
+});
+
+test('changing the intake selection starts fresh answers instead of copying another program draft', async ({ page }) => {
+    const { writes, errors } = await fixture(page); const otherProgram = id(91);
+    await page.route('**/sis/ui/data/programs/', route => route.fulfill({ json: { items: [
+        { id: program, code: 'DIP.ART', title: 'Studio Arts' }, { id: otherProgram, code: 'ARTS-UG', title: 'Fictional Arts' },
+    ], next_after: null } }));
+    await page.route(`**/sis/forms/programs/${otherProgram}/active/`, route => route.fulfill({ json: {
+        id: id(92), name: 'Fictional other program application', application_program_id: otherProgram, submission_id: id(93),
+        fields: [{ key: 'goals', label: 'New program plans', type: 'textarea', required: true, settings: {} }], layout: [],
+    } }));
+    await page.locator('#directory-create').click(); const body = page.locator('#drawer-body');
+    await body.getByRole('combobox', { name: 'Person', exact: true }).selectOption(person);
+    await body.getByRole('combobox', { name: 'Academic program', exact: true }).selectOption(program);
+    await body.getByRole('combobox', { name: 'Entry term', exact: true }).selectOption(term);
+    await body.getByRole('button', { name: 'Open program application' }).click();
+    await body.getByRole('textbox', { name: 'Your plans', exact: true }).fill('Original private fictional draft.');
+    await body.getByRole('button', { name: 'Back to application setup', exact: true }).click();
+    await body.getByRole('combobox', { name: 'Academic program', exact: true }).selectOption(otherProgram);
+    await body.getByRole('button', { name: 'Open program application' }).click();
+    await expect(body.getByRole('textbox', { name: 'New program plans', exact: true })).toHaveValue('');
+    await expect(body).not.toContainText('Original private fictional draft.'); expect(writes).toHaveLength(0); expect(errors).toEqual([]);
+});
+test('a denied application-form response after closing leaves the workspace free of stale errors', async ({ page }) => {
+    const { writes, errors } = await fixture(page); await page.locator('#directory-create').click(); const body = page.locator('#drawer-body');
+    await body.getByRole('combobox', { name: 'Person', exact: true }).selectOption(person);
+    await body.getByRole('combobox', { name: 'Academic program', exact: true }).selectOption(program);
+    await body.getByRole('combobox', { name: 'Entry term', exact: true }).selectOption(term);
+    let release, start; const pending = new Promise(resolve => { start = resolve; }); const held = new Promise(resolve => { release = resolve; });
+    await page.route(`**/sis/forms/programs/${program}/active/`, async route => { start(); await held; await route.fulfill({ status: 403, json: { error: 'Fictional denied form.' } }); });
+    await body.getByRole('button', { name: 'Open program application' }).click(); await pending;
+    await page.getByRole('button', { name: 'Close record', exact: true }).click(); await expect(page.locator('#record-drawer')).toBeHidden();
+    const finished = page.waitForResponse(response => response.url().endsWith(`/programs/${program}/active/`)); release(); await finished;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(page.locator('#workspace-alert')).toBeHidden(); await expect(page.locator('#record-drawer')).toBeHidden(); expect(writes).toHaveLength(0); expect(errors).toEqual([]);
 });

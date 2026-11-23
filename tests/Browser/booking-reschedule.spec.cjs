@@ -85,7 +85,7 @@ test('reviewed room moves retain the original reservation through conflicts and 
     await recordAction(page, 'View previous booking');
     await expect(body).toContainText('LIB.101 · Seminar room');
     await expect(body.getByRole('button', { name: /^Reschedule meeting on / })).toHaveCount(1);
-    await expect(body.locator('tbody .status-badge').filter({ hasText: /^cancelled$/ })).toHaveCount(1);
+    await expect(body.locator('.scheduling-meeting-list .status-badge').filter({ hasText: /^cancelled$/ })).toHaveCount(1);
     await page.getByRole('button', { name: /^View replacement for / }).click();
     await expect(await revealRecordAction(page, 'View previous booking')).toBeVisible();
     const confirmations = state.calls.filter(call => call.path.endsWith('/reschedule/confirm/'));

@@ -1,12 +1,12 @@
 window.createTimeReviewPolicy = function (ui) {
     "use strict";
-    const { node, request, task, openDrawer, table } = ui;
-    const button = (label, run) =>
+    const { node, request, task, openDrawer, table, recordSummary, backToWorkspace } = ui;
+    const button = (label, run, style = "btn-outline-primary") =>
         node(
             "button",
             {
                 type: "button",
-                class: "btn btn-outline-primary",
+                class: `btn ${style}`,
                 onclick: (event) => task(run, event.currentTarget),
             },
             label,
@@ -81,15 +81,89 @@ window.createTimeReviewPolicy = function (ui) {
         );
     }
     async function open() {
-        const body = openDrawer("Timesheet review policy", "INSTITUTION SETUP");
-        body.append(node("p", { role: "status" }, "Loading policy…"));
-        const data = await request("/sis/time-policy/");
+        const body = openDrawer("Timesheet review policy", "INSTITUTION SETUP", { record: null });
+        const workspaceReturn = () =>
+            backToWorkspace
+                ? button("Back to Team & timesheets", backToWorkspace, "btn-link mb-3")
+                : null;
+        const stage = (title) => {
+            document.getElementById("drawer-title").textContent = title;
+            const location = document.querySelector("#drawer-body .record-task-location");
+            if (location) location.textContent = title;
+        };
+        const denied = () => {
+            stage("Policy access unavailable");
+            body.replaceChildren(
+                ...[
+                    workspaceReturn(),
+                    node(
+                        "p",
+                        { role: "status" },
+                        "Timesheet review policy access is no longer available.",
+                    ),
+                ].filter(Boolean),
+            );
+        };
+        const loading = node("p", { role: "status" }, "Loading policy…");
+        body.append(...[workspaceReturn(), loading].filter(Boolean));
+        let data;
+        try {
+            data = await request("/sis/time-policy/");
+        } catch (failure) {
+            if (!body.isConnected) return;
+            if (failure.status === 403) denied();
+            else
+                body.replaceChildren(
+                    ...[
+                        workspaceReturn(),
+                        node(
+                            "p",
+                            { role: "alert" },
+                            "The current policy could not be loaded. Try again.",
+                        ),
+                        button("Retry policy read", open),
+                    ].filter(Boolean),
+                );
+            return;
+        }
         if (!body.isConnected) return;
-        const fields = {};
         const form = node("form", {
-            class: "record-form",
+            class: "record-form time-policy-form",
             "aria-label": "Timesheet review policy",
         });
+        const group = (label, explanation) => {
+            const grid = node("div", { class: "record-form-grid" });
+            form.append(
+                node(
+                    "fieldset",
+                    { class: "record-form-section" },
+                    node("legend", {}, label),
+                    node("p", { class: "form-text" }, explanation),
+                    grid,
+                ),
+            );
+            return grid;
+        };
+        const field = (container, label, control, help = "", wide = false) => {
+            const hint = help
+                ? node("p", { id: `${control.id}-help`, class: "form-text mb-0" }, help)
+                : null;
+            if (hint) control.setAttribute("aria-describedby", hint.id);
+            container.append(
+                node(
+                    "div",
+                    { class: `record-form-field${wide ? " record-form-wide" : ""}` },
+                    node("label", { for: control.id, class: "form-label" }, label),
+                    control,
+                    ...(hint ? [hint] : []),
+                ),
+            );
+        };
+        const time = group(
+            "Clocked-time review",
+            "These thresholds flag recorded work for review across an employee’s positions. Pending and approved time count; rejected time is excluded. Blank limits leave that threshold unset.",
+        );
+        const fields = {};
         for (const [key, label, maximum] of [
             ["daily_minutes", "Daily limit in minutes (optional)", 1500],
             ["weekly_minutes", "Weekly limit in minutes (optional)", 10140],
@@ -103,10 +177,7 @@ window.createTimeReviewPolicy = function (ui) {
                 step: 1,
                 value: data.rules[key] ?? "",
             });
-            form.append(
-                node("label", { for: fields[key].id, class: "form-label" }, label),
-                fields[key],
-            );
+            field(time, label, fields[key]);
         }
         const mode = node(
             "select",
@@ -115,12 +186,31 @@ window.createTimeReviewPolicy = function (ui) {
             node("option", { value: "exception_required" }, "Require exception approval"),
         );
         mode.value = data.rules.mode;
+        field(
+            time,
+            "How flags affect approval",
+            mode,
+            "Advisory flags allow the normal HR decision. Required exceptions also need the separate exception duty and a reason.",
+            true,
+        );
         const overlap = node("input", {
             type: "checkbox",
             id: "time-policy-overlap",
             class: "form-check-input",
             checked: data.rules.overlaps,
         });
+        time.append(
+            node(
+                "div",
+                { class: "record-form-field record-form-wide form-check" },
+                overlap,
+                node(
+                    "label",
+                    { for: overlap.id, class: "form-check-label" },
+                    "Flag overlapping work intervals",
+                ),
+            ),
+        );
         const zone = node("input", {
             id: "time-policy-timezone",
             class: "form-control",
@@ -128,6 +218,17 @@ window.createTimeReviewPolicy = function (ui) {
             required: true,
             maxlength: 80,
         });
+        field(
+            time,
+            "Institutional timezone",
+            zone,
+            "Use an institution timezone such as America/Los_Angeles. It determines the calendar days and weeks used for these checks.",
+            true,
+        );
+        const teaching = group(
+            "Teaching contact hours",
+            "A contact hour is a teaching measure, separate from clocked work. Enter the institution’s instructional-minute unit and rounding rule for a typical teaching week.",
+        );
         const contact = node("input", {
             type: "number",
             id: "contact-unit-minutes",
@@ -138,83 +239,101 @@ window.createTimeReviewPolicy = function (ui) {
             required: true,
             value: data.rules.contact_unit_minutes,
         });
+        field(teaching, "Instructional minutes per contact hour", contact);
+        const roundingLabels = {
+            nearest: "Nearest thousandth (half up)",
+            down: "Round down to thousandth",
+            up: "Round up to thousandth",
+        };
         const rounding = node(
             "select",
             { id: "contact-rounding", class: "form-select" },
-            ...["nearest", "down", "up"].map((value) =>
-                node(
-                    "option",
-                    { value },
-                    value === "nearest"
-                        ? "Nearest thousandth (half up)"
-                        : value === "down"
-                          ? "Round down to thousandth"
-                          : "Round up to thousandth",
-                ),
+            ...Object.entries(roundingLabels).map(([value, label]) =>
+                node("option", { value }, label),
             ),
         );
         rounding.value = data.rules.contact_rounding;
-        form.append(
-            node("h3", { class: "h6" }, "Teaching contact-hours calculation"),
-            node(
-                "label",
-                { for: contact.id, class: "form-label" },
-                "Instructional minutes per contact hour",
-            ),
-            contact,
-            node("label", { for: rounding.id, class: "form-label" }, "Contact-hours rounding"),
-            rounding,
+        field(teaching, "Contact-hours rounding", rounding);
+        teaching.append(
             node(
                 "p",
-                { class: "form-text" },
-                "Weekly contact hours = section weekly instructional minutes ÷ this unit. The fallback is 50 minutes, rounded to the nearest thousandth. This never converts contact hours into timesheet work or payroll.",
+                { class: "form-text record-form-wide mb-0" },
+                "Weekly contact hours = section weekly instructional minutes ÷ instructional minutes per contact hour. With no published policy, the default is 50 minutes, rounded to the nearest thousandth. This does not calculate timesheet work or payroll.",
             ),
+        );
+        const publication = group(
+            "Policy publication",
+            "Review all settings before confirming. New approvals use the published policy; previously recorded decisions and published offerings retain their original policy evidence.",
         );
         const reason = node("textarea", {
             id: "time-policy-reason",
             class: "form-control",
             maxlength: 1000,
+            rows: 3,
             required: true,
         });
-        const error = node("div", { role: "alert", class: "text-danger" });
+        field(
+            publication,
+            "Reason for policy publication",
+            reason,
+            "Explain why the institution is setting or changing these rules.",
+            true,
+        );
+        const error = node("div", { role: "alert", class: "time-policy-error", tabindex: "-1" });
         const submit = node(
             "button",
             { type: "submit", class: "btn btn-primary" },
             "Review time policy",
         );
         form.append(
-            node("label", { for: mode.id, class: "form-label" }, "How flags affect approval"),
-            mode,
+            error,
             node(
                 "div",
-                { class: "form-check" },
-                overlap,
-                node(
-                    "label",
-                    { for: overlap.id, class: "form-check-label" },
-                    "Flag overlapping work intervals",
-                ),
+                { class: "inline-actions time-policy-actions" },
+                submit,
+                button("Reload current policy", open),
             ),
-            node("label", { for: zone.id, class: "form-label" }, "Institutional timezone"),
-            zone,
-            node("label", { for: reason.id, class: "form-label" }, "Reason for policy publication"),
-            reason,
-            error,
-            submit,
+            node(
+                "p",
+                { class: "form-text" },
+                "Reload current policy replaces these unsaved settings.",
+            ),
         );
-        const edit = () =>
-            body.replaceChildren(
+        const context = () =>
+            node(
+                "section",
+                { class: "time-policy-context", "aria-label": "Current policy" },
+                node(
+                    "h3",
+                    { class: "h6" },
+                    data.publication_id ? `Published policy ${data.version}` : "Default settings",
+                ),
                 node(
                     "p",
-                    {},
-                    "Set institutional review thresholds. Blank limits mean no threshold. These rules do not calculate payroll or convert teaching contact hours to clocked work.",
+                    { class: "form-text mb-0" },
+                    data.publication_id
+                        ? "You are editing a new policy based on this publication. Earlier decisions keep their recorded settings."
+                        : "No institutional policy has been published. The defaults below apply until publication.",
                 ),
-                form,
             );
+        const edit = () => {
+            if (!body.isConnected) return;
+            stage("Timesheet review policy");
+            body.replaceChildren(...[workspaceReturn(), context(), form].filter(Boolean));
+        };
         edit();
+        const minutes = (value) => (value == null ? "Not set" : `${value} minutes`);
+        const reviewSection = (label, rows) =>
+            node(
+                "section",
+                { class: "time-policy-review-section", "aria-label": label },
+                node("h3", { class: "h6" }, label),
+                recordSummary(rows),
+            );
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
+                if (!form.isConnected || !form.reportValidity()) return;
                 error.textContent = "";
                 const rules = {
                     contact_unit_minutes: Number(contact.value),
@@ -238,41 +357,99 @@ window.createTimeReviewPolicy = function (ui) {
                         reason: reason.value,
                     });
                     if (!body.isConnected) return;
-                    const message = node("div", { role: "alert", class: "text-danger" });
+                    const reviewedRules = review.rules;
+                    stage("Review timesheet policy");
+                    const message = node("div", {
+                        role: "alert",
+                        class: "time-policy-error",
+                        tabindex: "-1",
+                    });
                     body.replaceChildren(
-                        node("h3", {}, "Review institutional time policy"),
-                        node(
-                            "p",
-                            {},
-                            `Daily: ${rules.daily_minutes ?? "Not set"} minutes · Weekly: ${rules.weekly_minutes ?? "Not set"} minutes · Overlap checks: ${rules.overlaps ? "Yes" : "No"} · ${rules.mode === "advisory" ? "Advisory" : "Exception approval required"} · ${rules.timezone} · Contact hour: ${rules.contact_unit_minutes} instructional minutes, rounding ${rules.contact_rounding}`,
-                        ),
-                        node("p", {}, review.reason),
+                        button("Back to policy settings", edit, "btn-link mb-3"),
                         node(
                             "p",
                             { class: "form-text" },
-                            "New approvals use this policy. Previously recorded decisions retain their original policy and evidence. This review expires in twenty minutes.",
+                            "Review both calculations and the publication reason before confirming. This review expires in twenty minutes.",
+                        ),
+                        reviewSection("Clocked-time review", [
+                            ["Daily limit", minutes(reviewedRules.daily_minutes)],
+                            ["Weekly limit", minutes(reviewedRules.weekly_minutes)],
+                            [
+                                "Overlapping intervals",
+                                reviewedRules.overlaps ? "Flag for review" : "No overlap flag",
+                            ],
+                            [
+                                "Approval rule",
+                                reviewedRules.mode === "advisory"
+                                    ? "Advisory warnings"
+                                    : "Exception approval required",
+                            ],
+                            ["Institutional timezone", reviewedRules.timezone],
+                        ]),
+                        reviewSection("Teaching contact hours", [
+                            ["Instructional minutes per contact hour", reviewedRules.contact_unit_minutes],
+                            ["Contact-hours rounding", roundingLabels[reviewedRules.contact_rounding]],
+                            ["Period", "Typical teaching week"],
+                        ]),
+                        node(
+                            "section",
+                            {
+                                class: "time-policy-review-section",
+                                "aria-label": "Publication reason",
+                            },
+                            node("h3", { class: "h6" }, "Publication reason"),
+                            node("p", { class: "time-policy-reason" }, review.reason),
+                        ),
+                        node(
+                            "p",
+                            { class: "form-text" },
+                            "New approvals use this policy. Previously recorded decisions and published offerings retain their original policy and evidence.",
                         ),
                         message,
-                        button("Confirm time policy", async () => {
-                            try {
-                                await request("/sis/time-policy/publish/", "POST", review);
-                                if (!body.isConnected) return;
-                                body.replaceChildren(
-                                    node(
-                                        "p",
-                                        { role: "status", class: "alert alert-success" },
-                                        "Timesheet policy published.",
-                                    ),
-                                    button("View current policy", open),
-                                );
-                            } catch (failure) {
-                                if (body.isConnected) message.textContent = failure.message;
-                            }
-                        }),
-                        button("Revise policy", edit),
+                        node(
+                            "div",
+                            { class: "inline-actions time-policy-actions" },
+                            button(
+                                "Confirm time policy",
+                                async () => {
+                                    try {
+                                        await request("/sis/time-policy/publish/", "POST", review);
+                                        if (!body.isConnected) return;
+                                        stage("Timesheet policy published");
+                                        body.replaceChildren(
+                                            ...[
+                                                workspaceReturn(),
+                                                node(
+                                                    "p",
+                                                    {
+                                                        role: "status",
+                                                        class: "alert alert-success",
+                                                    },
+                                                    "Timesheet policy published.",
+                                                ),
+                                                button("View current policy", open),
+                                            ].filter(Boolean),
+                                        );
+                                    } catch (failure) {
+                                        if (!body.isConnected) return;
+                                        if (failure.status === 403) denied();
+                                        else {
+                                            message.textContent = failure.message;
+                                            message.focus();
+                                        }
+                                    }
+                                },
+                                "btn-primary",
+                            ),
+                        ),
                     );
                 } catch (failure) {
-                    if (form.isConnected) error.textContent = failure.message;
+                    if (!body.isConnected) return;
+                    if (failure.status === 403) denied();
+                    else if (form.isConnected) {
+                        error.textContent = failure.message;
+                        error.focus();
+                    }
                 }
             }, submit);
         });

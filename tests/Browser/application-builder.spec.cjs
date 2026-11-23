@@ -503,3 +503,17 @@ test('undo during and after saving preserves the current server identity and exp
     expect(posted[1].fields[0].label).toBe('Original question');
     expect(errors).toEqual([]);
 });
+
+test('the first saved draft binds its collapsible preferences without storing the new definition', async ({ page }) => {
+    const { writes, errors } = await fixture(page);
+    await page.locator('#form-name').fill('Private fictional form name'); await page.locator('#form-level').selectOption(level);
+    await add(page, 'text', 'Private fictional question'); await page.getByRole('button', { name: 'Collapse all', exact: true }).click();
+    expect(await page.evaluate(() => localStorage.length)).toBe(0);
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect.poll(() => page.evaluate(() => Object.keys(JSON.parse(localStorage.getItem('etsis.form-library.collapses') || '{"forms":{}}').forms).length)).toBe(1);
+    await page.reload(); await page.locator('.form-library-item').first().click();
+    await expect(page.getByRole('button', { name: 'Expand field 1', exact: true })).toHaveAttribute('aria-expanded', 'false');
+    const encoded = await page.evaluate(() => localStorage.getItem('etsis.form-library.collapses'));
+    expect(encoded).not.toContain('Private fictional'); expect(encoded).not.toContain(draftId);
+    expect(writes.filter(write => write.path === '/sis/forms/')).toHaveLength(1); expect(errors).toEqual([]);
+});

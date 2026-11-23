@@ -1,7 +1,18 @@
 /* Configure term templates, generate academic years, maintain terms, and read derived cohorts. */
 window.createWorkspaceAcademicCalendar = function (ui) {
     "use strict";
-    const { node, request: transport, task, buildForm, formData, openDrawer, table, badge, notify } = ui;
+    const {
+        node,
+        request: transport,
+        task,
+        buildForm,
+        formData,
+        openDrawer,
+        table,
+        badge,
+        notify,
+        recordSummary,
+    } = ui;
     let activeBody = null;
     let exampleStart = new Date().getFullYear();
     async function request(...args) {
@@ -20,7 +31,10 @@ window.createWorkspaceAcademicCalendar = function (ui) {
     }
     function openPanel(title, label) {
         const drawer = openDrawer(title, label);
-        activeBody = node("div");
+        activeBody = node("div", { class: "academic-calendar-panel" });
+        activeBody.append(
+            node("p", { role: "status", class: "form-text" }, "Loading academic calendar…"),
+        );
         drawer.append(activeBody);
         return activeBody;
     }
@@ -38,12 +52,6 @@ window.createWorkspaceAcademicCalendar = function (ui) {
             },
             label,
         );
-    const grid = (headers, rows, label) =>
-        node(
-            "div",
-            { class: "table-responsive", role: "region", tabindex: "0", "aria-label": label },
-            table(headers, rows, label),
-        );
     const kinds = [
         { value: "standard", label: "Standard — no overlapping standard terms" },
         { value: "non_standard", label: "Non-standard — overlap permitted" },
@@ -53,7 +61,13 @@ window.createWorkspaceAcademicCalendar = function (ui) {
         { value: "END_YEAR", label: `Second year — ${exampleStart + 1} (Spring / Summer example)` },
     ];
     const termFields = [
-        ["academic_year_id", "Academic year (required for new terms)", "lookup", "academic_years", false],
+        [
+            "academic_year_id",
+            "Academic year (required for new terms)",
+            "lookup",
+            "academic_years",
+            false,
+        ],
         ["code", "Term code"],
         ["name", "Term display name"],
         ["kind", "Term category", "choice", kinds],
@@ -61,83 +75,198 @@ window.createWorkspaceAcademicCalendar = function (ui) {
         ["ends_on", "Last day", "date"],
         ["add_drop_ends_on", "Last day to add or drop", "date"],
     ];
-    async function years(after = null, stack = []) {
-        const result = await request("/sis/academic-years/", "POST", after ? { after } : {});
-        const body = openPanel("Academic years", "TERM TYPES → ACADEMIC YEAR → TERMS");
-        body.append(
+    function groupForm(form, sections) {
+        for (const [label, keys, description = ""] of sections) {
+            const fields = node("div", { class: "record-form-grid" });
+            const section = node(
+                "fieldset",
+                { class: "record-form-section" },
+                node("legend", {}, label),
+                ...(description ? [node("p", { class: "form-text" }, description)] : []),
+                fields,
+            );
+            for (const key of keys) {
+                const wrapper = form.elements[key]?.closest(".mb-4");
+                if (wrapper) {
+                    wrapper.classList.add("record-form-field");
+                    fields.append(wrapper);
+                }
+            }
+            form.append(section);
+        }
+    }
+    const cards = (label, items) =>
+        node("ul", { class: "calendar-record-list", "aria-label": label }, items);
+    const card = (title, content) =>
+        node(
+            "li",
+            {},
+            node(
+                "article",
+                { class: "surface calendar-record-card" },
+                node("h3", { class: "h6" }, title),
+                ...content,
+            ),
+        );
+    async function library(kind, after, stack, origin = null) {
+        const isYear = kind === "years",
+            label = isYear ? "academic year" : "term type";
+        const title = isYear ? "Academic years" : "Term types";
+        const body = openPanel(title, isYear ? "ACADEMIC CALENDAR" : "REUSABLE CALENDAR TEMPLATES");
+        let accepted = { after, stack: [...stack] },
+            nextAfter = null,
+            busy = false;
+        const reopen = () => library(kind, accepted.after, accepted.stack, origin);
+        const actions = node(
+            "div",
+            { class: "inline-actions mb-3" },
+            isYear
+                ? button("Create academic year", () => createYear(reopen), true)
+                : button("Add term type", () => editType(null, reopen), true),
+            isYear
+                ? button("Set up term types", () =>
+                      types(null, [], { back: reopen, label: "Back to academic years" }),
+                  )
+                : button("Academic years", () => years()),
+        );
+        const status = node(
+            "p",
+            { class: "form-text", role: "status", tabindex: "-1" },
+            "Loading…",
+        );
+        const content = node("div");
+        const control = (label, run) =>
+            node(
+                "button",
+                {
+                    type: "button",
+                    class: "btn btn-outline-primary",
+                    onclick: () => {
+                        if (!busy) task(run);
+                    },
+                },
+                label,
+            );
+        const previous = control(`Previous ${label} page`, () =>
+            load(accepted.stack.at(-1), accepted.stack.slice(0, -1), true),
+        );
+        const next = control(`Next ${label} page`, () =>
+            load(nextAfter, [...accepted.stack, accepted.after], true),
+        );
+        const refresh = control(`Refresh ${title.toLowerCase()}`, () =>
+            load(accepted.after, accepted.stack, true),
+        );
+        body.replaceChildren(
+            ...(origin ? [button(origin.label, origin.back)] : []),
             node(
                 "p",
-                {},
-                "Set up your term types first. Enter a start year and review the generated terms. The following year is supplied automatically. Matriculation cohorts derive from the academic year; they have no separate setup form.",
+                { class: "form-text" },
+                isYear
+                    ? "Set up term types, enter a start year, then review and confirm its terms. Matriculation cohorts derive from the academic year; they have no separate setup form."
+                    : "Active templates generate future academic years. Editing a template preserves existing term dates, classifications and academic records.",
             ),
-            button("Set up term types", () => types()),
-            button("Create academic year", createYear, true),
-        );
-        body.append(
-            result.items.length
-                ? grid(
-                      ["Academic year", "Term dates", "Terms", "Origin"],
-                      result.items.map((y) => [
-                          y.code,
-                          `${y.starts_on} through ${y.ends_on}`,
-                          y.term_count ?? "—",
-                          y.legacy
-                              ? "Existing calendar — review Terms classifications"
-                              : "Generated from term types",
-                      ]),
-                      "Academic years",
-                  )
-                : node(
-                      "p",
-                      {},
-                      "No academic years yet. Configure active term types, then create your first year.",
-                  ),
-        );
-        if (stack.length)
-            body.append(button("Previous academic year page", () => years(stack.at(-1), stack.slice(0, -1))));
-        if (result.next_after)
-            body.append(button("Next academic year page", () => years(result.next_after, [...stack, after])));
-    }
-    async function types(after = null, stack = []) {
-        const result = await request("/sis/term-types/", "POST", after ? { after } : {});
-        const body = openPanel("Term types", "REUSABLE CALENDAR TEMPLATES");
-        body.append(
+            actions,
+            status,
             node(
-                "p",
-                {},
-                "Active term types generate terms when an academic year is created. Editing a template affects future generation; existing terms keep their dates and classification.",
+                "nav",
+                { class: "inline-actions mb-3", "aria-label": `${title} pages` },
+                previous,
+                next,
+                refresh,
             ),
-            button("Add term type", () => editType(), true),
-            button("Academic years", () => years()),
+            content,
         );
-        body.append(
-            result.items.length
-                ? grid(
-                      ["Type", "Display template", "Code template", "Category", "Status", "Action"],
-                      result.items.map((t) => [
-                          t.code,
-                          t.name_pattern,
-                          t.code_pattern,
-                          t.kind === "standard" ? "Standard" : "Non-standard",
-                          badge(t.active ? "Active" : "Inactive"),
-                          button(`Edit ${t.code}`, () => editType(t)),
-                      ]),
-                      "Term type templates",
-                  )
-                : node(
-                      "p",
-                      {},
-                      "Add your usual terms, such as Fall and Spring. Use non-standard types for overlapping sessions.",
-                  ),
-        );
-        if (stack.length)
-            body.append(button("Previous term type page", () => types(stack.at(-1), stack.slice(0, -1))));
-        if (result.next_after)
-            body.append(button("Next term type page", () => types(result.next_after, [...stack, after])));
+        function controls(pending) {
+            busy = pending;
+            previous.disabled = pending || !accepted.stack.length;
+            next.disabled = pending || !nextAfter;
+            refresh.disabled = pending;
+            content.inert = pending;
+            content.setAttribute("aria-busy", String(pending));
+        }
+        async function load(cursor, trail, focus = false) {
+            controls(true);
+            let result;
+            try {
+                result = await request(
+                    isYear ? "/sis/academic-years/" : "/sis/term-types/",
+                    "POST",
+                    cursor ? { after: cursor } : {},
+                );
+            } catch (error) {
+                if (status.isConnected)
+                    status.textContent =
+                        "This page could not be loaded. Any previous page remains displayed. Use Refresh to try again.";
+                throw error;
+            } finally {
+                if (content.isConnected) controls(false);
+            }
+            if (!body.isConnected || !content.isConnected) return;
+            accepted = { after: cursor, stack: [...trail] };
+            nextAfter = result.next_after;
+            status.textContent = `${result.items.length} ${isYear ? "academic years" : "term types"} on this page.${nextAfter ? " More are available." : ""}`;
+            content.replaceChildren(
+                result.items.length
+                    ? cards(
+                          title,
+                          result.items.map((item) =>
+                              isYear
+                                  ? card(item.code, [
+                                        recordSummary([
+                                            [
+                                                "Term dates",
+                                                `${item.starts_on} through ${item.ends_on}`,
+                                            ],
+                                            ["Terms", item.term_count ?? "Not supplied"],
+                                            [
+                                                "Origin",
+                                                item.legacy
+                                                    ? "Existing calendar — review Terms classifications"
+                                                    : "Generated from term types",
+                                            ],
+                                        ]),
+                                    ])
+                                  : card(item.code, [
+                                        recordSummary([
+                                            ["Display template", item.name_pattern],
+                                            ["Code template", item.code_pattern],
+                                            [
+                                                "Category",
+                                                item.kind === "standard"
+                                                    ? "Standard"
+                                                    : "Non-standard",
+                                            ],
+                                            ["Status", badge(item.active ? "Active" : "Inactive")],
+                                        ]),
+                                        button(`Edit ${item.code}`, () => editType(item, reopen)),
+                                    ]),
+                          ),
+                      )
+                    : node(
+                          "p",
+                          {},
+                          isYear
+                              ? "No academic years yet. Configure active term types, then create your first year."
+                              : "Add your usual terms, such as Fall and Spring. Use non-standard types for overlapping sessions.",
+                      ),
+            );
+            controls(false);
+            if (focus) status.focus({ preventScroll: true });
+        }
+        await load(after, stack);
     }
-    async function editType(value = null) {
+    const years = (after = null, stack = []) => library("years", after, stack);
+    const types = (after = null, stack = [], origin = null) =>
+        library("types", after, stack, origin);
+    async function editType(value = null, back = () => types()) {
+        const body = openPanel(
+            value ? "Edit term type" : "Add term type",
+            "FUTURE TERM GENERATION",
+        );
+        const backControl = button("Back to term types", back);
+        body.prepend(backControl);
         const id = value?.id || (await request("/sis/ui/operation-id/")).id;
-        const body = openPanel(value ? "Edit term type" : "Add term type", "FUTURE TERM GENERATION");
+        if (!body.isConnected) return;
         const fields = [
             ["code", "Term type code"],
             ["name_pattern", "Display name template"],
@@ -167,6 +296,12 @@ window.createWorkspaceAcademicCalendar = function (ui) {
         }
         fields.push(["active", "Use this type when generating new academic years", "checkbox"]);
         const form = await buildForm(fields, preset);
+        if (!body.isConnected) return;
+        groupForm(form, [
+            ["Template identity", ["code", "name_pattern", "code_pattern", "kind"]],
+            ...dateFields.map(([key, label]) => [label, [`${key}_month_day`, `${key}_year`]]),
+            ["Future generation", ["active"]],
+        ]);
         const exampleInput = node("input", {
             type: "number",
             id: `term-type-example-${id}`,
@@ -231,10 +366,50 @@ window.createWorkspaceAcademicCalendar = function (ui) {
             ["Fall", "Fall", "FA", "START_YEAR", "08-24", "12-18", "09-07", "standard", presets],
             ["Spring", "Spring", "SP", "END_YEAR", "01-04", "05-31", "01-18", "standard", presets],
             ["J-Term", "January", "J", "END_YEAR", "01-04", "01-31", "01-10", "standard", january],
-            ["February Spring", "Spring", "SP", "END_YEAR", "02-01", "05-31", "02-15", "standard", january],
-            ["Summer", "Summer", "SU", "END_YEAR", "06-01", "08-30", "06-08", "non_standard", summer],
-            ["Summer 1", "Summer 1", "S1", "END_YEAR", "06-01", "07-15", "06-08", "non_standard", summer],
-            ["Summer 2", "Summer 2", "S2", "END_YEAR", "07-16", "08-30", "07-23", "non_standard", summer],
+            [
+                "February Spring",
+                "Spring",
+                "SP",
+                "END_YEAR",
+                "02-01",
+                "05-31",
+                "02-15",
+                "standard",
+                january,
+            ],
+            [
+                "Summer",
+                "Summer",
+                "SU",
+                "END_YEAR",
+                "06-01",
+                "08-30",
+                "06-08",
+                "non_standard",
+                summer,
+            ],
+            [
+                "Summer 1",
+                "Summer 1",
+                "S1",
+                "END_YEAR",
+                "06-01",
+                "07-15",
+                "06-08",
+                "non_standard",
+                summer,
+            ],
+            [
+                "Summer 2",
+                "Summer 2",
+                "S2",
+                "END_YEAR",
+                "07-16",
+                "08-30",
+                "07-23",
+                "non_standard",
+                summer,
+            ],
         ]) {
             group.append(
                 button(`Use ${label} starting point`, () => {
@@ -273,7 +448,11 @@ window.createWorkspaceAcademicCalendar = function (ui) {
         form.addEventListener("input", () => {
             editVersion++;
             preview.replaceChildren(
-                node("p", { class: "form-text" }, "Settings changed. Preview the generated term again."),
+                node(
+                    "p",
+                    { class: "form-text" },
+                    "Settings changed. Preview the generated term again.",
+                ),
             );
         });
         const previewButton = button("Preview generated term", async () => {
@@ -286,11 +465,19 @@ window.createWorkspaceAcademicCalendar = function (ui) {
             });
             if (version !== editVersion || !body.isConnected) return;
             preview.replaceChildren(
-                node("p", {}, `Academic year ${result.academic_year}: ${result.name} (${result.code}).`),
-                grid(
-                    ["First day", "Last day", "Drop/add through"],
-                    [[result.starts_on, result.ends_on, result.add_drop_ends_on]],
-                    "Example generated term dates",
+                node(
+                    "p",
+                    {},
+                    `Academic year ${result.academic_year}: ${result.name} (${result.code}).`,
+                ),
+                node(
+                    "section",
+                    { role: "region", "aria-label": "Example generated term dates" },
+                    recordSummary([
+                        ["First day", result.starts_on],
+                        ["Last day", result.ends_on],
+                        ["Drop/add through", result.add_drop_ends_on],
+                    ]),
                 ),
                 node(
                     "p",
@@ -299,7 +486,11 @@ window.createWorkspaceAcademicCalendar = function (ui) {
                 ),
             );
         });
-        const patternPreview = node("p", { class: "form-text", role: "status", "aria-live": "polite" });
+        const patternPreview = node("p", {
+            class: "form-text",
+            role: "status",
+            "aria-live": "polite",
+        });
         const updatePatternPreview = () => {
             const pattern = form.elements.code_pattern.value;
             const code = (start) =>
@@ -325,9 +516,8 @@ window.createWorkspaceAcademicCalendar = function (ui) {
                 { class: "form-text" },
                 "Use {{START_YEAR}} and {{END_YEAR}} for full years. Short forms {{START_YEAR_SHORT}} and {{END_YEAR_SHORT}} preserve codes such as 26/FA. Dates use the selected year and an exact month/day. Invalid leap-day dates require a template review.",
             ),
-            previewButton,
+            node("div", { class: "inline-actions mb-3" }, previewButton, save),
             preview,
-            save,
         );
         form.addEventListener("submit", (event) => {
             event.preventDefault();
@@ -339,20 +529,22 @@ window.createWorkspaceAcademicCalendar = function (ui) {
                     if (error.status && error.status < 500) command = null;
                     throw error;
                 }
+                if (!body.isConnected || !form.isConnected) return;
                 notify("Term type saved. Existing terms were preserved.");
-                await types();
+                await back();
             }, save);
         });
-        body.append(
-            form,
-            button("Back to term types", () => types()),
-        );
+        body.replaceChildren(backControl, form);
     }
-    async function createYear() {
+    async function createYear(back = () => years(), start = exampleStart) {
         const body = openPanel("Create academic year", "START YEAR → GENERATED TERMS → CONFIRM");
+        const backControl = button("Back to academic years", back);
+        body.prepend(backControl);
         const form = await buildForm([["start_year", "Start year", "number"]], {
-            start_year: exampleStart,
+            start_year: start,
         });
+        if (!body.isConnected) return;
+        groupForm(form, [["Academic year", ["start_year"]]]);
         form.elements.start_year.min = 1000;
         form.elements.start_year.max = 2998;
         const status = node("p", { role: "status", "aria-live": "polite" });
@@ -363,47 +555,62 @@ window.createWorkspaceAcademicCalendar = function (ui) {
         };
         form.elements.start_year.addEventListener("input", update);
         update();
-        const next = node("button", { type: "submit", class: "btn btn-primary" }, "Review generated terms");
+        const next = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review generated terms",
+        );
         form.append(status, next);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
-            task(
-                async () =>
-                    confirmYear(
-                        await request("/sis/academic-years/review/", "POST", {
-                            start_year: Number(form.elements.start_year.value),
-                        }),
-                    ),
-                next,
-            );
+            task(async () => {
+                const startYear = Number(form.elements.start_year.value);
+                const plan = await request("/sis/academic-years/review/", "POST", {
+                    start_year: startYear,
+                });
+                if (!body.isConnected || Number(form.elements.start_year.value) !== startYear)
+                    return;
+                confirmYear(plan, back);
+            }, next);
         });
-        body.append(
+        body.replaceChildren(
+            backControl,
             node(
                 "p",
                 {},
                 "Every active term type is included. Matching existing terms with identical codes and dates can be linked without replacing their academic or financial records.",
             ),
             form,
-            button("Review term types", () => types()),
+            button("Review term types", () => {
+                const draft = Number(form.elements.start_year.value);
+                return types(null, [], {
+                    label: "Back to academic year setup",
+                    back: () => createYear(back, draft),
+                });
+            }),
         );
     }
     function termGrid(terms) {
-        return grid(
-            ["Term", "Code", "Category", "Starts", "Ends", "Drop/add through", "Action"],
-            terms.map((t) => [
-                t.name,
-                t.code,
-                t.kind === "standard" ? "Standard" : "Non-standard",
-                t.starts_on,
-                t.ends_on,
-                t.add_drop_ends_on,
-                t.adopt_existing ? "Link existing term" : "Generate new term",
-            ]),
+        return cards(
             "Generated academic terms",
+            terms.map((t) =>
+                card(`${t.name} · ${t.code}`, [
+                    recordSummary([
+                        ["Category", t.kind === "standard" ? "Standard" : "Non-standard"],
+                        ["Action", t.adopt_existing ? "Link existing term" : "Generate new term"],
+                        ["First day", t.starts_on],
+                        ["Last day", t.ends_on],
+                        ["Drop/add through", t.add_drop_ends_on],
+                    ]),
+                ]),
+            ),
         );
     }
-    function confirmYear(plan) {
-        const body = openPanel(`Review academic year ${plan.code}`, "ONE REVIEW · ONE CALENDAR TRANSACTION");
+    function confirmYear(plan, returnTo = () => years()) {
+        const body = openPanel(
+            `Review academic year ${plan.code}`,
+            "ONE REVIEW · ONE CALENDAR TRANSACTION",
+        );
         const command = {
             id: plan.id,
             operation_id: plan.operation_id,
@@ -411,8 +618,8 @@ window.createWorkspaceAcademicCalendar = function (ui) {
             revision: plan.revision,
             terms: plan.terms.map((t) => ({ term_type_id: t.term_type_id, id: t.id })),
         };
-        const back = button("Change start year", createYear);
-        body.append(
+        const back = button("Change start year", () => createYear(returnTo, plan.start_year));
+        body.replaceChildren(
             node(
                 "p",
                 {},
@@ -427,7 +634,10 @@ window.createWorkspaceAcademicCalendar = function (ui) {
             termGrid(plan.terms),
             button("Review term types and dates", () => {
                 exampleStart = plan.start_year;
-                return types();
+                return types(null, [], {
+                    label: "Back to academic year setup",
+                    back: () => createYear(returnTo, plan.start_year),
+                });
             }),
             node(
                 "p",
@@ -445,33 +655,55 @@ window.createWorkspaceAcademicCalendar = function (ui) {
                         if (error.status && error.status < 500) back.disabled = false;
                         throw error;
                     }
+                    if (!body.isConnected) return;
                     notify("Academic year and terms created.");
-                    await years();
+                    await returnTo();
                 },
                 true,
             ),
             button("Check saved academic year", async () => {
-                const saved = await request(`/sis/academic-years/${plan.id}/receipts/${plan.operation_id}/`);
-                const result = openPanel(`Academic year ${saved.code}`, "SAVED CALENDAR");
-                result.append(
-                    termGrid(saved.terms),
-                    button("Academic years", () => years()),
+                const saved = await request(
+                    `/sis/academic-years/${plan.id}/receipts/${plan.operation_id}/`,
                 );
+                if (!body.isConnected) return;
+                const result = openPanel(`Academic year ${saved.code}`, "SAVED CALENDAR");
+                result.append(termGrid(saved.terms), button("Academic years", returnTo));
             }),
         );
     }
-    async function termForm(id = null) {
-        const existing = id ? await request(`/sis/calendar/terms/${id}/`) : { kind: "non_standard" };
-        const operation = id ? null : (await request("/sis/ui/operation-id/")).id;
+    async function termForm(id = null, back = null) {
         const body = openPanel(
             id ? "Maintain academic term" : "Add an academic term",
             "TERMS · ACADEMIC YEAR MEMBERSHIP",
         );
-        const preset = Object.fromEntries(Object.entries(existing).filter(([, value]) => value !== null));
+        const backControl = button(
+            back ? "Back to record" : "Back to academic terms",
+            back || ui.refreshTerms,
+        );
+        body.prepend(backControl);
+        const existing = id
+            ? await request(`/sis/calendar/terms/${id}/`)
+            : { kind: "non_standard" };
+        if (!body.isConnected) return;
+        const operation = id ? null : (await request("/sis/ui/operation-id/")).id;
+        if (!body.isConnected) return;
+        const preset = Object.fromEntries(
+            Object.entries(existing).filter(([, value]) => value !== null),
+        );
         const form = await buildForm(termFields, preset);
+        if (!body.isConnected) return;
+        groupForm(form, [
+            ["Calendar membership", ["academic_year_id"]],
+            ["Term identity", ["code", "name", "kind"]],
+            ["Instructional dates", ["starts_on", "ends_on", "add_drop_ends_on"]],
+        ]);
         form.elements.academic_year_id.required = !id;
         if (existing.academic_year_id) form.elements.academic_year_id.disabled = true;
-        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save academic term");
+        const save = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Save academic term",
+        );
         let command = null;
         form.append(
             node(
@@ -498,16 +730,20 @@ window.createWorkspaceAcademicCalendar = function (ui) {
                     if (error.status && error.status < 500) command = null;
                     throw error;
                 }
+                if (!body.isConnected || !form.isConnected) return;
                 notify("Academic term saved.");
                 await ui.refreshTerms();
             }, save);
         });
-        body.append(form);
+        body.replaceChildren(backControl, form);
     }
-    async function studentCatalog(student, assignment) {
+    async function studentCatalog(student, assignment, back = null) {
         const path = `/sis/students/${student}/programs/${assignment}/catalog/`;
-        let value = await request(path, "POST", {});
         const body = openPanel("Matriculation cohort", "STUDENT PROGRAM");
+        const backControl = back ? button("Back to student programs", back) : null;
+        if (backControl) body.prepend(backControl);
+        let value = await request(path, "POST", {});
+        if (!body.isConnected) return;
         let selected = null,
             reason = "",
             after = null,
@@ -527,6 +763,7 @@ window.createWorkspaceAcademicCalendar = function (ui) {
             sequence++;
             if (!body.isConnected) return;
             body.replaceChildren(
+                ...(backControl ? [backControl] : []),
                 node("h3", { class: "h5" }, `${value.program.code} · ${value.program.title}`),
                 node(
                     "p",
@@ -543,7 +780,8 @@ window.createWorkspaceAcademicCalendar = function (ui) {
                 ),
                 button("Cohort history", () => history()),
             );
-            if (value.status === "active") body.append(button("Review cohort change", () => editor(), true));
+            if (value.status === "active")
+                body.append(button("Review cohort change", () => editor(), true));
             else
                 body.append(
                     node(
@@ -555,9 +793,26 @@ window.createWorkspaceAcademicCalendar = function (ui) {
         }
         async function editor(cursor = null, previous = []) {
             const current = ++sequence;
-            const page = await request(path + "choices/", "POST", cursor ? { after: cursor } : {});
+            const pending = node(
+                "p",
+                { role: "status", class: "form-text" },
+                "Loading published curricula…",
+            );
+            body.querySelector("[data-calendar-pending]")?.remove();
+            pending.dataset.calendarPending = "";
+            body.append(pending);
+            let page;
+            try {
+                page = await request(path + "choices/", "POST", cursor ? { after: cursor } : {});
+            } finally {
+                pending.remove();
+            }
             if (!body.isConnected || current !== sequence) return;
-            const heading = node("h3", { class: "h5", tabindex: "-1" }, "Choose a published curriculum");
+            const heading = node(
+                "h3",
+                { class: "h5", tabindex: "-1" },
+                "Choose a published curriculum",
+            );
             const form = node("form", {});
             const choices = node(
                 "fieldset",
@@ -580,13 +835,14 @@ window.createWorkspaceAcademicCalendar = function (ui) {
                 choices.append(
                     node(
                         "label",
-                        { for: id, class: "surface p-3" },
+                        { for: id, class: "surface calendar-cohort-choice" },
                         control,
                         `${title(item)} · ${item.program_title}${item.catalog_id === value.current?.catalog_id ? " · Current" : ""}`,
                     ),
                 );
             }
-            if (!page.items.length) choices.append(node("p", {}, "No published curricula on this page."));
+            if (!page.items.length)
+                choices.append(node("p", {}, "No published curricula on this page."));
             const picked = node(
                 "p",
                 { class: "form-text", role: "status", "aria-live": "polite" },
@@ -607,11 +863,19 @@ window.createWorkspaceAcademicCalendar = function (ui) {
                 },
             });
             note.value = reason;
-            const review = node("button", { type: "submit", class: "btn btn-primary" }, "Review change");
+            const review = node(
+                "button",
+                { type: "submit", class: "btn btn-primary" },
+                "Review change",
+            );
             form.append(
                 choices,
                 picked,
-                node("label", { for: "cohort-reason", class: "form-label" }, "Reason for cohort change"),
+                node(
+                    "label",
+                    { for: "cohort-reason", class: "form-label" },
+                    "Reason for cohort change",
+                ),
                 note,
                 explanation(),
                 review,
@@ -621,7 +885,11 @@ window.createWorkspaceAcademicCalendar = function (ui) {
                 task(async () => {
                     if (!form.reportValidity()) return;
                     if (!selected) throw new Error("Choose a published curriculum first.");
-                    const command = { catalog_id: selected.catalog_id, version: value.version, note: reason };
+                    const command = {
+                        catalog_id: selected.catalog_id,
+                        version: value.version,
+                        note: reason,
+                    };
                     const current = ++sequence;
                     const reviewed = await request(path + "review/", "POST", command);
                     if (!body.isConnected || current !== sequence) return;
@@ -630,14 +898,16 @@ window.createWorkspaceAcademicCalendar = function (ui) {
             });
             const paging = node("div", { class: "inline-actions my-3" });
             if (previous.length)
-                paging.append(button("Previous", () => editor(previous.at(-1), previous.slice(0, -1))));
+                paging.append(
+                    button("Previous", () => editor(previous.at(-1), previous.slice(0, -1))),
+                );
             if (page.next_after)
                 paging.append(button("Next", () => editor(page.next_after, [...previous, cursor])));
             body.replaceChildren(
                 heading,
                 button("Back to cohort", overview),
-                form,
                 paging,
+                form,
                 button("Refresh cohort", async () => {
                     const current = ++sequence;
                     const fresh = await request(path, "POST", {});
@@ -654,7 +924,11 @@ window.createWorkspaceAcademicCalendar = function (ui) {
             const heading = node("h3", { class: "h5", tabindex: "-1" }, "Confirm cohort change");
             body.replaceChildren(
                 heading,
-                node("p", {}, `Before: ${title(reviewed.before)}. After: ${title(reviewed.after)}.`),
+                node(
+                    "p",
+                    {},
+                    `Before: ${title(reviewed.before)}. After: ${title(reviewed.after)}.`,
+                ),
                 node("p", { class: "private-text" }, command.note),
                 explanation(),
                 button("Revise change", revise),
@@ -679,10 +953,24 @@ window.createWorkspaceAcademicCalendar = function (ui) {
             );
             focus(heading);
         }
-        async function history(cursor = null, previous = []) {
+        async function history(cursor = null, previous = [], receiptsAfter = after) {
             const current = ++sequence;
-            const page = await request(path + "history/", "POST", { cursor, after });
+            const pending = node(
+                "p",
+                { role: "status", class: "form-text" },
+                "Loading cohort history…",
+            );
+            body.querySelector("[data-calendar-pending]")?.remove();
+            pending.dataset.calendarPending = "";
+            body.append(pending);
+            let page;
+            try {
+                page = await request(path + "history/", "POST", { cursor, after: receiptsAfter });
+            } finally {
+                pending.remove();
+            }
             if (!body.isConnected || current !== sequence) return;
+            after = receiptsAfter;
             const heading = node("h3", { class: "h5", tabindex: "-1" }, "Cohort history");
             body.replaceChildren(
                 heading,
@@ -693,23 +981,34 @@ window.createWorkspaceAcademicCalendar = function (ui) {
                     "Protected decisions retain their original labels. Reasons, actor details and raw events are excluded.",
                 ),
                 page.items.length
-                    ? grid(
-                          ["Before", "After", "Effective", "Recorded"],
-                          page.items.map((item) => [
-                              title(item.previous_catalog),
-                              title(item.catalog),
-                              item.effective_at,
-                              item.recorded_at,
-                          ]),
-                          "Protected cohort decisions",
+                    ? node(
+                          "section",
+                          { role: "region", "aria-label": "Protected cohort decisions" },
+                          cards(
+                              "Cohort decisions",
+                              page.items.map((item) =>
+                                  card(title(item.catalog), [
+                                      recordSummary([
+                                          ["Before", title(item.previous_catalog)],
+                                          ["After", title(item.catalog)],
+                                          ["Effective", item.effective_at],
+                                          ["Recorded", item.recorded_at],
+                                      ]),
+                                  ]),
+                              ),
+                          ),
                       )
                     : node("p", {}, "No cohort changes on this history page."),
             );
             const paging = node("div", { class: "inline-actions my-3" });
             if (previous.length)
-                paging.append(button("Previous", () => history(previous.at(-1), previous.slice(0, -1))));
+                paging.append(
+                    button("Previous", () => history(previous.at(-1), previous.slice(0, -1))),
+                );
             if (page.next_cursor)
-                paging.append(button("Next", () => history(page.next_cursor, [...previous, cursor])));
+                paging.append(
+                    button("Next", () => history(page.next_cursor, [...previous, cursor])),
+                );
             body.append(
                 paging,
                 node("h4", { class: "h6" }, "Earlier receipts"),
@@ -719,22 +1018,27 @@ window.createWorkspaceAcademicCalendar = function (ui) {
                     "These receipts are preserved as originally recorded. They are not reconstructed events, and their calendar labels may reflect current reference data.",
                 ),
                 page.earlier_receipts.length
-                    ? grid(
-                          ["Academic year", "Revision", "Recorded"],
-                          page.earlier_receipts.map((item) => [
-                              item.year_code,
-                              item.catalog_revision,
-                              item.recorded_at,
-                          ]),
-                          "Earlier cohort receipts",
+                    ? node(
+                          "section",
+                          { role: "region", "aria-label": "Earlier cohort receipts" },
+                          cards(
+                              "Earlier receipts",
+                              page.earlier_receipts.map((item) =>
+                                  card(item.year_code, [
+                                      recordSummary([
+                                          ["Revision", item.catalog_revision],
+                                          ["Recorded", item.recorded_at],
+                                      ]),
+                                  ]),
+                              ),
+                          ),
                       )
                     : node("p", {}, "No earlier receipts on this page."),
             );
             if (page.next_after)
                 body.append(
                     button("More earlier receipts", () => {
-                        after = page.next_after;
-                        return history(cursor, previous);
+                        return history(cursor, previous, page.next_after);
                     }),
                 );
             focus(heading);

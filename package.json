@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build:assets": "node tools/build-assets.mjs",
-    "test:forms": "node --max-old-space-size=32 tests/JavaScript/application-form-layout.test.cjs",
+    "test:forms": "node --max-old-space-size=32 --test --test-concurrency=1 tests/JavaScript/application-form-layout.test.cjs tests/JavaScript/form-collapse-preferences.test.cjs",
     "test:browser": "playwright test"
   },
   "dependencies": {

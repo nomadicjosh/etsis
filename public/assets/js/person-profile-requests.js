@@ -5,7 +5,7 @@
     const statuses = { requested: 'Update requested', responded: 'Ready for staff review', closed: 'Closed', cancelled: 'Cancelled' };
     const areas = { contact: 'Contact information', addresses: 'Dated addresses', emergency_contacts: 'Emergency contacts', education: 'Educational background' };
     window.createPersonProfileRequests = ({ node, request, task, notify }) => ({
-        mount(container, endpoint, { staff = false, openEditor = () => {}, area = null } = {}) {
+        mount(container, endpoint, { staff = false, openEditor = () => {}, area = null, showHeading = true } = {}) {
             const availableAreas = area ? { [area]: areas[area] } : areas;
             const identity = `profile-requests-${++sequence}`;
             const active = node('div');
@@ -25,7 +25,7 @@
             const more = button('Older requests', () => load(true));
             more.hidden = true;
             controls.append(refresh, switcher);
-            container.append(node('h3', {}, 'Profile update requests'),
+            container.append(...(showHeading ? [node('h3', {}, 'Profile update requests')] : []),
                 node('p', { class: 'form-text' }, 'Use the existing editors to update details, then respond here. These requests do not change admissions, registration or account access.'),
                 controls, formArea, active, more, status);
             function messageField(form, label, suffix) {

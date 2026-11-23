@@ -1,6 +1,6 @@
 /* One working-definition model for field validation, references and retained form layouts. */
 'use strict';
-window.createApplicationLayoutEditor = ({ node, icon, openDrawer, closeDrawer, task, draft, changed, render, announce }) => {
+window.createApplicationLayoutEditor = ({ node, icon, openDrawer, closeDrawer, task, draft, changed, render, announce, settingsOpen = () => true, settingsChanged = () => {} }) => {
     let sortables = [];
     const layout = () => draft().layout || [];
     const find = key => {
@@ -107,11 +107,16 @@ window.createApplicationLayoutEditor = ({ node, icon, openDrawer, closeDrawer, t
                 reorder(); changed(); render(); document.getElementById(columnsSelect.id)?.focus();
             } }, [1, 2, 3].map(count => node('option', { value: count }, `${count} ${count === 1 ? 'column' : 'columns'}`)));
             columnsSelect.value = container.columns.length;
-            const settings = node('details', { class: 'form-container-settings', open: true }, node('summary', {}, 'Container settings'),
+            const settings = node('details', { class: 'form-container-settings', open: settingsOpen(container) }, node('summary', {}, 'Container settings'),
                 node('div', { class: 'row g-3 mt-1' },
                     node('div', { class: 'col-md-8' }, node('label', { class: 'form-label', for: titleInput.id }, 'Container title'), titleInput),
                     node('div', { class: 'col-md-4' }, node('label', { class: 'form-label', for: columnsSelect.id }, 'Columns'), columnsSelect),
                     node('div', { class: 'col-12' }, node('label', { class: 'form-label', for: help.id }, 'Container introduction'), help)));
+            let settingsWasOpen = settings.open;
+            settings.addEventListener('toggle', () => {
+                if (!settings.isConnected || settings.open === settingsWasOpen) return;
+                settingsWasOpen = settings.open; settingsChanged(container, settings.open);
+            });
             const columns = node('div', { class: 'designer-columns', 'data-columns': container.columns.length });
             container.columns.forEach((keys, column) => {
                 const target = node('div', { class: 'designer-column', role: 'group', 'aria-label': `${container.label}, column ${column + 1}` },

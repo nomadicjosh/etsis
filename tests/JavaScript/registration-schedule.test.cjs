@@ -152,7 +152,7 @@ test("staff single registration previews overlaps and disables only a blocked co
 async function portal({ result = conflict(true), gate = null } = {}) {
     const source = fs.readFileSync("public/assets/js/portal.js", "utf8");
     const code = source.slice(
-        source.indexOf("    function confirmRegistration(course) {"),
+        source.indexOf("    function confirmRegistration("),
         source.indexOf("    function transcripts(container) {"),
     );
     const window = {},

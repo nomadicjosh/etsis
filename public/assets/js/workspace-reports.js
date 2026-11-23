@@ -70,8 +70,12 @@ window.createWorkspaceReports = function (ui) {
         );
     }
     async function record(id) {
+        const pendingView = openDrawer("Saved report", "REPORTING");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading report details…"));
         const report = await request(`/sis/reports/${id}/`);
+        if (!pendingView.isConnected) return;
         if (report.relational) return ui.builder().record(id);
+        if (!pendingView.isConnected) return;
         const body = openDrawer(report.name, "STUDENT REPORT");
         body.append(
             node(

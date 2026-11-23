@@ -1,7 +1,22 @@
 /* Staff batch registration: explicit review, atomic confirmation and durable retry receipts. */
 window.createWorkspaceRegistration = function (ui) {
     "use strict";
-    const { node, request, task, table, money, recordSummary, buildForm, openDrawer, refreshDirectory } = ui;
+    const {
+        node,
+        request,
+        task,
+        table,
+        money,
+        recordSummary,
+        buildForm,
+        openDrawer,
+        refreshDirectory,
+    } = ui;
+    const openRegistration = (title, eyebrow) => {
+        const body = node("div", { class: "registration-workbench" });
+        openDrawer(title, eyebrow).append(body);
+        return body;
+    };
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
             "button",
@@ -30,7 +45,7 @@ window.createWorkspaceRegistration = function (ui) {
         money,
         button: (label, action, primary) =>
             button(label, action, primary ? "btn-primary" : "btn-outline-primary"),
-        open: (title) => openDrawer(title, "REVIEWED SECTION CHANGE"),
+        open: (title) => openRegistration(title, "REVIEWED SECTION CHANGE"),
     });
     async function changeSection(student, from, back) {
         await change({
@@ -39,7 +54,7 @@ window.createWorkspaceRegistration = function (ui) {
             baseUrl: "/sis/section-changes/",
             onBack: back,
             onComplete: async (result) => {
-                const body = openDrawer("Section changed", "REGISTRATION RECEIPT");
+                const body = openRegistration("Section changed", "REGISTRATION RECEIPT");
                 body.append(
                     node(
                         "p",
@@ -59,7 +74,7 @@ window.createWorkspaceRegistration = function (ui) {
         });
     }
     async function windowPolicy(term, back) {
-        const body = openDrawer("Term registration policy", "DETAILS → REVIEW → PUBLISH");
+        const body = openRegistration("Term registration policy", "DETAILS → REVIEW → PUBLISH");
         const base = `/sis/terms/${term}/registration-window/`;
         const saved = await request(base);
         if (!body.isConnected) return;
@@ -75,11 +90,15 @@ window.createWorkspaceRegistration = function (ui) {
             ["course_limit", "Maximum registered courses", "number"],
             ["reason", "Reason for publication", "textarea"],
         ];
-        const form = await buildForm(fields, {
-            opens_at: local(saved.definition?.opens_at),
-            closes_at: local(saved.definition?.closes_at),
-            course_limit: saved.definition?.course_limit ?? "",
-        });
+        const form = await buildForm(
+            fields,
+            {
+                opens_at: local(saved.definition?.opens_at),
+                closes_at: local(saved.definition?.closes_at),
+                course_limit: saved.definition?.course_limit ?? "",
+            },
+            { layout: "registration_window" },
+        );
         if (!body.isConnected) return;
         form.elements.opens_at.step = "1";
         form.elements.closes_at.step = "1";
@@ -166,15 +185,21 @@ window.createWorkspaceRegistration = function (ui) {
                 button("Back to policy", edit),
             );
         }
-        const review = node("button", { type: "submit", class: "btn btn-primary" }, "Review policy");
-        form.append(review);
+        const review = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review policy",
+        );
+        form.append(node("div", { class: "record-form-actions" }, review));
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
                 if (!form.reportValidity()) return;
                 const version = ++view;
                 const input = () => ({
-                    opens_at: new Date(form.elements.opens_at.value).toISOString().replace(".000Z", "+00:00"),
+                    opens_at: new Date(form.elements.opens_at.value)
+                        .toISOString()
+                        .replace(".000Z", "+00:00"),
                     closes_at: new Date(form.elements.closes_at.value)
                         .toISOString()
                         .replace(".000Z", "+00:00"),
@@ -214,26 +239,54 @@ window.createWorkspaceRegistration = function (ui) {
         edit();
     }
     async function policy(back = null) {
-        const body = openDrawer("Registration policy", "REGISTRATION SETTINGS");
+        const body = openRegistration("Registration policy", "REGISTRATION SETTINGS");
         const value = await request("/sis/registration-policy/");
         if (!body.isConnected) return;
         const choices = ["block — Block confirmed overlaps", "warn — Warn and allow registration"];
-        const facultyChoices = ["block — Block overlapping classes", "warn — Warn and allow publication"];
-        const dropChoices = ["block — Require linked courses to be dropped together", "warn — Warn and allow individual drops"];
-        const form = await buildForm([
-            ["mode", "When a student’s published meetings overlap", "choice", choices],
-            ["faculty_mode", "When a faculty member’s published classes overlap", "choice", facultyChoices],
-            ["prior_completion", "Allow qualifying prior completion to satisfy co-requisites", "checkbox"],
-            ["drop_mode", "When a drop leaves a co-requisite unsupported", "choice", dropChoices],
-        ], {
-            mode: choices.find((item) => item.startsWith(value.mode)),
-            faculty_mode: facultyChoices.find(item => item.startsWith(value.faculty_mode || "block")),
-            prior_completion: value.corequisites.prior_completion,
-            drop_mode: dropChoices.find(item => item.startsWith(value.corequisites.drop_mode)),
-        });
+        const facultyChoices = [
+            "block — Block overlapping classes",
+            "warn — Warn and allow publication",
+        ];
+        const dropChoices = [
+            "block — Require linked courses to be dropped together",
+            "warn — Warn and allow individual drops",
+        ];
+        const form = await buildForm(
+            [
+                ["mode", "When a student’s published meetings overlap", "choice", choices],
+                [
+                    "faculty_mode",
+                    "When a faculty member’s published classes overlap",
+                    "choice",
+                    facultyChoices,
+                ],
+                [
+                    "prior_completion",
+                    "Allow qualifying prior completion to satisfy co-requisites",
+                    "checkbox",
+                ],
+                [
+                    "drop_mode",
+                    "When a drop leaves a co-requisite unsupported",
+                    "choice",
+                    dropChoices,
+                ],
+            ],
+            {
+                mode: choices.find((item) => item.startsWith(value.mode)),
+                faculty_mode: facultyChoices.find((item) =>
+                    item.startsWith(value.faculty_mode || "block"),
+                ),
+                prior_completion: value.corequisites.prior_completion,
+                drop_mode: dropChoices.find((item) =>
+                    item.startsWith(value.corequisites.drop_mode),
+                ),
+            },
+            { layout: "registration_policy" },
+        );
         if (!body.isConnected) return;
         const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save policy");
-        form.append(save);
+        form.append(node("div", { class: "record-form-actions" }, save));
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
@@ -256,19 +309,36 @@ window.createWorkspaceRegistration = function (ui) {
                 "Student overlap policy applies to student and staff registration, including planned schedules. Faculty overlap policy applies when publishing a section meeting plan; earlier publications keep their reviewed policy. Turn off prior completion to require co-requisites in the same academic term. Accepted registrations retain their original requirement and prior-completion policy; the current drop policy controls whether an unsupported drop is blocked or warned.",
             ),
             form,
-            back ? button("Back to registration", back, "btn-link") : null,
+            back || ui.closeDrawer
+                ? button("Back to registration", back || ui.closeDrawer, "btn-link")
+                : null,
         );
     }
     async function plan(student, back, identity = null) {
         const selected = new Map();
-        let body = openDrawer("Plan registration", "SELECT SECTIONS → REVIEW SCHEDULE → CONFIRM");
-        const form = await buildForm([["section_id", "Add a course section", "lookup", "sections"]]);
+        let body = openRegistration(
+            "Plan registration",
+            "SELECT SECTIONS → REVIEW SCHEDULE → CONFIRM",
+        );
+        const form = await buildForm(
+            [["section_id", "Add a course section", "lookup", "sections"]],
+            {},
+            { layout: "registration_section" },
+        );
         if (!body.isConnected) return;
         const list = node("div", { "aria-live": "polite" });
-        const add = node("button", { type: "submit", class: "btn btn-outline-primary" }, "Add section");
-        form.append(add);
+        const add = node(
+            "button",
+            { type: "submit", class: "btn btn-outline-primary" },
+            "Add section",
+        );
+        (form.querySelector("fieldset") || form).append(
+            node("div", { class: "record-form-actions" }, add),
+        );
         function draw() {
-            list.replaceChildren(node("p", { role: "status" }, `${selected.size} of 10 sections selected.`));
+            list.replaceChildren(
+                node("p", { role: "status" }, `${selected.size} of 10 sections selected.`),
+            );
             if (selected.size)
                 list.append(
                     grid(
@@ -286,7 +356,10 @@ window.createWorkspaceRegistration = function (ui) {
             review.disabled = !selected.size;
         }
         function edit() {
-            body = openDrawer("Plan registration", "SELECT SECTIONS → REVIEW SCHEDULE → CONFIRM");
+            body = openRegistration(
+                "Plan registration",
+                "SELECT SECTIONS → REVIEW SCHEDULE → CONFIRM",
+            );
             body.append(
                 identity
                     ? recordSummary([
@@ -310,7 +383,7 @@ window.createWorkspaceRegistration = function (ui) {
             node,
             request,
             money,
-            open: (title) => openDrawer(title, "REVIEWED REGISTRATION"),
+            open: (title) => openRegistration(title, "REVIEWED REGISTRATION"),
             button: (label, action, primary) =>
                 button(label, action, primary ? "btn-primary" : "btn-outline-primary"),
         });
@@ -339,7 +412,8 @@ window.createWorkspaceRegistration = function (ui) {
             task(() => {
                 if (!form.reportValidity()) return;
                 const control = form.elements.section_id;
-                if (selected.has(control.value)) throw new Error("This section is already selected.");
+                if (selected.has(control.value))
+                    throw new Error("This section is already selected.");
                 if (selected.size >= 10) throw new Error("Select at most ten sections.");
                 selected.set(control.value, control.selectedOptions[0].textContent);
                 draw();
@@ -349,8 +423,12 @@ window.createWorkspaceRegistration = function (ui) {
     }
 
     async function single(student, back, draft = {}) {
-        let body = openDrawer("Register student", "SECTION → ELIGIBILITY & FEES → CONFIRM");
-        const form = await buildForm([["section_id", "Course section", "lookup", "sections"]], draft);
+        let body = openRegistration("Register student", "SECTION → ELIGIBILITY & FEES → CONFIRM");
+        const form = await buildForm(
+            [["section_id", "Course section", "lookup", "sections"]],
+            draft,
+            { layout: "registration_section" },
+        );
         if (!body.isConnected) return;
         let generation = 0,
             confirmation = null;
@@ -364,7 +442,10 @@ window.createWorkspaceRegistration = function (ui) {
                 by_staff: true,
             });
             if (!source.isConnected || turn !== generation) return;
-            const panel = openDrawer("Review registration", "SECTION → ELIGIBILITY & FEES → CONFIRM");
+            const panel = openRegistration(
+                "Review registration",
+                "SECTION → ELIGIBILITY & FEES → CONFIRM",
+            );
             body = panel;
             const confirm = button(
                 "Confirm registration",
@@ -387,8 +468,17 @@ window.createWorkspaceRegistration = function (ui) {
             confirm.disabled = !schedule.canConfirm(reviewed);
             panel.append(
                 schedule.registration(reviewed, money),
-                (reviewed.students[0]?.waitlist?.enabled || reviewed.students[0]?.waitlist?.entry_id) && ui.can("sis:registration:waitlist")
-                    ? button("Waitlist options", () => window.createSectionWaitlist(ui).place(student, { id: section }, () => single(student, back, { section_id: section }))) : null,
+                (reviewed.students[0]?.waitlist?.enabled ||
+                    reviewed.students[0]?.waitlist?.entry_id) &&
+                    ui.can("sis:registration:waitlist")
+                    ? button("Waitlist options", () =>
+                          window
+                              .createSectionWaitlist(ui)
+                              .place(student, { id: section }, () =>
+                                  single(student, back, { section_id: section }),
+                              ),
+                      )
+                    : null,
                 node(
                     "div",
                     { class: "inline-actions" },
@@ -399,8 +489,12 @@ window.createWorkspaceRegistration = function (ui) {
                 button("Back to student", back, "btn-link"),
             );
         }
-        const review = node("button", { type: "submit", class: "btn btn-primary" }, "Review registration");
-        form.append(review);
+        const review = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Review registration",
+        );
+        form.append(node("div", { class: "record-form-actions" }, review));
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
@@ -411,14 +505,24 @@ window.createWorkspaceRegistration = function (ui) {
     }
     function receipt(result, again, againLabel = "Start another group") {
         if (result.drop_plan_id) {
-            const body = openDrawer('Course drops completed', 'REGISTRATION RECEIPT');
-            body.append(node('p', { role: 'status' }, `${result.removed} courses removed; ${result.withdrawn} withdrawn.`),
-                node('p', {}, 'Reference: ', node('code', {}, result.drop_plan_id)), button(againLabel, again, 'btn-primary'));
+            const body = openRegistration("Course drops completed", "REGISTRATION RECEIPT");
+            body.append(
+                node(
+                    "p",
+                    { role: "status" },
+                    `${result.removed} courses removed; ${result.withdrawn} withdrawn.`,
+                ),
+                node("p", {}, "Reference: ", node("code", {}, result.drop_plan_id)),
+                button(againLabel, again, "btn-primary"),
+            );
             return body;
         }
 
         const planned = !!result.plan_id;
-        const body = openDrawer(planned ? "Schedule registered" : "Batch completed", "REGISTRATION RECEIPT");
+        const body = openRegistration(
+            planned ? "Schedule registered" : "Batch completed",
+            "REGISTRATION RECEIPT",
+        );
         body.append(
             node(
                 "p",
@@ -438,12 +542,21 @@ window.createWorkspaceRegistration = function (ui) {
         );
         return body;
     }
-    async function findReceipt() {
-        const body = openDrawer("Find a completed batch", "REGISTRATION RECEIPT");
-        const form = await buildForm([["operation_id", "Batch reference"]]);
+    async function findReceipt(back = null) {
+        const body = openRegistration("Find a completed batch", "REGISTRATION RECEIPT");
+        const form = await buildForm(
+            [["operation_id", "Batch reference"]],
+            {},
+            { layout: "registration_receipt" },
+        );
+        if (!body.isConnected) return;
         form.elements.operation_id.maxLength = 26;
-        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Check completed batch");
-        form.append(save);
+        const save = node(
+            "button",
+            { type: "submit", class: "btn btn-primary" },
+            "Check completed batch",
+        );
+        form.append(node("div", { class: "record-form-actions" }, save));
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
@@ -453,7 +566,8 @@ window.createWorkspaceRegistration = function (ui) {
                     throw new Error("Enter a valid batch reference.");
                 const result = await request(`/sis/registration-batches/${id}/`);
                 if (!body.isConnected) return;
-                receipt(result, () => start());
+                const saved = receipt(result, () => start());
+                if (back) saved.append(button("Back to registration", back));
             }, save);
         });
         body.append(
@@ -463,6 +577,7 @@ window.createWorkspaceRegistration = function (ui) {
                 "Only the staff member who submitted the batch can read its receipt, while their registration permission remains active.",
             ),
             form,
+            back ? button("Back to registration", back) : null,
         );
     }
     async function start(presetSection = "", presetStudents = [], back = null) {
@@ -475,7 +590,11 @@ window.createWorkspaceRegistration = function (ui) {
         );
         let sectionId = presetSection;
         async function selection() {
-            const body = openDrawer("Register a group", "BATCH REGISTRATION");
+            const body = openRegistration("Register a group", "BATCH REGISTRATION");
+            let selectionForm = null;
+            const rememberSection = () => {
+                if (selectionForm) sectionId = selectionForm.elements.section_id.value;
+            };
             const tools = node(
                 "div",
                 {
@@ -483,10 +602,22 @@ window.createWorkspaceRegistration = function (ui) {
                     role: "group",
                     "aria-label": "Registration tools",
                 },
-                button("Find a completed batch", findReceipt, "btn-outline-secondary"),
+                button(
+                    "Find a completed batch",
+                    () => {
+                        rememberSection();
+                        return findReceipt(selection);
+                    },
+                    "btn-outline-secondary",
+                ),
             );
             if (ui.can?.("sis:registration:policy"))
-                tools.append(button("Registration policy", () => policy(selection)));
+                tools.append(
+                    button("Registration policy", () => {
+                        rememberSection();
+                        return policy(selection);
+                    }),
+                );
             body.append(
                 node(
                     "p",
@@ -505,6 +636,7 @@ window.createWorkspaceRegistration = function (ui) {
                 { layout: "registration_group" },
             );
             if (!body.isConnected) return;
+            selectionForm = form;
             const selected = node("section", {
                 class: "record-section",
                 "aria-label": "Selected students",
@@ -520,7 +652,11 @@ window.createWorkspaceRegistration = function (ui) {
             });
             function render(focusIndex = null) {
                 selected.replaceChildren(
-                    node("h3", {}, `${chosen.size} selected ${chosen.size === 1 ? "student" : "students"}`),
+                    node(
+                        "h3",
+                        {},
+                        `${chosen.size} selected ${chosen.size === 1 ? "student" : "students"}`,
+                    ),
                     node(
                         "ul",
                         { class: "registration-selection" },
@@ -539,7 +675,9 @@ window.createWorkspaceRegistration = function (ui) {
                     ),
                 );
                 if (!chosen.size)
-                    selected.append(node("p", { class: "form-text" }, "Add students to build this group."));
+                    selected.append(
+                        node("p", { class: "form-text" }, "Add students to build this group."),
+                    );
                 if (focusIndex !== null) {
                     const controls = selected.querySelectorAll("button");
                     (controls[Math.min(focusIndex, controls.length - 1)] || add).focus();
@@ -551,7 +689,12 @@ window.createWorkspaceRegistration = function (ui) {
                 { type: "submit", class: "btn btn-primary" },
                 "Review selected group",
             );
-            form.append(add, selected, review);
+            const groups = form.querySelectorAll("fieldset");
+            (groups[groups.length - 1] || form).append(
+                node("div", { class: "record-form-actions" }, add),
+                selected,
+            );
+            form.append(node("div", { class: "record-form-actions" }, review));
             form.addEventListener("submit", (event) => {
                 event.preventDefault();
                 task(async () => {
@@ -562,7 +705,11 @@ window.createWorkspaceRegistration = function (ui) {
                         section_id: sectionId,
                         student_ids: [...chosen.keys()],
                     };
-                    const reviewed = await request("/sis/registration-batches/review/", "POST", payload);
+                    const reviewed = await request(
+                        "/sis/registration-batches/review/",
+                        "POST",
+                        payload,
+                    );
                     if (!body.isConnected) return;
                     await confirmation(reviewed, payload);
                 }, review);
@@ -571,7 +718,7 @@ window.createWorkspaceRegistration = function (ui) {
         }
         async function confirmation(reviewed, payload) {
             const section = reviewed.section;
-            const body = openDrawer("Review group registration", "CONFIRM THE SELECTION");
+            const body = openRegistration("Review group registration", "CONFIRM THE SELECTION");
             body.append(
                 button("Change selection", selection, "btn-link"),
                 node("h3", {}, section.code),
@@ -579,7 +726,10 @@ window.createWorkspaceRegistration = function (ui) {
                     ["Course", `${section.course_code} · ${section.course_title}`],
                     ["Credits", Number(section.credits_milli) / 1000],
                     ["Seats remaining", section.seats_remaining],
-                    ["Section fee", `${money(section.fee_minor, section.currency)} per new registration`],
+                    [
+                        "Section fee",
+                        `${money(section.fee_minor, section.currency)} per new registration`,
+                    ],
                 ]),
                 node(
                     "p",
@@ -595,41 +745,70 @@ window.createWorkspaceRegistration = function (ui) {
                         "This section or course is inactive. New registrations cannot be added.",
                     ),
                 );
-            const students = grid(
-                ["Student", "Institutional ID", "Activity", "Prerequisites", "Timetable", "Registration"],
-                reviewed.students.map((student) => [
-                    `${student.given_name} ${student.family_name}`,
-                    student.institutional_id,
+            const students = node(
+                "section",
+                {
+                    class: "registration-review-roster",
+                    "aria-label": "Reviewed registration group",
+                    tabindex: "0",
+                },
+                node("h3", { class: "h6" }, "Review each student"),
+                ...reviewed.students.map((student) =>
                     node(
-                        "div",
-                        {},
-                        student.active ? "Active" : "Inactive",
-                        schedule.readiness(student.readiness),
+                        "article",
+                        { class: "registration-review-card" },
+                        node("h4", { class: "h6" }, `${student.given_name} ${student.family_name}`),
+                        node("p", { class: "form-text" }, student.institutional_id),
+                        recordSummary([
+                            [
+                                "Activity",
+                                node(
+                                    "div",
+                                    {},
+                                    student.active ? "Active" : "Inactive",
+                                    schedule.readiness(student.readiness),
+                                ),
+                            ],
+                            [
+                                "Prerequisites",
+                                node(
+                                    "div",
+                                    {},
+                                    student.prerequisites?.status === "missing"
+                                        ? `Missing ${student.prerequisites.missing_count} ${student.prerequisites.missing_count === 1 ? "prerequisite" : "prerequisites"}`
+                                        : {
+                                              permission: "Prerequisite exception approved",
+                                              met: "Verified for this pursuit",
+                                              not_required: "No course prerequisites",
+                                              not_rechecked: ["A", "N"].includes(
+                                                  student.enrollment_status,
+                                              )
+                                                  ? "Existing registration — unchanged"
+                                                  : "Not checked — closed enrollment",
+                                          }[student.prerequisites?.status] ||
+                                              "Checked on confirmation",
+                                    schedule.prerequisites(
+                                        student.prerequisites,
+                                        reviewed.section.prerequisite_courses,
+                                    ),
+                                    schedule.corequisites(
+                                        student.corequisites,
+                                        reviewed.section.corequisite_courses,
+                                    ),
+                                ),
+                            ],
+                            ["Timetable", schedule.text(student.schedule)],
+                            [
+                                "Registration",
+                                ["A", "N"].includes(student.enrollment_status)
+                                    ? "Already enrolled — keep"
+                                    : student.enrollment_id
+                                      ? "Closed enrollment — registrar review required"
+                                      : "New registration",
+                            ],
+                        ]),
                     ),
-                    node(
-                        "div",
-                        {},
-                        student.prerequisites?.status === "missing"
-                            ? `Missing ${student.prerequisites.missing_count} ${student.prerequisites.missing_count === 1 ? "prerequisite" : "prerequisites"}`
-                            : {
-                                  permission: "Prerequisite exception approved",
-                                  met: "Verified for this pursuit",
-                                  not_required: "No course prerequisites",
-                                  not_rechecked: ["A", "N"].includes(student.enrollment_status)
-                                      ? "Existing registration — unchanged"
-                                      : "Not checked — closed enrollment",
-                              }[student.prerequisites?.status] || "Checked on confirmation",
-                        schedule.prerequisites(student.prerequisites, reviewed.section.prerequisite_courses),
-                        schedule.corequisites(student.corequisites, reviewed.section.corequisite_courses),
-                    ),
-                    schedule.text(student.schedule),
-                    ["A", "N"].includes(student.enrollment_status)
-                        ? "Already enrolled — keep"
-                        : student.enrollment_id
-                          ? "Closed enrollment — registrar review required"
-                          : "New registration",
-                ]),
-                "Reviewed registration group",
+                ),
             );
             body.append(
                 node(
@@ -667,8 +846,14 @@ window.createWorkspaceRegistration = function (ui) {
                     );
                 const details = node(
                     "details",
-                    { class: "mb-3", 'data-charge-review': '',
-                        'data-charges-attention': String(student.charges.total_minor == null || student.charges.problems.length > 0) },
+                    {
+                        class: "mb-3",
+                        "data-charge-review": "",
+                        "data-charges-attention": String(
+                            student.charges.total_minor == null ||
+                                student.charges.problems.length > 0,
+                        ),
+                    },
                     node(
                         "summary",
                         { class: "fw-semibold" },
@@ -733,7 +918,11 @@ window.createWorkspaceRegistration = function (ui) {
                     submit,
                     button("Refresh review", async () => {
                         submit.disabled = true;
-                        const next = await request("/sis/registration-batches/review/", "POST", payload);
+                        const next = await request(
+                            "/sis/registration-batches/review/",
+                            "POST",
+                            payload,
+                        );
                         if (body.isConnected) await confirmation(next, payload);
                     }),
                     button("Check batch receipt", async () => {
@@ -758,8 +947,15 @@ window.createWorkspaceRegistration = function (ui) {
         await selection();
     }
     async function history(student, back, after = "", stack = []) {
-        const page = await request(`/sis/students/${student}/registration-history/`, "POST", { after });
-        const body = openDrawer("Registration history", "RESTRICTED REGISTRAR HISTORY");
+        const pendingView = openRegistration("Registration history", "CONNECTED WORKSPACE");
+        pendingView.append(
+            node("p", { role: "status", class: "form-text" }, "Loading record details…"),
+        );
+        const page = await request(`/sis/students/${student}/registration-history/`, "POST", {
+            after,
+        });
+        if (!pendingView.isConnected) return;
+        const body = openRegistration("Registration history", "RESTRICTED REGISTRAR HISTORY");
         if (back) body.append(button("Back to student", back, "btn-link"));
         body.append(
             node(
@@ -822,9 +1018,9 @@ window.createWorkspaceRegistration = function (ui) {
                             : `Prerequisites at acceptance: ${prerequisites.required_course_count} required ${prerequisites.required_course_count === 1 ? "course" : "courses"} matched to ${prerequisites.supporting_record_count} verified academic ${prerequisites.supporting_record_count === 1 ? "record" : "records"}.`
                         : prerequisites?.status === "permission"
                           ? "Registration accepted with a registrar prerequisite exception. This did not award prerequisite completion or credit."
-                        : prerequisites?.status === "not_required"
-                          ? "No course prerequisites were required at acceptance."
-                          : "Supporting prerequisite references were not recorded for this earlier decision.",
+                          : prerequisites?.status === "not_required"
+                            ? "No course prerequisites were required at acceptance."
+                            : "Supporting prerequisite references were not recorded for this earlier decision.",
                 ),
             );
             panel.append(
@@ -845,8 +1041,19 @@ window.createWorkspaceRegistration = function (ui) {
                     "Recorded registration decisions",
                 ),
             );
-            if (record.status === "W" && !record.earlier_history_unknown && ui.can("sis:registration:reinstate") && ui.can("sis:gradebook:closed")) {
-                panel.append(button("Reinstate this withdrawal", () => window.createEnrollmentReinstatement(ui).open(student, record, () => history(student, back, after, stack))));
+            if (
+                record.status === "W" &&
+                !record.earlier_history_unknown &&
+                ui.can("sis:registration:reinstate") &&
+                ui.can("sis:gradebook:closed")
+            ) {
+                panel.append(
+                    button("Reinstate this withdrawal", () =>
+                        window
+                            .createEnrollmentReinstatement(ui)
+                            .open(student, record, () => history(student, back, after, stack)),
+                    ),
+                );
             }
             body.append(panel);
         }
@@ -867,7 +1074,9 @@ window.createWorkspaceRegistration = function (ui) {
             );
         if (page.next_after)
             nav.append(
-                button("Next history page", () => history(student, back, page.next_after, [...stack, after])),
+                button("Next history page", () =>
+                    history(student, back, page.next_after, [...stack, after]),
+                ),
             );
         body.append(nav);
     }

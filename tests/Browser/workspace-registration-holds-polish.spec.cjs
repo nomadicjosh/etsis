@@ -39,9 +39,15 @@ async function registration(page, delayed = false) {
             if (delayed) await pending;
             result = { operation_id: id(4), revision: 'fictional-review',
                 section: { code: 'MATH.101.A', course_code: 'MATH.101', course_title: 'College Algebra',
-                    credits_milli: 3000, seats_remaining: 4, fee_minor: 1250, currency: 'USD', active: true },
+                    credits_milli: 3000, seats_remaining: 4, fee_minor: 1250, currency: 'USD', active: true,
+                    prerequisite_courses: [], corequisite_courses: [] },
                 students: data.student_ids.map(selected => ({ ...students.find(student => student.id === selected),
-                    enrollment_id: null, enrollment_status: null, prerequisites: { status: 'met' } })),
+                    enrollment_id: null, enrollment_status: null, prerequisites: { status: 'not_required' },
+                    corequisites: { status: 'not_required' }, issues: [], readiness: [],
+                    schedule: { status: 'not_rechecked', blocked: false, conflicts: [], conflict_count: 0 },
+                    charges: { total_minor: 1250, currency: 'USD', problems: [],
+                        items: [{ name: 'Section fee', minor: 1250, currency: 'USD', status: 'new' }] },
+                })),
             };
         }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });

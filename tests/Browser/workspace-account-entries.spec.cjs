@@ -907,3 +907,16 @@ test('earlier charges explicitly lack detailed source classification', async ({ 
     await fixture(page, { charge: true });
     await expect(page.locator('#drawer-body')).toContainText('Detailed charge source not recorded');
 });
+
+test('an accepted account confirmation cannot reopen a drawer closed while saving', async ({ page }) => {
+    const f = await fixture(page); await recordAction(page, 'Correct amount');
+    await page.getByLabel('Corrected amount (USD)').fill('12.50'); await page.getByLabel('Reason for amount correction').fill('Fictional corrected receipt');
+    await page.getByRole('button', { name: 'Review amount correction', exact: true }).click();
+    let release, start; const pending = new Promise(resolve => { start = resolve; }); const held = new Promise(resolve => { release = resolve; });
+    await page.route('**/entries/*/correction/commit/', async route => { start(); await held; await route.fulfill({ json: { status: 'corrected' } }); });
+    await page.getByRole('button', { name: 'Confirm amount correction', exact: true }).click(); await pending;
+    await page.getByRole('button', { name: 'Close record', exact: true }).click(); await expect(page.locator('#record-drawer')).toBeHidden();
+    const finished = page.waitForResponse(response => response.url().endsWith('/correction/commit/')); release(); await finished;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(page.locator('#record-drawer')).toBeHidden(); await expect(page.locator('#drawer-body')).toBeEmpty(); expect(f.errors).toEqual([]);
+});

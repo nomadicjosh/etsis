@@ -33,7 +33,7 @@ for (const withdraw of [true, false]) {
         await page.locator('.workspace-nav-link[data-workspace="applications"]').click();
         await page.getByRole('button', { name: 'Fictional Applicant', exact: true }).click();
         await recordAction(page, withdraw ? 'Withdraw application' : 'Return to review');
-        await page.getByLabel('Reason for this change', { exact: true }).fill('Fictional private review reason.');
+        await page.getByRole('textbox', { name: 'Reason for this change', exact: true }).fill('Fictional private review reason.');
         await page.getByRole('button', { name: 'Review change', exact: true }).click();
         const confirmName = withdraw ? 'Confirm withdrawal' : 'Confirm return to review';
         await expect(page.getByRole('heading', { name: 'Fictional Applicant', exact: true })).toBeFocused();
@@ -43,9 +43,9 @@ for (const withdraw of [true, false]) {
         await expect(page.getByLabel('Reason for this change')).toHaveValue('Fictional private review reason.');
         await page.getByRole('button', { name: 'Review change', exact: true }).click();
         await page.getByRole('button', { name: confirmName, exact: true }).click();
-        await expect(page.locator('#drawer-body')).toContainText(withdraw ? 'This application was withdrawn.' : 'Review the submitted responses');
+        await expect(page.getByRole('button', { name: withdraw ? 'Return to review' : 'Accept application', exact: true })).toBeVisible();
         expect(writes.at(-1).data).toEqual({ review_token: 'fictional-reviewed-change' });
-        expect(writes[0].data).toEqual({ withdraw, reason: 'Fictional private review reason.' });
+        expect(writes.find(write => write.path.endsWith('/review-state/review/')).data).toEqual({ withdraw, reason: 'Fictional private review reason.' });
         await page.setViewportSize({ width: 390, height: 844 });
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();

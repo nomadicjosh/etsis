@@ -186,7 +186,7 @@ test("institutional time and contact policy keeps the draft through review and p
         .getByLabel("Reason for policy publication", { exact: true })
         .fill("Fictional institution workload review.");
     await page.getByRole("button", { name: "Review time policy", exact: true }).click();
-    await page.getByRole("button", { name: "Revise policy", exact: true }).click();
+    await page.getByRole("button", { name: "Back to policy settings", exact: true }).click();
     await expect(
         page.getByLabel("Instructional minutes per contact hour", { exact: true }),
     ).toHaveValue("60");

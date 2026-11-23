@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
+const { recordAction, revealRecordAction } = require('./support/workspace-actions.cjs');
 const id = n => String(n).padStart(26, '0');
 const employee = id(1), jobId = id(4), gradeId = id(5);
 
@@ -150,7 +151,8 @@ test('recording, rejected confirmation and later term changes share one private 
     await page.getByLabel('Reason for this agreement', { exact: true }).fill('Fictional revised agreement');
     await page.getByRole('button', { name: 'Review assignment', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm assignment', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Open previous assignment', exact: true })).toBeVisible();
+    await expect(await revealRecordAction(page, 'Open previous assignment')).toBeVisible();
+    await page.keyboard.press('Escape');
     expect(state.positions).toHaveLength(2);
     expect(state.positions[0].valid_through).toBe('2026-12-31');
     expect(state.calls.filter(call => call.path.endsWith('/assign/')).at(-1).data).toMatchObject({
@@ -172,23 +174,24 @@ test('end dates and voids retain version checks while delayed navigation cannot 
     await draft(page);
     await page.getByRole('button', { name: 'Review assignment', exact: true }).click();
     await page.getByRole('button', { name: 'Confirm assignment', exact: true }).click();
-    await page.getByRole('button', { name: 'Change end date', exact: true }).click();
+    await recordAction(page, 'Change end date');
     await page.getByLabel('Through date', { exact: true }).fill('2027-06-30');
     await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Fictional scheduled closure');
     await page.getByRole('button', { name: 'Save assignment end date', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('2027-06-30');
-    await page.getByRole('button', { name: 'Change end date', exact: true }).click();
+    await recordAction(page, 'Change end date');
     await page.getByLabel('Through date', { exact: true }).fill('');
     await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Fictional canceled closure');
     await page.getByRole('button', { name: 'Save assignment end date', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Open ended');
-    await page.getByRole('button', { name: 'Void assignment', exact: true }).click();
+    await recordAction(page, 'Void assignment');
     await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Fictional correction');
     await page.getByRole('button', { name: 'Confirm assignment void', exact: true }).click();
-    await page.getByRole('button', { name: 'Restore assignment', exact: true }).click();
+    await recordAction(page, 'Restore assignment');
     await page.getByRole('textbox', { name: 'Reason', exact: true }).fill('Fictional validation');
     await page.getByRole('button', { name: 'Confirm assignment restoration', exact: true }).click();
-    await expect(page.getByRole('button', { name: 'Void assignment', exact: true })).toBeVisible();
+    await expect(await revealRecordAction(page, 'Void assignment')).toBeVisible();
+    await page.keyboard.press('Escape');
     expect(state.calls.filter(call => /\/(end|void)\/$/.test(call.path)).map(call => call.data.version)).toEqual([1, 2, 3, 4]);
     let release;
     await page.route(`**/sis/employees/${employee}/positions/page/`, async route => {
@@ -216,7 +219,7 @@ test('primary designation supports review, revision, stale retry, history and cl
     await page.getByRole('button', { name: 'Designate as primary position', exact: true }).click();
     await page.getByLabel('Reason for primary designation').fill('Fictional reviewed main appointment');
     await page.getByRole('button', { name: 'Review primary designation', exact: true }).click();
-    await expect(page.locator('#drawer-body')).toContainText('After: LIB.ASST');
+    await expect(page.getByRole('region', { name: 'Primary designation review', exact: true })).toContainText('LIB.ASST');
     await page.getByRole('button', { name: 'Revise primary designation', exact: true }).click();
     await expect(page.getByLabel('Reason for primary designation')).toHaveValue('Fictional reviewed main appointment');
     await page.getByRole('button', { name: 'Review primary designation', exact: true }).click();
@@ -229,13 +232,13 @@ test('primary designation supports review, revision, stale retry, history and cl
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.getByRole('button', { name: 'Confirm primary designation', exact: true }).click();
     await page.getByRole('button', { name: 'Primary designation history', exact: true }).click();
-    await expect(page.getByRole('table', { name: 'Primary designation decisions' })).toContainText('Fictional reviewed main appointment');
+    await expect(page.getByRole('list', { name: 'Primary designation decisions' })).toContainText('Fictional reviewed main appointment');
     await accessible(page);
     await page.getByRole('button', { name: 'Back to primary position', exact: true }).click();
     await page.getByRole('button', { name: 'Clear primary designation', exact: true }).click();
     await page.getByLabel('Reason for primary designation').fill('Fictional leave unassigned');
     await page.getByRole('button', { name: 'Review primary designation', exact: true }).click();
-    await expect(page.locator('#drawer-body')).toContainText('After: No primary designation');
+    await expect(page.getByRole('region', { name: 'Primary designation review', exact: true })).toContainText('No primary designation');
     await page.getByRole('button', { name: 'Confirm primary designation', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Explicitly cleared');
     expect(state.primaryHistory).toHaveLength(2);

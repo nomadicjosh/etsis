@@ -49,7 +49,7 @@
                 function edit(kind) {
                     if (dirty && !window.confirm('Replace the unfinished intake review?')) return;
                     generation++; dirty = false; editor.replaceChildren(); status.textContent = '';
-                    const form = node('form'), controls = node('fieldset'), preview = node('div', { class: 'mt-3' });
+                    const form = node('form', { class: 'record-form' }), controls = node('fieldset', { class: 'record-form-section' }), preview = node('div', { class: 'mt-3' });
                     controls.append(node('legend', { class: 'h6' }, kind === 'defer' ? 'Choose a later intake' : 'Review updated intake'));
                     let selected = kind === 'reconfirm' ? data.current : null;
                     const chosen = node('p', { role: 'status', 'aria-atomic': 'true', class: 'form-text' });
@@ -61,7 +61,7 @@
                         let searchGeneration = 0;
                         const find = button('Find terms', () => list());
                         controls.append(node('label', { class: 'form-label', for: identity }, 'Find a later intake'),
-                            node('div', { class: 'd-flex gap-2' }, search, find), results);
+                            node('div', { class: 'd-flex flex-wrap gap-2 admission-intake-search' }, search, find), results);
                         search.addEventListener('keydown', event => { if (event.key === 'Enter') { event.preventDefault(); if (!busy && !searching) task(() => list()); } });
                         async function list(after = null) {
                             const ticket = generation, serial = ++searchGeneration; searching = true; find.disabled = true;

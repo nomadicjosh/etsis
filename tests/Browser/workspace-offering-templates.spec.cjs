@@ -1,4 +1,4 @@
-const { workspaceTool } = require('./support/workspace-actions.cjs');
+const { workspaceTool, recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
@@ -110,14 +110,14 @@ test('a new reusable template strips source identities and recovers an interrupt
 
 test('retirement and restoration require explicit reasons and display escaped change history', async ({ page }) => {
     const f = await fixture(page); await openTemplate(page);
-    await page.getByRole('button', { name: 'Retire template', exact: true }).click();
+    await recordAction(page, 'Retire template');
     await page.getByLabel('Reason for this change').fill('Fictional <script>retirement</script>');
     await page.getByRole('button', { name: 'Confirm status change', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Use for a new term', exact: true })).toHaveCount(0);
-    await page.getByRole('button', { name: 'Restore template', exact: true }).click();
+    await recordAction(page, 'Restore template');
     await page.getByLabel('Reason for this change').fill('Reviewed defaults for reuse.');
     await page.getByRole('button', { name: 'Confirm status change', exact: true }).click();
-    await page.getByRole('button', { name: 'Change history', exact: true }).click();
+    await recordAction(page, 'Change history');
     await expect(page.locator('#drawer-body')).toContainText('Fictional <script>retirement</script>');
     await expect(page.locator('#drawer-body script')).toHaveCount(0); await accessible(page);
     expect(f.calls.filter(call => call.path.endsWith('/status/')).map(call => call.data)).toMatchObject([{ active: false, version: 0 }, { active: true, version: 1 }]);

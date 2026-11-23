@@ -5,7 +5,7 @@
     window.createAdmissionWithdrawals = ({ node, request, task, notify }) => ({
         mount(container, application, { staff = false, canResolve = false, toggleTarget = null, label = '', onOutcome = async () => {}, beforeChange = () => true, initiallyOpen = false } = {}) {
             const base = `${staff ? '/sis' : '/portal/api'}/applications/${application}/withdrawal/`;
-            const id = `withdrawal-${++sequence}`, content = node('section', { id, hidden: true, class: 'record-section mt-3', 'aria-label': 'Application withdrawal' });
+            const id = `withdrawal-${++sequence}`, content = node('section', { id, hidden: true, class: 'record-section admission-workbench mt-3', 'aria-label': 'Application withdrawal' });
             const toggle = node('button', { type: 'button', class: 'btn btn-outline-secondary', 'aria-controls': id, 'aria-expanded': 'false',
                 ...(label ? { 'aria-label': `Withdrawal for ${label}` } : {}) }, 'Withdrawal');
             const status = node('p', { role: 'status', 'aria-live': 'polite', 'aria-atomic': 'true', class: 'form-text' }), body = node('div');
@@ -69,7 +69,7 @@
                 function edit(action, requestId = null) {
                     if (!beforeChange() || !leave()) return;
                     dirty = false; editor.replaceChildren(); status.textContent = '';
-                    const form = node('form'), controls = node('fieldset'), preview = node('div');
+                    const form = node('form', { class: 'record-form' }), controls = node('fieldset', { class: 'record-form-section' }), preview = node('div');
                     controls.append(node('legend', { class: 'h6' }, names[action]));
                     let reason = null;
                     if (action !== 'cancel') {

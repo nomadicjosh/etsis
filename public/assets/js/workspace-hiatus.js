@@ -1,30 +1,14 @@
 /* Staff hiatus history. Comments and amendment reasons stay in memory and render as text. */
 window.createWorkspaceHiatus = function (ui) {
     "use strict";
-    const {
-        node,
-        request,
-        task,
-        table,
-        badge,
-        buildForm,
-        formData,
-        flow,
-        openDrawer,
-    } = ui;
-    const button = (
-        label,
-        callback,
-        style = "btn-outline-primary",
-        settled = () => {},
-    ) =>
+    const { node, request, task, table, badge, buildForm, formData, flow, openDrawer } = ui;
+    const button = (label, callback, style = "btn-outline-primary", settled = () => {}) =>
         node(
             "button",
             {
                 type: "button",
                 class: `btn ${style}`,
-                onclick: (event) =>
-                    task(callback, event.currentTarget).finally(settled),
+                onclick: (event) => task(callback, event.currentTarget).finally(settled),
             },
             label,
         );
@@ -50,9 +34,8 @@ window.createWorkspaceHiatus = function (ui) {
     ];
     async function choose() {
         const body = openDrawer("Student hiatus history", "REGISTRAR RECORDS");
-        const form = await buildForm([
-            ["student_id", "Student", "lookup", "registrationstudents"],
-        ]);
+        const form = await buildForm([["student_id", "Student", "lookup", "registrationstudents"]]);
+        if (!body.isConnected) return;
         const submit = node(
             "button",
             { type: "submit", class: "btn btn-primary" },
@@ -62,8 +45,7 @@ window.createWorkspaceHiatus = function (ui) {
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
-                if (form.reportValidity())
-                    await page(form.elements.student_id.value);
+                if (form.reportValidity()) await page(form.elements.student_id.value);
             }, submit);
         });
         body.append(form);
@@ -93,8 +75,13 @@ window.createWorkspaceHiatus = function (ui) {
         );
         container.append(
             status,
+            node(
+                "nav",
+                { class: "inline-actions mb-3", "aria-label": `${label} pages` },
+                previous,
+                next,
+            ),
             content,
-            node("div", { class: "inline-actions" }, previous, next),
         );
         function controls() {
             previous.disabled = loading || !stack.length;
@@ -124,11 +111,12 @@ window.createWorkspaceHiatus = function (ui) {
         show(initial);
     }
     async function page(student) {
-        const result = await request(
-            `/sis/students/${student}/hiatuses/`,
-            "POST",
-            {},
+        const pendingView = openDrawer("Student hiatus history", "RECORD REVIEW");
+        pendingView.append(
+            node("p", { role: "status", class: "form-text" }, "Loading record details…"),
         );
+        const result = await request(`/sis/students/${student}/hiatuses/`, "POST", {});
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Student hiatus history", "REGISTRAR RECORDS");
         body.append(
             node(
@@ -165,9 +153,7 @@ window.createWorkspaceHiatus = function (ui) {
                               item.starts_on,
                               item.ends_on || "Open-ended",
                               badge(item.state),
-                              button("Review hiatus", () =>
-                                  record(student, item.id),
-                              ),
+                              button("Review hiatus", () => record(student, item.id)),
                           ]),
                           "Student hiatus records",
                       )
@@ -176,23 +162,22 @@ window.createWorkspaceHiatus = function (ui) {
         );
     }
     async function create(student, draft = {}) {
-        const body = openDrawer(
-            "Record a student hiatus",
-            "DETAILS → REVIEW → CONFIRM",
-        );
+        const body = openDrawer("Record a student hiatus", "DETAILS → REVIEW → CONFIRM");
         const fields = [
             ["code", "Hiatus type", "choice", choices],
             ["starts_on", "Effective start date", "date"],
             ["ends_on", "End date (optional)", "date", "", false],
             ["note", "Private staff comment", "textarea"],
         ];
-        const form = await buildForm(fields, {
-            ...draft,
-            code:
-                choices.find((choice) =>
-                    choice.startsWith(`${draft.code} —`),
-                ) || choices[0],
-        });
+        const form = await buildForm(
+            fields,
+            {
+                ...draft,
+                code: choices.find((choice) => choice.startsWith(`${draft.code} —`)) || choices[0],
+            },
+            { layout: "student_hiatus" },
+        );
+        if (!body.isConnected) return;
         const dates = () => {
             form.elements.ends_on.min = form.elements.starts_on.value;
         };
@@ -210,11 +195,16 @@ window.createWorkspaceHiatus = function (ui) {
                 if (!form.reportValidity()) return;
                 const data = { ...draft, ...formData(form, fields) };
                 data.code = data.code.split(" — ")[0];
+                if (draft.code && draft.code !== data.code) {
+                    delete data.section_ids;
+                    delete data.deactivate;
+                }
                 const reviewed = await request(
                     `/sis/students/${student}/hiatus-workflow/review/`,
                     "POST",
                     data,
                 );
+                if (!body.isConnected || !form.isConnected) return;
                 await plan(student, data, reviewed);
             }, submit);
         });
@@ -228,19 +218,12 @@ window.createWorkspaceHiatus = function (ui) {
         );
     }
     async function plan(student, draft, reviewed) {
-        const body = openDrawer(
-            "Review student hiatus plan",
-            "DETAILS → REVIEW → CONFIRM",
-        );
+        const body = openDrawer("Review student hiatus plan", "DETAILS → REVIEW → CONFIRM");
         const eligible = new Set(
-            reviewed.courses
-                .filter((course) => course.eligible)
-                .map((course) => course.section_id),
+            reviewed.courses.filter((course) => course.eligible).map((course) => course.section_id),
         );
         const selected = new Set(
-            (draft.section_ids ?? reviewed.defaults.section_ids).filter((id) =>
-                eligible.has(id),
-            ),
+            (draft.section_ids ?? reviewed.defaults.section_ids).filter((id) => eligible.has(id)),
         );
         const activity = node("input", {
             type: "checkbox",
@@ -340,54 +323,28 @@ window.createWorkspaceHiatus = function (ui) {
                 node(
                     "div",
                     {},
-                    node(
-                        "label",
-                        { for: id },
-                        control,
-                        `Apply to ${course.section_code}`,
-                    ),
-                    course.reason
-                        ? node("p", { class: "form-text" }, course.reason)
-                        : null,
+                    node("label", { for: id }, control, `Apply to ${course.section_code}`),
+                    course.reason ? node("p", { class: "form-text" }, course.reason) : null,
                 ),
             ];
         });
         body.append(
             rows.length
                 ? grid(
-                      [
-                          "Section",
-                          "Course",
-                          "Term",
-                          "Proposed status",
-                          "Apply change",
-                      ],
+                      ["Section", "Course", "Term", "Proposed status", "Apply change"],
                       rows,
                       "Proposed course changes",
                   )
-                : node(
-                      "p",
-                      {},
-                      "No open course enrollments need review for this date.",
-                  ),
+                : node("p", {}, "No open course enrollments need review for this date."),
             summary,
             node("h3", {}, "Staff comment"),
-            node(
-                "p",
-                { class: "text-break", style: "white-space: pre-wrap" },
-                draft.note,
-            ),
+            node("p", { class: "text-break", style: "white-space: pre-wrap" }, draft.note),
             node(
                 "p",
                 { class: "alert alert-info" },
                 "Early drops reverse their original course charges; late drops keep them. Finance reviews cash refunds and other adjustments separately.",
             ),
-            node(
-                "p",
-                {},
-                "Case reference: ",
-                node("code", {}, reviewed.operation_id),
-            ),
+            node("p", {}, "Case reference: ", node("code", {}, reviewed.operation_id)),
             node(
                 "p",
                 { class: "form-text" },
@@ -414,6 +371,7 @@ window.createWorkspaceHiatus = function (ui) {
                                 deactivate: activity.checked,
                             },
                         );
+                        if (!body.isConnected) return;
                         completed(student, result);
                         await ui.refreshDirectory();
                     },
@@ -434,10 +392,7 @@ window.createWorkspaceHiatus = function (ui) {
         );
     }
     function completed(student, result) {
-        const body = openDrawer(
-            "Hiatus plan completed",
-            "STUDENT RECORDS UPDATED",
-        );
+        const body = openDrawer("Hiatus plan completed", "STUDENT RECORDS UPDATED");
         body.append(
             node(
                 "p",
@@ -449,24 +404,18 @@ window.createWorkspaceHiatus = function (ui) {
                 {},
                 "The hiatus history and course changes were saved together. Early course charges were reversed; late charges were retained. Cash refunds require a separate financial review.",
             ),
-            button(
-                "Review saved hiatus",
-                () => record(student, result.id),
-                "btn-primary",
-            ),
+            button("Review saved hiatus", () => record(student, result.id), "btn-primary"),
             button("Back to hiatus history", () => page(student)),
         );
     }
     async function returnDetails(student, value, draft = {}) {
-        const body = openDrawer(
-            "Return from hiatus / readmission",
-            "DETAILS → REVIEW → CONFIRM",
-        );
+        const body = openDrawer("Return from hiatus / readmission", "DETAILS → REVIEW → CONFIRM");
         const fields = [
             ["return_on", "Return effective date", "date"],
             ["note", "Reason for return decision", "textarea"],
         ];
-        const form = await buildForm(fields, draft);
+        const form = await buildForm(fields, draft, { layout: "student_hiatus_return" });
+        if (!body.isConnected) return;
         const submit = node(
             "button",
             { type: "submit", class: "btn btn-primary" },
@@ -483,6 +432,7 @@ window.createWorkspaceHiatus = function (ui) {
                     "POST",
                     data,
                 );
+                if (!body.isConnected || !form.isConnected) return;
                 returnPlan(student, value, data, review);
             }, submit);
         });
@@ -496,10 +446,7 @@ window.createWorkspaceHiatus = function (ui) {
         );
     }
     function returnPlan(student, value, draft, review) {
-        const body = openDrawer(
-            "Review return / readmission plan",
-            "DETAILS → REVIEW → CONFIRM",
-        );
+        const body = openDrawer("Review return / readmission plan", "DETAILS → REVIEW → CONFIRM");
         const activity = node("input", {
             type: "checkbox",
             id: "return-reactivate",
@@ -557,17 +504,8 @@ window.createWorkspaceHiatus = function (ui) {
                 {},
                 "The hiatus ends before the return date; an earlier recorded end stays unchanged. Returning never restores dropped or withdrawn enrollments, changes employment or login access, or adjusts charges.",
             ),
-            node(
-                "p",
-                { class: "text-break", style: "white-space: pre-wrap" },
-                draft.note,
-            ),
-            node(
-                "p",
-                {},
-                "Return reference: ",
-                node("code", {}, review.operation_id),
-            ),
+            node("p", { class: "text-break", style: "white-space: pre-wrap" }, draft.note),
+            node("p", {}, "Return reference: ", node("code", {}, review.operation_id)),
             node(
                 "p",
                 { class: "form-text" },
@@ -590,6 +528,8 @@ window.createWorkspaceHiatus = function (ui) {
                                 reactivate: activity.checked,
                             },
                         );
+                        if (!body.isConnected) return;
+
                         returnCompleted(student, value.id, saved);
                         await ui.refreshDirectory();
                     },
@@ -599,16 +539,14 @@ window.createWorkspaceHiatus = function (ui) {
                     const saved = await request(
                         `/sis/students/${student}/hiatuses/${value.id}/returns/${review.operation_id}/`,
                     );
+                    if (!body.isConnected) return;
                     returnCompleted(student, value.id, saved);
                 }),
             ),
         );
     }
     function returnCompleted(student, hiatus, saved) {
-        const body = openDrawer(
-            "Return decision recorded",
-            "REGISTRAR RECORDS UPDATED",
-        );
+        const body = openDrawer("Return decision recorded", "REGISTRAR RECORDS UPDATED");
         const result = saved.result;
         body.append(
             node(
@@ -622,23 +560,20 @@ window.createWorkspaceHiatus = function (ui) {
                 "Earlier enrollments, holds and charges remain unchanged. Registration eligibility is checked when a new course is requested.",
             ),
             node("p", {}, "Reference: ", node("code", {}, saved.operation_id)),
-            button(
-                "Review saved hiatus",
-                () => record(student, hiatus),
-                "btn-primary",
-            ),
+            button("Review saved hiatus", () => record(student, hiatus), "btn-primary"),
         );
     }
     async function record(student, id) {
+        const pendingView = openDrawer("Student hiatus", "RECORD REVIEW");
+        pendingView.append(
+            node("p", { role: "status", class: "form-text" }, "Loading record details…"),
+        );
         const value = await request(`/sis/students/${student}/hiatuses/${id}/`);
+        if (!pendingView.isConnected) return;
         const body = openDrawer(value.label, "STUDENT HIATUS");
         body.append(
             button("Back to hiatus history", () => page(student), "btn-link"),
-            node(
-                "p",
-                {},
-                `${value.starts_on} through ${value.ends_on || "open-ended"}`,
-            ),
+            node("p", {}, `${value.starts_on} through ${value.ends_on || "open-ended"}`),
             badge(value.state),
             node(
                 "p",
@@ -649,11 +584,7 @@ window.createWorkspaceHiatus = function (ui) {
             ),
             node("p", { class: "form-text" }, explanation),
             node("h3", {}, "Initial staff comment"),
-            node(
-                "p",
-                { class: "text-break", style: "white-space: pre-wrap" },
-                value.comment,
-            ),
+            node("p", { class: "text-break", style: "white-space: pre-wrap" }, value.comment),
         );
         if (value.code === "W")
             body.append(
@@ -728,9 +659,8 @@ window.createWorkspaceHiatus = function (ui) {
                     "div",
                     { class: "inline-actions" },
                     button("Set or correct end date", async () => {
-                        const operation = await request(
-                            "/sis/ui/operation-id/",
-                        );
+                        const operation = await request("/sis/ui/operation-id/");
+                        if (!body.isConnected) return;
                         const form = await flow(
                             "Save hiatus end date",
                             [
@@ -752,9 +682,8 @@ window.createWorkspaceHiatus = function (ui) {
                     button(
                         "Void this record",
                         async () => {
-                            const operation = await request(
-                                "/sis/ui/operation-id/",
-                            );
+                            const operation = await request("/sis/ui/operation-id/");
+                            if (!body.isConnected) return;
                             await flow(
                                 "Confirm hiatus void",
                                 [["note", "Reason for voiding", "textarea"]],
@@ -798,13 +727,9 @@ window.createWorkspaceHiatus = function (ui) {
             panel,
             history,
             (after) =>
-                request(
-                    `/sis/students/${student}/hiatuses/${id}/history/`,
-                    "POST",
-                    {
-                        after,
-                    },
-                ),
+                request(`/sis/students/${student}/hiatuses/${id}/history/`, "POST", {
+                    after,
+                }),
             (rows) =>
                 rows.length
                     ? node(
@@ -821,8 +746,7 @@ window.createWorkspaceHiatus = function (ui) {
                                           created: "Created",
                                           end_changed: "End date changed",
                                           voided: "Voided",
-                                          returned:
-                                              "Return / readmission recorded",
+                                          returned: "Return / readmission recorded",
                                       }[item.action] || item.action,
                                   ),
                                   node(
@@ -837,8 +761,7 @@ window.createWorkspaceHiatus = function (ui) {
                                           ? "Verified decision"
                                           : "Earlier case evidence",
                                   ),
-                                  item.action === "end_changed" ||
-                                      item.action === "returned"
+                                  item.action === "end_changed" || item.action === "returned"
                                       ? node(
                                             "p",
                                             {},

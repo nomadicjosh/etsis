@@ -40,42 +40,103 @@ window.createWorkspaceRestrictions = function (ui) {
             },
             table(headers, rows, caption),
         );
-    async function pages(container, kind, fetchPage, render) {
-        let after = "";
+    async function pages(
+        container,
+        kind,
+        fetchPage,
+        render,
+        { initial = null, remember = () => {}, onDenied = null } = {},
+    ) {
+        let after = initial?.after || "";
         let nextAfter = null;
         let serial = 0;
-        const previousCursors = [],
-            content = node("div");
+        let busy = false;
+        let previousCursors = [...(initial?.trail || [])];
+        const content = node("div");
         const status = node("p", {
             class: "form-text",
             role: "status",
             "aria-live": "polite",
+            tabindex: "-1",
         });
-        const previous = button(`Previous ${kind} page`, async () => {
-            after = previousCursors.pop() || "";
-            await load();
+        const readButton = (label, run) =>
+            node(
+                "button",
+                {
+                    type: "button",
+                    class: "btn btn-outline-primary",
+                    onclick: () => {
+                        if (!busy) task(run);
+                    },
+                },
+                label,
+            );
+        const previous = readButton(`Previous ${kind} page`, () => {
+            return load(previousCursors.at(-1) || "", previousCursors.slice(0, -1), true);
         });
-        const next = button(`Next ${kind} page`, async () => {
-            previousCursors.push(after);
-            after = nextAfter;
-            await load();
-        });
+        const next = readButton(`Next ${kind} page`, () =>
+            load(nextAfter, [...previousCursors, after], true),
+        );
+        const refresh = readButton(`Refresh ${kind} page`, () =>
+            load(after, previousCursors, true),
+        );
         previous.disabled = true;
         next.disabled = true;
         container.append(
             status,
+            node(
+                "nav",
+                { class: "inline-actions mb-3", "aria-label": `${kind} pages` },
+                previous,
+                next,
+                refresh,
+            ),
             content,
-            node("div", { class: "inline-actions" }, previous, next),
         );
-        async function load() {
+        function controls(pending) {
+            busy = pending;
+            previous.disabled = pending || !previousCursors.length;
+            next.disabled = pending || !nextAfter;
+            refresh.disabled = pending;
+            content.inert = pending;
+            content.setAttribute("aria-busy", String(pending));
+        }
+        async function load(
+            candidateAfter = after,
+            candidateTrail = previousCursors,
+            focus = false,
+        ) {
             const token = ++serial;
-            const result = await fetchPage(after);
+            controls(true);
+            let result;
+            try {
+                result = await fetchPage(candidateAfter);
+            } catch (error) {
+                if (container.isConnected && token === serial) {
+                    status.textContent =
+                        "This page could not be refreshed. The previous page remains displayed. Try again.";
+                    if (error.status === 403) {
+                        content.replaceChildren();
+                        nextAfter = null;
+                        previousCursors = [];
+                        status.textContent = "Access to this list is no longer available.";
+                        onDenied?.();
+                    }
+                }
+                throw error;
+            } finally {
+                if (container.isConnected && token === serial) controls(false);
+            }
             if (!container.isConnected || token !== serial) return;
+            after = candidateAfter;
+            previousCursors = [...candidateTrail];
             nextAfter = result.next_after;
+            remember({ after, trail: [...previousCursors] });
             previous.disabled = !previousCursors.length;
             next.disabled = !nextAfter;
             status.textContent = `${result.items.length} records on this page.${nextAfter ? " More are available." : ""}`;
-            content.replaceChildren(render(result.items));
+            content.replaceChildren(render(result.items, result));
+            if (focus) status.focus({ preventScroll: true });
         }
         await load();
     }
@@ -96,33 +157,20 @@ window.createWorkspaceRestrictions = function (ui) {
             panel,
             "restriction",
             (after) =>
-                request(
-                    `/sis/persons/${student.person_id}/restrictions/`,
-                    "POST",
-                    {
-                        after,
-                    },
-                ),
+                request(`/sis/persons/${student.person_id}/restrictions/`, "POST", {
+                    after,
+                }),
             (rows) =>
                 rows.length
                     ? grid(
-                          [
-                              "Code",
-                              "Severity",
-                              "State",
-                              "Starts",
-                              "Ends",
-                              "Action",
-                          ],
+                          ["Code", "Severity", "State", "Starts", "Ends", "Action"],
                           rows.map((row) => [
                               row.code,
                               row.severity,
                               badge(row.state),
                               row.starts_on,
                               row.ends_on || "Open",
-                              button("Review restriction", () =>
-                                  view(row.id, student),
-                              ),
+                              button("Review restriction", () => view(row.id, student)),
                           ]),
                           "Student restrictions",
                       )
@@ -130,9 +178,13 @@ window.createWorkspaceRestrictions = function (ui) {
         );
     }
     async function create(student) {
+        const pendingView = openDrawer("Place restriction", "CONNECTED WORKSPACE");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const setup = await request("/sis/offices/", "POST", {});
+        if (!pendingView.isConnected) return;
         const offices = setup.items.filter((row) => Number(row.active) === 1);
         if (!offices.length) {
+            if (!pendingView.isConnected) return;
             const body = openDrawer("An owning office is needed", "HOLD SETUP");
             body.append(
                 node(
@@ -141,11 +193,11 @@ window.createWorkspaceRestrictions = function (ui) {
                     "An administrator must set up an active office and delegate access before a hold can be placed.",
                 ),
             );
-            if (setup.can_administer)
-                body.append(button("Set up offices", officeSetup));
+            if (setup.can_administer) body.append(button("Set up offices", officeSetup));
             return;
         }
         const operation = await request("/sis/ui/operation-id/");
+        if (!pendingView.isConnected) return;
         const form = await flow(
             "Place restriction",
             [
@@ -156,11 +208,7 @@ window.createWorkspaceRestrictions = function (ui) {
                     offices.map((row) => ({ value: row.id, label: row.name })),
                 ],
                 ["code", "Restriction code"],
-                [
-                    "severity",
-                    "Severity (99+ blocks student registration)",
-                    "number",
-                ],
+                ["severity", "Severity (99+ blocks student registration)", "number"],
                 ["starts_on", "Starts on", "date"],
                 ["ends_on", "Ends on (optional)", "date", "", false],
                 ["blocks_staff", "Also block staff registration", "checkbox"],
@@ -213,7 +261,8 @@ window.createWorkspaceRestrictions = function (ui) {
             ]),
         );
         const personName =
-            record.person_name || [student?.given_name, student?.family_name].filter(Boolean).join(" ");
+            record.person_name ||
+            [student?.given_name, student?.family_name].filter(Boolean).join(" ");
         if (personName)
             body.insertBefore(
                 node(
@@ -237,11 +286,19 @@ window.createWorkspaceRestrictions = function (ui) {
             ),
             node("p", {}, `Owning office: ${record.office_name || "Not assigned"}`),
         );
-        const actions = node("div", { class: "inline-actions", role: "group", "aria-label": "Hold tasks" });
+        const actions = node("div", {
+            class: "inline-actions",
+            role: "group",
+            "aria-label": "Hold tasks",
+        });
         const more = [button("Review hold history", () => history(id, student))];
         body.append(actions);
         if (can("sis:audit:read"))
-            more.push(button("View restriction audit", () => showAudit(student?.id || record.person_id, id)));
+            more.push(
+                button("View restriction audit", () =>
+                    showAudit(student?.id || record.person_id, id),
+                ),
+            );
         if (record.office_id && can("sis:restrictions:handoff"))
             more.push(
                 button(
@@ -307,7 +364,9 @@ window.createWorkspaceRestrictions = function (ui) {
                             {
                                 ends_on:
                                     record.ends_on ||
-                                    (record.today < record.starts_on ? record.starts_on : record.today),
+                                    (record.today < record.starts_on
+                                        ? record.starts_on
+                                        : record.today),
                             },
                             "The end date is inclusive. Explain why the hold is ending. Your decision and reason are retained; earlier decisions and notes remain available. This form safely reuses its operation ID when retried.",
                             { layout: "restriction_end" },
@@ -336,7 +395,8 @@ window.createWorkspaceRestrictions = function (ui) {
                 form.elements.note.autocomplete = "off";
             }),
         );
-        if (more.length > 1) actions.append(actionMenu("More", more, { context: "More hold actions" }));
+        if (more.length > 1)
+            actions.append(actionMenu("More", more, { context: "More hold actions" }));
         else actions.append(more[0]);
         const notes = node(
             "section",
@@ -395,24 +455,15 @@ window.createWorkspaceRestrictions = function (ui) {
             body,
             "history",
             async (cursor) => {
-                const result = await request(
-                    `/sis/restrictions/${id}/history/`,
-                    "POST",
-                    { cursor },
-                );
+                const result = await request(`/sis/restrictions/${id}/history/`, "POST", {
+                    cursor,
+                });
                 return { items: result.items, next_after: result.next_cursor };
             },
             (rows) =>
                 rows.length
                     ? grid(
-                          [
-                              "Decision",
-                              "Effective",
-                              "Starts",
-                              "Ends",
-                              "Office",
-                              "Recorded",
-                          ],
+                          ["Decision", "Effective", "Starts", "Ends", "Office", "Recorded"],
                           rows.map((row) => [
                               {
                                   observed: "Existing record observed",
@@ -438,7 +489,10 @@ window.createWorkspaceRestrictions = function (ui) {
         );
     }
     async function followUp(id, student) {
+        const pendingView = openDrawer("Restriction follow-up", "CONNECTED WORKSPACE");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const work = await request(`/sis/restrictions/${id}/follow-up/`);
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Follow-up & assignment", "OFFICE WORK");
         let assignee = work.assigned_user_id,
             name = work.assignee_name;
@@ -457,9 +511,7 @@ window.createWorkspaceRestrictions = function (ui) {
             button("Leave unassigned", () => choose(null, null)),
         );
         if (work.can_assign_self)
-            actions.append(
-                button("Assign to me", () => choose(work.self_user_id, "You")),
-            );
+            actions.append(button("Assign to me", () => choose(work.self_user_id, "You")));
         body.append(
             button("Back to restriction", () => view(id, student)),
             node(
@@ -489,11 +541,7 @@ window.createWorkspaceRestrictions = function (ui) {
             "form",
             { class: "inline-actions mb-3" },
             search,
-            node(
-                "button",
-                { type: "submit", class: "btn btn-outline-primary" },
-                "Find colleagues",
-            ),
+            node("button", { type: "submit", class: "btn btn-outline-primary" }, "Find colleagues"),
         );
         const results = node("div"),
             lookupStatus = node("p", { class: "form-text", role: "status" });
@@ -522,9 +570,7 @@ window.createWorkspaceRestrictions = function (ui) {
                         ["Colleague", "Action"],
                         rows.map((row) => [
                             row.name,
-                            button(`Choose ${row.name}`, () =>
-                                choose(row.id, row.name),
-                            ),
+                            button(`Choose ${row.name}`, () => choose(row.id, row.name)),
                         ]),
                         "Responsible colleague choices",
                     ),
@@ -542,11 +588,7 @@ window.createWorkspaceRestrictions = function (ui) {
         const form = await buildForm(fields, {
             follow_up_on: work.follow_up_on || "",
         });
-        const save = node(
-            "button",
-            { type: "submit", class: "btn btn-primary" },
-            "Save follow-up",
-        );
+        const save = node("button", { type: "submit", class: "btn btn-primary" }, "Save follow-up");
         const clear = button("Clear follow-up", () => {
             choose(null, null);
             form.elements.follow_up_on.value = "";
@@ -563,16 +605,12 @@ window.createWorkspaceRestrictions = function (ui) {
             event.preventDefault();
             task(async () => {
                 if (!form.reportValidity()) return;
-                await request(
-                    `/sis/restrictions/${id}/follow-up/save/`,
-                    "POST",
-                    {
-                        office_id: work.office_id,
-                        work_revision: Number(work.work_revision),
-                        assigned_user_id: assignee,
-                        follow_up_on: formData(form, fields).follow_up_on,
-                    },
-                );
+                await request(`/sis/restrictions/${id}/follow-up/save/`, "POST", {
+                    office_id: work.office_id,
+                    work_revision: Number(work.work_revision),
+                    assigned_user_id: assignee,
+                    follow_up_on: formData(form, fields).follow_up_on,
+                });
                 notify("Office follow-up saved.");
                 await view(id, student);
             }, save);
@@ -581,13 +619,14 @@ window.createWorkspaceRestrictions = function (ui) {
         await find();
     }
     async function handoff(id, student, record, preset = {}) {
+        const pendingView = openDrawer("Office handoff", "CONNECTED WORKSPACE");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const setup = await request("/sis/offices/", "POST", {});
+        if (!pendingView.isConnected) return;
         const choices = setup.items
-            .filter(
-                (row) =>
-                    Number(row.active) === 1 && row.id !== record.office_id,
-            )
+            .filter((row) => Number(row.active) === 1 && row.id !== record.office_id)
             .map((row) => ({ value: row.id, label: row.name }));
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Hand off this hold", "OFFICE RESPONSIBILITY");
         body.append(
             button("Back to restriction", () => view(id, student)),
@@ -599,11 +638,7 @@ window.createWorkspaceRestrictions = function (ui) {
         );
         if (!choices.length) {
             body.append(
-                node(
-                    "p",
-                    {},
-                    "No other active office is available within your current access.",
-                ),
+                node("p", {}, "No other active office is available within your current access."),
             );
             return;
         }
@@ -635,18 +670,11 @@ window.createWorkspaceRestrictions = function (ui) {
         });
     }
     async function confirmHandoff(id, student, record, draft, review) {
-        const body = openDrawer(
-            "Review office handoff",
-            "CONFIRM RESPONSIBILITY",
-        );
+        const body = openDrawer("Review office handoff", "CONFIRM RESPONSIBILITY");
         body.append(
             button("Change handoff", () => handoff(id, student, record, draft)),
             node("h3", {}, review.person.name),
-            node(
-                "p",
-                {},
-                `${review.person.institutional_id} · ${review.hold.code}`,
-            ),
+            node("p", {}, `${review.person.institutional_id} · ${review.hold.code}`),
             grid(
                 ["Current office", "Receiving office"],
                 [[review.from_office, review.to_office]],
@@ -658,11 +686,7 @@ window.createWorkspaceRestrictions = function (ui) {
                 `${review.hold.starts_on} through ${review.hold.ends_on || "open-ended"} · Severity ${review.hold.severity}`,
             ),
             node("h3", {}, "Reason"),
-            node(
-                "p",
-                { class: "text-break", style: "white-space: pre-wrap" },
-                draft.reason,
-            ),
+            node("p", { class: "text-break", style: "white-space: pre-wrap" }, draft.reason),
             node(
                 "p",
                 { class: "form-text" },
@@ -699,15 +723,10 @@ window.createWorkspaceRestrictions = function (ui) {
             event.preventDefault();
             task(async () => {
                 if (!form.reportValidity()) return;
-                await request(
-                    `/sis/restrictions/${id}/handoff/confirm/`,
-                    "POST",
-                    {
-                        review_token: review.review_token,
-                        acknowledge_access: formData(form, fields)
-                            .acknowledge_access,
-                    },
-                );
+                await request(`/sis/restrictions/${id}/handoff/confirm/`, "POST", {
+                    review_token: review.review_token,
+                    acknowledge_access: formData(form, fields).acknowledge_access,
+                });
                 notify("Office handoff recorded.");
                 await view(id, student);
             }, save);
@@ -725,16 +744,13 @@ window.createWorkspaceRestrictions = function (ui) {
             button(
                 "Place a hold",
                 () =>
-                    personSearch(
-                        false,
-                        "Find a person for this hold",
-                        (person) => create({ person_id: person.id }),
+                    personSearch(false, "Find a person for this hold", (person) =>
+                        create({ person_id: person.id }),
                     ),
                 "btn-primary",
             ),
         );
-        if (can("admin:access:manage"))
-            heading.append(button("Offices & delegation", officeSetup));
+        if (can("admin:access:manage")) heading.append(button("Offices & delegation", officeSetup));
         container.append(
             node("h2", {}, "Your office holds"),
             node(
@@ -771,23 +787,19 @@ window.createWorkspaceRestrictions = function (ui) {
             "div",
             { class: "form-check" },
             dueInput,
-            node(
-                "label",
-                { for: "holds-due", class: "form-check-label" },
-                "Due today or earlier",
-            ),
+            node("label", { for: "holds-due", class: "form-check-label" }, "Due today or earlier"),
         );
         const form = node(
             "form",
             { class: "hold-queue-search mb-3" },
             node("label", { class: "form-label" }, "Find office holds", search),
             node("label", { class: "form-label" }, "Assignment filter", assigned),
-            node("div", { class: "hold-queue-options" }, dueField,
             node(
-                "button",
-                { type: "submit", class: "btn btn-outline-primary" },
-                "Find holds",
-            )),
+                "div",
+                { class: "hold-queue-options" },
+                dueField,
+                node("button", { type: "submit", class: "btn btn-outline-primary" }, "Find holds"),
+            ),
         );
         const results = node("div");
         form.addEventListener("submit", (event) => {
@@ -833,39 +845,33 @@ window.createWorkspaceRestrictions = function (ui) {
                               ]),
                               "Office hold worklist",
                           )
-                        : node(
-                              "p",
-                              {},
-                              "No holds match your current office access and search.",
-                          ),
+                        : node("p", {}, "No holds match your current office access and search."),
             );
         }
         await render();
     }
-    async function personSearch(accountsOnly, title, choose) {
-        const body = openDrawer(
-            title,
-            accountsOnly ? "OFFICE DELEGATION" : "PLACE A HOLD",
-        );
+    async function personSearch(
+        accountsOnly,
+        title,
+        choose,
+        { back = null, backLabel = "Back to office delegates", context = "" } = {},
+    ) {
+        const body = openDrawer(title, accountsOnly ? "OFFICE DELEGATION" : "PLACE A HOLD");
+        if (back) body.append(button(backLabel, back, "btn-link mb-3"));
+        if (context) body.append(node("p", { class: "form-text" }, context));
         const search = node("input", {
             type: "search",
             class: "form-control",
             minlength: 2,
             maxlength: 80,
             required: true,
-            "aria-label": accountsOnly
-                ? "Find an enabled account"
-                : "Find a person for a hold",
+            "aria-label": accountsOnly ? "Find an enabled account" : "Find a person for a hold",
         });
         const form = node(
             "form",
-            { class: "inline-actions mb-3" },
+            { class: "office-person-search mb-3" },
             search,
-            node(
-                "button",
-                { class: "btn btn-primary", type: "submit" },
-                "Search people",
-            ),
+            node("button", { class: "btn btn-primary", type: "submit" }, "Search people"),
         );
         const results = node("div"),
             status = node(
@@ -880,21 +886,33 @@ window.createWorkspaceRestrictions = function (ui) {
             task(async () => {
                 if (!form.reportValidity()) return;
                 const token = ++serial;
-                const result = await request(
-                    `/sis/offices/${accountsOnly ? "accounts" : "people"}/`,
-                    "POST",
-                    { search: search.value.trim() },
-                );
+                results.inert = true;
+                let result;
+                try {
+                    result = await request(
+                        `/sis/offices/${accountsOnly ? "accounts" : "people"}/`,
+                        "POST",
+                        { search: search.value.trim() },
+                    );
+                } catch (error) {
+                    if (body.isConnected && token === serial && error.status === 403) {
+                        results.replaceChildren();
+                        status.textContent = "Access to this search is no longer available.";
+                    }
+                    throw error;
+                } finally {
+                    if (body.isConnected && token === serial) results.inert = false;
+                }
                 if (!body.isConnected || token !== serial) return;
                 status.textContent = `${result.items.length} matches. Up to 25 are shown; narrow your search to find another person.`;
                 results.replaceChildren(
                     ...result.items.map((person) =>
                         node(
-                            "p",
-                            {},
+                            "div",
+                            { class: "office-person-match" },
                             button(
                                 `${person.given_name} ${person.family_name}${person.institutional_id ? ` · ${person.institutional_id}` : ""}`,
-                                () => choose(person),
+                                () => choose(person, body),
                             ),
                         ),
                     ),
@@ -903,35 +921,93 @@ window.createWorkspaceRestrictions = function (ui) {
         });
         search.focus();
     }
-    async function officeSetup() {
-        const result = await request("/sis/offices/", "POST", {});
-        const body = openDrawer("Offices & delegation", "WORK SCOPE");
+    async function officeSetup(origin = null) {
+        const back = () => officeSetup(origin);
+        const body = openDrawer("Offices & delegation", "WORK SCOPE", { record: null });
+        const returnButton = button(
+            origin?.label || "Back to holds",
+            origin?.run ||
+                (async () => {
+                    ui.closeDrawer();
+                    await load();
+                }),
+            "btn-link mb-3",
+        );
+        const status = node("p", { role: "status" }, "Loading offices…");
+        body.append(returnButton, status);
+        let result;
+        try {
+            result = await request("/sis/offices/", "POST", {});
+        } catch (error) {
+            if (body.isConnected)
+                status.textContent =
+                    error.status === 403
+                        ? "Office setup access is no longer available."
+                        : "Office setup could not be loaded. Return to the workspace and try again.";
+            throw error;
+        }
+        if (!body.isConnected) return;
+        body.replaceChildren(returnButton);
         body.append(
             node(
                 "p",
                 { class: "form-text" },
                 "Office delegation narrows access. Staff also need the separate hold-management permission through Roles & access. It does not grant registration, grades, finance or general student-record access.",
             ),
-            button("Add office", () => officeForm()),
-            grid(
-                ["Code", "Office", "State", "Actions"],
-                result.items.map((row) => [
-                    row.code,
-                    row.name,
-                    Number(row.active) === 1 ? "Active" : "Retired",
-                    node(
-                        "div",
-                        { class: "inline-actions" },
-                        button("Edit office", () => officeForm(row)),
-                        button("Manage delegates", () => delegates(row.id)),
-                    ),
-                ]),
-                "Institution offices",
+        );
+        if (result.can_administer) body.append(button("Add office", () => officeForm(null, back)));
+        body.append(
+            node(
+                "p",
+                { class: "form-text mt-3", role: "status" },
+                `${result.items.length} offices.`,
             ),
         );
+        const cards = node("ul", {
+            class: "office-record-list",
+            "aria-label": "Institution offices",
+        });
+        for (const row of result.items) {
+            const actions = node("div", { class: "inline-actions office-record-actions" });
+            if (result.can_administer)
+                actions.append(
+                    button("Manage delegates", () => delegates(row.id, { offices: back })),
+                    actionMenu(
+                        "Office actions",
+                        [button("Edit office", () => officeForm(row, back))],
+                        { context: `Office actions for ${row.name}` },
+                    ),
+                );
+            cards.append(
+                node(
+                    "li",
+                    { class: "office-record-card" },
+                    node(
+                        "div",
+                        { class: "office-record-heading" },
+                        node("h3", {}, row.name),
+                        badge(Number(row.active) === 1 ? "Active" : "Retired"),
+                    ),
+                    node("p", { class: "form-text" }, row.code),
+                    actions,
+                ),
+            );
+        }
+        body.append(
+            result.items.length
+                ? cards
+                : node(
+                      "p",
+                      {},
+                      "No offices have been added. Add an office before configuring delegation.",
+                  ),
+        );
     }
-    async function officeForm(row = null) {
+    async function officeForm(row = null, back = officeSetup) {
+        const loading = openDrawer(row ? "Edit office" : "Add office", "OFFICE SETUP");
+        loading.append(node("p", { role: "status" }, "Preparing office details…"));
         const operation = row ? null : await request("/sis/ui/operation-id/");
+        if (!loading.isConnected) return;
         await flow(
             row ? "Save office" : "Create office",
             [
@@ -941,76 +1017,125 @@ window.createWorkspaceRestrictions = function (ui) {
             ],
             `/sis/offices/${row?.id || operation.id}/save/`,
             (data) => ({ ...data, revision: row ? Number(row.revision) : -1 }),
-            officeSetup,
-            row
-                ? { ...row, active: Number(row.active) === 1 }
-                : { active: true },
+            back,
+            row ? { ...row, active: Number(row.active) === 1 } : { active: true },
             "Retirement prevents delegated work and new holds. Existing holds keep their registration effects and remain available to authorized administrators. No records are deleted.",
+            { backLabel: "Back to offices" },
         );
     }
-    async function delegates(officeId) {
-        const body = openDrawer("Office delegates", "DATED ACCESS");
-        const officeLabel = node("p", { class: "fw-semibold" });
+    async function delegates(officeId, { initial = null, offices = officeSetup } = {}) {
+        let state = initial;
+        let officeName = "";
+        const back = () => delegates(officeId, { initial: state, offices });
+        const body = openDrawer("Office delegates", "DATED ACCESS", {
+            record: { key: `office:${officeId}`, label: "Office delegates", run: back },
+        });
+        const officeLabel = node("div", { class: "office-delegation-context" });
         body.append(
+            button("Back to offices", offices, "btn-link mb-3"),
             officeLabel,
-            button("Back to offices", officeSetup),
+            node(
+                "p",
+                { class: "form-text" },
+                "Delegation limits which office holds a staff member may work with. It adds no roles or permissions. Enabled delegates still need hold-management permission and an eligible date range.",
+            ),
             button("Add delegate", () =>
-                personSearch(true, "Choose a delegate", async (person) => {
-                    const context = await request(
-                        `/sis/offices/${officeId}/delegates/`,
-                        "POST",
-                        {},
-                    );
-                    await delegationForm(officeId, {
-                        user_id: person.owner_user_id,
-                        first_name: person.given_name,
-                        last_name: person.family_name,
-                        starts_on: context.today,
-                        active: true,
-                        revision: -1,
-                    });
-                }),
+                personSearch(
+                    true,
+                    "Choose a delegate",
+                    async (person, searchBody) => {
+                        const context = await request(
+                            `/sis/offices/${officeId}/delegates/`,
+                            "POST",
+                            {},
+                        );
+                        if (!searchBody.isConnected) return;
+                        await delegationForm(
+                            officeId,
+                            {
+                                user_id: person.owner_user_id,
+                                first_name: person.given_name,
+                                last_name: person.family_name,
+                                starts_on: context.today,
+                                active: true,
+                                revision: -1,
+                            },
+                            back,
+                            context.office,
+                        );
+                    },
+                    { back, context: officeName },
+                ),
             ),
         );
         await pages(
             body,
             "delegate",
             async (after) => {
-                const result = await request(
-                    `/sis/offices/${officeId}/delegates/`,
-                    "POST",
-                    {
-                        after,
-                    },
-                );
-                officeLabel.textContent = result.office.name;
+                const result = await request(`/sis/offices/${officeId}/delegates/`, "POST", {
+                    after,
+                });
                 return result;
             },
-            (rows) =>
-                rows.length
-                    ? grid(
-                          [
-                              "Staff member",
-                              "Starts",
-                              "Ends",
-                              "Enabled",
-                              "Action",
-                          ],
-                          rows.map((row) => [
-                              `${row.first_name} ${row.last_name}`,
-                              row.starts_on,
-                              row.ends_on || "Open",
-                              Number(row.active) === 1 ? "Yes" : "No",
-                              button("Edit delegation", () =>
-                                  delegationForm(officeId, row),
+            (rows, result) => {
+                officeName = result.office.name;
+                officeLabel.replaceChildren(
+                    node("h3", {}, result.office.name),
+                    node(
+                        "p",
+                        { class: "form-text mb-0" },
+                        `${result.office.code} · ${Number(result.office.active) === 1 ? "Active office" : "Retired office"}`,
+                    ),
+                );
+                return rows.length
+                    ? node(
+                          "ul",
+                          { class: "office-record-list", "aria-label": "Office delegates" },
+                          ...rows.map((row) =>
+                              node(
+                                  "li",
+                                  { class: "office-record-card" },
+                                  node(
+                                      "div",
+                                      { class: "office-record-heading" },
+                                      node("h3", {}, `${row.first_name} ${row.last_name}`),
+                                      badge(Number(row.active) === 1 ? "Enabled" : "Disabled"),
+                                  ),
+                                  recordSummary([
+                                      ["Starts", row.starts_on],
+                                      ["Ends (inclusive)", row.ends_on || "Open-ended"],
+                                  ]),
+                                  node(
+                                      "div",
+                                      { class: "inline-actions office-record-actions" },
+                                      button("Edit delegation", () =>
+                                          delegationForm(officeId, row, back, result.office),
+                                      ),
+                                  ),
                               ),
-                          ]),
-                          "Office delegates",
+                          ),
                       )
-                    : node("p", {}, "No delegates have been added."),
+                    : node("p", {}, "No delegates have been added.");
+            },
+            {
+                initial,
+                remember: (value) => {
+                    state = value;
+                },
+                onDenied: () => {
+                    body.replaceChildren(
+                        button("Back to offices", offices, "btn-link mb-3"),
+                        node(
+                            "p",
+                            { role: "status" },
+                            "Office delegation access is no longer available.",
+                        ),
+                    );
+                },
+            },
         );
     }
-    async function delegationForm(officeId, row) {
+    async function delegationForm(officeId, row, back, office) {
         const form = await flow(
             "Save office delegation",
             [
@@ -1024,9 +1149,10 @@ window.createWorkspaceRestrictions = function (ui) {
                 user_id: row.user_id,
                 revision: Number(row.revision),
             }),
-            () => delegates(officeId),
+            back,
             { ...row, active: row.active === true || Number(row.active) === 1 },
-            `${row.first_name} ${row.last_name}. Both dates are inclusive and follow the institution calendar. Disable access to revoke it now. This does not add roles or permissions; each action still checks current authority.`,
+            `${row.first_name} ${row.last_name} · ${office.name}. Both dates are inclusive and follow the institution calendar. Disable access to revoke it now. This does not add roles or permissions; each action still checks current authority.`,
+            { backLabel: "Back to office delegates" },
         );
         const dates = () => {
             form.elements.ends_on.min = form.elements.starts_on.value;

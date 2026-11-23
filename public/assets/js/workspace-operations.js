@@ -210,11 +210,13 @@ window.createWorkspaceOperations = function (ui) {
         explanation = "",
         formOptions = {},
     ) {
+        const { backLabel = "Back to record", ...buildOptions } = formOptions;
         const body = openDrawer(title, "CAMPUS OPERATIONS");
-        if (done) body.append(button("Back to record", done, "btn-link mb-3"));
+        if (done) body.append(button(backLabel, done, "btn-link mb-3"));
         if (explanation)
             body.append(node("p", { class: "form-text" }, explanation));
-        const form = await buildForm(descriptors, preset, formOptions);
+        const form = await buildForm(descriptors, preset, buildOptions);
+        if (!body.isConnected) return form;
         const save = node(
             "button",
             { type: "submit", class: "btn btn-primary" },
@@ -224,12 +226,15 @@ window.createWorkspaceOperations = function (ui) {
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
-                if (!form.reportValidity()) return;
+                if (!form.isConnected || !form.reportValidity()) return;
                 const data = transform
                     ? await transform(formData(form, descriptors))
                     : formData(form, descriptors);
+                if (!form.isConnected) return;
                 const result = await request(path, "POST", data);
+                if (!form.isConnected) return;
                 await ui.refreshDirectory();
+                if (!form.isConnected) return;
                 form.reset();
                 notify(
                     result?.status === "already_recorded"
@@ -887,6 +892,7 @@ window.createWorkspaceOperations = function (ui) {
                                         await request(`${base}commit/`, "POST", {
                                             review_token: accepted.review_token,
                                         });
+                                        if (!entryBody.isConnected || !form.isConnected) return;
                                         await back();
                                     } finally {
                                         confirming = false;
@@ -1220,6 +1226,7 @@ window.createWorkspaceOperations = function (ui) {
     }
     async function journal(body, row) {
         const data = await request(`/sis/journals/${row.id}/`);
+        if (!body.isConnected) return;
         body.append(
             section(
                 "Journal lines",
@@ -1250,15 +1257,18 @@ window.createWorkspaceOperations = function (ui) {
             );
     }
     async function createJournal() {
-        const operation = await request("/sis/ui/operation-id/");
         const body = openDrawer("Post a balanced journal", "GENERAL LEDGER");
+        body.append(node("p", { class: "form-text" }, "Enter the journal details, add at least two ledger lines and check that debits and credits balance before posting."));
+        const operation = await request("/sis/ui/operation-id/");
+        if (!body.isConnected) return;
         const base = [
             ["reference", "Unique journal reference"],
             ["posted_on", "Posting date", "date"],
             ["currency", "Currency", "currency"],
             ["reason", "Reason for journal", "textarea"],
         ];
-        const form = await buildForm(base);
+        const form = await buildForm(base, {}, { layout: "journal" });
+        if (!body.isConnected) return;
         const lines = node("div");
         let lineNumber = 0;
         const total = node(
@@ -1278,10 +1288,13 @@ window.createWorkspaceOperations = function (ui) {
                 ],
             ];
             const controls = await buildForm(descriptors);
-            const wrapper = section(`Line ${serial}`);
+            if (!body.isConnected) return;
+            const fields = node("div", { class: "record-form-grid" });
+            for (const field of [...controls.children]) { field.classList.add("record-form-field"); fields.append(field); }
+            const wrapper = node("fieldset", { class: "record-form-section" }, node("legend", {}, `Line ${serial}`));
             wrapper.dataset.serial = serial;
             wrapper.append(
-                ...controls.children,
+                fields,
                 button(
                     `Remove line ${serial}`,
                     async () => {
@@ -1304,7 +1317,9 @@ window.createWorkspaceOperations = function (ui) {
             }
         }
         await addLine();
+        if (!body.isConnected) return;
         await addLine();
+        if (!body.isConnected) return;
         lines.addEventListener("input", balance);
         form.elements.currency.addEventListener("change", balance);
         form.append(lines, button("Add journal line", addLine), total);
@@ -1339,8 +1354,10 @@ window.createWorkspaceOperations = function (ui) {
                         "Use at least two lines whose signed amounts total zero.",
                     );
                 const saved = await request("/sis/journals/", "POST", data);
+                if (!body.isConnected || !form.isConnected) return;
                 notify("Balanced journal posted.");
                 await ui.refreshDirectory();
+                if (!body.isConnected || !form.isConnected) return;
                 await openRecord("journals", {
                     id: saved.id,
                     reference: data.reference,
@@ -1351,6 +1368,7 @@ window.createWorkspaceOperations = function (ui) {
     }
     async function billing(body, row) {
         const rule = await request(`/sis/billing-rules/${row.id}/`);
+        if (!body.isConnected) return;
         body.append(
             section(
                 rule.name,
@@ -1394,8 +1412,9 @@ window.createWorkspaceOperations = function (ui) {
             "Choose up to 25 students. Review current flat fees, earlier postings and resulting balances before confirming."));
         if (back) body.append(button("Back to report selection", back));
         const form = await buildForm(descriptors);
+        if (!body.isConnected) return;
         form.elements.reason.maxLength = 2000;
-        const editor = node("fieldset", {}, node("legend", { class: "h5" }, "Billing selection"));
+        const editor = node("fieldset", { class: "record-form-section" }, node("legend", {}, "Billing selection"));
         editor.append(...form.children);
         const selected = node("section", { class: "record-section", "aria-live": "polite",
             "aria-label": "Selected billing students" });
@@ -1480,7 +1499,7 @@ window.createWorkspaceOperations = function (ui) {
                 const next = button("Next students", () => { offset += 10; renderPage(); });
                 previous.disabled = offset === 0;
                 next.disabled = offset + 10 >= review.students.length;
-                page.append(previous, next);
+                page.prepend(node("nav", { class: "inline-actions mb-3", "aria-label": "Reviewed billing students" }, previous, next));
             }
             renderPage();
             const confirm = button("Confirm reviewed charges", async () => {
@@ -1488,7 +1507,9 @@ window.createWorkspaceOperations = function (ui) {
                 reviewButton.disabled = true;
                 try {
                     const result = await request("/sis/billing-batches/", "POST", { review_token: review.review_token });
+                    if (!body.isConnected || !form.isConnected) return;
                     await ui.refreshDirectory();
+                    if (!body.isConnected || !form.isConnected) return;
                     body.replaceChildren(section("Billing completed",
                         node("p", { role: "status" }, `${result.posted} charge${result.posted === 1 ? "" : "s"} posted. ${result.accounts_created} account${result.accounts_created === 1 ? "" : "s"} opened.`),
                         ...result.totals.map(total => node("p", {}, `${money(total.minor, total.currency)} in new charges`)),
@@ -1908,7 +1929,7 @@ window.createWorkspaceOperations = function (ui) {
             }
         }
         await load(false);
-        if (latest.status === "active") window.setTimeout(() => poll(), latest.waiting ? 60000 : 6000);
+        if (body.isConnected && latest?.status === "active") window.setTimeout(() => poll(), latest.waiting ? 60000 : 6000);
     }
     async function campaign(body, row, origin = null) {
         const data = await request(`/sis/campaigns/${row.id}/`);
@@ -2151,7 +2172,10 @@ window.createWorkspaceOperations = function (ui) {
         );
     }
     async function editCatalog(kind, row, origin = {}) {
-        if (kind === "terms") return ui.calendar().editTerm(row.id);
+        if (kind === "terms") return ui.calendar().editTerm(row.id, async () => {
+            const fresh = await request(`/sis/ui/catalog/terms/${row.id}/`);
+            await openRecord(kind, fresh, origin);
+        });
         const saved = await request(`/sis/ui/catalog/${kind}/${row.id}/`);
         let descriptors = ui.datasets[kind].fields.map((field) => [...field]);
         if (kind === "sections")

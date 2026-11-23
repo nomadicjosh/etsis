@@ -1,5 +1,8 @@
 # Academic calendar setup
 
+Calendar libraries retain their accepted page when you edit, cancel or save. Use **Back to academic years** or **Back to term types** to return. Reviewing templates from academic-year setup preserves the start year; return to setup and generate a fresh review after changing templates. Template forms group identity, anchored dates and future generation; reviews keep each term’s dates and deadline together. Term editors include **Back to record** when opened from an existing term and **Back to academic terms** for a new term. Saving still refreshes the terms workspace.
+
+
 Configure **Term types → Academic years → Terms**, in that order. Calendar setup requires `sis:catalog:manage`. Open **Academic Catalog** in the admin workspace to find all three entries.
 
 ## 1. Configure term types

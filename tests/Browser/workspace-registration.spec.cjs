@@ -240,6 +240,13 @@ test("staff can find an earlier receipt by reference without reselecting or chan
     await page.goto("/admin/registration-fixture/");
     await page.locator('.workspace-nav-link[data-workspace="registration"]').click();
     await page.getByRole("button", { name: "Register a group", exact: true }).click();
+    await page.getByRole('combobox', { name: /^Course section/u }).selectOption(f.section);
+    await page.getByRole('combobox', { name: /^Find a student/u }).selectOption(f.first);
+    await page.getByRole('button', { name: 'Add student to group', exact: true }).click();
+    await page.getByRole('button', { name: 'Find a completed batch', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to registration', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: /^Course section/u })).toHaveValue(f.section);
+    await expect(page.getByRole('region', { name: 'Selected students', exact: true })).toContainText('1 selected student');
     await page.getByRole("button", { name: "Find a completed batch", exact: true }).click();
     await page.getByLabel("Batch reference", { exact: false }).fill(f.operation);
     await page.getByRole("button", { name: "Check completed batch", exact: true }).click();
@@ -247,6 +254,9 @@ test("staff can find an earlier receipt by reference without reselecting or chan
     await expect(page.locator("#drawer-body")).toContainText(
         "1 registration created. 1 existing registration kept.",
     );
+    await page.getByRole('button', { name: 'Back to registration', exact: true }).click();
+    await expect(page.getByRole('combobox', { name: /^Course section/u })).toHaveValue(f.section);
+    await expect(page.getByRole('region', { name: 'Selected students', exact: true })).toContainText('1 selected student');
     expect(f.sent.some((item) => item.path.endsWith("/review/") || item.path.endsWith("/commit/"))).toBe(
         false,
     );

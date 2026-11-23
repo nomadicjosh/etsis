@@ -37,6 +37,28 @@ window.createWorkspaceTranscripts = function (ui) {
             table(headers, rows, caption),
         );
     const units = (value) => (value / 1000).toFixed(3);
+    function workflow(status) {
+        const stages = { pending: 1, ready: 2, fulfilled: 3 };
+        if (!Object.hasOwn(stages, status)) return null;
+        const current = stages[status];
+        return node("ol", { class: "transcript-workflow", "aria-label": "Transcript fulfillment progress" },
+            ["Request received", "Prepare document", "Record delivery"].map((label, index) => {
+                const complete = index < current;
+                return node("li", {
+                    class: complete ? "complete" : index === current ? "current" : "upcoming",
+                    "aria-current": index === current ? "step" : null,
+                }, node("i", { class: `bi bi-${complete ? "check2-circle" : index === current ? "arrow-right-circle" : "circle"}`, "aria-hidden": "true" }),
+                node("span", {}, node("strong", {}, label),
+                    node("small", {}, complete ? "Complete" : index === current ? "Current step" : "Next step")));
+            }));
+    }
+    function taskCard(title, description, glyph, action) {
+        return node("section", { class: "record-task-card", "aria-label": title },
+            node("div", { class: "record-task-heading" },
+                node("span", { class: "icon-soft", "aria-hidden": "true" }, node("i", { class: `bi bi-${glyph}` })),
+                node("h3", {}, title)),
+            node("p", { class: "form-text" }, description), action);
+    }
     function releaseChecklist(policy, stage, changed = () => {}) {
         const section = node("fieldset", { class: "record-section" },
             node("legend", { class: "h5" }, "Institutional release checks"));
@@ -240,7 +262,11 @@ window.createWorkspaceTranscripts = function (ui) {
         );
     }
     async function record(id) {
-        const body = openDrawer("Transcript request", "REGISTRAR WORKSPACE");
+        const body = openDrawer("Transcript request", "REGISTRAR WORKSPACE", {
+            record: { key: `transcript-request:${id}`, label: "Transcript request", run: () => record(id) },
+        });
+        const loading = node("p", { role: "status", class: "form-text" }, "Loading transcript request…");
+        body.append(loading);
         const original = await request(`/portal/api/transcripts/${id}/`);
         if (!body.isConnected) return;
         const currentStatus = node("span", {}, badge(original.status));
@@ -263,6 +289,7 @@ window.createWorkspaceTranscripts = function (ui) {
             ]),
         );
         if (!can("sis:student:read")) {
+            loading.remove();
             body.append(
                 node(
                     "p",
@@ -274,23 +301,29 @@ window.createWorkspaceTranscripts = function (ui) {
         }
         const current = await request(`/sis/transcript-requests/${id}/fulfillment/`);
         if (!body.isConnected) return;
+        loading.remove();
         currentStatus.replaceChildren(badge(current.status));
+        const progress = workflow(current.status);
+        if (progress) body.append(progress);
         const actions = node("div", {
-            class: "inline-actions",
+            class: "record-task-grid transcript-request-tasks",
             role: "group",
             "aria-label": "Transcript request tasks",
         });
         if (current.document)
             actions.append(
-                button("Review transcript", () => document(id, current.document.id), "btn-primary"),
+                taskCard("Prepared document", "Review the retained document, download its protected PDF or record actual delivery.",
+                    "file-earmark-check", button("Review transcript", () => document(id, current.document.id), "btn-primary")),
             );
         if (["pending", "ready"].includes(current.status))
             actions.append(
-                button(
+                taskCard("Preparation", current.document
+                    ? "Review the current academic record and prepare a new revision. Earlier prepared documents retain their values."
+                    : "Review the academic record, document layout and institutional release checks before preparing a document.", "journal-check", button(
                     current.document ? "Review new revision" : "Review preparation",
                     () => review(id),
                     current.document ? "btn-outline-secondary" : "btn-primary",
-                ),
+                )),
             );
         if (actions.childElementCount) body.append(actions);
         body.append(
@@ -303,9 +336,12 @@ window.createWorkspaceTranscripts = function (ui) {
     }
     async function review(id, layoutCode = null) {
         const body = openDrawer("Review transcript preparation", "ACADEMIC REVIEW → PREPARE PDF");
+        const loading = node("p", { role: "status", class: "form-text" }, "Loading preparation review…");
+        body.append(loading);
         const reviewed = await request(`/sis/transcript-requests/${id}/review/`, "POST",
             layoutCode === null ? {} : { layout_code: layoutCode });
         if (!body.isConnected) return;
+        loading.remove();
         const consent = node("input", {
             type: "checkbox",
             id: "transcript-release-reviewed",
@@ -420,12 +456,22 @@ window.createWorkspaceTranscripts = function (ui) {
         );
     }
     async function document(id, documentId) {
-        const body = openDrawer("Prepared transcript", "OFFICIAL TRANSCRIPT");
+        const body = openDrawer("Prepared transcript", "OFFICIAL TRANSCRIPT", {
+            record: { key: `transcript-document:${id}:${documentId}`, label: "Prepared transcript", run: () => document(id, documentId) },
+        });
+        const loading = node("p", { role: "status", class: "form-text" }, "Loading prepared transcript…");
+        body.append(loading);
         const value = await request(`/sis/transcript-requests/${id}/documents/${documentId}/`);
         if (!body.isConnected) return;
         const current = await request(`/sis/transcript-requests/${id}/fulfillment/`);
         if (!body.isConnected) return;
+        loading.remove();
         body.append(
+            node("div", { class: "transcript-document-identity" },
+                node("span", { class: "icon-soft", "aria-hidden": "true" }, node("i", { class: "bi bi-file-earmark-check" })),
+                node("div", {}, node("h3", {}, value.snapshot.student.name),
+                    node("p", { class: "form-text" }, `Institutional ID: ${value.snapshot.student.institutional_id}`)),
+                badge(value.is_latest ? "Current document" : "Earlier document")),
             recordSummary([
                 ["Prepared at", value.created_at],
                 ["Document layout", value.snapshot.presentation.label],
@@ -529,7 +575,11 @@ window.createWorkspaceTranscripts = function (ui) {
         const submit = node("button", { type: "submit", class: "btn btn-primary" }, "Review delivery");
         form.elements.evidence.maxLength = 2000;
         submit.disabled = !checklist.complete();
-        form.append(checklist.section, submit);
+        const refresh = button("Refresh checks", () => delivery(id, documentId, version, {
+            delivered_at: form.elements.delivered_at.value, evidence: form.elements.evidence.value,
+        }));
+        form.append(checklist.section,
+            node("div", { class: "inline-actions", role: "group", "aria-label": "Delivery review actions" }, submit, refresh));
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
@@ -556,9 +606,6 @@ window.createWorkspaceTranscripts = function (ui) {
                 "Record evidence only after actual delivery through the institution's approved process. This screen does not send a document or email.",
             ),
             form,
-            button("Refresh checks", () => delivery(id, documentId, version, {
-                delivered_at: form.elements.delivered_at.value, evidence: form.elements.evidence.value,
-            })),
             button("Back to document", () => document(id, documentId), "btn-link"),
         );
     }
@@ -569,15 +616,17 @@ window.createWorkspaceTranscripts = function (ui) {
                 ["Document", documentId],
                 ["Actual delivery time", reviewed.delivery.delivered_at],
             ]),
-            node("h3", {}, "Delivery evidence"),
-            node("p", { class: "text-break", style: "white-space: pre-wrap" }, reviewed.delivery.evidence),
-            node("h3", { class: "h5" }, "Confirmed release checks"),
-            node("ul", {}, ...reviewed.release_policy.checks.filter((check) => check.stage === "delivery" || check.stage === "both")
-                .map((check) => node("li", {}, check.label))),
+            node("section", { class: "record-section", "aria-label": "Reviewed delivery evidence" },
+                node("h3", {}, "Delivery evidence"),
+                node("p", { class: "text-break", style: "white-space: pre-wrap" }, reviewed.delivery.evidence)),
+            node("section", { class: "record-section", "aria-label": "Reviewed delivery release checks" },
+                node("h3", {}, "Confirmed release checks"),
+                node("ul", {}, ...reviewed.release_policy.checks.filter((check) => check.stage === "delivery" || check.stage === "both")
+                    .map((check) => node("li", {}, check.label)))),
             node(
                 "p",
                 { class: "form-text" },
-                "This review expires after 20 minutes. Changing details keeps your entries. After an interrupted response, retry unchanged or check the saved document before starting another review.",
+                "This review expires after 20 minutes. Changing details keeps your entries. After an interrupted response, retry unchanged or return to the document to check delivery before starting another review.",
             ),
             node(
                 "div",
@@ -604,7 +653,7 @@ window.createWorkspaceTranscripts = function (ui) {
                     "btn-primary",
                 ),
                 button("Change details", () => delivery(id, documentId, reviewed.delivery.version, draft)),
-                button("Check saved document", () => document(id, documentId), "btn-link"),
+                button("Back to document", () => document(id, documentId), "btn-link"),
             ),
         );
     }

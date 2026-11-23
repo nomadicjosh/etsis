@@ -42,11 +42,14 @@ window.createWorkspaceStudents = function (ui) {
     const status = (value) =>
         value === null ? "Unknown" : value ? "Active" : "Inactive";
     async function activity(record, back) {
+        const pendingView = openDrawer("Review student activity", "RECORD REVIEW");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const page = await request(
             `/sis/students/${record.id}/activity/history/`,
             "POST",
             {},
         );
+        if (!pendingView.isConnected) return;
         const body = openDrawer(
             "Review student activity",
             "REGISTRAR DECISION",
@@ -161,11 +164,14 @@ window.createWorkspaceStudents = function (ui) {
         body.append(form);
     }
     async function activityHistory(id, back, cursor = null, previous = []) {
+        const pendingView = openDrawer("Activity history", "RECORD REVIEW");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const page = await request(
             `/sis/students/${id}/activity/history/`,
             "POST",
             cursor ? { cursor } : {},
         );
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Activity history", "REGISTRAR RECORD");
         body.append(
             button("Back to student", back),
@@ -318,11 +324,14 @@ window.createWorkspaceStudents = function (ui) {
         cursor = null,
         previous = [],
     ) {
+        const pendingView = openDrawer("Program status history", "RECORD REVIEW");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const page = await request(
             `/sis/students/${id}/programs/${item.id}/status/history/`,
             "POST",
             cursor ? { cursor } : {},
         );
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Program status history", "REGISTRAR RECORD");
         body.append(
             button("Back to student", back),
@@ -508,11 +517,14 @@ window.createWorkspaceStudents = function (ui) {
         body.append(form);
     }
     async function primaryHistory(id, back, cursor = null, previous = []) {
+        const pendingView = openDrawer("Primary-program history", "RECORD REVIEW");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const page = await request(
             `/sis/students/${id}/primary-program/history/`,
             "POST",
             cursor ? { cursor } : {},
         );
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Primary-program history", "REGISTRAR RECORD");
         body.append(
             button("Back to student", back),
@@ -717,12 +729,22 @@ window.createWorkspaceStudents = function (ui) {
     }
 
     async function student(id) {
+        const pendingView = openDrawer("Student record", "RECORD REVIEW");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const record = await request(`/sis/students/${id}/record/`);
+        const back = () => student(id);
+        if (!pendingView.isConnected) return;
         const body = openDrawer(
             `${record.given_name} ${record.family_name}`,
             "STUDENT RECORD",
+            {
+                record: {
+                    key: `student:${id}`,
+                    label: `${record.given_name} ${record.family_name}`,
+                    run: back,
+                },
+            },
         );
-        const back = () => student(id);
         body.append(
             recordSummary([
                 ["Institutional ID", record.institutional_id],
@@ -960,8 +982,9 @@ window.createWorkspaceStudents = function (ui) {
             disposeActionMenus(content);
             content.replaceChildren(
                 page.items.length
-                    ? grid(
-                          ["Program", "Entry term", "Catalog", "Status", "Actions"],
+                    ? node(
+                          "div",
+                          { class: "record-program-list", role: "group", "aria-label": "Program assignments" },
                           page.items.map((item) => {
                               const controls = node("div", {
                                   class: "program-actions",
@@ -993,7 +1016,7 @@ window.createWorkspaceStudents = function (ui) {
                                   );
                                   extra.push(
                                       button("Matriculation cohort", () =>
-                                          ui.calendar().studentCatalog(id, item.id),
+                                          ui.calendar().studentCatalog(id, item.id, back),
                                       ),
                                   );
                                   if (
@@ -1020,26 +1043,35 @@ window.createWorkspaceStudents = function (ui) {
                                           compact: true,
                                       }),
                                   );
-                              return [
+                              return node(
+                                  "article",
+                                  {
+                                      class: "record-program-card",
+                                      "aria-label": `${item.program_code} · ${item.term_code || "Entry term unknown"}`,
+                                  },
                                   node(
                                       "div",
-                                      { class: "program-identity" },
+                                      { class: "record-program-heading" },
                                       node(
-                                          "strong",
-                                          { class: "private-text" },
-                                          `${item.program_code} · ${item.program_title}`,
+                                          "div",
+                                          { class: "record-program-identity" },
+                                          node("i", { class: "bi bi-mortarboard", "aria-hidden": "true" }),
+                                          node("h4", {}, node("strong", {}, item.program_code), node("span", {}, item.program_title)),
                                       ),
-                                      item.is_primary ? badge("Primary") : null,
+                                      node(
+                                          "div",
+                                          { class: "record-program-badges" },
+                                          item.is_primary ? badge("Primary") : null,
+                                          badge(item.status === "active" ? "Active" : item.status === "closed" ? "Closed" : item.status),
+                                      ),
                                   ),
-                                  item.term_code,
-                                  item.catalog_year
-                                      ? `${item.catalog_year} · revision ${item.catalog_revision}`
-                                      : "Catalog needs review",
-                                  badge(item.status),
-                                  controls,
-                              ];
+                                  recordSummary([
+                                      ["Entry term", item.term_code || "Not recorded"],
+                                      ["Catalog", item.catalog_year ? `${item.catalog_year} · revision ${item.catalog_revision}` : "Catalog needs review"],
+                                  ]),
+                                  node("div", { class: "record-program-footer" }, controls),
+                              );
                           }),
-                          "Program assignments",
                       )
                     : node("p", {}, "No program assignments are recorded."),
             );
@@ -1412,7 +1444,10 @@ window.createWorkspaceStudents = function (ui) {
         cursor = null,
         previous = [],
     ) {
+        const pendingView = openDrawer("Specialization selection history", "RECORD REVIEW");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const data = await request(path + "history/", "POST", { cursor });
+        if (!pendingView.isConnected) return;
         const body = openDrawer(
             "Specialization selection history",
             "RETAINED DECISIONS",
@@ -1488,8 +1523,11 @@ window.createWorkspaceStudents = function (ui) {
         body.append(navigation);
     }
     async function specializationRequirements(base, choice, back, notice = "") {
+        const pendingView = openDrawer("Specialization requirements", "RECORD REVIEW");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const path = `${base}${choice.id}/requirements/`;
         const data = await request(path);
+        if (!pendingView.isConnected) return;
         const body = openDrawer(
             "Specialization requirements",
             "RETAINED STUDENT REQUIREMENTS",
@@ -1572,7 +1610,10 @@ window.createWorkspaceStudents = function (ui) {
         previous = [],
         reason = "",
     ) {
+        const pendingView = openDrawer("Choose specialization requirements", "RECORD REVIEW");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const data = await request(path + "choices/", "POST", { cursor });
+        if (!pendingView.isConnected) return;
         const body = openDrawer(
             "Choose specialization requirements",
             "EXACT PUBLISHED VERSION",

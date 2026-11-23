@@ -2,6 +2,16 @@
 
 Admissions staff keep application responses, educational background, the working checklist, office routing and follow-up together in the existing application review. Formal decisions and matriculation continue through their own reviewed, retained workflows. Working casework does not accept/reject an application, create a student, award credit or change registration eligibility.
 
+## Start an application
+
+Choose **Admissions → Start an application**, select the existing person, academic program and entry term, then choose **Open program application**. Starting from a person record keeps that person selected. Complete the program’s published form and use its existing answer review before submitting.
+
+**Back to application setup** retains the selections and unfinished answers for the same person, program, term and published form. Reopen that same selection to resume. A different selection or published form starts with fresh answers; one applicant’s answers are never copied to another. After submission, **Start another application** obtains a fresh submission request. **Back to Admissions** or **Back to person record** returns to the originating workspace.
+
+## Institutional policies
+
+Choose **Admissions → Policies**. Acceptance checklist, Application revisions, Offer acceptance and Applicant withdrawal have separate labeled groups, explanations and save actions. Each save sends that policy’s current revision. Saving one policy preserves unsaved choices in the others. While a save is pending, save actions are unavailable; a newer input remains marked as unsaved after the accepted response. Ordinary failures keep the draft; denied access removes the controls. Earlier decisions and issued offers retain their recorded policies.
+
 ## Start or continue a case
 
 Open **Admissions**, find an applicant and open the application. Choose **Checklist & follow-up**. This loads only that application's current working case; opening an ordinary listing does not load its notes or replay history.
@@ -29,6 +39,9 @@ Staff with `sis:forms:manage` can also **Create preset from draft** or **Edit pr
 The workbench itself requires `sis:admissions:manage`; authoring presets additionally requires the form-management permission in this screen. The preset configuration API permits a form manager to maintain a known preset without granting access to private applications.
 
 ## Work the follow-up queue
+
+The assignment filter and due-date checkbox share a bounded field group. **Refresh queue** applies those choices; paging sits above the results. Changing filters leaves previous results visible until refreshed. Failed paging retains the accepted page and cursor. Open a case and use **Back to follow-up queue** to return to its accepted assignment, due-date filter and page. **Back to Admissions** closes the queue.
+
 
 From **Admissions**, choose **Follow-up queue**. Filter **All open**, **Assigned to me** or **Unassigned**, optionally check **Due today or earlier**, then refresh. Open/waiting cases appear in pages of twenty, ordered by case creation identity with exclusive cursors. Private notes, instructions and encrypted case payloads are not loaded into this queue.
 

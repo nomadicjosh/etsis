@@ -21,8 +21,10 @@ if ($path === '/portal/api/events/') {
     $loader = new \Qubus\View\Native\NativeLoader(['framework' => $root . '/resources/views']);
     header('Cache-Control: private, no-store');
     header('Content-Type: application/json');
-    echo json_encode(['html' => $loader->render('framework::frontend/portal/components/event-calendar',
-        publicEventsFixture($_GET))], JSON_THROW_ON_ERROR);
+    echo json_encode(['html' => $loader->render(
+        'framework::frontend/portal/components/event-calendar',
+        publicEventsFixture($_GET)
+    )], JSON_THROW_ON_ERROR);
     return;
 }
 
@@ -39,8 +41,11 @@ if ($path === '/fixture/transcript-document/') {
         'student' => ['name' => 'Alex Example', 'institutional_id' => 'S-FICTIONAL'],
         'program' => ['code' => 'BS.CS', 'title' => 'Computer Science'], 'preview' => ($_GET['preview'] ?? '') === '1',
         'document_id' => 'FICTIONAL-REFERENCE', 'issued_at' => '2026-11-07T12:00:00Z',
-        'credits' => [['term_code' => '26/FA', 'course_code' => 'MATH.101', 'course_title' => 'Algebra',
-            'credit_type' => 'institutional', 'attempted_milli' => 3000, 'completed_milli' => 3000, 'grade_code' => 'A']],
+        'credits' => [[
+            'term_code' => '26/FA', 'course_code' => 'MATH.101', 'course_title' => 'Algebra',
+            'credit_type' => 'institutional', 'attempted_milli' => 3000,
+            'completed_milli' => 3000, 'grade_code' => 'A',
+        ]],
         'totals' => ['attempted_milli' => 3000, 'completed_milli' => 3000, 'gpa_milli' => 4000],
     ]);
     return true;
@@ -53,7 +58,9 @@ if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/lo
     ? $_GET['theme'] : 'campus-harbor';
     $signedIn = ($_GET['guest'] ?? '') !== '1';
     $config = \Qubus\Config\Collection::factory([]);
-    $config->setConfigKey('portal', ['name' => 'Northstar', 'theme' => $theme, 'tagline' => 'Fictional campus fixture.']);
+    $config->setConfigKey('portal', [
+        'name' => 'Northstar', 'theme' => $theme, 'tagline' => 'Fictional campus fixture.',
+    ]);
     $config->setConfigKey('auth', ['login_route' => 'login', 'password_min_length' => 26, 'username_min_length' => 6]);
     $gate = new class ($signedIn) implements \Codefy\Framework\Auth\Gate {
         public function __construct(private bool $signedIn)
@@ -79,14 +86,25 @@ if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/lo
     $renderer = new \Application\View\CampusRenderer($config, $gate);
     $public = ['terms' => [['id' => '01K00000000000000000000002', 'code' => '26/FA']],
         'programs' => [
-            ['id' => '01K00000000000000000000001', 'code' => 'BS.CS', 'title' => 'Computer Science', 'form_id' => '01K00000000000000000000008'],
-            ['id' => '01K00000000000000000000009', 'code' => 'BA.ART', 'title' => 'Arts & Creative Practice', 'form_id' => null],
-            ['id' => '01K00000000000000000000010', 'code' => 'BS.BIO', 'title' => 'Biological Sciences', 'form_id' => null],
+            ['id' => '01K00000000000000000000001', 'code' => 'BS.CS',
+                'title' => 'Computer Science', 'form_id' => '01K00000000000000000000008'],
+            ['id' => '01K00000000000000000000009', 'code' => 'BA.ART',
+                'title' => 'Arts & Creative Practice', 'form_id' => null],
+            ['id' => '01K00000000000000000000010', 'code' => 'BS.BIO',
+                'title' => 'Biological Sciences', 'form_id' => null],
         ],
         'news' => [
-            ['id' => '01K00000000000000000000011', 'code' => 'new-chapter', 'title' => 'A new chapter. A familiar sense of belonging.', 'content' => 'Fictional fixture: explore new spaces for learning and connection this fall.'],
-            ['id' => '01K00000000000000000000012', 'code' => 'ideas', 'title' => 'Good ideas grow in good company.', 'content' => 'Fictional fixture: discover a community built around curiosity and a shared love of learning.'],
-            ['id' => '01K00000000000000000000013', 'code' => 'registration', 'title' => 'Make a little room for possibility.', 'content' => 'Fictional fixture: your next semester starts with a spark. Explore course offerings and build your path.'],
+            ['id' => '01K00000000000000000000011', 'code' => 'new-chapter',
+                'title' => 'A new chapter. A familiar sense of belonging.',
+                'content' => 'Fictional fixture: explore new spaces for learning and connection this fall.'],
+            ['id' => '01K00000000000000000000012', 'code' => 'ideas',
+                'title' => 'Good ideas grow in good company.',
+                'content' => 'Fictional fixture: discover a community built around curiosity '
+                    . 'and a shared love of learning.'],
+            ['id' => '01K00000000000000000000013', 'code' => 'registration',
+                'title' => 'Make a little room for possibility.',
+                'content' => 'Fictional fixture: your next semester starts with a spark. '
+                    . 'Explore course offerings and build your path.'],
         ]];
     $csrf = '<input type="hidden" name="csrf_token" value="fictional-test-token">';
     $data = $public + ['csrfMarkup' => $csrf, 'flashMarkup' => ''];
@@ -139,7 +157,9 @@ if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/lo
 
 $loader = new Qubus\View\Native\NativeLoader(['framework' => $root . '/resources/views']);
 header('Cache-Control: private, no-store');
-header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self'; frame-ancestors 'self'");
+header("Content-Security-Policy: default-src 'self'; script-src 'self'; "
+    . "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
+    . "connect-src 'self'; frame-ancestors 'self'");
 if ($path === '/admin/error-fixture/') {
     $response = new \Application\Http\Middleware\SisPrivacyMiddleware()->process(
         new \Qubus\Http\ServerRequest([], [], '/admin/profile/update/?fictional-secret', 'POST')
@@ -166,7 +186,8 @@ if ($path === '/admin/profile/') {
 }
 echo $loader->render('framework::backend/workspace/index', [
     'title' => 'Fictional campus · Workspace test',
-    'section' => 'overview',
+    'section' => preg_match('~^/admin/workspace/([^/]+)/?$~', (string) $path, $workspaceMatch) === 1
+        ? $workspaceMatch[1] : 'overview',
     'permissions' => match ($path) {
         '/admin/admissions-only-fixture/' => ['sis:admissions:manage'],
         '/admin/form-editor-fixture/' => ['sis:forms:manage'],

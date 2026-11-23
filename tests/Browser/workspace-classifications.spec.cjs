@@ -1,4 +1,4 @@
-const { workspaceTool } = require('./support/workspace-actions.cjs');
+const { workspaceTool, recordAction } = require('./support/workspace-actions.cjs');
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = number => `01K000000000000000000000${String(number).padStart(2, '0')}`;
@@ -56,9 +56,9 @@ test('staff set up departments and levels, choose them together and review their
     await workspaceTool(page, 'Departments & levels');
     await add(page, 'Department', 'SCI', 'Science <script>fictional</script>');
     await expect(page.locator('#drawer-body')).toContainText('Science <script>fictional</script>');
-    await page.getByRole('button', { name: 'Academic levels', exact: true }).click();
+    await recordAction(page, 'Academic levels');
     await add(page, 'Academic level', 'UG', 'Undergraduate');
-    await page.getByRole('button', { name: 'Course levels', exact: true }).click();
+    await recordAction(page, 'Course levels');
     await add(page, 'Course level', 'INTRO', 'Introductory');
     await page.getByRole('button', { name: 'Close record', exact: true }).click();
     await page.getByRole('button', { name: 'Fictional Algebra', exact: true }).click();
@@ -123,10 +123,10 @@ test('school and field libraries share setup without adding course classificatio
     const f = await fixture(page);
     await workspaceTool(page, 'Schools & fields');
     await expect(page.getByRole('group', { name: 'Classification category', exact: true })
-        .getByRole('button')).toHaveCount(2);
+        .getByRole('button')).toHaveCount(1);
     await add(page, 'School/college', 'ARTS', 'College of Arts <b>fictional</b>');
     await expect(page.locator('#drawer-body')).toContainText('College of Arts <b>fictional</b>');
-    await page.getByRole('button', { name: 'Fields of study', exact: true }).click();
+    await recordAction(page, 'Fields of study');
     await add(page, 'Field of study', '11.0701', 'Fictional Computer Science');
     await page.getByLabel('Find fields of study', { exact: true }).fill('11.0701');
     await page.getByRole('button', { name: 'Search classifications', exact: true }).click();

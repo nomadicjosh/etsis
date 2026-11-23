@@ -2159,3 +2159,27 @@ test("requirement card grade floors survive preview save and publication", async
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
+
+for (const stage of ['library', 'program', 'academic year', 'group editor']) {
+    test(`late ${stage} reader cannot reopen the closed degree builder`, async ({ page }) => {
+        const f = await fixture(page, { existing: true });
+        let endpoint, begin;
+        if (stage === 'library') {
+            endpoint = '/sis/course-groups/page/'; begin = () => workspaceTool(page, 'Course group library');
+        } else if (stage === 'group editor') {
+            await workspaceTool(page, 'Course group library');
+            endpoint = `/sis/course-groups/${f.group}/`; begin = () => page.getByRole('button', { name: 'Build General education', exact: true }).click();
+        } else if (stage === 'academic year') {
+            await openDegree(page); endpoint = '/sis/academic-years/'; begin = () => page.getByRole('button', { name: 'Set up an academic year', exact: true }).click();
+        } else {
+            await page.getByRole('link', { name: 'Programs', exact: true }).click(); await page.getByRole('button', { name: 'Computing', exact: true }).click();
+            endpoint = `/sis/programs/${f.program}/degree-audits/page/`; begin = () => page.getByRole('button', { name: 'Degree audit requirements', exact: true }).click();
+        }
+        let release, start; const pending = new Promise(resolve => { start = resolve; }); const held = new Promise(resolve => { release = resolve; });
+        await page.route(`**${endpoint}`, async route => { start(); await held; await route.fulfill({ json: { items: [], next_after: null } }); });
+        await begin(); await pending; await page.getByRole('button', { name: 'Close builder', exact: true }).click(); await expect(page.getByRole('dialog')).toHaveCount(0);
+        const finished = page.waitForResponse(response => new URL(response.url()).pathname === endpoint); release(); await finished;
+        await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+        await expect(page.getByRole('dialog')).toHaveCount(0); expect(f.errors).toEqual([]);
+    });
+}

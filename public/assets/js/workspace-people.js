@@ -58,8 +58,11 @@ window.createWorkspacePeople = function (ui) {
         );
     }
     async function account(person) {
+        const pendingView = openDrawer("Sign-in account", "CONNECTED WORKSPACE");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const id = personId(person);
         const record = await request(`/sis/ui/people/${id}/account/`);
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Sign-in account", "CONNECTED TO THIS PERSON");
         body.append(button("Back to person", () => openPerson(id), "btn-link"));
         body.append(
@@ -115,9 +118,12 @@ window.createWorkspacePeople = function (ui) {
             );
     }
     async function signIn(person, record) {
+        const pendingView = openDrawer("Review sign-in access", "CONNECTED WORKSPACE");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const id = personId(person);
         const enabled = !record.sign_in_enabled;
         const operation = (await request("/sis/ui/operation-id/")).id;
+        if (!pendingView.isConnected) return;
         const body = openDrawer(enabled ? "Enable sign-in" : "Disable sign-in", "ACCOUNT ACCESS");
         body.append(button("Back to account", () => account(person), "btn-link"));
         body.append(node("p", {}, enabled
@@ -160,8 +166,11 @@ window.createWorkspacePeople = function (ui) {
         });
     }
     async function contact(person) {
+        const pendingView = openDrawer("Contact information", "CONNECTED WORKSPACE");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const id = personId(person);
         let record = await request(`/sis/ui/people/${id}/contact/`);
+        if (!pendingView.isConnected) return;
         const body = openDrawer(
             "Contact information",
             `${person.givenName} ${person.familyName}`,
@@ -221,8 +230,18 @@ window.createWorkspacePeople = function (ui) {
                 notify("Contact information saved.");
             }, save);
         });
-        body.append(form);
-        const addresses = node("div", { class: "mt-4" });
+        const contactPanel = (title, description, glyph, content) => node(
+            "section",
+            { class: "record-contact-panel", "aria-label": title },
+            node("div", { class: "record-task-heading" },
+                node("span", { class: "icon-soft", "aria-hidden": "true" },
+                    node("i", { class: `bi bi-${glyph}` })),
+                node("h3", {}, title)),
+            node("p", { class: "form-text" }, description),
+            content,
+        );
+        body.append(contactPanel("Contact details", "Maintain the current contact details for this person.", "person-lines-fill", form));
+        const addresses = node("div");
         addresses.append(button("Manage addresses", () => window.createPersonAddresses({ node, request, task, notify })
             .open(addresses, `/sis/ui/people/${id}/addresses/`, saved => {
                 const revision = saved.contact_revision;
@@ -237,22 +256,24 @@ window.createWorkspacePeople = function (ui) {
                     addressHelp.hidden = false;
                 }
             })));
-        body.append(addresses);
-        const emergency = node("div", { class: "mt-4" });
+        body.append(contactPanel("Addresses", "Maintain dated mailing, home and other addresses without changing the contact draft above.", "geo-alt", addresses));
+        const emergency = node("div");
         emergency.append(button("Emergency contacts", () =>
             window.createPersonEmergencyContacts({ node, request, task, notify })
                 .open(emergency, `/sis/ui/people/${id}/emergency-contacts/`)));
-        body.append(emergency);
-        const educationArea = node('div', { class: 'mt-4' });
-        const educationEditor = window.createPersonEducation({ node, request, task, notify }).mount(
-            educationArea, `/sis/ui/people/${id}/education/`, { canReview: can('sis:admissions:manage') },
-        );
-        body.append(educationArea);
-        const requests = node("section", { class: "mt-4", 'aria-label': 'Profile update requests' });
-        body.append(requests);
+        body.append(contactPanel("Emergency contacts", "Maintain the people to contact in an emergency.", "telephone", emergency));
+        let contactBody = body;
+        const requests = node("div");
+        body.append(contactPanel("Profile update requests", "Request missing information and review the person's replies. Profile edits are saved separately.", "chat-left-text", requests));
         window.createPersonProfileRequests({ node, request, task, notify }).mount(
-            requests, `/sis/ui/people/${id}/update-requests/`, { staff: true, openEditor: area => {
-                if (area === 'education') return educationEditor.open();
+            requests, `/sis/ui/people/${id}/update-requests/`, { staff: true, showHeading: false, openEditor: area => {
+                if (area === 'education') {
+                    const content = [...contactBody.childNodes];
+                    return education(person, () => {
+                        contactBody = openDrawer('Contact information', `${person.givenName} ${person.familyName}`);
+                        contactBody.append(button('Back to person', () => openPerson(id), 'btn-link'), ...content);
+                    });
+                }
                 if (area === 'contact') form.elements.preferred_name.focus();
                 else (area === 'addresses' ? addresses : emergency).querySelector('button')?.click();
             } },
@@ -286,9 +307,13 @@ window.createWorkspacePeople = function (ui) {
         );
         return { beforeLeave: () => editor.beforeLeave() && (followUp?.beforeLeave() ?? true) };
     }
-    function education(person) {
+    function education(person, back = null) {
         const body = openDrawer('Educational background', 'PERSON');
-        educationWorkflow(body, person, true);
+        let workflow;
+        body.append(button(back ? 'Back to contact information' : 'Back to person', () => {
+            if (workflow.beforeLeave()) return back ? back() : openPerson(personId(person));
+        }, 'btn-link'));
+        workflow = educationWorkflow(body, person, true);
     }
     async function password(person, record) {
         const id = personId(person);
@@ -360,12 +385,16 @@ window.createWorkspacePeople = function (ui) {
         body.append(form);
     }
     async function application(row) {
+        const pendingView = openDrawer("Application review", "ADMISSIONS RECORD");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading application review…"));
         const review = await request(`/sis/applications/${row.id}/review/`);
         const app = review.application;
         const person = review.person;
+        if (!pendingView.isConnected) return;
         const body = openDrawer(
             `${person.givenName} ${person.familyName}`,
             "APPLICATION REVIEW",
+            {record:{key:`application:${row.id}`,label:`${person.givenName} ${person.familyName}`,run:()=>application(row)}},
         );
         body.append(
             recordSummary([
@@ -441,6 +470,9 @@ window.createWorkspacePeople = function (ui) {
         function mayLeave() {
             return otherForms() && offerEditor.beforeLeave() && (withdrawalEditor?.beforeLeave() ?? true) && (answerEditor?.beforeLeave() ?? true);
         }
+        if (typeof row.followUpBack === "function") body.prepend(
+            button("Back to follow-up queue", () => mayLeave() && row.followUpBack()),
+        );
         if (typeof row.reportBack === "function") body.prepend(
             button("Back to report", () => mayLeave() && row.reportBack()),
         );
@@ -748,6 +780,8 @@ window.createWorkspacePeople = function (ui) {
         }, review); });
     }
     async function decisionHistory(row, cursor = null, previous = []) {
+        const pendingView = openDrawer("Application history", "ADMISSIONS RECORD");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading application history…"));
         const record =
             cursor === null
                 ? await request(`/sis/applications/${row.id}/decision/history/`)
@@ -756,6 +790,7 @@ window.createWorkspacePeople = function (ui) {
                       "POST",
                       { cursor },
                   );
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Application history", "ADMISSIONS RECORD");
         body.append(button("Back to application", () => application(row)));
         if (record.submission) {
@@ -1015,7 +1050,7 @@ window.createWorkspacePeople = function (ui) {
                             notify(
                                 "Student record created. Initial program and activity history recorded.",
                             );
-                            await application(row);
+                            if (heading.isConnected) await application(row);
                         },
                         "btn-primary",
                     ),
@@ -1028,9 +1063,12 @@ window.createWorkspacePeople = function (ui) {
         body.append(form);
     }
     async function matriculationHistory(row) {
+        const pendingView = openDrawer("Matriculation history", "ADMISSIONS RECORD");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading matriculation history…"));
         const record = await request(
             `/sis/applications/${row.id}/matriculate/history/`,
         );
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Matriculation history", "ADMISSIONS RECORD");
         body.append(button("Back to application", () => application(row)));
         if (!record.history_recorded) {
@@ -1070,15 +1108,19 @@ window.createWorkspacePeople = function (ui) {
     }
     function admissionPolicy() {
         const body = openDrawer('Admissions policy', 'INSTITUTIONAL SETUP');
-        window.createAdmissionPolicy({ node, request, task, notify }).mount(body);
+        let editor = null;
+        body.append(button('Back to Admissions', () => (editor?.beforeLeave() ?? true) && ui.closeDrawer(), 'btn-link'));
+        editor = window.createAdmissionPolicy({ node, request, task, notify }).mount(body);
     }
     function withdrawalQueue() {
         const body = openDrawer('Withdrawal requests', 'ADMISSIONS WORKLIST');
         window.createAdmissionWithdrawals({ node, request, task, notify }).queue(body, row => application(row));
     }
-    function caseQueue() {
+    function caseQueue(state = null) {
         const body = openDrawer('Admissions follow-up', 'APPLICATION WORKBENCH');
-        window.createAdmissionCasework({ node, request, task, notify }).queue(body, row => application(row));
+        body.append(button('Back to Admissions', ui.closeDrawer, 'btn-link'));
+        window.createAdmissionCasework({ node, request, task, notify }).queue(body,
+            (row, accepted) => application({ ...row, followUpBack: () => caseQueue(accepted) }), state);
     }
     return { editProfile, account, contact, education, history, application, caseQueue, admissionPolicy, withdrawalQueue };
 };

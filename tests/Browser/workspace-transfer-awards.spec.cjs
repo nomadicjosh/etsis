@@ -321,6 +321,8 @@ async function fixture(page, options = {}) {
                 before,
                 after,
                 revision: "b".repeat(64),
+                operation_id: id(serial++),
+                review_token: "fictional-transfer-review",
             };
         } else if (path === endpoint + "confirm/") {
             if (!operations.has(data.operation_id)) {

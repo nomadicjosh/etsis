@@ -2,7 +2,7 @@ const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = n => String(n).padStart(26, '0');
 
-async function fixture(page) {
+async function fixture(page, { agendaWindow = false } = {}) {
     const room = id(1), booking = id(2);
     const state = { calls: [], errors: [], approved: false, delayed: null, release: null, overflow: false };
     page.on('pageerror', error => state.errors.push(error.message));
@@ -67,10 +67,23 @@ async function fixture(page) {
     await page.locator('.workspace-nav-link[data-workspace="bookings"]').click();
     await page.locator('#directory-tabs').getByRole('link', { name: 'Rooms & spaces' }).click();
     await page.getByRole('button', { name: 'Fictional.101', exact: true }).click();
+    if (agendaWindow) {
+        await page.getByLabel(/^Starts/u).fill('2026-03-01T00:00');
+        await page.getByLabel(/^Ends/u).fill('2026-03-20T00:00');
+        await page.getByRole('button', { name: 'View agenda', exact: true }).click();
+    }
     await page.getByRole('button', { name: 'Room timetable', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Fictional.101 · Capacity: 30' })).toBeVisible();
     return state;
 }
+
+test('returning from the timetable restores the viewed room agenda dates', async ({ page }) => {
+    const state = await fixture(page, { agendaWindow: true });
+    await page.getByRole('button', { name: 'Back to room agenda', exact: true }).click();
+    await expect(page.getByLabel(/^Starts/u)).toHaveValue('2026-03-01T00:00');
+    await expect(page.getByLabel(/^Ends/u)).toHaveValue('2026-03-20T00:00');
+    expect(state.errors).toEqual([]);
+});
 
 test('weekly room timetable keeps school time, pages days and returns from booking approval with fresh counts', async ({ page }) => {
     const state = await fixture(page);

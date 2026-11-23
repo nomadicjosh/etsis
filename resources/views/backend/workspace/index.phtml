@@ -2,6 +2,8 @@
 
 declare(strict_types=1);
 
+use function Codefy\Framework\Helpers\trans_html;
+
 $section = $section ?? "overview";
 $permissions = $permissions ?? [];
 $displayName = $displayName ?? "Campus member";
@@ -89,6 +91,7 @@ $client = [
         <script defer src="/assets/js/workspace-form-library.js"></script>
         <script defer src="/assets/js/workspace-history-checks.js"></script>
         <script defer src="/assets/js/section-waitlist.js"></script>
+        <script defer src="/assets/js/workspace-surfaces.js"></script>
         <script defer src="/assets/js/workspace-operations.js"></script>
         <script defer src="/assets/js/workspace-access.js"></script>
         <script defer src="/assets/js/workspace-moodle.js"></script>
@@ -219,7 +222,9 @@ $client = [
                         <i class="bi bi-chevron-right" aria-hidden="true"></i>
                         <a id="topbar-parent" class="context-parent" href="/admin/" hidden></a>
                         <i id="topbar-parent-divider" class="bi bi-chevron-right" aria-hidden="true" hidden></i>
-                        <strong id="topbar-page" aria-current="page">Overview</strong>
+                        <strong id="topbar-page" aria-current="page">
+                            <?= $section === "overview" ? trans_html("Overview") : trans_html("Workspace") ?>
+                        </strong>
                     </div>
                     <div class="topbar-actions">
                         <?php if ($can("sis:person:manage")) : ?>
@@ -300,7 +305,17 @@ $client = [
                     <noscript><div class="alert alert-info">
                             Enable JavaScript to use the interactive campus workspace.
                         </div></noscript>
-                    <section data-panel="overview" aria-labelledby="overview-heading">
+                    <div
+                        id="workspace-loading"
+                        class="surface p-4"
+                        role="status"
+                        <?= $section === "overview" ? "hidden" : "" ?>>
+                        <?= trans_html("Loading workspace…") ?>
+                    </div>
+                    <section
+                        data-panel="overview"
+                        aria-labelledby="overview-heading"
+                        <?= $section !== "overview" ? "hidden" : "" ?>>
                         <div class="page-heading">
                             <div>
                                 <div class="eyebrow">

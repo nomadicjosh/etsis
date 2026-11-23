@@ -485,8 +485,12 @@ window.createWorkspaceCatalog = function (ui) {
         receipt(await request(`/sis/catalog/offerings/${id}/`));
     }
     async function offeringDefinitions(id, draft = { reason: "", choices: new Map() }) {
+        const pendingView = openDrawer("Choose offering definitions", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const setup = await request(`/sis/catalog/offerings/${id}/publication-setup/`, "POST", {});
+        if (!pendingView.isConnected) return;
         draft.dates ??= new Map();
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Choose offering definitions", "DEFINITIONS & DATES → REVIEW → PUBLISH");
         const form = node("form", {}),
             groups = new Map();
@@ -787,9 +791,12 @@ window.createWorkspaceCatalog = function (ui) {
         );
     }
     async function plans(after = "", stack = []) {
+        const pendingView = openDrawer("Saved offering plans", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const result = await request("/sis/catalog/offerings/", "POST", {
             after,
         });
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Saved offering plans", "DRAFTS & PUBLICATION");
         body.append(
             button("Build another offering plan", () => start(), "btn-primary"),
@@ -817,9 +824,12 @@ window.createWorkspaceCatalog = function (ui) {
             );
     }
     async function courseText(course) {
+        const pendingView = openDrawer("Course titles & description", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const draft = await request(`/sis/courses/${course}/text/`);
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Course titles & description", "ACADEMIC CATALOG");
-        const form = node("form", {});
+        const form = node("form", { class: "record-form" });
         const title = node("input", {
             class: "form-control",
             type: "text",
@@ -859,8 +869,10 @@ window.createWorkspaceCatalog = function (ui) {
                 "Use plain text. Leave fields blank when unspecified. Saving keeps a draft; review and publish a definition to use this text in the portal and for new transcript records.",
             ),
         );
+        const textFields = node("fieldset", { class: "record-form-section" }, node("legend", {}, "Course display text"));
+        textFields.append(...form.childNodes);
         const save = submit("Save course text draft");
-        form.append(save);
+        form.append(textFields, save);
         form.addEventListener("submit", (event) => {
             event.preventDefault();
             task(async () => {
@@ -871,6 +883,7 @@ window.createWorkspaceCatalog = function (ui) {
                     course_number: courseNumber.value,
                     revision: draft.revision,
                 });
+                if (!body.isConnected || !form.isConnected) return;
                 const done = openDrawer("Course text draft saved", "READY FOR REVIEW");
                 done.append(
                     node(
@@ -895,6 +908,7 @@ window.createWorkspaceCatalog = function (ui) {
                     throw new Error("Save your text changes before reviewing optional assistance.");
                 }
                 const preview = await request(`/sis/courses/${course}/assistance/`);
+                if (!body.isConnected || !form.isConnected) return;
                 if (assistantPanel) assistantPanel.remove();
                 assistantPanel = node(
                     "section",
@@ -1081,11 +1095,14 @@ window.createWorkspaceCatalog = function (ui) {
         );
     }
     async function publications(course, cursor = null, stack = [], returnTo = null, draft = { reason: "" }) {
+        const pendingView = openDrawer("Published course definitions", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const data = await request(
             `/sis/courses/${course}/publication/page/`,
             "POST",
             cursor ? { cursor } : {},
         );
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Published course definitions", "ACADEMIC CATALOG");
         body.append(
             node(
@@ -1222,11 +1239,14 @@ window.createWorkspaceCatalog = function (ui) {
         stack = [],
         draft = { reason: "", selected: null },
     ) {
+        const pendingView = openDrawer("Section course definition", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const data = await request(
             `/sis/sections/${section}/course-definition/page/`,
             "POST",
             cursor ? { cursor } : {},
         );
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Section course definition", "CHOOSE → REVIEW → RETAIN");
         body.append(node("p", {}, `Section: ${data.section.code}`));
         if (data.bound) {
@@ -1444,13 +1464,17 @@ window.createWorkspaceCatalog = function (ui) {
         return details;
     }
     async function sectionPublications(section, cursor = null, stack = [], draft = null, back = null) {
+        const pendingView = openDrawer("Published section details", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const setup = await request(`/sis/sections/${section}/publication/setup/`, "POST", {});
+        if (!pendingView.isConnected) return;
         const page = await request(
             `/sis/sections/${section}/publication/page/`,
             "POST",
             cursor ? { cursor } : {},
         );
         let currentDraft = draft;
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Published section details", "ACADEMIC CATALOG");
         if (back) body.append(button("Back to section", back, "btn-link"));
         body.append(node("p", {}, `Section: ${setup.section.code}`));
@@ -1743,11 +1767,14 @@ window.createWorkspaceCatalog = function (ui) {
             );
     }
     async function offeringSelectionHistory(section, back, cursor = null, stack = []) {
+        const pendingView = openDrawer("Offering selection history", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const data = await request(
             `/sis/sections/${section}/publication/selection-page/`,
             "POST",
             cursor ? { cursor } : {},
         );
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Offering selection history", "RETAINED DECISIONS");
         if (!data.items.length) body.append(node("p", {}, "No offering selection has been recorded."));
         for (const item of data.items) {
@@ -1867,7 +1894,10 @@ window.createWorkspaceCatalog = function (ui) {
         body.append(form, button("Back to section publications", back));
     }
     async function subjects(search = "", after = null, stack = [], choose = null) {
+        const pendingView = openDrawer("Course subject", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const data = await request("/sis/catalog/subjects/", "POST", { search, ...(after ? { after } : {}) });
+        if (!pendingView.isConnected) return;
         const body = openDrawer(choose ? "Choose course subject" : "Course subjects", "ACADEMIC CATALOG");
         body.append(
             node(
@@ -1948,7 +1978,10 @@ window.createWorkspaceCatalog = function (ui) {
         body.append(form, button("Back to subjects", back));
     }
     async function courseSubject(course) {
+        const pendingView = openDrawer("Course subject", "ACADEMIC CATALOG");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const current = await request(`/sis/courses/${course}/subject/`);
+        if (!pendingView.isConnected) return;
         const body = openDrawer("Course subject", "DRAFT CLASSIFICATION");
         body.append(
             node("p", {}, `${current.course.code} — ${current.course.title}`),

@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
+const { recordAction } = require('./support/workspace-actions.cjs');
 const id = n => String(n).padStart(26, '0');
 
 async function setup(page) {
@@ -70,8 +71,8 @@ test('HR can create a monthly pay grade inside an unsaved job draft and retain v
     await expect(page.locator('#drawer-body')).toContainText('Fictional default needs review.');
     await expect(page.getByLabel('Title', { exact: true })).toHaveValue('Fictional library assistant');
     await page.getByRole('button', { name: 'Save job definition', exact: true }).click();
-    await expect(page.getByRole('table', { name: 'Job definitions', exact: true })).toContainText('Fictional library assistant');
-    await expect(page.getByRole('table', { name: 'Job definitions', exact: true })).toContainText('Per month');
+    await expect(page.getByRole('list', { name: 'Job definitions', exact: true })).toContainText('Fictional library assistant');
+    await expect(page.getByRole('list', { name: 'Job definitions', exact: true })).toContainText('Per month');
     expect(state.jobs[0]).toMatchObject({ rate_minor: 350050, weekly_minutes: 2250, version: 0,
         pay_grade_id: state.grades[0].id, currency: 'USD', basis: 'monthly' });
     await page.getByRole('button', { name: 'Edit definition', exact: true }).click();
@@ -80,7 +81,7 @@ test('HR can create a monthly pay grade inside an unsaved job draft and retain v
     expect(state.jobs[0]).toMatchObject({ active: false, version: 1 });
     await page.getByLabel('Search job definitions', { exact: true }).fill('LIB');
     await page.getByRole('button', { name: 'Find definitions', exact: true }).click();
-    await expect(page.getByRole('table', { name: 'Job definitions', exact: true })).toContainText('Retired');
+    await expect(page.getByRole('list', { name: 'Job definitions', exact: true })).toContainText('Retired');
     await page.setViewportSize({ width: 375, height: 812 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await accessible(page);
@@ -91,7 +92,7 @@ test('HR can create a monthly pay grade inside an unsaved job draft and retain v
 
 test('currency precision is explicit and invalid fractions do not become rounded saved amounts', async ({ page }) => {
     const state = await setup(page);
-    await page.getByRole('button', { name: 'Pay grades', exact: true }).click();
+    await recordAction(page, 'Pay grades');
     await page.getByRole('button', { name: 'Add pay grade', exact: true }).click();
     await page.getByLabel('Code', { exact: true }).fill('ANNUAL');
     await page.getByLabel('Title', { exact: true }).fill('Fictional annual band');

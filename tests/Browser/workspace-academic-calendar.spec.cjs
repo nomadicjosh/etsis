@@ -375,3 +375,17 @@ test('a delayed cohort chooser cannot replace a later history screen', async ({ 
     await expect(page.getByRole('heading', { name: 'Choose a published curriculum', exact: true })).toHaveCount(0);
     expect(f.errors).toEqual([]);
 });
+
+test('term editor cancellation returns to its originating record without saving', async ({ page }) => {
+    const f = await fixture(page);
+    await page.route(`**/sis/ui/catalog/terms/${termId}/`, route => route.fulfill({ json: term }));
+    await page.locator('#directory-tabs [data-workspace="terms"]').click();
+    await page.getByRole('button', { name: '26/FA', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit catalog record', exact: true }).click();
+    await page.getByLabel('Term display name', { exact: false }).fill('Unsaved fictional term');
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Edit catalog record', exact: true })).toBeVisible();
+    await expect(page.locator('#drawer-body form')).toHaveCount(0);
+    expect(f.calls.some(c => c.path === `/sis/calendar/terms/${termId}/save/`)).toBe(false);
+    expect(f.errors).toEqual([]);
+});

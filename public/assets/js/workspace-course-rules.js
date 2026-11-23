@@ -83,6 +83,8 @@ window.createWorkspaceCourseRules = function (ui) {
         after = null,
         stack = [],
     ) {
+        const pendingView = openDrawer("Choose catalog reference", "CONNECTED WORKSPACE");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const path =
             fieldName === "course_id"
                 ? "/sis/ui/data/courses/"
@@ -90,6 +92,7 @@ window.createWorkspaceCourseRules = function (ui) {
                   ? "/sis/catalog/subjects/"
                   : `/sis/catalog/classifications/${fieldName.replace(/_id$/, "")}/page/`;
         const data = await post(path, { search, ...(after ? { after } : {}) });
+        if (!pendingView.isConnected) return;
         const body = openDrawer(
             `Choose ${labels[fieldName].toLowerCase()}`,
             "COURSE RULE",
@@ -326,12 +329,15 @@ window.createWorkspaceCourseRules = function (ui) {
         accessible();
     }
     async function history(before = null) {
+        const pendingView = openDrawer("Saved course-rule revisions", "RECORD REVIEW");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         if (!selected) throw new Error("Open a saved course rule first.");
         const rule = selected.rule_id;
         const data = await post(
             `/sis/course-rules/${rule}/revisions/`,
             before ? { before } : {},
         );
+        if (!pendingView.isConnected) return;
         const body = openDrawer(
             "Saved course-rule revisions",
             "RETAINED DEFINITIONS",
@@ -373,10 +379,13 @@ window.createWorkspaceCourseRules = function (ui) {
         await library();
     }
     async function publicationChoices(course, cursor = null) {
+        const pendingView = openDrawer("Course rule publication", "RECORD REVIEW");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading record details…"));
         const data = await post(
             `/sis/courses/${course.id}/publication/page/`,
             cursor ? { cursor } : {},
         );
+        if (!pendingView.isConnected) return;
         const body = openDrawer(
             `Preview ${course.code}`,
             "CHOOSE A RETAINED PUBLICATION",

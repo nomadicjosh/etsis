@@ -12,6 +12,7 @@ window.createWorkspaceTransfer = function (ui) {
     flow,
     showAudit,
     recordSummary,
+    badge,
   } = ui;
   const button = (label, callback, style = "btn-outline-primary") =>
     node(
@@ -51,42 +52,56 @@ window.createWorkspaceTransfer = function (ui) {
     form.elements.starts_on.addEventListener("input", dates);
     dates();
   }
-  async function pages(container, label, fetchPage, render) {
-    let after = "",
+  async function pages(container, label, fetchPage, render, saved = null, remember = () => {}) {
+    let after = saved?.after || "",
       nextAfter = null,
       serial = 0;
-    const previousCursors = [];
+    let previousCursors = [...(saved?.previousCursors || [])];
     const information = node("p", {
         role: "status",
         "aria-live": "polite",
         class: "form-text",
       }),
       content = node("div");
-    const previous = button(`Previous ${label} page`, async () => {
-      after = previousCursors.pop() || "";
-      await load();
-    });
-    const next = button(`Next ${label} page`, async () => {
-      previousCursors.push(after);
-      after = nextAfter;
-      await load();
-    });
+    const pageButton = (text, open) => node("button", {
+      type: "button", class: "btn btn-outline-primary", onclick: () => task(open),
+    }, text);
+    const previous = pageButton(`Previous ${label} page`, () =>
+      load(true, previousCursors.at(-1) || "", previousCursors.slice(0, -1)));
+    const next = pageButton(`Next ${label} page`, () =>
+      load(true, nextAfter, [...previousCursors, after]));
     previous.disabled = true;
     next.disabled = true;
     container.append(
       information,
+      node("nav", { class: "inline-actions mb-3", "aria-label": `${label === "catalog" ? "Related record" : "Award"} pages` }, previous, next),
       content,
-      node("div", { class: "inline-actions" }, previous, next),
     );
-    async function load() {
-      const token = ++serial,
-        page = await fetchPage(after);
-      if (!container.isConnected || token !== serial) return;
-      nextAfter = page.next_after;
-      previous.disabled = !previousCursors.length;
-      next.disabled = !nextAfter;
-      information.textContent = `${page.items.length} records on this page.${nextAfter ? " More are available." : ""}`;
-      content.replaceChildren(render(page.items));
+    async function load(focus = false, cursor = after, trail = previousCursors) {
+      const token = ++serial;
+      previous.disabled = true;
+      next.disabled = true;
+      content.setAttribute("aria-busy", "true");
+      try {
+        const page = await fetchPage(cursor);
+        if (!container.isConnected || token !== serial) return;
+        after = cursor;
+        previousCursors = [...trail];
+        nextAfter = page.next_after;
+        remember({ after, previousCursors: [...previousCursors] });
+        information.textContent = `${page.items.length} ${page.items.length === 1 ? "record" : "records"} on this page.${nextAfter ? " More are available." : ""}`;
+        content.replaceChildren(render(page.items));
+        if (focus) {
+          information.tabIndex = -1;
+          information.focus();
+        }
+      } finally {
+        if (container.isConnected && token === serial) {
+          previous.disabled = !previousCursors.length;
+          next.disabled = !nextAfter;
+          content.removeAttribute("aria-busy");
+        }
+      }
     }
     await load();
   }
@@ -115,17 +130,28 @@ window.createWorkspaceTransfer = function (ui) {
       ],
     ]);
   }
-  async function record(kind, id) {
-    const body = openDrawer("Transfer record", "TRANSFER CATALOG");
-    body.append(node("p", { role: "status" }, "Loading transfer record…"));
-    const value = await request(`/sis/ui/transfer/${kind}/${id}/`),
-      back = () => record(kind, id);
-    if (!body.isConnected) return;
-    document.getElementById("drawer-title").textContent =
-      kind === "equivalencies"
-        ? `${value.external_code} → ${value.course_code}`
-        : value.code;
-    body.replaceChildren();
+  function card(title, subtitle, status, fields, actions, label) {
+    return node("article", { class: "transfer-record-card", "aria-label": label },
+      node("div", { class: "transfer-record-heading" },
+        node("div", { class: "transfer-record-identity" },
+          node("h4", {}, title), node("p", { class: "form-text" }, subtitle)),
+        status ? badge(status) : null),
+      fields.length ? recordSummary(fields) : null,
+      actions.length ? node("div", { class: "transfer-record-footer" }, ...actions) : null);
+  }
+  async function record(kind, id, context = {}) {
+    let pageState = context.page || null;
+    const back = () => record(kind, id, { parent: context.parent, page: pageState });
+    const options = { record: { key: `transfer:${kind}:${id}`, label: "Transfer record", run: back } };
+    const loading = openDrawer("Transfer record", "TRANSFER CATALOG", options);
+    loading.append(node("p", { role: "status" }, "Loading transfer record…"));
+    const value = await request(`/sis/ui/transfer/${kind}/${id}/`);
+    if (!loading.isConnected) return;
+    const label = kind === "equivalencies" ? `${value.external_code} → ${value.course_code}`
+      : `${value.code} · ${kind === "institutions" ? value.name : value.title}`;
+    options.record.label = label;
+    const body = openDrawer(label, kind === "institutions" ? "SENDING INSTITUTION"
+      : kind === "external" ? "EXTERNAL COURSE" : "TRANSFER EQUIVALENCY", options);
     if (kind === "equivalencies") body.append(summary(value));
     else
       body.append(
@@ -145,17 +171,17 @@ window.createWorkspaceTransfer = function (ui) {
               ],
         ),
       );
-    if (kind !== "institutions")
+    if (context.parent || kind !== "institutions")
       body.prepend(
         button(
-          "Back to sending record",
-          () =>
+          context.parent?.label || (kind === "external" ? "Back to institution" : "Back to external course"),
+          context.parent?.open || (() =>
             record(
               kind === "external" ? "institutions" : "external",
               kind === "external"
                 ? value.institution_id
                 : value.external_course_id,
-            ),
+            )),
           "btn-link mb-3",
         ),
       );
@@ -257,31 +283,24 @@ window.createWorkspaceTransfer = function (ui) {
           }),
         (rows) =>
           rows.length
-            ? grid(
-                kind === "institutions"
-                  ? ["Code", "Title", "Action"]
-                  : ["Institutional course", "Credits", "Effective", "Action"],
+            ? node("div", { class: "transfer-record-list" },
                 rows.map((row) =>
                   kind === "institutions"
-                    ? [
-                        row.code,
-                        row.title,
-                        button("Open external course", () =>
-                          record("external", row.id),
-                        ),
-                      ]
-                    : [
-                        `${row.course_code} · ${row.course_title}`,
-                        Number(row.credits_milli) / 1000,
-                        row.starts_on,
-                        button("Review equivalency", () =>
-                          record("equivalencies", row.id),
-                        ),
-                      ],
-                ),
-                "Related transfer records",
-              )
+                    ? card(row.code, row.title, null, [], [
+                        button("Open external course", () => record("external", row.id, {
+                          parent: { label: "Back to institution", open: back },
+                        })),
+                      ], `External course ${row.code}`)
+                    : card(row.course_code, row.course_title, null, [
+                        ["Credits", Number(row.credits_milli) / 1000],
+                        ["Effective from", row.starts_on],
+                      ], [button("Review equivalency", () => record("equivalencies", row.id, {
+                        parent: { label: "Back to external course", open: back },
+                      }))], `Equivalency ${row.course_code}`),
+                ))
             : node("p", {}, "No related records have been added."),
+        pageState,
+        (state) => { pageState = state; },
       );
     } else {
       actions.append(
@@ -322,43 +341,34 @@ window.createWorkspaceTransfer = function (ui) {
           }),
         (rows) =>
           rows.length
-            ? grid(
-                [
-                  "Student",
-                  "Institutional ID",
-                  "Completion date",
-                  "Posting term",
-                  "Awarded credits / grade",
-                  "Status",
-                  "Action",
-                ],
-                rows.map((row) => [
-                  `${row.given_name} ${row.family_name}`,
-                  row.institutional_id,
-                  row.completed_on,
-                  row.term_code,
-                  `${Number(row.credits_milli) / 1000} · ${row.status === "V" ? "Voided" : row.grade_code || "—"}`,
-                  row.status === "V" ? "Voided" : "Awarded",
+            ? node("div", { class: "transfer-record-list" },
+                rows.map((row) => card(
+                  `${row.given_name} ${row.family_name}`, "Posted transfer credit",
+                  row.status === "V" ? "Voided" : "Awarded", [
+                    ["Institutional ID", row.institutional_id],
+                    ["Completion date", row.completed_on],
+                    ["Posting term", row.term_code],
+                    ["Credits / grade", `${Number(row.credits_milli) / 1000} · ${row.status === "V" ? "Voided" : row.grade_code || "—"}`],
+                  ],
                   can("sis:student:read")
-                    ? node(
-                        "div",
-                        { class: "inline-actions" },
+                    ? [
                         button("Review award", () =>
                           ui.awards().record(row.student_id, row.id),
                         ),
                         button("Open student record", () =>
                           openRecord("students", { id: row.student_id }),
                         ),
-                      )
-                    : "—",
-                ]),
-                "Transfer awards",
-              )
+                      ]
+                    : [],
+                  `Transfer award for ${row.given_name} ${row.family_name} · ${row.institutional_id}`,
+                )))
             : node(
                 "p",
                 {},
                 "No credit awards have been recorded for this equivalency.",
               ),
+        pageState,
+        (state) => { pageState = state; },
       );
     }
     if (body.isConnected && can("sis:audit:read"))

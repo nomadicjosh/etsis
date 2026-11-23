@@ -1,3 +1,4 @@
+const {recordAction}=require('./support/workspace-actions.cjs');
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const id = (n) => String(n).padStart(26, "0");
@@ -121,7 +122,7 @@ async function setup(page, { stale = false, ready = true } = {}) {
     await page.goto("/admin/");
     await page.locator('.workspace-nav-link[data-workspace="teaching"]').click();
     await page.getByRole("button", { name: "HIST 101.A", exact: true }).click();
-    await page.getByRole("button", { name: "Class grade certification", exact: true }).click();
+    await recordAction(page, "Class grade certification");
     await expect(
         page.getByRole("heading", { name: "HIST 101.A · 26/FA", exact: true }),
     ).toBeVisible();

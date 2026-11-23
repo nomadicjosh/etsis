@@ -85,7 +85,7 @@ window.createWorkspaceReportRequests = function (ui) {
         body.append(
             button("Check saved action", async () => {
                 await request(`/sis/report-requests/${id}/receipts/${op}/`);
-                await completed();
+                if (body.isConnected) await completed();
             }),
             node(
                 "p",
@@ -95,7 +95,10 @@ window.createWorkspaceReportRequests = function (ui) {
         );
     }
     async function create() {
+        const pendingView = openCase("Report requests", "REPORTING");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading report details…"));
         const op = await operation();
+        if (!pendingView.isConnected) return;
         const body = openCase("Request a report", "ASK A QUESTION");
         body.append(
             node(
@@ -144,6 +147,7 @@ window.createWorkspaceReportRequests = function (ui) {
                     }
                     throw error;
                 }
+                if (!body.isConnected || !form.isConnected) return;
                 notify("Your report request was submitted.");
                 await record(op);
             }, form.querySelector('[type="submit"]'));
@@ -164,11 +168,14 @@ window.createWorkspaceReportRequests = function (ui) {
         after = null,
         stack = [],
     ) {
+        const pendingView = openCase("Report requests", "REPORTING");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading report details…"));
         const page = await request("/sis/report-requests/page/", "POST", {
             queue: team,
             status,
             ...(after ? { after } : {}),
         });
+        if (!pendingView.isConnected) return;
         const body = openCase(
             team ? "Report request queue" : "My report requests",
             "REPORT REQUESTS",
@@ -217,7 +224,7 @@ window.createWorkspaceReportRequests = function (ui) {
                     table(
                         ["Question", "Requester", "Progress", "Date needed"],
                         page.items.map((row) => [
-                            button(row.title, () => record(row.id)),
+                            button(row.title, () => record(row.id, () => queue(team, status, after, stack))),
                             row.owned ? "You" : row.requester_name,
                             node(
                                 "div",
@@ -258,11 +265,16 @@ window.createWorkspaceReportRequests = function (ui) {
                     queue(team, status, page.next_after, [...stack, after]),
                 ),
             );
-        body.append(controls);
+        body.prepend(controls);
     }
-    async function record(id) {
+    async function record(id, back = null) {
+        const pendingView = openCase("Report requests", "REPORTING");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading report details…"));
         const value = await request(`/sis/report-requests/${id}/`);
+        if (!pendingView.isConnected) return;
         const body = openCase(value.title, "REPORT REQUEST");
+        const reopen = () => record(id, back);
+        if (back) body.append(button("Back to request queue", back));
         body.append(
             badge(labels[value.status]),
             node(
@@ -302,8 +314,8 @@ window.createWorkspaceReportRequests = function (ui) {
                             : actionLabels[key],
                         () =>
                             key === "deliver"
-                                ? delivery(value)
-                                : action(value, key),
+                                ? delivery(value, reopen)
+                                : action(value, key, reopen),
                         ["reply", "claim", "deliver"].includes(key),
                     ),
                 );
@@ -369,8 +381,11 @@ window.createWorkspaceReportRequests = function (ui) {
         );
         await load();
     }
-    async function action(value, kind) {
+    async function action(value, kind, back = () => record(value.id)) {
+        const pendingView = openCase("Report requests", "REPORTING");
+        pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading report details…"));
         const op = await operation();
+        if (!pendingView.isConnected) return;
         const body = openCase(
             kind === "claim" && value.assigned
                 ? "Take over request"
@@ -437,17 +452,18 @@ window.createWorkspaceReportRequests = function (ui) {
                     throw error;
                 }
                 notify("Request updated.");
-                await record(value.id);
+                if (!body.isConnected) return;
+                await back();
             }, send);
         });
         form.append(send);
         body.append(
             form,
-            button("Back to request", () => record(value.id)),
+            button("Back to request", back),
         );
-        recovery(body, value.id, op, () => record(value.id));
+        recovery(body, value.id, op, back);
     }
-    async function delivery(value) {
+    async function delivery(value, back = () => record(value.id)) {
         const body = openCase("Share a finished report", "REPORT HANDOFF");
         body.append(
             node("h3", {}, value.title),
@@ -483,17 +499,18 @@ window.createWorkspaceReportRequests = function (ui) {
                         report_id: draft.report_id,
                     },
                 );
-                await confirmDelivery(value, draft, plan);
+                if (!body.isConnected || !form.isConnected) return;
+                await confirmDelivery(value, draft, plan, back);
             }, next);
         });
         form.append(next);
         body.append(
             form,
             help(),
-            button("Back to request", () => record(value.id)),
+            button("Back to request", back),
         );
     }
-    async function confirmDelivery(value, draft, plan) {
+    async function confirmDelivery(value, draft, plan, back = () => record(value.id)) {
         const body = openCase("Review report handoff", "EXPLICIT SHARING");
         const command = {
             action: "deliver",
@@ -523,7 +540,7 @@ window.createWorkspaceReportRequests = function (ui) {
             node(
                 "div",
                 { class: "d-flex flex-wrap gap-2" },
-                button("Back to request", () => record(value.id)),
+                button("Back to request", back),
                 button(
                     "Confirm and share report",
                     async () => {
@@ -533,13 +550,14 @@ window.createWorkspaceReportRequests = function (ui) {
                             command,
                         );
                         notify("Report shared with the requester.");
-                        await record(value.id);
+                        if (!body.isConnected) return;
+                await back();
                     },
                     true,
                 ),
             ),
         );
-        recovery(body, value.id, plan.operation_id, () => record(value.id));
+        recovery(body, value.id, plan.operation_id, back);
     }
     return { create, queue, record };
 };
