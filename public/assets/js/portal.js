@@ -12,7 +12,7 @@
         ? JSON.parse(one('#campus-notification-config').textContent) : {};
     const notifications = one('#campus-notifications-open') ? window.createWorkspaceNotifications({
         node: el, stack: one('#campus-notice'), trigger: one('#campus-notifications-open'),
-        bootstrap: window.bootstrap, labels: notificationLabels,
+        bootstrap: window.bootstrap, labels: notificationLabels, request,
     }) : null;
     const feedbackText = (key, fallback) => notificationLabels[key] || fallback;
     let me = null;

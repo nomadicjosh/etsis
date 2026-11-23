@@ -1,7 +1,7 @@
 /* Bounded, page-local action feedback. Browser storage contains preferences only. */
 window.createWorkspaceNotifications = function (ui) {
     'use strict';
-    const { node, stack, trigger, bootstrap, labels = {} } = ui;
+    const { node, stack, trigger, bootstrap, labels = {}, request } = ui;
     const text = (key, fallback) => labels[key] || fallback;
     const preferenceKey = 'etsis.workspace.notification-preferences';
     const sounds = Object.freeze({
@@ -27,6 +27,7 @@ window.createWorkspaceNotifications = function (ui) {
     const history = [], visible = new Map();
     let dialog = null, list = null, empty = null, audio = null, sequence = 0, lastSound = -Infinity;
     let disposed = false;
+    let announcements = null;
     let activeSound = null, pendingSound = null, decodedSound = null, soundGeneration = 0;
     const icons = { success: 'check-circle', info: 'info-circle', warning: 'exclamation-triangle' };
     const titles = { success: 'Completed', info: 'Update', warning: 'Needs attention' };
@@ -193,6 +194,7 @@ window.createWorkspaceNotifications = function (ui) {
     }
     function closeHistory() {
         if (!dialog) return;
+        announcements?.destroy(); announcements = null;
         const previous = dialog;
         dialog = list = empty = null;
         previous.close(); previous.remove();
@@ -273,6 +275,20 @@ window.createWorkspaceNotifications = function (ui) {
                     glyph('trash'), text('clear', 'Clear recent notifications'))));
         dialog.addEventListener('cancel', event => { event.preventDefault(); closeHistory(); });
         const currentDialog = dialog;
+        if (request) {
+            const body = node('div', { class: 'campus-announcements-body' });
+            const section = node('details', { class: 'campus-announcements' },
+                node('summary', {}, glyph('megaphone'), text('announcements', 'Campus announcements')), body);
+            section.addEventListener('toggle', () => {
+                if (dialog !== currentDialog) return;
+                announcements?.destroy(); announcements = null;
+                if (section.open && dialog === currentDialog) {
+                    announcements = window.createCampusAnnouncements({ node, request, labels, notify });
+                    announcements.mount(body);
+                }
+            });
+            currentDialog.querySelector('.workspace-notification-dialog-body').prepend(section);
+        }
         dialog.addEventListener('close', () => { if (dialog === currentDialog) closeHistory(); });
         stack.hidden = true;
         document.body.append(dialog); renderHistory(); dialog.showModal();

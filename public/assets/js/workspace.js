@@ -95,7 +95,7 @@
     surfaces = window.createWorkspaceSurfaces({node, task, bootstrap});
     const notifications = window.createWorkspaceNotifications({
         node, stack: $one('#workspace-status'), trigger: $one('#workspace-notifications-open'), bootstrap,
-        labels: config.notification_labels,
+        labels: config.notification_labels, request,
     });
 
     async function send(path, method = 'GET', data, accept = 'application/json') {
@@ -1371,6 +1371,11 @@
         const code = form.elements.namedItem('code');
         const kind = form.elements.namedItem('kind');
         const content = form.elements.namedItem('content');
+        const audience = form.elements.namedItem('audience');
+        const announcementHelp = node('p', { class: 'form-text', id: `${audience.id}-announcement-help` },
+            config.notification_labels.announcement_publish_help);
+        audience.after(announcementHelp);
+        audience.setAttribute('aria-describedby', announcementHelp.id);
         content.maxLength = 60000;
         const helpId = `${code.id}-help`;
         code.maxLength = 80;
@@ -1386,6 +1391,7 @@
         );
         form.elements.title.maxLength = 191;
         const update = () => {
+            announcementHelp.hidden = kind.value !== 'news' || audience.value !== 'campus';
             form.querySelector(`label[for="${content.id}"]`).firstChild.textContent =
                 kind.value === 'link' ? 'HTTPS link ' : 'Content ';
             content.rows = kind.value === 'link' ? 3 : 12;
@@ -1393,6 +1399,7 @@
                 kind.value === 'link' ? 'https://example.edu/' : 'Write your campus update…';
         };
         kind.addEventListener('change', update);
+        audience.addEventListener('change', update);
         update();
         form.append(
             node(

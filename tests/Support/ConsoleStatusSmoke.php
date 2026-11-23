@@ -73,6 +73,7 @@ try {
                 'check-standing',
                 'check-enrollment-load',
                 'check-content-publication',
+                'check-announcements',
                 'check-prerequisite-permissions',
                 'check-advising',
                 'check-moodle-resolution',
@@ -231,6 +232,11 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/PrerequisitePermissionBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-announcements') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/AnnouncementBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-content-publication') {
             $kernel->bootstrap();

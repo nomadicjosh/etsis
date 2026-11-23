@@ -42,6 +42,7 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
         <link rel="stylesheet" href="<?= $esc($themeAsset) ?>" />
         <?php if ($signedIn) : ?>
             <link rel="stylesheet" href="/assets/css/notifications.css" />
+            <script defer src="/assets/js/campus-announcements.js"></script>
             <script defer src="/assets/js/workspace-notifications.js"></script>
         <?php endif; ?>
         <script defer src="/assets/vendor/bootstrap.bundle.min.js"></script>
@@ -211,6 +212,7 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
                 . 'Check the relevant service for your current records and request status.',
             );
             ?>
+            <form id="campus-csrf" hidden><?= $csrfMarkup ?? csrf_field() ?></form>
             <script id="campus-notification-config" type="application/json">
                 <?= json_encode(
                     $notificationLabels,

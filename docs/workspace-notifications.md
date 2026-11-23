@@ -1,12 +1,14 @@
 # Workspace and portal toast notifications
 
-Implemented November 23, 2026. Staff and signed-in portal action feedback use the same locally hosted Bootstrap Toast component, colors, icons and accessible controls. The four supplied sound files are now selectable. Persistent campus announcements and automatic portal-wide notification delivery remain separate roadmap work.
+Implemented November 23, 2026. Staff and signed-in portal action feedback use the same locally hosted Bootstrap Toast component, colors, icons and accessible controls. The four supplied sound files are selectable. The same bell also provides [persistent campus announcements](campus-announcements.md); automatic domain-triggered/push/email delivery remains separate roadmap work.
 
 ## Use notifications
 
 Successful workspace actions can show **Completed**, **Update** or **Needs attention** feedback. A toast never moves keyboard focus when it appears. Use **Dismiss notification** to close it. Ordinary toasts disappear after eight seconds; Bootstrap pauses dismissal while the pointer or keyboard focus is within the toast.
 
 The bell in the workspace header opens **Recent workspace notifications**. It retains the newest twenty messages from this page, even after their toasts disappear. The badge counts recent messages, not unread institutional records. **Clear recent notifications** removes this temporary feedback only. It does not cancel jobs, delete audit/history or change recorded decisions. Closing the panel returns focus to the bell.
+
+Expand **Campus announcements** in this panel for reviewed campus news and account-specific read state. It loads separately on demand and retains its read state on the server. Clearing recent action feedback does not clear announcements or mark them read. See [publication, reading and sound behavior](campus-announcements.md).
 
 Only five toasts are visible at once. Further feedback remains available in the recent list. Toasts render as literal text, including any angle brackets in a message. They appear within the active drawer, modal or native report dialog so they remain visible and their dismiss controls work with the active focus boundary. The recent panel, cards and controls reflow on narrow screens and with enlarged text. Toasts do not animate.
 

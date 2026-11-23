@@ -34,3 +34,14 @@ dialog > .workspace-notification-stack { position: absolute; width: min(24rem, c
 }
 .workspace-notification-sound-choice { min-width: 0; }
 .workspace-notification-sound-choice .form-select { max-width: 100%; white-space: normal; }
+.campus-announcements { margin-block-end: 1rem; border: 1px solid #bacbdc; border-radius: 10px; overflow-wrap: anywhere; }
+.campus-announcements > summary { padding: 1rem; font-size: .9rem; font-weight: 600; overflow-wrap: anywhere; }
+.campus-announcements > summary .bi { margin-inline-end: .5rem; }
+.campus-announcements-body { padding: 1rem; border-block-start: 1px solid #d6e0e9; }
+.campus-announcements .btn { max-width: 100%; white-space: normal; overflow-wrap: anywhere; flex-wrap: wrap; }
+.campus-announcement-list > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; padding-block: .5rem; border-block-end: 1px solid #d6e0e9; }
+.campus-announcement-list .btn { min-width: 0; max-width: 100%; padding-inline: 0; }
+.campus-announcement-content { white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 480px) {
+    .campus-announcements > summary, .campus-announcements-body { padding: 12px; }
+}

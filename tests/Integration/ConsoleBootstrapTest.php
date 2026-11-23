@@ -2,11 +2,22 @@
 
 declare(strict_types=1);
 
+namespace Tests\Integration;
+
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
 final class ConsoleBootstrapTest extends TestCase
 {
+    public function testAnnouncementRoutesKeepPrivateOwnerStateCsrfAndExistingPublications(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-announcements']);
+        $process->setTimeout(12);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testContentPublicationRoutesAndNativeBlocksShareAuthorityPrivacyAndVisibility(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
@@ -399,5 +410,4 @@ final class ConsoleBootstrapTest extends TestCase
         $process->run();
         self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
     }
-
 }

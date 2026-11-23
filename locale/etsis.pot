@@ -1677,3 +1677,79 @@ msgstr ""
 #: public/themes/campus-harbor/layouts/portal/view.php:209
 msgid "Recent action feedback stays only in this page. Reloading or signing out clears it. Check the relevant service for your current records and request status."
 msgstr ""
+
+#: resources/views/shared/notification-labels.php:8
+msgid "Campus announcements"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:9
+msgid "After approval, campus news appears in the notification bell for signed-in applicants, students and staff. Publication times control its availability. Public website news is separate."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:13
+msgid "This announcement changed or is unavailable. Refresh the list."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:14
+msgid "Announcements could not load. Use Refresh announcements to try again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:15
+msgid "Loading campus announcements…"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:16
+msgid "New campus announcements are available."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:17
+msgid "Unread"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:18
+msgid "Read"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:19
+msgid "Announcement pages"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:20
+msgid "Previous announcements"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:21
+msgid "More announcements"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:22
+msgid "There are no matching campus announcements."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:23
+msgid "Campus announcements loaded. Reading state is saved to your account."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:24
+msgid "Mark as read"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:25
+msgid "Marked as read. This is not a policy acknowledgement."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:26
+msgid "Back to list"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:27
+msgid "Refresh announcements"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:28
+msgid "Published campus news is available to signed-in applicants, students and staff. Open an announcement before marking its current version as read."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:32
+msgid "Show read items"
+msgstr ""

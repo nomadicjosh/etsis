@@ -5,6 +5,31 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'announcements' => trans_html('Campus announcements'),
+    'announcement_publish_help' => trans_html(
+        'After approval, campus news appears in the notification bell for signed-in applicants, students and staff. '
+        . 'Publication times control its availability. Public website news is separate.',
+    ),
+    'announcement_changed' => trans_html('This announcement changed or is unavailable. Refresh the list.'),
+    'announcement_failed' => trans_html('Announcements could not load. Use Refresh announcements to try again.'),
+    'announcement_loading' => trans_html('Loading campus announcements…'),
+    'announcement_new' => trans_html('New campus announcements are available.'),
+    'announcement_unread' => trans_html('Unread'),
+    'announcement_read' => trans_html('Read'),
+    'announcement_pages' => trans_html('Announcement pages'),
+    'announcement_previous' => trans_html('Previous announcements'),
+    'announcement_more' => trans_html('More announcements'),
+    'announcement_empty' => trans_html('There are no matching campus announcements.'),
+    'announcement_loaded' => trans_html('Campus announcements loaded. Reading state is saved to your account.'),
+    'announcement_mark' => trans_html('Mark as read'),
+    'announcement_marked' => trans_html('Marked as read. This is not a policy acknowledgement.'),
+    'announcement_back' => trans_html('Back to list'),
+    'announcement_refresh' => trans_html('Refresh announcements'),
+    'announcement_help' => trans_html(
+        'Published campus news is available to signed-in applicants, students and staff. '
+        . 'Open an announcement before marking its current version as read.',
+    ),
+    'announcement_include' => trans_html('Show read items'),
     'title' => trans_html('Notifications'),
     'recent' => trans_html('Recent workspace notifications'),
     'notification' => trans_html('Workspace notification'),

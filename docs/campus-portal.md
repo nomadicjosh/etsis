@@ -4,6 +4,8 @@ The portal uses Bootstrap 5, local assets, and Vihzhuo native PHP blocks. It rea
 
 Signed-in pages now share the [notification bell, recent action feedback and optional sound choices](workspace-notifications.md#student-and-applicant-portal) with the staff workspace. Choose Message, Warm success, Bird, Piano or Short tone and test it; sound defaults off. Only display/sound preferences persist in this browser. Recent messages clear when leaving the page and do not replace Admissions updates, Booking updates or request status.
 
+The same bell now includes [Campus announcements](campus-announcements.md): explicitly approved campus news, its publication window and per-account read state. Opening an announcement does not mark it read. **Mark as read** records only the displayed revision; revised/reapproved wording becomes unread again. This is separate from temporary action feedback and formal policy acknowledgement.
+
 ## Public campus events
 
 See the consolidated [public campus event workflow](public-campus-events.md) for publishing, the calendar, Vihzhuo blocks, permissions and cancellation behavior.
