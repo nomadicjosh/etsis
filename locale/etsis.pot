@@ -1493,3 +1493,99 @@ msgstr ""
 #: resources/views/backend/workspace/waitlist-bypass-labels.php:53
 msgid "Newer bypass decisions"
 msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:8
+msgid "Recent workspace notifications"
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:9
+msgid "Workspace notification"
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:10
+msgid "Close notifications"
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:11
+msgid "Dismiss notification"
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:12
+msgid "Clear recent notifications"
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:13
+msgid "There are no notifications from this workspace session."
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:14
+msgid "Recent action feedback stays only in this page. Reloading or signing out clears it. Recorded decisions and background job status remain in their own workspaces."
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:18
+msgid "Play notification sounds"
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:19
+msgid "Keep notifications on screen until dismissed"
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:20
+msgid "Only these display and sound preferences are saved in this browser. Notification messages and campus records are never saved here."
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:24
+msgid "Test notification sound"
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:25
+msgid "Sound is unavailable. Visual notifications will still appear."
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:26
+msgid "Completed"
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:28
+msgid "Needs attention"
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:29
+msgid "Export queued. Its download will be available after preparation finishes."
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:30
+msgid "Your report export is ready. Open the export controls to download it."
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:31
+msgid "The report export could not finish. Review its status before trying again."
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:32
+msgid "Report export cancelled."
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:33
+msgid "Delivery processing finished. Review confirmed sends and closed outcomes."
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:34
+msgid "Recipients queued. No messages have been sent."
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:35
+msgid "Background delivery confirmed. You can leave this screen."
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:36
+msgid "Delivery needs review. Unconfirmed messages will not be retried automatically."
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:37
+msgid "Delivery stopped. Review access, recipients and institutional mail settings."
+msgstr ""
+
+#: resources/views/backend/workspace/notification-labels.php:8
+msgid "Notifications"
+msgstr ""

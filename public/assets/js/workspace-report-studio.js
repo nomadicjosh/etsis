@@ -1,6 +1,7 @@
 /* Relational Report Studio: explicit field/relationship choices, live AJAX preview and versioned saves. */
 window.createWorkspaceReportStudio = function (ui) {
     "use strict";
+    const notificationText = (key, fallback) => ui.notificationLabels?.[key] || fallback;
     const { node, request, requestFile, task, can, table } = ui;
     let widgets = [],
         chart = null,
@@ -2953,7 +2954,10 @@ window.createWorkspaceReportStudio = function (ui) {
                 });
                 if (!exports.isConnected) return;
                 exportOperation = null;
-                renderExport(data.export);
+                renderExport(data.export, true);
+                if (["queued", "running"].includes(data.export?.status)) ui.notify?.(notificationText(
+                    'export_queued', 'Export queued. Its download will be available after preparation finishes.'
+                ), { tone: 'info' });
             } catch (error) {
                 if (!exports.isConnected) return;
                 throw error;
@@ -2974,7 +2978,13 @@ window.createWorkspaceReportStudio = function (ui) {
             prepareExport.disabled = downloadExport.disabled = true;
             try {
                 const data = await request(`/sis/report-studio/${id}/exports/${exportJob.id}/cancel/`, "POST", {});
-                if (exports.isConnected) renderExport(data.export);
+                if (exports.isConnected) {
+                    const wasReady = exportJob?.status === 'ready';
+                    renderExport(data.export);
+                    if (wasReady && data.export?.status === 'cancelled') ui.notify?.(notificationText(
+                        'export_cancelled', 'Report export cancelled.'
+                    ), { tone: 'info' });
+                }
             } catch (error) {
                 if (!exports.isConnected) return;
                 throw error;
@@ -3001,10 +3011,20 @@ window.createWorkspaceReportStudio = function (ui) {
         });
         const refreshExport = button("Check status", () => checkExport());
         exportActions.append(prepareExport, downloadExport, cancelExport, refreshExport);
-        function renderExport(job) {
+        function renderExport(job, requested = false) {
             exportGeneration++;
             clearTimeout(exportTimer);
+            const previous = exportJob;
             exportJob = job;
+            if ((previous?.id === job?.id && ["queued", "running"].includes(previous?.status))
+                || (requested && job?.status === 'ready')) {
+                if (job.status === 'ready') ui.notify?.(notificationText('export_ready',
+                    'Your report export is ready. Open the export controls to download it.'));
+                if (job.status === 'failed') ui.notify?.(notificationText('export_failed',
+                    'The report export could not finish. Review its status before trying again.'), { tone: 'warning' });
+                if (job.status === 'cancelled') ui.notify?.(notificationText('export_cancelled',
+                    'Report export cancelled.'), { tone: 'info' });
+            }
             const pending = ["queued", "running"].includes(job?.status);
             const messages = {
                 queued: "Queued. The background worker will prepare your export.",

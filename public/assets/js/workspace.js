@@ -93,6 +93,10 @@
     }
 
     surfaces = window.createWorkspaceSurfaces({node, task, bootstrap});
+    const notifications = window.createWorkspaceNotifications({
+        node, stack: $one('#workspace-status'), trigger: $one('#workspace-notifications-open'), bootstrap,
+        labels: config.notification_labels,
+    });
 
     async function send(path, method = 'GET', data, accept = 'application/json') {
         const multipart = typeof FormData !== 'undefined' && data instanceof FormData;
@@ -103,6 +107,7 @@
             headers: { Accept: accept, ...(method === 'GET' ? {} : { ...(!multipart ? { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' } : {}), 'X-CSRF-Token': csrf() }) },
             body: method === 'GET' ? undefined : multipart ? data : new URLSearchParams({ _workspace_json: JSON.stringify(data || {}) }).toString(),
         });
+        if ([401, 403].includes(response.status)) notifications.clear();
         if (response.status === 401) {
             if (!signInPending) {
                 signInPending = true;
@@ -189,12 +194,7 @@
         alert.focus();
     }
 
-    function notify(message) {
-        const status = $one('#workspace-status');
-        status.textContent = message;
-        status.hidden = false;
-        window.setTimeout(() => { status.hidden = true; }, 6500);
-    }
+    function notify(message, options = {}) { notifications.notify(message, options); }
 
     async function task(callback, button) {
         $one('#workspace-alert').hidden = true;
@@ -294,7 +294,7 @@
     };
     datasets.transcripts = { title: 'Transcript requests', description: 'Review a request, prepare the official record, and record delivery after it is complete.', icon: 'file-earmark-text', permission: 'sis:transcript:manage', columns: [['Request', 'short_id'], ['Delivery', 'delivery'], ['Status', 'status'], ['Requested', 'requested_at']] };
     const historyChecks = window.createWorkspaceHistoryChecks({ node, request, task, openDrawer, labels: config.history_check_labels });
-    const operations = window.createWorkspaceOperations({ reportingLabels: config.section_reporting_labels, waitlists: () => waitlistStudio, historyChecks: () => historyChecks, node, request, task, can, table, badge, money, moneyInput, recordSummary, actionMenu, disposeActionMenus, buildForm, formData, openDrawer, notify, openRecord, createRecord, navigate, datasets, courseDrops: () => courseDropStudio, catalog: () => catalogStudio, classifications: () => classificationStudio, prerequisites: () => prerequisiteStudio, programs: () => programStudio, degreeAudit: () => degreeAuditStudio, calendar: () => academicCalendarStudio, batchRegistration: () => batchRegistration, teaching: () => teachingStudio, restrictions: () => restrictionStudio, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const operations = window.createWorkspaceOperations({ notificationLabels: config.notification_labels, reportingLabels: config.section_reporting_labels, waitlists: () => waitlistStudio, historyChecks: () => historyChecks, node, request, task, can, table, badge, money, moneyInput, recordSummary, actionMenu, disposeActionMenus, buildForm, formData, openDrawer, notify, openRecord, createRecord, navigate, datasets, courseDrops: () => courseDropStudio, catalog: () => catalogStudio, classifications: () => classificationStudio, prerequisites: () => prerequisiteStudio, programs: () => programStudio, degreeAudit: () => degreeAuditStudio, calendar: () => academicCalendarStudio, batchRegistration: () => batchRegistration, teaching: () => teachingStudio, restrictions: () => restrictionStudio, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const courseDropStudio = window.createWorkspaceCourseDrops({ node, request, task, openDrawer, notify, buildForm, formData });
     const academicCalendarStudio = window.createWorkspaceAcademicCalendar({ node, request, task, buildForm, formData, openDrawer, table, badge, notify, recordSummary, refreshTerms: async () => { drawer.hide(); if (datasets[current]) await loadDirectory(); } });
     const degreeAuditStudio = window.createWorkspaceDegreeAudit({ taskNavigation: surfaces.taskNavigation, node, request, task, can, closeDrawer: () => drawer.hide() });
@@ -339,6 +339,7 @@
     const advisingStudio = window.createWorkspaceAdvising({ node, request, task, can, openDrawer });
     const studentStudio = window.createWorkspaceStudents({ historyCheckLabels: config.history_check_labels, historyChecks: () => historyChecks, prerequisitePermissions: () => prerequisitePermissions, enrollmentLoad: () => enrollmentLoad, standing: () => standingStudio, advising: () => advisingStudio, node, request, task, can, actionMenu, recordSummary, messageRecord: operations.messageRecord, disposeActionMenus, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
     relationalStudio = window.createWorkspaceReportStudio({ reportingLabels: config.section_reporting_labels,
+        notify, notificationLabels: config.notification_labels,
         node, request, requestFile, task, can, table, openDrawer, actionMenu, disposeActionMenus,
         closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(),
         openAccount: (id, back) => {

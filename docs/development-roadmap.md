@@ -541,8 +541,10 @@ External student-progress AI remains deferred by project direction; catalog-auth
 - [ ] Gravatar and upload profile image support with cropping
 - [ ] An admin with `super` role can login as/impersonate another user, and return back to themself after
 - [x] [Maintenance mode](maintenance-mode.md), with current super-administrator access, private browser/API responses, paused background launches and explicit framework console controls.
-- [ ] Notifications frontend and backend (i.e. registration is now open, etc.) with sound
-- [ ] Toaster Notifications - backend only (i.e. queue has been processed, text message sent, etc.) with sound
+- [ ] Notifications frontend and backend (i.e. registration is now open, etc.) with sound. Persistent institutional announcements, audience rules and portal-wide delivery remain separate from the completed backend action feedback below.
+- [x] [Backend toast notifications with optional sound](workspace-notifications.md): shared Bootstrap feedback, bounded visible/recent messages, explicit dismissal, silent default, tested sound and display preferences, rate-limited short tones and safe blocked-audio/storage fallback.
+- [x] [Keep workspace feedback private and accessible](workspace-notifications.md#privacy-and-validation): page-only message history, preference-only browser storage, access-denial/page-leave cleanup, active drawer/dialog placement, preserved keyboard focus and narrow/enlarged-text reflow. Add no event stream, notification table or browser-stored campus data.
+- [x] [Connect observed communications and export outcomes](workspace-notifications.md#connected-background-outcomes): distinguish queued work from completed/held/blocked processing, preserve closed-without-resend outcomes, announce genuine ready/failed/cancelled export transitions and avoid replaying already finished statuses. Retain existing review, ownership, polling, CSRF and private download boundaries; create no report, send or extra worker.
 
 ## Next implementation stages
 

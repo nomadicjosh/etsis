@@ -91,8 +91,9 @@ test('system roles retain read-only permissions and super needs no permission li
     expect(state.errors).toEqual([]);
 });
 
-async function message(page, status = 'draft') {
+async function message(page, status = 'draft', progressStates = ['held']) {
     const state = { calls: [], errors: [] };
+    let progressReads = 0;
     const wording = Array.from({ length: 18 }, (_, index) => `Fictional paragraph ${index + 1}. This notice is only a browser fixture. Review the campus welcome schedule and bring your questions.`).join('\n\n');
     page.on('pageerror', error => state.errors.push(error.message));
     await page.route('**/sis/**', async route => {
@@ -104,10 +105,12 @@ async function message(page, status = 'draft') {
         else if (path === `/sis/campaigns/${id(10)}/`) result = {
             id: id(10), subject: 'Fictional campus welcome', body: wording, status, version: 3, is_owner: true, can_dispatch: true,
         };
-        else if (path.endsWith('/delivery-progress/')) result = {
-            status: 'held', campaign_status: 'queued', version: 2, total: 3,
-            counts: { sent: 2, queued: 0, sending: 0, needs_review: 1, closed: 0 },
-        };
+        else if (path.endsWith('/delivery-progress/')) {
+            const progress = progressStates[Math.min(progressReads++, progressStates.length - 1)];
+            result = { status: progress, campaign_status: 'queued', version: progressReads, total: 3,
+                counts: { sent: 2, queued: progress === 'active' ? 1 : 0, sending: 0,
+                    needs_review: progress === 'held' ? 1 : 0, closed: progress === 'completed' ? 1 : 0 } };
+        }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto('/admin/');
@@ -148,6 +151,24 @@ test('sending progress remains ahead of long message content without sending fro
     expect(state.calls.some(call => /\/(queue|dispatch|delivery-confirm)\/$/u.test(call.path))).toBe(false);
     expect(state.errors).toEqual([]);
 });
+for (const status of ['completed', 'held']) {
+    test(`delivery ${status} feedback follows observed progress without repeating or claiming every message was sent`, async ({ page }) => {
+        await page.clock.install();
+        const state = await message(page, 'queued', ['active', status]);
+        await expect(page.getByRole('progressbar', { name: 'Confirmed sends', exact: true })).toHaveAttribute('aria-valuenow', '66');
+        await expect(page.locator('.workspace-notification-toast')).toHaveCount(0);
+        await page.getByRole('button', { name: 'Refresh progress', exact: true }).click();
+        const copy = status === 'completed'
+            ? 'Delivery processing finished. Review confirmed sends and closed outcomes.'
+            : 'Delivery needs review. Unconfirmed messages will not be retried automatically.';
+        await expect(page.locator('#workspace-status')).toContainText(copy);
+        await page.getByRole('button', { name: 'Refresh progress', exact: true }).click();
+        await expect(page.locator('.workspace-notification-toast')).toHaveCount(1);
+        await expect(page.getByRole('progressbar', { name: 'Confirmed sends', exact: true })).toHaveAttribute('aria-valuetext', '2 of 3 messages confirmed sent');
+        expect(state.calls.filter(call => call.method !== 'GET' && !call.path.startsWith('/sis/ui/'))).toEqual([]);
+        expect(state.errors).toEqual([]);
+    });
+}
 
 test('template menu keeps editing prominent and retirement requires confirmation', async ({ page }) => {
     const state = await message(page, 'template');

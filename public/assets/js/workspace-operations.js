@@ -1585,7 +1585,8 @@ window.createWorkspaceOperations = function (ui) {
                         version: reviewed.version, recipients: reviewed.recipients.map(person => ({ user_id: person.user_id })),
                     });
                     if (!body.isConnected) return;
-                    notify("Recipients queued. No messages have been sent.");
+                    notify(ui.notificationLabels?.recipients_queued || "Recipients queued. No messages have been sent.",
+                        { tone: 'info' });
                     await ui.refreshDirectory();
                     await back();
                 }, "btn-primary"));
@@ -1731,7 +1732,8 @@ window.createWorkspaceOperations = function (ui) {
             try {
                 await request(`/sis/campaigns/${row.id}/delivery-confirm/`, "POST", { review_token: token });
                 if (!body.isConnected) return;
-                notify("Background delivery confirmed. You can leave this screen.");
+                notify(ui.notificationLabels?.delivery_queued || "Background delivery confirmed. You can leave this screen.",
+                    { tone: 'info' });
                 await back();
             } finally {
                 timing.disabled = false;
@@ -1895,6 +1897,15 @@ window.createWorkspaceOperations = function (ui) {
             }
             const state = await request(`/sis/campaigns/${row.id}/delivery-progress/`);
             if (!body.isConnected) return;
+            if (latest?.status === 'active' && ['completed', 'held', 'blocked'].includes(state.status)) {
+                const copy = {
+                    completed: ['delivery_completed', 'Delivery processing finished. Review confirmed sends and closed outcomes.'],
+                    held: ['delivery_held', 'Delivery needs review. Unconfirmed messages will not be retried automatically.'],
+                    blocked: ['delivery_blocked', 'Delivery stopped. Review access, recipients and institutional mail settings.'],
+                }[state.status];
+                notify(ui.notificationLabels?.[copy[0]] || copy[1],
+                    { tone: state.status === 'completed' ? 'success' : 'warning' });
+            }
             latest = state;
             const next = JSON.stringify(state);
             if (next !== signature) {

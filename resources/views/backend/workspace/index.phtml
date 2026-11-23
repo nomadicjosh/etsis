@@ -5,6 +5,7 @@ declare(strict_types=1);
 use Codefy\Framework\Proxy\Codefy;
 
 use function Codefy\Framework\Helpers\trans_html;
+use function Codefy\Framework\Helpers\trans_attr;
 
 $section = $section ?? "overview";
 $permissions = $permissions ?? [];
@@ -64,6 +65,7 @@ $client = [
     "transcript_standing_labels" => require __DIR__ . "/transcript-standing-labels.php",
     "section_reporting_labels" => require __DIR__ . "/section-reporting-labels.php",
     "waitlist_bypass_labels" => require __DIR__ . "/waitlist-bypass-labels.php",
+    "notification_labels" => require __DIR__ . "/notification-labels.php",
 ];
 ?>
 <!doctype html>
@@ -101,6 +103,7 @@ $client = [
         <script defer src="/assets/js/workspace-history-checks.js"></script>
         <script defer src="/assets/js/section-waitlist.js"></script>
         <script defer src="/assets/js/workspace-surfaces.js"></script>
+        <script defer src="/assets/js/workspace-notifications.js"></script>
         <script defer src="/assets/js/workspace-operations.js"></script>
         <script defer src="/assets/js/workspace-access.js"></script>
         <script defer src="/assets/js/workspace-moodle.js"></script>
@@ -239,6 +242,20 @@ $client = [
                         </strong>
                     </div>
                     <div class="topbar-actions">
+                        <button
+                            id="workspace-notifications-open"
+                            class="workspace-notification-trigger"
+                            type="button"
+                            aria-haspopup="dialog"
+                            aria-expanded="false"
+                            aria-label="<?= trans_attr('Recent workspace notifications') ?>">
+                            <i class="bi bi-bell" aria-hidden="true"></i>
+                            <span
+                                data-notification-count
+                                class="workspace-notification-count"
+                                aria-hidden="true"
+                                hidden></span>
+                        </button>
                         <?php if ($can("sis:person:manage")) : ?>
                             <button
                                 class="search-launch"
@@ -574,6 +591,6 @@ $client = [
                 </div>
             </div>
         </div>
-        <div id="workspace-status" class="workspace-toast" role="status" aria-live="polite" hidden></div>
+        <div id="workspace-status" class="workspace-notification-stack" role="status" aria-live="polite" aria-atomic="false"></div>
     </body>
 </html>

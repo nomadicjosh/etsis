@@ -26,7 +26,7 @@ async function fixture(page, options = {}) {
                     state.fail = false;
                     return route.fulfill({ status: 500, json: { error: 'Unable to confirm the request. Try again.' } });
                 }
-                state.job = { id: data.operation_id, status: 'queued', rows: null,
+                state.job = { id: data.operation_id, status: options.ready ? 'ready' : 'queued', rows: options.ready ? 1 : null,
                     expires_at: '2026-12-20T12:00:00+00:00' };
             }
             result = { export: state.job };
@@ -51,6 +51,7 @@ test('complete exports survive navigation and provide private downloads without 
     const studio = page.locator('dialog.report-studio');
     await studio.getByRole('button', { name: 'Prepare CSV', exact: true }).click();
     await expect(studio).toContainText('Queued.');
+    await expect(page.locator('#workspace-status')).toContainText('Export queued.');
     await expect(studio.getByRole('button', { name: 'Prepare CSV', exact: true })).toBeDisabled();
     await expect(studio.getByRole('progressbar', { name: 'Complete export preparation' })).toBeVisible();
     await studio.getByRole('button', { name: 'Back to reports', exact: true }).click();
@@ -60,11 +61,14 @@ test('complete exports survive navigation and provide private downloads without 
     state.job.status = 'ready'; state.job.rows = 12000;
     await studio.getByRole('button', { name: 'Check status', exact: true }).click();
     await expect(studio).toContainText('12,000 rows');
+    await expect(page.locator('#workspace-status')).toContainText('Your report export is ready.');
+    await expect(page.locator('#workspace-status')).not.toContainText('Fictional S-1');
     const downloaded = page.waitForEvent('download');
     await studio.getByRole('button', { name: 'Download CSV', exact: true }).click();
     expect((await downloaded).suggestedFilename()).toBe('report-results.csv');
     await studio.getByRole('button', { name: 'Cancel export', exact: true }).click();
     await expect(studio).toContainText('Export cancelled.');
+    await expect(page.locator('#workspace-status')).toContainText('Report export cancelled.');
     await expect(studio.getByRole('button', { name: 'Download CSV', exact: true })).toHaveCount(0);
     const mutations = state.calls.filter(call => call.data && /exports\//.test(call.path));
     expect(mutations.every(call => call.csrf === 'fictional-test-token')).toBe(true);
@@ -105,5 +109,13 @@ test('download revocation removes the stale ready action', async ({ page }) => {
     await studio.getByRole('button', { name: 'Download CSV', exact: true }).click();
     await expect(studio).toContainText('This export is no longer available.');
     await expect(studio.getByRole('button', { name: 'Download CSV', exact: true })).toHaveCount(0);
+    expect(state.errors).toEqual([]);
+});
+test('an already completed preparation acknowledgement announces readiness without claiming queued work', async ({ page }) => {
+    const state = await fixture(page, { ready: true });
+    await page.locator('dialog.report-studio').getByRole('button', { name: 'Prepare CSV', exact: true }).click();
+    await expect(page.locator('#workspace-status')).toContainText('Your report export is ready.');
+    await expect(page.locator('#workspace-status')).not.toContainText('Export queued.');
+    await expect(page.locator('.workspace-notification-toast')).toHaveCount(1);
     expect(state.errors).toEqual([]);
 });
