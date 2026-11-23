@@ -10,6 +10,7 @@ use Domain\Admissions\Service\AdmissionDocumentService;
 use Domain\Admissions\Service\AdmissionDocumentWorker;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 use DomainException;
 use Infrastructure\Admissions\PrivateAdmissionDocumentStorage;
@@ -61,7 +62,8 @@ final class AdmissionDocumentsTest extends TestCase
             $s->audit,
             $s->clock,
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql),
-            $s->decisionLedger()
+            $s->decisionLedger(),
+            $f->documentHolds()
         );
         $scanner = new class implements AdmissionDocumentScanner {
             public string $verdict = 'clean';
@@ -82,7 +84,8 @@ final class AdmissionDocumentsTest extends TestCase
             $policy,
             $f->campus->cipher,
             $s->transactions,
-            $s->clock
+            $s->clock,
+            $f->documentHolds()
         );
         return [$f, $service, $worker, $repo, $storage, $scanner, $root];
     }
@@ -516,7 +519,8 @@ final class AdmissionDocumentsTest extends TestCase
             $audit,
             $s->clock,
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql),
-            $s->decisionLedger()
+            $s->decisionLedger(),
+            $f->documentHolds()
         );
         try {
             $service->upload($f->application, EntityId::generate(), 'fictional.pdf', self::PDF, false);
@@ -617,7 +621,8 @@ final class AdmissionDocumentsTest extends TestCase
             new AdmissionDocumentPolicy(false, 0),
             $f->campus->cipher,
             $s->transactions,
-            $s->clock
+            $s->clock,
+            $f->documentHolds()
         );
         self::assertSame(1, $worker->run()['removed']);
         self::assertSame('purged', $repo->find($id)['status']);
@@ -691,5 +696,383 @@ final class AdmissionDocumentsTest extends TestCase
         };
         self::assertSame(1, $worker->run()['ready']);
         self::assertCount(1, $service->listing($f->application, false)['items']);
+    }
+    private function changeHold(
+        AdmissionCaseworkFixture $f,
+        string $scope,
+        string $action,
+        ?EntityId $application = null
+    ): array {
+        $application ??= $f->application;
+        $holds = $f->documentHolds();
+        $review = $holds->review(
+            $application,
+            $scope,
+            $action,
+            $holds->listing($application)['revision'],
+            'Fictional preservation review.'
+        );
+        return [$review, $holds->confirm(
+            $application,
+            new EntityId($review['operation_id']),
+            $scope,
+            $action,
+            $review['revision'],
+            $review['reason'],
+            $review['review_token']
+        )];
+    }
+
+    public function testFullLengthUnicodeReasonsRemainReadableAfterPlacementAndRelease(): void
+    {
+        [$f] = $this->fixture();
+        $holds = $f->documentHolds();
+        $reason = str_repeat('🙂', 1000);
+        foreach (['place', 'release'] as $action) {
+            $review = $holds->review(
+                $f->application,
+                'person',
+                $action,
+                $holds->listing($f->application)['revision'],
+                $reason,
+            );
+            $holds->confirm(
+                $f->application,
+                new EntityId($review['operation_id']),
+                'person',
+                $action,
+                $review['revision'],
+                $review['reason'],
+                $review['review_token'],
+            );
+        }
+        $history = $holds->listing($f->application)['history'];
+        self::assertCount(1, $history);
+        self::assertSame($reason, $history[0]['reason']);
+        self::assertSame($reason, $history[0]['release_reason']);
+        self::assertFalse($history[0]['active']);
+    }
+
+    public function testCaseAndPersonHoldsCoverFutureFilesAndOtherApplicationsWithoutSharingPrivateReasons(): void
+    {
+        [$f, $documents, $worker, $repo] = $this->fixture(new AdmissionDocumentPolicy(true, 1, true));
+        $s = $f->campus->sis;
+        $person = $s->admissions->application($f->application)->personId;
+        $second = $s->legacyApplication($person, $s->program, $s->term)->id;
+        $otherPerson = $s->legacyPerson($s->user(), 'Fictional', 'Other applicant');
+        $unrelated = $s->legacyApplication($otherPerson->id, $s->program, $s->term)->id;
+        $before = $s->sql->rows('sis_history_events');
+        $this->changeHold($f, 'case', 'place');
+        $holds = $f->documentHolds();
+        self::assertTrue($holds->blocks($person, $f->application));
+        self::assertFalse($holds->blocks($person, $second));
+        $this->changeHold($f, 'person', 'place');
+        self::assertTrue($holds->blocks($person, $second));
+        self::assertFalse($holds->blocks($otherPerson->id, $unrelated));
+        $id = EntityId::generate();
+        $documents->upload($second, $id, 'fictional-later-file.pdf', self::PDF, false);
+        self::assertSame(1, $worker->run()['ready']);
+        $s->clock->time = $s->clock->now()->modify('+2 days');
+        $listed = $documents->listing($second, true);
+        self::assertTrue($listed['items'][0]['scope_held']);
+        self::assertFalse($listed['items'][0]['can_purge']);
+        self::assertArrayNotHasKey('retention_holds', $documents->listing($second, false));
+        self::assertFalse($documents->listing($second, false)['items'][0]['scope_held']);
+        self::assertStringNotContainsString(
+            'Fictional preservation review.',
+            json_encode($s->sql->rows('sis_admission_document_holds')),
+        );
+        self::assertSame($before, $s->sql->rows('sis_history_events'));
+        self::assertSame('ready', $repo->find($id)['status']);
+    }
+
+    public function testQueuedDisposalIsPreservedAndDoesNotStarveUnrelatedWorkUntilTheLastScopeHoldIsReleased(): void
+    {
+        [$f, $documents, $worker, $repo, $storage] = $this->fixture(new AdmissionDocumentPolicy(true, 1, true));
+        $s = $f->campus->sis;
+        $id = EntityId::generate();
+        $documents->upload($f->application, $id, 'fictional-queued.pdf', self::PDF, false);
+        $s->clock->time = $s->clock->now()->modify('+2 days');
+        $review = $documents->reviewPurge($f->application, $id, 1, 'Fictional expiry.');
+        $documents->purge($f->application, $id, $review['review_token']);
+        $this->changeHold($f, 'case', 'place');
+        $this->changeHold($f, 'person', 'place');
+        $later = EntityId::generate();
+        $documents->upload($f->application, $later, 'fictional-new.pdf', self::PDF, false);
+        self::assertSame(1, $worker->run()['ready']);
+        self::assertSame(self::PDF, $storage->read($f->application, $id));
+        $this->changeHold($f, 'case', 'release');
+        self::assertSame(0, $worker->run()['removed']);
+        self::assertSame('purging', $repo->find($id)['status']);
+        $this->changeHold($f, 'person', 'release');
+        self::assertSame(1, $worker->run()['removed']);
+        self::assertSame('purged', $repo->find($id)['status']);
+        self::assertSame('ready', $repo->find($later)['status']);
+    }
+
+    public function testANewHoldBlocksDisposalConfirmationAndReleasePreservesFileRules(): void
+    {
+        [$f, $documents, , $repo] = $this->fixture(new AdmissionDocumentPolicy(true, 1, true));
+        $id = EntityId::generate();
+        $documents->upload($f->application, $id, 'fictional.pdf', self::PDF, false);
+        $s = $f->campus->sis;
+        $s->clock->time = $s->clock->now()->modify('+2 days');
+        $review = $documents->reviewPurge($f->application, $id, 1, 'Fictional expiry.');
+        $this->changeHold($f, 'person', 'place');
+        try {
+            $documents->purge($f->application, $id, $review['review_token']);
+            self::fail('A fresh person hold was ignored.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame('quarantined', $repo->find($id)['status']);
+        }
+        $documents->retain($f->application, $id, 1, true);
+        $this->changeHold($f, 'person', 'release');
+        self::assertFalse($documents->listing($f->application, true)['items'][0]['can_purge']);
+        $this->expectException(ConcurrentModificationException::class);
+        $documents->reviewPurge($f->application, $id, 2, 'Fictional expiry again.');
+    }
+
+    public function testHoldReceiptsPreserveOriginalOutcomesAcrossReleaseNewCyclesAndReviewExpiry(): void
+    {
+        [$f] = $this->fixture();
+        [$placed, $original] = $this->changeHold($f, 'person', 'place');
+        [$released, $release] = $this->changeHold($f, 'person', 'release');
+        $this->changeHold($f, 'person', 'place');
+        $f->campus->sis->clock->time = $f->campus->sis->clock->now()->modify('+1 day');
+        $holds = $f->documentHolds();
+        foreach ([[$placed, $original], [$released, $release]] as [$review, $expected]) {
+            self::assertSame($expected, $holds->confirm(
+                $f->application,
+                new EntityId($review['operation_id']),
+                $review['scope'],
+                $review['action'],
+                $review['revision'],
+                $review['reason'],
+                $review['review_token']
+            ));
+        }
+        $history = $holds->listing($f->application)['history'];
+        self::assertCount(2, $history);
+        self::assertTrue($history[0]['active']);
+        self::assertFalse($history[1]['active']);
+        self::assertSame('Fictional preservation review.', $history[1]['reason']);
+        self::assertSame('Fictional preservation review.', $history[1]['release_reason']);
+    }
+
+    public function testAPlaceReleaseCycleInvalidatesAnEarlierReviewEvenWhenNoHoldIsActive(): void
+    {
+        [$f] = $this->fixture();
+        $holds = $f->documentHolds();
+        $review = $holds->review(
+            $f->application,
+            'case',
+            'place',
+            $holds->listing($f->application)['revision'],
+            'Fictional earlier review.'
+        );
+        $this->changeHold($f, 'case', 'place');
+        $this->changeHold($f, 'case', 'release');
+        $this->expectException(ConcurrentModificationException::class);
+        $holds->confirm(
+            $f->application,
+            new EntityId($review['operation_id']),
+            'case',
+            'place',
+            $review['revision'],
+            $review['reason'],
+            $review['review_token']
+        );
+    }
+
+    public function testHoldMutationsRequireBothPermissionsAndNeverBecomeApplicantControls(): void
+    {
+        [$f, $documents] = $this->fixture();
+        $s = $f->campus->sis;
+        $s->access->staff = false;
+        foreach ([[], ['sis:admissions:manage'], ['sis:admissions:documents:retain']] as $grants) {
+            $s->access->grants = $grants;
+            try {
+                $f->documentHolds()->listing($f->application);
+                self::fail('Incomplete document authority read hold reasons.');
+            } catch (AccessDeniedException) {
+                self::assertSame([], $s->sql->rows('sis_admission_document_holds'));
+            }
+        }
+        self::assertArrayNotHasKey('retention_holds', $documents->listing($f->application, false));
+    }
+
+    public function testAuditFailureAndAuthorityLossDuringHoldConfirmationRollBackTheDecision(): void
+    {
+        foreach (['audit', 'authority', 'expired'] as $failure) {
+            [$f] = $this->fixture();
+            $s = $f->campus->sis;
+            $audit = $this->createMock(\Domain\Audit\Repository\AuditTrail::class);
+            $audit->expects(self::once())->method('record')
+                ->willReturnCallback(static function () use ($s, $failure): void {
+                    if ($failure === 'audit') {
+                        throw new \RuntimeException('Fictional audit failure.');
+                    }
+                    if ($failure === 'authority') {
+                        $s->access->staff = false;
+                    } else {
+                        $s->clock->time = $s->clock->now()->modify('+21 minutes');
+                    }
+                });
+            $holds = $f->documentHolds($audit);
+            $review = $holds->review(
+                $f->application,
+                'case',
+                'place',
+                $holds->listing($f->application)['revision'],
+                'Fictional audited hold.'
+            );
+            try {
+                $holds->confirm(
+                    $f->application,
+                    new EntityId($review['operation_id']),
+                    'case',
+                    'place',
+                    $review['revision'],
+                    $review['reason'],
+                    $review['review_token']
+                );
+                self::fail('A failed final check committed preservation controls.');
+            } catch (\Throwable $error) {
+                self::assertNotInstanceOf(\PHPUnit\Framework\AssertionFailedError::class, $error);
+                self::assertSame([], $s->sql->rows('sis_admission_document_holds'));
+            }
+        }
+    }
+
+    public function testChangingProtectedHoldRoutingFailsClosedInsteadOfAuthorizingDisposal(): void
+    {
+        [$f, $documents, $worker, $repo] = $this->fixture(new AdmissionDocumentPolicy(true, 1, true));
+        $id = EntityId::generate();
+        $documents->upload($f->application, $id, 'fictional.pdf', self::PDF, false);
+        $s = $f->campus->sis;
+        $s->clock->time = $s->clock->now()->modify('+2 days');
+        $review = $documents->reviewPurge($f->application, $id, 1, 'Fictional expiry.');
+        $documents->purge($f->application, $id, $review['review_token']);
+        [, $hold] = $this->changeHold($f, 'person', 'place');
+        $s->sql->update('sis_admission_document_holds', ['active' => 0], ['id' => $hold['id']]);
+        try {
+            $worker->run();
+            self::fail('Tampered hold routing authorized permanent removal.');
+        } catch (DomainException) {
+            self::assertSame('purging', $repo->find($id)['status']);
+        }
+    }
+
+    public function testAReviewCannotBeReusedForAnotherScopeReasonApplicationOrActor(): void
+    {
+        [$f] = $this->fixture();
+        $s = $f->campus->sis;
+        $holds = $f->documentHolds();
+        $review = $holds->review(
+            $f->application,
+            'person',
+            'place',
+            $holds->listing($f->application)['revision'],
+            'Fictional reviewed reason.'
+        );
+        $person = $s->admissions->application($f->application)->personId;
+        $second = $s->legacyApplication($person, $s->program, $s->term)->id;
+        $originalActor = $s->access->actor;
+        foreach (['scope', 'reason', 'application', 'actor'] as $changed) {
+            $s->access->actor = $changed === 'actor' ? $s->user() : $originalActor;
+            try {
+                $holds->confirm(
+                    $changed === 'application' ? $second : $f->application,
+                    new EntityId($review['operation_id']),
+                    $changed === 'scope' ? 'case' : 'person',
+                    'place',
+                    $review['revision'],
+                    $changed === 'reason' ? 'Different reason.' : $review['reason'],
+                    $review['review_token']
+                );
+                self::fail('A changed hold request reused another review.');
+            } catch (AccessDeniedException | ConcurrentModificationException | ValidationException) {
+                self::assertSame([], $s->sql->rows('sis_admission_document_holds'));
+            }
+        }
+    }
+
+    public function testHoldHistoryPagesDoNotMixOtherCaseHoldsAndKeepBothDecisionReasons(): void
+    {
+        [$f] = $this->fixture();
+        for ($cycle = 0; $cycle < 21; $cycle++) {
+            $this->changeHold($f, 'case', 'place');
+            $this->changeHold($f, 'case', 'release');
+        }
+        $s = $f->campus->sis;
+        $person = $s->admissions->application($f->application)->personId;
+        $second = $s->legacyApplication($person, $s->program, $s->term)->id;
+        $this->changeHold($f, 'case', 'place', $second);
+        $this->changeHold($f, 'person', 'place', $second);
+        $holds = $f->documentHolds();
+        $first = $holds->listing($f->application);
+        self::assertCount(20, $first['history']);
+        $last = $holds->listing($f->application, new EntityId($first['next_cursor']));
+        self::assertCount(2, $last['history']);
+        self::assertNull($last['next_cursor']);
+        $ids = array_column([...$first['history'], ...$last['history']], 'id');
+        self::assertCount(22, array_unique($ids));
+        self::assertTrue($first['scopes']['person']['active']);
+        self::assertFalse($first['scopes']['case']['active']);
+        self::assertNotNull($last['history'][0]['release_reason']);
+    }
+
+    public function testRemovalRechecksHoldsAfterCandidateSelectionAndUnlinksInsideThePersonTransaction(): void
+    {
+        [$f, $documents, , $repo, $storage, $scanner] = $this->fixture(new AdmissionDocumentPolicy(true, 1, true));
+        $s = $f->campus->sis;
+        $id = EntityId::generate();
+        $documents->upload($f->application, $id, 'fictional.pdf', self::PDF, false);
+        $s->clock->time = $s->clock->now()->modify('+2 days');
+        $review = $documents->reviewPurge($f->application, $id, 1, 'Fictional expiry.');
+        $documents->purge($f->application, $id, $review['review_token']);
+        $racing = $this->createMock(\Domain\Admissions\Repository\AdmissionDocumentRepository::class);
+        $racing->expects(self::once())->method('scanCandidates')->willReturnCallback(
+            function (string $at, string $stale, int $limit, bool $scan) use ($f, $repo): array {
+                $candidates = $repo->scanCandidates($at, $stale, $limit, $scan);
+                $this->changeHold($f, 'case', 'place');
+                return $candidates;
+            }
+        );
+        $racing->method('lock')->willReturnCallback($repo->lock(...));
+        $racing->method('find')->willReturnCallback($repo->find(...));
+        $worker = new AdmissionDocumentWorker(
+            $racing,
+            $s->admissions,
+            $storage,
+            $scanner,
+            new AdmissionDocumentPolicy(true, 1, true),
+            $f->campus->cipher,
+            $s->transactions,
+            $s->clock,
+            $f->documentHolds()
+        );
+        self::assertSame(1, $worker->run()['pending']);
+        self::assertSame(self::PDF, $storage->read($f->application, $id));
+        $this->changeHold($f, 'case', 'release');
+        $checked = $this->createMock(\Domain\Admissions\Service\AdmissionDocumentStorage::class);
+        $checked->expects(self::once())->method('remove')->willReturnCallback(
+            static function (EntityId $application, EntityId $document) use ($s, $storage): void {
+                self::assertTrue($s->sql->inTransaction());
+                $storage->remove($application, $document);
+            }
+        );
+        $worker = new AdmissionDocumentWorker(
+            $repo,
+            $s->admissions,
+            $checked,
+            $scanner,
+            new AdmissionDocumentPolicy(true, 1, true),
+            $f->campus->cipher,
+            $s->transactions,
+            $s->clock,
+            $f->documentHolds()
+        );
+        self::assertSame(1, $worker->run()['removed']);
     }
 }

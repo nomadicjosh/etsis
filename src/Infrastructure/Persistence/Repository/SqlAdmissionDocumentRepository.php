@@ -58,8 +58,17 @@ final readonly class SqlAdmissionDocumentRepository implements AdmissionDocument
     {
         $q = $this->sql->quote(...);
         $table = $q('sis_admission_documents');
-        $rows = $this->sql->fetch('SELECT * FROM ' . $table . ' WHERE ' . $q('status')
-            . ' = ? ORDER BY ' . $q('id'), ['purging'], $limit);
+        // Skip preserved cleanup work so a held file cannot starve unrelated cleanup/scanning.
+        // The worker independently authenticates current hold metadata under the person lock.
+        $rows = $this->sql->fetch(
+            'SELECT d.* FROM ' . $table . ' d WHERE d.' . $q('status') . ' = ? AND NOT EXISTS ('
+            . 'SELECT h.' . $q('id') . ' FROM ' . $q('sis_admission_document_holds') . ' h WHERE h.'
+            . $q('person_id') . ' = d.' . $q('person_id') . ' AND h.' . $q('active') . ' = 1 AND (h.'
+            . $q('application_id') . ' IS NULL OR h.' . $q('application_id') . ' = d.' . $q('application_id')
+            . ')) ORDER BY d.' . $q('id'),
+            ['purging'],
+            $limit,
+        );
         if (!$scan || count($rows) >= $limit) {
             return $rows;
         }

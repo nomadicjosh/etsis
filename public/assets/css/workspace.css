@@ -1241,3 +1241,12 @@ h3 { font-size: .9rem; font-weight: 650; }
 /* Enlarged workspace headings must fit behind reopened drawers as well. */
 .page-heading > div { min-width: 0; max-width: 100%; }
 .page-heading h1, .page-heading p { overflow-wrap: anywhere; }
+
+/* Scoped preservation controls avoid stacking padded boxes inside the document panel. */
+.document-preservation, .document-hold-form { min-width: 0; }
+.document-preservation .record-form-actions > .btn { max-width: 100%; text-align: start; justify-content: flex-start; }
+.document-hold-form .record-form-actions > .btn { flex: 1 1 10rem; }
+@media (max-width: 575.98px) {
+    .admission-workbench .admission-document-panel { padding-inline: .375rem; }
+    .document-preservation .alert { padding-inline: .5rem; }
+}

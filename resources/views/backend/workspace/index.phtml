@@ -56,6 +56,7 @@ $client = [
     "permissions" => $permissions,
     "name" => $displayName,
     "login_url" => $loginUrl ?? "/login/",
+    "document_hold_labels" => require __DIR__ . "/document-hold-labels.php",
 ];
 ?>
 <!doctype html>
@@ -100,6 +101,7 @@ $client = [
         <script defer src="/assets/js/person-emergency-contacts.js"></script>
         <script defer src="/assets/js/person-profile-requests.js"></script>
         <script defer src="/assets/js/person-education.js"></script>
+        <script defer src="/assets/js/admission-document-holds.js"></script>
         <script defer src="/assets/js/admission-documents.js"></script>
         <script defer src="/assets/js/admission-entry.js"></script>
         <script defer src="/assets/js/admission-policy.js"></script>

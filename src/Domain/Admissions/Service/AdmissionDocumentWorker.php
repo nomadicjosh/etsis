@@ -26,6 +26,7 @@ final readonly class AdmissionDocumentWorker
         private MessageCipher $cipher,
         private UnitOfWork $transactions,
         private Clock $clock,
+        private AdmissionDocumentHoldService $holds,
     ) {
     }
     private function at(string $offset = ''): string
@@ -51,13 +52,32 @@ final readonly class AdmissionDocumentWorker
             $id = new EntityId($candidate['id']);
             $person = new EntityId($candidate['person_id']);
             $application = new EntityId($candidate['application_id']);
-            $claim = $this->transactions->run(function () use ($id, $person, $content): ?array {
+            $claim = $this->transactions->run(function () use ($id, $person, $application, $content): ?array {
                 $this->admissions->lockPerson($person);
                 $this->documents->lock($id);
                 $row = $this->documents->find($id);
                 $content->metadata($row);
+                if (
+                    $row['person_id'] !== $person->value || $row['application_id'] !== $application->value
+                    || $this->admissions->application($application)->personId->value !== $person->value
+                ) {
+                    throw new \DomainException('Document preservation needs institutional review.');
+                }
                 if ($row['status'] === 'purging') {
-                    return $row;
+                    if ($this->holds->blocks($person, $application)) {
+                        return ['preserved' => true];
+                    }
+                    // Local unlink stays inside the canonical-person lock so a hold cannot race removal.
+                    try {
+                        $this->storage->remove($application, $id);
+                    } catch (Throwable) {
+                        return ['preserved' => true];
+                    }
+                    $this->documents->change($id, (int) $row['version'], $content->changes(
+                        $row,
+                        ['status' => 'purged', 'scan_token' => null, 'scan_after' => $this->at('+15 minutes')],
+                    ));
+                    return ['removed' => true];
                 }
                 $eligible = ($row['status'] === 'quarantined' && $row['scan_after'] <= $this->at())
                     || ($row['status'] === 'scanning' && $row['scan_after'] <= $this->at('-5 minutes'));
@@ -75,29 +95,24 @@ final readonly class AdmissionDocumentWorker
                 continue;
             }
             $result['examined']++;
-            // External scanning/file IO happens after releasing all person and document database locks.
+            if (isset($claim['removed']) || isset($claim['preserved'])) {
+                $result[isset($claim['removed']) ? 'removed' : 'pending']++;
+                continue;
+            }
+            // External scanning happens after releasing all person and document database locks.
             try {
-                if ($claim['status'] === 'purging') {
-                    $this->storage->remove($application, $id);
-                    $outcome = 'purged';
-                } else {
-                    $verdict = $this->scanner->scan($content->read($claim));
-                    $outcome = match ($verdict) {
-                        'clean' => 'ready', 'infected' => 'rejected', default => 'quarantined'
-                    };
-                }
+                $verdict = $this->scanner->scan($content->read($claim));
+                $outcome = match ($verdict) {
+                    'clean' => 'ready', 'infected' => 'rejected', default => 'quarantined'
+                };
             } catch (Throwable) {
-                $outcome = $claim['status'] === 'purging' ? 'purging' : 'quarantined';
+                $outcome = 'quarantined';
             }
             $accepted = $this->transactions->run(function () use ($id, $person, $claim, $outcome, $content): bool {
                 $this->admissions->lockPerson($person);
                 $this->documents->lock($id);
                 $row = $this->documents->find($id);
-                if ($claim['status'] === 'purging') {
-                    if ($row['status'] !== 'purging' || $outcome !== 'purged') {
-                        return false;
-                    }
-                } elseif ($row['status'] !== 'scanning' || $row['scan_token'] !== $claim['scan_token']) {
+                if ($row['status'] !== 'scanning' || $row['scan_token'] !== $claim['scan_token']) {
                     return false;
                 }
                 $meta = $content->metadata($row);

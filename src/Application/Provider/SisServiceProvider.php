@@ -305,6 +305,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Communications\DefuseMessageCipher::class,
             \Domain\Admissions\Repository\AdmissionDocumentRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlAdmissionDocumentRepository::class,
+            \Domain\Admissions\Repository\AdmissionDocumentHoldRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlAdmissionDocumentHoldRepository::class,
             \Domain\Admissions\Service\AdmissionDocumentStorage::class =>
                 \Infrastructure\Admissions\PrivateAdmissionDocumentStorage::class,
             \Domain\Admissions\Service\AdmissionDocumentScanner::class =>

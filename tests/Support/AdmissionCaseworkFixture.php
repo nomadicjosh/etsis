@@ -13,6 +13,24 @@ final class AdmissionCaseworkFixture
     public \Domain\Admissions\Service\AdmissionUpdatesService $updates;
     public \Domain\Shared\ValueObject\EntityId $application;
 
+    public function documentHolds(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null
+    ): \Domain\Admissions\Service\AdmissionDocumentHoldService {
+        $s = $this->campus->sis;
+        return new \Domain\Admissions\Service\AdmissionDocumentHoldService(
+            new \Infrastructure\Persistence\Repository\SqlAdmissionDocumentHoldRepository($s->sql),
+            $s->admissions,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql),
+            $this->campus->cipher,
+            $s->access,
+            $s->transactions,
+            $audit ?? $s->audit,
+            $s->clock,
+            new \Domain\Shared\Service\ReviewProof($this->campus->cipher, $s->clock),
+            new \Infrastructure\Persistence\SqlActorDirectory($s->sql),
+        );
+    }
+
     public function __construct(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Admissions\Repository\AdmissionsRepository $admissions = null,

@@ -452,7 +452,7 @@ window.createWorkspacePeople = function (ui) {
         const workbench = window.createAdmissionCasework({ node, request, task, notify }).mount(casework, row.id,
             { managePresets: can('sis:forms:manage') });
         const documents = node('div', { class: 'record-section mt-3' });
-        const documentEditor = window.createAdmissionDocuments({ node, request, task, notify }).mount(documents, row.id, { staff: true });
+        const documentEditor = window.createAdmissionDocuments({ node, request, task, notify, holdLabels: ui.documentHoldLabels }).mount(documents, row.id, { staff: true });
         body.append(documents);
         const offerArea = node('div'), withdrawalArea = node('div'); body.append(offerArea, withdrawalArea);
         let background = null, withdrawalEditor = null, answerEditor = null;

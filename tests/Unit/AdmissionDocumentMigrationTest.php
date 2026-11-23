@@ -10,6 +10,31 @@ use Qubus\Expressive\Schema\CreateTable;
 
 final class AdmissionDocumentMigrationTest extends TestCase
 {
+    public function testScopedHoldSchemaCompilesAcrossFiveDialectsWithoutBackfillingEarlierFacts(): void
+    {
+        require_once dirname(__DIR__, 2) . '/database/migrations/20261122000001_CreateSisAdmissionDocumentHolds.php';
+        foreach (['MySQL', 'PostgreSQL', 'SQLite', 'SQLServer', 'Oracle'] as $dialect) {
+            $table = new CreateTable('sis_admission_document_holds');
+            \CreateSisAdmissionDocumentHolds::define($table);
+            $connection = $this->createStub(Connection::class);
+            $connection->method('quoteIdentifier')->willReturnCallback(
+                static fn(string $name): string => '"' . $name . '"'
+            );
+            $compiler = 'Qubus\\Expressive\\Schema\\Compiler\\' . $dialect;
+            $sql = json_encode(new $compiler($connection)->create($table), JSON_THROW_ON_ERROR);
+            foreach (
+                ['protected_metadata', 'scope_sequence', 'sadh_scope', 'sadh_history', 'sadh_release',
+                'sadh_application_fk', 'sadh_person_fk'] as $field
+            ) {
+                self::assertStringContainsString($field, $sql);
+            }
+            self::assertDoesNotMatchRegularExpression('/DROP |DELETE FROM|UPDATE |INSERT INTO|AUTO_INCREMENT/i', $sql);
+            self::assertStringNotContainsString('sis_history_events', $sql);
+            // Nullable release identifiers need an ordinary index: SQL Server allows only one NULL in a unique index.
+            self::assertStringNotContainsString('UNIQUE', strtoupper($sql));
+        }
+    }
+
     public function testProtectedDocumentSchemaCompilesAcrossFiveDialects(): void
     {
         require_once dirname(__DIR__, 2) . '/database/migrations/20261117000004_CreateSisAdmissionDocuments.php';

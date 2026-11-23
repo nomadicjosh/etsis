@@ -16,9 +16,11 @@ foreach (glob($root . '/config/*.php') as $file) {
 foreach (['bootstrap', 'database', 'resources', 'public'] as $directory) {
     symlink($root . '/' . $directory, $fixture . '/' . $directory);
 }
-foreach (['APP_BASE_PATH' => $fixture, 'DB_CONNECTION' => 'sqlite', 'DB_DSN' => 'sqlite::memory:',
+foreach (
+    ['APP_BASE_PATH' => $fixture, 'DB_CONNECTION' => 'sqlite', 'DB_DSN' => 'sqlite::memory:',
     'APP_ENV' => 'testing', 'APP_TIMEZONE' => 'UTC',
-    'APP_BASE_URL' => 'https://campus.example.invalid'] as $key => $value) {
+    'APP_BASE_URL' => 'https://campus.example.invalid'] as $key => $value
+) {
     $_ENV[$key] = $_SERVER[$key] = $value;
 }
 try {
@@ -32,18 +34,56 @@ try {
         $_POST = ['_workspace_json' => json_encode(['code' => 'Math-101', 'title' => 'Algebra',
             'credits_milli' => 3000], JSON_THROW_ON_ERROR)];
     }
-    if (in_array(($argv[1] ?? ''), [
-        'check-historical-finance', 'check-primary-position', 'check-recorded-progress',
-        'check-academic-organization', 'check-group-work-eligibility',
-        'check-component-major-links',
-        'check-curriculum-reports',
-        'check-registered-credits', 'check-coursework-grade-policy',
-        'check-curriculum-components', 'check-enrollment-reinstatement', 'check-waitlists', 'check-workload-policy',
-        'check-grade-certification', 'check-support-history',
-        'check-maintenance', 'check-profile-requests', 'check-portal', 'check-admission-readiness', 'check-drop-policy', 'check-hiatus-history', 'check-transcript-reviews', 'check-registration-schedule', 'check-gradebook-calculation', 'check-grade-changes', 'check-section-classifications', 'check-program-classifications', 'check-profile-command', 'check-login-sessions',
-        'check-mapped-imports', 'check-standing', 'check-enrollment-load', 'check-content-publication', 'check-prerequisite-permissions',
-        'check-advising', 'check-moodle-resolution', 'check-course-rules', 'check-prerequisite-groups', 'check-degree-trials', 'check-transfer-corrections', 'check-report-exports',
-    ], true)) {
+    if (
+        in_array(
+            ($argv[1] ?? ''),
+            [
+                'check-document-holds',
+                'check-historical-finance',
+                'check-primary-position',
+                'check-recorded-progress',
+                'check-academic-organization',
+                'check-group-work-eligibility',
+                'check-component-major-links',
+                'check-curriculum-reports',
+                'check-registered-credits',
+                'check-coursework-grade-policy',
+                'check-curriculum-components',
+                'check-enrollment-reinstatement',
+                'check-waitlists',
+                'check-workload-policy',
+                'check-grade-certification',
+                'check-support-history',
+                'check-maintenance',
+                'check-profile-requests',
+                'check-portal',
+                'check-admission-readiness',
+                'check-drop-policy',
+                'check-hiatus-history',
+                'check-transcript-reviews',
+                'check-registration-schedule',
+                'check-gradebook-calculation',
+                'check-grade-changes',
+                'check-section-classifications',
+                'check-program-classifications',
+                'check-profile-command',
+                'check-login-sessions',
+                'check-mapped-imports',
+                'check-standing',
+                'check-enrollment-load',
+                'check-content-publication',
+                'check-prerequisite-permissions',
+                'check-advising',
+                'check-moodle-resolution',
+                'check-course-rules',
+                'check-prerequisite-groups',
+                'check-degree-trials',
+                'check-transfer-corrections',
+                'check-report-exports',
+            ],
+            true,
+        )
+    ) {
         $_SERVER['DOCUMENT_ROOT'] = $fixture . '/public';
         $_SERVER['SCRIPT_NAME'] = '/index.php';
         $_SERVER['REQUEST_METHOD'] = 'GET';
@@ -78,8 +118,10 @@ try {
                 ->withHeader('Content-Type', 'application/x-www-form-urlencoded')
                 ->withHeader('Accept', 'application/json')
                 ->withHeader('X-CSRF-Token', 'fictionalcsrftoken')
-                ->withAttribute(\Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::CSRF_SESSION_ATTRIBUTE,
-                    'fictionalcsrftoken')
+                ->withAttribute(
+                    \Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::CSRF_SESSION_ATTRIBUTE,
+                    'fictionalcsrftoken'
+                )
                 ->withBody(new \Laminas\Diactoros\Stream('php://temp', 'w+'));
             $request->getBody()->write(http_build_query($_POST));
             $request->getBody()->rewind();
@@ -90,8 +132,10 @@ try {
             }
             $body = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
             $course = $sis->sql->one('sis_courses', ['id' => $body['id']]);
-            if ($course['code'] !== 'Math-101' || $course['title'] !== 'Algebra'
-                || (int) $course['credits_milli'] !== 3000) {
+            if (
+                $course['code'] !== 'Math-101' || $course['title'] !== 'Algebra'
+                || (int) $course['credits_milli'] !== 3000
+            ) {
                 throw new RuntimeException('Course details were not persisted.');
             }
             $status = 0;
@@ -236,6 +280,10 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/HistoricalFinanceBootChecks.php';
             $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-document-holds') {
+            $kernel->bootstrap();
+            require __DIR__ . '/AdmissionDocumentHoldBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-primary-position') {
             $kernel->bootstrap();
             require __DIR__ . '/PrimaryPositionBootChecks.php';
@@ -288,11 +336,11 @@ try {
             require __DIR__ . '/ProfileCommandBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-login-sessions') {
-            require __DIR__.'/LoginSessionBootChecks.php';
-            $status=0;
+            require __DIR__ . '/LoginSessionBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-moodle-resolution') {
-            require __DIR__.'/MoodleResolutionBootChecks.php';
-            $status=0;
+            require __DIR__ . '/MoodleResolutionBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-profile-requests') {
             $kernel->bootstrap();
             require __DIR__ . '/ProfileRequestsBootChecks.php';
@@ -300,26 +348,32 @@ try {
         } elseif (($argv[1] ?? '') === 'check-person-projections') {
             require __DIR__ . '/PersonProjectionBootChecks.php';
             $status = 0;
-        } elseif (in_array($argv[1] ?? '', ['check-history-verification', 'check-account-projections', 'check-academic-projections'], true)) {
-            require __DIR__.'/HistoryVerificationBootChecks.php';
-            $status=0;
+        } elseif (
+            in_array(
+                $argv[1] ?? '',
+                ['check-history-verification', 'check-account-projections', 'check-academic-projections'],
+                true,
+            )
+        ) {
+            require __DIR__ . '/HistoryVerificationBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-degree-trials') {
-            require __DIR__.'/DraftDegreeAuditBootChecks.php';
-            $status=0;
+            require __DIR__ . '/DraftDegreeAuditBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-course-rules') {
-            require __DIR__.'/CourseRuleBootChecks.php';
-            $status=0;
+            require __DIR__ . '/CourseRuleBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-report-exports') {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/ReportExportBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-report-retention') {
-            require __DIR__.'/ReportRetentionBootChecks.php';
-            $status=0;
+            require __DIR__ . '/ReportRetentionBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-session-retention') {
-            require __DIR__.'/SessionRetentionBootChecks.php';
-            $status=0;
+            require __DIR__ . '/SessionRetentionBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-moodle') {
             $kernel->bootstrap();
             $app->configContainer->setConfigKey('moodle', ['enabled' => false]);
@@ -333,15 +387,19 @@ try {
                 throw new RuntimeException('Disabled Moodle diagnostic did not complete.');
             }
             $sync = new \Symfony\Component\Console\Tester\CommandTester($kernel->all()['sis:moodle:sync']);
-            if ($sync->execute(['--limit' => '21']) !== 2 || $sync->execute([]) !== 0 ||
-                !str_contains($sync->getDisplay(), 'disabled')) {
+            if (
+                $sync->execute(['--limit' => '21']) !== 2 || $sync->execute([]) !== 0 ||
+                !str_contains($sync->getDisplay(), 'disabled')
+            ) {
                 throw new RuntimeException('Disabled section synchronization failed its command boundary.');
             }
             if ($kernel->call('sis:moodle:provision') !== 0) {
                 throw new RuntimeException('The disabled Moodle provisioning command was not registered.');
             }
             $worker = $app->make(\Domain\Lms\Service\MoodleProvisioningWorker::class);
-            $provision = new \Symfony\Component\Console\Tester\CommandTester(new \Application\Console\Commands\MoodleProvisionCommand($app));
+            $provision = new \Symfony\Component\Console\Tester\CommandTester(
+                new \Application\Console\Commands\MoodleProvisionCommand($app),
+            );
             if ($provision->execute([]) !== 0 || !str_contains($provision->getDisplay(), 'disabled')) {
                 throw new RuntimeException('Disabled Moodle worker did not resolve without network or queue access.');
             }
@@ -349,8 +407,10 @@ try {
             $inspect = new \Symfony\Component\Console\Tester\CommandTester(
                 new \Application\Console\Commands\MoodleInspectCommand($app, $reader),
             );
-            if ($inspect->execute(['resource' => 'user', 'remote_id' => '123']) !== 0 ||
-                !str_contains($inspect->getDisplay(), 'disabled')) {
+            if (
+                $inspect->execute(['resource' => 'user', 'remote_id' => '123']) !== 0 ||
+                !str_contains($inspect->getDisplay(), 'disabled')
+            ) {
                 throw new RuntimeException('Disabled Moodle record reader did not resolve without network access.');
             }
             $instanceReader = $app->make(\Domain\Lms\Service\MoodleInstanceReader::class);
@@ -363,9 +423,11 @@ try {
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-authentication') {
             $kernel->bootstrap();
-            if (!$app->get(\Codefy\Framework\Auth\Sentinel::class) instanceof \Codefy\Framework\Auth\Auth
+            if (
+                !$app->get(\Codefy\Framework\Auth\Sentinel::class) instanceof \Codefy\Framework\Auth\Auth
                 || !$app->get(\Codefy\Framework\Auth\Rbac\Resource\StorageResource::class)
-                    instanceof \Infrastructure\Security\Rbac\SqlStorageResource) {
+                    instanceof \Infrastructure\Security\Rbac\SqlStorageResource
+            ) {
                 throw new RuntimeException('Framework authentication must use database RBAC storage.');
             }
             $middleware = new \Qubus\Routing\Route\InjectorMiddlewareResolver($app)->resolve('user.authenticate');
@@ -373,7 +435,10 @@ try {
                 throw new RuntimeException('Unauthenticated request reached the protected handler.');
             });
             $response = $middleware->process(new \Qubus\Http\ServerRequest([], [], '/auth/', 'POST'), $handler);
-            if ($response->getStatusCode() !== 302 || $response->getHeaderLine('Location') !== '/login/?notice=credentials') {
+            if (
+                $response->getStatusCode() !== 302
+                || $response->getHeaderLine('Location') !== '/login/?notice=credentials'
+            ) {
                 throw new RuntimeException('Authentication middleware did not reject missing credentials.');
             }
             $status = 0;
@@ -382,8 +447,10 @@ try {
         }
     }
 } finally {
-    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($fixture,
-        FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);
+    $files = new RecursiveIteratorIterator(new RecursiveDirectoryIterator(
+        $fixture,
+        FilesystemIterator::SKIP_DOTS
+    ), RecursiveIteratorIterator::CHILD_FIRST);
     foreach ($files as $file) {
         if ($file->isDir() && !$file->isLink()) {
             rmdir($file->getPathname());

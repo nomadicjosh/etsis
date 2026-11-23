@@ -37,6 +37,7 @@ final readonly class AdmissionDocumentService
         private Clock $clock,
         private AccessRepository $permissions,
         private AdmissionDecisionLedger $decisions,
+        private AdmissionDocumentHoldService $holds,
     ) {
     }
     private function at(): string
@@ -87,6 +88,7 @@ final readonly class AdmissionDocumentService
             }
         }
         $person = $this->admissions->application($application)->personId;
+        $scopeHeld = $staff && $this->holds->blocks($person, $application);
         foreach ($rows as $row) {
             if ($row['person_id'] !== $person->value) {
                 throw new AccessDeniedException('The document parent does not match this application.');
@@ -100,16 +102,23 @@ final readonly class AdmissionDocumentService
                 'status' => $row['status'], 'version' => (int) $row['version'],
                 'created_at' => $row['created_at'], 'expires_at' => $row['expires_at'],
                 'held' => $staff && (int) $row['held'] === 1,
+                'scope_held' => $staff && $scopeHeld,
                 'retained_evidence' => $staff && ($meta['evidence_decisions'] ?? []) !== [],
                 'can_select_evidence' => $staff && $row['status'] === 'ready' && $row['expires_at'] > $this->at(),
-                'can_purge' => $canRetain && (int) $row['held'] === 0 && $row['expires_at'] <= $this->at()
+                'can_purge' => $canRetain && !$scopeHeld && (int) $row['held'] === 0
+                    && $row['expires_at'] <= $this->at()
                     && ($meta['evidence_decisions'] ?? []) === []
                     && !in_array($row['status'], ['purging', 'purged'], true),
                 'can_download' => $row['status'] === 'ready' && ($staff || $row['expires_at'] > $this->at())];
         }
         $this->authorize($application, $staff, $actor);
-        return ['enabled' => $this->policy->acceptsUploads(), 'max_bytes' => AdmissionDocumentPolicy::MAX_BYTES,
+        $result = ['enabled' => $this->policy->acceptsUploads(), 'max_bytes' => AdmissionDocumentPolicy::MAX_BYTES,
             'upload_id' => EntityId::generate()->value, 'can_retain' => $canRetain, 'items' => $items];
+        if ($canRetain) {
+            $result['retention_holds'] = $this->holds->listing($application);
+        }
+        $this->authorize($application, $staff, $actor);
+        return $result;
     }
     /** @return array{id:string,status:string} */
     public function upload(
@@ -375,6 +384,9 @@ final readonly class AdmissionDocumentService
     /** @param array<string,mixed> $row */
     private function purgeEligible(array $row, int $version): void
     {
+        if ($this->holds->blocks(new EntityId($row['person_id']), new EntityId($row['application_id']))) {
+            throw new ConcurrentModificationException('A case or person hold protects this document from removal.');
+        }
         if (
             ($this->metadata($row)['evidence_decisions'] ?? []) !== []
             || $this->decisions->retainsDocument(

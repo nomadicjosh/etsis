@@ -2,7 +2,7 @@
 (() => {
     'use strict';
     let sequence = 0;
-    window.createAdmissionDocuments = ({ node, request, task, notify }) => ({
+    window.createAdmissionDocuments = ({ node, request, task, notify, holdLabels = {} }) => ({
         summary(container, evidence) {
             const section = node('section', { class: 'record-section' }, node('h4', { class: 'h6' }, 'Decision evidence'));
             if (evidence?.length) section.append(node('ul', {}, ...evidence.map(file => node('li', { class: 'text-break private-text' }, file.name))));
@@ -91,13 +91,15 @@
             }
             function draw(data, ticket) {
                 const status = node('p', { role: 'status', 'aria-atomic': 'true', class: 'form-text' });
-                const controls = node('fieldset', { class: 'record-form-section' }, node('legend', { class: 'h5', tabindex: '-1' }, label ? `Application documents · ${label}` : 'Application documents'));
+                const controls = node('fieldset', { class: 'record-form-section admission-document-panel' }, node('legend', { class: 'h5', tabindex: '-1' }, label ? `Application documents · ${label}` : 'Application documents'));
                 const helpId = `document-help-${++sequence}`;
                 const introduction = node('p', { id: helpId, class: 'form-text' }, 'PDF, JPEG and PNG · up to 5 MiB each. Files stay private and need a background safety scan before download. Admissions reviews the checklist separately.');
                 controls.append(introduction);
                 let fileInput = null; const drafts = [];
+                let holdLeave = () => true;
                 let activeSettings = null, activeButton = null, controlEpoch = 0;
                 leave = () => {
+                    if (!holdLeave()) return false;
                     const changed = drafts.find(draft => draft.changed());
                     if (pending || fileInput?.files?.length || changed) {
                         status.textContent = pending ? 'Wait for the current document request to finish.' : 'Save or clear document changes before starting another task.';
@@ -109,9 +111,20 @@
                     if (pending) return;
                     pending = true; controls.disabled = true; toggle.disabled = true;
                     try { await run(); } catch (error) {
-                        if (alive(ticket)) status.textContent = 'We couldn’t finish this request. Your selections are still here.';
+                        if (alive(ticket)) {
+                            status.textContent = error.status === 403
+                                ? 'Application documents are no longer available with your current access.'
+                                : 'We couldn’t finish this request. Your selections are still here.';
+                            if (error.status === 403) { controls.replaceChildren(); holdLeave = () => true; drafts.splice(0); }
+                        }
                         throw error;
                     } finally { pending = false; controls.disabled = false; toggle.disabled = false; }
+                }
+                if (staff && data.can_retain && data.retention_holds) {
+                    holdLeave = window.createAdmissionDocumentHolds({ node, request, task, notify, labels: holdLabels })(
+                        controls, application, data.retention_holds,
+                        { alive: () => alive(ticket), write, reload: load, beforeChange: leave, status },
+                    );
                 }
                 if (data.enabled) {
                     const form = node('form'), id = `admission-document-file-${++sequence}`;
@@ -128,6 +141,7 @@
                     if (staff) form.append(node('p', { class: 'form-text' }, 'Staff uploads start as staff-only. Records staff control applicant access.'));
                     form.addEventListener('submit', event => {
                         event.preventDefault();
+                        if (!holdLeave()) return;
                         const changed = drafts.find(draft => draft.changed());
                         if (changed) { status.textContent = 'Finish or clear retention changes before uploading.'; changed.focus(); return; }
                         const file = fileInput.files[0];
@@ -161,6 +175,10 @@
                     }, item.status === 'quarantined' ? 'Retry scan' : 'Quarantine for recheck'));
                     if (staff && item.status !== 'purging') card.append(node('p', { class: 'form-text' }, item.applicant_visible ? 'Shared with applicant' : 'Staff only'));
                     if (staff && item.retained_evidence) card.append(node('p', { class: 'form-text' }, 'Used in an admissions decision. Ordinary file removal is unavailable.'));
+                    if (staff && item.scope_held) {
+                        const label = 'A case or person hold protects this file from removal.';
+                        card.append(node('p', { class: 'form-text' }, holdLabels[label] || label));
+                    }
                     if (staff) card.append(node('p', { class: 'form-text' }, `Retention ends ${item.expires_at.slice(0, 10)} UTC${item.held ? ' · Hold in place' : ''}`));
                     if (staff && item.retained_evidence) card.append(node('p', { class: 'form-text' }, 'Retained for an admissions decision. Ordinary file removal is unavailable.'));
                     if (data.can_retain && item.status !== 'purging') {
@@ -183,6 +201,7 @@
                                 node('div', { class: 'form-check mb-2' }, hold, node('label', { for: holdId, class: 'form-check-label' }, 'Keep under hold')),
                                 node('label', { for: dateId, class: 'form-label' }, 'Extend through (UTC, optional)'), date, save);
                             form.addEventListener('submit', event => { event.preventDefault();
+                                if (!holdLeave()) return;
                                 if (fileInput?.files?.length) { status.textContent = 'Upload or clear the selected file first.'; fileInput.focus(); return; }
                                 if (!form.reportValidity()) return;
                                 task(() => write(async () => { await request(`${base}${item.id}/retain/`, 'POST', {
@@ -204,6 +223,7 @@
                                 date.addEventListener('input', invalidate); visible.addEventListener('change', invalidate);
                                 disposal.append(node('label', { for: reasonId, class: 'form-label' }, 'Reason for removal'), reason, review, preview);
                                 disposal.addEventListener('submit', event => { event.preventDefault();
+                                    if (!holdLeave()) return;
                                     if (hold.checked !== item.held || date.value || visible.checked !== item.applicant_visible || fileInput?.files?.length) {
                                         status.textContent = 'Save retention changes and upload or clear selected files before reviewing removal.'; return;
                                     }

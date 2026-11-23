@@ -28,6 +28,10 @@ return static function (Psr7Router $router): void {
     $router->post('/sis/ui/people/{id}/update-requests/{requestId}/resolve/', [$profileRequests, 'resolve']);
     $router->map(['GET'], '/sis/applications/{application}/documents/', [Documents::class, 'listing']);
     $router->map(['POST'], '/sis/applications/{application}/documents/', [Documents::class, 'upload']);
+    $holds = \Application\Http\Controller\AdmissionDocumentHoldController::class;
+    $router->get('/sis/applications/{application}/document-holds/', [$holds, 'history']);
+    $router->post('/sis/applications/{application}/document-holds/review/', [$holds, 'review']);
+    $router->post('/sis/applications/{application}/document-holds/confirm/', [$holds, 'confirm']);
     $router->map(['GET'], '/sis/applications/{application}/documents/{id}/download/', [Documents::class, 'download']);
     $router->map(['POST'], '/sis/applications/{application}/documents/{id}/rescan/', [Documents::class, 'rescan']);
     $router->map(['POST'], '/sis/applications/{application}/documents/{id}/retain/', [Documents::class, 'retain']);
