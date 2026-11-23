@@ -4,6 +4,8 @@ Implemented 2026-11-09. Authorized catalog staff can review and retain a section
 
 ## Staff workflow
 
+Sections can now choose [fixed offering credits within the selected course's published range](course-credit-policies.md). New publications retain that quantity and reviews show it. Change **Offering credits**, publish and select the new definition before registering against it. A later amendment applies to future registrations; earlier student references and quantities remain unchanged. Earlier publications without an explicit offering quantity remain unrecorded.
+
 1. Open **Academic catalog → Sections → a section → Published section details**.
 2. If necessary, use **Choose course definition** first. Retain an explicitly selected published course version, then choose **Publish section details** from that screen. The publication workflow verifies both the binding decision and its cached course definition against protected history.
 3. Enter **Instruction starts on** and **Instruction ends on**, with a reason for publication. The first setup suggests the term dates; staff must review the actual instructional period. Later setup starts from the latest section publication's dates.
@@ -109,7 +111,7 @@ The entry-point review distinguishes these boundaries:
 | Gradebook and teaching access | Continue using the operational teaching assignment for authority. A retained publication reference is historical evidence, not a grant of present-day access. |
 | Portal, staff lists, reports and transcripts | Continue their existing authorized sources. This stage adds the private catalog publication/history screen; it does not relabel today's section values as a student's retained offering. |
 
-Further definition work includes grading and eligibility policy versions, additional classifications, variable credits/CEUs, teaching teams, typed fee components and corrections that affect already enrolled students. Published instructional dates alone do not change add/drop precedence or institute a new refund policy.
+Further definition work includes grading and eligibility policy versions, additional classifications, student-selected quantities within one section and separate CEUs, teaching teams, typed fee components and corrections that affect already enrolled students. Published instructional dates alone do not change add/drop precedence or institute a new refund policy.
 
 ## Verification
 

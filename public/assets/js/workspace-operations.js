@@ -2272,6 +2272,7 @@ window.createWorkspaceOperations = function (ui) {
                     "journal-text",
                     [
                         button("Titles & description", () => ui.catalog().courseText(row.id), "btn-primary"),
+                        button(ui.creditLabels?.course_title || "Course credit policy", () => ui.catalog().credits("courses", row, () => openRecord(sectionName, row))),
                         button("Course subject", () => ui.catalog().courseSubject(row.id)),
                         button("Departments & levels", () => ui.classifications().course(row.id)),
                     ],
@@ -2326,6 +2327,7 @@ window.createWorkspaceOperations = function (ui) {
                     [
                         button("Course definition", () => ui.catalog().sectionDefinition(row.id)),
                         button(ui.reportingLabels?.section_setup || "Section classifications", () => ui.classifications().section(row.id)),
+                        button(ui.creditLabels?.section_title || "Offering credits", () => ui.catalog().credits("sections", row, () => openRecord(sectionName, row))),
                         button("Contact hours", () => ui.catalog().contactHours(row, () => openRecord(sectionName, row))),
                         button("Published section details", () => ui.catalog().sectionPublications(row.id, null, [], null,
                             () => openRecord(sectionName, row, origin))),

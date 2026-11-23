@@ -27,6 +27,11 @@ final readonly class SqlCourseVersionProjection
                 "credits_milli" => (int) $r["credits_milli"],
                 "prerequisites" => json_decode($r["prerequisites"], true, 8, JSON_THROW_ON_ERROR),
             ];
+            if ($r['credit_policy'] !== null) {
+                $definition['credit_policy'] = \Domain\Catalog\ValueObject\CreditPolicy::stored(
+                    $r['credit_policy'],
+                )->describe();
+            }
             if ((int) $r["schema_version"] !== 1) {
                 throw new CorruptHistoryException();
             }
@@ -187,6 +192,8 @@ final readonly class SqlCourseVersionProjection
             "code" => $definition->definition->code,
             "title" => $definition->definition->title,
             "credits_milli" => $definition->definition->creditsMilli,
+            'credit_policy' => $definition->definition->creditPolicy === null ? null :
+                json_encode($definition->definition->creditPolicy->describe(), JSON_THROW_ON_ERROR),
             "transcript_title" => $definition->definition->text->transcriptTitle,
             "description" => $definition->definition->text->description,
             'course_number' => $definition->definition->text->courseNumber,

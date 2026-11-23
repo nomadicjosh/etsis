@@ -217,6 +217,9 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
             if ($row['minimum_enrollment'] !== null) {
                 $facts['minimum_enrollment'] = $this->integer($row['minimum_enrollment']);
             }
+            if ($row['credits_milli'] !== null) {
+                $facts['credits_milli'] = $this->integer($row['credits_milli']);
+            }
             if ($row['contact_hours'] !== null) {
                 if (!is_string($row['contact_hours']) || strlen($row['contact_hours']) > 2048) {
                     throw new CorruptHistoryException();

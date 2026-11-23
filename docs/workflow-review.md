@@ -4,7 +4,15 @@ The legacy system is the feature inventory, not a requirement to reproduce its s
 
 “Working” below describes a workflow available in the current code. “Partial” means useful pieces work but the broader recommendation still needs implementation. “Proposed” is a design recommendation, not completed functionality.
 
-## Completed: published campus announcements and private account reading state
+## Completed: course credit ranges and fixed offering quantities
+
+**Working.** [Course credit policies](course-credit-policies.md) connect atomic fixed/range draft setup, immutable course publication/binding, section offering choices, publication/selection and reviewed future amendments. The shared course/section drawers use exact human credit entry, translated semantic labels, saved-revision checks, failure-preserving fields, access clearing and record/publication returns. Unbound sections identify draft limits explicitly. Clones preserve ranges and validate defaults.
+
+Registration, grouped schedules, section changes, waitlist entry, per-credit billing, academic attempts and verified load use the chosen offering quantity. Student enrollment views retain each accepted offering quantity after later draft changes or amendments. The course default, later registered-credit corrections, awarded quantities and original financial postings remain separate facts. Existing journals/publications/receipts remain untouched; earlier absent policies are not inferred. Student-selected quantities within a section and separate CEUs remain open.
+
+Migration **20261123000003** adds nullable projection columns only. It applied and repeated safely on the configured development MariaDB database, preserving all original course/offering values and journal/support bytes. The independent protected-history checksums matched before and after. Five dialect compilers and populated SQLite preservation are covered; destructive rollback is refused. New domain/provider checks cover precision, retained policies, activation, future amendments, exact prices/attempts/load, tampering, stale reviews, authority/source/audit rollback, private responses and CSRF. New credit drawers and existing catalog/section publication browser cases cover narrow/enlarged text, keyboard/WCAG scans, record returns and delayed responses. Checks stay low-priority, time/memory bounded and single-browser-worker. No new report, dependency or event table was added.
+
+## Earlier completed: published campus announcements and private account reading state
 
 **Working.** [Campus announcements](campus-announcements.md) connect the existing campus-news author/publisher workflow and publication windows to both signed-in notification bells. Authoring explains the signed-in audience. A shared reader loads twenty titles per page on demand, opens safe rich/plain content, marks only the displayed revision read and returns through the accepted page/filter. Public news, other content types, absent audience relationships and unavailable publications stay outside this private reader. Initial observations and paging stay silent; a deliberate refresh can use existing optional sound for newly observed content or a changed known revision. No poll, email or recipient fan-out was added.
 

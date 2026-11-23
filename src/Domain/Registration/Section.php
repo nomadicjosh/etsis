@@ -27,7 +27,11 @@ final readonly class Section
         public ?EntityId $campusId = null,
         public int $minimumEnrollment = 0,
         public ?EntityId $reportingGroupId = null,
+        public ?int $offeringCreditsMilli = null,
     ) {
+        if ($offeringCreditsMilli !== null && ($offeringCreditsMilli < 0 || $offeringCreditsMilli > 999999)) {
+            throw new InvalidArgumentException('Use nonnegative academic-credit thousandths.');
+        }
         if (trim($code) === '' || strlen($code) > 80 || $capacity < 1 || $capacity > 100000 || $fee->minor < 0) {
             throw new InvalidArgumentException('A section requires a code, positive capacity and nonnegative fees.');
         }

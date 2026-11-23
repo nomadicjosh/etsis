@@ -54,4 +54,13 @@ final readonly class SectionCourseSql
         $q($field) .
         " END";
     }
+
+    public function creditUnits(string $sectionAlias, string $unboundExpression): string
+    {
+        if (preg_match('/^[a-z][a-z0-9_]*$/D', $sectionAlias) !== 1) {
+            throw new InvalidArgumentException('Use a repository-owned section alias.');
+        }
+        return 'COALESCE(' . $sectionAlias . '.' . $this->sql->quote('offering_credits_milli') . ', '
+        . $this->value('credits_milli', $unboundExpression) . ')';
+    }
 }

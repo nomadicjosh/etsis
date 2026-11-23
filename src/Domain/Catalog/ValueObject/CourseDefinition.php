@@ -20,7 +20,9 @@ final readonly class CourseDefinition
         public ?SubjectSnapshot $subject = null,
         public CourseClassifications $classifications = new CourseClassifications(),
         public ?PrerequisiteGroups $prerequisiteGroups = null,
+        public ?CreditPolicy $creditPolicy = null,
     ) {
+        $creditPolicy?->requireChoice($creditsMilli);
         if (
             trim($code) === "" ||
             strlen($code) > 80 ||
@@ -68,6 +70,12 @@ final readonly class CourseDefinition
             "subject",
             "classifications",
         ];
+        if (array_key_exists('credit_policy', $data)) {
+            $keys[] = 'credit_policy';
+            if (!is_array($data['credit_policy'])) {
+                throw new InvalidArgumentException('Use the complete credit policy.');
+            }
+        }
         if (array_key_exists('course_number', $data)) {
             $keys[] = 'course_number';
         }
@@ -129,6 +137,7 @@ final readonly class CourseDefinition
                     $data["prerequisite_requirement_minimum"] ?? null,
                     $data['prerequisite_rule'] ?? null
                 ) : null,
+            isset($data['credit_policy']) ? CreditPolicy::fromArray($data['credit_policy']) : null,
         );
     }
 
@@ -140,7 +149,8 @@ final readonly class CourseDefinition
             "title" => $this->title,
             "credits_milli" => $this->creditsMilli,
             "prerequisites" => $this->prerequisites,
-        ] + ($this->prerequisiteGroups === null ? [] : ["prerequisite_groups" => $this->prerequisiteGroups->groups]) +
+        ] + ($this->creditPolicy === null ? [] : ['credit_policy' => $this->creditPolicy->describe()]) +
+        ($this->prerequisiteGroups === null ? [] : ["prerequisite_groups" => $this->prerequisiteGroups->groups]) +
         ($this->prerequisiteGroups?->minimums === null ? [] :
         ['prerequisite_group_minimums' => $this->prerequisiteGroups->minimums]) +
         ($this->prerequisiteGroups?->minimumGradePointsMilli === null ? [] :

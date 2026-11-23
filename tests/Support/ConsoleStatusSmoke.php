@@ -48,6 +48,7 @@ try {
                 'check-component-major-links',
                 'check-curriculum-reports',
                 'check-registered-credits',
+                'check-credit-policies',
                 'check-coursework-grade-policy',
                 'check-curriculum-components',
                 'check-enrollment-reinstatement',
@@ -257,6 +258,11 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/StandingBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-credit-policies') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/CreditPolicyBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-registered-credits') {
             $kernel->bootstrap();

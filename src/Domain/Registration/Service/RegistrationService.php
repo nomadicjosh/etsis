@@ -121,6 +121,17 @@ final readonly class RegistrationService
             }
             $waitlistClaim = $this->waitlists->claim($sectionId, $studentId, $waitlistBypass);
             $course = $this->repository->courseForSection($section);
+            if ($section->offeringCreditsMilli !== null && $section->publicationVersionId === null) {
+                throw new DomainException('Publish and select the section offering credits before registration.');
+            }
+            if (
+                $course->publicationVersionId === null && $course->creditPolicy !== null
+                && $course->creditPolicy->minimumMilli !== $course->creditPolicy->maximumMilli
+            ) {
+                throw new DomainException(
+                    'Select a published course definition for this credit range before registration.',
+                );
+            }
             $window = $this->windows->checked($section->termId, $this->repository->window($section->termId));
             $courseRead ??= new RegistrationCourseRead();
             if (
@@ -245,7 +256,7 @@ final readonly class RegistrationService
                 $section->termId,
                 $enrollment->id,
                 $section->fee,
-                $course->creditsMilli,
+                $course->registrationCreditsMilli(),
                 new EventContext(
                     $actor,
                     $now,

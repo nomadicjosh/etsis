@@ -452,6 +452,8 @@ final readonly class SectionPublicationService
                         $selected === null || array_key_exists("minimum_enrollment", $selected->definition->data),
                         $selected === null || array_key_exists("contact_hours", $selected->definition->data),
                         $selected?->definition->data ?? [],
+                        recordCredits: $selected === null
+                            || array_key_exists("credits_milli", $selected->definition->data),
                     );
             if (
                 $course !== null &&
@@ -569,6 +571,7 @@ final readonly class SectionPublicationService
                         array_key_exists("web_registration", $d),
                         array_key_exists("minimum_enrollment", $d),
                         array_key_exists("contact_hours", $d),
+                        recordCredits: array_key_exists("credits_milli", $d),
                     ),
                 ) !== $this->fingerprint($d) ||
                 !$this->matchingClassifications($definition, $row)
@@ -746,6 +749,19 @@ final readonly class SectionPublicationService
     private function assertContactPublication(EntityId $section, PublishedSectionDefinition $definition): void
     {
         $data = $definition->definition->data;
+        $row = $this->catalog->get('sections', $section);
+        $course = $this->bindings->bound($section);
+        if ($course === null) {
+            throw new CorruptHistoryException();
+        }
+        $credits = $row['offering_credits_milli'] === null ? $course->definition->creditsMilli
+        : (int) $row['offering_credits_milli'];
+        if (
+            array_key_exists('credits_milli', $data) ? $data['credits_milli'] !== $credits
+            : $row['offering_credits_milli'] !== null
+        ) {
+            throw new ConcurrentModificationException('Offering credits changed. Review the offering again.');
+        }
         if (
             array_key_exists('contact_hours', $data) &&
             $this->contactHours->snapshot($section) !== $data['contact_hours']
@@ -840,6 +856,7 @@ final readonly class SectionPublicationService
                         array_key_exists("web_registration", $d),
                         array_key_exists("minimum_enrollment", $d),
                         array_key_exists("contact_hours", $d),
+                        recordCredits: array_key_exists("credits_milli", $d),
                     ),
                 ) !== $this->fingerprint($d) ||
                 !$this->matchingClassifications($definition, $row)
@@ -1096,6 +1113,7 @@ final readonly class SectionPublicationService
         bool $recordMinimum = true,
         bool $recordContact = true,
         array $retainedContact = [],
+        bool $recordCredits = true,
     ): array {
         $data = [
             "course_id" => $row["course_id"],
@@ -1119,6 +1137,19 @@ final readonly class SectionPublicationService
         }
         if ($recordMinimum) {
             $data['minimum_enrollment'] = (int) ($row['minimum_enrollment'] ?? 0);
+        }
+        if ($recordCredits) {
+            $default = $course['definition']['credits_milli'];
+            $policy = isset($course['definition']['credit_policy'])
+            ? \Domain\Catalog\ValueObject\CreditPolicy::fromArray($course['definition']['credit_policy'])
+            : \Domain\Catalog\ValueObject\CreditPolicy::fixed($default);
+            $credits = $row['offering_credits_milli'] === null ? $default : (int) $row['offering_credits_milli'];
+            $policy->requireChoice($credits);
+            $data['credits_milli'] = $credits;
+        } elseif ($row['offering_credits_milli'] !== null) {
+            throw new ConcurrentModificationException(
+                'Publish the chosen offering credits before selecting this version.',
+            );
         }
         if ($recordContact) {
             $data['contact_hours'] = array_key_exists('contact_hours', $retainedContact)

@@ -1080,6 +1080,8 @@ window.createWorkspaceCatalog = function (ui) {
                 node("dd", { class: "course-description-text" }, definition.description || "Not specified"),
             ),
             node("div", {}, node("dt", {}, "Credits"), node("dd", {}, definition.credits_milli / 1000)),
+            node('div', {}, node('dt', {}, ui.creditLabels?.course_title || 'Course credit policy'),
+                node('dd', {}, creditPolicyText(definition.credit_policy))),
             ...classifications,
             node(
                 "div",
@@ -1094,7 +1096,7 @@ window.createWorkspaceCatalog = function (ui) {
             ),
         );
     }
-    async function publications(course, cursor = null, stack = [], returnTo = null, draft = { reason: "" }) {
+    async function publications(course, cursor = null, stack = [], returnTo = null, draft = { reason: "" }, returnLabel = "Back to offering definitions") {
         const pendingView = openDrawer("Published course definitions", "ACADEMIC CATALOG");
         pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading catalog details…"));
         const data = await request(
@@ -1143,7 +1145,7 @@ window.createWorkspaceCatalog = function (ui) {
                 const reviewed = await request(`/sis/courses/${course}/publication/review/`, "POST", {
                     reason: reason.value,
                 });
-                reviewDefinition(course, reviewed, returnTo, draft);
+                reviewDefinition(course, reviewed, returnTo, draft, returnLabel);
             }, review);
         });
         body.append(form, node("h3", { class: "h5 mt-4" }, "Retained versions (oldest first)"));
@@ -1172,18 +1174,18 @@ window.createWorkspaceCatalog = function (ui) {
         if (stack.length)
             body.append(
                 button("Previous definitions page", () =>
-                    publications(course, stack.at(-1), stack.slice(0, -1), returnTo, draft),
+                    publications(course, stack.at(-1), stack.slice(0, -1), returnTo, draft, returnLabel),
                 ),
             );
         if (data.next_cursor)
             body.append(
                 button("Next definitions page", () =>
-                    publications(course, data.next_cursor, [...stack, cursor], returnTo, draft),
+                    publications(course, data.next_cursor, [...stack, cursor], returnTo, draft, returnLabel),
                 ),
             );
-        if (returnTo) body.append(button("Back to offering definitions", returnTo));
+        if (returnTo) body.append(button(returnLabel, returnTo));
     }
-    function reviewDefinition(course, reviewed, returnTo = null, draft = { reason: reviewed.reason }) {
+    function reviewDefinition(course, reviewed, returnTo = null, draft = { reason: reviewed.reason }, returnLabel = "Back to offering definitions") {
         const body = openDrawer("Review course publication", "REVIEW → PUBLISH");
         body.append(
             node(
@@ -1216,11 +1218,11 @@ window.createWorkspaceCatalog = function (ui) {
                         reference(saved.operation_id),
                         button(
                             "View published definitions",
-                            () => publications(course, null, [], returnTo),
+                            () => publications(course, null, [], returnTo, draft, returnLabel),
                             "btn-primary",
                         ),
                     );
-                    if (returnTo) result.append(button("Back to offering definitions", returnTo));
+                    if (returnTo) result.append(button(returnLabel, returnTo));
                 },
                 "btn-primary",
             ),
@@ -1228,9 +1230,9 @@ window.createWorkspaceCatalog = function (ui) {
                 const current = await request(`/sis/courses/${course}/publication/review/`, "POST", {
                     reason: draft.reason,
                 });
-                reviewDefinition(course, current, returnTo, draft);
+                reviewDefinition(course, current, returnTo, draft, returnLabel);
             }),
-            button("Return to definitions", () => publications(course, null, [], returnTo, draft)),
+            button("Return to definitions", () => publications(course, null, [], returnTo, draft, returnLabel)),
         );
     }
     async function sectionDefinition(
@@ -1421,6 +1423,8 @@ window.createWorkspaceCatalog = function (ui) {
             ],
             ["Term", `${definition.term_code}: ${definition.term_starts_on} through ${definition.term_ends_on}`],
             ["Capacity", definition.capacity],
+            [ui.creditLabels?.section_title || 'Offering credits', definition.credits_milli === undefined
+                ? ui.creditLabels?.unrecorded || 'Not recorded in this publication' : definition.credits_milli / 1000],
             ["Minimum enrollment target", definition.minimum_enrollment === undefined ? "Not recorded in this publication"
                 : definition.minimum_enrollment ? `${definition.minimum_enrollment} students` : "No target"],
             ["Student self-registration", typeof definition.web_registration === "boolean"
@@ -2022,5 +2026,20 @@ window.createWorkspaceCatalog = function (ui) {
             );
     }
     const contactHours = (section, back) => window.createSectionContactHours(ui).open(section, back);
-    return { contactHours, enrollmentReview, subjects, courseSubject, clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
+    function creditPolicyText(policy) {
+        if (!policy) return ui.creditLabels?.unrecorded || 'Not recorded in this publication';
+        if (policy.minimum_milli === policy.maximum_milli) return (ui.creditLabels?.fixed_help
+            || 'The retained course allows {value} academic credits.').replace('{value}', policy.minimum_milli / 1000);
+        return (ui.creditLabels?.range_help || 'Allowed: {min}–{max} academic credits, in increments of {step}.')
+            .replace('{min}', policy.minimum_milli / 1000).replace('{max}', policy.maximum_milli / 1000)
+            .replace('{step}', policy.increment_milli / 1000);
+    }
+    function credits(kind, row, back) {
+        return window.createWorkspaceCreditPolicy({ node, request, task, openDrawer, labels: ui.creditLabels,
+            saved: result => { row.credits_milli = result.offering_credits_milli ?? result.credits_milli;
+                row.offering_credits_milli = result.offering_credits_milli; },
+        }).open(kind, row.id, back, () => kind === 'courses' ? publications(row.id, null, [], back, undefined, ui.creditLabels?.back || 'Back to record')
+            : sectionPublications(row.id, null, [], null, back));
+    }
+    return { credits, contactHours, enrollmentReview, subjects, courseSubject, clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
 };

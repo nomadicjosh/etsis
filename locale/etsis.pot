@@ -1753,3 +1753,107 @@ msgstr ""
 #: resources/views/shared/notification-labels.php:32
 msgid "Show read items"
 msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:8
+msgid "Course credit policy"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:9
+msgid "Offering credits"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:10
+msgid "Back to record"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:11
+msgid "Loading credit settings…"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:12
+msgid "Default academic credits"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:13
+msgid "Course credit rule"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:14
+msgid "Fixed credits"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:15
+msgid "Credit range"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:16
+msgid "Minimum academic credits"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:17
+msgid "Maximum academic credits"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:18
+msgid "Credit increment"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:19
+msgid "Use the retained course default"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:20
+msgid "Fixed credits for this offering"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:21
+msgid "Allowed: {min}–{max} academic credits, in increments of {step}."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:22
+msgid "The retained course allows {value} academic credits."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:23
+msgid "Use up to three decimal places. These are academic credits; CEUs are separate."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:24
+msgid "Save a draft default and permitted credit range together, then publish the course definition. Existing publications, student attempts and charges retain their accepted facts."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:28
+msgid "Choose one fixed offering value within its selected course policy. Publish and select the offering before new registrations use it. Students cannot choose individual credit values in this stage."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:32
+msgid "Save credit draft"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:33
+msgid "Credit draft saved. Review its publication before using it for new registrations."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:34
+msgid "Review publication"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:35
+msgid "Use a nonnegative credit value with up to three decimal places, at most 999.999."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:36
+msgid "Not recorded in this publication"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:37
+msgid "No course publication is selected. These limits come from the course draft. Choose a published course definition before publishing this offering."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:41
+msgid "Use the course draft default"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:42
+msgid "The course draft allows {value} academic credits."
+msgstr ""

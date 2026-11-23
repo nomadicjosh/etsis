@@ -22,6 +22,9 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $credits = \Application\Http\Controller\SisCreditPolicyController::class;
+    $router->get('/sis/ui/catalog/{kind}/{id}/credits/', [$credits, 'show']);
+    $router->post('/sis/ui/catalog/{kind}/{id}/credits/', [$credits, 'save']);
     $profileRequests = \Application\Http\Controller\ProfileUpdateRequestController::class;
     $router->get('/sis/ui/people/{id}/update-requests/', [$profileRequests, 'staff']);
     $router->post('/sis/ui/people/{id}/update-requests/', [$profileRequests, 'create']);

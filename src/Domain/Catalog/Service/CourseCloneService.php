@@ -112,7 +112,14 @@ final readonly class CourseCloneService
                 throw new ValidationException([["field" => "code", "message" => "Choose an unused course code."]]);
             }
             $this->registration->addCourse($draft);
+            $policy = $context['source']['credit_policy'] === null ? null
+                : \Domain\Catalog\ValueObject\CreditPolicy::fromArray($context['source']['credit_policy']);
+            if ($policy !== null && $policy->minimumMilli === $policy->maximumMilli) {
+                $policy = \Domain\Catalog\ValueObject\CreditPolicy::fixed($draft->creditsMilli);
+            }
+            $policy?->requireChoice($draft->creditsMilli);
             $this->catalog->save("courses", $draft->id, [
+                'credit_policy' => $policy === null ? null : json_encode($policy->describe(), JSON_THROW_ON_ERROR),
                 "transcript_title" => $context["source"]["transcript_title"],
                 "description" => $context["source"]["description"],
                 'course_number' => $context['source']['course_number'],
@@ -223,6 +230,7 @@ final readonly class CourseCloneService
                 "code" => $course->code,
                 "title" => $course->title,
                 "credits_milli" => $course->creditsMilli,
+                'credit_policy' => $course->creditPolicy?->describe(),
                 "active" => $course->active,
                 "transcript_title" => $text["transcript_title"],
                 "description" => $text["description"],

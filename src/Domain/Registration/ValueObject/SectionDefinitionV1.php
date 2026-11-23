@@ -32,14 +32,21 @@ final readonly class SectionDefinitionV1
     public function __construct(public array $data)
     {
         if (
-            !in_array(count($data), [count(self::FIELDS), count(self::FIELDS) + 1, count(self::FIELDS) + 2, count(self::FIELDS) + 3], true) ||
-            array_diff(array_keys($data), [...self::FIELDS, 'web_registration', 'minimum_enrollment', 'contact_hours']) !== [] ||
+            count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 4 ||
+            array_diff(array_keys($data), [...self::FIELDS, 'web_registration', 'minimum_enrollment',
+                'contact_hours', 'credits_milli']) !== [] ||
             array_diff(self::FIELDS, array_keys($data)) !== [] ||
             (array_key_exists('web_registration', $data) && !is_bool($data['web_registration']))
         ) {
             throw new InvalidArgumentException(
                 "A complete section definition is required.",
             );
+        }
+        if (
+            array_key_exists('credits_milli', $data) && (!is_int($data['credits_milli'])
+            || $data['credits_milli'] < 0 || $data['credits_milli'] > 999999)
+        ) {
+            throw new InvalidArgumentException('Use retained academic-credit thousandths.');
         }
         if (
             array_key_exists('minimum_enrollment', $data) &&

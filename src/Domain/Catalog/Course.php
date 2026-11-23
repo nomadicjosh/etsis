@@ -20,7 +20,10 @@ final readonly class Course
         public ?EntityId $publicationVersionId = null,
         public ?array $publishedPrerequisites = null,
         public ?\Domain\Catalog\ValueObject\PrerequisiteGroups $prerequisiteGroups = null,
+        public ?\Domain\Catalog\ValueObject\CreditPolicy $creditPolicy = null,
+        public ?int $offeringCreditsMilli = null,
     ) {
+        $creditPolicy?->requireChoice($creditsMilli);
         if (in_array($id->value, $prerequisiteGroups?->references() ?? [], true)) {
             throw new InvalidArgumentException('A course cannot require itself.');
         }
@@ -36,6 +39,7 @@ final readonly class Course
                 $creditsMilli,
                 $publishedPrerequisites,
                 prerequisiteGroups: $prerequisiteGroups,
+                creditPolicy: $creditPolicy,
             );
         }
         if (
@@ -57,5 +61,13 @@ final readonly class Course
                 "Valid course details and nonnegative credit thousandths are required.",
             );
         }
+    }
+
+    public function registrationCreditsMilli(): int
+    {
+        $credits = $this->offeringCreditsMilli ?? $this->creditsMilli;
+        ($this->creditPolicy ?? \Domain\Catalog\ValueObject\CreditPolicy::fixed($this->creditsMilli))
+            ->requireChoice($credits);
+        return $credits;
     }
 }

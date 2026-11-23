@@ -1,6 +1,6 @@
 # Published course definitions
 
-A course has one current `CourseDefinition` containing its code, title, fixed credits, prerequisite identities and optional counted choice groups, `CourseText`, optional `SubjectSnapshot` and `CourseClassifications` for department/academic level/course level. `PublishedCourseDefinition` adds the course and publication ULIDs. We evolve this model directly during alpha; field additions do not create another numbered domain class or a compatibility API.
+A course has one current `CourseDefinition` containing its code, title, default credits, optional retained [credit policy](course-credit-policies.md), prerequisite identities and optional counted choice groups, `CourseText`, optional `SubjectSnapshot` and `CourseClassifications` for department/academic level/course level. New publications include an explicit fixed/range rule; earlier absent policies remain unrecorded. `PublishedCourseDefinition` adds the course and publication ULIDs. We evolve this model directly during alpha; field additions do not create another numbered domain class or a compatibility API.
 
 A new **publication revision** is still a separate historical fact. Changing a title, description or subject and publishing again never overwrites the definition retained by an earlier section or student. Publication revisions and development-era serialization formats are different concerns.
 

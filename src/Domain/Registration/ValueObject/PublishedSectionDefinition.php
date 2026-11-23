@@ -64,6 +64,8 @@ final readonly class PublishedSectionDefinition
         $d["course_id"] === $section->courseId->value &&
         $d["term_id"] === $section->termId->value &&
         $d["course_version_id"] === $course->publicationVersionId?->value &&
+        (array_key_exists('credits_milli', $d) ? $d['credits_milli'] === $course->registrationCreditsMilli()
+        : $section->offeringCreditsMilli === null) &&
         $d["code"] === $section->code &&
         $d["capacity"] === $section->capacity &&
         (!array_key_exists('minimum_enrollment', $d) || $d['minimum_enrollment'] === $section->minimumEnrollment) &&

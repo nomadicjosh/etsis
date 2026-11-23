@@ -88,7 +88,7 @@ final readonly class InstitutionalCreditLedger
                 "credit_type" => "institutional",
                 "course_code" => $course->code,
                 "course_title" => $course->publishedTranscriptTitle ?? $course->title,
-                "attempted_milli" => $course->creditsMilli,
+                "attempted_milli" => $course->registrationCreditsMilli(),
                 "completed_milli" => 0,
                 "grade_points_milli" => 0,
                 "grade_id" => null,

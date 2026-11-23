@@ -47,6 +47,76 @@ final readonly class CatalogEditor
         ]);
     }
 
+    public function creditPolicy(
+        EntityId $course,
+        int $defaultMilli,
+        \Domain\Catalog\ValueObject\CreditPolicy $policy,
+        string $revision,
+    ): void {
+        $policy->requireChoice($defaultMilli);
+        $this->save('courses', $course, $revision, ['credits_milli' => $defaultMilli,
+            'credit_policy' => json_encode($policy->describe(), JSON_THROW_ON_ERROR)]);
+    }
+
+    /** @return array<string, mixed> */
+    public function creditSettings(string $kind, EntityId $id): array
+    {
+        $actor = $this->access->requirePermission('sis:catalog:manage');
+        $row = $this->repository->get($kind, $id);
+        if ($kind === 'courses') {
+            $policy = \Domain\Catalog\ValueObject\CreditPolicy::stored($row['credit_policy'])
+            ?? \Domain\Catalog\ValueObject\CreditPolicy::fixed((int) $row['credits_milli']);
+            $result = ['credits_milli' => (int) $row['credits_milli'], 'credit_policy' => $policy->describe(),
+                'revision' => $this->revision($row)];
+        } elseif ($kind === 'sections') {
+            $result = $this->sectionCreditContext($id, $row);
+        } else {
+            throw new \InvalidArgumentException('Choose a course or section credit policy.');
+        }
+        $this->sameActor($actor);
+        return $result;
+    }
+
+    public function sectionCredits(EntityId $section, ?int $creditsMilli, string $revision): void
+    {
+        $actor = $this->access->requirePermission('sis:catalog:manage');
+        $this->transactions->run(function () use ($section, $creditsMilli, $revision, $actor): void {
+            $this->repository->lock('sections', $section);
+            $row = $this->repository->get('sections', $section);
+            $this->repository->lock('courses', new EntityId($row['course_id']));
+            $current = $this->sectionCreditContext($section, $row);
+            $this->sameActor($actor);
+            if (!hash_equals($current['revision'], $revision)) {
+                throw new ConcurrentModificationException('The section or its course policy changed. Reload credits.');
+            }
+            $policy = \Domain\Catalog\ValueObject\CreditPolicy::fromArray($current['credit_policy']);
+            $policy->requireChoice($creditsMilli ?? $current['credits_milli'], 'offering_credits_milli');
+            $this->repository->save('sections', $section, ['offering_credits_milli' => $creditsMilli]);
+            $expected = $this->sectionCreditContext($section, $this->repository->get('sections', $section));
+            $this->audit->record($actor, 'catalog.section_credits.updated', $section);
+            $this->sameActor($actor);
+            if ($this->sectionCreditContext($section, $this->repository->get('sections', $section)) !== $expected) {
+                throw new ConcurrentModificationException(
+                    'The section or its course policy changed before completion.',
+                );
+            }
+        });
+    }
+
+    /** @param array<string, scalar|null> $row
+     * @return array<string, mixed> */
+    private function sectionCreditContext(EntityId $section, array $row): array
+    {
+        $course = $this->registration->courseForSection($this->registration->section($section));
+        $policy = $course->creditPolicy ?? \Domain\Catalog\ValueObject\CreditPolicy::fixed($course->creditsMilli);
+        return ['credits_milli' => $course->creditsMilli, 'credit_policy' => $policy->describe(),
+            'offering_credits_milli' => $row['offering_credits_milli'] === null
+                ? null : (int) $row['offering_credits_milli'],
+            'course_version_id' => $course->publicationVersionId?->value,
+            'revision' => hash('sha256', json_encode([$this->revision($row), $course->publicationVersionId?->value,
+                $course->creditsMilli, $policy->describe()], JSON_THROW_ON_ERROR))];
+    }
+
     public function courseText(EntityId $course, \Domain\Catalog\ValueObject\CourseText $text, string $revision): void
     {
         $this->save("courses", $course, $revision, $text->describe());
@@ -79,15 +149,28 @@ final readonly class CatalogEditor
         $this->transactions->run(function () use ($kind, $id, $revision, $values, $actor): void {
             $this->repository->lock($kind, $id);
             $this->sameActor($actor);
-            if (!hash_equals($this->revision($this->repository->get($kind, $id)), $revision)) {
+            $current = $this->repository->get($kind, $id);
+            if (!hash_equals($this->revision($current), $revision)) {
                 throw new ConcurrentModificationException("This catalog record changed. Reload before saving.");
             }
-            if ($kind === "sections" && (int) $values["capacity"] < $this->registration->sectionCount($id)) {
+            if ($kind === 'courses') {
+                $proposed = array_replace($current, $values);
+                \Domain\Catalog\ValueObject\CreditPolicy::stored($proposed['credit_policy'])
+                    ?->requireChoice((int) $proposed['credits_milli']);
+            }
+            if (
+                $kind === "sections" && isset($values['capacity'])
+                && (int) $values["capacity"] < $this->registration->sectionCount($id)
+            ) {
                 throw new DomainException("Capacity cannot be lower than the active enrollment count.");
             }
             $this->repository->save($kind, $id, $values);
+            $saved = $this->revision($this->repository->get($kind, $id));
             $this->audit->record($actor, "catalog." . $kind . ".updated", $id);
             $this->sameActor($actor);
+            if (!hash_equals($saved, $this->revision($this->repository->get($kind, $id)))) {
+                throw new ConcurrentModificationException('The catalog record changed before completion.');
+            }
         });
     }
 

@@ -142,7 +142,7 @@ final readonly class RegistrationBatchService
             $current->webRegistration !== $expected["web_registration"] ||
             $course->code !== $expected["course_code"] ||
             $course->title !== $expected["course_title"] ||
-            $course->creditsMilli !== $expected["credits_milli"] ||
+            $course->registrationCreditsMilli() !== $expected["credits_milli"] ||
             $term->dates->start->format("Y-m-d") !== $expected["term_starts_on"] ||
             $term->dates->end?->format("Y-m-d") !== $expected["term_ends_on"]
         ) {
@@ -154,7 +154,7 @@ final readonly class RegistrationBatchService
             $student,
             $current->termId,
             $current->fee,
-            $course->creditsMilli,
+            $course->registrationCreditsMilli(),
             $budget,
         );
         if ($fresh->definitionFingerprint() !== $quote->definitionFingerprint()) {
@@ -279,7 +279,7 @@ final readonly class RegistrationBatchService
                     $selection->student,
                     $current->termId,
                     $current->fee,
-                    $course->creditsMilli,
+                    $course->registrationCreditsMilli(),
                     $budget,
                 );
                 if ($quote->definitionFingerprint() !== $quotes[$section->value]->definitionFingerprint()) {
@@ -907,7 +907,7 @@ final readonly class RegistrationBatchService
                 $id,
                 $section->termId,
                 $section->fee,
-                $course->creditsMilli,
+                $course->registrationCreditsMilli(),
                 $budget,
                 $rules,
             )
@@ -952,6 +952,13 @@ final readonly class RegistrationBatchService
                 array_filter($readiness, static fn(array $check): bool => $check["status"] === "blocked"),
                 "message",
             );
+            if (
+                $enrollment === null && (($section->offeringCreditsMilli !== null && $selectedOffering === null)
+                || ($course->publicationVersionId === null && $course->creditPolicy !== null
+                    && $course->creditPolicy->minimumMilli !== $course->creditPolicy->maximumMilli))
+            ) {
+                $issues[] = 'Publish and select the course and offering credit definitions before registration.';
+            }
             if (
                 $enrollment === null && $selectedOffering !== null &&
                 !$selectedOffering->matchesOffering($section, $course)
@@ -1044,7 +1051,7 @@ final readonly class RegistrationBatchService
                 "prerequisite_courses" => $prerequisiteCourses,
                 'corequisite_courses' => array_map(static fn(string $id): array =>
                     $corequisiteLabels[$id] ?? ['code' => null, 'title' => null], $corequired),
-                "credits_milli" => $course->creditsMilli,
+                "credits_milli" => $course->registrationCreditsMilli(),
                 'web_registration' => $section->webRegistration,
                 'self_registration_recorded' => array_key_exists(
                     'web_registration',

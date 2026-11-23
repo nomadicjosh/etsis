@@ -96,7 +96,7 @@ final readonly class SqlCampusRepository implements CampusRepository
         $course = new \Infrastructure\Persistence\SectionCourseSql($this->sql);
         $code = $course->value("code", "c." . $q("code"));
         $title = $course->value("title", "c." . $q("title"));
-        $credits = $course->value("credits_milli", "c." . $q("credits_milli"));
+        $credits = $course->creditUnits("s", "c." . $q("credits_milli"));
         $description = $course->value("description", "x." . $q("published_description"));
         $courseNumber = $course->value('course_number', 'x.' . $q('published_course_number'));
         $numberRecorded = $course->value('number_recorded', 'x.' . $q('published_number_recorded'));
@@ -441,7 +441,8 @@ final readonly class SqlCampusRepository implements CampusRepository
                 " AS " .
                 $q("title") .
                 ", " .
-                $course->value("credits_milli", "c." . $q("credits_milli")) .
+                'COALESCE(accepted.' . $q('credits_milli') . ', ' .
+                    $course->value("credits_milli", "c." . $q("credits_milli")) . ')' .
                 " AS " .
                 $q("credits_milli") .
                 ", scb." .
@@ -461,6 +462,9 @@ final readonly class SqlCampusRepository implements CampusRepository
                 " = s." .
                 $q("course_id") .
                 $course->joins("s") .
+                ' LEFT JOIN ' . $q('sis_enrollment_section_versions') . ' ev ON ev.' . $q('id') . ' = e.' . $q('id') .
+                ' LEFT JOIN ' . $q('sis_section_versions') . ' accepted ON accepted.' . $q('id') .
+                    ' = ev.' . $q('publication_id') .
                 " WHERE e." .
                 $q("student_id") .
                 " = ? ORDER BY e." .

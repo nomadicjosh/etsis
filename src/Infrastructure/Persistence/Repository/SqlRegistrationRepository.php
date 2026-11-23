@@ -81,6 +81,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             (int) $r["credits_milli"],
             (bool) $r["active"],
             $r["published_transcript_title"],
+            creditPolicy: \Domain\Catalog\ValueObject\CreditPolicy::stored($r['credit_policy']),
         );
     }
 
@@ -97,6 +98,8 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 $current->active,
                 $current->publishedTranscriptTitle,
                 prerequisiteGroups: new SqlCatalogWorkflowRepository($this->sql)->prerequisiteGroups($current->id),
+                creditPolicy: $current->creditPolicy,
+                offeringCreditsMilli: $section->offeringCreditsMilli,
             );
         }
         return new Course(
@@ -109,6 +112,8 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             $bound->versionId,
             $bound->definition->prerequisites,
             $bound->definition->prerequisiteGroups,
+            $bound->definition->creditPolicy,
+            $section->offeringCreditsMilli,
         );
     }
 
@@ -155,6 +160,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 (filter_var($r['minimum_enrollment'], FILTER_VALIDATE_INT) === false ?
                     throw new \Domain\Shared\EventSourcing\CorruptHistoryException() : (int) $r['minimum_enrollment']),
             isset($classes["reporting_group_id"]) ? new EntityId($classes["reporting_group_id"]) : null,
+            $r['offering_credits_milli'] === null ? null : (int) $r['offering_credits_milli'],
         );
     }
 
@@ -327,6 +333,8 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             "code" => $course->code,
             "title" => $course->title,
             "credits_milli" => $course->creditsMilli,
+            'credit_policy' => $course->creditPolicy === null ? null :
+                json_encode($course->creditPolicy->describe(), JSON_THROW_ON_ERROR),
             "active" => (int) $course->active,
         ]);
     }

@@ -279,7 +279,7 @@ final readonly class SectionChangeService
             $selection->student,
             $section->termId,
             $section->fee,
-            $course->creditsMilli,
+            $course->registrationCreditsMilli(),
             $budget,
         );
     }

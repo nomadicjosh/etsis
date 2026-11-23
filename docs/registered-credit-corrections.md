@@ -2,6 +2,8 @@
 
 Registered credits describe the quantity used for a student's enrollment load. Awarded attempted/completed credits, grades, GPA and the quantity on an original charge are separate facts. A registrar can now correct a genuinely recorded registered quantity without rewriting those other facts.
 
+For new registrations, configure [course credit policies and fixed offering credits](course-credit-policies.md) before publication. That offering quantity supplies the original registered/attempted units and any per-credit price. This correction workflow changes an existing student's registered quantity only; it does not select offering credits, authorize individual variable-credit registration or automatically reassess charges.
+
 This is a correction workflow using institutional evidence. It does not offer variable-credit course registration, infer a missing earlier quantity, backdate a census or automatically adjust tuition, refunds, standing or financial-aid eligibility.
 
 ## Authority and supported records
