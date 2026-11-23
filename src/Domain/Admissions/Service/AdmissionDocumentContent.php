@@ -61,6 +61,23 @@ final readonly class AdmissionDocumentContent
                 }
                 new EntityId($reference);
             }
+            if (array_key_exists('retention_basis', $meta)) {
+                if (!is_array($meta['retention_basis'])) {
+                    throw new DomainException();
+                }
+                \Domain\Admissions\ValueObject\DocumentRetentionBasis::fromArray($meta['retention_basis']);
+            }
+            if (
+                array_key_exists('applicant_expires_at', $meta)
+                && (!is_string($meta['applicant_expires_at'])
+                    || preg_match(
+                        '/^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{6}Z$/D',
+                        $meta['applicant_expires_at']
+                    ) !== 1
+                    || $meta['applicant_expires_at'] > $row['expires_at'])
+            ) {
+                throw new DomainException();
+            }
             return $meta;
         } catch (Throwable) {
             throw new DomainException('This protected document needs institutional review.');

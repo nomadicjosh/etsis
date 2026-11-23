@@ -13,6 +13,53 @@ final class AdmissionCaseworkFixture
     public \Domain\Admissions\Service\AdmissionUpdatesService $updates;
     public \Domain\Shared\ValueObject\EntityId $application;
 
+    public function documents(
+        \Domain\Admissions\Service\AdmissionDocumentStorage $storage,
+        ?\Domain\Admissions\Service\AdmissionDocumentPolicy $policy = null,
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Admissions\Service\AdmissionDocumentService {
+        $s = $this->campus->sis;
+        return new \Domain\Admissions\Service\AdmissionDocumentService(
+            new \Infrastructure\Persistence\Repository\SqlAdmissionDocumentRepository($s->sql),
+            $s->admissions,
+            $storage,
+            $policy ?? new \Domain\Admissions\Service\AdmissionDocumentPolicy(true, 365, true),
+            $this->campus->cipher,
+            $s->access,
+            $s->transactions,
+            $audit ?? $s->audit,
+            $s->clock,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql),
+            $s->decisionLedger(),
+            $this->documentHolds(),
+            $this->documentRetention($storage, $policy),
+        );
+    }
+
+    public function documentRetention(
+        ?\Domain\Admissions\Service\AdmissionDocumentStorage $storage = null,
+        ?\Domain\Admissions\Service\AdmissionDocumentPolicy $policy = null,
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Admissions\Service\AdmissionRetentionService {
+        $s = $this->campus->sis;
+        $storage ??= new \Infrastructure\Admissions\PrivateAdmissionDocumentStorage($this->campus->cipher);
+        return new \Domain\Admissions\Service\AdmissionRetentionService(
+            new \Infrastructure\Persistence\Repository\SqlAdmissionRetentionRepository($s->sql),
+            new \Infrastructure\Persistence\Repository\SqlAdmissionDocumentRepository($s->sql),
+            $s->admissions,
+            new \Domain\Admissions\Service\AdmissionDocumentContent($this->campus->cipher, $storage),
+            $policy ?? new \Domain\Admissions\Service\AdmissionDocumentPolicy(true, 365, true),
+            $this->campus->cipher,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql),
+            $s->access,
+            $s->transactions,
+            $audit ?? $s->audit,
+            $s->clock,
+            new \Domain\Shared\Service\ReviewProof($this->campus->cipher, $s->clock),
+            new \Infrastructure\Persistence\SqlActorDirectory($s->sql),
+        );
+    }
+
     public function documentHolds(
         ?\Domain\Audit\Repository\AuditTrail $audit = null
     ): \Domain\Admissions\Service\AdmissionDocumentHoldService {

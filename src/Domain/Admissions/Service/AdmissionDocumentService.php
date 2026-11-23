@@ -38,6 +38,7 @@ final readonly class AdmissionDocumentService
         private AccessRepository $permissions,
         private AdmissionDecisionLedger $decisions,
         private AdmissionDocumentHoldService $holds,
+        private AdmissionRetentionService $retention,
     ) {
     }
     private function at(): string
@@ -100,7 +101,8 @@ final readonly class AdmissionDocumentService
             $items[] = ['id' => $row['id'], 'name' => $meta['name'] ?? 'Document removal pending',
                 'bytes' => $meta['bytes'] ?? null, 'applicant_visible' => $meta['applicant_visible'] ?? false,
                 'status' => $row['status'], 'version' => (int) $row['version'],
-                'created_at' => $row['created_at'], 'expires_at' => $row['expires_at'],
+                'created_at' => $row['created_at'],
+                'expires_at' => $staff ? $row['expires_at'] : ($meta['applicant_expires_at'] ?? $row['expires_at']),
                 'held' => $staff && (int) $row['held'] === 1,
                 'scope_held' => $staff && $scopeHeld,
                 'retained_evidence' => $staff && ($meta['evidence_decisions'] ?? []) !== [],
@@ -109,7 +111,13 @@ final readonly class AdmissionDocumentService
                     && $row['expires_at'] <= $this->at()
                     && ($meta['evidence_decisions'] ?? []) === []
                     && !in_array($row['status'], ['purging', 'purged'], true),
-                'can_download' => $row['status'] === 'ready' && ($staff || $row['expires_at'] > $this->at())];
+                'can_download' => $row['status'] === 'ready'
+                    && ($staff || ($meta['applicant_expires_at'] ?? $row['expires_at']) > $this->at())];
+            if ($staff) {
+                $index = array_key_last($items);
+                $items[$index]['retention_basis'] = $meta['retention_basis'] ?? null;
+                $items[$index]['applicant_expires_at'] = $meta['applicant_expires_at'] ?? $row['expires_at'];
+            }
         }
         $this->authorize($application, $staff, $actor);
         $result = ['enabled' => $this->policy->acceptsUploads(), 'max_bytes' => AdmissionDocumentPolicy::MAX_BYTES,
@@ -164,9 +172,7 @@ final readonly class AdmissionDocumentService
             $staff,
             $visible
         ): array {
-            if ($staff) {
-                $this->permissions->lock();
-            }
+            $this->permissions->lock();
             $this->admissions->lockPerson($route->personId);
             $this->admissions->lockApplication($application);
             if ($this->admissions->application($application)->personId->value !== $route->personId->value) {
@@ -196,21 +202,32 @@ final readonly class AdmissionDocumentService
             }
             $written = false;
             try {
+                $basis = $this->retention->uploadBasis();
+                $meta['retention_basis'] = $basis;
+                $created = $this->at();
                 $this->storage->put($application, $id, $bytes);
                 $written = true;
                 $row = ['id' => $id->value, 'application_id' => $application->value,
                     'person_id' => $route->personId->value, 'uploaded_by' => $actor->value, 'version' => 1,
-                    'held' => 0, 'status' => 'quarantined', 'created_at' => $this->at(), 'scan_after' => $this->at(),
-                    'scan_token' => null, 'expires_at' => $this->clock->now()->setTimezone(new DateTimeZone('UTC'))
-                        ->modify('+' . $this->policy->retentionDays . ' days')->format('Y-m-d\TH:i:s.u\Z'),
+                    'held' => 0, 'status' => 'quarantined', 'created_at' => $created, 'scan_after' => $created,
+                    'scan_token' => null, 'expires_at' => new DateTimeImmutable($created)
+                        ->modify('+' . $basis['days'] . ' days')->format('Y-m-d\TH:i:s.u\Z'),
                     'protected_metadata' => ''];
                 $content = new AdmissionDocumentContent($this->cipher, $this->storage);
+                $meta['applicant_expires_at'] = $row['expires_at'];
                 $row['protected_metadata'] = $content->protect($row, $meta);
                 $this->documents->add($row);
+                $this->retention->recordUpload($row, $actor, $basis);
                 $this->audit->record($actor, 'admissions.document_uploaded', $id);
                 $this->authorize($application, $staff, $actor);
                 if ($staff && $visible) {
                     $this->retainAuthority($application, $actor);
+                }
+                if (
+                    $this->retention->uploadBasis() !== $basis
+                    || $this->admissions->application($application)->personId->value !== $route->personId->value
+                ) {
+                    throw new ConcurrentModificationException('The upload retention policy changed. Retry the upload.');
                 }
             } catch (Throwable $error) {
                 try {
@@ -247,10 +264,13 @@ final readonly class AdmissionDocumentService
             $this->documents->lock($id);
             $row = $this->ownedRow($application, $id);
             $this->authorize($application, $staff, $actor);
-            if ($row['status'] !== 'ready' || (!$staff && $row['expires_at'] <= $this->at())) {
+            $meta = $this->metadata($row);
+            if (
+                $row['status'] !== 'ready'
+                || (!$staff && ($meta['applicant_expires_at'] ?? $row['expires_at']) <= $this->at())
+            ) {
                 throw new DomainException('This document is not available for download.');
             }
-            $meta = $this->metadata($row);
             if (!$staff && $meta['applicant_visible'] !== true) {
                 throw new AccessDeniedException('This file is restricted to admissions staff.');
             }
@@ -334,10 +354,17 @@ final readonly class AdmissionDocumentService
                 throw new ConcurrentModificationException('Reload the current document before changing retention.');
             }
             $shareChanged = $visible !== null && $meta['applicant_visible'] !== $visible;
+            $availableBefore = $meta['applicant_expires_at'] ?? $row['expires_at'];
+            if ($until !== null || ($shareChanged && $visible === true)) {
+                $meta['applicant_expires_at'] = $expires;
+            }
+            $accessChanged = ($meta['applicant_expires_at'] ?? $row['expires_at']) !== $availableBefore;
             if ($visible !== null) {
                 $meta['applicant_visible'] = $visible;
             }
-            if ((int) $row['held'] !== (int) $hold || $expires !== $row['expires_at'] || $shareChanged) {
+            if (
+                (int) $row['held'] !== (int) $hold || $expires !== $row['expires_at'] || $shareChanged || $accessChanged
+            ) {
                 $changes = new AdmissionDocumentContent($this->cipher, $this->storage)->changes(
                     $row,
                     ['held' => (int) $hold, 'expires_at' => $expires],
@@ -346,6 +373,9 @@ final readonly class AdmissionDocumentService
                 $this->documents->change($id, $version, $changes);
                 $action = $hold ? 'admissions.document_retained_hold' : 'admissions.document_retention_updated';
                 $this->audit->record($actor, $action, $id);
+                if ($accessChanged) {
+                    $this->audit->record($actor, 'admissions.document_applicant_access_extended', $id);
+                }
                 if ($shareChanged) {
                     $this->audit->record(
                         $actor,

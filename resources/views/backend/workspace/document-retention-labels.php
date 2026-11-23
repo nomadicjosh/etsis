@@ -1,0 +1,96 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_html;
+
+// Escaped translations remain text in the browser; no HTML insertion is used.
+return [
+    'Applicant access ends (UTC)' => trans_html('Applicant access ends (UTC)'),
+    'Manual extensions also extend applicant access to a shared file.' => trans_html(
+        'Manual extensions also extend applicant access to a shared file.',
+    ),
+    'ADMISSIONS SETTINGS' => trans_html('ADMISSIONS SETTINGS'),
+    'Add retention category' => trans_html('Add retention category'),
+    'Available for new selections' => trans_html('Available for new selections'),
+    'Back to Admissions' => trans_html('Back to Admissions'),
+    'Cancel classification' => trans_html('Cancel classification'),
+    'Categories set future upload defaults. Existing files keep their recorded basis and deadlines.' => trans_html(
+        'Categories set future upload defaults. Existing files keep their recorded basis and deadlines.',
+    ),
+    'Category code' => trans_html('Category code'),
+    'Category name' => trans_html('Category name'),
+    'Choose a retention category' => trans_html('Choose a retention category'),
+    'Classification history' => trans_html('Classification history'),
+    'Classify document' => trans_html('Classify document'),
+    'Configure document retention' => trans_html('Configure document retention'),
+    'Confirm retention change' => trans_html('Confirm retention change'),
+    'Current deadline' => trans_html('Current deadline'),
+    'Current policy revision' => trans_html('Current policy revision'),
+    'Days run from the original upload. A shorter category never reduces the existing deadline.' => trans_html(
+        'Days run from the original upload. A shorter category never reduces the existing deadline.',
+    ),
+    'Default' => trans_html('Default'),
+    'Default for new uploads' => trans_html('Default for new uploads'),
+    'Deployment fallback' => trans_html('Deployment fallback'),
+    'Deployment fallback (uncategorized)' => trans_html('Deployment fallback (uncategorized)'),
+    'Deployment fallback days' => trans_html('Deployment fallback days'),
+    'Discard retention changes' => trans_html('Discard retention changes'),
+    'Document category' => trans_html('Document category'),
+    'Document retention' => trans_html('Document retention'),
+    'Document retention could not be loaded.' => trans_html('Document retention could not be loaded.'),
+    'Earlier decisions' => trans_html('Earlier decisions'),
+    'Earlier policies' => trans_html('Earlier policies'),
+    'Earlier retention basis unknown' => trans_html('Earlier retention basis unknown'),
+    'Earlier retention decisions were not recorded.' => trans_html('Earlier retention decisions were not recorded.'),
+    'Existing file deadlines and holds will not change.' => trans_html(
+        'Existing file deadlines and holds will not change.',
+    ),
+    'File access, existing holds and decision evidence stay unchanged.' => trans_html(
+        'File access, existing holds and decision evidence stay unchanged.',
+    ),
+    'Finish or discard retention changes before starting another task.' => trans_html(
+        'Finish or discard retention changes before starting another task.',
+    ),
+    'Initial upload policy' => trans_html('Initial upload policy'),
+    'Loading document retention…' => trans_html('Loading document retention…'),
+    'Loading retention history…' => trans_html('Loading retention history…'),
+    'New category' => trans_html('New category'),
+    'Newer decisions' => trans_html('Newer decisions'),
+    'Policy revision' => trans_html('Policy revision'),
+    'Proposed deadline' => trans_html('Proposed deadline'),
+    'Reason for classification' => trans_html('Reason for classification'),
+    'Reason for policy change' => trans_html('Reason for policy change'),
+    'Refresh retention policy' => trans_html('Refresh retention policy'),
+    'Remove unsaved category' => trans_html('Remove unsaved category'),
+    'Retain through' => trans_html('Retain through'),
+    'Retained policy' => trans_html('Retained policy'),
+    'Retained retention decisions' => trans_html('Retained retention decisions'),
+    'Retention access is no longer available.' => trans_html('Retention access is no longer available.'),
+    'Retention category' => trans_html('Retention category'),
+    'Retention change saved.' => trans_html('Retention change saved.'),
+    'Retention days from upload' => trans_html('Retention days from upload'),
+    'Retention history loaded.' => trans_html('Retention history loaded.'),
+    'Retention review' => trans_html('Retention review'),
+    'Retired' => trans_html('Retired'),
+    'Retry document retention' => trans_html('Retry document retention'),
+    'Review document classification' => trans_html('Review document classification'),
+    'Review institutional retention' => trans_html('Review institutional retention'),
+    'Review ready. Confirm or revise this change.' => trans_html('Review ready. Confirm or revise this change.'),
+    'Review retention change' => trans_html('Review retention change'),
+    'Reviewing retention change…' => trans_html('Reviewing retention change…'),
+    'Revise retention change' => trans_html('Revise retention change'),
+    'Staff classification' => trans_html('Staff classification'),
+    'The 25-category limit is reached. Existing identities must be retained.' => trans_html(
+        'The 25-category limit is reached. Existing identities must be retained.',
+    ),
+    'The request did not finish. Your review is still available.' => trans_html(
+        'The request did not finish. Your review is still available.',
+    ),
+    'Unavailable account' => trans_html('Unavailable account'),
+    'Untitled category' => trans_html('Untitled category'),
+    'Upload availability and scanner approval remain deployment controls.' => trans_html(
+        'Upload availability and scanner approval remain deployment controls.',
+    ),
+    'days from upload' => trans_html('days from upload'),
+];

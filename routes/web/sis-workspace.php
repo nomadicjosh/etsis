@@ -32,6 +32,17 @@ return static function (Psr7Router $router): void {
     $router->get('/sis/applications/{application}/document-holds/', [$holds, 'history']);
     $router->post('/sis/applications/{application}/document-holds/review/', [$holds, 'review']);
     $router->post('/sis/applications/{application}/document-holds/confirm/', [$holds, 'confirm']);
+    $retention = \Application\Http\Controller\AdmissionRetentionController::class;
+    $router->get('/sis/document-retention/', [$retention, 'configuration']);
+    $router->get('/sis/document-retention/history/', [$retention, 'policies']);
+    $router->post('/sis/document-retention/review/', [$retention, 'reviewPolicy']);
+    $router->post('/sis/document-retention/confirm/', [$retention, 'publishPolicy']);
+    $router->get('/sis/applications/{application}/documents/{id}/category/', [$retention, 'history']);
+    $router->post(
+        '/sis/applications/{application}/documents/{id}/category/review/',
+        [$retention, 'reviewClassification']
+    );
+    $router->post('/sis/applications/{application}/documents/{id}/category/confirm/', [$retention, 'classify']);
     $router->map(['GET'], '/sis/applications/{application}/documents/{id}/download/', [Documents::class, 'download']);
     $router->map(['POST'], '/sis/applications/{application}/documents/{id}/rescan/', [Documents::class, 'rescan']);
     $router->map(['POST'], '/sis/applications/{application}/documents/{id}/retain/', [Documents::class, 'retain']);

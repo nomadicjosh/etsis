@@ -311,7 +311,7 @@
     const moodlePeople = window.createWorkspaceMoodlePeople({ node, request, task, can, openDrawer, openPerson });
     const moodleRequests = window.createWorkspaceMoodleRequests({ node, request, task, can, openDrawer, openPerson });
     const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions, offices: () => restrictionStudio.officeSetup({ label: 'Back to roles & access', run: async () => { drawer.hide(); await loadAccess(); } }) });
-    const peopleStudio = window.createWorkspacePeople({ documentHoldLabels: config.document_hold_labels, closeDrawer: () => drawer.hide(), node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, recordSummary, actionMenu, historyPanel, messageRecord: operations.messageRecord, flow: operations.flow, loginUrl: config.login_url || '/login/' });
+    const peopleStudio = window.createWorkspacePeople({ documentHoldLabels: config.document_hold_labels, documentRetentionLabels: config.document_retention_labels, closeDrawer: () => drawer.hide(), node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, recordSummary, actionMenu, historyPanel, messageRecord: operations.messageRecord, flow: operations.flow, loginUrl: config.login_url || '/login/' });
     const teachingStudio = window.createWorkspaceTeaching({ actionMenu, node, request, requestFile, task, can, recordSummary, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
     const schedulingStudio = window.createWorkspaceScheduling({ openCalendar: () => { drawer.hide(); return navigate('calendar', current !== 'calendar'); }, node, request, task, can, recordSummary, actionMenu, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve(),
         composeAnnouncement: (preset, back) => createRecord('campaigns', preset, { back,
@@ -591,6 +591,8 @@
             'Open admissions follow-up queue', 'inboxes'));
         if (section === 'applications') tools.append(tool('Withdrawal requests', () => peopleStudio.withdrawalQueue(),
             'Review applicant withdrawal requests', 'inbox'));
+        if (section === 'applications' && can('sis:admissions:manage') && can('sis:admissions:documents:retain')) tools.append(
+            tool(config.document_retention_labels?.['Document retention'] || 'Document retention', () => peopleStudio.documentRetention(), config.document_retention_labels?.['Configure document retention'] || 'Configure document retention', 'archive'));
         if (section === 'applications' && can('sis:admissions:policy')) tools.append(
             tool('Policies', () => peopleStudio.admissionPolicy(), 'Configure admissions policies', 'sliders'));
         if (section === 'registration' && can('sis:registration:manage')) tools.append(

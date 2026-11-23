@@ -14,7 +14,7 @@
       container,
       application,
       data,
-      { alive, write, reload, beforeChange, status },
+      { alive, write, reload, beforeChange, beforeRequest = () => true, status },
     ) {
       const base = `/sis/applications/${application}/document-holds/`;
       const section = node("section", {
@@ -139,7 +139,7 @@
         });
         form.addEventListener("submit", (event) => {
           event.preventDefault();
-          if (!form.reportValidity()) return;
+          if (!beforeRequest() || !form.reportValidity()) return;
           task(async () => {
             await write(async () => {
               status.textContent = text("Reviewing document hold…");
@@ -174,13 +174,13 @@
                   button(
                     action === "place" ? "Confirm hold" : "Confirm release",
                     () =>
-                      write(async () => {
+                      beforeRequest() && write(async () => {
                         if (!fresh() || proof !== accepted) return;
                         status.textContent = text("Saving document hold…");
                         await request(`${base}confirm/`, "POST", accepted);
                         if (!fresh()) return;
-                        editing = false;
                         await reload();
+                        editing = false;
                         notify(text("Document hold change saved."));
                       }),
                     "btn-primary",

@@ -68,6 +68,7 @@ final readonly class WorkspaceService
         "sis:person:manage",
         "sis:person:assign-id",
         "sis:admissions:manage",
+        "sis:admissions:documents:retain",
         "sis:admissions:correct",
         "sis:admissions:withdraw",
         "sis:admissions:amend",

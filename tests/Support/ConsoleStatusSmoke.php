@@ -39,6 +39,7 @@ try {
             ($argv[1] ?? ''),
             [
                 'check-document-holds',
+                'check-document-retention',
                 'check-historical-finance',
                 'check-primary-position',
                 'check-recorded-progress',
@@ -279,6 +280,10 @@ try {
         } elseif (($argv[1] ?? '') === 'check-historical-finance') {
             $kernel->bootstrap();
             require __DIR__ . '/HistoricalFinanceBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-document-retention') {
+            $kernel->bootstrap();
+            require __DIR__ . '/AdmissionRetentionBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-document-holds') {
             $kernel->bootstrap();

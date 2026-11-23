@@ -1250,3 +1250,17 @@ h3 { font-size: .9rem; font-weight: 650; }
     .admission-workbench .admission-document-panel { padding-inline: .375rem; }
     .document-preservation .alert { padding-inline: .5rem; }
 }
+
+/* Retention policy and file classifications share the existing document form language. */
+.retention-policy-fields, .document-retention-section, .document-retention-section fieldset { min-width: 0; }
+.retention-policy-fields { border: 0; padding: 0; }
+.document-retention-section form > fieldset { border: 0; padding: 0; margin: 0; }
+.document-retention-section .record-form-actions > .btn, .retention-policy-panel .record-form-actions > .btn { max-width: 100%; justify-content: flex-start; text-align: start; }
+@media (max-width: 575.98px) {
+    .retention-policy-panel .record-form-section { padding-inline: .5rem; }
+    .document-retention-section .record-form-actions > .btn { flex: 1 1 10rem; }
+}
+
+@media (max-width: 575.98px) {
+    .admission-workbench .admission-document-card { padding: .375rem !important; }
+}

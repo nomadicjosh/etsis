@@ -452,7 +452,7 @@ window.createWorkspacePeople = function (ui) {
         const workbench = window.createAdmissionCasework({ node, request, task, notify }).mount(casework, row.id,
             { managePresets: can('sis:forms:manage') });
         const documents = node('div', { class: 'record-section mt-3' });
-        const documentEditor = window.createAdmissionDocuments({ node, request, task, notify, holdLabels: ui.documentHoldLabels }).mount(documents, row.id, { staff: true });
+        const documentEditor = window.createAdmissionDocuments({ node, request, task, notify, holdLabels: ui.documentHoldLabels, retentionLabels: ui.documentRetentionLabels }).mount(documents, row.id, { staff: true });
         body.append(documents);
         const offerArea = node('div'), withdrawalArea = node('div'); body.append(offerArea, withdrawalArea);
         let background = null, withdrawalEditor = null, answerEditor = null;
@@ -1106,6 +1106,13 @@ window.createWorkspacePeople = function (ui) {
             ),
         );
     }
+    function documentRetention() {
+        const labels = ui.documentRetentionLabels || {};
+        const body = openDrawer(labels['Document retention'] || 'Document retention', labels['ADMISSIONS SETTINGS'] || 'ADMISSIONS SETTINGS');
+        let editor = null;
+        body.append(button(labels['Back to Admissions'] || 'Back to Admissions', () => (editor?.beforeLeave() ?? true) && ui.closeDrawer(), 'btn-link'));
+        editor = window.createAdmissionRetention({ node, request, task, notify, labels }).mountPolicy(body);
+    }
     function admissionPolicy() {
         const body = openDrawer('Admissions policy', 'INSTITUTIONAL SETUP');
         let editor = null;
@@ -1122,5 +1129,5 @@ window.createWorkspacePeople = function (ui) {
         window.createAdmissionCasework({ node, request, task, notify }).queue(body,
             (row, accepted) => application({ ...row, followUpBack: () => caseQueue(accepted) }), state);
     }
-    return { editProfile, account, contact, education, history, application, caseQueue, admissionPolicy, withdrawalQueue };
+    return { editProfile, account, contact, education, history, application, caseQueue, admissionPolicy, documentRetention, withdrawalQueue };
 };

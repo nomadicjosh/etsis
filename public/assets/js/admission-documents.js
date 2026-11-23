@@ -2,7 +2,7 @@
 (() => {
     'use strict';
     let sequence = 0;
-    window.createAdmissionDocuments = ({ node, request, task, notify, holdLabels = {} }) => ({
+    window.createAdmissionDocuments = ({ node, request, task, notify, holdLabels = {}, retentionLabels = {} }) => ({
         summary(container, evidence) {
             const section = node('section', { class: 'record-section' }, node('h4', { class: 'h6' }, 'Decision evidence'));
             if (evidence?.length) section.append(node('ul', {}, ...evidence.map(file => node('li', { class: 'text-break private-text' }, file.name))));
@@ -96,10 +96,9 @@
                 const introduction = node('p', { id: helpId, class: 'form-text' }, 'PDF, JPEG and PNG · up to 5 MiB each. Files stay private and need a background safety scan before download. Admissions reviews the checklist separately.');
                 controls.append(introduction);
                 let fileInput = null; const drafts = [];
-                let holdLeave = () => true;
+                let holdLeave = () => true, categoryLeave = () => true;
                 let activeSettings = null, activeButton = null, controlEpoch = 0;
-                leave = () => {
-                    if (!holdLeave()) return false;
+                const documentDraftsGuard = () => {
                     const changed = drafts.find(draft => draft.changed());
                     if (pending || fileInput?.files?.length || changed) {
                         status.textContent = pending ? 'Wait for the current document request to finish.' : 'Save or clear document changes before starting another task.';
@@ -107,6 +106,7 @@
                     }
                     return true;
                 };
+                leave = () => holdLeave() && categoryLeave() && documentDraftsGuard();
                 async function write(run) {
                     if (pending) return;
                     pending = true; controls.disabled = true; toggle.disabled = true;
@@ -115,7 +115,7 @@
                             status.textContent = error.status === 403
                                 ? 'Application documents are no longer available with your current access.'
                                 : 'We couldn’t finish this request. Your selections are still here.';
-                            if (error.status === 403) { controls.replaceChildren(); holdLeave = () => true; drafts.splice(0); }
+                            if (error.status === 403) { controls.replaceChildren(); holdLeave = categoryLeave = () => true; drafts.splice(0); }
                         }
                         throw error;
                     } finally { pending = false; controls.disabled = false; toggle.disabled = false; }
@@ -123,7 +123,8 @@
                 if (staff && data.can_retain && data.retention_holds) {
                     holdLeave = window.createAdmissionDocumentHolds({ node, request, task, notify, labels: holdLabels })(
                         controls, application, data.retention_holds,
-                        { alive: () => alive(ticket), write, reload: load, beforeChange: leave, status },
+                        { alive: () => alive(ticket), write, reload: load, beforeChange: leave,
+                            beforeRequest: () => categoryLeave() && documentDraftsGuard(), status },
                     );
                 }
                 if (data.enabled) {
@@ -141,7 +142,7 @@
                     if (staff) form.append(node('p', { class: 'form-text' }, 'Staff uploads start as staff-only. Records staff control applicant access.'));
                     form.addEventListener('submit', event => {
                         event.preventDefault();
-                        if (!holdLeave()) return;
+                        if (!holdLeave() || !categoryLeave()) return;
                         const changed = drafts.find(draft => draft.changed());
                         if (changed) { status.textContent = 'Finish or clear retention changes before uploading.'; changed.focus(); return; }
                         const file = fileInput.files[0];
@@ -163,7 +164,7 @@
                 const labels = { quarantined: 'Waiting for safety scan', scanning: 'Safety scan in progress', ready: 'Available',
                     rejected: 'Not available — contact admissions or upload a replacement', purging: 'Removal pending' };
                 for (const item of data.items) {
-                    const card = node('article', { class: 'border rounded p-3 mb-3' }, node('h3', { class: 'h6 private-text text-break' }, item.name),
+                    const card = node('article', { class: 'admission-document-card border rounded p-3 mb-3' }, node('h3', { class: 'h6 private-text text-break' }, item.name),
                         node('p', {}, item.status === 'ready' && !item.can_download ? 'No longer available — contact admissions' : labels[item.status] || 'Contact admissions'),
                         node('p', { class: 'form-text' }, `Uploaded ${new Date(item.created_at).toLocaleDateString()}${item.bytes ? ' · ' + Math.ceil(item.bytes / 1024) + ' KiB' : ''}`));
                     if (item.can_download) card.append(node('a', { href: `${base}${item.id}/download/`, class: 'btn btn-outline-primary', download: '' }, 'Download'));
@@ -180,6 +181,11 @@
                         card.append(node('p', { class: 'form-text' }, holdLabels[label] || label));
                     }
                     if (staff) card.append(node('p', { class: 'form-text' }, `Retention ends ${item.expires_at.slice(0, 10)} UTC${item.held ? ' · Hold in place' : ''}`));
+                    if (staff && item.applicant_visible && item.applicant_expires_at) {
+                        const label = 'Applicant access ends (UTC)';
+                        card.append(node('p', { class: 'form-text' }, retentionLabels[label] || label, ': ',
+                            new Date(item.applicant_expires_at).toLocaleString(undefined, { timeZone: 'UTC' })));
+                    }
                     if (staff && item.retained_evidence) card.append(node('p', { class: 'form-text' }, 'Retained for an admissions decision. Ordinary file removal is unavailable.'));
                     if (data.can_retain && item.status !== 'purging') {
                         const settingsId = `document-controls-${++sequence}`;
@@ -200,8 +206,10 @@
                             form.append(node('div', { class: 'form-check mb-2' }, visible, node('label', { for: visibilityId, class: 'form-check-label' }, 'Show file to applicant')),
                                 node('div', { class: 'form-check mb-2' }, hold, node('label', { for: holdId, class: 'form-check-label' }, 'Keep under hold')),
                                 node('label', { for: dateId, class: 'form-label' }, 'Extend through (UTC, optional)'), date, save);
+                            const help = 'Manual extensions also extend applicant access to a shared file.';
+                            form.append(node('p', { class: 'form-text' }, retentionLabels[help] || help));
                             form.addEventListener('submit', event => { event.preventDefault();
-                                if (!holdLeave()) return;
+                                if (!holdLeave() || !categoryLeave()) return;
                                 if (fileInput?.files?.length) { status.textContent = 'Upload or clear the selected file first.'; fileInput.focus(); return; }
                                 if (!form.reportValidity()) return;
                                 task(() => write(async () => { await request(`${base}${item.id}/retain/`, 'POST', {
@@ -211,6 +219,15 @@
                             });
                             drafts.push({ changed: () => hold.checked !== item.held || !!date.value || visible.checked !== item.applicant_visible, focus: () => { settings.open = true; save.focus(); } });
                             settings.append(form);
+                            if (window.createAdmissionRetention) {
+                                const retention = window.createAdmissionRetention({ node, request, task, notify, labels: retentionLabels });
+                                const editor = retention.mountFile(settings, application, item, {
+                                    alive: () => alive(ticket) && selection === controlEpoch,
+                                    write, reload: load, beforeChange: leave,
+                                    beforeRequest: () => holdLeave() && documentDraftsGuard(), status,
+                                });
+                                categoryLeave = editor.beforeLeave;
+                            }
                             if (item.can_purge) {
                                 const disposal = node('form', { class: 'border-top mt-3 pt-3' });
                                 const reasonId = `document-disposal-${++sequence}`;
@@ -223,7 +240,7 @@
                                 date.addEventListener('input', invalidate); visible.addEventListener('change', invalidate);
                                 disposal.append(node('label', { for: reasonId, class: 'form-label' }, 'Reason for removal'), reason, review, preview);
                                 disposal.addEventListener('submit', event => { event.preventDefault();
-                                    if (!holdLeave()) return;
+                                    if (!holdLeave() || !categoryLeave()) return;
                                     if (hold.checked !== item.held || date.value || visible.checked !== item.applicant_visible || fileInput?.files?.length) {
                                         status.textContent = 'Save retention changes and upload or clear selected files before reviewing removal.'; return;
                                     }
@@ -244,7 +261,7 @@
                                 settings.append(disposal);
                             }
                             settings.append(node('button', { type: 'button', class: 'btn btn-link mt-2', onclick: () => {
-                                controlEpoch++; drafts.splice(0); settings.remove(); activeSettings = null;
+                                controlEpoch++; categoryLeave = () => true; drafts.splice(0); settings.remove(); activeSettings = null;
                                 manage.setAttribute('aria-expanded', 'false'); manage.focus();
                             } }, 'Discard changes'));
                             card.append(settings); activeSettings = settings; visible.focus();

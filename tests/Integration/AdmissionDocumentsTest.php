@@ -63,7 +63,8 @@ final class AdmissionDocumentsTest extends TestCase
             $s->clock,
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql),
             $s->decisionLedger(),
-            $f->documentHolds()
+            $f->documentHolds(),
+            $f->documentRetention($storage, $policy)
         );
         $scanner = new class implements AdmissionDocumentScanner {
             public string $verdict = 'clean';
@@ -520,7 +521,8 @@ final class AdmissionDocumentsTest extends TestCase
             $s->clock,
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql),
             $s->decisionLedger(),
-            $f->documentHolds()
+            $f->documentHolds(),
+            $f->documentRetention($storage)
         );
         try {
             $service->upload($f->application, EntityId::generate(), 'fictional.pdf', self::PDF, false);
