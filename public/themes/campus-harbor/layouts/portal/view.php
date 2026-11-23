@@ -9,6 +9,8 @@ use Vihzhuo\Core\ThemeContext;
 
 use function Codefy\Framework\Helpers\trans_attr;
 use function Codefy\Framework\Helpers\trans_html;
+use function Codefy\Framework\Helpers\view;
+use function Application\Shared\Helpers\menu_items;
 
 $esc = static fn(mixed $value): string => htmlspecialchars(
     (string) $value,
@@ -23,6 +25,12 @@ $staffAccess = $staffAccess ?? $signedIn && \Codefy\Framework\Helpers\gate("sis:
 $theme = ThemeContext::current();
 $themeAsset = $theme?->getAssetPath("public/css/theme.css") ?? "/themes/campus-harbor/public/css/theme.css";
 $title = $page->getTranslation("meta_title", "en") ?: $portalName;
+$siteNavigation ??= [];
+foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
+    $siteNavigation[$menuSlot] ??= (string) view('framework::shared/site-navigation', [
+        'items' => menu_items($menuSlot), 'prefix' => 'campus-' . $menuSlot,
+    ])->getBody();
+}
 ?>
 <!doctype html>
 <html lang="<?=Codefy::$PHP->configContainer->string('app.language');?>">
@@ -45,7 +53,9 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
             <script defer src="/assets/js/campus-announcements.js"></script>
             <script defer src="/assets/js/workspace-notifications.js"></script>
         <?php endif; ?>
+        <link rel="stylesheet" href="/assets/css/site-navigation.css">
         <script defer src="/assets/vendor/bootstrap.bundle.min.js"></script>
+        <script defer src="/assets/js/site-navigation.js"></script>
         <script defer src="/assets/js/review-guidance.js"></script>
         <script defer src="/assets/js/application-form.js"></script>
         <script defer src="/assets/js/application-revisions.js"></script>
@@ -121,6 +131,7 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
                 </button>
                 <div class="collapse navbar-collapse" id="campus-navigation">
                     <ul class="navbar-nav ms-auto align-items-lg-center gap-lg-3">
+                        <?= $siteNavigation['primary'] ?>
                         <li class="nav-item">
                             <a class="nav-link" href="/portal/courses/">Courses</a>
                         </li>
@@ -155,6 +166,12 @@ $title = $page->getTranslation("meta_title", "en") ?: $portalName;
         </header>
         <main id="campus-main" tabindex="-1"><?= $body ?></main>
         <footer class="campus-footer">
+            <nav class="campus-container" aria-label="<?= trans_attr('Additional website links') ?>">
+                <ul class="nav flex-wrap">
+                    <?= $siteNavigation['secondary'] ?>
+                    <?= $siteNavigation['footer'] ?>
+                </ul>
+            </nav>
             <div class="campus-container campus-footer-grid">
                 <div>
                     <a class="campus-brand" href="/">

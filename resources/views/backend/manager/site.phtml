@@ -1,0 +1,138 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_html;
+use function Codefy\Framework\Helpers\trans_attr;
+use function Codefy\Framework\Helpers\config;
+
+$mode = in_array($mode ?? 'pages', ['pages', 'menus', 'settings'], true) ? $mode ?? 'pages' : 'pages';
+$esc = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$labels = require __DIR__ . "/site-labels.php";
+$settings = [
+    "manager_url" => config("vihzhuo.website_manager.url", "/admin/manager"),
+    "builder_url" => config(
+        "vihzhuo.pagebuilder.url",
+        "/admin/manager/pagebuilder",
+    ),
+    "csrf_header" => config("csrf.header", "X-CSRF-Token"),
+];
+$managerUrl = rtrim((string) $settings['manager_url'], '/') . '/';
+$pageTitle = match ($mode) {
+    'menus' => trans_html('Website menus'),
+    'settings' => trans_html('Website settings'),
+    default => trans_html('Website pages'),
+};
+$heading = match ($mode) {
+    'menus' => trans_html('Build a clear path through your website'),
+    'settings' => trans_html('Configure your website languages'),
+    default => trans_html('From saved draft to approved page'),
+};
+?>
+<!doctype html>
+<html lang="<?= $esc(config('app.language', 'en')) ?>">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title><?= $pageTitle ?></title>
+        <link rel="icon" href="/assets/images/workspace-mark.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="/assets/vendor/bootstrap.min.css">
+        <link rel="stylesheet" href="/assets/vendor/icons/bootstrap-icons.min.css">
+        <link rel="stylesheet" href="/assets/css/site-manager.css">
+        <link rel="stylesheet" href="/assets/css/site-navigation.css">
+    </head>
+    <body>
+        <a href="#site-main" class="visually-hidden-focusable p-3"><?= trans_html(
+            "Skip to main content",
+        ) ?></a>
+        <header class="site-header border-bottom bg-white">
+            <nav class="container-fluid site-container d-flex align-items-center flex-wrap gap-3 py-3"
+                aria-label="<?= trans_attr("Website management") ?>">
+                <a class="site-brand" href="/admin/"><i class="bi bi-grid-1x2 me-2" aria-hidden="true"></i><?= trans_html(
+                    "Staff workspace",
+                ) ?></a>
+                <a class="btn <?= $mode === "pages"
+                    ? "btn-primary"
+                    : "btn-light" ?>" href="<?= $esc($managerUrl) ?>"
+                    <?= $mode === "pages"
+                        ? 'aria-current="page"'
+                        : "" ?>><?= trans_html("Website pages") ?></a>
+                <a class="btn <?= $mode === "menus"
+                    ? "btn-primary"
+                    : "btn-light" ?>" href="<?= $esc($managerUrl) ?>?route=menus"
+                    <?= $mode === "menus"
+                        ? 'aria-current="page"'
+                        : "" ?>><?= trans_html("Website menus") ?></a>
+                <a class="btn <?= $mode === 'settings' ? 'btn-primary' : 'btn-light' ?>"
+                    href="<?= $esc($managerUrl) ?>?route=settings"
+                    <?= $mode === 'settings' ? 'aria-current="page"' : '' ?>>
+                    <?= trans_html('Website settings') ?>
+                </a>
+            </nav>
+        </header>
+        <main id="site-main" class="site-container container-fluid py-4 py-lg-5" tabindex="-1">
+            <p class="site-eyebrow"><?= trans_html("CAMPUS WEBSITE") ?></p>
+            <h1><?= $heading ?></h1>
+            <p class="text-secondary site-intro"><?= $mode === "menus"
+                ? trans_html(
+                    "Arrange links into clear dropdown menus. Save your draft, inspect the structure and publish when ready.",
+                )
+                : trans_html(
+                    "Design pages in the page builder, hand them over for review and choose when approved content becomes public.",
+                ) ?></p>
+            <div id="site-status" role="status" aria-live="polite"></div>
+            <div id="site-manager" data-mode="<?= $mode ?>">
+                <?php if ($mode === 'settings'): ?>
+                    <form class="site-card" method="post" action="<?= $esc($settingsAction) ?>">
+                        <?= $csrfMarkup ?? csrf_field() ?>
+                        <h2 class="h4"><?= trans_html('Website languages') ?></h2>
+                        <label class="form-label" for="site-languages"><?= trans_html('Active languages') ?></label>
+                        <p id="site-languages-help" class="form-text"><?= trans_html('Use Ctrl or Command to select multiple languages.') ?></p>
+                        <select id="site-languages" name="languages[]" class="form-select" multiple required
+                            aria-describedby="site-languages-help">
+                            <?php foreach ($languageOptions as $locale => $languageName): ?>
+                                <option value="<?= $esc($locale) ?>"
+                                    <?= in_array($locale, $activeLanguages, true) ? 'selected' : '' ?>>
+                                    <?= $esc($languageName) ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                        <button class="btn btn-primary mt-3" type="submit"><?= trans_html('Save website settings') ?></button>
+                    </form>
+                <?php endif; ?>
+            </div>
+        </main>
+        <div class="offcanvas offcanvas-end site-review" tabindex="-1" id="site-review" aria-labelledby="site-review-title">
+            <div class="offcanvas-header border-bottom">
+                <h2 id="site-review-title" class="h4 mb-0"><?= trans_html(
+                    "Review before publishing",
+                ) ?></h2>
+                <button class="btn-close" type="button" data-bs-dismiss="offcanvas" aria-label="<?= trans_attr(
+                    "Close review",
+                ) ?>"></button>
+            </div>
+            <div class="offcanvas-body" id="site-review-body"></div>
+        </div>
+        <form id="site-csrf" hidden><?= $csrfMarkup ?? csrf_field() ?></form>
+        <script id="site-labels" type="application/json"><?= json_encode(
+            $labels,
+            JSON_HEX_TAG |
+                JSON_HEX_AMP |
+                JSON_HEX_APOS |
+                JSON_HEX_QUOT |
+                JSON_THROW_ON_ERROR,
+        ) ?></script>
+        <script id="site-config" type="application/json"><?= json_encode(
+            $settings,
+            JSON_HEX_TAG |
+                JSON_HEX_AMP |
+                JSON_HEX_APOS |
+                JSON_HEX_QUOT |
+                JSON_THROW_ON_ERROR,
+        ) ?></script>
+        <script src="/assets/vendor/bootstrap.bundle.min.js"></script>
+        <script src="/assets/vendor/sortable.min.js"></script>
+        <script src="/assets/js/site-navigation.js"></script>
+        <script src="/assets/js/site-manager.js"></script>
+    </body>
+</html>

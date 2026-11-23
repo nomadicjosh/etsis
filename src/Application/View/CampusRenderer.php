@@ -8,7 +8,11 @@ use Codefy\Framework\Auth\Gate;
 use Laminas\Diactoros\Response\HtmlResponse;
 use Psr\Http\Message\ResponseInterface;
 use Qubus\Config\ConfigContainer;
+use Qubus\Exception\Data\TypeException;
+use Qubus\View\Native\Exception\InvalidTemplateNameException;
+use Qubus\View\Native\Exception\ViewException;
 use Qubus\View\Native\NativeLoader;
+use Throwable;
 use Vihzhuo\Core\ThemeContext;
 use Vihzhuo\Page;
 use Vihzhuo\Theme;
@@ -17,17 +21,30 @@ use InvalidArgumentException;
 
 final readonly class CampusRenderer
 {
-    public function __construct(private ConfigContainer $config, private Gate $gate)
-    {
+    public function __construct(
+        private ConfigContainer $config,
+        private Gate $gate,
+        private ?\Domain\Portal\Service\NavigationService $navigation = null
+    ) {
     }
 
-    /** @param array<string, mixed> $data */
+    /**
+     * @param string $template
+     * @param string $title
+     * @param array<string, mixed> $data
+     * @return ResponseInterface
+     * @throws InvalidTemplateNameException
+     * @throws TypeException
+     * @throws ViewException
+     * @throws Throwable
+     */
     public function render(string $template, string $title, array $data = []): ResponseInterface
     {
         if (
             !in_array(
                 $template,
-                ["home", "catalog", "news", "article", "workspace", "not-found", "auth", "moodle", "account-setup", "events"],
+                ["home", "catalog", "news", "article", "workspace", "not-found", "auth",
+                    "moodle", "account-setup", "events"],
                 true,
             )
         ) {
@@ -61,6 +78,12 @@ final readonly class CampusRenderer
         ];
         $loader = new NativeLoader(["framework" => $root . "/resources/views"]);
         $body = $loader->render("framework::frontend/portal/" . $template, $data);
+        $siteNavigation = [];
+        foreach (['primary', 'secondary', 'footer'] as $slot) {
+            $siteNavigation[$slot] = $loader->render('framework::shared/site-navigation', [
+                'items' => $this->navigation?->publicItems($slot) ?? [], 'prefix' => 'campus-' . $slot,
+            ]);
+        }
         $html = ThemeContext::render($theme, new ThemeLayout($theme, "portal")->getViewFile(), [
             "moodleLaunchEnabled" =>
                 $this->config->boolean("moodle.enabled", false) &&
@@ -74,6 +97,7 @@ final readonly class CampusRenderer
             "staffAccess" => $signedIn && $this->canUseWorkspace(),
             "loginUrl" => $data["loginUrl"],
             "csrfMarkup" => $data["csrfMarkup"] ?? null,
+            'siteNavigation' => $siteNavigation,
         ]);
         return new HtmlResponse($html, 200, [
             "Cache-Control" => "private, no-store, max-age=0",
@@ -86,6 +110,11 @@ final readonly class CampusRenderer
         ]);
     }
 
+    /**
+     * @return bool
+     * @throws TypeException
+     * @throws \ReflectionException
+     */
     public function canUseWorkspace(): bool
     {
         $permissions = [
@@ -111,14 +140,12 @@ final readonly class CampusRenderer
                 "sis:finance:ledger",
                 "sis:rules:manage",
             ];
-        foreach ($permissions as $permission) {
-            if ($this->gate->can($permission)) {
-                return true;
-            }
-        }
-        return false;
+        return array_any($permissions, fn($permission) => $this->gate->can($permission));
     }
 
+    /**
+     * @throws TypeException
+     */
     public function loginUrl(): string
     {
         return "/" . trim($this->config->string("auth.login_route", "login"), "/") . "/";

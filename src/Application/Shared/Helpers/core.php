@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Application\Shared\Helpers;
 
 use Qubus\Exception\Data\TypeException;
+use Codefy\Framework\Proxy\Codefy;
+use Domain\Portal\Service\PagePublicationService;
+use Domain\Portal\Service\NavigationService;
 
-use function phpb_pages;
 use function Qubus\Support\Helpers\collect;
 use function Qubus\Support\Helpers\is_null__;
 
@@ -18,7 +20,7 @@ use function Qubus\Support\Helpers\is_null__;
  */
 function nav_links(?string $type = null): array
 {
-    $navLinks = collect(phpb_pages())
+    $navLinks = collect(Codefy::$PHP->make(PagePublicationService::class)->navigation())
         ->where(key: 'show_in_nav', operator: '=', value: 'yes')
         ->sort(function ($item1, $item2) {
             return $item1['nav_position'] <=> $item2['nav_position'];
@@ -29,4 +31,9 @@ function nav_links(?string $type = null): array
     }
 
     return $navLinks->all();
+}
+
+function menu_items(string $slot): array
+{
+    return Codefy::$PHP->make(NavigationService::class)->publicItems($slot);
 }

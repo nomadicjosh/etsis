@@ -1,9 +1,8 @@
 <?php
 
-use Spatie\Menu\Link;
-
-use function Application\Shared\Helpers\nav_links;
+use function Application\Shared\Helpers\menu_items;
 use function Codefy\Framework\Helpers\config;
+use function Codefy\Framework\Helpers\view;
 
 //phpcs:disable
 ?>
@@ -13,9 +12,9 @@ use function Codefy\Framework\Helpers\config;
         <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarSupportedContent" aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation"><span class="navbar-toggler-icon"></span></button>
         <div class="collapse navbar-collapse" id="navbarSupportedContent">
             <ul class="navbar-nav ms-auto mb-2 mb-lg-0">
-            <?php foreach (nav_links(type: 'primary') as $page) : ?>
-                <li class="nav-item"><?=Link::to(url: $page['route'], text: $page['title'])->addClass(class: 'nav-link');?></li>
-            <?php endforeach ?>
+                <?= view('framework::shared/site-navigation', [
+                    'items' => menu_items('primary'), 'prefix' => 'website-primary',
+                ])->getBody() ?>
             </ul>
         </div>
     </div>

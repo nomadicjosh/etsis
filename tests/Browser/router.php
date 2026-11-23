@@ -23,6 +23,45 @@ $viewApp = \Codefy\Framework\Helpers\get_fresh_bootstrap();
 $viewApp->delegate(\Qubus\Config\ConfigContainer::class, static fn () => $viewConfig);
 $viewApp->delegate('codefy.config', static fn () => $viewConfig);
 
+if ($path === '/fixture/site-navigation/') {
+    require_once $root . '/tests/Support/WebsiteFixture.php';
+    $item = \Tests\Support\WebsiteFixture::item(...);
+    $leaf = $item('leaf');
+    $leaf['label'] = 'Fictional help';
+    $leaf['url'] = 'https://example.invalid/help';
+    $leaf['new_tab'] = true;
+    $child = $item('child', 'group', children: [$leaf]);
+    $child['label'] = 'Campus resources';
+    $menu = $item('root', 'group', children: [$child]);
+    $menu['label'] = 'Explore campus';
+    $loader = new \Qubus\View\Native\NativeLoader(['framework' => $root . '/resources/views']);
+    header('Cache-Control: private, no-store');
+    echo '<!doctype html><html lang="en"><head><meta charset="utf-8">'
+    . '<meta name="viewport" content="width=device-width,initial-scale=1">'
+    . '<title>Fictional dropdown fixture</title><link rel="stylesheet" href="/assets/vendor/bootstrap.min.css">'
+    . '<link rel="stylesheet" href="/assets/css/site-navigation.css"></head><body>'
+    . '<aside aria-label="Fictional sidebar" '
+    . 'style="position:fixed;left:0;top:0;bottom:0;width:64px;z-index:1040;background:#203651"></aside>'
+    . '<main style="margin-left:72px;padding:1rem"><h1>Fictional public navigation</h1>'
+    . '<nav class="navbar" aria-label="Fictional website" '
+    . 'style="justify-content:end;overflow:hidden">'
+    . '<ul class="navbar-nav">'
+    . $loader->render('framework::shared/site-navigation', ['items' => [$menu], 'prefix' => 'fictional-public'])
+    . '</ul></nav></main><script src="/assets/vendor/bootstrap.bundle.min.js"></script>'
+    . '<script src="/assets/js/site-navigation.js"></script></body></html>';
+    return;
+}
+
+if ($path === '/fixture/website-manager/') {
+    $loader = new \Qubus\View\Native\NativeLoader(['framework' => $root . '/resources/views']);
+    header('Cache-Control: private, no-store');
+    echo $loader->render('framework::backend/manager/site', [
+        'mode' => ($_GET['mode'] ?? '') === 'pages' ? 'pages' : 'menus',
+        'csrfMarkup' => '<input type="hidden" name="csrf_token" value="fictional-test-token">',
+    ]);
+    return;
+}
+
 if ($path === '/portal/api/events/') {
     require __DIR__ . '/public-events-fixture.php';
     $loader = new \Qubus\View\Native\NativeLoader(['framework' => $root . '/resources/views']);

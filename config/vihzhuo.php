@@ -169,7 +169,7 @@ return [
      |
      */
         'router' => [
-            'class' => Vihzhuo\Modules\Router\DatabasePageRouter::class,
+            'class' => Application\Service\WebsitePageRouter::class,
             'use_router' => true
         ],
 

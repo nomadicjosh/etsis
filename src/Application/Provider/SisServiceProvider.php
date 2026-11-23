@@ -322,6 +322,10 @@ final class SisServiceProvider extends CodefyServiceProvider
             \Domain\Communications\Service\MailTransport::class =>
                 \Infrastructure\Communications\ConfiguredMailTransport::class,
             \Domain\Portal\Service\ContentMarkup::class => \Infrastructure\Portal\SymfonyContentMarkup::class,
+            \Domain\Portal\Repository\PagePublicationRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlPagePublicationRepository::class,
+            \Domain\Portal\Repository\NavigationRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlNavigationRepository::class,
             \Domain\Portal\Repository\PortalRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlPortalRepository::class,
 
@@ -464,5 +468,10 @@ final class SisServiceProvider extends CodefyServiceProvider
             \Infrastructure\Persistence\Repository\SqlSubmissionProjection::class,
         );
         $this->codefy->alias(StudentAccess::class, GateStudentAccess::class);
+        $this->codefy->delegate(\Application\View\CampusRenderer::class, fn () => new \Application\View\CampusRenderer(
+            $this->codefy->make(\Qubus\Config\ConfigContainer::class),
+            $this->codefy->make(\Codefy\Framework\Auth\Gate::class),
+            $this->codefy->make(\Domain\Portal\Service\NavigationService::class),
+        ));
     }
 }

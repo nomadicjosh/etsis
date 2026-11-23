@@ -1,0 +1,13 @@
+.site-navigation-heading{display:flex;align-items:center;min-width:0;width:100%}
+.site-navigation-heading>a{flex:1;min-width:0;white-space:normal;overflow-wrap:anywhere}
+.site-navigation-toggle{border:0;background:transparent;color:inherit;white-space:normal;text-align:left;min-height:2.75rem}
+.site-navigation-heading>a+.site-navigation-toggle{width:2.75rem;flex:none}
+.site-navigation-menu{min-width:min(15rem,calc(100vw - 2rem));max-width:calc(100vw - 2rem);max-height:min(32rem,70vh);overflow-y:auto;box-shadow:0 8px 30px #1f35552b;border-color:#cdd9e7;text-align:left}
+.site-navigation-menu :is(.dropdown-item,.dropdown-toggle){white-space:normal;overflow-wrap:anywhere;color:#203651}
+.site-navigation-menu .site-navigation-toggle{flex:1;padding:.5rem 1rem}
+.site-navigation-menu .site-navigation-heading>a+.site-navigation-toggle{flex:none}
+.site-navigation-item :is(a,button):focus-visible{outline:3px solid #1259a5;outline-offset:-3px}
+.site-navigation-menu .dropdown-item:hover{background:#e9f0f8;color:#173f68}
+.campus-footer .nav-link{color:inherit}
+.bg-dark .site-navigation-item>.site-navigation-heading>.nav-link{color:#fff}
+.site-navigation-portal{z-index:1080;max-width:calc(100vw - 1.5rem);max-height:70vh;overflow-y:auto;text-align:left;color:#203651;box-shadow:0 8px 30px #1f35552b}

@@ -1857,3 +1857,479 @@ msgstr ""
 #: resources/views/backend/workspace/credit-policy-labels.php:42
 msgid "The course draft allows {value} academic credits."
 msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:8
+msgid "Remove page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:9
+msgid "Removing this page removes its public route. Menu links to it will stop appearing."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:12
+msgid "Loading page destination…"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:13
+msgid "This page is unavailable. Choose another destination."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:14
+msgid "Add at top level"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:15
+msgid "Loading website settings…"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:16
+msgid "Unable to complete this request. Your working entries remain here."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:17
+msgid "Your website access ended. Sign in or ask an administrator for access."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:18
+msgid "Draft saved. Review it before publishing."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:19
+msgid "Publication confirmed."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:20
+msgid "Save menu draft"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:22
+msgid "Confirm publication"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:23
+msgid "Back to editor"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:24
+msgid "Close review"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:25
+msgid "Primary menu"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:26
+msgid "Secondary menu"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:27
+msgid "Footer menu"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:28
+msgid "Menu location"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:29
+msgid "Add item"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:30
+msgid "Custom link"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:31
+msgid "Website page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:32
+msgid "Dropdown group"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:33
+msgid "Divider"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:34
+msgid "New link"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:35
+msgid "New dropdown"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:36
+msgid "Undo"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:37
+msgid "Redo"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:38
+msgid "Responsive preview"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:39
+msgid "This preview shows your draft structure. Page links appear on the public website only while their exact page revision is approved and visible."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:43
+msgid "Add a page, custom link or dropdown group to begin."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:44
+msgid "Select an item to edit its label, destination and display settings."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:45
+msgid "Navigation label"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:46
+msgid "Accessible description"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:47
+msgid "Link address"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:48
+msgid "Bootstrap icon"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:49
+msgid "No icon"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:50
+msgid "Show this item"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:51
+msgid "Open link in a new tab"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:52
+msgid "Child items"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:53
+msgid "Item settings"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:54
+msgid "Item actions"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:55
+msgid "Move up"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:56
+msgid "Move down"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:57
+msgid "Nest under previous item"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:58
+msgid "Move out one level"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:59
+msgid "Duplicate item"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:60
+msgid "Remove item"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:61
+msgid "Edit item"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:62
+msgid "Drag to reorder"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:63
+msgid "Use at most 100 items and three navigation levels."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:64
+msgid "Unsaved menu changes"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:65
+msgid "Reload saved menu"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:66
+msgid "Discard changes"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:67
+msgid "Keep editing"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:68
+msgid "You have unsaved changes. Keep editing or discard them before changing menu locations."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:69
+msgid "Website pages"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:70
+msgid "More page choices"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:71
+msgid "Choose a website page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:72
+msgid "Add selected page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:73
+msgid "Menu structure"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:74
+msgid "Drag by the grip to reorder or nest items. Use each item’s action menu for keyboard ordering. Menus support three levels and 100 items."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:78
+msgid "Check labels, destinations, nesting and new-tab choices. Publishing uses this saved draft; later edits stay separate until another review."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:82
+msgid "Save your menu draft before reviewing publication."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:83
+msgid "Save the page in the page builder before requesting review."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:84
+msgid "Design page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:85
+msgid "Page settings"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:86
+msgid "Publication settings"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:87
+msgid "Create a page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:88
+msgid "No website pages yet. Create a page, design it, then submit the saved revision for review."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:91
+msgid "Next pages"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:92
+msgid "Previous pages"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:93
+msgid "Status"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:94
+msgid "Draft"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:95
+msgid "Awaiting review"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:96
+msgid "Approved"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:97
+msgid "Archived"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:98
+msgid "Submit for review"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:99
+msgid "Approve publication"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:100
+msgid "Return to author"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:101
+msgid "Archive page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:102
+msgid "Publication action"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:103
+msgid "Publication starts (UTC)"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:104
+msgid "Publication ends (UTC)"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:105
+msgid "Leave the start blank for immediate publication and the end blank for ongoing visibility. Scheduled pages appear automatically at their approved time."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:109
+msgid "Review note for the author"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:110
+msgid "Explain the requested correction. This note stays in website management."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:111
+msgid "Approval covers the saved page, all translations, routes and navigation settings. Any later edit needs a fresh review."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:115
+msgid "Public route"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:116
+msgid "Review this action"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:117
+msgid "Confirm reviewed action"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:118
+msgid "opens in a new tab"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:119
+msgid "Revise this action"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:120
+msgid "Reload saved page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:121
+msgid "The review is no longer current. Keep your entries and review the saved revision again."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:124
+msgid "Copy from another menu"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:125
+msgid "Copy items into this draft"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:126
+msgid "Copying replaces this draft only. Save and review before publishing."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:127
+msgid "Find in loaded pages"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:128
+msgid "Add child items to this dropdown before publishing."
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:22
+msgid "Website menus"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:23
+msgid "Website settings"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:27
+msgid "Build a clear path through your website"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:28
+msgid "Configure your website languages"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:29
+msgid "From saved draft to approved page"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:44
+msgid "Skip to main content"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:49
+msgid "Website management"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:50
+msgid "Staff workspace"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:73
+msgid "CAMPUS WEBSITE"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:76
+msgid "Arrange links into clear dropdown menus. Save your draft, inspect the structure and publish when ready."
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:79
+msgid "Design pages in the page builder, hand them over for review and choose when approved content becomes public."
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:87
+msgid "Website languages"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:88
+msgid "Active languages"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:89
+msgid "Use Ctrl or Command to select multiple languages."
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:99
+msgid "Save website settings"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:106
+msgid "Review before publishing"
+msgstr ""
+
+#: resources/views/shared/site-navigation.phtml:36
+msgid "(opens in a new tab)"
+msgstr ""
+
+#: resources/views/shared/site-navigation.phtml:45
+msgid "Open menu"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:8
+msgid "Back to pages"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:9
+msgid "Inspect saved design"
+msgstr ""

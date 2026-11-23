@@ -22,6 +22,15 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $website = \Application\Http\Controller\WebsitePublicationController::class;
+    $router->get('/sis/website/pages/', [$website, 'pages']);
+    $router->get('/sis/website/pages/{id}/', [$website, 'page']);
+    $router->post('/sis/website/pages/{id}/review/', [$website, 'reviewPage']);
+    $router->post('/sis/website/pages/{id}/confirm/', [$website, 'confirmPage']);
+    $router->get('/sis/website/menus/{slot}/', [$website, 'menu']);
+    $router->post('/sis/website/menus/{slot}/', [$website, 'saveMenu']);
+    $router->post('/sis/website/menus/{slot}/review/', [$website, 'reviewMenu']);
+    $router->post('/sis/website/menus/{slot}/publish/', [$website, 'publishMenu']);
     $credits = \Application\Http\Controller\SisCreditPolicyController::class;
     $router->get('/sis/ui/catalog/{kind}/{id}/credits/', [$credits, 'show']);
     $router->post('/sis/ui/catalog/{kind}/{id}/credits/', [$credits, 'save']);

@@ -8,7 +8,6 @@ use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Qubus\Http\Response;
 use Vihzhuo\Contracts\PageContract;
-use Vihzhuo\Repositories\PageRepository;
 
 use function Codefy\Framework\Helpers\view;
 
@@ -19,6 +18,20 @@ final class WebsiteManager extends \Vihzhuo\Modules\WebsiteManager\WebsiteManage
         ?string $route = null,
         ?string $action = null
     ): ResponseInterface {
+        if ($route === 'settings' && $action !== 'update') {
+            \Codefy\Framework\Proxy\Codefy::$PHP->make(
+                \Domain\Portal\Service\PagePublicationService::class,
+            )->directory();
+            return view('framework::backend/manager/site', [
+                'mode' => 'settings', 'languageOptions' => phpb_trans('languages'),
+                'activeLanguages' => array_keys(phpb_active_languages()),
+                'settingsAction' => phpb_url('website_manager', ['route' => 'settings', 'action' => 'update']),
+            ]);
+        }
+        if ($route === 'menus') {
+            \Codefy\Framework\Proxy\Codefy::$PHP->make(\Domain\Portal\Service\NavigationService::class)->get('primary');
+            return view('framework::backend/manager/site', ['mode' => 'menus']);
+        }
         if ($action === 'destroy' && $request->getMethod() !== 'POST') {
             return new Response(status: 405, headers: ['Allow' => 'POST']);
         }
@@ -28,10 +41,8 @@ final class WebsiteManager extends \Vihzhuo\Modules\WebsiteManager\WebsiteManage
 
     public function renderOverview(): ResponseInterface
     {
-        return view('framework::backend/manager/index', [
-            'title' => 'Website Manager',
-            'pages' => new PageRepository()->getAll(),
-        ]);
+        \Codefy\Framework\Proxy\Codefy::$PHP->make(\Domain\Portal\Service\PagePublicationService::class)->directory();
+        return view('framework::backend/manager/site', ['mode' => 'pages']);
     }
 
     public function renderPageSettings(?PageContract $page = null): ResponseInterface

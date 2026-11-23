@@ -1,0 +1,68 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_attr;
+use function Codefy\Framework\Helpers\trans_html;
+
+$esc = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$renderItems = static function (array $items, int $depth, string $prefix) use (&$renderItems, $esc): void {
+    foreach ($items as $position => $item) {
+        $submenuId = $prefix . '-' . $position;
+        $linkClass = $depth === 0 ? 'nav-link' : 'dropdown-item';
+        $classes = ($depth === 0 ? 'nav-item ' : '') . ($item['children'] !== [] ? 'dropdown ' : '');
+        $classes .= 'site-navigation-item';
+        ?>
+        <?php if ($item['type'] === 'divider'): ?>
+            <li><hr class="dropdown-divider"></li>
+        <?php else: ?>
+            <li class="<?= $esc($classes) ?>">
+                <div class="site-navigation-heading">
+                    <?php if ($item['url'] !== null): ?>
+                        <a class="<?= $esc($linkClass) ?>" href="<?= $esc($item['url']) ?>"
+                            <?php if ($item['description'] !== ''): ?>
+                                title="<?= $esc($item['description']) ?>"
+                                aria-description="<?= $esc($item['description']) ?>"
+                            <?php endif; ?>
+                            <?php if ($item['new_tab']): ?>
+                                target="_blank" rel="noopener noreferrer"
+                            <?php endif; ?>
+                        >
+                            <?php if ($item['icon'] !== ''): ?>
+                                <i class="bi bi-<?= $esc($item['icon']) ?> me-2" aria-hidden="true"></i>
+                            <?php endif; ?>
+                            <?= $esc($item['label']) ?>
+                            <?php if ($item['new_tab']): ?>
+                                <span class="visually-hidden"><?= trans_html('(opens in a new tab)') ?></span>
+                            <?php endif; ?>
+                        </a>
+                    <?php endif; ?>
+                    <?php if ($item['children'] !== []): ?>
+                        <button type="button" class="<?= $esc($linkClass) ?> dropdown-toggle site-navigation-toggle"
+                            data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false"
+                            aria-controls="<?= $esc($submenuId) ?>"
+                            <?php if ($item['url'] !== null): ?>
+                                aria-label="<?= trans_attr('Open menu') ?>: <?= $esc($item['label']) ?>"
+                            <?php endif; ?>
+                            <?php if ($item['description'] !== ''): ?>
+                                aria-description="<?= $esc($item['description']) ?>"
+                            <?php endif; ?>
+                        >
+                            <?php if ($item['url'] === null): ?>
+                                <?php if ($item['icon'] !== ''): ?>
+                                    <i class="bi bi-<?= $esc($item['icon']) ?> me-2" aria-hidden="true"></i>
+                                <?php endif; ?>
+                                <?= $esc($item['label']) ?>
+                            <?php endif; ?>
+                        </button>
+                        <ul class="dropdown-menu site-navigation-menu" id="<?= $esc($submenuId) ?>">
+                            <?php $renderItems($item['children'], $depth + 1, $submenuId); ?>
+                        </ul>
+                    <?php endif; ?>
+                </div>
+            </li>
+        <?php endif; ?>
+        <?php
+    }
+};
+$renderItems($items, $depth ?? 0, $prefix ?? 'campus-menu');
