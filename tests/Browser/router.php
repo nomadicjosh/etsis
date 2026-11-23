@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-// Isolated local fixture: no application bootstrap, credentials or institutional database.
+// Isolated local view fixture: no service boot or institutional database queries.
 if (PHP_SAPI !== 'cli-server') {
     http_response_code(404);
     exit;
@@ -15,6 +15,13 @@ if (is_string($path) && (str_starts_with($path, '/assets/') || str_starts_with($
 }
 
 require $root . '/vendor/autoload.php';
+
+// Supply only the view facade used by layout language/charset attributes; do not boot services.
+$viewConfig = \Qubus\Config\Collection::factory([]);
+$viewConfig->setConfigKey('app', ['language' => 'en', 'charset' => 'UTF-8', 'locale_domain' => 'etsis']);
+$viewApp = \Codefy\Framework\Helpers\get_fresh_bootstrap();
+$viewApp->delegate(\Qubus\Config\ConfigContainer::class, static fn () => $viewConfig);
+$viewApp->delegate('codefy.config', static fn () => $viewConfig);
 
 if ($path === '/portal/api/events/') {
     require __DIR__ . '/public-events-fixture.php';

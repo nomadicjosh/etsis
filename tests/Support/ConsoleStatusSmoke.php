@@ -395,6 +395,9 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/ProfileRequestsBootChecks.php';
             $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-student-decision-projections') {
+            require __DIR__ . '/StudentDecisionProjectionBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-application-projections') {
             require __DIR__ . '/ApplicationProjectionBootChecks.php';
             $status = 0;

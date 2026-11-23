@@ -416,7 +416,7 @@ window.createWorkspacePeople = function (ui) {
         });
         const extra = [button("Application history", () => mayLeave() && decisionHistory(row))];
         if (can('sis:admissions:manage') && can('sis:audit:read') && can('sis:history:verify')) {
-            const label = ui.historyCheckLabels?.['Check application history'] || 'Check application history';
+            const label = ui.historyCheckLabels?.check_application || 'Check application history';
             extra.push(button(label, () => mayLeave() && ui.historyChecks().open('application', row.id, () => application(row))));
         }
         if (can("sis:person:manage"))
@@ -1112,9 +1112,9 @@ window.createWorkspacePeople = function (ui) {
     }
     function documentRetention() {
         const labels = ui.documentRetentionLabels || {};
-        const body = openDrawer(labels['Document retention'] || 'Document retention', labels['ADMISSIONS SETTINGS'] || 'ADMISSIONS SETTINGS');
+        const body = openDrawer(labels.retention || 'Document retention', labels.settings_heading || 'ADMISSIONS SETTINGS');
         let editor = null;
-        body.append(button(labels['Back to Admissions'] || 'Back to Admissions', () => (editor?.beforeLeave() ?? true) && ui.closeDrawer(), 'btn-link'));
+        body.append(button(labels.back_admissions || 'Back to Admissions', () => (editor?.beforeLeave() ?? true) && ui.closeDrawer(), 'btn-link'));
         editor = window.createAdmissionRetention({ node, request, task, notify, labels }).mountPolicy(body);
     }
     function admissionPolicy() {

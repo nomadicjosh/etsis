@@ -1217,3 +1217,47 @@ msgstr ""
 #: resources/views/backend/workspace/transcript-standing-labels.php:79
 msgid "No selected academic standing is included through this date."
 msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:8
+msgid "Program standing"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:9
+msgid "Retained enrollment load"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:10
+msgid "Program pursuit identity"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:11
+msgid "Standing periods and history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:12
+msgid "Retained load decision and projection"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:13
+msgid "No recorded standing observed"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:14
+msgid "No standing decision was found for this pursuit. Earlier standing remains unknown."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:17
+msgid "Standing periods checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:18
+msgid "Retained determinations checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:19
+msgid "Check standing history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:20
+msgid "Check retained load history"
+msgstr ""

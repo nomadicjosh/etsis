@@ -9,8 +9,73 @@
         notify,
         labels = {},
     }) => {
-        const text = (value) => labels[value] || value;
-        const button = (label, run, style = "btn-outline-secondary") =>
+        const fallbackLabels = {
+            add_category: "Add retention category",
+            category_available: "Available for new selections",
+            cancel_classification: "Cancel classification",
+            categories_help: "Categories set future upload defaults. Existing files keep their recorded basis and deadlines.",
+            category_code: "Category code",
+            category_name: "Category name",
+            choose_category: "Choose a retention category",
+            classification_history: "Classification history",
+            classify_document: "Classify document",
+            confirm_change: "Confirm retention change",
+            current_deadline: "Current deadline",
+            current_revision: "Current policy revision",
+            classification_help: "Days run from the original upload. A shorter category never reduces the existing deadline.",
+            default: "Default",
+            upload_default: "Default for new uploads",
+            fallback: "Deployment fallback",
+            uncategorized_fallback: "",
+            fallback_days: "Deployment fallback days",
+            discard_changes: "Discard retention changes",
+            document_category: "Document category",
+            load_failed: "Document retention could not be loaded.",
+            earlier_decisions: "Earlier decisions",
+            earlier_policies: "Earlier policies",
+            unknown_basis: "Earlier retention basis unknown",
+            history_empty: "Earlier retention decisions were not recorded.",
+            existing_files_help: "Existing file deadlines and holds will not change.",
+            file_access_help: "File access, existing holds and decision evidence stay unchanged.",
+            finish_changes: "Finish or discard retention changes before starting another task.",
+            upload_policy: "Initial upload policy",
+            loading_retention: "Loading document retention…",
+            loading_history: "Loading retention history…",
+            new_category: "New category",
+            newer_decisions: "Newer decisions",
+            policy_revision: "Policy revision",
+            proposed_deadline: "Proposed deadline",
+            classification_reason: "Reason for classification",
+            policy_reason: "Reason for policy change",
+            refresh_policy: "Refresh retention policy",
+            remove_category: "Remove unsaved category",
+            retain_through: "Retain through",
+            retained_policy: "Retained policy",
+            retained_decisions: "Retained retention decisions",
+            access_unavailable: "Retention access is no longer available.",
+            retention_category: "Retention category",
+            saved: "Retention change saved.",
+            retention_days: "Retention days from upload",
+            history_loaded: "Retention history loaded.",
+            review_heading: "Retention review",
+            retired: "Retired",
+            retry_retention: "Retry document retention",
+            review_classification: "Review document classification",
+            review_policy: "Review institutional retention",
+            review_ready: "Review ready. Confirm or revise this change.",
+            review_change: "Review retention change",
+            reviewing: "Reviewing retention change…",
+            revise_change: "Revise retention change",
+            staff_classification: "Staff classification",
+            category_limit: "The 25-category limit is reached. Existing identities must be retained.",
+            request_incomplete: "The request did not finish. Your review is still available.",
+            unavailable_account: "Unavailable account",
+            untitled_category: "Untitled category",
+            upload_help: "Upload availability and scanner approval remain deployment controls.",
+            days_from_upload: "days from upload",
+        };
+        const text = key => labels[key] || fallbackLabels[key];
+        const button = (key, run, style = "btn-outline-secondary") =>
             node(
                 "button",
                 {
@@ -18,16 +83,16 @@
                     class: `btn ${style}`,
                     onclick: (event) => task(run, event.currentTarget),
                 },
-                text(label),
+                text(key),
             );
-        const field = (label, control) =>
+        const field = (key, control) =>
             node(
                 "div",
                 { class: "mb-3" },
                 node(
                     "label",
                     { for: control.id, class: "form-label" },
-                    text(label),
+                    text(key),
                 ),
                 control,
             );
@@ -51,23 +116,23 @@
                     ? [
                           value.category
                               ? `${value.category.code} · ${value.category.title}`
-                              : text("Deployment fallback"),
+                              : text("fallback"),
                           " · ",
                           value.days,
                           " ",
-                          text("days from upload"),
+                          text("days_from_upload"),
                           ...(value.policy_id
                               ? [
                                     " · ",
-                                    text("Policy revision"),
+                                    text("policy_revision"),
                                     " ",
                                     value.policy_revision,
                                 ]
                               : []),
                       ]
-                    : text("Earlier retention basis unknown"),
+                    : text("unknown_basis"),
             );
-        const title = (label) => node("h3", { class: "h6" }, text(label));
+        const title = (key) => node("h3", { class: "h6" }, text(key));
         function reviewed(
             form,
             fields,
@@ -87,13 +152,13 @@
                 pending = false;
             const preview = node("section", {
                 class: "record-section",
-                "aria-label": text("Retention review"),
+                "aria-label": text("review_heading"),
                 hidden: true,
             });
             const review = node(
                 "button",
                 { type: "submit", class: "btn btn-primary" },
-                text("Review retention change"),
+                text("review_change"),
             );
             const actions = node(
                 "div",
@@ -109,7 +174,7 @@
                 )
                     return true;
                 status.textContent = text(
-                    "Finish or discard retention changes before starting another task.",
+                    "finish_changes",
                 );
                 (proof
                     ? preview.querySelector("button")
@@ -127,13 +192,13 @@
                 } catch (error) {
                     if (alive()) {
                         status.textContent = text(
-                            "The request did not finish. Your review is still available.",
+                            "request_incomplete",
                         );
                         if (error.status === 403) {
                             if (denied) denied();
                             else form.replaceChildren();
                             status.textContent = text(
-                                "Retention access is no longer available.",
+                                "access_unavailable",
                             );
                         }
                     }
@@ -150,7 +215,7 @@
                 task(async () => {
                     await run(async () => {
                         status.textContent = text(
-                            "Reviewing retention change…",
+                            "reviewing",
                         );
                         proof = await request(
                             `${endpoint}review/`,
@@ -167,7 +232,7 @@
                                 "div",
                                 { class: "record-form-actions" },
                                 button(
-                                    "Confirm retention change",
+                                    "confirm_change",
                                     () =>
                                         beforeRequest() &&
                                         run(async () => {
@@ -183,14 +248,14 @@
                                                 proof = null;
                                                 notify(
                                                     text(
-                                                        "Retention change saved.",
+                                                        "saved",
                                                     ),
                                                 );
                                             }
                                         }),
                                     "btn-primary",
                                 ),
-                                button("Revise retention change", async () => {
+                                button("revise_change", async () => {
                                     if (pending || !alive()) return;
                                     proof = null;
                                     fields.disabled = false;
@@ -202,7 +267,7 @@
                             ),
                         );
                         status.textContent = text(
-                            "Review ready. Confirm or revise this change.",
+                            "review_ready",
                         );
                     });
                     await new Promise((resolve) =>
@@ -232,10 +297,10 @@
             const content = node("section", {
                 hidden: true,
                 id: `retention-history-${++sequence}`,
-                "aria-label": text("Retained retention decisions"),
+                "aria-label": text("retained_decisions"),
             });
             const toggle = button(
-                policy ? "Earlier policies" : "Classification history",
+                policy ? "earlier_policies" : "classification_history",
                 async () => {
                     if (!beforeChange()) return;
                     if (opened) {
@@ -252,7 +317,7 @@
             async function load(next, previous) {
                 if (!beforeChange()) return;
                 const action = async () => {
-                    status.textContent = text("Loading retention history…");
+                    status.textContent = text("loading_history");
                     const data = await request(
                         `${endpoint}${next === null ? "" : `?before=${encodeURIComponent(next)}`}`,
                     );
@@ -269,10 +334,10 @@
                             { class: "border-top pt-3 mt-3" },
                             title(
                                 policy
-                                    ? "Retained policy"
+                                    ? "retained_policy"
                                     : record.source === "upload"
-                                      ? "Initial upload policy"
-                                      : "Staff classification",
+                                      ? "upload_policy"
+                                      : "staff_classification",
                             ),
                             node(
                                 "p",
@@ -280,7 +345,7 @@
                                 stamp(record.recorded_at),
                                 " · ",
                                 record.actor_name ||
-                                    text("Unavailable account"),
+                                    text("unavailable_account"),
                             ),
                         );
                         if (policy) {
@@ -288,7 +353,7 @@
                                 node(
                                     "p",
                                     {},
-                                    text("Policy revision"),
+                                    text("policy_revision"),
                                     " ",
                                     record.revision,
                                 ),
@@ -304,10 +369,10 @@
                                         " · ",
                                         category.days,
                                         " ",
-                                        text("days from upload"),
+                                        text("days_from_upload"),
                                         category.active
                                             ? ""
-                                            : ` · ${text("Retired")}`,
+                                            : ` · ${text("retired")}`,
                                     ),
                                 );
                         } else
@@ -317,7 +382,7 @@
                                 node(
                                     "p",
                                     { class: "form-text" },
-                                    text("Retain through"),
+                                    text("retain_through"),
                                     " ",
                                     stamp(record.expires_after),
                                 ),
@@ -338,7 +403,7 @@
                                 "p",
                                 {},
                                 text(
-                                    "Earlier retention decisions were not recorded.",
+                                    "history_empty",
                                 ),
                             ),
                         );
@@ -347,18 +412,18 @@
                     });
                     if (trail.length)
                         paging.append(
-                            button("Newer decisions", () =>
+                            button("newer_decisions", () =>
                                 load(trail.at(-1), trail.slice(0, -1)),
                             ),
                         );
                     if (data.next_cursor !== null)
                         paging.append(
-                            button("Earlier decisions", () =>
+                            button("earlier_decisions", () =>
                                 load(data.next_cursor, [...trail, cursor]),
                             ),
                         );
                     content.replaceChildren(list, paging);
-                    status.textContent = text("Retention history loaded.");
+                    status.textContent = text("history_loaded");
                 };
                 try {
                     if (write) await write(action);
@@ -368,7 +433,7 @@
                         if (denied) denied();
                         else container.replaceChildren();
                         status.textContent = text(
-                            "Retention access is no longer available.",
+                            "access_unavailable",
                         );
                     }
                     throw error;
@@ -396,7 +461,7 @@
             async function load() {
                 const ticket = ++generation;
                 loading = true;
-                status.textContent = text("Loading document retention…");
+                status.textContent = text("loading_retention");
                 try {
                     const data = await request("/sis/document-retention/");
                     if (!current(ticket)) return;
@@ -404,7 +469,7 @@
                 } catch (error) {
                     if (current(ticket)) {
                         status.textContent = text(
-                            "Document retention could not be loaded.",
+                            "load_failed",
                         );
                         if (error.status === 403) body.replaceChildren();
                     }
@@ -437,7 +502,7 @@
                         node(
                             "option",
                             { value: "" },
-                            text("Deployment fallback (uncategorized)"),
+                            text("uncategorized_fallback"),
                         ),
                         ...choices
                             .filter((choice) => choice.active.checked)
@@ -445,10 +510,10 @@
                                 node(
                                     "option",
                                     { value: choice.id },
-                                    choice.code.value || text("New category"),
+                                    choice.code.value || text("new_category"),
                                     " · ",
                                     choice.name.value ||
-                                        text("Untitled category"),
+                                        text("untitled_category"),
                                 ),
                             ),
                     );
@@ -484,22 +549,22 @@
                     const card = node(
                         "fieldset",
                         { class: "record-form-section retention-category" },
-                        node("legend", {}, text("Retention category")),
+                        node("legend", {}, text("retention_category")),
                         node(
                             "div",
                             { class: "row g-3" },
                             node(
                                 "div",
                                 { class: "col-12 col-md-4" },
-                                field("Category code", code),
+                                field("category_code", code),
                             ),
                             node(
                                 "div",
                                 { class: "col-12 col-md-8" },
-                                field("Category name", name),
+                                field("category_name", name),
                             ),
                         ),
-                        field("Retention days from upload", days),
+                        field("retention_days", days),
                         node(
                             "div",
                             { class: "form-check" },
@@ -507,7 +572,7 @@
                             node(
                                 "label",
                                 { class: "form-check-label", for: active.id },
-                                text("Available for new selections"),
+                                text("category_available"),
                             ),
                         ),
                     );
@@ -517,7 +582,7 @@
                     if (!existing)
                         card.append(
                             button(
-                                "Remove unsaved category",
+                                "remove_category",
                                 async () => {
                                     choices.splice(choices.indexOf(item), 1);
                                     ids.push(item.id);
@@ -535,10 +600,10 @@
                 for (const category of data.definition.categories)
                     add(category, true);
                 defaults(data.definition.default_id || "");
-                const addButton = button("Add retention category", async () => {
+                const addButton = button("add_category", async () => {
                     if (!ids.length) {
                         status.textContent = text(
-                            "The 25-category limit is reached. Existing identities must be retained.",
+                            "category_limit",
                         );
                         return;
                     }
@@ -555,27 +620,27 @@
                         "p",
                         { class: "form-text" },
                         text(
-                            "Categories set future upload defaults. Existing files keep their recorded basis and deadlines.",
+                            "categories_help",
                         ),
                     ),
                     node(
                         "p",
                         { class: "form-text" },
                         text(
-                            "Upload availability and scanner approval remain deployment controls.",
+                            "upload_help",
                         ),
                     ),
-                    field("Default for new uploads", defaultInput),
+                    field("upload_default", defaultInput),
                     node(
                         "p",
                         { class: "form-text" },
-                        text("Deployment fallback days"),
+                        text("fallback_days"),
                         ": ",
                         data.deployment_days,
                     ),
                     entries,
                     node("div", { class: "record-form-actions" }, addButton),
-                    field("Reason for policy change", reason),
+                    field("policy_reason", reason),
                 );
                 form.append(fields);
                 body.replaceChildren(form);
@@ -603,22 +668,22 @@
                         complete: load,
                         denied: () => body.replaceChildren(),
                         summary: (proof) => [
-                            title("Review institutional retention"),
+                            title("review_policy"),
                             node(
                                 "p",
                                 {},
                                 text(
-                                    "Existing file deadlines and holds will not change.",
+                                    "existing_files_help",
                                 ),
                             ),
                             node(
                                 "p",
                                 { class: "text-break" },
-                                text("Default for new uploads"),
+                                text("upload_default"),
                                 ": ",
                                 proof.definition.default_id === null
                                     ? text(
-                                          "Deployment fallback (uncategorized)",
+                                          "uncategorized_fallback",
                                       )
                                     : proof.definition.categories.find(
                                           (category) =>
@@ -636,13 +701,13 @@
                                     " · ",
                                     category.days,
                                     " ",
-                                    text("days from upload"),
+                                    text("days_from_upload"),
                                     category.id === proof.definition.default_id
-                                        ? ` · ${text("Default")}`
+                                        ? ` · ${text("default")}`
                                         : "",
                                     category.active
                                         ? ""
-                                        : ` · ${text("Retired")}`,
+                                        : ` · ${text("retired")}`,
                                 ),
                             ),
                             node(
@@ -655,7 +720,7 @@
                 );
                 editor.actions.append(
                     button(
-                        "Discard retention changes",
+                        "discard_changes",
                         async () => {
                             if (!editor.pending()) render(data, ticket);
                         },
@@ -671,14 +736,14 @@
                     denied: () => body.replaceChildren(),
                 });
                 extra.append(
-                    button("Refresh retention policy", async () => {
+                    button("refresh_policy", async () => {
                         if (guard()) await load();
                     }),
                 );
-                status.textContent = text("Current policy revision");
+                status.textContent = text("current_revision");
                 status.append(" ", data.revision);
             }
-            const refresh = button("Retry document retention", load);
+            const refresh = button("retry_retention", load);
             body.append(refresh);
             task(load, refresh);
             return { beforeLeave: guard };
@@ -703,14 +768,14 @@
             const section = node(
                 "section",
                 { class: "record-section document-retention-section" },
-                title("Document category"),
+                title("document_category"),
                 basis(item.retention_basis),
             );
             const formArea = node("div");
             const guard = () => !editing || (editor?.beforeLeave() ?? false);
             if (!["purging", "purged"].includes(item.status))
                 section.append(
-                    button("Classify document", async () => {
+                    button("classify_document", async () => {
                         if (!beforeChange()) return;
                         editing = true;
                         const ticket = ++epoch;
@@ -736,7 +801,7 @@
                                 node(
                                     "option",
                                     { value: "" },
-                                    text("Choose a retention category"),
+                                    text("choose_category"),
                                 ),
                                 ...data.definition.categories
                                     .filter((choice) => choice.active)
@@ -760,13 +825,13 @@
                                 required: true,
                             });
                             fields.append(
-                                field("Retention category", category),
-                                field("Reason for classification", reason),
+                                field("retention_category", category),
+                                field("classification_reason", reason),
                                 node(
                                     "p",
                                     { class: "form-text" },
                                     text(
-                                        "Days run from the original upload. A shorter category never reduces the existing deadline.",
+                                        "classification_help",
                                     ),
                                 ),
                             );
@@ -792,20 +857,20 @@
                                     complete: reload,
                                     beforeRequest,
                                     summary: (proof) => [
-                                        title("Review document classification"),
+                                        title("review_classification"),
                                         basis(proof.before),
                                         basis(proof.after),
                                         node(
                                             "p",
                                             {},
-                                            text("Current deadline"),
+                                            text("current_deadline"),
                                             ": ",
                                             stamp(proof.expires_before),
                                         ),
                                         node(
                                             "p",
                                             {},
-                                            text("Proposed deadline"),
+                                            text("proposed_deadline"),
                                             ": ",
                                             stamp(proof.expires_after),
                                         ),
@@ -813,7 +878,7 @@
                                             "p",
                                             { class: "form-text" },
                                             text(
-                                                "File access, existing holds and decision evidence stay unchanged.",
+                                                "file_access_help",
                                             ),
                                         ),
                                         node(
@@ -828,7 +893,7 @@
                             );
                             editor.actions.append(
                                 button(
-                                    "Cancel classification",
+                                    "cancel_classification",
                                     async () => {
                                         if (editor.pending()) return;
                                         epoch++;

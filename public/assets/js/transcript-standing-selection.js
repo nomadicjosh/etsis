@@ -1,29 +1,48 @@
 /* Institution reference choices only. Drafts and pending lookup state stay in this drawer. */
 'use strict';
 window.createTranscriptStandingSelection = ({ node, request, task, labels = {}, container, saved, enabled, changed, denied }) => {
-    const text = value => labels[value] || value;
+    const fallbackLabels = {
+        remove: "Remove",
+        all_definitions: "All recorded standing definitions",
+        selected_definitions: "Selected standing definitions",
+        unavailable_definition: "Unavailable definition",
+        find_definitions: "Find definitions",
+        more_definitions: "More definitions",
+        previous_definitions: "Previous definitions",
+        available_definitions: "Available standing definitions",
+        find_definition: "Find a standing definition",
+        include_standings: "Standings to include",
+        selection_required: "Choose at least one definition or include all standings.",
+        remove_selection: "Remove selection",
+        loading_definitions: "Loading standing definitions…",
+        retired_definition: "Retired definition",
+        selection_hint: "Choose the definitions to include. Other recorded standings will be omitted.",
+        no_definitions: "No standing definitions match this search.",
+        lookup_failed: "Standing definitions could not be loaded. Your choices are kept; try again.",
+    };
+    const text = key => labels[key] || fallbackLabels[key];
     let next = null, applied = '', sequence = 0, loading = false, loaded = false, cursor = null, stack = [];
     const selected = new Map((saved.standing_choices || []).map(item => [item.id, item]));
     for (const id of saved.standing_definitions || []) {
-        if (!selected.has(id)) selected.set(id, { id, code: text('Unavailable definition'), title: '' });
+        if (!selected.has(id)) selected.set(id, { id, code: text('unavailable_definition'), title: '' });
     }
     const mode = node('select', { id: 'transcript-standing-mode', class: 'form-select' },
-        node('option', { value: 'all' }, text('All recorded standing definitions')),
-        node('option', { value: 'selected' }, text('Selected standing definitions')));
+        node('option', { value: 'all' }, text('all_definitions')),
+        node('option', { value: 'selected' }, text('selected_definitions')));
     mode.value = saved.standing_definitions === null || saved.standing_definitions === undefined ? 'all' : 'selected';
     const search = node('input', { id: 'transcript-standing-search', type: 'search', class: 'form-control', maxlength: '80' });
-    const searchButton = node('button', { type: 'button', class: 'btn btn-outline-primary' }, text('Find definitions'));
-    const more = node('button', { type: 'button', class: 'btn btn-outline-primary' }, text('More definitions'));
-    const previous = node('button', { type: 'button', class: 'btn btn-outline-primary' }, text('Previous definitions'));
+    const searchButton = node('button', { type: 'button', class: 'btn btn-outline-primary' }, text('find_definitions'));
+    const more = node('button', { type: 'button', class: 'btn btn-outline-primary' }, text('more_definitions'));
+    const previous = node('button', { type: 'button', class: 'btn btn-outline-primary' }, text('previous_definitions'));
     const status = node('p', { class: 'form-text', role: 'status' });
-    const choices = node('div', { 'aria-label': text('Available standing definitions'), role: 'group' });
-    const picked = node('div', { 'aria-label': text('Selected standing definitions'), role: 'group' });
+    const choices = node('div', { 'aria-label': text('available_definitions'), role: 'group' });
+    const picked = node('div', { 'aria-label': text('selected_definitions'), role: 'group' });
     const picker = node('div', { class: 'mt-3' }, picked,
         node('div', { class: 'record-field-group mt-3' },
-            node('label', { for: search.id, class: 'form-label' }, text('Find a standing definition')),
+            node('label', { for: search.id, class: 'form-label' }, text('find_definition')),
             search, node('div', { class: 'd-flex gap-2 flex-wrap mt-2' }, searchButton)), status, choices,
         node('div', { class: 'd-flex gap-2 flex-wrap' }, previous, more));
-    container.append(node('label', { for: mode.id, class: 'form-label' }, text('Standings to include')), mode,
+    container.append(node('label', { for: mode.id, class: 'form-label' }, text('include_standings')), mode,
         node('p', { class: 'form-text' }, (labels.selection_help || 'Choose up to 25 standing definitions. Retired definitions can still identify earlier recorded periods. Transcripts keep the original recorded labels.')),
         picker);
     function alive() { return container.isConnected; }
@@ -42,14 +61,14 @@ window.createTranscriptStandingSelection = ({ node, request, task, labels = {}, 
         changed();
     }
     function renderSelected() {
-        picked.replaceChildren(node('h4', { class: 'h6' }, text('Selected standing definitions')));
-        if (!selected.size) picked.append(node('p', { class: 'form-text' }, text('Choose at least one definition or include all standings.')));
+        picked.replaceChildren(node('h4', { class: 'h6' }, text('selected_definitions')));
+        if (!selected.size) picked.append(node('p', { class: 'form-text' }, text('selection_required')));
         for (const item of selected.values()) {
             const remove = node('button', { type: 'button', class: 'btn btn-sm btn-outline-secondary',
-                'aria-label': `${text('Remove selection')} ${item.code}`, onclick: () => {
+                'aria-label': `${text('remove_selection')} ${item.code}`, onclick: () => {
                     selected.delete(item.id); renderSelected(); refresh();
                     (document.getElementById(`transcript-standing-choice-${item.id}`) || mode).focus();
-                } }, node('i', { class: 'bi bi-x-lg me-1', 'aria-hidden': 'true' }), text('Remove'));
+                } }, node('i', { class: 'bi bi-x-lg me-1', 'aria-hidden': 'true' }), text('remove'));
             picked.append(node('div', { class: 'd-flex flex-wrap gap-2 align-items-start justify-content-between border rounded p-2 mb-2' },
                 node('span', { class: 'transcript-standing-picked-label text-break' },
                     [item.code, item.title].filter(Boolean).join(' · ')), remove));
@@ -57,7 +76,7 @@ window.createTranscriptStandingSelection = ({ node, request, task, labels = {}, 
     }
     async function load(term, after = null, trail = []) {
         const ticket = ++sequence;
-        loading = true; status.textContent = text('Loading standing definitions…'); refresh();
+        loading = true; status.textContent = text('loading_definitions'); refresh();
         try {
             const query = new URLSearchParams({ search: term, ...(after ? { after } : {}) });
             const page = await request(`/sis/transcript-policy/standings/?${query}`);
@@ -74,14 +93,14 @@ window.createTranscriptStandingSelection = ({ node, request, task, labels = {}, 
                     } });
                 choices.append(node('div', { class: 'form-check mb-3 text-break' }, input,
                     node('label', { for: input.id, class: 'form-check-label' }, `${item.code} · ${item.title}`,
-                        item.active ? '' : ` · ${text('Retired definition')}`)));
+                        item.active ? '' : ` · ${text('retired_definition')}`)));
             }
-            status.textContent = page.items.length ? text('Choose the definitions to include. Other recorded standings will be omitted.')
-                : text('No standing definitions match this search.');
+            status.textContent = page.items.length ? text('selection_hint')
+                : text('no_definitions');
             renderSelected();
         } catch (error) {
             if (alive() && ticket === sequence) {
-                status.textContent = text('Standing definitions could not be loaded. Your choices are kept; try again.');
+                status.textContent = text('lookup_failed');
                 if ([401, 403].includes(error.status)) denied();
                 throw error;
             }

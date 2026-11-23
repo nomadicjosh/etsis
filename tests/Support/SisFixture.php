@@ -266,6 +266,22 @@ final class SisFixture
         );
     }
 
+    public function studentDecisionVerifier(): \Infrastructure\Projection\SqlStudentDecisionProjectionVerifier
+    {
+        $history = \EventStoreFixture::history($this->connection->queryBuilder());
+        return new \Infrastructure\Projection\SqlStudentDecisionProjectionVerifier(
+            $this->sql,
+            new \Domain\Student\Service\StudentStandingLedger(
+                new \Infrastructure\Persistence\Repository\SqlStudentStandingRepository($this->sql),
+                $history,
+            ),
+            new \Domain\Student\Service\LoadDeterminationLedger(
+                new \Infrastructure\Persistence\Repository\SqlLoadDeterminationRepository($this->sql),
+                $history,
+            ),
+        );
+    }
+
     public function standingService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Advising\Service\AdvisorProgressAccess $advisors = null,

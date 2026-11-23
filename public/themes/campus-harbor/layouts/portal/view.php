@@ -2,6 +2,7 @@
 
 declare(strict_types=1);
 
+use Codefy\Framework\Proxy\Codefy;
 use Vihzhuo\Core\ThemeContext;
 
 $esc = static fn(mixed $value): string => htmlspecialchars(
@@ -19,11 +20,12 @@ $themeAsset = $theme?->getAssetPath("public/css/theme.css") ?? "/themes/campus-h
 $title = $page->getTranslation("meta_title", "en") ?: $portalName;
 ?>
 <!doctype html>
-<html lang="en">
+<html lang="<?=Codefy::$PHP->configContainer->string('app.language');?>">
     <head>
-        <meta charset="utf-8" />
+        <meta charset="<?=Codefy::$PHP->configContainer->string('app.charset');?>" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta name="referrer" content="same-origin" />
+        <meta content="noindex,nofollow" name="robots">
         <title><?= $esc($title) ?> · <?= $esc($portalName) ?></title>
         <link rel="icon" href="/assets/images/workspace-mark.svg" type="image/svg+xml" />
         <link rel="stylesheet" href="/assets/vendor/bootstrap.min.css" />

@@ -260,6 +260,10 @@ final class EnrollmentReinstatementQuantityTest extends TestCase
             $s->audit,
             $s->clock,
             new \Domain\Shared\Service\ReviewProof($s->dropCipher, $s->clock),
+            new \Domain\Student\Service\LoadDeterminationLedger(
+                new \Infrastructure\Persistence\Repository\SqlLoadDeterminationRepository($s->sql),
+                \EventStoreFixture::history($s->connection->queryBuilder()),
+            ),
         );
     }
     public function testNewLoadReviewsUseTheRestoredQuantityAndEarlierDeterminationsRemainIntact(): void

@@ -334,10 +334,10 @@
             notify({ approve: 'Publication approved.', submit: 'Draft submitted for review.', return: 'Draft returned to its author.', archive: 'Content archived.' }[action]);
             drawer.hide(); await loadDirectory();
         } });
-    const enrollmentLoad = window.createWorkspaceEnrollmentLoad({ node, request, task, can, openDrawer });
+    const enrollmentLoad = window.createWorkspaceEnrollmentLoad({ historyChecks: () => historyChecks, historyCheckLabels: config.history_check_labels, node, request, task, can, openDrawer });
     const standingStudio = window.createWorkspaceStanding({ node, request, task, can, openDrawer, degreeAudit: () => degreeAuditStudio });
     const advisingStudio = window.createWorkspaceAdvising({ node, request, task, can, openDrawer });
-    const studentStudio = window.createWorkspaceStudents({ historyChecks: () => historyChecks, prerequisitePermissions: () => prerequisitePermissions, enrollmentLoad: () => enrollmentLoad, standing: () => standingStudio, advising: () => advisingStudio, node, request, task, can, actionMenu, recordSummary, messageRecord: operations.messageRecord, disposeActionMenus, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
+    const studentStudio = window.createWorkspaceStudents({ historyCheckLabels: config.history_check_labels, historyChecks: () => historyChecks, prerequisitePermissions: () => prerequisitePermissions, enrollmentLoad: () => enrollmentLoad, standing: () => standingStudio, advising: () => advisingStudio, node, request, task, can, actionMenu, recordSummary, messageRecord: operations.messageRecord, disposeActionMenus, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
     relationalStudio = window.createWorkspaceReportStudio({
         node, request, requestFile, task, can, table, openDrawer, actionMenu, disposeActionMenus,
         closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(),
@@ -592,7 +592,7 @@
         if (section === 'applications') tools.append(tool('Withdrawal requests', () => peopleStudio.withdrawalQueue(),
             'Review applicant withdrawal requests', 'inbox'));
         if (section === 'applications' && can('sis:admissions:manage') && can('sis:admissions:documents:retain')) tools.append(
-            tool(config.document_retention_labels?.['Document retention'] || 'Document retention', () => peopleStudio.documentRetention(), config.document_retention_labels?.['Configure document retention'] || 'Configure document retention', 'archive'));
+            tool(config.document_retention_labels?.retention || 'Document retention', () => peopleStudio.documentRetention(), config.document_retention_labels?.configure_retention || 'Configure document retention', 'archive'));
         if (section === 'applications' && can('sis:admissions:policy')) tools.append(
             tool('Policies', () => peopleStudio.admissionPolicy(), 'Configure admissions policies', 'sliders'));
         if (section === 'registration' && can('sis:registration:manage')) tools.append(

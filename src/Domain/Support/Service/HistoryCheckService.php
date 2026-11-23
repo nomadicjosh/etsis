@@ -21,6 +21,9 @@ use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\StudentRecordRepository;
+use Domain\Student\Repository\StudentDecisionProjectionVerifier;
+use Domain\Student\Repository\LoadDeterminationRepository;
+use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Support\Enum\HistoryCheckSubject;
 use Domain\Support\HistoryCheckReceipt;
 use Domain\Support\HistoryCheckScope;
@@ -36,6 +39,8 @@ final readonly class HistoryCheckService
         private AcademicProjectionVerifier $academics,
         private AccountProjectionVerifier $accounts,
         private ApplicationProjectionVerifier $applications,
+        private StudentDecisionProjectionVerifier $decisions,
+        private LoadDeterminationRepository $loads,
         private AdmissionsRepository $admissions,
         private PersonProfileRepository $people,
         private StudentRecordRepository $students,
@@ -57,10 +62,20 @@ final readonly class HistoryCheckService
                 throw new AccessDeniedException();
             }
         }
+        $load = $kind === HistoryCheckSubject::Load
+        ? ($this->loads->find($id) ?? throw new RecordNotFoundException("Load determination not found."))
+        : null;
+        $pursuit = match ($kind) {
+            HistoryCheckSubject::Standing => $id,
+            HistoryCheckSubject::Load => new EntityId($load["pursuit_id"]),
+            default => null,
+        };
         $student = match ($kind) {
             HistoryCheckSubject::Person => null,
             HistoryCheckSubject::Application => null,
             HistoryCheckSubject::Student => $id,
+            HistoryCheckSubject::Standing => $this->students->assignment($id)->studentId,
+            HistoryCheckSubject::Load => new EntityId($load["student_id"]),
             HistoryCheckSubject::Account => $this->receipts->accountStudent($id),
         };
         $person = $this->admissions->person(
@@ -77,13 +92,15 @@ final readonly class HistoryCheckService
                 "This history check requires current support authority.",
             );
         }
-        return new HistoryCheckScope($kind, $id, $person->id, $person->ownerUserId, $student);
+        return new HistoryCheckScope($kind, $id, $person->id, $person->ownerUserId, $student, $pursuit);
     }
 
     private function recheck(HistoryCheckScope $scope, EntityId $actor): void
     {
+        $current = $this->scope($scope->kind, $scope->subject, $actor);
         if (
-            $scope->criteria() !== $this->scope($scope->kind, $scope->subject, $actor)->criteria()
+            $scope->criteria() !== $current->criteria()
+            || $scope->pursuit?->value !== $current->pursuit?->value
         ) {
             throw new ConcurrentModificationException(
                 "Record routing changed. Reopen the record before checking its history.",
@@ -144,6 +161,12 @@ final readonly class HistoryCheckService
                         new AccountId($scope->subject->value),
                         HistoryCheckReceipt::EVENT_LIMIT,
                     )
+                    ->describe(),
+                HistoryCheckSubject::Standing => $this->decisions
+                    ->standing($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)
+                    ->describe(),
+                HistoryCheckSubject::Load => $this->decisions
+                    ->load($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)
                     ->describe(),
                 HistoryCheckSubject::Application => $this->applications
                     ->verify($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)

@@ -8,6 +8,7 @@ use Codefy\Framework\Application;
 use Codefy\Framework\Console\ConsoleCommand;
 use Domain\AcademicRecord\Repository\AcademicProjectionVerifier;
 use Domain\Admissions\Repository\ApplicationProjectionVerifier;
+use Domain\Student\Repository\StudentDecisionProjectionVerifier;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Finance\Repository\AccountProjectionVerifier;
 use Domain\Finance\ValueObject\AccountId;
@@ -32,6 +33,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
         ['account', null, 'required', 'Verify one financial account and its balance/posting projections; no cursor.'],
         ['person', null, 'required', 'Compare one person’s profile projections with protected history; no cursor.'],
         ['application', null, 'required', 'Compare one admissions application with protected history; no cursor.'],
+        ['standing', null, 'required', 'Compare standing under one program pursuit with protected history; no cursor.'],
+        ['load', null, 'required', 'Compare one retained load determination with protected history; no cursor.'],
     ];
     public function __construct(Application $codefy)
     {
@@ -57,9 +60,18 @@ final class VerifyHistoryCommand extends ConsoleCommand
             $student = $this->getOptions('student');
             $person = $this->getOptions('person');
             $application = $this->getOptions('application');
-            $subjects = [$account, $student, $person, $application];
+            $standing = $this->getOptions('standing');
+            $load = $this->getOptions('load');
+            $subjects = [$account, $student, $person, $application, $standing, $load];
             if (count(array_filter($subjects, static fn(mixed $id): bool => $id !== null)) > 1) {
                 throw new InvalidArgumentException();
+            }
+            if ($standing !== null || $load !== null) {
+                $reference = $standing ?? $load;
+                if (!is_string($reference) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
+                    throw new InvalidArgumentException();
+                }
+                return $this->decision($standing !== null, new EntityId($reference), $events, $json);
             }
             if ($application !== null) {
                 if (!is_string($application) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
@@ -96,7 +108,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 $json,
                 "invalid_input",
                 "Use --streams=1..50, --events=1..2000 and a valid optional verification cursor. "
-                    . 'Use one of --person=ULID, --account=ULID, --student=ULID or --application=ULID '
+                    . 'Use one of --person=ULID, --account=ULID, --student=ULID, --application=ULID, '
+                    . '--standing=PURSUIT_ULID or --load=DETERMINATION_ULID '
                     . 'with --events and optional --json.',
                 self::INVALID,
             );
@@ -147,6 +160,31 @@ final class VerifyHistoryCommand extends ConsoleCommand
             );
         }
         return $result->complete ? self::SUCCESS : 3;
+    }
+
+    private function decision(bool $standing, EntityId $id, int $events, bool $json): int
+    {
+        $verifier = $this->codefy->make(StudentDecisionProjectionVerifier::class);
+        $result = $standing ? $verifier->standing($id, $events) : $verifier->load($id, $events);
+        if ($json) {
+            $this->output->writeln(json_encode($result->describe(), JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
+        } else {
+            $this->terminalRaw(($standing ? 'Program standing ' : 'Retained load determination ')
+                . $id->value . ': ' . $result->status . '.');
+            $this->terminalRaw($result->events . ' events checked; '
+                . ($result->records ?? 'unknown') . ' retained records compared.');
+            if ($result->issues !== []) {
+                $this->terminalRaw('Components requiring review: ' . implode(', ', $result->issues) . '.');
+            }
+            $this->terminalRaw('No records were changed. This compares the selected retained decision and projection, '
+                . 'not current policy, source registration freshness, census or graduation eligibility, '
+                . 'every retry receipt or archive completeness. An empty observation is not verified prior history.');
+        }
+        return match ($result->status) {
+            'verified' => self::SUCCESS,
+            'observed_empty', 'changed', 'limited' => 3,
+            default => self::FAILURE,
+        };
     }
 
     private function student(EntityId $student, int $events, bool $json): int

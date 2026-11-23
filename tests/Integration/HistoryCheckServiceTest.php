@@ -37,6 +37,7 @@ final class HistoryCheckServiceTest extends TestCase
         ?AuditTrail $audit = null,
         ?AcademicProjectionVerifier $academics = null,
         ?\Domain\Admissions\Repository\ApplicationProjectionVerifier $applications = null,
+        ?\Domain\Student\Repository\StudentDecisionProjectionVerifier $decisions = null,
     ): HistoryCheckService {
         $s = $c->sis;
         return new HistoryCheckService(
@@ -77,6 +78,8 @@ final class HistoryCheckServiceTest extends TestCase
                 $s->admissions,
                 $s->decisionLedger(),
             ),
+            $decisions ?? $s->studentDecisionVerifier(),
+            new \Infrastructure\Persistence\Repository\SqlLoadDeterminationRepository($s->sql),
             $s->admissions,
             new SqlPersonProfileRepository($s->sql),
             new SqlStudentRecordRepository($s->sql),
@@ -141,6 +144,101 @@ final class HistoryCheckServiceTest extends TestCase
             return;
         }
         self::fail("A forbidden support operation was accepted.");
+    }
+
+    public function testStandingAndLoadUseIndependentDutiesAndRetainOnlySupportMetadata(): void
+    {
+        require_once dirname(__DIR__) . '/Support/StudentDecisionFixture.php';
+        $c = new CampusFixture();
+        $f = new \Tests\Support\StudentDecisionFixture($c->sis);
+        $s = $c->sis;
+        $service = $this->service($c);
+        $cases = [[HistoryCheckSubject::Standing, $f->pursuit], [HistoryCheckSubject::Load, $f->determination]];
+        foreach ($cases as [$kind, $id]) {
+            $before = $this->facts($c);
+            $result = $service->run($kind, $id);
+            self::assertSame('verified', $result['result']['status']);
+            self::assertSame(1, $result['result']['records_checked']);
+            self::assertSame([$result['receipt']], $service->history($kind, $id)['items']);
+            self::assertSame($before, $this->facts($c));
+            self::assertStringNotContainsString('Private', json_encode($result));
+            self::assertStringNotContainsString('credits_milli', json_encode($result));
+            $s->access->staff = false;
+            $all = ['sis:history:verify', 'sis:audit:read', ...$kind->permissions()];
+            foreach ($all as $missing) {
+                $s->access->grants = array_values(array_diff($all, [$missing]));
+                $this->rejects(fn () => $service->run($kind, $id), AccessDeniedException::class);
+                $this->rejects(fn () => $service->history($kind, $id), AccessDeniedException::class);
+            }
+            $s->access->staff = true;
+            $s->access->grants = [];
+        }
+        self::assertCount(2, $s->sql->rows('sis_history_checks'));
+    }
+
+    public function testDecisionSupportProtectsSuperOwnersAndCurrentPursuitRouting(): void
+    {
+        require_once dirname(__DIR__) . '/Support/StudentDecisionFixture.php';
+        $c = new CampusFixture();
+        $f = new \Tests\Support\StudentDecisionFixture($c->sis);
+        $s = $c->sis;
+        $owner = $s->admissions->person($s->admissions->student($f->student)->personId)->ownerUserId;
+        $roles = new SqlAccessRepository($s->sql);
+        $roles->assign(\Domain\Access\Enum\GrantKind::UserRole, $owner, $roles->roleNamed('super')->id, true);
+        $service = $this->service($c);
+        $cases = [[HistoryCheckSubject::Standing, $f->pursuit], [HistoryCheckSubject::Load, $f->determination]];
+        foreach ($cases as [$kind, $id]) {
+            $this->rejects(fn () => $service->run($kind, $id), AccessDeniedException::class);
+        }
+        $roles->assign(\Domain\Access\Enum\GrantKind::UserRole, $owner, $roles->roleNamed('super')->id, false);
+        $provider = $this->createStub(\Domain\Student\Repository\StudentDecisionProjectionVerifier::class);
+        $provider->method('load')->willReturnCallback(function () use ($s, $f) {
+            $s->sql->update(
+                'sis_load_determinations',
+                ['pursuit_id' => EntityId::generate()->value],
+                ['id' => $f->determination->value],
+            );
+            return new \Domain\Student\ValueObject\StudentDecisionProjectionCheck(
+                'verified',
+                'enrollment_load_determination',
+                $f->determination,
+                1,
+                1,
+                1,
+            );
+        });
+        $s->connection->pdo->exec('PRAGMA foreign_keys = OFF');
+        $this->rejects(
+            fn () => $this->service($c, decisions: $provider)->run(HistoryCheckSubject::Load, $f->determination),
+            ConcurrentModificationException::class
+        );
+        self::assertSame([], $s->sql->rows('sis_history_checks'));
+    }
+
+    public function testDecisionSupportFinalAuditOrAuthorityFailureRollsBackReceipts(): void
+    {
+        require_once dirname(__DIR__) . '/Support/StudentDecisionFixture.php';
+        $c = new CampusFixture();
+        $f = new \Tests\Support\StudentDecisionFixture($c->sis);
+        $s = $c->sis;
+        foreach (['audit', 'authority'] as $failure) {
+            $audit = $this->createStub(AuditTrail::class);
+            $audit->method('record')->willReturnCallback(function () use ($s, $failure): void {
+                if ($failure === 'audit') {
+                    throw new \RuntimeException('Fictional unavailable audit');
+                }
+                $s->access->staff = false;
+            });
+            $cases = [[HistoryCheckSubject::Standing, $f->pursuit], [HistoryCheckSubject::Load, $f->determination]];
+            foreach ($cases as [$kind, $id]) {
+                $s->access->staff = true;
+                $this->rejects(
+                    fn () => $this->service($c, audit: $audit)->run($kind, $id),
+                    $failure === 'audit' ? \RuntimeException::class : AccessDeniedException::class
+                );
+                self::assertSame([], $s->sql->rows('sis_history_checks'));
+            }
+        }
     }
 
     public function testApplicationRoutingChangeSuppressesTheResultAndSupportReceipt(): void

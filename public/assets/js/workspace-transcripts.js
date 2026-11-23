@@ -1,7 +1,15 @@
 /* Reviewed, immutable transcript documents and separately recorded delivery evidence. */
 window.createWorkspaceTranscripts = function (ui) {
     "use strict";
-    const text = value => ui.standingLabels?.[value] || value;
+    const fallbackLabels = {
+        selection_required: "Choose at least one definition or include all standings.",
+        setup_unavailable: "Transcript setup is no longer available. Reopen it after access is restored.",
+        newer_edits_unsaved: "Transcript setup saved. Newer edits are still unsaved.",
+        setup_selection_hint: "This setup selects particular standing definitions for new preparations.",
+        document_selection_hint: "This document includes institution-selected standing definitions.",
+        selected_standing_empty: "No selected academic standing is included through this date.",
+    };
+    const text = key => ui.standingLabels?.[key] || fallbackLabels[key];
     const {
         node,
         request,
@@ -88,7 +96,7 @@ window.createWorkspaceTranscripts = function (ui) {
             node("p", { class: "form-text" }, `Setup revision ${evidence.revision} · Confirmed ${evidence.confirmed_at}`),
             node("p", { class: "form-text" }, evidence.include_standing ? "Academic standing selected in this institutional setup." : "Academic standing not selected in this institutional setup."),
             evidence.include_standing && evidence.standing_definitions ? node('p', { class: 'form-text' },
-                text('This setup selects particular standing definitions for new preparations.')) : null,
+                text('setup_selection_hint')) : null,
             evidence.checks.length ? node("ul", {}, ...evidence.checks.map((check) =>
                 node("li", {}, node("strong", {}, check.label), check.details ? ` — ${check.details}` : "")))
                 : node("p", {}, "No additional institutional checks applied."));
@@ -111,7 +119,7 @@ window.createWorkspaceTranscripts = function (ui) {
             standing_definitions: selection.valid() ? selection.value() : null });
         function denied() {
             if (body.isConnected) body.replaceChildren(node('p', { role: 'alert', class: 'form-text' },
-                text('Transcript setup is no longer available. Reopen it after access is restored.')));
+                text('setup_unavailable')));
         }
         const save = button("Save setup", async () => {
             const captured = draft();
@@ -121,7 +129,7 @@ window.createWorkspaceTranscripts = function (ui) {
                 return;
             }
             if (standing.checked && !selection.valid()) {
-                notice = text('Choose at least one definition or include all standings.');
+                notice = text('selection_required');
                 document.getElementById('transcript-standing-mode')?.focus();
                 return;
             }
@@ -131,7 +139,7 @@ window.createWorkspaceTranscripts = function (ui) {
                 if (!body.isConnected) return;
                 saved.revision = result.revision;
                 if (JSON.stringify(draft()) === JSON.stringify(captured)) { await policy(); return; }
-                notice = text('Transcript setup saved. Newer edits are still unsaved.');
+                notice = text('newer_edits_unsaved');
             } catch (error) {
                 if ([401, 403].includes(error.status)) denied();
                 throw error;
@@ -236,11 +244,11 @@ window.createWorkspaceTranscripts = function (ui) {
             snapshot.standing ? node("section", { class: "record-section", "aria-label": "Transcript academic standing" },
                 node("h3", { class: "h5" }, "Recorded academic standing"),
                 snapshot.standing.filtered ? node('p', { class: 'form-text' },
-                    text('This document includes institution-selected standing definitions.')) : null,
+                    text('document_selection_hint')) : null,
                 node("p", { class: "form-text" }, `Selected primary pursuit · Recorded periods through ${snapshot.standing.through}. Earlier unrecorded standing is not inferred.`),
                 snapshot.standing.periods.length ? node("ul", {}, ...snapshot.standing.periods.map(row => node("li", { class: "text-break" },
                     `${row.code} · ${row.title} · ${row.starts_on} through ${row.ends_on || "open"}`)))
-                    : node("p", {}, snapshot.standing.filtered ? text('No selected academic standing is included through this date.')
+                    : node("p", {}, snapshot.standing.filtered ? text('selected_standing_empty')
                         : "No standing is recorded through this date.")) : null,
             grid(
                 ["Term", "Course", "Title", "Attempted", "Earned", "Grade", "History"],

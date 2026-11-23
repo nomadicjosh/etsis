@@ -23,6 +23,12 @@ Correct the periods, enter a reason and confirm **I verified institutional evide
 
 The pursuit remains closed. Neither its original standing decisions nor the student's current-program standing, enrollment, activity, charges or advisor access are replaced. A program change does not copy the correction into the new pursuit. Accepted retries return their original result rather than overwriting later corrections. Evidence and protected reasons remain staff-only; students continue to see the retained labels/dates under their own historical pursuit.
 
+## Check standing history
+
+Authorized support staff can use **Students → open student → Student programs → More → Check standing history** for the selected current or closed pursuit. This requires `sis:history:verify`, `sis:audit:read`, `sis:student:read` and `sis:standing:manage`; ordinary ownership/advising access does not grant it. The shared drawer runs only on request, displays minimized verification/limit/change outcomes, records a restricted support receipt and offers **Back to record**. Previous checks remain observations of their recorded point.
+
+A pursuit without recorded standing reports **No recorded standing observed**, with earlier standing explicitly unknown. It does not imply good standing. Recorded/corrected decisions are compared with their complete period projection; a renamed definition does not relabel them. No label, dates, private policy reference, reason or raw event is exposed in the support result. This check changes no standing or academic decision. Trusted operators can use the existing [selected verification command](event-history-foundation.md#selected-standing-and-enrollment-load-verification) for a larger bounded observation; repairs and institutional decisions remain separate authorized work.
+
 ## Student and advisor views
 
 Students see **Academic standing** beside the selected pursuit's degree progress in **My campus → Degree progress**. The presentation shows the accepted label and inclusive dates. Earlier/future periods remain available through **Other recorded periods**. Closed pursuits are explicitly identified as historical. No period for the selected date means no determination is recorded; it does not mean good standing, probation or suspension.

@@ -24,6 +24,8 @@ $supportApplication = $sis->submissionService()->apply(
     $sis->program,
     $sis->term,
 );
+require_once __DIR__ . '/StudentDecisionFixture.php';
+$supportDecisions = new \Tests\Support\StudentDecisionFixture($sis);
 $supportEvents = array_map($sis->sql->rows(...), [
     "sis_history_events",
     "sis_history_streams",
@@ -35,6 +37,8 @@ $supportEvents = array_map($sis->sql->rows(...), [
     "sis_account_balances",
     "sis_applications",
     "sis_application_intake",
+    "sis_student_standing",
+    "sis_load_determinations",
 ]);
 $supportBase = "/sis/history-checks/";
 $supportRead = static function (string $path, array $data) use ($teachingPost): array {
@@ -55,6 +59,8 @@ $supportCases = [
     "student" => $supportStudent->id->value,
     "account" => (string) $supportAccount->aggregateId(),
     "application" => $supportApplication->id->value,
+    "standing" => $supportDecisions->pursuit->value,
+    "load" => $supportDecisions->determination->value,
 ];
 foreach ($supportCases as $kind => $id) {
     $base = $supportBase . $kind . "/" . $id . "/";
@@ -69,7 +75,8 @@ foreach ($supportCases as $kind => $id) {
     if (
         ($checked["event_limit"] ?? null) !== 200 ||
         !isset($checked["receipt"]["reference"]) ||
-        (in_array($kind, ['account', 'application'], true) && ($checked["result"]["status"] ?? null) !== "verified")
+        (in_array($kind, ['account', 'application', 'standing', 'load'], true) &&
+            ($checked["result"]["status"] ?? null) !== "verified")
     ) {
         throw new RuntimeException("The selected support check lost its fixed scope or allowance.");
     }
@@ -94,6 +101,12 @@ if (
 ) {
     throw new RuntimeException("Support duty widened person-profile access.");
 }
+foreach (['standing' => 'sis:standing:manage', 'load' => 'sis:load:determine'] as $kind => $permission) {
+    $sis->access->grants = ['sis:history:verify', 'sis:audit:read', 'sis:student:read'];
+    if ($teachingPost($supportBase . $kind . '/' . $supportCases[$kind] . '/run/', [])->getStatusCode() !== 403) {
+        throw new RuntimeException('Support checking bypassed the independent student-decision duty.');
+    }
+}
 $sis->access->staff = true;
 $sis->access->grants = [];
 if (
@@ -113,6 +126,8 @@ if (
             "sis_account_balances",
             "sis_applications",
             "sis_application_intake",
+            "sis_student_standing",
+            "sis_load_determinations",
         ])
 ) {
     throw new RuntimeException("Support checks changed source facts or accepted an unknown scope.");

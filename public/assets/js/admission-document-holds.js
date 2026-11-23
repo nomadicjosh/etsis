@@ -9,7 +9,43 @@
     notify,
     labels = {},
   }) {
-    const text = (value) => labels[value] || value;
+    const fallbackLabels = {
+        scope_help: "Holds do not share files, extend applicant access, or restore removed files.",
+        unavailable_account: "Unavailable account",
+        preservation: "Document preservation",
+        holds_help: "Holds protect existing and future admissions files from removal.",
+        finish_change: "Finish or cancel the document hold change first.",
+        scope_application: "This application",
+        scope_person: "All applications for this person",
+        review_heading: "Document hold review",
+        review_change: "Review hold change",
+        cancel_change: "Cancel hold change",
+        hold_reason: "Reason for hold",
+        release_reason: "Reason for release",
+        reviewing: "Reviewing document hold…",
+        place_confirmation: "Confirm this hold. File holds and decision evidence remain separate.",
+        release_confirmation: "Release this scope’s hold. Other holds, deadlines and decision evidence still apply.",
+        confirm_hold: "Confirm hold",
+        confirm_release: "Confirm release",
+        saving: "Saving document hold…",
+        saved: "Document hold change saved.",
+        revise_change: "Revise hold change",
+        review_ready: "Review ready. Confirm or revise this change.",
+        active: "Hold active",
+        inactive: "No active hold",
+        release_application: "Release application hold",
+        place_application: "Place application hold",
+        release_person: "Release person hold",
+        place_person: "Place person hold",
+        history: "Hold history",
+        released: "Hold released",
+        history_empty: "No document hold decisions recorded.",
+        loading_history: "Loading hold history…",
+        history_loaded: "Hold history loaded.",
+        newer_history: "Newer holds",
+        earlier_history: "Earlier holds",
+    };
+    const text = key => labels[key] || fallbackLabels[key];
     return function mount(
       container,
       application,
@@ -19,27 +55,27 @@
       const base = `/sis/applications/${application}/document-holds/`;
       const section = node("section", {
         class: "record-section document-preservation",
-        "aria-label": text("Document preservation"),
+        "aria-label": text("preservation"),
       });
       section.append(
         node(
           "h3",
           { class: "h6" },
           node("i", { class: "bi bi-shield-lock me-2", "aria-hidden": "true" }),
-          text("Document preservation"),
+          text("preservation"),
         ),
         node(
           "p",
           { class: "form-text" },
           text(
-            "Holds protect existing and future admissions files from removal.",
+            "holds_help",
           ),
         ),
         node(
           "p",
           { class: "form-text" },
           text(
-            "Holds do not share files, extend applicant access, or restore removed files.",
+            "scope_help",
           ),
         ),
       );
@@ -51,15 +87,15 @@
       const guard = () => {
         if (!editing) return true;
         status.textContent = text(
-          "Finish or cancel the document hold change first.",
+          "finish_change",
         );
         reasonInput?.focus();
         return false;
       };
       const stamp = (value) =>
         new Date(value).toLocaleString(undefined, { timeZoneName: "short" });
-      const recorder = (name) => name || text("Unavailable account");
-      const button = (label, run, style = "btn-outline-secondary") =>
+      const recorder = (name) => name || text("unavailable_account");
+      const button = (key, run, style = "btn-outline-secondary") =>
         node(
           "button",
           {
@@ -67,13 +103,13 @@
             class: `btn ${style}`,
             onclick: (event) => task(run, event.currentTarget),
           },
-          text(label),
+          text(key),
         );
       const scopeLabel = (scope) =>
         text(
           scope === "case"
-            ? "This application"
-            : "All applications for this person",
+            ? "scope_application"
+            : "scope_person",
         );
       function edit(scope) {
         if (!beforeChange()) return;
@@ -94,14 +130,14 @@
         reasonInput = reason;
         const preview = node("section", {
           class: "mt-3",
-          "aria-label": text("Document hold review"),
+          "aria-label": text("review_heading"),
         });
         const review = node(
           "button",
           { type: "submit", class: "btn btn-primary" },
-          text("Review hold change"),
+          text("review_change"),
         );
-        const cancel = button("Cancel hold change", async () => {
+        const cancel = button("cancel_change", async () => {
           epoch++;
           editing = false;
           editor.replaceChildren();
@@ -118,7 +154,7 @@
           node(
             "label",
             { for: fieldId, class: "form-label" },
-            text(action === "place" ? "Reason for hold" : "Reason for release"),
+            text(action === "place" ? "hold_reason" : "release_reason"),
           ),
           reason,
           actions,
@@ -142,7 +178,7 @@
           if (!beforeRequest() || !form.reportValidity()) return;
           task(async () => {
             await write(async () => {
-              status.textContent = text("Reviewing document hold…");
+              status.textContent = text("reviewing");
               proof = await request(`${base}review/`, "POST", {
                 scope,
                 action,
@@ -159,8 +195,8 @@
                   { class: "alert alert-warning" },
                   text(
                     action === "place"
-                      ? "Confirm this hold. File holds and decision evidence remain separate."
-                      : "Release this scope’s hold. Other holds, deadlines and decision evidence still apply.",
+                      ? "place_confirmation"
+                      : "release_confirmation",
                   ),
                 ),
                 node(
@@ -172,26 +208,26 @@
                   "div",
                   { class: "record-form-actions" },
                   button(
-                    action === "place" ? "Confirm hold" : "Confirm release",
+                    action === "place" ? "confirm_hold" : "confirm_release",
                     () =>
                       beforeRequest() && write(async () => {
                         if (!fresh() || proof !== accepted) return;
-                        status.textContent = text("Saving document hold…");
+                        status.textContent = text("saving");
                         await request(`${base}confirm/`, "POST", accepted);
                         if (!fresh()) return;
                         await reload();
                         editing = false;
-                        notify(text("Document hold change saved."));
+                        notify(text("saved"));
                       }),
                     "btn-primary",
                   ),
-                  button("Revise hold change", async () => {
+                  button("revise_change", async () => {
                     if (fresh()) revise();
                   }),
                 ),
               );
               status.textContent = text(
-                "Review ready. Confirm or revise this change.",
+                "review_ready",
               );
             });
             if (fresh()) preview.querySelector("button")?.focus();
@@ -214,7 +250,7 @@
             node(
               "p",
               {},
-              text(state.active ? "Hold active" : "No active hold"),
+              text(state.active ? "active" : "inactive"),
             ),
           ),
         );
@@ -229,15 +265,15 @@
             ),
             node("p", { class: "form-text" }, stamp(state.created_at)),
           );
-        const label =
+        const labelKey =
           scope === "case"
             ? state.active
-              ? "Release application hold"
-              : "Place application hold"
+              ? "release_application"
+              : "place_application"
             : state.active
-              ? "Release person hold"
-              : "Place person hold";
-        scopeButtons[scope] = button(label, async () => edit(scope));
+              ? "release_person"
+              : "place_person";
+        scopeButtons[scope] = button(labelKey, async () => edit(scope));
         content.append(scopeButtons[scope]);
         scopes.append(card);
       }
@@ -246,7 +282,7 @@
         pageTicket = 0,
         cursor = null,
         trail = [];
-      const historyToggle = button("Hold history", async () => {
+      const historyToggle = button("history", async () => {
         if (!beforeChange()) return;
         opened = !opened;
         historyToggle.setAttribute("aria-expanded", String(opened));
@@ -266,7 +302,7 @@
             "article",
             { class: "border-top pt-3 mt-3" },
             node("h4", { class: "h6" }, scopeLabel(item.scope)),
-            node("p", {}, text(item.active ? "Hold active" : "Hold released")),
+            node("p", {}, text(item.active ? "active" : "released")),
             node(
               "p",
               { class: "form-text text-break" },
@@ -293,29 +329,29 @@
         }
         if (!page.history.length)
           list.append(
-            node("p", {}, text("No document hold decisions recorded.")),
+            node("p", {}, text("history_empty")),
           );
         const actions = node("div", { class: "record-form-actions mt-3" });
         async function load(nextCursor, previousTrail) {
           if (!beforeChange()) return;
           const ticket = ++pageTicket;
           await write(async () => {
-            status.textContent = text("Loading hold history…");
+            status.textContent = text("loading_history");
             const result = await request(
               `${base}${nextCursor ? `?before=${encodeURIComponent(nextCursor)}` : ""}`,
             );
             if (!alive() || ticket !== pageTicket) return;
             renderHistory(result, nextCursor, previousTrail);
-            status.textContent = text("Hold history loaded.");
+            status.textContent = text("history_loaded");
           });
         }
         if (trail.length)
           actions.append(
-            button("Newer holds", () => load(trail.at(-1), trail.slice(0, -1))),
+            button("newer_history", () => load(trail.at(-1), trail.slice(0, -1))),
           );
         if (page.next_cursor)
           actions.append(
-            button("Earlier holds", () =>
+            button("earlier_history", () =>
               load(page.next_cursor, [...trail, cursor]),
             ),
           );

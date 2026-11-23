@@ -1,10 +1,10 @@
 /* Shared working review and retained determinations. Private results stay in the current page only. */
 window.createEnrollmentLoadReview = function (ui) {
     "use strict";
-    const { node, request, task } = ui;
+    const { node, request, task, historyCheckLabels: labels = {} } = ui;
     const credits = milli => (milli / 1000).toLocaleString(undefined, { maximumFractionDigits: 3 });
     let sequence = 0;
-    return function mount(container, base, { canDetermine = false, canReadDeterminations = true, correctCredits = null } = {}) {
+    return function mount(container, base, { canDetermine = false, canReadDeterminations = true, correctCredits = null, checkDetermination = null, initialHistory = null } = {}) {
         const root = node("section", { class: "surface border rounded p-3 my-3", "aria-label": "Enrollment load" });
         container.append(root);
         let serial = 0;
@@ -62,7 +62,9 @@ window.createEnrollmentLoadReview = function (ui) {
                     node("p", { class: "form-text" }, "Individual registration sources remain in protected academic history."));
                 root.append(node("article", { class: "border rounded p-3 my-2" },
                     node("h3", { class: "h6" }, `${item.as_of_date} · ${credits(item.credits_milli)} credits · ${item.classification?.label || 'Not registered'}`),
-                    node("p", {}, `Recorded ${item.recorded_at} · ${item.enrollment_count} active registrations`), details));
+                    node("p", {}, `Recorded ${item.recorded_at} · ${item.enrollment_count} active registrations`), details,
+                    checkDetermination && item.id ? button(labels.check_load || "Check retained load history",
+                        () => checkDetermination(item.id, { term, after, stack: [...stack] })) : null));
             }
             if (!data.items.length) root.append(node("p", { role: "status" }, "No load determinations have been recorded for this pursuit and term."));
             if (stack.length) root.append(button("Newer determinations", () => history(term, stack.at(-1), stack.slice(0, -1))));
@@ -106,6 +108,7 @@ window.createEnrollmentLoadReview = function (ui) {
         }
         root.append(node("h2", { class: "h5" }, "Enrollment load"), button("Review enrollment load", () => choose()));
         if (canReadDeterminations) root.append(button("Recorded determinations", () => choose('', null, [], true)));
+        if (initialHistory) task(() => history(initialHistory.term, initialHistory.after, initialHistory.stack));
         return root;
     };
 };
@@ -282,10 +285,14 @@ window.createWorkspaceEnrollmentLoad = function (ui) {
         if (page.next_cursor) body.append(button("Earlier publications", () => history(program, back, page.next_cursor)));
         body.append(button("Back", back));
     }
-    return { policy, open(student, pursuit) {
+    function open(student, pursuit, initialHistory = null) {
         const body = openDrawer("Enrollment load", "STUDENT PROGRAM");
         mount(body, `/sis/students/${student}/programs/${pursuit}/load/`, { canDetermine: can("sis:load:determine"), canReadDeterminations: can("sis:load:determine"),
+            initialHistory,
+            checkDetermination: can("sis:load:determine") && can("sis:student:read") && can("sis:history:verify") && can("sis:audit:read")
+                ? (id, state) => ui.historyChecks().open('load', id, () => open(student, pursuit, state)) : null,
             correctCredits: can("sis:registration:credits:amend") && can("sis:registration:manage")
                 ? (container, item, back) => registeredCredits(container, student, item, back) : null });
-    } };
+    }
+    return { policy, open };
 };

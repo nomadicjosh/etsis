@@ -44,6 +44,14 @@ Choose **Recorded determinations** to find a term, or **Recorded determinations 
 
 Students and assigned advisors use the same read-only history panel beside degree progress. Readers receive no staff reason, actor, per-course source detail or enrollment/credit source identity. Retaining a total does not reopen coursework restricted after an early drop. Source evidence remains in protected academic history. Detached screen responses cannot update another record, and private drafts/proofs stay in page memory.
 
+## Check a retained determination
+
+In **Recorded determinations**, choose a term and use **Check retained load history** on the particular determination. This staff-only support action requires `sis:history:verify`, `sis:audit:read`, `sis:student:read` and `sis:load:determine`. It opens the shared history-check drawer; **Back to record** restores the original term, ten-record page and newer/older navigation. The selected reference is available only in staff history responses. Student/advisor history continues to withhold internal determination/source/policy-version identities and private reasons.
+
+Run the check deliberately to compare the original retained decision and its minimized projection. Results contain safe status/counts and a restricted support reference; they do not repeat credit amounts, classifications, policy details or private narratives. Later registrations, corrected quantities, current policy changes or closed pursuits do not rewrite the earlier observation. This is not a fresh load calculation or a reconstruction of census/financial-aid eligibility. The check does not independently replay every referenced registration or policy. A missing/damaged decision is unverified; changed/limited results are incomplete. Support receipts do not approve a later business action.
+
+Trusted operators can use [the existing selected verification command](event-history-foundation.md#selected-standing-and-enrollment-load-verification) with a larger bounded allowance. No repair, new determination, enrollment change, finance posting or automatic side effect occurs. Existing domain decisions retain their own fresh source/concurrency checks.
+
 ## Reporting
 
 Report Studio offers **Recorded enrollment load** and **Recorded load by date**. The source has **one row per retained determination**, including multiple decisions for the same student/pursuit/term/date. It includes retained term/program labels, date, classification, credits and registration count, with explicitly current person names/institutional ID. Filter dates explicitly. Count distinct students within each selected group for headcounts; a student may still appear in several date/classification groups. Neither summing decisions nor summing group headcounts produces a current census.

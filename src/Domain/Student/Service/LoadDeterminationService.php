@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Domain\Student\Service;
 
-use DateTimeZone;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Advising\Service\AdvisorProgressAccess;
 use Domain\Audit\Repository\AuditTrail;
@@ -12,7 +11,6 @@ use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
-use Domain\Shared\EventSourcing\StoredEvent;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -22,7 +20,6 @@ use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\Service\ReviewProof;
 use Domain\Shared\ValueObject\EntityId;
-use Domain\Student\EnrollmentLoadDetermination;
 use Domain\Student\Event\EnrollmentLoadWasDetermined;
 use Domain\Student\Repository\EnrollmentLoadPolicyRepository;
 use Domain\Student\Repository\EnrollmentLoadRepository;
@@ -48,6 +45,7 @@ final readonly class LoadDeterminationService
         private AuditTrail $audit,
         private Clock $clock,
         private ReviewProof $proofs,
+        private LoadDeterminationLedger $ledger,
     ) {
     }
     public function terms(
@@ -132,7 +130,7 @@ final readonly class LoadDeterminationService
         ): array {
             $this->students->lock($student);
             $budget = new HistoryReadBudget();
-            $stored = $this->restore($operation, $budget);
+            $stored = $this->ledger->restore($operation, $budget);
             $this->proofs->validate(
                 $token,
                 "load-determination",
@@ -193,7 +191,7 @@ final readonly class LoadDeterminationService
             }
             $context = new EventContext($actor, $at, $operation, reason: trim($reason));
             $this->history->append($this->stream($operation), $operation, 0, $context, [$event]);
-            $this->records->insert($this->projection($operation, $snapshot, $context->effectiveAt));
+            $this->records->insert($this->ledger->projection($operation, $snapshot, $context->effectiveAt));
             $this->authorize($student, $pursuit, "staff", $actor);
             $this->proofs->validate(
                 $token,
@@ -228,7 +226,7 @@ final readonly class LoadDeterminationService
             $items = [];
             foreach (array_slice($rows, 0, 10) as $row) {
                 $stored =
-                    $this->restore(new EntityId($row["id"]), $budget) ??
+                    $this->ledger->restore(new EntityId($row["id"]), $budget) ??
                     throw new CorruptHistoryException();
                 $snapshot = new LoadDeterminationSnapshot($stored->event->payload()["snapshot"]);
                 if (
@@ -248,7 +246,7 @@ final readonly class LoadDeterminationService
                         $view["policy"]["version_id"],
                     );
                 }
-                $items[] = $view + [
+                $items[] = $view + ($channel === "staff" ? ["id" => $row["id"]] : []) + [
                     "recorded_at" => $stored->context->effectiveAt->format(DATE_ATOM),
                 ];
             }
@@ -304,62 +302,6 @@ final readonly class LoadDeterminationService
             ]);
         }
         return new LoadDeterminationSnapshot($snapshot);
-    }
-    private function restore(EntityId $id, HistoryReadBudget $budget): ?StoredEvent
-    {
-        $row = $this->records->find($id);
-        $page = $budget->page($this->history, $this->stream($id));
-        if ($page->throughVersion === 0 && $page->events === [] && $row === null) {
-            return null;
-        }
-        if (
-            $page->throughVersion !== 1 ||
-            count($page->events) !== 1 ||
-            $page->nextCursor !== null ||
-            $row === null
-        ) {
-            throw new CorruptHistoryException();
-        }
-        $stored = $page->events[0];
-        $root = EnrollmentLoadDetermination::root(new LoadDeterminationId($id->value));
-        $root->accept($stored);
-        $expected = $this->projection($id, $root->snapshot(), $stored->context->effectiveAt);
-        foreach ($expected as $key => $value) {
-            if ($key === "recorded_at") {
-                if (new \DateTimeImmutable($row[$key])->format("Y-m-d H:i:s") !== $value) {
-                    throw new CorruptHistoryException();
-                }
-            } elseif (
-                is_int($value) ? (string) $row[$key] !== (string) $value : $row[$key] !== $value
-            ) {
-                throw new CorruptHistoryException();
-            }
-        }
-        return $stored;
-    }
-    private function projection(
-        EntityId $id,
-        LoadDeterminationSnapshot $snapshot,
-        \DateTimeImmutable $at,
-    ): array {
-        $d = $snapshot->data;
-        return [
-            "id" => $id->value,
-            "student_id" => $d["student_id"],
-            "pursuit_id" => $d["pursuit_id"],
-            "term_id" => $d["term"]["id"],
-            "term_code" => $d["term"]["code"],
-            "program_code" => $d["program"]["code"],
-            "program_title" => $d["program"]["title"],
-            "determined_on" => $d["as_of_date"],
-            "recorded_at" => $at->setTimezone(new DateTimeZone("UTC"))->format("Y-m-d H:i:s"),
-            "registered_credits_milli" => $snapshot->creditsMilli,
-            "enrollment_count" => count($d["sources"]),
-            "classification_code" => $snapshot->classification["code"] ?? null,
-            "classification_title" => $snapshot->classification["label"] ?? null,
-            "policy_version_id" => $d["policy"]["version_id"],
-            "policy_source" => $d["policy"]["source"],
-        ];
     }
     private function authorize(
         EntityId $student,

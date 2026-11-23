@@ -77,10 +77,13 @@ final readonly class StudentStandingLedger implements TranscriptStandingSource
         return $latest;
     }
 
-    public function load(EntityId $student, EntityId $pursuit): StudentStanding
-    {
+    public function load(
+        EntityId $student,
+        EntityId $pursuit,
+        ?HistoryReadBudget $budget = null,
+    ): StudentStanding {
         $root = StudentStanding::root(new StudentStandingId($pursuit->value));
-        $budget = new HistoryReadBudget();
+        $budget ??= new HistoryReadBudget();
         $cursor = null;
         do {
             $page = $budget->page($this->history, $this->stream($pursuit), $cursor);

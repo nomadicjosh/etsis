@@ -4,7 +4,7 @@ const AxeBuilder = require('@axe-core/playwright').default;
 const { recordAction } = require('./support/workspace-actions.cjs');
 const id = n => String(n).padStart(26, '0');
 const person = id(1), student = id(2), account = id(3), owner = id(4), program = id(5), term = id(6), application = id(7);
-async function fixture(page, kind, { denied = false, delay = null } = {}) {
+async function fixture(page, kind, { denied = false, delay = null, outcome = null } = {}) {
     const calls = [], errors = [], receipts = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
@@ -21,6 +21,11 @@ async function fixture(page, kind, { denied = false, delay = null } = {}) {
             : [{ id: account, name: 'Fictional account', currency: 'USD' }], next_after: null };
         else if (path === `/sis/ui/people/${person}/`) result = { person: { id: { value: person }, ownerUserId: { value: owner }, givenName: 'Fictional', familyName: 'Person', institutionalId: { value: 'S-FICTIONAL' } }, students: [], employees: [], accounts: [], applications: [] };
         else if (path === `/sis/students/${student}/`) result = { id: student, person_id: person, given_name: 'Fictional', family_name: 'Person', institutional_id: 'S-FICTIONAL', active: true, primary_program: { id: program, code: 'BS.CS', title: 'Computing' }, entry_term: { id: term, code: '26/FA' }, revision: 'student' };
+        else if (path === `/sis/students/${student}/programs/`) result = { items: [{ id: id(8), program_code: 'ARTS-UG', program_title: 'Arts', term_code: '26/FA', status: 'active', is_primary: true }], next_after: null };
+        else if (path.endsWith('/load/terms/')) result = { items: [{ id: term, code: '26/FA', starts_on: '2026-08-01', ends_on: '2026-12-15' }], next_after: null };
+        else if (path.endsWith('/load/determinations/')) result = { items: [{ id: data.after ? id(12) : id(11), as_of_date: '2026-08-10', credits_milli: 3000, enrollment_count: 1,
+            classification: { label: 'Fictional full time' }, program: { code: 'ARTS-UG', title: 'Arts' }, recorded_at: '2026-08-10T17:00:00Z',
+            policy: { source: 'global', definition: { bands: [{ label: 'Fictional full time', min_credits_milli: 3000 }] } } }], next_after: data.after ? null : id(90) };
         else if (path === `/sis/accounts/${account}/`) result = { id: account, institutional_id: 'S-FICTIONAL', balance_minor: 1000, currency: 'USD', position: 1, entries: [], active_charge_total_minor: 1000 };
         else if (path === `/sis/applications/${application}/review/`) result = {
             application: { id: { value: application }, status: 'submitted' },
@@ -31,16 +36,17 @@ async function fixture(page, kind, { denied = false, delay = null } = {}) {
             if (denied) return route.fulfill({ status: 403, json: { error: 'Current support duty is required.' } });
             if (path.endsWith('/run/')) {
                 if (delay) await delay();
-                const status = kind === 'person' ? 'history_gaps' : kind === 'student' ? 'observed_empty' : 'verified';
-                const receipt = { reference: id(20 + receipts.length), status, events_checked: 2, checked_at: '2026-08-10T17:00:00Z' };
+                const status = outcome || (kind === 'person' ? 'history_gaps' : kind === 'student' ? 'observed_empty' : 'verified');
+                const checked = kind === 'standing' && status === 'observed_empty' ? 0 : 2;
+                const receipt = { reference: id(20 + receipts.length), status, events_checked: checked, checked_at: '2026-08-10T17:00:00Z' };
                 receipts.unshift(receipt);
-                result = { result: { status, events_checked: 2, position: kind === 'student' ? null : 2, current_records: kind === 'student' ? 0 : null, issues: [] }, receipt, event_limit: 200 };
+                result = { result: { status, events_checked: checked, records_checked: ['standing', 'load'].includes(kind) ? (status === 'observed_empty' ? 0 : 1) : null, position: kind === 'student' ? null : checked, current_records: kind === 'student' ? 0 : null, issues: [] }, receipt, event_limit: 200 };
             } else result = { items: data.after ? [{ reference: id(10), status: 'limited', events_checked: 200, checked_at: '2026-08-09T17:00:00Z' }] : receipts, next_after: receipts.length && !data.after ? receipts.at(-1).reference : null };
         }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto('/admin/');
-    const dataset = { person: 'people', student: 'students', account: 'accounts', application: 'applications' }[kind];
+    const dataset = { person: 'people', student: 'students', account: 'accounts', application: 'applications', standing: 'students', load: 'students' }[kind];
     await page.locator(`.workspace-nav-link[data-workspace="${dataset}"]`).click();
     await page.getByLabel('Search this workspace').fill('Fictional');
     await page.getByLabel('Search this workspace').press('Enter');
@@ -144,5 +150,82 @@ test('application check clears prior results after authority loss and preserves 
     await page.getByRole('button', { name: 'Refresh previous checks', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toBeEmpty();
     await expect(page.getByRole('region', { name: 'Previous history checks', exact: true })).toBeEmpty();
+    expect(errors).toEqual([]);
+});
+
+async function openDecisionCheck(page, kind) {
+    if (kind === 'standing') return recordAction(page, 'Check standing history');
+    await recordAction(page, 'Enrollment load');
+    await page.getByRole('button', { name: 'Recorded determinations', exact: true }).click();
+    await page.getByRole('button', { name: '26/FA · 2026-08-01–2026-12-15', exact: true }).click();
+    await page.getByRole('button', { name: 'Older determinations', exact: true }).click();
+    await page.getByRole('button', { name: 'Check retained load history', exact: true }).click();
+}
+
+for (const kind of ['standing', 'load']) {
+    test(`${kind} history checks use the selected retained context and preserve record returns`, async ({ page }) => {
+        const { calls, errors } = await fixture(page, kind);
+        await openDecisionCheck(page, kind);
+        const run = page.getByRole('button', { name: 'Run history check', exact: true });
+        await expect(run).toBeEnabled();
+        await run.focus(); await page.keyboard.press('Enter');
+        await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toContainText('Verified within this check');
+        await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toContainText(kind === 'standing' ? 'Standing periods checked: 1' : 'Retained determinations checked: 1');
+        const reference = kind === 'standing' ? id(8) : id(12);
+        expect(calls.find(call => call.path === `/sis/history-checks/${kind}/${reference}/run/`)).toBeTruthy();
+        await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+        if (kind === 'load') {
+            await expect(page.getByRole('heading', { name: 'Recorded enrollment load · 26/FA', exact: true })).toBeVisible();
+            const reads = calls.filter(call => call.path.endsWith('/load/determinations/'));
+            expect(reads.at(-1).data).toEqual({ term_id: term, after: id(90) });
+            await expect(page.getByRole('button', { name: 'Newer determinations', exact: true })).toBeVisible();
+        } else await expect(page.getByRole('group', { name: 'Student tasks', exact: true })).toBeVisible();
+        expect(errors).toEqual([]);
+        expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    });
+}
+
+test('empty standing observation keeps earlier facts unknown and stays accessible on a phone', async ({ page }) => {
+    const { errors } = await fixture(page, 'standing', { outcome: 'observed_empty' });
+    await openDecisionCheck(page, 'standing');
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toContainText('Earlier standing remains unknown.');
+    await expect(page.getByRole('region', { name: 'Previous history checks', exact: true })).toContainText('No recorded standing observed');
+    await page.screenshot({ path: '/tmp/etsis-decision-check-desktop.png' });
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(axe.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) }))).toEqual([]);
+    await page.getByRole('button', { name: 'Run history check', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/etsis-decision-check-phone.png' });
+    expect(errors).toEqual([]);
+});
+
+test('load support clears earlier results when its independent authority is lost', async ({ page }) => {
+    const { errors } = await fixture(page, 'load');
+    await openDecisionCheck(page, 'load');
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toContainText('Verified within this check');
+    await page.route('**/history-checks/load/**', route => route.fulfill({ status: 403, json: { error: 'Current load support duty is required.' } }));
+    await page.getByRole('button', { name: 'Refresh previous checks', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toBeEmpty();
+    await expect(page.getByRole('region', { name: 'Previous history checks', exact: true })).toBeEmpty();
+    expect(errors).toEqual([]);
+});
+
+test('a closed standing support drawer ignores its late verification response', async ({ page }) => {
+    let requested, release;
+    const pending = new Promise(resolve => { requested = resolve; });
+    const held = new Promise(resolve => { release = resolve; });
+    const { errors } = await fixture(page, 'standing', { delay: async () => { requested(); await held; } });
+    await openDecisionCheck(page, 'standing');
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+    await pending;
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    const finished = page.waitForResponse(response => response.url().endsWith('/run/'));
+    release(); await finished;
+    await expect(page.getByRole('group', { name: 'Student tasks', exact: true })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toHaveCount(0);
     expect(errors).toEqual([]);
 });

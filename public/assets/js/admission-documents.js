@@ -178,12 +178,12 @@
                     if (staff && item.retained_evidence) card.append(node('p', { class: 'form-text' }, 'Used in an admissions decision. Ordinary file removal is unavailable.'));
                     if (staff && item.scope_held) {
                         const label = 'A case or person hold protects this file from removal.';
-                        card.append(node('p', { class: 'form-text' }, holdLabels[label] || label));
+                        card.append(node('p', { class: 'form-text' }, holdLabels.protected_file || label));
                     }
                     if (staff) card.append(node('p', { class: 'form-text' }, `Retention ends ${item.expires_at.slice(0, 10)} UTC${item.held ? ' · Hold in place' : ''}`));
                     if (staff && item.applicant_visible && item.applicant_expires_at) {
                         const label = 'Applicant access ends (UTC)';
-                        card.append(node('p', { class: 'form-text' }, retentionLabels[label] || label, ': ',
+                        card.append(node('p', { class: 'form-text' }, retentionLabels.applicant_access_ends || label, ': ',
                             new Date(item.applicant_expires_at).toLocaleString(undefined, { timeZone: 'UTC' })));
                     }
                     if (staff && item.retained_evidence) card.append(node('p', { class: 'form-text' }, 'Retained for an admissions decision. Ordinary file removal is unavailable.'));
@@ -207,7 +207,7 @@
                                 node('div', { class: 'form-check mb-2' }, hold, node('label', { for: holdId, class: 'form-check-label' }, 'Keep under hold')),
                                 node('label', { for: dateId, class: 'form-label' }, 'Extend through (UTC, optional)'), date, save);
                             const help = 'Manual extensions also extend applicant access to a shared file.';
-                            form.append(node('p', { class: 'form-text' }, retentionLabels[help] || help));
+                            form.append(node('p', { class: 'form-text' }, retentionLabels.extension_help || help));
                             form.addEventListener('submit', event => { event.preventDefault();
                                 if (!holdLeave() || !categoryLeave()) return;
                                 if (fileInput?.files?.length) { status.textContent = 'Upload or clear the selected file first.'; fileInput.focus(); return; }
