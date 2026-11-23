@@ -1,6 +1,6 @@
 # Interface polish review
 
-The current work is screen and workflow polish. Finish this review before resuming new development-roadmap features. A completed domain implementation or an earlier passing test does not by itself establish that every connected screen in that domain has been reviewed for presentation and navigation.
+The user has resumed unchecked roadmap/handoff implementation after the focused interface passes below. This interface queue remains open alongside that work; preserve its branding, accessibility and navigation requirements in new features. A completed domain implementation or an earlier passing test does not by itself establish that every connected screen in that domain has been reviewed for presentation and navigation.
 
 Keep runs bounded, low-priority and single-worker. Preserve existing permissions, reviewed commands, historical facts and private responses. Reporting changes remain limited to already-defined student/student-related reports.
 

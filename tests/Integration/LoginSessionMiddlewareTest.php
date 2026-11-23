@@ -1,20 +1,24 @@
 <?php
+
 declare(strict_types=1);
-require_once dirname(__DIR__) . "/Support/SisFixture.php";
-use Application\Http\Middleware\{LoginSessionAuthorityMiddleware, SisPrivacyMiddleware};
-use Codefy\Framework\Http\Middleware\Auth\{
-    UserSessionMiddleware,
-    UserCookieDecryptMiddleware,
-    AuthenticationMiddleware,
-    AuthTokenAware,
-};
-use Defuse\Crypto\{Crypto, Key};
+
+namespace Tests\Integration;
+
+use DateTimeImmutable;
+use DateTimeZone;
+use SisFixture;
+use Application\Http\Middleware\LoginSessionAuthorityMiddleware;
+use Application\Http\Middleware\SisPrivacyMiddleware;
+use Codefy\Framework\Http\Middleware\Auth\UserSessionMiddleware;
+use Codefy\Framework\Http\Middleware\Auth\UserCookieDecryptMiddleware;
+use Codefy\Framework\Http\Middleware\Auth\AuthenticationMiddleware;
+use Codefy\Framework\Http\Middleware\Auth\AuthTokenAware;
+use Defuse\Crypto\Crypto;
+use Defuse\Crypto\Key;
 use Domain\User\Service\LoginSessionAuthority;
-use Infrastructure\Security\{
-    FrameworkLoginCookieReader,
-    SqlLoginSessionRepository,
-    SqlLoginAccountStateReader,
-};
+use Infrastructure\Security\FrameworkLoginCookieReader;
+use Infrastructure\Security\SqlLoginSessionRepository;
+use Infrastructure\Security\SqlLoginAccountStateReader;
 use Laminas\Diactoros\Response\JsonResponse;
 use PHPUnit\Framework\TestCase;
 use Qubus\Config\Collection;
@@ -22,6 +26,7 @@ use Qubus\Http\ServerRequest;
 use Qubus\Http\Cookies\Factory\HttpCookieFactory;
 use Qubus\Http\Cookies\SetCookieCollection;
 use Qubus\Routing\Handlers\CallableRequestHandler;
+
 final class LoginSessionMiddlewareTest extends TestCase
 {
     private SisFixture $f;
@@ -30,8 +35,26 @@ final class LoginSessionMiddlewareTest extends TestCase
     private LoginSessionAuthority $authority;
     private LoginSessionAuthorityMiddleware $guard;
     private Key $key;
+    private function maintenanceAccess(): \Application\Http\Security\MaintenanceAccess
+    {
+        return new \Application\Http\Security\MaintenanceAccess(
+            $this->createStub(\Codefy\Framework\Auth\Repository\AuthUserRepository::class),
+            $this->createStub(\Domain\Access\Repository\AccessRepository::class),
+            $this->reader,
+            $this->authority,
+            new UserCookieDecryptMiddleware($this->config),
+        );
+    }
+
+    private function openMaintenance(): \Domain\Shared\Operations\MaintenanceMode
+    {
+        $mode = $this->createStub(\Domain\Shared\Operations\MaintenanceMode::class);
+        $mode->method('status')->willReturn(\Domain\Shared\Operations\MaintenanceState::up());
+        return $mode;
+    }
     protected function setUp(): void
     {
+        require_once dirname(__DIR__) . "/Support/SisFixture.php";
         $this->f = new SisFixture();
         $this->f->clock->time = new DateTimeImmutable("now", new DateTimeZone("UTC"));
         $this->f->connection->pdo->exec("ALTER TABLE users ADD COLUMN token VARCHAR(191)");
@@ -60,7 +83,10 @@ final class LoginSessionMiddlewareTest extends TestCase
     {
         $codec = new class ($this->config) {
             use AuthTokenAware;
-            public function __construct(protected Collection $configContainer) {}
+
+            public function __construct(protected Collection $configContainer)
+            {
+            }
             public function issue(): string
             {
                 return $this->encryptAuthToken("fictional-token", 3600);
@@ -92,15 +118,13 @@ final class LoginSessionMiddlewareTest extends TestCase
     {
         $now = $this->f->clock->now()->getTimestamp();
         $values = ["", "invalid", str_repeat("x", 16385), ["not-a-cookie"]];
-        foreach (
-            [
-                ["version" => 1, "token" => "fictional-token", "expires" => $now],
-                ["version" => 0, "token" => "fictional-token", "expires" => $now + 10],
-                ["version" => 1, "token" => "", "expires" => $now + 10],
-                ["version" => 1, "token" => "fictional-token", "expires" => (string) ($now + 10)],
-            ]
-            as $data
-        ) {
+        $envelopes = [
+            ["version" => 1, "token" => "fictional-token", "expires" => $now],
+            ["version" => 0, "token" => "fictional-token", "expires" => $now + 10],
+            ["version" => 1, "token" => "", "expires" => $now + 10],
+            ["version" => 1, "token" => "fictional-token", "expires" => (string) ($now + 10)],
+        ];
+        foreach ($envelopes as $data) {
             $values[] = Crypto::encrypt(json_encode($data), $this->key);
         }
         $values[] = Crypto::encrypt("not-json", $this->key);
@@ -210,6 +234,8 @@ final class LoginSessionMiddlewareTest extends TestCase
             $this->reader,
             $this->authority,
             new UserSessionMiddleware($this->config, $factory),
+            $this->openMaintenance(),
+            $this->maintenanceAccess(),
         );
         $response = $middleware->process(
             $request,
@@ -232,6 +258,8 @@ final class LoginSessionMiddlewareTest extends TestCase
             $this->reader,
             $this->authority,
             new UserSessionMiddleware($this->config, $factory),
+            $this->openMaintenance(),
+            $this->maintenanceAccess(),
         );
         try {
             $middleware->process($request, new CallableRequestHandler(static fn() => new JsonResponse([])));
@@ -287,7 +315,10 @@ final class LoginSessionMiddlewareTest extends TestCase
             ));
             self::assertSame(401, $response->getStatusCode());
             self::assertStringContainsString('no-store', $response->getHeaderLine('Cache-Control'));
-            self::assertSame(['error' => 'Sign in again to continue.'], json_decode((string) $response->getBody(), true));
+            self::assertSame(
+                ['error' => 'Sign in again to continue.'],
+                json_decode((string) $response->getBody(), true),
+            );
         }
         $request = $this->request($this->cookie(), '/sis/employees/');
         $response = new SisPrivacyMiddleware()->process($request, new CallableRequestHandler(

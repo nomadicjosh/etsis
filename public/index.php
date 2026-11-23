@@ -10,6 +10,50 @@ use function Codefy\Framework\Helpers\get_fresh_bootstrap;
 
 $app = get_fresh_bootstrap();
 
+// Pause admission before provider boot, session writes, body parsing or the special webhook entry point.
+$maintenanceMode = \Application\Provider\MaintenanceServiceProvider::mode($app);
+$maintenancePath = parse_url($_SERVER['REQUEST_URI'] ?? '/', PHP_URL_PATH) ?: '/';
+$maintenanceMethod = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+if ($maintenanceMode->status()->paused()) {
+    \Application\Provider\MaintenanceServiceProvider::localization($app);
+    $maintenanceAuthentication = \Application\Http\Security\MaintenanceRoutes::authentication(
+        $maintenanceMethod,
+        $maintenancePath,
+        $app->configContainer->string('auth.login_route', 'login'),
+    );
+    $maintenanceCandidate = \Application\Http\Security\MaintenanceRoutes::browserCandidate(
+        $maintenancePath,
+        $_COOKIE[$app->configContainer->string('auth.cookie_name', 'USERSESSID')] ?? null,
+    );
+    $maintenanceAllowed = $maintenanceAuthentication;
+    if (!$maintenanceAuthentication && $maintenanceCandidate) {
+        try {
+            // Verify an actual live super session before matching even an unknown URL or booting page providers.
+            $app->bootstrapWith([\Codefy\Framework\Bootstrap\RegisterProviders::class]);
+            $maintenanceRequest = new \Qubus\Http\ServerRequest([], [], $maintenancePath, $maintenanceMethod)
+                ->withCookieParams($_COOKIE);
+            $maintenanceAllowed = $app->make(\Application\Http\Security\MaintenanceAccess::class)
+                ->permitsRequest($maintenanceRequest);
+            if ($maintenanceAllowed) {
+                $app->bootstrapWith([\Codefy\Framework\Bootstrap\BootProviders::class]);
+            }
+        } catch (\Throwable) {
+            $maintenanceAllowed = false;
+        }
+    }
+    if (!$maintenanceAllowed) {
+        $maintenance = new \Application\Http\Response\MaintenanceResponse($maintenanceMode)->respond(
+            $maintenanceMethod,
+            $maintenancePath,
+            $_SERVER['HTTP_ACCEPT'] ?? '',
+        );
+        if ($maintenance !== null) {
+            new \Laminas\HttpHandlerRunner\Emitter\SapiEmitter()->emit($maintenance);
+            exit;
+        }
+    }
+}
+
 // Verify provider signatures against the untouched body before the router's legacy input parser.
 // Browser mutations continue through the normal session, firewall and CSRF middleware below.
 if (parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) === '/portal/payments/webhook/') {
@@ -36,5 +80,17 @@ if (parse_url($_SERVER['REQUEST_URI'] ?? '', PHP_URL_PATH) === '/portal/payments
     exit;
 }
 
-$kernel = $app->make(name: Kernel::class);
-$kernel->boot();
+try {
+    $kernel = $app->make(name: Kernel::class);
+    $kernel->boot();
+} catch (\Throwable $error) {
+    $maintenance = new \Application\Http\Response\MaintenanceResponse($maintenanceMode)->respond(
+        $maintenanceMethod,
+        $maintenancePath,
+        $_SERVER['HTTP_ACCEPT'] ?? '',
+    );
+    if ($maintenance === null) {
+        throw $error;
+    }
+    new \Laminas\HttpHandlerRunner\Emitter\SapiEmitter()->emit($maintenance);
+}

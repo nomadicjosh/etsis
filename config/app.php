@@ -126,6 +126,7 @@ return [
     */
     "middlewares" => Middleware::defaultMiddlewares()
         ->merge([
+            "maintenance" => Application\Http\Middleware\MaintenanceMiddleware::class,
             "user.authenticate" => Application\Http\Middleware\PasswordAuthenticationMiddleware::class,
             "user.session" => Application\Http\Middleware\StartLoginSessionMiddleware::class,
             "auth.session.authority" => Application\Http\Middleware\LoginSessionAuthorityMiddleware::class,
@@ -146,6 +147,7 @@ return [
     */
     "base_middlewares" => array_merge(
         [
+            "maintenance",
             "sis.privacy",
             "moodle.session.channel",
             "sis.json",
@@ -170,6 +172,7 @@ return [
     | requested. Feel free to add your own console commands.
     */
     "commands" => [
+        \Application\Console\Commands\MaintenanceCommand::class,
         \Application\Console\Commands\VerifyHistoryCommand::class,
         \Application\Console\Commands\PruneLoginSessionsCommand::class,
         \Application\Console\Commands\PruneReportsCommand::class,

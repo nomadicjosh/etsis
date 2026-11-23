@@ -40,7 +40,7 @@ try {
         'check-registered-credits', 'check-coursework-grade-policy',
         'check-curriculum-components', 'check-enrollment-reinstatement', 'check-waitlists', 'check-workload-policy',
         'check-grade-certification', 'check-support-history',
-        'check-profile-requests', 'check-portal', 'check-admission-readiness', 'check-drop-policy', 'check-hiatus-history', 'check-transcript-reviews', 'check-registration-schedule', 'check-gradebook-calculation', 'check-grade-changes', 'check-section-classifications', 'check-program-classifications', 'check-profile-command', 'check-login-sessions',
+        'check-maintenance', 'check-profile-requests', 'check-portal', 'check-admission-readiness', 'check-drop-policy', 'check-hiatus-history', 'check-transcript-reviews', 'check-registration-schedule', 'check-gradebook-calculation', 'check-grade-changes', 'check-section-classifications', 'check-program-classifications', 'check-profile-command', 'check-login-sessions',
         'check-mapped-imports', 'check-standing', 'check-enrollment-load', 'check-content-publication', 'check-prerequisite-permissions',
         'check-advising', 'check-moodle-resolution', 'check-course-rules', 'check-prerequisite-groups', 'check-degree-trials', 'check-transfer-corrections', 'check-report-exports',
     ], true)) {
@@ -52,7 +52,10 @@ try {
         $_SERVER['HTTPS'] = 'on';
     }
     $app = \Codefy\Framework\Helpers\get_fresh_bootstrap();
-    if (($argv[1] ?? '') === 'check-early-webhook') {
+    if (($argv[1] ?? '') === 'check-maintenance') {
+        require __DIR__ . '/MaintenanceBootChecks.php';
+        $status = 0;
+    } elseif (($argv[1] ?? '') === 'check-early-webhook') {
         $app->bootstrapWith([\Codefy\Framework\Bootstrap\RegisterProviders::class]);
         $webhook = $app->make(\Application\Http\Controller\PaymentWebhookController::class);
         $response = $webhook->receive('{"amount_total":12345}', '');

@@ -512,12 +512,13 @@ External student-progress AI remains deferred by project direction; catalog-auth
 - [ ] Exercise encrypted artifact and database backup/restore together, key loss/rotation recovery, failed rebuilds and deployment rollback/recovery procedures.
 - [x] Add the [etSIS-only alpha developer setup](../README.md#install-and-setup-for-alpha-testing), with DDEV configuration, private key creation, migrations/assets, ordinary registration, hidden-email/confirmed first-super bootstrap and feedback guidance. Verify empty SQLite and isolated MariaDB migration/registration/admin access; fix SQLite compiler state so legacy auto-increment tables cannot remove later ULID primary keys. Preserve existing databases.
 - [ ] Finish upgrade/operations guides, office setup guides, policy configuration, safe monitoring and incident procedures.
+- [x] Complete [maintenance admission and operator controls](maintenance-mode.md): current super-only sign-in/access, private early 503 responses, paused external ingress and new worker launches, database-independent recovery controls, protected atomic state and a bounded maintenance-window guide. Existing sessions/roles are rechecked, normal CSRF and reviewed commands remain protected, and no academic/financial facts are rewritten. Full backup/restore, independent integrity anchors, distributed deployment and release acceptance remain under the open items above.
 - [ ] Run representative admissions-to-graduation and registration-to-billing-to-refund scenarios with fictional records, then institution-led acceptance of the agreed initial release scope.
 
 **Done when:** the intended release scope is explicit and accepted, recovery is demonstrated, and operational/security/accessibility checks pass. Event sourcing supports evidence; it does not by itself certify legal compliance.
 
 ## 9. Multi-tenancy
-- [ ] One install codebase, multiple tenants; support subdomain installs; each subdomain should have its own database
+- [ ] One install codebase, multiple tenants; support subdomain installs; each subdomain should have its own database; one `super` account who has the ability to log into any tenant install.
 - [ ] Privacy and Security is of the utmost importance; making sure institution data isn't leaking into other institution data; making sure institutions can see other institution's data.
 - [ ] Option of offloading uploaded documents to Amazon S3 with encryption
 - [ ] Secure and encrypted mission-critical database backups with option to offload to Amazon S3
@@ -525,7 +526,7 @@ External student-progress AI remains deferred by project direction; catalog-auth
 ## 10. Misc.
 - [ ] Gravatar and upload profile image support with cropping
 - [ ] An admin with `super` role can login as/impersonate another user, and return back to themself after
-- [ ] Maintenance mode
+- [x] [Maintenance mode](maintenance-mode.md), with current super-administrator access, private browser/API responses, paused background launches and explicit framework console controls.
 
 ## Next implementation stages
 

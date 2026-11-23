@@ -5,6 +5,17 @@
     <arg name="colors"/>
     <file>src</file>
     <rule ref="QubusCodingStandard"/>
+    <!-- Mixed views follow their surrounding four-space HTML nesting. These PHP-only
+         checks conflict with expanded inline/alternative template control blocks. -->
+    <rule ref="Generic.WhiteSpace.ScopeIndent">
+        <exclude-pattern>*/resources/views/*.phtml</exclude-pattern>
+    </rule>
+    <rule ref="Squiz.ControlStructures.ControlSignature.SpaceAfterCloseParenthesis">
+        <exclude-pattern>*/resources/views/*.phtml</exclude-pattern>
+    </rule>
+    <rule ref="Squiz.ControlStructures.ControlSignature.SpaceAfterKeyword">
+        <exclude-pattern>*/resources/views/*.phtml</exclude-pattern>
+    </rule>
     <rule ref="PSR1.Classes.ClassDeclaration.MissingNamespace">
         <exclude-pattern>database/migrations/*</exclude-pattern>
     </rule>

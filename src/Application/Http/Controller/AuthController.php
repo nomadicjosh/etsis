@@ -14,6 +14,7 @@ use Qubus\Http\ServerRequest;
 use Qubus\Routing\Exceptions\NamedRouteNotFoundException;
 use Qubus\Routing\Exceptions\RouteParamFailedConstraintException;
 use Qubus\Routing\Psr7Router;
+use Domain\Shared\Operations\MaintenanceMode;
 
 final readonly class AuthController
 {
@@ -23,6 +24,7 @@ final readonly class AuthController
         private Gate $gate,
         private LoginCookieReader $cookies,
         private LoginSessionAuthority $sessions,
+        private MaintenanceMode $maintenance,
     ) {
     }
 
@@ -31,7 +33,8 @@ final readonly class AuthController
         $body = $request->getParsedBody();
         $continue = is_array($body) && ($body["continue"] ?? null) === "apply";
         // The session cookie is written after this response. Resolve access on the next GET.
-        return new RedirectResponse("/portal/sign-in/" . ($continue ? "?continue=apply" : ""));
+        return new RedirectResponse($this->maintenance->status()->paused()
+            ? '/admin/' : "/portal/sign-in/" . ($continue ? "?continue=apply" : ""));
     }
 
     /**
@@ -41,7 +44,8 @@ final readonly class AuthController
     public function login(ServerRequest $request): ResponseInterface
     {
         $continue = ($request->getQueryParams()["continue"] ?? null) === "apply";
-        if ($this->gate->isLoggedIn()) {
+        $maintenance = $this->maintenance->status()->paused();
+        if (!$maintenance && $this->gate->isLoggedIn()) {
             return new RedirectResponse("/portal/sign-in/" . ($continue ? "?continue=apply" : ""));
         }
         $failed = ($request->getQueryParams()["notice"] ?? null) === "credentials";
@@ -50,6 +54,7 @@ final readonly class AuthController
             "mode" => "login",
             "url" => $this->router->url("auth"),
             "continue" => $continue,
+            "maintenanceActive" => $maintenance,
         ]);
     }
 

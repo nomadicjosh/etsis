@@ -10,6 +10,10 @@ use Domain\Shared\Exception\AccessDeniedException;
 use Domain\User\Service\LoginSessionAuthority;
 use Psr\Http\Message\{ServerRequestInterface, ResponseInterface};
 use Psr\Http\Server\{MiddlewareInterface, RequestHandlerInterface};
+use Domain\Shared\Operations\MaintenanceMode;
+use Application\Http\Security\MaintenanceAccess;
+use Application\Http\Response\MaintenanceResponse;
+use Qubus\Http\Session\SessionEntity;
 
 /** Runs after successful password authentication, before the framework creates the new cookie. */
 final readonly class StartLoginSessionMiddleware implements MiddlewareInterface
@@ -18,6 +22,8 @@ final readonly class StartLoginSessionMiddleware implements MiddlewareInterface
         private LoginCookieReader $cookies,
         private LoginSessionAuthority $sessions,
         private UserSessionMiddleware $framework,
+        private MaintenanceMode $maintenance,
+        private MaintenanceAccess $maintenanceAccess,
     ) {
     }
     public function process(
@@ -32,9 +38,35 @@ final readonly class StartLoginSessionMiddleware implements MiddlewareInterface
         ) {
             throw new AccessDeniedException("Password authentication is required before starting a sign-in.");
         }
+        if ($this->maintenanceDenies($authenticated)) {
+            $denied = new MaintenanceResponse($this->maintenance)->respond(
+                $request->getMethod(),
+                $request->getUri()->getPath(),
+                $request->getHeaderLine('Accept'),
+            );
+            if ($denied !== null) {
+                return $denied;
+            }
+        }
         $this->sessions->revokeCurrent($this->cookies->read($request));
         $values = $request->getCookieParams();
         unset($values[$this->cookies->name()]);
-        return $this->framework->process($request->withCookieParams($values), $handler);
+        $response = $this->framework->process($request->withCookieParams($values), $handler);
+        if ($this->maintenanceDenies($authenticated)) {
+            $denied = new MaintenanceResponse($this->maintenance)->respond(
+                $request->getMethod(),
+                $request->getUri()->getPath(),
+                $request->getHeaderLine('Accept'),
+            );
+            if ($denied !== null) {
+                return $denied;
+            }
+        }
+        return $response;
+    }
+    private function maintenanceDenies(object $authenticated): bool
+    {
+        return $this->maintenance->status()->paused()
+        && (!$authenticated instanceof SessionEntity || !$this->maintenanceAccess->permitsLogin($authenticated));
     }
 }

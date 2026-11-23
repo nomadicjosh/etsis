@@ -1,5 +1,7 @@
 # Database authorization
 
+During [maintenance](maintenance-mode.md), sign-in remains available only to enabled accounts with the current protected `super` assignment. Existing sessions are rechecked against current account/session authority and the database role; ordinary administrators, broad delegated permissions and stale role text do not bypass the pause. Maintenance keeps normal CSRF, rate limiting, ownership and command authorization in place. Operators retain the existing console bootstrap safeguards for recovery.
+
 `Application\Provider\RbacServiceProvider` binds `Domain\Access\Repository\AccessRepository` to `Infrastructure\Persistence\Repository\SqlAccessRepository`. Access services live in `Domain\Access\Service`; protection of user account edits lives in `Domain\User\Service\UserAccountAccess`. The existing Codefy `Gate` contract and `gate('sis:student:read')` calls remain compatible. Runtime authorization does not load `config/rbac.php`, `RbacLoader`, a JSON permission file, or a PHP role/permission graph.
 
 The migration `20261106000005_CreateSisAccessTables.php` creates seven tables with ULID primary keys: roles, permissions, role permissions, user roles, user permissions, permission implications, and a serialization/bootstrap marker. Foreign keys and unique indexes enforce valid, distinct assignments. Definition names and both directions of assignment/implication pairs are indexed. The existing users key width is retained for compatibility.

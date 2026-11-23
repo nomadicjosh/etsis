@@ -11,12 +11,18 @@ use Psr\Http\Message\{ResponseInterface, ServerRequestInterface};
 use Psr\Http\Server\{MiddlewareInterface, RequestHandlerInterface};
 use Qubus\Http\Session\SessionEntity;
 use Qubus\Config\ConfigContainer;
+use Domain\Shared\Operations\MaintenanceMode;
+use Application\Http\Security\MaintenanceAccess;
 
 /** Uses framework credential verification with a fixed, non-identifying failure notice. */
 final readonly class PasswordAuthenticationMiddleware implements MiddlewareInterface
 {
-    public function __construct(private Sentinel $auth, private ConfigContainer $config)
-    {
+    public function __construct(
+        private Sentinel $auth,
+        private ConfigContainer $config,
+        private MaintenanceMode $maintenance,
+        private MaintenanceAccess $maintenanceAccess,
+    ) {
     }
 
     public function process(
@@ -24,7 +30,10 @@ final readonly class PasswordAuthenticationMiddleware implements MiddlewareInter
         RequestHandlerInterface $handler,
     ): ResponseInterface {
         $user = $this->auth->authenticate($request);
-        if (!($user instanceof SessionEntity)) {
+        if (
+            !($user instanceof SessionEntity)
+            || ($this->maintenance->status()->paused() && !$this->maintenanceAccess->permitsLogin($user))
+        ) {
             $body = $request->getParsedBody();
             $continue = is_array($body) && ($body["continue"] ?? null) === "apply";
             return new RedirectResponse(
