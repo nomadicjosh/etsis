@@ -661,6 +661,9 @@ final readonly class HistoricalSchemaRegistry
                     $payload,
                     $class === \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class,
                 );
+                if (array_key_exists('priority_bypass', $payload)) {
+                    $definition['fields'][] = 'priority_bypass';
+                }
             }
             if ($class === \Domain\Gradebook\Event\GradeComparisonPolicyWasPublished::class) {
                 \Domain\Gradebook\GradeComparisonPolicy::validate($payload);

@@ -47,6 +47,22 @@ final readonly class RegistrationBatchService
     ) {
     }
 
+    /** Internal selected-request assessment. The bypass coordinator owns its independent duty and locks. */
+    public function assessWaitlistBypass(
+        EntityId $student,
+        EntityId $section,
+        HistoryReadBudget $budget,
+        ?\Domain\Finance\ValueObject\RegistrationChargeQuote &$quote,
+    ): array {
+        $selection = new RegistrationBatchSelection($section, $student);
+        $actor = $this->authorize($selection, true);
+        $quotes = [];
+        $result = $this->context($selection, $budget, true, $quotes, reviewingWaitlistBypass: true);
+        $quote = $quotes[$student->value] ?? null;
+        $this->actor($actor, $selection, true);
+        return $result;
+    }
+
     /** Internal reinstatement assessment; the coordinator owns duty, exact identity and source verification. */
     public function assessReinstatement(
         EntityId $student,
@@ -116,6 +132,7 @@ final readonly class RegistrationBatchService
             $this->windows->checked($current->termId, $this->repository->window($current->termId))->fingerprint() !==
                 $expected['registration_window']['revision'] ||
             $current->termId->value !== $expected["term_id"] ||
+            $current->code !== $expected["code"] ||
             $course->id->value !== $expected["course_id"] ||
             $current->publicationVersionId?->value !== $expected["section_version_id"] ||
             $this->versions->selectionPosition($section) !== $expected["selection_position"] ||
@@ -815,6 +832,7 @@ final readonly class RegistrationBatchService
         ?EntityId $replacingSection = null,
         ?CoRequisitePlan $corequisitePlan = null,
         ?EntityId $reinstating = null,
+        bool $reviewingWaitlistBypass = false,
     ): array {
         $section = $this->repository->section($selection->section);
         $course = $this->repository->courseForSection($section);
@@ -921,10 +939,12 @@ final readonly class RegistrationBatchService
                 $readiness[] = [
                     'code' => 'waitlist',
                     'label' => 'Waitlist priority',
-                    'status' => $waitlist['can_register'] ? 'met' : 'blocked',
-                    'message' => $waitlist['can_register'] ? 'Your request is the oldest accepted request.'
-                        : 'Earlier accepted waitlist requests have priority.',
-                    'next_step' => $waitlist['can_register'] ? null
+                    'status' => $reviewingWaitlistBypass ? 'review_required' :
+                        ($waitlist['can_register'] ? 'met' : 'blocked'),
+                    'message' => $reviewingWaitlistBypass ? 'A separately authorized waitlist bypass is required.' :
+                        ($waitlist['can_register'] ? 'Your request is the oldest accepted request.'
+                        : 'Earlier accepted waitlist requests have priority.'),
+                    'next_step' => $reviewingWaitlistBypass || $waitlist['can_register'] ? null
                         : 'Wait for your turn or ask the registrar to review the queue.',
                 ];
             }

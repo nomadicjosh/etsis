@@ -3,6 +3,8 @@ window.createSectionWaitlist = function (ui) {
     "use strict";
     const { node, request, table } = ui;
     const portal = !!ui.portal;
+    const render = (body, ...content) => body.replaceChildren(...content.filter(item => item != null));
+    const bypassText = (key, fallback) => ui.bypassLabels?.[key] || fallback;
     const open = ui.open || ((title) => ui.openDrawer(title, "SECTION WAITLIST"));
     const action = (label, run, primary = false) =>
         ui.button
@@ -23,7 +25,7 @@ window.createSectionWaitlist = function (ui) {
             return await request(...args);
         } catch (error) {
             if (error.status === 403 && body.isConnected)
-                body.replaceChildren(
+                render(body,
                     notice(
                         "Access to this waitlist changed. Reopen the task after checking your access.",
                     ),
@@ -107,7 +109,7 @@ window.createSectionWaitlist = function (ui) {
         );
         form.append(node("div", { class: "d-flex flex-wrap gap-2 my-3" }, submit));
         const edit = () =>
-            body.replaceChildren(
+            render(body,
                 explanation(),
                 notice(
                     `${current.waiting_count} existing requests. This setting belongs to this section. Other sections keep their own settings.`,
@@ -138,7 +140,7 @@ window.createSectionWaitlist = function (ui) {
                     );
                     if (!body.isConnected) return;
                     const failure = node("div", { role: "alert", class: "text-danger" });
-                    body.replaceChildren(
+                    render(body,
                         node("h3", {}, "Review section waitlist policy"),
                         explanation(),
                         notice(
@@ -158,7 +160,7 @@ window.createSectionWaitlist = function (ui) {
                                         review,
                                     );
                                     if (body.isConnected)
-                                        body.replaceChildren(
+                                        render(body,
                                             notice("Section waitlist policy recorded."),
                                             action("View policy", () => policy(section, back)),
                                             back ? action("Back to section", back) : null,
@@ -195,7 +197,7 @@ window.createSectionWaitlist = function (ui) {
             ? await send(body, base)
             : await send(body, `${base}context/`, "POST", { student_id: student });
         if (!body.isConnected) return;
-        body.replaceChildren(
+        render(body,
             node("h3", {}, `${result.course_code} · ${result.section_code}`),
             explanation(),
             notice(
@@ -292,7 +294,7 @@ window.createSectionWaitlist = function (ui) {
             role: "alert",
             class: portal ? "campus-notice" : "text-danger",
         });
-        body.replaceChildren(
+        render(body,
             node(
                 "h3",
                 {},
@@ -321,7 +323,7 @@ window.createSectionWaitlist = function (ui) {
                             student_id: student,
                         });
                         if (!body.isConnected) return;
-                        body.replaceChildren(
+                        render(body,
                             notice("Waitlist change recorded."),
                             action("View current waitlist", back),
                         );
@@ -363,12 +365,14 @@ window.createSectionWaitlist = function (ui) {
                           {},
                           item.rank === 1 ? "Waiting for a seat" : "Earlier requests have priority",
                       ),
+                item.rank > 1 && data.seats_remaining > 0 && ui.can?.('sis:registration:waitlist:bypass')
+                    ? bypassAction(section, item, () => staff(section, back, after, previous)) : null,
                 action("Review removal", () =>
                     remove(body, section, item, () => staff(section, back)),
                 ),
             ),
         ]);
-        body.replaceChildren(
+        render(body,
             node("h3", {}, data.section_code),
             explanation(),
             notice(
@@ -389,6 +393,10 @@ window.createSectionWaitlist = function (ui) {
                 ),
             ),
             !data.items.length ? node("p", {}, "No active waitlist requests.") : null,
+            ui.can?.('sis:registration:waitlist:bypass') ? action(
+                bypassText('history', 'Bypass decision history'),
+                () => bypassHistory(section, () => staff(section, back, after, previous)),
+            ) : null,
             previous.length
                 ? action("Previous waitlist page", () =>
                       staff(section, back, previous.at(-1), previous.slice(0, -1)),
@@ -405,6 +413,176 @@ window.createSectionWaitlist = function (ui) {
             back ? action("Back to section", back) : null,
         );
     }
+    async function bypassHistory(section, back, before = null, through = null, previous = []) {
+        const body = open(bypassText('history', 'Bypass decision history'));
+        body.append(notice(bypassText('loading_history', 'Loading recorded bypass decisions…')));
+        const query = new URLSearchParams();
+        if (before !== null) query.set('before', String(before));
+        if (through !== null) query.set('through', String(through));
+        const data = await send(body, `/sis/sections/${section.id}/waitlist/bypass/history/${query.size ? `?${query}` : ''}`);
+        if (!body.isConnected) return;
+        const cards = data.items.map(item => {
+            const details = node('dl', { class: 'row mb-0' });
+            for (const [label, value] of [
+                [bypassText('recorded_at', 'Recorded decision time'), item.effective_at],
+                [bypassText('earlier', 'Earlier waiting requests'), String(item.earlier_requests)],
+                [bypassText('reason', 'Reason'), item.reason],
+                [bypassText('actor', 'Staff account reference'), item.actor_id],
+                [bypassText('enrollment', 'Accepted registration reference'), item.enrollment_id],
+            ]) details.append(node('dt', { class: 'col-sm-4' }, label), node('dd', { class: 'col-sm-8 text-break' }, value));
+            return node('article', { class: 'record-section', 'aria-label': item.current_name },
+                node('h3', { class: 'h6 text-break' }, item.current_name),
+                node('p', { class: 'text-secondary text-break' }, item.current_institutional_id), details);
+        });
+        render(body,
+            node('h3', { class: 'h5 text-break' }, data.section_code),
+            node('p', {}, bypassText('history_help',
+                'Recorded reasons and registration references remain unchanged after later queue changes or drops. Student names and institutional IDs below are current. Access to this history does not grant profile access.')),
+            ...cards,
+            !cards.length ? notice(bypassText('empty_history', 'No waitlist bypass decisions are recorded for this section.')) : null,
+            node('div', { class: 'd-flex flex-wrap gap-2 my-3' },
+                previous.length ? action(bypassText('newer', 'Newer bypass decisions'), () =>
+                    bypassHistory(section, back, previous.at(-1), data.through, previous.slice(0, -1))) : null,
+                data.next_before !== null ? action(bypassText('older', 'Older bypass decisions'), () =>
+                    bypassHistory(section, back, data.next_before, data.through, [...previous, before])) : null,
+                action(bypassText('refresh_history', 'Refresh bypass history'), () => bypassHistory(section, back)),
+                action(bypassText('back_queue', 'Back to queue'), back)),
+        );
+    }
+
+    function bypassAction(section, item, back) {
+        const button = action(bypassText('open', 'Review priority bypass'), () => bypass(section, item, back));
+        button.prepend(node('i', { class: 'bi bi-person-check', 'aria-hidden': 'true' }));
+        return button;
+    }
+
+    function bypass(section, item, back) {
+        const body = open(bypassText('title', 'Waitlist priority bypass'));
+        const base = `/sis/sections/${section.id}/waitlist/bypass/`;
+        let generation = 0;
+        const active = version => body.isConnected && version === generation;
+        const help = () => node('p', {}, bypassText('help',
+            'Register this later request ahead of earlier waiting requests for a documented institutional reason. Earlier requests keep their places. Normal registration eligibility, capacity and charges still apply.'));
+        const backButton = () => action(bypassText('back_queue', 'Back to queue'), back);
+        const formatMoney = (minor, currency) => ui.money ? ui.money(minor, currency) : `${(minor / 100).toFixed(2)} ${currency}`;
+        function edit(draft = '') {
+            const version = ++generation;
+            const reason = node('textarea', { id: 'waitlist-bypass-reason', class: 'form-control',
+                required: true, maxlength: 1000, rows: 4 });
+            reason.value = draft;
+            const error = node('div', { role: 'alert', class: 'text-danger', tabindex: '-1' });
+            const submit = node('button', { type: 'submit', class: 'btn btn-primary' },
+                bypassText('review', 'Review bypass and registration'));
+            const form = node('form', { class: 'record-form', 'aria-label': bypassText('title', 'Waitlist priority bypass') },
+                node('fieldset', { class: 'record-form-section' },
+                    node('legend', { class: 'h6' }, item.current_name),
+                    node('p', { class: 'text-secondary text-break' }, item.current_institutional_id),
+                    node('label', { for: reason.id, class: 'form-label' },
+                        bypassText('reason_label', 'Institutional reason for this bypass')), reason),
+                error, node('div', { class: 'd-flex flex-wrap gap-2 my-3' }, submit, backButton()));
+            render(body, help(), form);
+            form.addEventListener('submit', event => {
+                event.preventDefault();
+                if (!form.reportValidity()) return;
+                const captured = reason.value;
+                ui.task(async () => {
+                    try {
+                        const reviewed = await send(body, `${base}review/`, 'POST', {
+                            student_id: item.student_id, entry_id: item.entry_id, reason: captured,
+                        });
+                        if (!active(version)) return;
+                        if (reason.value !== captured) {
+                            error.textContent = bypassText('draft_changed',
+                                'Your reason changed while the review loaded. Review your latest text again.');
+                            error.focus();
+                            return;
+                        }
+                        review(reviewed);
+                    } catch (failure) {
+                        if (active(version) && error.isConnected) {
+                            error.textContent = failure.message;
+                            error.focus();
+                        }
+                    }
+                }, submit);
+            });
+        }
+        function review(reviewed) {
+            const version = ++generation;
+            const details = node('dl', { class: 'row mb-0' });
+            for (const [label, value] of [
+                [bypassText('student', 'Student (current)'),
+                    `${reviewed.student.given_name} ${reviewed.student.family_name} · ${reviewed.student.institutional_id}`],
+                [bypassText('section', 'Section'), reviewed.section.code],
+                [bypassText('course', 'Course'), `${reviewed.section.course_code} — ${reviewed.section.course_title}`],
+                [bypassText('credits', 'Academic credits'), String(reviewed.section.credits_milli / 1000)],
+                [bypassText('earlier', 'Earlier waiting requests'), String(reviewed.earlier_requests)],
+                [bypassText('seats', 'Available seats'), String(reviewed.section.seats_remaining)],
+                [bypassText('reason', 'Reason'), reviewed.reason],
+            ]) details.append(node('dt', { class: 'col-sm-4' }, label),
+                node('dd', { class: 'col-sm-8 text-break' }, value));
+            const charges = reviewed.student.charges;
+            const billing = node('section', { class: 'record-section', 'aria-label': bypassText('charges', 'Registration charges') },
+                node('h3', { class: 'h6' }, bypassText('charges', 'Registration charges')),
+                node('ul', {}, ...(charges.items || []).map(charge => node('li', {},
+                    `${charge.name || ''} · ${formatMoney(charge.minor, charge.currency || charges.currency)} · ${charge.status === 'new'
+                        ? bypassText('new_charge', 'New charge') : bypassText('not_due', 'Already assessed; no new charge')}`))),
+                node('ul', { class: 'text-danger' }, ...(charges.problems || []).map(problem => node('li', {}, problem))),
+                node('p', {}, `${bypassText('total', 'Total new charges')}: ${charges.total_minor === null
+                    ? bypassText('unavailable', 'Unavailable') : formatMoney(charges.total_minor, charges.currency)}`));
+            const error = node('div', { role: 'alert', class: 'text-danger', tabindex: '-1' });
+            const command = Object.fromEntries(['operation_id', 'student_id', 'person_id', 'entry_id', 'version',
+                'assessment_revision', 'reason', 'review_token'].map(key => [key, reviewed[key]]));
+            const controls = node('div', { class: 'd-flex flex-wrap gap-2 my-3' });
+            if (reviewed.can_confirm) controls.append(action(bypassText('confirm', 'Confirm bypass and register'), async () => {
+                try {
+                    await send(body, `${base}confirm/`, 'POST', command);
+                    if (!active(version)) return;
+                    ++generation;
+                    render(body, notice(bypassText('success',
+                        'Registration completed with the reviewed waitlist bypass.')), backButton());
+                } catch (failure) {
+                    if (active(version) && error.isConnected) {
+                        error.textContent = failure.message;
+                        error.focus();
+                    }
+                }
+            }, true));
+            controls.append(
+                action(bypassText('refresh', 'Refresh bypass review'), async () => {
+                    try {
+                        const refreshed = await send(body, `${base}review/`, 'POST', {
+                            student_id: item.student_id, entry_id: item.entry_id, reason: reviewed.reason,
+                        });
+                        if (active(version)) review(refreshed);
+                    } catch (failure) {
+                        if (active(version) && error.isConnected) {
+                            error.textContent = failure.message;
+                            error.focus();
+                        }
+                    }
+                }),
+                action(bypassText('revise', 'Revise reason'), () => edit(reviewed.reason)), backButton());
+            render(body,
+                node('p', {}, bypassText('review_help',
+                    'Check the selected student, section, charges and reason. This review expires after twenty minutes and reserves no seat. A changed queue, registration source or price requires a fresh review.')),
+                node('section', { class: 'record-section' }, details),
+                billing,
+                node('section', { class: 'record-section' },
+                    node('h3', { class: 'h6' }, bypassText('checks', 'Registration checks')),
+                    node('ul', {}, ...reviewed.student.readiness.map(check => node('li', {},
+                        check.code === 'waitlist' ? bypassText('priority_notice',
+                            'This review explicitly requests an exception to waitlist priority.') : check.message))),
+                    ...(reviewed.student.issues.length ? [node('ul', { class: 'text-danger' },
+                        ...reviewed.student.issues.map(issue => node('li', {}, issue)))] : [])),
+                !reviewed.can_confirm ? notice(bypassText('blocked',
+                    'Resolve the listed registration, seat or pricing issues, then refresh this review.')) : null,
+                error, controls,
+            );
+        }
+        edit();
+    }
+
     function remove(body, section, item, back) {
         const reason = node("textarea", {
             id: "waitlist-removal-reason",
@@ -428,7 +606,7 @@ window.createSectionWaitlist = function (ui) {
             "Review waitlist removal",
         );
         form.append(submit);
-        body.replaceChildren(
+        render(body,
             node("h3", {}, `Remove request for ${item.current_name}`),
             form,
             action("Back to queue", back),
@@ -459,7 +637,7 @@ window.createSectionWaitlist = function (ui) {
             `/portal/api/waitlists/${student}/${after ? `?after=${encodeURIComponent(after)}` : ""}`,
         );
         if (!body.isConnected) return;
-        body.replaceChildren(
+        render(body,
             explanation(),
             ...page.items.map((item) =>
                 node(

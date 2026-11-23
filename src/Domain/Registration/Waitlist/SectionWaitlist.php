@@ -28,6 +28,7 @@ final class SectionWaitlist extends EventSourcedAggregate
     ];
     private array $entries = [];
     private array $receipts = [];
+    private array $bypasses = [];
     private array $policy = [
         "enabled" => false,
         "maximum_active" => 50,
@@ -39,6 +40,26 @@ final class SectionWaitlist extends EventSourcedAggregate
     {
         try {
             $keys = $policy ? self::POLICY_FIELDS : self::PLACE_FIELDS;
+            if (!$policy && array_key_exists('priority_bypass', $p)) {
+                $keys[] = 'priority_bypass';
+                $bypass = $p['priority_bypass'];
+                if (
+                    $p['action'] !== 'registered' || !is_array($bypass) || count($bypass) !== 3 ||
+                    !is_string($bypass['review_revision'] ?? null) ||
+                    !preg_match('/^[a-f0-9]{64}$/D', $bypass['review_revision']) ||
+                    !is_int($bypass['queue_version'] ?? null) || $bypass['queue_version'] < 1 ||
+                    $bypass['queue_version'] >= self::MAX_EVENTS ||
+                    !is_array($bypass['earlier_entry_ids'] ?? null) ||
+                    !array_is_list($bypass['earlier_entry_ids']) ||
+                    count($bypass['earlier_entry_ids']) < 1 || count($bypass['earlier_entry_ids']) > 99 ||
+                    count(array_unique($bypass['earlier_entry_ids'])) !== count($bypass['earlier_entry_ids'])
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                foreach ($bypass['earlier_entry_ids'] as $id) {
+                    new EntityId($id);
+                }
+            }
             if (count($keys) !== count($p) || array_diff(array_keys($p), $keys) !== []) {
                 throw new CorruptHistoryException();
             }
@@ -114,6 +135,22 @@ final class SectionWaitlist extends EventSourcedAggregate
             "action" => $policy ? "policy" : $p["action"],
             "entry_id" => $p["entry_id"] ?? null,
         ];
+        if (isset($p['priority_bypass'])) {
+            $this->bypasses[] = [
+                'operation_id' => $p['operation_id'], 'entry_id' => $p['entry_id'],
+                'student_id' => $p['student_id'], 'person_id' => $p['person_id'],
+                'enrollment_id' => $p['enrollment_id'], 'accepted_position' => $event->playhead(),
+                'earlier_requests' => count($p['priority_bypass']['earlier_entry_ids']),
+                'actor_id' => $context->actor->value, 'reason' => $context->reason,
+                'effective_at' => $context->effectiveAt->format(DATE_ATOM),
+            ];
+            $this->receipts[$p['operation_id']] += [
+                'bypass_revision' => $p['priority_bypass']['review_revision'],
+                'enrollment_id' => $p['enrollment_id'],
+                'student_id' => $p['student_id'],
+                'person_id' => $p['person_id'],
+            ];
+        }
         if (!$policy) {
             $this->entries[$p["entry_id"]]["changed_at"] = $context->effectiveAt->format(DATE_ATOM);
         }
@@ -160,12 +197,27 @@ final class SectionWaitlist extends EventSourcedAggregate
             return;
         }
         $entry = $this->entries[$p["entry_id"]] ?? throw new CorruptHistoryException();
+        $earlier = [];
+        foreach ($this->active() as $waiting) {
+            if ($waiting['id'] === $entry['id']) {
+                break;
+            }
+            $earlier[] = $waiting['id'];
+        }
+        if (
+            isset($p['priority_bypass']) &&
+            ($p['priority_bypass']['queue_version'] !== $event->playhead() - 1 ||
+            $p['priority_bypass']['earlier_entry_ids'] !== $earlier)
+        ) {
+            throw new CorruptHistoryException();
+        }
         if (
             $entry["status"] !== "active" ||
             $entry["student_id"] !== $p["student_id"] ||
             $entry["person_id"] !== $p["person_id"] ||
             $entry["policy_position"] !== $p["policy_position"] ||
-            ($p["action"] === "registered" && ($this->active()[0]["id"] ?? null) !== $p["entry_id"])
+            ($p["action"] === "registered" && !isset($p['priority_bypass']) &&
+                ($this->active()[0]["id"] ?? null) !== $p["entry_id"])
         ) {
             throw new CorruptHistoryException();
         }
@@ -189,6 +241,11 @@ final class SectionWaitlist extends EventSourcedAggregate
     public function entries(): array
     {
         return $this->entries;
+    }
+    /** Restricted workflow evidence; never part of the ordinary queue or owner projection. */
+    public function bypasses(): array
+    {
+        return $this->bypasses;
     }
     public function forStudent(string $student): ?array
     {

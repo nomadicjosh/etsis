@@ -21,6 +21,8 @@ final readonly class WaitlistSeatGuard
         private WaitlistLedger $ledger,
         private AuditTrail $audit,
         private Clock $clock,
+        private \Domain\Shared\Security\StudentAccess $access,
+        private \Domain\Shared\Service\ReviewProof $proofs,
     ) {
     }
     public function status(
@@ -56,12 +58,15 @@ final readonly class WaitlistSeatGuard
         }
         return $results;
     }
-    public function claim(EntityId $section, EntityId $student): WaitlistClaim
+    public function claim(EntityId $section, EntityId $student, ?WaitlistBypass $bypass = null): WaitlistClaim
     {
         $budget = WaitlistLedger::budget();
         $root = $this->ledger->load($section, $budget);
         $first = $root->active()[0] ?? null;
-        if ($first !== null && $first["student_id"] !== $student->value) {
+        if ($bypass !== null) {
+            $this->bypassAuthority($bypass);
+            $this->bypassEntry($root, $section, $student, $bypass);
+        } elseif ($first !== null && $first["student_id"] !== $student->value) {
             throw new ValidationException([
                 [
                     "field" => "waitlist",
@@ -75,8 +80,9 @@ final readonly class WaitlistSeatGuard
             $section,
             $student,
             $root->playhead(),
-            $first["id"] ?? null,
+            $bypass?->entry->value ?? $first["id"] ?? null,
             $budget,
+            $bypass,
         );
     }
     public function complete(WaitlistClaim $claim, Enrollment $enrollment, EntityId $actor): void
@@ -90,7 +96,7 @@ final readonly class WaitlistSeatGuard
         $root = $this->ledger->load($claim->section, $claim->budget);
         if (
             $root->playhead() !== $claim->version ||
-            ($root->active()[0]["id"] ?? null) !== $claim->entry
+            ($claim->bypass === null && ($root->active()[0]["id"] ?? null) !== $claim->entry)
         ) {
             throw new ConcurrentModificationException(
                 "The waitlist changed during registration. Review again.",
@@ -99,8 +105,13 @@ final readonly class WaitlistSeatGuard
         if ($claim->entry === null) {
             return;
         }
+        $bypass = $claim->bypass;
+        if ($bypass !== null) {
+            $this->bypassAuthority($bypass, $actor);
+            $this->bypassEntry($root, $claim->section, $claim->student, $bypass);
+        }
         $entry = $root->entries()[$claim->entry];
-        $operation = DerivedIdentity::from($enrollment->id, "waitlist.registration");
+        $operation = $bypass?->operation ?? DerivedIdentity::from($enrollment->id, "waitlist.registration");
         $this->ledger->append(
             $claim->section,
             $root,
@@ -112,14 +123,23 @@ final readonly class WaitlistSeatGuard
                 "person_id" => $entry["person_id"],
                 "policy_position" => $entry["policy_position"],
                 "enrollment_id" => $enrollment->id->value,
-            ],
+            ] + ($bypass === null ? [] : ['priority_bypass' => [
+                'review_revision' => $bypass->revision(),
+                'queue_version' => $root->playhead(),
+                'earlier_entry_ids' => array_column(array_slice(
+                    $root->active(),
+                    0,
+                    array_search($entry['id'], array_column($root->active(), 'id'), true),
+                ), 'id'),
+            ]]),
             false,
             new EventContext(
                 $actor,
                 $this->clock->now(),
                 $operation,
                 causation: $enrollment->id,
-                reason: "Oldest accepted waitlist request completed by genuine course registration.",
+                reason: $bypass?->reason ??
+                    "Oldest accepted waitlist request completed by genuine course registration.",
             ),
         );
         $this->audit->record($actor, "registration.waitlist_registered", $enrollment->id);
@@ -129,6 +149,45 @@ final readonly class WaitlistSeatGuard
             throw new ConcurrentModificationException(
                 "The waitlist changed before registration completed.",
             );
+        }
+    }
+
+    private function bypassAuthority(WaitlistBypass $bypass, ?EntityId $expected = null): void
+    {
+        $actor = $this->access->requirePermission(WaitlistBypass::DUTY);
+        foreach ([WaitlistService::DUTY, 'sis:registration:manage'] as $duty) {
+            if ($this->access->requirePermission($duty)->value !== $actor->value) {
+                throw new \Domain\Shared\Exception\AccessDeniedException();
+            }
+        }
+        if ($expected !== null && $actor->value !== $expected->value) {
+            throw new \Domain\Shared\Exception\AccessDeniedException();
+        }
+        $this->proofs->validate(
+            $bypass->token,
+            'waitlist',
+            'priority_bypass',
+            $bypass->section,
+            $actor,
+            $bypass->operation,
+            $bypass->revision(),
+        );
+    }
+
+    private function bypassEntry(
+        SectionWaitlist $root,
+        EntityId $section,
+        EntityId $student,
+        WaitlistBypass $bypass,
+    ): void {
+        $entry = $root->forStudent($student->value);
+        if (
+            $bypass->section->value !== $section->value || $bypass->student->value !== $student->value ||
+            $bypass->version !== $root->playhead() || ($entry['id'] ?? null) !== $bypass->entry->value ||
+            ($entry['person_id'] ?? null) !== $bypass->person->value ||
+            ($root->active()[0]['id'] ?? null) === $bypass->entry->value
+        ) {
+            throw new ConcurrentModificationException('The reviewed waitlist bypass changed. Review again.');
         }
     }
 }

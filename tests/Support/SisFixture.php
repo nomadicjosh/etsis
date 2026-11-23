@@ -1747,8 +1747,27 @@ final class SisFixture
             $this->waitlistLedger(),
             $audit ?? $this->audit,
             $this->clock,
+            $this->access,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
         );
     }
+    public function waitlistBypasses(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Registration\Waitlist\WaitlistBypassService {
+        return new \Domain\Registration\Waitlist\WaitlistBypassService(
+            $this->waitlistLedger(),
+            $this->registration,
+            $this->admissions,
+            $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions,
+            $audit ?? $this->audit,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+            $this->registrationBatches(),
+            $this->service,
+        );
+    }
+
     public function waitlists(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
     ): \Domain\Registration\Waitlist\WaitlistService {

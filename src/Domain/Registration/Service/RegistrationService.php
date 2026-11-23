@@ -58,6 +58,7 @@ final readonly class RegistrationService
         ?\Domain\Finance\ValueObject\RegistrationChargeQuote $chargeQuote = null,
         ?RegistrationCourseRead $courseRead = null,
         ?CoRequisitePlan $corequisitePlan = null,
+        ?\Domain\Registration\Waitlist\WaitlistBypass $waitlistBypass = null,
     ): Enrollment {
         $actor = $this->access->authenticatedUserId();
         $initialStudent = $this->admissions->student($studentId);
@@ -77,6 +78,7 @@ final readonly class RegistrationService
             $chargeQuote,
             $courseRead,
             $corequisitePlan,
+            $waitlistBypass,
         ): Enrollment {
             // Eligibility locks follow student, person, section and course order.
             $this->repository->lockStudent($studentId);
@@ -114,7 +116,10 @@ final readonly class RegistrationService
                     "A closed enrollment requires registrar review before re-enrollment.",
                 );
             }
-            $waitlistClaim = $this->waitlists->claim($sectionId, $studentId);
+            if ($waitlistBypass !== null && !$byStaff) {
+                throw new AccessDeniedException('Waitlist bypass requires staff registration.');
+            }
+            $waitlistClaim = $this->waitlists->claim($sectionId, $studentId, $waitlistBypass);
             $course = $this->repository->courseForSection($section);
             $window = $this->windows->checked($section->termId, $this->repository->window($section->termId));
             $courseRead ??= new RegistrationCourseRead();

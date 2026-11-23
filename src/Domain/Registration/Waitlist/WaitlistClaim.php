@@ -16,6 +16,7 @@ final readonly class WaitlistClaim implements \JsonSerializable
         public int $version,
         public ?string $entry,
         #[\SensitiveParameter] public HistoryReadBudget $budget,
+        #[\SensitiveParameter] public ?WaitlistBypass $bypass = null,
     ) {
     }
     public function jsonSerialize(): array

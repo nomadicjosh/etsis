@@ -304,7 +304,7 @@
     const classificationStudio = window.createWorkspaceClassifications({ reportingLabels: config.section_reporting_labels, node, request, task, buildForm, formData, openDrawer, actionMenu, badge, publications: course => catalogStudio.publications(course), sectionPublications: section => catalogStudio.sectionPublications(section) });
     const programStudio = window.createWorkspacePrograms({ node, request, task, buildForm, formData, openDrawer, degreeAudit: () => degreeAuditStudio, references: () => classificationStudio, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const offeringTemplates = window.createWorkspaceOfferingTemplates({ node, request, task, table, badge, money, actionMenu, buildForm, formData, openDrawer, notify, catalog: () => catalogStudio });
-    const waitlistStudio = window.createSectionWaitlist({ node, request, task, table, can, openDrawer,
+    const waitlistStudio = window.createSectionWaitlist({ bypassLabels: config.waitlist_bypass_labels, node, request, task, table, money, can, openDrawer,
         register: (student, section, back) => batchRegistration.single(student, back, { section_id: section }) });
     const batchRegistration = window.createWorkspaceRegistration({ node, request, task, can, table, money, recordSummary, buildForm, openDrawer, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const moodleStudio = window.createWorkspaceMoodle({ node, request, task, can });

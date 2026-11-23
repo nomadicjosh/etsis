@@ -86,4 +86,51 @@ if (
 ) {
     throw new RuntimeException("Owner request history lost its safe outcome.");
 }
+$sis->access->staff = true;
+$entries = [];
+foreach ([$student, $other] as $waiting) {
+    $r = $postData($path . 'review/', [
+        'student_id' => $waiting->id->value, 'entry_id' => null, 'action' => 'requested',
+    ]);
+    $entries[] = $postData($path . 'confirm/', ['student_id' => $waiting->id->value] + $r)['entry_id'];
+}
+$sis->sql->update('sis_sections', ['capacity' => 2], ['id' => $section->id->value]);
+$bypassInput = ['student_id' => $other->id->value, 'entry_id' => $entries[1],
+    'reason' => 'Fictional restricted bypass <b>reason</b>'];
+$sis->access->staff = false;
+$sis->access->grants = ['sis:registration:manage', 'sis:registration:waitlist'];
+$postData($path . 'bypass/review/', $bypassInput, 403);
+$sis->access->grants[] = \Domain\Registration\Waitlist\WaitlistBypass::DUTY;
+$r = $postData($path . 'bypass/review/', $bypassInput);
+if (!$r['can_confirm'] || $r['earlier_requests'] !== 1) {
+    throw new RuntimeException('The actual bypass provider lost its normal registration assessment.');
+}
+$command = array_intersect_key($r, array_flip(['operation_id', 'student_id', 'person_id', 'entry_id',
+    'version', 'assessment_revision', 'reason', 'review_token']));
+$accepted = $postData($path . 'bypass/confirm/', $command);
+$history = $read($path . 'bypass/history/');
+if (
+    count($history['items']) !== 1 || $history['items'][0]['reason'] !== $bypassInput['reason'] ||
+    $history['items'][0]['enrollment_id'] !== $accepted['enrollment_id']
+) {
+    throw new RuntimeException('Restricted bypass history lost its accepted evidence.');
+}
+if ($postData($path . 'bypass/confirm/', $command) !== $accepted) {
+    throw new RuntimeException('An accepted bypass changed its receipt.');
+}
+$sis->access->staff = true;
+if ($read($path)['items'][0]['entry_id'] !== $entries[0]) {
+    throw new RuntimeException('A bypass removed an earlier waiting request.');
+}
+$sis->access->staff = false;
+$sis->access->grants = [];
+$read($path . 'bypass/history/', 403);
+$sis->access->actor = $sis->admissions->person($other->personId)->ownerUserId;
+$visible = $read('/portal/api/waitlists/' . $other->id->value . '/');
+if (
+    $visible['items'][0]['status'] !== 'registered' ||
+    str_contains(json_encode($visible, JSON_THROW_ON_ERROR), 'restricted bypass')
+) {
+    throw new RuntimeException('Owner waitlist outcomes exposed private bypass evidence.');
+}
 echo "Waitlist route checks passed.\n";

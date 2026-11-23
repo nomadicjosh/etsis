@@ -1345,3 +1345,151 @@ msgstr ""
 #: resources/views/backend/workspace/section-reporting-labels.php:32
 msgid "Reporting group choice recorded in accepted offering"
 msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:8
+msgid "Waitlist priority bypass"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:9
+msgid "Review priority bypass"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:10
+msgid "Institutional reason for this bypass"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:11
+msgid "Review bypass and registration"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:12
+msgid "Confirm bypass and register"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:13
+msgid "Revise reason"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:14
+msgid "Refresh bypass review"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:15
+msgid "Back to queue"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:16
+msgid "Registration completed with the reviewed waitlist bypass."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:17
+msgid "Register this later request ahead of earlier waiting requests for a documented institutional reason. Earlier requests keep their places. Normal registration eligibility, capacity and charges still apply."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:21
+msgid "Check the selected student, section, charges and reason. This review expires after twenty minutes and reserves no seat. A changed queue, registration source or price requires a fresh review."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:25
+msgid "Student (current)"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:26
+msgid "Section"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:27
+msgid "Course"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:28
+msgid "Academic credits"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:29
+msgid "Earlier waiting requests"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:30
+msgid "Registration charges"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:31
+msgid "New charge"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:32
+msgid "Already assessed; no new charge"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:33
+msgid "Available seats"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:34
+msgid "Total new charges"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:35
+msgid "Reason"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:36
+msgid "Registration checks"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:37
+msgid "This review explicitly requests an exception to waitlist priority."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:38
+msgid "Resolve the listed registration, seat or pricing issues, then refresh this review."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:39
+msgid "Your reason changed while the review loaded. Review your latest text again."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:40
+msgid "Unavailable"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:41
+msgid "Bypass decision history"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:42
+msgid "Refresh bypass history"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:43
+msgid "Loading recorded bypass decisions…"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:44
+msgid "No waitlist bypass decisions are recorded for this section."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:45
+msgid "Recorded reasons and registration references remain unchanged after later queue changes or drops. Student names and institutional IDs below are current. Access to this history does not grant profile access."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:49
+msgid "Recorded decision time"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:50
+msgid "Staff account reference"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:51
+msgid "Accepted registration reference"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:52
+msgid "Older bypass decisions"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:53
+msgid "Newer bypass decisions"
+msgstr ""

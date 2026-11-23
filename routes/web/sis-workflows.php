@@ -909,6 +909,10 @@ return static function (Psr7Router $router): void {
         $reinstatements, 'confirm',
     ]);
     $waitlists = \Application\Http\Controller\SisWaitlistController::class;
+    $bypasses = \Application\Http\Controller\SisWaitlistBypassController::class;
+    $router->get('/sis/sections/{id}/waitlist/bypass/history/', [$bypasses, 'history']);
+    $router->post('/sis/sections/{id}/waitlist/bypass/review/', [$bypasses, 'review']);
+    $router->post('/sis/sections/{id}/waitlist/bypass/confirm/', [$bypasses, 'confirm']);
     $router->get('/sis/sections/{id}/waitlist/policy/', [$waitlists, 'policy'])->name('sis.waitlist.policy');
     $router->post('/sis/sections/{id}/waitlist/policy/review/', [$waitlists, 'reviewPolicy']);
     $router->post('/sis/sections/{id}/waitlist/policy/confirm/', [$waitlists, 'confirmPolicy']);
@@ -1235,9 +1239,13 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["GET"], "/sis/bookings/{id}/", [SisBookingController::class, "show"])
         ->name("sis.booking.show");
-    $router->get('/sis/sections/{id}/contact-hours/', [\Application\Http\Controller\SisSectionContactController::class, 'view'])
+    $router->get('/sis/sections/{id}/contact-hours/', [
+        \Application\Http\Controller\SisSectionContactController::class, 'view',
+    ])
         ->name('sis.section.contact-hours');
-    $router->post('/sis/sections/{id}/contact-hours/', [\Application\Http\Controller\SisSectionContactController::class, 'save'])
+    $router->post('/sis/sections/{id}/contact-hours/', [
+        \Application\Http\Controller\SisSectionContactController::class, 'save',
+    ])
         ->name('sis.section.contact-hours.save');
     $router->get('/sis/grade-comparison-policy/', [
         \Application\Http\Controller\SisGradeComparisonPolicyController::class, 'view',
@@ -1426,7 +1434,9 @@ return static function (Psr7Router $router): void {
         \Application\Http\Controller\SisPortalEditorController::class, 'review',
     ])->name('sis.portal.publication.review');
     $router
-        ->map(["POST"], "/sis/portal/posts/{id}/publication/", [\Application\Http\Controller\SisPortalEditorController::class, "confirm"])
+        ->map(["POST"], "/sis/portal/posts/{id}/publication/", [
+            \Application\Http\Controller\SisPortalEditorController::class, "confirm",
+        ])
         ->name("sis.portal.publish");
     $router
         ->map(["GET"], "/sis/portal/content/{code}/", [SisPortalController::class, "show"])

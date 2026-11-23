@@ -18,6 +18,8 @@ Course-group [sending-institution eligibility](degree-audit-builder.md#sending-i
 
 ## Sources and evidence
 
+[Reviewed waitlist bypasses](registration-history.md#review-a-waitlist-priority-bypass) now retain an explicit institutional reason and the actual earlier accepted queue references with the genuine registered outcome. Ordinary FIFO decisions preserve their earlier shapes. Existing earlier requests remain active; student enrollment, academic credit, financial posting, queue completion and audit are atomic. Restricted paged decision history exposes only authorized curated evidence, while owner outcomes stay neutral. No earlier exception is inferred, no event is converted and existing projection shapes remain unchanged.
+
 Nested prerequisite routes now retain their counted expression in the existing course publication and accepted registration evidence. Current drafts, published rules and curated branch-status explanations remain distinct; earlier flat rules are not rewritten. See the [authoring and historical boundaries](course-publication.md#nested-prerequisite-routes).
 
 The existing [legacy inventory](legacy-inventory.json) records 51 documents, six migrations and 207 views. Primary academic sources for this review are:

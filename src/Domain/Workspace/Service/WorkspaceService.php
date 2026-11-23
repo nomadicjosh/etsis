@@ -80,6 +80,7 @@ final readonly class WorkspaceService
         "sis:registration:reinstate",
         "sis:gradebook:closed",
         "sis:registration:waitlist",
+        "sis:registration:waitlist:bypass",
         "sis:registration:policy",
         "sis:registration:manage",
         "sis:gradebook:certify",
