@@ -22,7 +22,7 @@ The converter reads 20 stream identities at a time and 50 source events per page
 
 The original event ID, aggregate identity, type, playhead, payload and recorded event time are retained. The original transaction ID, original JSON text and SQL timestamp are also retained in an encrypted provenance record. The old adapter interpreted its timezone-less event metadata clock as UTC; conversion preserves that interpretation and the original text, without claiming that the historic writer's timezone was independently verified. Journal insertion time records the conversion time separately. No actor, effective date, approval or earlier policy version is invented when the original record omitted it.
 
-The migration has **not** been applied to a working database during development. Its source-to-target checks verify a conversion, not the authenticity of plaintext records before this protection existed. Protect any backups, database snapshots and retained storage containing the original plaintext under the institution's recovery and retention policy.
+Initial migration qualification used isolated fixtures; consult migration status and the current handoff for the configured installation's applied state. Source-to-target checks verify a conversion, not the authenticity of plaintext records before this protection existed. Protect any backups, database snapshots and retained storage containing the original plaintext under the institution's recovery and retention policy.
 
 ## Ports, schemas and provenance
 
@@ -61,13 +61,15 @@ The installed Defuse authenticated-encryption component protects versioned envel
 
 Retain every key needed for stored events, heads, receipts and cursors. When leaving the default application-key configuration, retain its original key as `app-v1` in the private ring before selecting a new active ID. Never replace key bytes under an existing identifier. Reload long-running workers after configuration changes. Removing an old key makes its records unreadable; there is no fallback. Re-encryption and key retirement require a separate verified maintenance procedure.
 
+The [independent checkpoint and recovery workflow](history-checkpoint-recovery.md) now supplies new-only private checkpoint key/artifact files and bounded restored-journal comparison. Checkpoint keys are separate from application/event keys. Mixed-key reads, old cursors/receipts, preserved event bytes and recovery after missing/replaced keys are qualified with fictional fixtures; no real key was rotated during that check.
+
 ## Replay and integrity limits
 
 `page(stream, cursor, limit)` accepts 1–100 events per page. The first page captures an authenticated upper version/hash; subsequent pages retain that boundary and the verified preceding position/hash. Later appends stay outside that replay. Readers verify contiguous positions, authenticated row bindings, schemas and the hash chain through the captured head. Effective time, original event creation time and journal insertion time remain separate. Sequence defines stream order.
 
 The framework compatibility adapter verifies history using bounded SQL pages, including the prefix when loading from a later playhead. Codefy's EventStream still materializes the returned result in memory; callers needing fully bounded replay should use the domain page API. Replay restores events without executing postings or other side effects. Durable projector checkpoints, rebuild coordination and as-of academic projections remain future work.
 
-An append checks the head and tail without rescanning the entire stream. A paged reader checks the records it consumes and completes verification at its captured head. A valid earlier whole-database restore may be undetectable to a fresh reader without an independent trusted checkpoint. Newer cursors detect a head rolled below their captured version, but do not replace protected external anchors, restricted database roles, backups and restore verification. No compliance or privileged-administrator tamper-proof guarantee is claimed. Policy-driven retention/legal holds and external integrity anchors remain outstanding; no runtime purge API is provided.
+An append checks the head and tail without rescanning the entire stream. A paged reader checks the records it consumes and completes verification at its captured head. A valid earlier whole-database restore may be undetectable to a fresh reader without an independent trusted checkpoint. Newer cursors detect a head rolled below their captured version. The [checkpoint command](history-checkpoint-recovery.md) adds a complete protected-inventory comparison against a retained independent artifact; operators must actually protect its custody separately. Restricted database roles, whole backup/artifact/projection restore, external custody and independent qualification remain necessary. No compliance or privileged-administrator tamper-proof guarantee is claimed. Remaining retention/legal-hold policies and key retirement stay open; no runtime purge API is provided.
 
 ## Read-only operator verification
 

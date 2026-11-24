@@ -2,6 +2,8 @@
 
 Implemented November 24, 2026. The focused recovery suite exercises real registration, publication, academic, waitlist, billing, drop and recorded-refund services across separate PHP processes. It terminates a worker with a POSIX kill signal before commit or after commit but before its reply. The tests use disposable fictional SQLite databases, not the configured application database.
 
+The separate [independent journal checkpoint workflow](history-checkpoint-recovery.md) now detects an older valid restored journal inventory and qualifies mixed event-key recovery. It supplements these process-loss checks; full database, projection and encrypted-artifact backup/restore acceptance remains open.
+
 ## Qualified scenarios
 
 | Scenario | Required result |

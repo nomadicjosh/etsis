@@ -446,6 +446,9 @@ try {
         ) {
             require __DIR__ . '/HistoryVerificationBootChecks.php';
             $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-history-anchor') {
+            require __DIR__ . '/HistoryAnchorBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-degree-trials') {
             require __DIR__ . '/DraftDegreeAuditBootChecks.php';
             $status = 0;

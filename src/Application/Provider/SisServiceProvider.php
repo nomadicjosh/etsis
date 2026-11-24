@@ -85,6 +85,10 @@ final class SisServiceProvider extends CodefyServiceProvider
             \Domain\Lms\Service\MoodleConnectionProbe::class => \Infrastructure\Lms\RestMoodleGateway::class,
             \Domain\Shared\EventSourcing\HistoricalIntegrityVerifier::class =>
                 \Infrastructure\EventSourcing\SqlHistoricalIntegrityVerifier::class,
+            \Domain\Shared\EventSourcing\HistoryInventory::class =>
+                \Infrastructure\EventSourcing\SqlHistoryInventory::class,
+            \Domain\Shared\EventSourcing\HistoryAnchorStorage::class =>
+                \Infrastructure\Operations\LocalHistoryAnchorStorage::class,
             \Domain\AcademicRecord\Repository\AcademicProjectionVerifier::class =>
                 \Infrastructure\Projection\SqlAcademicProjectionVerifier::class,
             \Domain\Finance\Repository\AccountProjectionVerifier::class =>
@@ -379,6 +383,12 @@ final class SisServiceProvider extends CodefyServiceProvider
         foreach ($bindings as $port => $adapter) {
             $this->codefy->alias($port, $adapter);
         }
+        $this->codefy->delegate(\Infrastructure\Operations\LocalHistoryAnchorStorage::class, function () {
+            return new \Infrastructure\Operations\LocalHistoryAnchorStorage(
+                $this->codefy->configContainer,
+                $this->codefy->publicPath(),
+            );
+        });
         $this->codefy->delegate(\Domain\Admissions\Service\AdmissionDocumentPolicy::class, function () {
             $enabled = $this->codefy->configContainer->getConfigKey('admission_documents.enabled', false) === true;
             return new \Domain\Admissions\Service\AdmissionDocumentPolicy(

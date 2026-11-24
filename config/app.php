@@ -174,6 +174,7 @@ return [
     "commands" => [
         \Application\Console\Commands\MaintenanceCommand::class,
         \Application\Console\Commands\VerifyHistoryCommand::class,
+        \Application\Console\Commands\HistoryAnchorCommand::class,
         \Application\Console\Commands\PruneLoginSessionsCommand::class,
         \Application\Console\Commands\PruneReportsCommand::class,
         \Application\Console\Commands\ExportReportsCommand::class,
