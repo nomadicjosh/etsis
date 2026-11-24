@@ -32,6 +32,8 @@ use Domain\Support\HistoryCheckScope;
 use Domain\Support\Repository\HistoryCheckRepository;
 use Throwable;
 
+use function Codefy\Framework\Helpers\trans;
+
 /** Explicitly authorized operator facade. Verification itself remains outside a snapshot transaction. */
 final readonly class HistoryCheckService
 {
@@ -53,6 +55,7 @@ final readonly class HistoryCheckService
         private Clock $clock,
         private EmploymentProjectionVerifier $employmentHistory,
         private TimeRepository $employees,
+        private \Domain\DegreeAudit\Repository\DegreeProgressRecordRepository $progressRecords,
     ) {
     }
 
@@ -72,9 +75,15 @@ final readonly class HistoryCheckService
         $load = $kind === HistoryCheckSubject::Load
         ? ($this->loads->find($id) ?? throw new RecordNotFoundException("Load determination not found."))
         : null;
+        $progress = $kind === HistoryCheckSubject::Progress
+        ? ($this->progressRecords->find($id) ?? throw new RecordNotFoundException(
+            trans('Recorded progress not found.')
+        ))
+        : null;
         $pursuit = match ($kind) {
             HistoryCheckSubject::Standing, HistoryCheckSubject::Advisors, HistoryCheckSubject::Requirements => $id,
             HistoryCheckSubject::Load => new EntityId($load["pursuit_id"]),
+            HistoryCheckSubject::Progress => new EntityId($progress['pursuit_id']),
             default => null,
         };
         $student = match ($kind) {
@@ -85,8 +94,15 @@ final readonly class HistoryCheckService
             HistoryCheckSubject::Standing, HistoryCheckSubject::Advisors, HistoryCheckSubject::Requirements =>
             $this->students->assignment($id)->studentId,
             HistoryCheckSubject::Load => new EntityId($load["student_id"]),
+            HistoryCheckSubject::Progress => new EntityId($progress['student_id']),
             HistoryCheckSubject::Account => $this->receipts->accountStudent($id),
         };
+        if (
+            $kind === HistoryCheckSubject::Progress &&
+            $this->students->assignment($pursuit)->studentId->value !== $student->value
+        ) {
+            throw new AccessDeniedException();
+        }
         $person = $this->admissions->person(
             $employee !== null ? $this->employees->employee($employee)->personId
                 : ($kind === HistoryCheckSubject::Application ? $this->admissions->application($id)->personId
@@ -183,6 +199,8 @@ final readonly class HistoryCheckService
                     ->advisors($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Requirements => $this->decisions
                     ->requirements($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
+                HistoryCheckSubject::Progress => $this->decisions
+                    ->progressRecord($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::PrimaryPosition => $this->employmentHistory
                     ->primaryPosition($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Position => $this->employmentHistory

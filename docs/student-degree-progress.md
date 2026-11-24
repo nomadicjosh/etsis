@@ -258,6 +258,14 @@ Each accepted observation is one **`DegreeProgressWasRecorded`** event in its ow
 Migration **`20261121000016_CreateSisRecordedDegreeProgress`** creates the portable index and protected duty with no automatic role/user grants. It converts no current rows or earlier events and fabricates no past reviews. Full final evaluation policy, remaining chronology/equivalence rules, reviewed graduation eligibility and credential decisions remain on the roadmap.
 
 
+### Check a saved review's history
+
+Authorized support staff can open a saved review and choose **Check recorded progress history**. This requires student read, degree-progress recording, history verification and audit-read permissions together. The button is absent from owner/advisor-only and ordinary read-only views. See the [operator and privacy boundaries](event-history-foundation.md#selected-recorded-progress-checks).
+
+The check compares the accepted observation with its protected event and support projection; it does not recompute degree progress, change the saved review, reevaluate today's catalog or award a credential. It distinguishes a verified observation from missing/corrupt data, concurrent changes and an exhausted allowance. Earlier protected reviews keep their original meaning after later grades, course corrections or pursuit closure.
+
+**Back to record** returns to that exact saved review and checks read access again. The summary regains keyboard focus, and **Back to recorded reviews** remains available. A support result is an observation at the stated time, not a continuing guarantee; only a minimized restricted support receipt and access audit are saved. No individual historical coursework or private staff reason appears in the support result.
+
 ## Sending-institution eligibility
 
 A published course group may list permitted sending institutions for transfer work. Staff and student group cards show the retained codes and names. A list restricts transfer placement in that group; institutional work follows the separate origin rule. An empty or absent list imposes no sending-institution restriction. Named courses, saved eligibility rules and approved substitutes all use the same check.

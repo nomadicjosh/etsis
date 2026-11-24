@@ -2903,6 +2903,21 @@ window.createWorkspaceDegreeAudit = function (ui) {
         });
         body.append(form, button("Back to work attribution", back));
     }
+    function recordedProgress(base, back, recordId = null) {
+        const target = screen("Recorded progress reviews");
+        const canCheck = ['sis:history:verify', 'sis:audit:read', 'sis:student:read', 'sis:degree-audit:record']
+            .every(permission => ui.can?.(permission));
+        const records = window.createRecordedDegreeProgress({
+            node, request, labels: ui.historyCheckLabels,
+            checkHistory: canCheck ? id => {
+                close();
+                return ui.historyChecks().open('progress', id, () => recordedProgress(base, back, id));
+            } : null,
+        }, base + "records/", true);
+        target.append(button("Back to requirements", back), records.element);
+        return records.start(recordId);
+    }
+
     async function studentRequirements(studentId, assignmentId, back) {
         const pendingView = screen("Student degree requirements", "RETAINED PROGRAM REQUIREMENTS");
         pendingView.append(node("p", { role: "status", class: "form-text" }, "Loading academic requirements…"));
@@ -2951,12 +2966,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
         body.append(
             actions(
                 button("Degree progress", () => degreeProgress(base, restore), "btn-primary"),
-                button("Recorded progress reviews", () => {
-                    const target = screen("Recorded progress reviews");
-                    const records = window.createRecordedDegreeProgress({ node, request }, base + "records/", true);
-                    target.append(button("Back to requirements", restore), records.element);
-                    records.start();
-                }),
+                button("Recorded progress reviews", () => recordedProgress(base, restore)),
                 ui.can?.("sis:student:read")
                     ? button("Combined curriculum progress", () => combinedProgress(base, restore))
                     : null,

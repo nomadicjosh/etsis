@@ -5,6 +5,14 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'recorded_progress' => trans_html('Recorded degree progress'),
+    'progress_components' => trans_html('Accepted progress observation, protected history and projection'),
+    'progress_count' => trans_html('Recorded progress observations checked'),
+    'check_progress' => trans_html('Check recorded progress history'),
+    'progress_help' => trans_html(
+        'Compare this saved progress observation with its protected history and projection. '
+        . 'This check does not recalculate progress, apply current policies or certify graduation.',
+    ),
     'advisor_assignments' => trans_html('Advisor assignments'),
     'degree_selection' => trans_html('Selected degree requirements'),
     'advisor_components' => trans_html('Retained advisor assignments and projection'),

@@ -6,7 +6,7 @@ declare(strict_types=1);
 $early = new \Symfony\Component\Console\Tester\CommandTester(
     new \Application\Console\Commands\VerifyHistoryCommand($app),
 );
-foreach (['standing', 'load', 'advisors', 'requirements'] as $kind) {
+foreach (['standing', 'load', 'advisors', 'requirements', 'progress-record'] as $kind) {
     foreach (
         [[$kind => 'PRIVATE invalid input'],
         [$kind => '00000000000000000000000000', 'streams' => '10'],

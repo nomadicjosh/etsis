@@ -23,6 +23,7 @@ final readonly class StudentDecisionProjectionCheck
         if (
             !in_array($scope, [
                 'student_standing', 'enrollment_load_determination', 'student_advisors', 'student_degree_requirements',
+                'recorded_degree_progress',
             ], true)
             || !in_array($status, ['verified', 'observed_empty', 'unverified', 'changed', 'limited'], true)
             || $events < 0 || $events > 2000
@@ -32,14 +33,16 @@ final readonly class StudentDecisionProjectionCheck
             || ($records !== null && ($records < 0 || $records > 50))
             || !array_is_list($issues)
             || array_diff($issues, ['pursuit_identity', 'standing', 'load_decision', 'advisors',
-                'requirements', 'unavailable']) !== []
+                'requirements', 'progress_record', 'unavailable']) !== []
             || ($status === 'unverified' ? $issues === [] : $issues !== [])
             || ($status === 'verified' && $position === 0)
             || ($status === 'observed_empty' &&
-                ($scope === 'enrollment_load_determination' || $position !== 0 || $records !== 0))
+                (in_array($scope, ['enrollment_load_determination', 'recorded_degree_progress'], true) ||
+                    $position !== 0 || $records !== 0))
             || ($complete && $scope === 'student_degree_requirements' && $records > 1)
             || ($status === 'verified' && $scope === 'student_degree_requirements' && $records !== 1)
             || ($complete && $scope === 'enrollment_load_determination' && ($position !== 1 || $records !== 1))
+            || ($complete && $scope === 'recorded_degree_progress' && ($position !== 1 || $records !== 1))
         ) {
             throw new InvalidArgumentException('Use a bounded, consistent student-decision verification result.');
         }
@@ -50,7 +53,11 @@ final readonly class StudentDecisionProjectionCheck
         return [
             'status' => $this->status,
             'scope' => $this->scope,
-            $this->scope !== 'enrollment_load_determination' ? 'pursuit_reference' : 'determination_reference' =>
+            match ($this->scope) {
+                'enrollment_load_determination' => 'determination_reference',
+                'recorded_degree_progress' => 'progress_record_reference',
+                default => 'pursuit_reference',
+            } =>
                 $this->reference->value,
             'events_checked' => $this->events,
             'position' => $this->position,

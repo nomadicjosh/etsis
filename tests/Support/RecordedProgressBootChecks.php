@@ -97,3 +97,5 @@ $sis->access->actor = $sis->user();
 if ($read($ownerBase . $review["operation_id"] . "/")->getStatusCode() !== 403) {
     throw new RuntimeException("An unrelated owner opened another student progress record.");
 }
+
+require __DIR__ . '/RecordedProgressVerificationBootChecks.php';

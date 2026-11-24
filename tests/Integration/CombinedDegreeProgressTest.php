@@ -954,6 +954,10 @@ final class CombinedDegreeProgressTest extends TestCase
             $audit ?? $s->audit,
             $s->clock,
             new \Domain\Shared\Service\ReviewProof($f->r->catalog->fixture->cipher, $s->clock),
+            new \Domain\DegreeAudit\Service\RecordedProgressReader(
+                new \Infrastructure\Persistence\Repository\SqlDegreeProgressRecordRepository($s->sql),
+                $f->r->history,
+            ),
         );
     }
 

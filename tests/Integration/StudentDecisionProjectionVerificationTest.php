@@ -39,6 +39,10 @@ final class StudentDecisionProjectionVerificationTest extends TestCase
                 $history,
             ),
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($history),
+            new \Domain\DegreeAudit\Service\RecordedProgressReader(
+                new \Infrastructure\Persistence\Repository\SqlDegreeProgressRecordRepository($s->sql),
+                $history,
+            ),
         );
     }
 

@@ -29,6 +29,7 @@ final readonly class SqlStudentDecisionProjectionVerifier implements StudentDeci
         private AdvisorHistoryReader $advisors,
         private StudentRequirementsReader $requirements,
         private PublishedRequirementsReader $publications,
+        private \Domain\DegreeAudit\Service\RecordedProgressReader $progressRecords,
     ) {
     }
 
@@ -52,6 +53,11 @@ final readonly class SqlStudentDecisionProjectionVerifier implements StudentDeci
         return $this->verify('student_degree_requirements', $pursuit, $eventLimit);
     }
 
+    public function progressRecord(EntityId $record, int $eventLimit = 500): StudentDecisionProjectionCheck
+    {
+        return $this->verify('recorded_degree_progress', $record, $eventLimit);
+    }
+
     private function verify(string $scope, EntityId $id, int $eventLimit): StudentDecisionProjectionCheck
     {
         if ($eventLimit < 1 || $eventLimit > 2000) {
@@ -71,6 +77,7 @@ final readonly class SqlStudentDecisionProjectionVerifier implements StudentDeci
             'student_standing' => 'standing',
             'student_advisors' => 'advisors',
             'student_degree_requirements' => 'requirements',
+            'recorded_degree_progress' => 'progress_record',
             default => 'load_decision',
         };
         $issues = [];
@@ -83,17 +90,32 @@ final readonly class SqlStudentDecisionProjectionVerifier implements StudentDeci
             if (
                 count($before['pursuit']) !== 1 || count($before['student']) !== 1
                 || count($before['person']) !== 1
-                || ($scope === 'enrollment_load_determination'
+                || (in_array($scope, ['enrollment_load_determination', 'recorded_degree_progress'], true)
                     && ($before['projection'][0]['student_id'] ?? null) !== $before['student'][0]['id'])
             ) {
-                $issues = [$scope !== 'enrollment_load_determination' ? 'pursuit_identity' : 'load_decision'];
+                $issues = [in_array($scope, ['enrollment_load_determination', 'recorded_degree_progress'], true)
+                    ? $issue : 'pursuit_identity'];
             } else {
                 $heads = $before['head'];
                 $position = $heads === [] ? 0 : $this->position($heads);
                 if ($position > $eventLimit) {
                     throw new HistoryReadLimitException();
                 }
-                if ($scope === 'student_standing') {
+                if ($scope === 'recorded_degree_progress') {
+                    $stored = $this->progressRecords->read($id, $budget);
+                    if ($stored === null || $position !== 1) {
+                        throw new CorruptHistoryException();
+                    }
+                    $snapshot = $stored->event->payload()['snapshot'];
+                    if (
+                        $snapshot['student_id'] !== $before['student'][0]['id'] ||
+                        $snapshot['pursuit_id'] !== $before['pursuit'][0]['id']
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $records = 1;
+                    $status = 'verified';
+                } elseif ($scope === 'student_standing') {
                     $root = $this->standings->load(new EntityId($before['student'][0]['id']), $id, $budget);
                     if ($root->playhead() !== $position) {
                         throw new CorruptHistoryException();
@@ -205,14 +227,15 @@ final readonly class SqlStudentDecisionProjectionVerifier implements StudentDeci
     private function boundary(string $scope, EntityId $id): array
     {
         $q = $this->sql->quote(...);
-        $load = $scope === 'enrollment_load_determination';
-        $projection = $load ? $this->sql->rows('sis_load_determinations', ['id' => $id->value], 2) : [];
-        $pursuit = $load ? ($projection[0]['pursuit_id'] ?? null) : $id->value;
+        $retained = in_array($scope, ['enrollment_load_determination', 'recorded_degree_progress'], true);
+        $table = $scope === 'recorded_degree_progress' ? 'sis_degree_progress_records' : 'sis_load_determinations';
+        $projection = $retained ? $this->sql->rows($table, ['id' => $id->value], 2) : [];
+        $pursuit = $retained ? ($projection[0]['pursuit_id'] ?? null) : $id->value;
         $assignments = $pursuit === null ? [] : $this->sql->rows('sis_student_programs', ['id' => $pursuit], 2);
         $student = $assignments[0]['student_id'] ?? null;
         $students = $student === null ? [] : $this->sql->rows('sis_students', ['id' => $student], 2);
         $person = $students[0]['person_id'] ?? null;
-        if (!$load) {
+        if (!$retained) {
             // Include wrong-student rows under this pursuit so they cannot disappear from the observation.
             [$table, $column] = match ($scope) {
                 'student_advisors' => ['sis_student_advisors', 'pursuit_id'],

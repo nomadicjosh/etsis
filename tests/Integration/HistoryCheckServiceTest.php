@@ -26,6 +26,68 @@ use PHPUnit\Framework\TestCase;
 
 final class HistoryCheckServiceTest extends TestCase
 {
+    public function testProgressSupportProtectsSuperOwnersAndRetainsOnlyMinimizedMetadata(): void
+    {
+        require_once dirname(__DIR__) . '/Support/RecordedProgressVerificationFixture.php';
+        $f = new \Tests\Support\RecordedProgressVerificationFixture();
+        $s = $f->sis;
+        $owner = $s->admissions->person($s->admissions->student($f->curriculum->student)->personId)->ownerUserId;
+        $roles = new SqlAccessRepository($s->sql);
+        $kind = \Domain\Access\Enum\GrantKind::UserRole;
+        $roles->assign($kind, $owner, $roles->roleNamed('super')->id, true);
+        $service = $this->service($s);
+        $this->rejects(fn () => $service->run(HistoryCheckSubject::Progress, $f->record), AccessDeniedException::class);
+        self::assertSame([], $s->sql->rows('sis_history_checks'));
+        $roles->assign($kind, $owner, $roles->roleNamed('super')->id, false);
+        $before = \EventStoreFixture::historyDigest($s->sql);
+        $projection = $s->sql->rows('sis_degree_progress_records');
+        $result = $service->run(HistoryCheckSubject::Progress, $f->record);
+        self::assertSame('verified', $result['result']['status']);
+        self::assertSame([$result['receipt']], $service->history(HistoryCheckSubject::Progress, $f->record)['items']);
+        self::assertSame($before, \EventStoreFixture::historyDigest($s->sql));
+        self::assertSame($projection, $s->sql->rows('sis_degree_progress_records'));
+        foreach (['Fictional', 'inputs', 'snapshot', 'source_references', 'source_hash', 'reason'] as $private) {
+            self::assertStringNotContainsString($private, json_encode($result, JSON_THROW_ON_ERROR));
+            self::assertStringNotContainsString(
+                $private,
+                json_encode($s->sql->rows('sis_history_checks'), JSON_THROW_ON_ERROR)
+            );
+        }
+    }
+
+    public function testProgressSupportRollsBackReceiptAuditAndRoutingFailures(): void
+    {
+        require_once dirname(__DIR__) . '/Support/RecordedProgressVerificationFixture.php';
+        $f = new \Tests\Support\RecordedProgressVerificationFixture();
+        $s = $f->sis;
+        foreach (['audit', 'authority', 'routing'] as $failure) {
+            $s->access->staff = true;
+            $before = $f->facts();
+            $audit = $this->createStub(AuditTrail::class);
+            $audit->method('record')->willReturnCallback(function () use ($failure, $s, $f): void {
+                if ($failure === 'audit') {
+                    throw new \RuntimeException('PRIVATE unavailable audit');
+                }
+                if ($failure === 'authority') {
+                    $s->access->staff = false;
+                } else {
+                    $s->sql->update(
+                        'sis_degree_progress_records',
+                        ['student_id' => EntityId::generate()->value],
+                        ['id' => $f->record->value]
+                    );
+                }
+            });
+            $s->connection->pdo->exec('PRAGMA foreign_keys = OFF');
+            $this->rejects(
+                fn () => $this->service($s, audit: $audit)->run(HistoryCheckSubject::Progress, $f->record),
+                $failure === 'audit' ? \RuntimeException::class : AccessDeniedException::class
+            );
+            self::assertSame([], $s->sql->rows('sis_history_checks'));
+            self::assertSame($before, $f->facts());
+        }
+    }
+
     public function testCurriculumChecksRequireEveryDutyAndKeepBusinessHistoryUnchanged(): void
     {
         require_once dirname(__DIR__) . '/Support/StudentDecisionFixture.php';
@@ -58,7 +120,7 @@ final class HistoryCheckServiceTest extends TestCase
     }
 
     private function service(
-        CampusFixture $c,
+        CampusFixture|\SisFixture $c,
         ?PersonProjectionVerifier $people = null,
         ?AuditTrail $audit = null,
         ?AcademicProjectionVerifier $academics = null,
@@ -66,7 +128,8 @@ final class HistoryCheckServiceTest extends TestCase
         ?\Domain\Student\Repository\StudentDecisionProjectionVerifier $decisions = null,
         ?\Domain\HumanResources\Repository\EmploymentProjectionVerifier $employment = null,
     ): HistoryCheckService {
-        $s = $c->sis;
+        $s = $c instanceof CampusFixture ? $c->sis : $c;
+        $cipher = $c instanceof CampusFixture ? $c->cipher : $s->dropCipher;
         return new HistoryCheckService(
             new SqlHistoryCheckRepository($s->sql),
             $people ??
@@ -75,19 +138,19 @@ final class HistoryCheckServiceTest extends TestCase
                     \EventStoreFixture::history($s->connection->queryBuilder()),
                     new \Infrastructure\Persistence\Repository\SqlPersonContactRepository(
                         $s->sql,
-                        $c->cipher,
+                        $cipher,
                     ),
                     new \Infrastructure\Persistence\Repository\SqlAddressBookRepository(
                         $s->sql,
-                        $c->cipher,
+                        $cipher,
                     ),
                     new \Infrastructure\Persistence\Repository\SqlEmergencyContactsRepository(
                         $s->sql,
-                        $c->cipher,
+                        $cipher,
                     ),
                     new \Infrastructure\Persistence\Repository\SqlEducationBackgroundRepository(
                         $s->sql,
-                        $c->cipher,
+                        $cipher,
                     ),
                 ),
             $academics ??
@@ -117,6 +180,7 @@ final class HistoryCheckServiceTest extends TestCase
             $s->clock,
             $employment ?? $s->employmentVerifier(),
             new \Infrastructure\Persistence\Repository\SqlTimeRepository($s->sql, $s->dropCipher),
+            new \Infrastructure\Persistence\Repository\SqlDegreeProgressRecordRepository($s->sql),
         );
     }
 

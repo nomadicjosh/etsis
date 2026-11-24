@@ -14,4 +14,5 @@ interface StudentDecisionProjectionVerifier
     public function load(EntityId $determination, int $eventLimit = 500): StudentDecisionProjectionCheck;
     public function advisors(EntityId $pursuit, int $eventLimit = 500): StudentDecisionProjectionCheck;
     public function requirements(EntityId $pursuit, int $eventLimit = 500): StudentDecisionProjectionCheck;
+    public function progressRecord(EntityId $record, int $eventLimit = 500): StudentDecisionProjectionCheck;
 }

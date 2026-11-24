@@ -333,6 +333,10 @@ final class SisFixture
                 $history,
             ),
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($history),
+            new \Domain\DegreeAudit\Service\RecordedProgressReader(
+                new \Infrastructure\Persistence\Repository\SqlDegreeProgressRecordRepository($this->sql),
+                $history,
+            ),
         );
     }
 

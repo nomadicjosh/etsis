@@ -94,6 +94,24 @@ Staff can run the same selected checks from **Academic advisors → Check adviso
 
 **Back to record** restores the originating record. Advisor rows/reasons held in memory survive this detour; degree requirements close their modal before opening the shared support drawer and restore it on return. Closed/denied responses cannot restore private results, and no draft/proof/result enters browser storage. Previous receipts describe their observed point, not a continuing guarantee or an independent projection checkpoint.
 
+### Selected recorded-progress checks
+
+A trusted operator can verify one accepted degree-progress observation:
+
+```sh
+ddev codex sis:history:verify --progress-record=RECORD_ULID --events=500 --json
+```
+
+Use the saved review's reference, not the student or pursuit ID. This mode accepts 1–2,000 replay events, shares the existing 4 MiB/five-second cooperative replay allowance, and rejects other selected targets, `--streams` and continuation cursors. The accepted observation contains exactly one protected event; a valid selected check normally reads one event and compares one index row. Exit 0 means verified, 3 means changed/limited, 1 means missing/unverified/unavailable, and 2 means invalid input. A missing record is not a verified empty historical review.
+
+`RecordedProgressReader` shares the ordinary workflow's authenticated replay and deterministic projection comparison. The check validates the protected accepted snapshot and its original actor/reason/date/intent context, then compares student/pursuit routing, recording dates and the original source fingerprint. Current student activity, a closed pursuit, today's catalog and later academic corrections do not rewrite or recalculate that observation. Before/after observations include the selected projection, pursuit/student/person routing and protected stream head. Changed boundaries are distinct from stable corruption; an enclosing snapshot transaction is refused. Failed, limited or changed checks expose no partial compared-record count.
+
+Output is limited to the saved review reference, scope, status, observed position, event/record counts and fixed issue codes. No source fingerprint, course evidence, requirements, student identity values, protected reasons or raw snapshot is printed. The console path is read-only: no write locks, access audit, repair, replay side effect or event conversion. The check does not independently re-resolve every referenced publication, rerun the allocation engine, prove archive completeness, qualify a future engine, or certify graduation/restore readiness. Controlled reproduction and current progress remain separate operations.
+
+Staff open **Students → Degree requirements → Recorded progress reviews → Open review → Check recorded progress history**. The shared support drawer requires **all four** duties: `sis:history:verify`, `sis:audit:read`, `sis:student:read` and `sis:degree-audit:record`, with current canonical-person ownership and super-owner protections. It uses the fixed 200-event browser allowance regardless of submitted override fields. Verification runs outside the separate transaction that saves a minimized existing support receipt and required audit. Routing and authority are rechecked through that transaction; failures roll back the receipt and audit. Business observations and the authoritative journal remain unchanged.
+
+The originating requirements modal closes before the support drawer opens. **Back to record** returns directly to the selected saved review, rereads it under current access and focuses its summary; it does not run a fresh progress calculation. Late/denied responses cannot restore a prior result, and lost source-read access leaves no stale saved summary. Owners, advisors and student-read permission alone do not acquire support authority. No proof, snapshot or check result enters browser storage. No migration, new permission/grant, report or separate event store is needed.
+
 ### Full protected journal checks
 
 Deployment operators can check protected event chains with the existing console runner:

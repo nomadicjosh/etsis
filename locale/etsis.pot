@@ -1226,150 +1226,187 @@ msgid "days from upload"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:8
+#: resources/views/backend/workspace/history-check-labels.php:38
 msgid "Program standing"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:9
+#: resources/views/backend/workspace/history-check-labels.php:39
 msgid "Retained enrollment load"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:10
+#: resources/views/backend/workspace/history-check-labels.php:40
 msgid "Program pursuit identity"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:11
+#: resources/views/backend/workspace/history-check-labels.php:41
 msgid "Standing periods and history"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:12
+#: resources/views/backend/workspace/history-check-labels.php:42
 msgid "Retained load decision and projection"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:13
+#: resources/views/backend/workspace/history-check-labels.php:43
 msgid "No recorded standing observed"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:15
+#: resources/views/backend/workspace/history-check-labels.php:45
 msgid "No standing decision was found for this pursuit. Earlier standing remains unknown."
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:17
+#: resources/views/backend/workspace/history-check-labels.php:47
 msgid "Standing periods checked"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:18
+#: resources/views/backend/workspace/history-check-labels.php:48
 msgid "Retained determinations checked"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:19
+#: resources/views/backend/workspace/history-check-labels.php:49
 msgid "Check standing history"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:20
+#: resources/views/backend/workspace/history-check-labels.php:50
 msgid "Check retained load history"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:21
+#: resources/views/backend/workspace/history-check-labels.php:51
 msgid "Primary position designation"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:22
+#: resources/views/backend/workspace/history-check-labels.php:52
 msgid "Position agreement"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:23
+#: resources/views/backend/workspace/history-check-labels.php:53
 msgid "Retained time decision"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:24
+#: resources/views/backend/workspace/history-check-labels.php:54
 msgid "Check primary designation history"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:25
+#: resources/views/backend/workspace/history-check-labels.php:55
 msgid "Check position agreement history"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:26
+#: resources/views/backend/workspace/history-check-labels.php:56
 msgid "Check retained time decision"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:27
+#: resources/views/backend/workspace/history-check-labels.php:57
 msgid "Selected HR records checked"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:28
+#: resources/views/backend/workspace/history-check-labels.php:58
 msgid "Primary designation and projection"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:29
+#: resources/views/backend/workspace/history-check-labels.php:59
 msgid "Retained position agreement and projection"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:30
+#: resources/views/backend/workspace/history-check-labels.php:60
 msgid "Retained time decision and working entry"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:31
+#: resources/views/backend/workspace/history-check-labels.php:61
 msgid "Earlier time decision not recorded"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:33
+#: resources/views/backend/workspace/history-check-labels.php:63
 msgid "The entry has a decision status, but its earlier decision was not recorded. This observation cannot verify that decision."
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:36
+#: resources/views/backend/workspace/history-check-labels.php:66
 msgid "Employment and person routing"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:37
+#: resources/views/backend/workspace/history-check-labels.php:67
 msgid "No recorded primary designation observed"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:39
+#: resources/views/backend/workspace/history-check-labels.php:69
 msgid "No protected designation was found. This does not establish earlier primary history."
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:41
+#: resources/views/backend/workspace/history-check-labels.php:71
 msgid "No retained time decision observed"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:43
+#: resources/views/backend/workspace/history-check-labels.php:73
 msgid "The entry is pending with no recorded decision. This check does not approve or reject it."
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:46
+#: resources/views/backend/workspace/history-check-labels.php:76
 msgid "Run one selected HR observation with a 200-event allowance and bounded replay. It does not approve employment or time, recalculate current appointment eligibility, determine wages/payroll or certify archive completeness."
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:51
+#: resources/views/backend/workspace/history-check-labels.php:81
 msgid "Earlier checks describe their recorded observation. HR reasons, pay terms, work intervals, raw event payloads and credentials are not displayed here."
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:54
+#: resources/views/backend/workspace/history-check-labels.php:84
 msgid "Admissions application"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:55
+#: resources/views/backend/workspace/history-check-labels.php:85
 msgid "Check application history"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:56
+#: resources/views/backend/workspace/history-check-labels.php:86
 msgid "Application facts and history"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:57
+#: resources/views/backend/workspace/history-check-labels.php:87
 msgid "Application intake projection"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:59
+#: resources/views/backend/workspace/history-check-labels.php:89
 msgid "Business records were not changed. A restricted support receipt was recorded."
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:62
+#: resources/views/backend/workspace/history-check-labels.php:92
 msgid "Run one selected-record observation with a 200-event allowance and bounded replay. It does not repair data, approve admissions, academic or financial decisions, verify external settlement, or certify archive completeness or restore readiness."
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:68
+#: resources/views/backend/workspace/history-check-labels.php:98
 msgid "Previous results describe their recorded observation, not a continuing guarantee about the current record. No event payloads, application answers, private profile values, financial amounts or credentials are displayed."
 msgstr ""
 
@@ -3635,54 +3672,67 @@ msgid "No numeric shared-course shortage was identified within this explanation 
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:8
+#: resources/views/backend/workspace/history-check-labels.php:16
 msgid "Advisor assignments"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:9
+#: resources/views/backend/workspace/history-check-labels.php:17
 msgid "Selected degree requirements"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:10
+#: resources/views/backend/workspace/history-check-labels.php:18
 msgid "Retained advisor assignments and projection"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:11
+#: resources/views/backend/workspace/history-check-labels.php:19
 msgid "Degree selection, projection and retained definitions"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:12
+#: resources/views/backend/workspace/history-check-labels.php:20
 msgid "No recorded advisor assignment observed"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:13
+#: resources/views/backend/workspace/history-check-labels.php:22
 msgid "No advisor decision was found for this pursuit. Earlier advising remains unknown."
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:14
+#: resources/views/backend/workspace/history-check-labels.php:24
 msgid "No recorded degree selection observed"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:15
+#: resources/views/backend/workspace/history-check-labels.php:26
 msgid "No degree selection was found for this pursuit. This does not assign requirements or establish earlier history."
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:18
+#: resources/views/backend/workspace/history-check-labels.php:29
 msgid "Retained advisor periods checked"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:19
+#: resources/views/backend/workspace/history-check-labels.php:30
 msgid "Selected requirement baselines checked"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:20
+#: resources/views/backend/workspace/history-check-labels.php:31
 msgid "Check advisor assignment history"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:21
+#: resources/views/backend/workspace/history-check-labels.php:32
 msgid "Check degree selection history"
 msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:25
+#: resources/views/backend/workspace/history-check-labels.php:34
 msgid "Compare retained advisor assignments or the selected degree baseline with history, using a 200-event allowance. Current advisor eligibility and degree completion need their own reviews; this check changes neither access nor academic requirements."
 msgstr ""
 
@@ -4075,4 +4125,28 @@ msgstr ""
 
 #: src/Infrastructure/Documents/RegisteredTranscriptLayouts.php:44
 msgid "CEU transcript · A4"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:8
+msgid "Recorded degree progress"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:9
+msgid "Accepted progress observation, protected history and projection"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:10
+msgid "Recorded progress observations checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:11
+msgid "Check recorded progress history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:13
+msgid "Compare this saved progress observation with its protected history and projection. This check does not recalculate progress, apply current policies or certify graduation."
+msgstr ""
+
+#: src/Domain/Support/Service/HistoryCheckService.php:80
+msgid "Recorded progress not found."
 msgstr ""

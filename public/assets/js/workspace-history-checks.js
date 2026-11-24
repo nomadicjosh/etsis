@@ -2,6 +2,10 @@
 'use strict';
 window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels = {} }) => {
     const fallbackLabels = {
+        recorded_progress: "Recorded degree progress",
+        progress_components: "Accepted progress observation, protected history and projection",
+        progress_count: "Recorded progress observations checked",
+        progress_help: "Compare this saved progress observation with its protected history and projection. This check does not recalculate progress, apply current policies or certify graduation.",
         program_standing: "Program standing",
         retained_load: "Retained enrollment load",
         advisor_assignments: "Advisor assignments",
@@ -30,7 +34,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         history_help: "Previous results describe their recorded observation, not a continuing guarantee about the current record. No event payloads, application answers, private profile values, financial amounts or credentials are displayed.",
     };
     const text = key => labels[key] || fallbackLabels[key];
-    const kinds = { advisors: text('advisor_assignments'), requirements: text('degree_selection'), person: 'Person profile', student: 'Student academic records', account: 'Student account', application: text('application'), standing: text('program_standing'), load: text('retained_load'), primary: text('primary_position'), position: text('position'), time: text('time_entry') };
+    const kinds = { progress: text('recorded_progress'), advisors: text('advisor_assignments'), requirements: text('degree_selection'), person: 'Person profile', student: 'Student academic records', account: 'Student account', application: text('application'), standing: text('program_standing'), load: text('retained_load'), primary: text('primary_position'), position: text('position'), time: text('time_entry') };
     const employmentKinds = ['primary', 'position', 'time'];
     const statuses = {
         verified: ['Verified within this check', 'The selected recorded sources matched their projections at the observed point.'],
@@ -44,7 +48,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         addresses: 'Address projection', emergency_contacts: 'Emergency-contact projection', education: 'Education projection',
         unavailable: 'Verification source unavailable', student_identity: 'Student identity', academic_sources: 'Academic sources',
         account_identity: 'Account identity', balance: 'Balance projection', postings: 'Posting projection',
-        advisors: text('advisor_components'), requirements: text('requirement_components'), application: text('application_components'), intake: text('intake_component'), pursuit_identity: text('pursuit_identity'), standing: text('standing_components'), load_decision: text('load_components'), primary_position: text('primary_components'), position: text('position_components'), time_decision: text('time_components'), earlier_decision: text('earlier_time') };
+        progress_record: text('progress_components'), advisors: text('advisor_components'), requirements: text('requirement_components'), application: text('application_components'), intake: text('intake_component'), pursuit_identity: text('pursuit_identity'), standing: text('standing_components'), load_decision: text('load_components'), primary_position: text('primary_components'), position: text('position_components'), time_decision: text('time_components'), earlier_decision: text('earlier_time') };
     function observation(kind, state) {
         if (kind === 'time' && state === 'history_gaps') return [text('earlier_time'), text('earlier_time_help')];
         if (state === 'observed_empty') {
@@ -94,7 +98,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
                 node('p', { class: 'text-break' }, `Support reference: ${receipt.reference}`),
                 node('p', {}, `Observed ${receipt.checked_at} · ${check.events_checked} events checked (maximum ${data.event_limit}).`));
             if (check.records_checked != null) result.append(node('p', {},
-                `${text(employmentKinds.includes(kind) ? 'hr_count' : kind === 'standing' ? 'standing_count' : kind === 'advisors' ? 'advisor_count' : kind === 'requirements' ? 'requirement_count' : 'load_count')}: ${check.records_checked}.`));
+                `${text(employmentKinds.includes(kind) ? 'hr_count' : kind === 'standing' ? 'standing_count' : kind === 'advisors' ? 'advisor_count' : kind === 'requirements' ? 'requirement_count' : kind === 'progress' ? 'progress_count' : 'load_count')}: ${check.records_checked}.`));
             if (check.position != null) result.append(node('p', {}, `Observed stream position: ${check.position}.`));
             if (check.current_records != null) result.append(node('p', {}, `Current academic records checked: ${check.current_records}.`));
             if (check.expected_postings != null) result.append(node('p', {}, `Expected postings checked: ${check.expected_postings}.`));
@@ -112,7 +116,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         if (back) controls.append(node('button', { type: 'button', class: 'btn btn-link', onclick: event => task(back, event.currentTarget) }, 'Back to record'));
         body.append(node('h3', { class: 'h5' }, kinds[kind]),
             node('p', {}, text(employmentKinds.includes(kind) ? 'hr_help' :
-                ['advisors', 'requirements'].includes(kind) ? 'curriculum_help' : 'check_help')),
+                kind === 'progress' ? 'progress_help' : ['advisors', 'requirements'].includes(kind) ? 'curriculum_help' : 'check_help')),
             node('p', { class: 'form-text' }, text(employmentKinds.includes(kind) ? 'hr_history_help' : 'history_help')),
             controls, status, result, history, node('div', { class: 'd-flex gap-2 flex-wrap' }, previous, older));
         async function load() {
@@ -120,7 +124,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
             if (!body.isConnected) return;
             next = page.next_after; older.hidden = !next; previous.hidden = !stack.length;
             history.replaceChildren(node('h3', { class: 'h5' }, 'Previous checks'));
-            for (const item of page.items) history.append(node('article', { class: 'border rounded p-3 mb-3 text-break' },
+            for (const item of page.items) history.append(node('article', { class: 'border rounded bg-white p-3 mb-3 text-break' },
                 node('h4', { class: 'h6' }, observation(kind, item.status)[0]),
                 node('p', {}, `Observed ${item.checked_at} · ${item.events_checked} events checked.`),
                 node('p', {}, `Support reference: ${item.reference}`)));

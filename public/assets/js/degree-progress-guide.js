@@ -1117,7 +1117,7 @@ window.createDegreeProgressBlockers = function (ui, data, headingLevel = 2) {
 };
 
 /* Shared private, summary-only recorded progress workflow. Drafts and proofs stay in page memory. */
-window.createRecordedDegreeProgress = function ({ node, request, buttonClass = "btn-outline-primary" }, base, allowRecording = false) {
+window.createRecordedDegreeProgress = function ({ node, request, buttonClass = "btn-outline-primary", checkHistory = null, labels = {} }, base, allowRecording = false) {
     const element = node("section", { class: "record-section", "aria-label": "Recorded progress reviews" });
     const notice = node("p", { role: "status", "aria-live": "polite" });
     const content = node("div");
@@ -1132,7 +1132,17 @@ window.createRecordedDegreeProgress = function ({ node, request, buttonClass = "
     async function run(action, control) {
         if (control) control.disabled = true;
         try { await action(); }
-        catch (error) { if (element.isConnected && (!control || control.isConnected)) notice.textContent = error.message || "This request could not be completed. Your draft is retained."; }
+        catch (error) {
+            if (element.isConnected && (!control || control.isConnected)) {
+                if ([401, 403].includes(error.status)) {
+                    ++generation;
+                    reason = "";
+                    review = null;
+                    content.replaceChildren();
+                }
+                notice.textContent = error.message || "This request could not be completed. Your draft is retained.";
+            }
+        }
         finally { if (control?.isConnected) control.disabled = false; }
     }
     const amount = n => n == null ? "Needs review" : String(n / 1000);
@@ -1184,6 +1194,14 @@ window.createRecordedDegreeProgress = function ({ node, request, buttonClass = "
         if (!valid(current)) return;
         notice.textContent = "";
         content.replaceChildren(node("p", {}, `Recorded ${data.recorded_at}`), summary(data.summary), button("Back to recorded reviews", () => page()));
+        if (checkHistory) {
+            const check = button(labels.check_progress || "Check recorded progress history", () => checkHistory(id));
+            check.prepend(node("i", { class: "bi bi-shield-check me-1", "aria-hidden": "true" }));
+            content.append(check);
+        }
+        const heading = content.querySelector("h3");
+        heading.tabIndex = -1;
+        heading.focus();
     }
     function editor() {
         ++generation;
@@ -1227,6 +1245,6 @@ window.createRecordedDegreeProgress = function ({ node, request, buttonClass = "
                 notice.textContent = "Progress review recorded.";
             }));
     }
-    return { element, start: () => run(() => page()) };
+    return { element, start: (id = null) => run(() => id ? show(id) : page()) };
 };
 window.recordedProgressSequence = 0;

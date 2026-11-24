@@ -38,6 +38,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
         ['load', null, 'required', 'Compare one retained load determination with protected history; no cursor.'],
         ['advisors', null, 'required', 'Compare one pursuit advisor assignment history; no cursor.'],
         ['requirements', null, 'required', 'Compare one pursuit degree selection and retained definitions; no cursor.'],
+        ['progress-record', null, 'required',
+            'Compare one recorded progress observation with protected history; no cursor.'],
         ['primary-position', null, 'required',
             'Compare one employee primary designation with protected history; no cursor.'],
         ['position', null, 'required', 'Compare one position agreement with protected history; no cursor.'],
@@ -71,13 +73,14 @@ final class VerifyHistoryCommand extends ConsoleCommand
             $load = $this->getOptions('load');
             $advisors = $this->getOptions('advisors');
             $requirements = $this->getOptions('requirements');
+            $progress = $this->getOptions('progress-record');
             $employment = [
                 'primary-position' => $this->getOptions('primary-position'),
                 'position' => $this->getOptions('position'),
                 'time-entry' => $this->getOptions('time-entry'),
             ];
             $subjects = [$account, $student, $person, $application, $standing, $load,
-                $advisors, $requirements, ...array_values($employment)];
+                $advisors, $requirements, $progress, ...array_values($employment)];
             if (count(array_filter($subjects, static fn(mixed $id): bool => $id !== null)) > 1) {
                 throw new InvalidArgumentException();
             }
@@ -90,13 +93,16 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 }
                 return $this->employment($kind, new EntityId($reference), $events, $json);
             }
-            if ($standing !== null || $load !== null || $advisors !== null || $requirements !== null) {
-                $reference = $standing ?? $load ?? $advisors ?? $requirements;
+            if (
+                $standing !== null || $load !== null || $advisors !== null ||
+                $requirements !== null || $progress !== null
+            ) {
+                $reference = $standing ?? $load ?? $advisors ?? $requirements ?? $progress;
                 if (!is_string($reference) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
                     throw new InvalidArgumentException();
                 }
                 $kind = $standing !== null ? 'standing' : ($load !== null ? 'load' :
-                    ($advisors !== null ? 'advisors' : 'requirements'));
+                    ($advisors !== null ? 'advisors' : ($requirements !== null ? 'requirements' : 'progress-record')));
                 return $this->decision($kind, new EntityId($reference), $events, $json);
             }
             if ($application !== null) {
@@ -227,12 +233,14 @@ final class VerifyHistoryCommand extends ConsoleCommand
             'load' => $verifier->load($id, $events),
             'advisors' => $verifier->advisors($id, $events),
             'requirements' => $verifier->requirements($id, $events),
+            'progress-record' => $verifier->progressRecord($id, $events),
         };
         $label = match ($kind) {
             'standing' => 'Program standing',
             'load' => 'Retained load determination',
             'advisors' => 'Advisor assignments',
             'requirements' => 'Selected degree requirements',
+            'progress-record' => 'Recorded degree progress',
         };
         if ($json) {
             $this->output->writeln(json_encode($result->describe(), JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
@@ -245,7 +253,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
             }
             $this->terminalRaw('No records were changed. This compares the selected retained decision and projection, '
                 . 'not current policy, source registration freshness, census or graduation eligibility, '
-                . 'every retry receipt or archive completeness. An empty observation is not verified prior history.');
+                . 'fresh progress reproduction, every retry receipt or archive completeness. '
+                . 'An empty observation is not verified prior history.');
         }
         return match ($result->status) {
             'verified' => self::SUCCESS,
