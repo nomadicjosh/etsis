@@ -4,6 +4,17 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
     const fallbackLabels = {
         program_standing: "Program standing",
         retained_load: "Retained enrollment load",
+        advisor_assignments: "Advisor assignments",
+        degree_selection: "Selected degree requirements",
+        advisor_components: "Retained advisor assignments and projection",
+        requirement_components: "Degree selection, projection and retained definitions",
+        advisors_empty: "No recorded advisor assignment observed",
+        advisors_empty_help: "No advisor decision was found for this pursuit. Earlier advising remains unknown.",
+        requirements_empty: "No recorded degree selection observed",
+        requirements_empty_help: "No degree selection was found for this pursuit. This does not assign requirements or establish earlier history.",
+        advisor_count: "Retained advisor periods checked",
+        requirement_count: "Selected requirement baselines checked",
+        curriculum_help: "Compare retained advisor assignments or the selected degree baseline with history, using a 200-event allowance. Current advisor eligibility and degree completion need their own reviews; this check changes neither access nor academic requirements.",
         pursuit_identity: "Program pursuit identity",
         standing_components: "Standing periods and history",
         load_components: "Retained load decision and projection",
@@ -19,7 +30,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         history_help: "Previous results describe their recorded observation, not a continuing guarantee about the current record. No event payloads, application answers, private profile values, financial amounts or credentials are displayed.",
     };
     const text = key => labels[key] || fallbackLabels[key];
-    const kinds = { person: 'Person profile', student: 'Student academic records', account: 'Student account', application: text('application'), standing: text('program_standing'), load: text('retained_load'), primary: text('primary_position'), position: text('position'), time: text('time_entry') };
+    const kinds = { advisors: text('advisor_assignments'), requirements: text('degree_selection'), person: 'Person profile', student: 'Student academic records', account: 'Student account', application: text('application'), standing: text('program_standing'), load: text('retained_load'), primary: text('primary_position'), position: text('position'), time: text('time_entry') };
     const employmentKinds = ['primary', 'position', 'time'];
     const statuses = {
         verified: ['Verified within this check', 'The selected recorded sources matched their projections at the observed point.'],
@@ -33,11 +44,12 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         addresses: 'Address projection', emergency_contacts: 'Emergency-contact projection', education: 'Education projection',
         unavailable: 'Verification source unavailable', student_identity: 'Student identity', academic_sources: 'Academic sources',
         account_identity: 'Account identity', balance: 'Balance projection', postings: 'Posting projection',
-        application: text('application_components'), intake: text('intake_component'), pursuit_identity: text('pursuit_identity'), standing: text('standing_components'), load_decision: text('load_components'), primary_position: text('primary_components'), position: text('position_components'), time_decision: text('time_components'), earlier_decision: text('earlier_time') };
+        advisors: text('advisor_components'), requirements: text('requirement_components'), application: text('application_components'), intake: text('intake_component'), pursuit_identity: text('pursuit_identity'), standing: text('standing_components'), load_decision: text('load_components'), primary_position: text('primary_components'), position: text('position_components'), time_decision: text('time_components'), earlier_decision: text('earlier_time') };
     function observation(kind, state) {
         if (kind === 'time' && state === 'history_gaps') return [text('earlier_time'), text('earlier_time_help')];
         if (state === 'observed_empty') {
             if (kind === 'standing') return [text('standing_empty'), text('standing_empty_help')];
+            if (['advisors', 'requirements'].includes(kind)) return [text(`${kind}_empty`), text(`${kind}_empty_help`)];
             if (kind === 'primary') return [text('primary_empty'), text('primary_empty_help')];
             if (kind === 'time') return [text('time_empty'), text('time_empty_help')];
         }
@@ -82,7 +94,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
                 node('p', { class: 'text-break' }, `Support reference: ${receipt.reference}`),
                 node('p', {}, `Observed ${receipt.checked_at} · ${check.events_checked} events checked (maximum ${data.event_limit}).`));
             if (check.records_checked != null) result.append(node('p', {},
-                `${text(employmentKinds.includes(kind) ? 'hr_count' : kind === 'standing' ? 'standing_count' : 'load_count')}: ${check.records_checked}.`));
+                `${text(employmentKinds.includes(kind) ? 'hr_count' : kind === 'standing' ? 'standing_count' : kind === 'advisors' ? 'advisor_count' : kind === 'requirements' ? 'requirement_count' : 'load_count')}: ${check.records_checked}.`));
             if (check.position != null) result.append(node('p', {}, `Observed stream position: ${check.position}.`));
             if (check.current_records != null) result.append(node('p', {}, `Current academic records checked: ${check.current_records}.`));
             if (check.expected_postings != null) result.append(node('p', {}, `Expected postings checked: ${check.expected_postings}.`));
@@ -99,7 +111,8 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         controls.append(run, button('Refresh previous checks', () => load()));
         if (back) controls.append(node('button', { type: 'button', class: 'btn btn-link', onclick: event => task(back, event.currentTarget) }, 'Back to record'));
         body.append(node('h3', { class: 'h5' }, kinds[kind]),
-            node('p', {}, text(employmentKinds.includes(kind) ? 'hr_help' : 'check_help')),
+            node('p', {}, text(employmentKinds.includes(kind) ? 'hr_help' :
+                ['advisors', 'requirements'].includes(kind) ? 'curriculum_help' : 'check_help')),
             node('p', { class: 'form-text' }, text(employmentKinds.includes(kind) ? 'hr_history_help' : 'history_help')),
             controls, status, result, history, node('div', { class: 'd-flex gap-2 flex-wrap' }, previous, older));
         async function load() {

@@ -36,6 +36,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
         ['application', null, 'required', 'Compare one admissions application with protected history; no cursor.'],
         ['standing', null, 'required', 'Compare standing under one program pursuit with protected history; no cursor.'],
         ['load', null, 'required', 'Compare one retained load determination with protected history; no cursor.'],
+        ['advisors', null, 'required', 'Compare one pursuit advisor assignment history; no cursor.'],
+        ['requirements', null, 'required', 'Compare one pursuit degree selection and retained definitions; no cursor.'],
         ['primary-position', null, 'required',
             'Compare one employee primary designation with protected history; no cursor.'],
         ['position', null, 'required', 'Compare one position agreement with protected history; no cursor.'],
@@ -67,12 +69,15 @@ final class VerifyHistoryCommand extends ConsoleCommand
             $application = $this->getOptions('application');
             $standing = $this->getOptions('standing');
             $load = $this->getOptions('load');
+            $advisors = $this->getOptions('advisors');
+            $requirements = $this->getOptions('requirements');
             $employment = [
                 'primary-position' => $this->getOptions('primary-position'),
                 'position' => $this->getOptions('position'),
                 'time-entry' => $this->getOptions('time-entry'),
             ];
-            $subjects = [$account, $student, $person, $application, $standing, $load, ...array_values($employment)];
+            $subjects = [$account, $student, $person, $application, $standing, $load,
+                $advisors, $requirements, ...array_values($employment)];
             if (count(array_filter($subjects, static fn(mixed $id): bool => $id !== null)) > 1) {
                 throw new InvalidArgumentException();
             }
@@ -85,12 +90,14 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 }
                 return $this->employment($kind, new EntityId($reference), $events, $json);
             }
-            if ($standing !== null || $load !== null) {
-                $reference = $standing ?? $load;
+            if ($standing !== null || $load !== null || $advisors !== null || $requirements !== null) {
+                $reference = $standing ?? $load ?? $advisors ?? $requirements;
                 if (!is_string($reference) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
                     throw new InvalidArgumentException();
                 }
-                return $this->decision($standing !== null, new EntityId($reference), $events, $json);
+                $kind = $standing !== null ? 'standing' : ($load !== null ? 'load' :
+                    ($advisors !== null ? 'advisors' : 'requirements'));
+                return $this->decision($kind, new EntityId($reference), $events, $json);
             }
             if ($application !== null) {
                 if (!is_string($application) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
@@ -128,7 +135,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 "invalid_input",
                 "Use --streams=1..50, --events=1..2000 and a valid optional verification cursor. "
                     . 'Use one of --person=ULID, --account=ULID, --student=ULID, --application=ULID, '
-                    . '--standing=PURSUIT_ULID, --load=DETERMINATION_ULID, --primary-position=EMPLOYEE_ULID, '
+                    . '--standing=PURSUIT_ULID, --load=DETERMINATION_ULID, --advisors=PURSUIT_ULID, '
+                    . '--requirements=PURSUIT_ULID, --primary-position=EMPLOYEE_ULID, '
                     . '--position=POSITION_ULID or --time-entry=ENTRY_ULID '
                     . 'with --events and optional --json.',
                 self::INVALID,
@@ -211,15 +219,25 @@ final class VerifyHistoryCommand extends ConsoleCommand
         };
     }
 
-    private function decision(bool $standing, EntityId $id, int $events, bool $json): int
+    private function decision(string $kind, EntityId $id, int $events, bool $json): int
     {
         $verifier = $this->codefy->make(StudentDecisionProjectionVerifier::class);
-        $result = $standing ? $verifier->standing($id, $events) : $verifier->load($id, $events);
+        $result = match ($kind) {
+            'standing' => $verifier->standing($id, $events),
+            'load' => $verifier->load($id, $events),
+            'advisors' => $verifier->advisors($id, $events),
+            'requirements' => $verifier->requirements($id, $events),
+        };
+        $label = match ($kind) {
+            'standing' => 'Program standing',
+            'load' => 'Retained load determination',
+            'advisors' => 'Advisor assignments',
+            'requirements' => 'Selected degree requirements',
+        };
         if ($json) {
             $this->output->writeln(json_encode($result->describe(), JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
         } else {
-            $this->terminalRaw(($standing ? 'Program standing ' : 'Retained load determination ')
-                . $id->value . ': ' . $result->status . '.');
+            $this->terminalRaw($label . ' ' . $id->value . ': ' . $result->status . '.');
             $this->terminalRaw($result->events . ' events checked; '
                 . ($result->records ?? 'unknown') . ' retained records compared.');
             if ($result->issues !== []) {

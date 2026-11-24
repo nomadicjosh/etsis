@@ -42,6 +42,8 @@ $supportEvents = array_map($sis->sql->rows(...), [
     "sis_application_intake",
     "sis_student_standing",
     "sis_load_determinations",
+    'sis_student_advisors',
+    'sis_student_requirements',
 ]);
 $supportBase = "/sis/history-checks/";
 $supportRead = static function (string $path, array $data) use ($teachingPost): array {
@@ -64,6 +66,8 @@ $supportCases = [
     "application" => $supportApplication->id->value,
     "standing" => $supportDecisions->pursuit->value,
     "load" => $supportDecisions->determination->value,
+    'advisors' => $supportDecisions->pursuit->value,
+    'requirements' => $supportDecisions->pursuit->value,
     'primary' => $supportEmployment->employee->value,
     'position' => $supportEmployment->position->value,
     'time' => $supportEmployment->entry->value,
@@ -107,7 +111,10 @@ if (
 ) {
     throw new RuntimeException("Support duty widened person-profile access.");
 }
-foreach (['standing' => 'sis:standing:manage', 'load' => 'sis:load:determine'] as $kind => $permission) {
+foreach (
+    ['standing' => 'sis:standing:manage', 'load' => 'sis:load:determine',
+    'advisors' => 'sis:advising:manage', 'requirements' => 'sis:degree-audit:assign'] as $kind => $permission
+) {
     $sis->access->grants = ['sis:history:verify', 'sis:audit:read', 'sis:student:read'];
     if ($teachingPost($supportBase . $kind . '/' . $supportCases[$kind] . '/run/', [])->getStatusCode() !== 403) {
         throw new RuntimeException('Support checking bypassed the independent student-decision duty.');
@@ -148,6 +155,8 @@ if (
             "sis_application_intake",
             "sis_student_standing",
             "sis_load_determinations",
+            'sis_student_advisors',
+            'sis_student_requirements',
         ])
 ) {
     throw new RuntimeException("Support checks changed source facts or accepted an unknown scope.");

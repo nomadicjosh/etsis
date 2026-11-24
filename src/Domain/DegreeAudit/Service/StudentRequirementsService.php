@@ -461,36 +461,9 @@ final readonly class StudentRequirementsService
     }
     private function state(EntityId $assignment, ?HistoryReadBudget $budget = null): StudentRequirements
     {
-        $s = $this->stream($assignment);
-        $state = StudentRequirements::root($s->aggregateId);
-        $cursor = null;
-        do {
-            $page =
-            $budget === null
-            ? $this->history->page($s, $cursor, 20)
-            : $budget->page($this->history, $s, $cursor);
-            foreach ($page->events as $stored) {
-                $state->acceptHistorical($stored->event);
-            }
-            $cursor = $page->nextCursor;
-        } while ($cursor !== null);
-        $p = $state->selection();
-        $row = $this->selections->get($assignment);
-        if (($p === null) !== ($row === null)) {
-            throw new CorruptHistoryException();
-        }
-        if ($p !== null && $row !== null) {
-            unset($p["previous_decision_id"]);
-            $expected = ["id" => $assignment->value] + $p + ["position" => $state->playhead()];
-            if (count($row) !== count($expected)) {
-                throw new CorruptHistoryException();
-            }
-            foreach ($expected as $key => $value) {
-                if (($row[$key] ?? null) !== $value) {
-                    throw new CorruptHistoryException();
-                }
-            }
-        }
-        return $state;
+        return new StudentRequirementsReader($this->selections, $this->history)->read(
+            $assignment,
+            $budget ?? new HistoryReadBudget(),
+        );
     }
 }

@@ -309,9 +309,11 @@ final class SisFixture
         );
     }
 
-    public function studentDecisionVerifier(): \Infrastructure\Projection\SqlStudentDecisionProjectionVerifier
+    public function studentDecisionVerifier(
+        ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null,
+    ): \Infrastructure\Projection\SqlStudentDecisionProjectionVerifier
     {
-        $history = \EventStoreFixture::history($this->connection->queryBuilder());
+        $history ??= \EventStoreFixture::history($this->connection->queryBuilder());
         return new \Infrastructure\Projection\SqlStudentDecisionProjectionVerifier(
             $this->sql,
             new \Domain\Student\Service\StudentStandingLedger(
@@ -322,6 +324,15 @@ final class SisFixture
                 new \Infrastructure\Persistence\Repository\SqlLoadDeterminationRepository($this->sql),
                 $history,
             ),
+            new \Domain\Advising\Service\AdvisorHistoryReader(
+                new \Infrastructure\Persistence\Repository\SqlAdvisorRepository($this->sql),
+                $history,
+            ),
+            new \Domain\DegreeAudit\Service\StudentRequirementsReader(
+                new \Infrastructure\Persistence\Repository\SqlStudentRequirementsRepository($this->sql),
+                $history,
+            ),
+            new \Domain\DegreeAudit\Service\PublishedRequirementsReader($history),
         );
     }
 

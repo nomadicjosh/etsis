@@ -6,7 +6,7 @@ declare(strict_types=1);
 $early = new \Symfony\Component\Console\Tester\CommandTester(
     new \Application\Console\Commands\VerifyHistoryCommand($app),
 );
-foreach (['standing', 'load'] as $kind) {
+foreach (['standing', 'load', 'advisors', 'requirements'] as $kind) {
     foreach (
         [[$kind => 'PRIVATE invalid input'],
         [$kind => '00000000000000000000000000', 'streams' => '10'],
@@ -59,6 +59,17 @@ foreach (['standing' => $f->pursuit, 'load' => $f->determination] as $kind => $i
     }
     if ($test->execute(['--' . $kind => '00000000000000000000000000', '--json' => true]) !== 1) {
         throw new RuntimeException('Missing student-decision identity was accepted.');
+    }
+}
+foreach (['advisors', 'requirements'] as $kind) {
+    if (
+        $test->execute(['--' . $kind => $f->pursuit->value, '--json' => true]) !== 3 ||
+        json_decode($test->getDisplay(), true)['status'] !== 'observed_empty'
+    ) {
+        throw new RuntimeException('An empty curriculum observation was treated as verified prior history.');
+    }
+    if ($test->execute(['--' . $kind => '00000000000000000000000000', '--json' => true]) !== 1) {
+        throw new RuntimeException('A missing curriculum pursuit was accepted.');
     }
 }
 if ($before !== $f->facts()) {

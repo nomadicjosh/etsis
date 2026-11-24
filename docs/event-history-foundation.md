@@ -73,6 +73,29 @@ An append checks the head and tail without rescanning the entire stream. A paged
 
 ## Read-only operator verification
 
+### Selected advisor and degree-selection checks
+
+Trusted operators can compare one pursuit's advisor assignments or selected degree baseline with protected history:
+
+```sh
+ddev codex sis:history:verify --advisors=PURSUIT_ULID --events=500 --json
+ddev codex sis:history:verify --requirements=PURSUIT_ULID --events=500 --json
+```
+
+These are mutually exclusive selected modes, including with other subject selectors. Use `--events=1..2000`; global `--streams` and continuation cursors do not apply. Both commands are read-only, resolve dependencies lazily and return the existing minimized selected-decision result. Neither invokes projectors, repairs a row, grants advisor access, assigns a baseline or evaluates graduation eligibility. A selected mismatch exits 1; empty/changed/limited observations exit 3, while verified results exit 0.
+
+Advisor checks replay the exact pursuit history and compare its dated assignments with the current projection, including student routing. A previously recorded assignment list that was deliberately cleared can verify with zero current periods. An absent stream and empty projection produce **No recorded advisor assignment observed**; they do not establish earlier advising. Current staff/faculty eligibility and closed-pursuit status do not rewrite retained assignments, and are not certified by this check.
+
+Degree-selection checks compare the exact retained selection with its projection and student/program routing, then resolve the selected degree, reusable-group and course publications, plus the retained program publication where present, under one shared allowance. They retain the selection's academic-year/program-publication context rather than substituting current catalog choices. Missing or corrupt referenced facts fail verification. An absent selection remains unrecorded, and a limited read returns no partial record count or requirements. This is not validation of every mutable publication cache, specialization/exception history, academic award, grading calculation or final evaluation.
+
+Both verifiers share a bounded event/4 MiB/five-second replay allowance, reject enclosing snapshot transactions, and compare pursuit/person routing, selected projections and stream heads before/after the read. Changing sources are reported as **changed**, separately from a stable mismatch. Existing workflow readers use the same extracted replay/projection comparisons; no alternate model, event stream, historical backfill or silent repair is introduced.
+
+Staff can run the same selected checks from **Academic advisors → Check advisor assignment history** and **Student degree requirements → Check degree selection history**. Each requires independent `sis:history:verify`, `sis:audit:read`, `sis:student:read` and its source duty (`sis:advising:manage` or `sis:degree-audit:assign`). Super-owner safeguards remain in force. Owners and dated advisor access alone receive no support authority. Browser checks use the fixed 200-event allowance and existing private, CSRF-protected transport; only a minimized restricted support receipt and required access audit are saved. The business journal and student facts remain unchanged.
+
+**Back to record** restores the originating record. Advisor rows/reasons held in memory survive this detour; degree requirements close their modal before opening the shared support drawer and restore it on return. Closed/denied responses cannot restore private results, and no draft/proof/result enters browser storage. Previous receipts describe their observed point, not a continuing guarantee or an independent projection checkpoint.
+
+### Full protected journal checks
+
 Deployment operators can check protected event chains with the existing console runner:
 
 ```sh

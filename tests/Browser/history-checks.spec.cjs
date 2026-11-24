@@ -22,6 +22,10 @@ async function fixture(page, kind, { denied = false, delay = null, outcome = nul
         else if (path === `/sis/ui/people/${person}/`) result = { person: { id: { value: person }, ownerUserId: { value: owner }, givenName: 'Fictional', familyName: 'Person', institutionalId: { value: 'S-FICTIONAL' } }, students: [], employees: [], accounts: [], applications: [] };
         else if (path === `/sis/students/${student}/`) result = { id: student, person_id: person, given_name: 'Fictional', family_name: 'Person', institutional_id: 'S-FICTIONAL', active: true, primary_program: { id: program, code: 'BS.CS', title: 'Computing' }, entry_term: { id: term, code: '26/FA' }, revision: 'student' };
         else if (path === `/sis/students/${student}/programs/`) result = { items: [{ id: id(8), program_code: 'ARTS-UG', program_title: 'Arts', term_code: '26/FA', status: 'active', is_primary: true }], next_after: null };
+        else if (path.endsWith('/advisors/')) result = {rows: [], revision: 'a'.repeat(64), editable: true,
+            known_history: false, program: {code: 'ARTS-UG', title: 'Arts'}, status: 'active'};
+        else if (path.endsWith('/degree-requirements/')) result = {selection: null, cohort_changed: false,
+            scope: {status: 'active'}, requirements: null};
         else if (path.endsWith('/load/terms/')) result = { items: [{ id: term, code: '26/FA', starts_on: '2026-08-01', ends_on: '2026-12-15' }], next_after: null };
         else if (path.endsWith('/load/determinations/')) result = { items: [{ id: data.after ? id(12) : id(11), as_of_date: '2026-08-10', credits_milli: 3000, enrollment_count: 1,
             classification: { label: 'Fictional full time' }, program: { code: 'ARTS-UG', title: 'Arts' }, recorded_at: '2026-08-10T17:00:00Z',
@@ -40,13 +44,13 @@ async function fixture(page, kind, { denied = false, delay = null, outcome = nul
                 const checked = kind === 'standing' && status === 'observed_empty' ? 0 : 2;
                 const receipt = { reference: id(20 + receipts.length), status, events_checked: checked, checked_at: '2026-08-10T17:00:00Z' };
                 receipts.unshift(receipt);
-                result = { result: { status, events_checked: checked, records_checked: ['standing', 'load'].includes(kind) ? (status === 'observed_empty' ? 0 : 1) : null, position: kind === 'student' ? null : checked, current_records: kind === 'student' ? 0 : null, issues: [] }, receipt, event_limit: 200 };
+                result = { result: { status, events_checked: checked, records_checked: ['standing', 'load', 'advisors', 'requirements'].includes(kind) ? (status === 'observed_empty' ? 0 : 1) : null, position: kind === 'student' ? null : checked, current_records: kind === 'student' ? 0 : null, issues: [] }, receipt, event_limit: 200 };
             } else result = { items: data.after ? [{ reference: id(10), status: 'limited', events_checked: 200, checked_at: '2026-08-09T17:00:00Z' }] : receipts, next_after: receipts.length && !data.after ? receipts.at(-1).reference : null };
         }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto('/admin/');
-    const dataset = { person: 'people', student: 'students', account: 'accounts', application: 'applications', standing: 'students', load: 'students' }[kind];
+    const dataset = { person: 'people', student: 'students', account: 'accounts', application: 'applications', standing: 'students', load: 'students', advisors: 'students', requirements: 'students' }[kind];
     await page.locator(`.workspace-nav-link[data-workspace="${dataset}"]`).click();
     await page.getByLabel('Search this workspace').fill('Fictional');
     await page.getByLabel('Search this workspace').press('Enter');
@@ -229,3 +233,79 @@ test('a closed standing support drawer ignores its late verification response', 
     await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toHaveCount(0);
     expect(errors).toEqual([]);
 });
+
+for (const kind of ['advisors', 'requirements']) {
+    test(`${kind} curriculum checks preserve their record and drafts through the support drawer`, async ({page}) => {
+        const {calls, errors} = await fixture(page, kind);
+        if (kind === 'advisors') {
+            await recordAction(page, 'Academic advisors');
+            await page.getByLabel('Reason for change', {exact: true}).fill('Unsaved fictional advisor correction.');
+            await page.getByRole('button', {name: 'Check advisor assignment history', exact: true}).click();
+        } else {
+            await recordAction(page, 'Degree requirements');
+            await expect(page.locator('dialog.degree-audit-studio')).toBeVisible();
+            await page.getByRole('button', {name: 'Check degree selection history', exact: true}).click();
+            await expect(page.locator('dialog.degree-audit-studio')).toHaveCount(0);
+        }
+        const run = page.getByRole('button', {name: 'Run history check', exact: true});
+        await expect(run).toBeEnabled();
+        await run.focus(); await page.keyboard.press('Enter');
+        const result = page.getByRole('region', {name: 'Current check result', exact: true});
+        await expect(result).toContainText('Verified within this check');
+        await expect(result).toContainText(kind === 'advisors' ? 'Retained advisor periods checked: 1' : 'Selected requirement baselines checked: 1');
+        await page.setViewportSize({width: 320, height: 900});
+        const axe = await new AxeBuilder({page}).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+        expect(axe.violations.map(v => ({id: v.id, targets: v.nodes.map(n => n.target)}))).toEqual([]);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        const originalFont = await result.evaluate(element => parseFloat(getComputedStyle(element).fontSize));
+        const rootSize = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
+        // Keep CSP enforced: emulate enlarged text with an allowed same-origin stylesheet.
+        await page.route('**/fixtures/enlarged-text.css', route => route.fulfill({
+            contentType: 'text/css', body: `html { font-size: ${rootSize * 2}px !important; }`,
+        }));
+        await page.addStyleTag({url: '/fixtures/enlarged-text.css'});
+        await expect.poll(() => result.evaluate(element => parseFloat(getComputedStyle(element).fontSize)),
+            {timeout: 3000}).toBeGreaterThanOrEqual(originalFont * 2);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        const skip = page.locator('.skip-link');
+        expect(await skip.evaluate(element => element.getBoundingClientRect().bottom)).toBeLessThanOrEqual(0);
+        await page.screenshot({path: `/tmp/etsis-${kind}-history-check.png`});
+        await page.getByRole('button', {name: 'Back to record', exact: true}).click();
+        if (kind === 'advisors') {
+            await expect(page.getByLabel('Reason for change', {exact: true})).toHaveValue('Unsaved fictional advisor correction.');
+            expect(calls.filter(c => c.path.endsWith('/advisors/'))).toHaveLength(1);
+        } else {
+            await expect(page.getByRole('heading', {name: 'Student degree requirements', exact: true})).toBeVisible();
+        }
+        // The global skip link is outside the modal focus scope; test it after leaving the record.
+        if (kind === 'requirements')
+            await page.getByRole('button', {name: 'Close builder', exact: true}).click();
+        else await page.locator('.record-drawer .btn-close').click();
+        await expect(page.locator('.record-drawer')).not.toBeVisible();
+        await skip.focus();
+        await expect(skip).toBeFocused();
+        await expect.poll(() => skip.evaluate(element => {
+            const rect = element.getBoundingClientRect();
+            return rect.top >= 0 && rect.left >= 0 && rect.right <= innerWidth;
+        }), {timeout: 3000}).toBe(true);
+        expect(calls.filter(c => c.path.endsWith(`/history-checks/${kind}/${id(8)}/run/`))).toHaveLength(1);
+        expect(calls.filter(c => c.path.includes('/history-checks/')).every(c => c.csrf === 'fictional-test-token')).toBe(true);
+        expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+        expect(errors).toEqual([]);
+    });
+
+    test(`${kind} empty history remains unknown and access denial clears the result`, async ({page}) => {
+        const {errors} = await fixture(page, kind, {outcome: 'observed_empty'});
+        await recordAction(page, kind === 'advisors' ? 'Academic advisors' : 'Degree requirements');
+        await page.getByRole('button', {name: kind === 'advisors' ? 'Check advisor assignment history' : 'Check degree selection history', exact: true}).click();
+        await page.getByRole('button', {name: 'Run history check', exact: true}).click();
+        const result = page.getByRole('region', {name: 'Current check result', exact: true});
+        await expect(result).toContainText(kind === 'advisors' ? 'Earlier advising remains unknown' : 'does not assign requirements');
+        await page.route('**/sis/history-checks/**', route => route.fulfill({status: 403, json: {error: 'Current support duty required.'}}));
+        await page.getByRole('button', {name: 'Refresh previous checks', exact: true}).click();
+        await expect(result).toBeEmpty();
+        await expect(page.getByRole('region', {name: 'Previous history checks', exact: true})).toBeEmpty();
+        await expect(page.getByRole('button', {name: 'Back to record', exact: true})).toBeVisible();
+        expect(errors).toEqual([]);
+    });
+}

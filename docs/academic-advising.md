@@ -37,6 +37,12 @@ Browser/API reads remain private/no-store, browser POSTs retain framework CSRF, 
 
 The migration was applied to the configured DDEV application database on November 20, 2026. All twenty recorded events remained intact, and before/after checksums matched for `sis_history_events`, `sis_history_streams` and `sis_history_operations`. The new advisor projection starts empty; the protected permission was added without changing role or user grants. Focused verification passed 119 PHP tests, seven browser scenarios, the framework HTTP/CSRF smoke checks and scoped coding-standard checks. Browser checks used one worker and fictional records.
 
+## Check retained assignment history
+
+In **Academic advisors**, authorized support staff can choose **Check advisor assignment history**. This compares the pursuit's protected assignment decisions and dated current projection without changing either. It remains available for a historical/closed pursuit; it does not certify that an advisor is currently eligible or grant access to an advisee.
+
+The action requires `sis:history:verify`, `sis:audit:read`, `sis:student:read` and `sis:advising:manage` together, with the existing super-owner safeguards. A student or assigned advisor gains no support permission through ownership or the advising relationship. The shared drawer uses a fixed 200-event allowance, private responses, framework CSRF and minimized audited receipts. **Back to record** preserves unsaved advisor rows and correction reasons. Missing earlier history is explicitly unknown; a deliberately cleared recorded list can still verify with zero current assignments. See [selected checks and their limits](event-history-foundation.md#selected-advisor-and-degree-selection-checks).
+
 ## Working check-ins
 
 A completed check-in can now carry student-visible next steps, an optional follow-up date and an optional private advising note. This operational record does not assign an advisor, book an appointment, send a notification or change registration, standing, degree requirements, awarded work or any other authoritative academic fact. Do not use private notes to collect unrelated sensitive information.

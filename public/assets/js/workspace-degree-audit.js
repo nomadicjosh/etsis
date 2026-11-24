@@ -2967,6 +2967,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 button("Credits & GPA", () => academicCalculations(base, restore)),
                 button("Review course placement", () => groupAllocation(base, restore)),
                 button("Assignment history", () => studentHistory(base, restore)),
+                ['sis:history:verify', 'sis:audit:read', 'sis:student:read', 'sis:degree-audit:assign']
+                    .every(permission => ui.can?.(permission))
+                    ? button(ui.historyCheckLabels.check_requirements, () => {
+                        close();
+                        ui.historyChecks().open('requirements', assignmentId, restore);
+                    }) : null,
                 data.selection
                     ? button("Preview with approvals", () =>
                           adjustedRequirements(

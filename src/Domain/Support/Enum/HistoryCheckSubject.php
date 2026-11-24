@@ -12,6 +12,8 @@ enum HistoryCheckSubject: string
     case Application = "application";
     case Standing = "standing";
     case Load = "load";
+    case Advisors = 'advisors';
+    case Requirements = 'requirements';
     case PrimaryPosition = 'primary';
     case Position = 'position';
     case TimeEntry = 'time';
@@ -25,6 +27,8 @@ enum HistoryCheckSubject: string
             self::Application => ["sis:admissions:manage"],
             self::Standing => ["sis:student:read", "sis:standing:manage"],
             self::Load => ["sis:student:read", "sis:load:determine"],
+            self::Advisors => ['sis:student:read', 'sis:advising:manage'],
+            self::Requirements => ['sis:student:read', 'sis:degree-audit:assign'],
             self::PrimaryPosition, self::Position, self::TimeEntry => ['sis:hr:manage'],
         };
     }
@@ -38,6 +42,8 @@ enum HistoryCheckSubject: string
             self::Application => "admissions_application",
             self::Standing => "student_standing",
             self::Load => "enrollment_load_determination",
+            self::Advisors => 'student_advisors',
+            self::Requirements => 'student_degree_requirements',
             self::PrimaryPosition => 'employment_primary_position',
             self::Position => 'employment_position',
             self::TimeEntry => 'timesheet_decision',
@@ -47,7 +53,7 @@ enum HistoryCheckSubject: string
     public function referenceKey(): string
     {
         return match ($this) {
-            self::Standing => "pursuit_reference",
+            self::Standing, self::Advisors, self::Requirements => "pursuit_reference",
             self::Load => "determination_reference",
             self::PrimaryPosition => 'primary_position_reference',
             self::TimeEntry => 'time_entry_reference',

@@ -3625,3 +3625,55 @@ msgstr ""
 #: resources/views/shared/degree-competition-labels.php:14
 msgid "No numeric shared-course shortage was identified within this explanation limit. A complete placement is still unavailable; review the retained requirements and sharing rules."
 msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:8
+msgid "Advisor assignments"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:9
+msgid "Selected degree requirements"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:10
+msgid "Retained advisor assignments and projection"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:11
+msgid "Degree selection, projection and retained definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:12
+msgid "No recorded advisor assignment observed"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:13
+msgid "No advisor decision was found for this pursuit. Earlier advising remains unknown."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:14
+msgid "No recorded degree selection observed"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:15
+msgid "No degree selection was found for this pursuit. This does not assign requirements or establish earlier history."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:18
+msgid "Retained advisor periods checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:19
+msgid "Selected requirement baselines checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:20
+msgid "Check advisor assignment history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:21
+msgid "Check degree selection history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:25
+msgid "Compare retained advisor assignments or the selected degree baseline with history, using a 200-event allowance. Current advisor eligibility and degree completion need their own reviews; this check changes neither access nor academic requirements."
+msgstr ""

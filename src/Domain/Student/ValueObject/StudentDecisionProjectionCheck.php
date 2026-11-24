@@ -21,7 +21,9 @@ final readonly class StudentDecisionProjectionCheck
     ) {
         $complete = in_array($status, ['verified', 'observed_empty'], true);
         if (
-            !in_array($scope, ['student_standing', 'enrollment_load_determination'], true)
+            !in_array($scope, [
+                'student_standing', 'enrollment_load_determination', 'student_advisors', 'student_degree_requirements',
+            ], true)
             || !in_array($status, ['verified', 'observed_empty', 'unverified', 'changed', 'limited'], true)
             || $events < 0 || $events > 2000
             || ($position !== null && $position < 0)
@@ -29,10 +31,14 @@ final readonly class StudentDecisionProjectionCheck
             || ($complete && $position === null)
             || ($records !== null && ($records < 0 || $records > 50))
             || !array_is_list($issues)
-            || array_diff($issues, ['pursuit_identity', 'standing', 'load_decision', 'unavailable']) !== []
+            || array_diff($issues, ['pursuit_identity', 'standing', 'load_decision', 'advisors',
+                'requirements', 'unavailable']) !== []
             || ($status === 'unverified' ? $issues === [] : $issues !== [])
             || ($status === 'verified' && $position === 0)
-            || ($status === 'observed_empty' && ($scope !== 'student_standing' || $position !== 0 || $records !== 0))
+            || ($status === 'observed_empty' &&
+                ($scope === 'enrollment_load_determination' || $position !== 0 || $records !== 0))
+            || ($complete && $scope === 'student_degree_requirements' && $records > 1)
+            || ($status === 'verified' && $scope === 'student_degree_requirements' && $records !== 1)
             || ($complete && $scope === 'enrollment_load_determination' && ($position !== 1 || $records !== 1))
         ) {
             throw new InvalidArgumentException('Use a bounded, consistent student-decision verification result.');
@@ -44,7 +50,7 @@ final readonly class StudentDecisionProjectionCheck
         return [
             'status' => $this->status,
             'scope' => $this->scope,
-            $this->scope === 'student_standing' ? 'pursuit_reference' : 'determination_reference' =>
+            $this->scope !== 'enrollment_load_determination' ? 'pursuit_reference' : 'determination_reference' =>
                 $this->reference->value,
             'events_checked' => $this->events,
             'position' => $this->position,

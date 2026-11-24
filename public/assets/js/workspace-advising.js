@@ -50,6 +50,9 @@ window.createWorkspaceAdvising = function (ui) {
                 node("div", { class: "inline-actions mt-3" },
                     saved.editable && rows.length < 50 ? button("Add advisor", () => choose()) : null, review,
                     ui.can("sis:audit:read") ? button("Assignment history", () => history()) : null,
+                    ['sis:history:verify', 'sis:audit:read', 'sis:student:read', 'sis:advising:manage'].every(ui.can)
+                        ? button(ui.historyCheckLabels.check_advisors, () =>
+                            ui.historyChecks().open('advisors', pursuit, () => render())) : null,
                     back ? button("Back to programs", back, "btn-link") : null), live);
             form.addEventListener("submit", event => {
                 event.preventDefault();

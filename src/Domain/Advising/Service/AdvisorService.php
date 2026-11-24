@@ -357,23 +357,11 @@ final readonly class AdvisorService implements AdvisorProgressAccess
 
     private function load(EntityId $student, EntityId $pursuit): AdvisorHistory
     {
-        $root = AdvisorHistory::root(new AdvisorHistoryId($pursuit->value));
-        $budget = new HistoryReadBudget();
-        $cursor = null;
-        do {
-            $page = $budget->page($this->history, $this->stream($pursuit), $cursor);
-            foreach ($page->events as $stored) {
-                if ($stored->event->payload()["student_id"] !== $student->value) {
-                    throw new CorruptHistoryException();
-                }
-                $root->accept($stored);
-            }
-            $cursor = $page->nextCursor;
-        } while ($cursor !== null);
-        if ($root->rows() !== $this->records->rows($pursuit)) {
-            throw new CorruptHistoryException();
-        }
-        return $root;
+        return new AdvisorHistoryReader($this->records, $this->history)->read(
+            $student,
+            $pursuit,
+            new HistoryReadBudget(),
+        );
     }
 
     private function scope(EntityId $student, EntityId $pursuit): array

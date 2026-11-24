@@ -29,7 +29,16 @@ final class StudentDecisionProjectionVerificationTest extends TestCase
         return new SqlStudentDecisionProjectionVerifier(
             $s->sql,
             new StudentStandingLedger(new SqlStudentStandingRepository($s->sql), $history),
-            new LoadDeterminationLedger(new SqlLoadDeterminationRepository($s->sql), $history)
+            new LoadDeterminationLedger(new SqlLoadDeterminationRepository($s->sql), $history),
+            new \Domain\Advising\Service\AdvisorHistoryReader(
+                new \Infrastructure\Persistence\Repository\SqlAdvisorRepository($s->sql),
+                $history,
+            ),
+            new \Domain\DegreeAudit\Service\StudentRequirementsReader(
+                new \Infrastructure\Persistence\Repository\SqlStudentRequirementsRepository($s->sql),
+                $history,
+            ),
+            new \Domain\DegreeAudit\Service\PublishedRequirementsReader($history),
         );
     }
 

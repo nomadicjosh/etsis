@@ -73,7 +73,7 @@ final readonly class HistoryCheckService
         ? ($this->loads->find($id) ?? throw new RecordNotFoundException("Load determination not found."))
         : null;
         $pursuit = match ($kind) {
-            HistoryCheckSubject::Standing => $id,
+            HistoryCheckSubject::Standing, HistoryCheckSubject::Advisors, HistoryCheckSubject::Requirements => $id,
             HistoryCheckSubject::Load => new EntityId($load["pursuit_id"]),
             default => null,
         };
@@ -82,7 +82,8 @@ final readonly class HistoryCheckService
             HistoryCheckSubject::PrimaryPosition, HistoryCheckSubject::Position, HistoryCheckSubject::TimeEntry => null,
             HistoryCheckSubject::Application => null,
             HistoryCheckSubject::Student => $id,
-            HistoryCheckSubject::Standing => $this->students->assignment($id)->studentId,
+            HistoryCheckSubject::Standing, HistoryCheckSubject::Advisors, HistoryCheckSubject::Requirements =>
+            $this->students->assignment($id)->studentId,
             HistoryCheckSubject::Load => new EntityId($load["student_id"]),
             HistoryCheckSubject::Account => $this->receipts->accountStudent($id),
         };
@@ -178,6 +179,10 @@ final readonly class HistoryCheckService
                 HistoryCheckSubject::Load => $this->decisions
                     ->load($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)
                     ->describe(),
+                HistoryCheckSubject::Advisors => $this->decisions
+                    ->advisors($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
+                HistoryCheckSubject::Requirements => $this->decisions
+                    ->requirements($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::PrimaryPosition => $this->employmentHistory
                     ->primaryPosition($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Position => $this->employmentHistory

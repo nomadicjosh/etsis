@@ -5,6 +5,28 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'advisor_assignments' => trans_html('Advisor assignments'),
+    'degree_selection' => trans_html('Selected degree requirements'),
+    'advisor_components' => trans_html('Retained advisor assignments and projection'),
+    'requirement_components' => trans_html('Degree selection, projection and retained definitions'),
+    'advisors_empty' => trans_html('No recorded advisor assignment observed'),
+    'advisors_empty_help' => trans_html(
+        'No advisor decision was found for this pursuit. Earlier advising remains unknown.',
+    ),
+    'requirements_empty' => trans_html('No recorded degree selection observed'),
+    'requirements_empty_help' => trans_html(
+        'No degree selection was found for this pursuit. '
+        . 'This does not assign requirements or establish earlier history.',
+    ),
+    'advisor_count' => trans_html('Retained advisor periods checked'),
+    'requirement_count' => trans_html('Selected requirement baselines checked'),
+    'check_advisors' => trans_html('Check advisor assignment history'),
+    'check_requirements' => trans_html('Check degree selection history'),
+    'curriculum_help' => trans_html(
+        'Compare retained advisor assignments or the selected degree baseline with history, '
+        . 'using a 200-event allowance. Current advisor eligibility and degree completion need their own reviews; '
+        . 'this check changes neither access nor academic requirements.',
+    ),
     'program_standing' => trans_html('Program standing'),
     'retained_load' => trans_html('Retained enrollment load'),
     'pursuit_identity' => trans_html('Program pursuit identity'),

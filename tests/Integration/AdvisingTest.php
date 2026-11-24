@@ -15,6 +15,84 @@ use SisFixture;
 
 final class AdvisingTest extends TestCase
 {
+    public function testSelectedAdvisorHistoryVerifiesClosedPursuitsWithoutWritesOrPrivateValues(): void
+    {
+        $s = new SisFixture();
+        $student = $s->student();
+        $pursuit = $this->pursuit($s, $student->id);
+        $advisor = $this->advisor($s);
+        $this->confirm($this->service($s), $student->id, $pursuit, [$this->row($advisor->id)]);
+        $s->sql->update('sis_student_programs', ['status' => 'closed'], ['id' => $pursuit->value]);
+        $s->sql->update('sis_employees', ['active' => 0], ['person_id' => $advisor->id->value]);
+        $before = \EventStoreFixture::historyDigest($s->sql);
+        $s->connection->pdo->exec('PRAGMA query_only = ON');
+        $result = $s->studentDecisionVerifier()->advisors($pursuit);
+        self::assertSame('verified', $result->status);
+        self::assertSame(1, $result->records);
+        self::assertSame(1, $result->events);
+        foreach ([$student->id->value, $advisor->id->value, 'Fictional', 'starts_on', 'reason', 'rows'] as $private) {
+            self::assertStringNotContainsString($private, json_encode($result->describe(), JSON_THROW_ON_ERROR));
+        }
+        self::assertSame($before, \EventStoreFixture::historyDigest($s->sql));
+    }
+
+    public function testAdvisorObservationDistinguishesUnknownEmptyFromARecordedClearedList(): void
+    {
+        $s = new SisFixture();
+        $student = $s->student();
+        $pursuit = $this->pursuit($s, $student->id);
+        self::assertSame('observed_empty', $s->studentDecisionVerifier()->advisors($pursuit)->status);
+        $advisor = $this->advisor($s);
+        $service = $this->service($s);
+        $this->confirm($service, $student->id, $pursuit, [$this->row($advisor->id)]);
+        $this->confirm($service, $student->id, $pursuit, []);
+        $result = $s->studentDecisionVerifier()->advisors($pursuit);
+        self::assertSame('verified', $result->status);
+        self::assertSame(0, $result->records);
+        self::assertSame(2, $result->position);
+        self::assertSame('limited', $s->studentDecisionVerifier()->advisors($pursuit, 1)->status);
+    }
+
+    public function testAdvisorProjectionDriftIsReportedWithoutRepair(): void
+    {
+        foreach (['dates', 'missing', 'student'] as $case) {
+            $s = new SisFixture();
+            $student = $s->student();
+            $pursuit = $this->pursuit($s, $student->id);
+            $advisor = $this->advisor($s);
+            $row = $this->row($advisor->id);
+            $this->confirm($this->service($s), $student->id, $pursuit, [$row]);
+            if ($case === 'missing') {
+                $s->sql->execute('DELETE FROM sis_student_advisors WHERE id = ?', [$row['id']]);
+            } else {
+                $values = $case === 'dates' ? ['starts_on' => '2026-02-01'] :
+                ['student_id' => $s->student()->id->value];
+                $s->sql->update('sis_student_advisors', $values, ['id' => $row['id']]);
+            }
+            $before = $s->sql->rows('sis_student_advisors');
+            $s->connection->pdo->exec('PRAGMA query_only = ON');
+            $result = $s->studentDecisionVerifier()->advisors($pursuit);
+            self::assertSame('unverified', $result->status);
+            self::assertSame(['advisors'], $result->issues);
+            self::assertSame($before, $s->sql->rows('sis_student_advisors'));
+        }
+    }
+
+    public function testAdvisorRoutingChangeDuringReplayIsAChangedObservation(): void
+    {
+        $s = new SisFixture();
+        $student = $s->student();
+        $pursuit = $this->pursuit($s, $student->id);
+        $actual = \EventStoreFixture::history($s->connection->queryBuilder());
+        $history = $this->createStub(\Domain\Shared\EventSourcing\HistoricalEventStore::class);
+        $history->method('page')->willReturnCallback(function ($stream, $cursor, $limit) use ($s, $pursuit, $actual) {
+            $page = $actual->page($stream, $cursor, $limit);
+            $s->sql->update('sis_student_programs', ['status' => 'closed'], ['id' => $pursuit->value]);
+            return $page;
+        });
+        self::assertSame('changed', $s->studentDecisionVerifier($history)->advisors($pursuit)->status);
+    }
+
     public static function setUpBeforeClass(): void
     {
         require_once dirname(__DIR__) . "/Support/SisFixture.php";

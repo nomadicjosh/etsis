@@ -26,6 +26,32 @@ use PHPUnit\Framework\TestCase;
 
 final class HistoryCheckServiceTest extends TestCase
 {
+    public function testCurriculumChecksRequireEveryDutyAndKeepBusinessHistoryUnchanged(): void
+    {
+        require_once dirname(__DIR__) . '/Support/StudentDecisionFixture.php';
+        $c = new CampusFixture();
+        $f = new \Tests\Support\StudentDecisionFixture($c->sis);
+        $s = $c->sis;
+        $s->access->actor = $s->user();
+        $s->access->staff = false;
+        foreach ([HistoryCheckSubject::Advisors, HistoryCheckSubject::Requirements] as $kind) {
+            $grants = ['sis:history:verify', 'sis:audit:read', ...$kind->permissions()];
+            $s->access->grants = $grants;
+            $before = \EventStoreFixture::historyDigest($s->sql);
+            $result = $this->service($c)->run($kind, $f->pursuit);
+            self::assertSame('observed_empty', $result['result']['status']);
+            self::assertSame($f->pursuit->value, $result['result']['pursuit_reference']);
+            self::assertSame($before, \EventStoreFixture::historyDigest($s->sql));
+            $count = count($s->sql->rows('sis_history_checks'));
+            foreach ($grants as $missing) {
+                $s->access->grants = array_values(array_diff($grants, [$missing]));
+                $this->rejects(fn() => $this->service($c)->run($kind, $f->pursuit), AccessDeniedException::class);
+                $this->rejects(fn() => $this->service($c)->history($kind, $f->pursuit), AccessDeniedException::class);
+                self::assertCount($count, $s->sql->rows('sis_history_checks'));
+            }
+        }
+    }
+
     public static function setUpBeforeClass(): void
     {
         require_once dirname(__DIR__) . "/Support/CampusFixture.php";
@@ -232,7 +258,8 @@ final class HistoryCheckServiceTest extends TestCase
                 }
                 $s->access->staff = false;
             });
-            $cases = [[HistoryCheckSubject::Standing, $f->pursuit], [HistoryCheckSubject::Load, $f->determination]];
+            $cases = [[HistoryCheckSubject::Standing, $f->pursuit], [HistoryCheckSubject::Load, $f->determination],
+                [HistoryCheckSubject::Advisors, $f->pursuit], [HistoryCheckSubject::Requirements, $f->pursuit]];
             foreach ($cases as [$kind, $id]) {
                 $s->access->staff = true;
                 $this->rejects(

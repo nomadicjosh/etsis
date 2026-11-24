@@ -12,6 +12,72 @@ use Domain\Shared\ValueObject\EntityId;
 use PHPUnit\Framework\TestCase;
 final class StudentRequirementsTest extends TestCase
 {
+    public function testSelectedRequirementCheckResolvesRetainedDefinitionsWithWritesProhibited(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $f->assign();
+        $s = $f->f->sis;
+        $s->sql->update('sis_student_programs', ['status' => 'closed'], ['id' => $f->assignment->value]);
+        $before = EventStoreFixture::historyDigest($s->sql);
+        $s->connection->pdo->exec('PRAGMA query_only = ON');
+        $result = $s->studentDecisionVerifier()->requirements($f->assignment);
+        self::assertSame('verified', $result->status);
+        self::assertSame(1, $result->records);
+        self::assertSame(1, $result->position);
+        self::assertGreaterThan(1, $result->events);
+        $privateValues = [$f->student->value, $f->version->value, 'Fictional', 'definition', 'program_id', 'reason'];
+        foreach ($privateValues as $private) {
+            self::assertStringNotContainsString($private, json_encode($result->describe(), JSON_THROW_ON_ERROR));
+        }
+        self::assertSame($before, EventStoreFixture::historyDigest($s->sql));
+    }
+
+    public function testRequirementCheckDoesNotInferAnUnrecordedSelectionOrReturnPartialDefinitions(): void
+    {
+        $f = new StudentRequirementsFixture();
+        $v = $f->f->sis->studentDecisionVerifier();
+        self::assertSame('observed_empty', $v->requirements($f->assignment)->status);
+        $f->assign();
+        $limited = $v->requirements($f->assignment, 1);
+        self::assertSame('limited', $limited->status);
+        self::assertNull($limited->records);
+        self::assertSame(['pursuit_identity'], $v->requirements(EntityId::generate())->issues);
+    }
+
+    public function testRequirementProjectionAndReferencedPublicationCorruptionNeverRepairOrVerify(): void
+    {
+        foreach (['projection', 'publication', 'missing'] as $case) {
+            $f = new StudentRequirementsFixture();
+            $f->assign();
+            $s = $f->f->sis;
+            if ($case === 'projection') {
+                $s->sql->update(
+                    'sis_student_requirements',
+                    ['pursuit_started_on' => '2026-02-01'],
+                    ['id' => $f->assignment->value],
+                );
+            } elseif ($case === 'missing') {
+                $s->sql->execute('DELETE FROM sis_student_requirements WHERE id = ?', [$f->assignment->value]);
+            } else {
+                $head = $s->sql->rows('sis_history_streams', ['stream_type' => 'course_publication'], 1)[0];
+                $event = $s->sql->rows('sis_history_events', ['stream_id' => $head['id']], 1)[0];
+                $s->sql->update(
+                    'sis_history_events',
+                    ['sealed_event' => 'fictional-private-damage'],
+                    ['id' => $event['id']],
+                );
+            }
+            $before = EventStoreFixture::historyDigest($s->sql);
+            $rows = $s->sql->rows('sis_student_requirements');
+            $s->connection->pdo->exec('PRAGMA query_only = ON');
+            $result = $s->studentDecisionVerifier()->requirements($f->assignment);
+            self::assertSame('unverified', $result->status);
+            self::assertSame(['requirements'], $result->issues);
+            self::assertSame($rows, $s->sql->rows('sis_student_requirements'));
+            self::assertSame($before, EventStoreFixture::historyDigest($s->sql));
+        }
+    }
+
     public function testPublicationDoesNotAssignStudentsAndReviewIsSideEffectFree(): void
     {
         $f = new StudentRequirementsFixture();

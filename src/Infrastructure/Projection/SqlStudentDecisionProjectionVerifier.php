@@ -12,6 +12,9 @@ use Domain\Student\Repository\StudentDecisionProjectionVerifier;
 use Domain\Student\Service\LoadDeterminationLedger;
 use Domain\Student\Service\StudentStandingLedger;
 use Domain\Student\ValueObject\StudentDecisionProjectionCheck;
+use Domain\Advising\Service\AdvisorHistoryReader;
+use Domain\DegreeAudit\Service\StudentRequirementsReader;
+use Domain\DegreeAudit\Service\PublishedRequirementsReader;
 use Infrastructure\Persistence\SqlRecords;
 use InvalidArgumentException;
 use Throwable;
@@ -23,6 +26,9 @@ final readonly class SqlStudentDecisionProjectionVerifier implements StudentDeci
         private SqlRecords $sql,
         private StudentStandingLedger $standings,
         private LoadDeterminationLedger $loads,
+        private AdvisorHistoryReader $advisors,
+        private StudentRequirementsReader $requirements,
+        private PublishedRequirementsReader $publications,
     ) {
     }
 
@@ -34,6 +40,16 @@ final readonly class SqlStudentDecisionProjectionVerifier implements StudentDeci
     public function load(EntityId $determination, int $eventLimit = 500): StudentDecisionProjectionCheck
     {
         return $this->verify('enrollment_load_determination', $determination, $eventLimit);
+    }
+
+    public function advisors(EntityId $pursuit, int $eventLimit = 500): StudentDecisionProjectionCheck
+    {
+        return $this->verify('student_advisors', $pursuit, $eventLimit);
+    }
+
+    public function requirements(EntityId $pursuit, int $eventLimit = 500): StudentDecisionProjectionCheck
+    {
+        return $this->verify('student_degree_requirements', $pursuit, $eventLimit);
     }
 
     private function verify(string $scope, EntityId $id, int $eventLimit): StudentDecisionProjectionCheck
@@ -51,7 +67,12 @@ final readonly class SqlStudentDecisionProjectionVerifier implements StudentDeci
         );
         $before = null;
         $status = 'unverified';
-        $issue = $scope === 'student_standing' ? 'standing' : 'load_decision';
+        $issue = match ($scope) {
+            'student_standing' => 'standing',
+            'student_advisors' => 'advisors',
+            'student_degree_requirements' => 'requirements',
+            default => 'load_decision',
+        };
         $issues = [];
         $position = $records = null;
         try {
@@ -65,7 +86,7 @@ final readonly class SqlStudentDecisionProjectionVerifier implements StudentDeci
                 || ($scope === 'enrollment_load_determination'
                     && ($before['projection'][0]['student_id'] ?? null) !== $before['student'][0]['id'])
             ) {
-                $issues = [$scope === 'student_standing' ? 'pursuit_identity' : 'load_decision'];
+                $issues = [$scope !== 'enrollment_load_determination' ? 'pursuit_identity' : 'load_decision'];
             } else {
                 $heads = $before['head'];
                 $position = $heads === [] ? 0 : $this->position($heads);
@@ -81,6 +102,43 @@ final readonly class SqlStudentDecisionProjectionVerifier implements StudentDeci
                     if ($records !== count($before['projection'])) {
                         throw new CorruptHistoryException();
                     }
+                    $status = $position === 0 ? 'observed_empty' : 'verified';
+                } elseif ($scope === 'student_advisors') {
+                    $root = $this->advisors->read(new EntityId($before['student'][0]['id']), $id, $budget);
+                    if ($root->playhead() !== $position) {
+                        throw new CorruptHistoryException();
+                    }
+                    $records = count($root->rows());
+                    $status = $position === 0 ? 'observed_empty' : 'verified';
+                } elseif ($scope === 'student_degree_requirements') {
+                    $root = $this->requirements->read($id, $budget);
+                    if ($root->playhead() !== $position) {
+                        throw new CorruptHistoryException();
+                    }
+                    $selected = $root->selection();
+                    if ($selected !== null) {
+                        if (
+                            $selected['student_id'] !== $before['student'][0]['id'] ||
+                            $selected['program_id'] !== $before['pursuit'][0]['program_id']
+                        ) {
+                            throw new CorruptHistoryException();
+                        }
+                        $published = $this->publications->version(
+                            new EntityId($selected['template_id']),
+                            new EntityId($selected['requirements_version_id']),
+                            $budget,
+                        );
+                        if (
+                            ($published['specialization_id'] ?? null) !== null ||
+                            $published['program_id'] !== $selected['program_id'] ||
+                            $published['academic_year_id'] !== $selected['academic_year_id'] ||
+                            (($published['program_version_id'] ?? null) !== null &&
+                                $published['program_version_id'] !== $selected['cohort_catalog_id'])
+                        ) {
+                            throw new CorruptHistoryException();
+                        }
+                    }
+                    $records = $selected === null ? 0 : 1;
                     $status = $position === 0 ? 'observed_empty' : 'verified';
                 } else {
                     $stored = $this->loads->restore($id, $budget);
@@ -156,8 +214,13 @@ final readonly class SqlStudentDecisionProjectionVerifier implements StudentDeci
         $person = $students[0]['person_id'] ?? null;
         if (!$load) {
             // Include wrong-student rows under this pursuit so they cannot disappear from the observation.
-            $projection = $this->sql->fetch('SELECT * FROM ' . $q('sis_student_standing')
-                . ' WHERE ' . $q('pursuit_id') . ' = ? ORDER BY ' . $q('id'), [$id->value], 51);
+            [$table, $column] = match ($scope) {
+                'student_advisors' => ['sis_student_advisors', 'pursuit_id'],
+                'student_degree_requirements' => ['sis_student_requirements', 'id'],
+                default => ['sis_student_standing', 'pursuit_id'],
+            };
+            $projection = $this->sql->fetch('SELECT * FROM ' . $q($table)
+                . ' WHERE ' . $q($column) . ' = ? ORDER BY ' . $q('id'), [$id->value], 51);
         }
         return [
             'projection' => $projection,

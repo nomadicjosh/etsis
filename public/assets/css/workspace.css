@@ -20,8 +20,8 @@ a { color: var(--campus-primary); text-underline-offset: 3px; }
 button, input, select, textarea { font: inherit; }
 button, a, input, select, textarea, [tabindex] { scroll-margin-top: 100px; }
 :focus-visible { outline: 3px solid #2467a5 !important; outline-offset: 4px; box-shadow: none !important; }
-.skip-link { position: fixed; top: -100px; left: 20px; z-index: 2000; padding: 12px 20px; background: #fff; border: 2px solid var(--campus-primary); border-radius: 8px; }
-.skip-link:focus { top: 12px; }
+.skip-link { position: fixed; top: 12px; left: 20px; z-index: 2000; max-width: calc(100vw - 40px); padding: 12px 20px; background: #fff; border: 2px solid var(--campus-primary); border-radius: 8px; overflow-wrap: anywhere; transform: translateY(calc(-100% - 24px)); }
+.skip-link:focus { transform: translateY(0); }
 .workspace-shell { display: flex; min-height: 100vh; }
 .workspace-sidebar { --bs-offcanvas-width: min(290px, 90vw); width: 258px; flex: 0 0 258px; background: #fff !important; border-right: 1px solid var(--campus-line); position: sticky; top: 0; height: 100dvh; display: flex; flex-direction: column; overflow: hidden; z-index: 1045; }
 .brand-row { padding: 26px 24px 22px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
