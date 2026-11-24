@@ -22,6 +22,7 @@ final class PortalAuthenticationTest extends TestCase
     public static function setUpBeforeClass(): void
     {
         require_once dirname(__DIR__) . '/Support/CampusFixture.php';
+        require_once dirname(__DIR__) . '/Support/ProgramDiscoveryFixture.php';
     }
 
     #[RunInSeparateProcess]
@@ -41,10 +42,27 @@ final class PortalAuthenticationTest extends TestCase
         $renderer = new CampusRenderer($config, $gate);
         $response = $renderer->render('home', 'Fictional welcome', ['programs' => [], 'news' => []]);
         self::assertStringContainsString('href="/campus-sign-in/"', (string) $response->getBody());
-        $controller = new CampusPortalController(new CampusFixture()->service, $renderer, $gate);
+        $campus = new CampusFixture();
+        $discovery = new \Tests\Support\ProgramDiscoveryFixture($campus->sis);
+        $controller = new CampusPortalController($campus->service, $renderer, $gate, $discovery->service());
         self::assertSame('/campus-sign-in/', $controller->student()->getHeaderLine('Location'));
         self::assertSame('/campus-sign-in/', $controller->admissionsUpdates()->getHeaderLine('Location'));
         self::assertSame('/campus-sign-in/', $controller->landing(new ServerRequest())
             ->getHeaderLine('Location'));
+        $target = new \Domain\Shared\ValueObject\EntityId('7ZZZZZZZZZZZZZZZZZZZZZZZZZ');
+        for ($i = 0; $i < 101; ++$i) {
+            $campus->sis->sql->insert('sis_programs', [
+                'id' => \Domain\Shared\ValueObject\EntityId::generate()->value,
+                'code' => 'FICTIONAL.PAGE.' . $i, 'title' => 'Fictional catalog option ' . $i,
+            ]);
+        }
+        $campus->sis->sql->insert('sis_programs', ['id' => $target->value,
+            'code' => 'FICTIONAL.TARGET', 'title' => 'Fictional selection beyond the initial program page']);
+        $request = new ServerRequest([], [], '/portal/apply/', 'GET')->withQueryParams(['program' => $target->value]);
+        $application = $controller->apply($request);
+        self::assertStringContainsString(
+            'Fictional selection beyond the initial program page',
+            (string) $application->getBody()
+        );
     }
 }

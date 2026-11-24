@@ -44,7 +44,7 @@ final readonly class CampusRenderer
             !in_array(
                 $template,
                 ["home", "catalog", "news", "article", "workspace", "not-found", "auth",
-                    "moodle", "account-setup", "events"],
+                    "moodle", "account-setup", "events", "programs", "program"],
                 true,
             )
         ) {

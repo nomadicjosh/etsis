@@ -36,12 +36,14 @@ final readonly class PasswordAuthenticationMiddleware implements MiddlewareInter
         ) {
             $body = $request->getParsedBody();
             $continue = is_array($body) && ($body["continue"] ?? null) === "apply";
+            $selection = $continue
+            ? substr(\Application\Http\Security\ApplicationContinuation::query($body), 1) : '';
             return new RedirectResponse(
                 "/" .
                     trim($this->config->string("auth.login_route", "login"), "/") .
                     "/" .
                     "?notice=credentials" .
-                    ($continue ? "&continue=apply" : ""),
+                    ($continue ? '&' . $selection : ''),
             );
         }
         return $handler->handle($request->withAttribute(AuthenticationMiddleware::AUTH_ATTRIBUTE, $user));

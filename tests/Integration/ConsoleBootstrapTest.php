@@ -9,6 +9,15 @@ use Symfony\Component\Process\Process;
 
 final class ConsoleBootstrapTest extends TestCase
 {
+    public function testPublicProgramDiscoveryUsesExplicitPublicationCsrfAndPrivatePublishingAuthority(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-program-discovery']);
+        $process->setTimeout(12);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testLoadPublicationChoicesUseActualProvidersCsrfAndIndependentPolicyAuthority(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',

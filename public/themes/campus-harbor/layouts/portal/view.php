@@ -148,6 +148,11 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
                         <li class="nav-item">
                             <a class="nav-link" href="/portal/courses/">Courses</a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="/portal/programs/">
+                                <?= \Codefy\Framework\Helpers\trans_html('Programs'); ?>
+                            </a>
+                        </li>
                         <li class="nav-item"><a class="nav-link" href="/portal/news/">Updates</a></li>
                         <li class="nav-item"><a class="nav-link" href="/portal/events/">Events</a></li>
                         <?php if ($staffAccess) : ?>
@@ -200,6 +205,9 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
                 <div>
                     <h2>Find your next step</h2>
                     <a href="/portal/courses/">Explore courses</a>
+                    <a href="/portal/programs/">
+                        <?= \Codefy\Framework\Helpers\trans_html('Explore programs'); ?>
+                    </a>
                     <a href="/portal/apply/">Apply to a program</a>
                     <a href="/portal/news/">News &amp; updates</a>
                 </div>

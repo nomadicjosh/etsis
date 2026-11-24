@@ -77,6 +77,7 @@ try {
                 'check-enrollment-load',
                 'check-content-publication',
                 'check-announcements',
+                'check-program-discovery',
                 'check-prerequisite-permissions',
                 'check-advising',
                 'check-moodle-resolution',
@@ -240,6 +241,11 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/AnnouncementBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-program-discovery') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/ProgramDiscoveryBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-content-publication') {
             $kernel->bootstrap();

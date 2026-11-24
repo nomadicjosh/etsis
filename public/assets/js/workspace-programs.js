@@ -1408,5 +1408,114 @@ window.createWorkspacePrograms = function (ui) {
             );
         body.append(button("Back to program details", back));
     }
-    return { open };
+    async function website(id) {
+        const fallback = {
+            title: 'Website catalog', help: 'Choose the published academic program version visitors may see. Draft edits stay private until a new version is deliberately selected here.',
+            publication: 'Published program definition', choose: 'Choose a publication', selected: 'Current selected publication',
+            visible: 'Show this program in the public catalog', review: 'Review website catalog', confirm: 'Confirm catalog publication',
+            hide: 'Confirm removal from public catalog', revise: 'Revise catalog settings', preview: 'Public program preview',
+            shown: 'Visitors will see this selected program version.',
+            hidden: 'This program will be removed from the public catalog. Academic records and application forms remain unchanged.',
+            saved: 'Website catalog updated.', empty: 'Publish an academic program definition before adding it to the website catalog.',
+            more: 'Older publications', previous: 'Newer publications', reload: 'Reload catalog settings', open: 'View public program',
+            year: 'Academic year', components: 'Published academic options', no_description: 'No published description.',
+            scope: 'Website visibility does not accept an applicant, select a major or change any student’s retained curriculum.',
+        };
+        const text = key => ui.discoveryLabels?.[key] || fallback[key];
+        const endpoint = `/sis/programs/${id}/website-catalog/`;
+        const loading = openDrawer(text('title'), text('title'));
+        let current = await request(endpoint);
+        if (!loading.isConnected) return;
+        let options = await request(`${endpoint}choices/`), after = null, previous = [];
+        if (!loading.isConnected) return;
+        const draft = { catalog_id: current.catalog_id, visible: current.visible };
+        function render(message = '') {
+            const body = openDrawer(text('title'), text('title'));
+            const status = node('p', { class: 'form-text', role: 'status', tabindex: '-1' }, message);
+            const choose = node('select', { id: 'website-program-publication', class: 'form-select' },
+                node('option', { value: '' }, text('choose')),
+                ...options.items.map(item => node('option', { value: item.id },
+                    `${item.year_code} · ${item.title} · #${item.revision}`)));
+            if (draft.catalog_id && !options.items.some(item => item.id === draft.catalog_id)) {
+                choose.append(node('option', { value: draft.catalog_id }, text('selected')));
+            }
+            choose.value = draft.catalog_id || '';
+            const visible = node('input', { id: 'website-program-visible', type: 'checkbox',
+                class: 'form-check-input', checked: draft.visible });
+            const busy = value => body.querySelectorAll('button, select, input').forEach(control => { control.disabled = value; });
+            const review = button(text('review'), async () => {
+                busy(true);
+                try {
+                    const plan = await request(`${endpoint}review/`, 'POST', { ...draft, version: current.version });
+                    if (body.isConnected) confirm(plan);
+                } finally { if (body.isConnected) { busy(false); update(); } }
+            }, 'btn-primary');
+            function update() {
+                draft.catalog_id = choose.value || null; draft.visible = visible.checked;
+                review.disabled = (draft.visible && !draft.catalog_id)
+                    || (draft.catalog_id === current.catalog_id && draft.visible === current.visible);
+            }
+            choose.addEventListener('change', update); visible.addEventListener('change', update);
+            const paging = async (cursor, stack) => {
+                busy(true);
+                try {
+                    const result = await request(`${endpoint}choices/?${new URLSearchParams({ after: cursor || '' })}`);
+                    if (!body.isConnected) return;
+                    options = result; after = cursor; previous = stack; render();
+                } finally { if (body.isConnected) { busy(false); update(); } }
+            };
+            body.append(node('h3', { class: 'h5' }, `${current.program.code} · ${current.program.title}`),
+                node('p', { class: 'form-text' }, text('help')),
+                node('div', { class: 'surface p-3 mb-3' },
+                    node('label', { for: choose.id, class: 'form-label' }, text('publication')), choose,
+                    node('div', { class: 'form-check my-3' }, visible,
+                        node('label', { for: visible.id, class: 'form-check-label' }, text('visible'))),
+                    node('p', { class: 'form-text' }, text('scope'))), status);
+            if (!options.items.length) body.append(node('p', { class: 'alert alert-info' }, text('empty')));
+            const actions = node('div', { class: 'd-flex flex-wrap gap-2' }, review,
+                button(text('reload'), async () => {
+                    busy(true);
+                    try {
+                        const fresh = await request(endpoint);
+                        if (!body.isConnected) return;
+                        current = fresh; draft.catalog_id = fresh.catalog_id; draft.visible = fresh.visible; render();
+                    } finally { if (body.isConnected) { busy(false); update(); } }
+                }));
+            if (current.visible) actions.append(node('a', { href: `/portal/programs/${id}/`,
+                class: 'btn btn-outline-secondary' }, text('open')));
+            if (options.next_after) actions.append(button(text('more'), () => paging(options.next_after, [...previous, after])));
+            if (previous.length) actions.append(button(text('previous'), () => {
+                const earlier = [...previous]; return paging(earlier.pop(), earlier);
+            }));
+            body.append(actions); update();
+        }
+        function confirm(plan) {
+            const body = openDrawer(text('review'), text('preview'));
+            body.append(node('p', { class: plan.visible ? 'alert alert-info' : 'alert alert-warning' },
+                text(plan.visible ? 'shown' : 'hidden')));
+            if (plan.program) {
+                body.append(node('h3', { class: 'h5' }, `${plan.program.code} · ${plan.program.title}`),
+                    node('p', { class: 'form-text' }, `${text('year')}: ${plan.program.academic_year_code}`),
+                    node('p', { class: 'course-description-text' }, plan.program.description || text('no_description')));
+                if (plan.program.components.length) body.append(node('h4', { class: 'h6' }, text('components')),
+                    node('ul', {}, ...plan.program.components.map(item => node('li', {}, item.title))));
+            }
+            const publish = button(text(plan.visible ? 'confirm' : 'hide'), async () => {
+                body.querySelectorAll('button').forEach(control => { control.disabled = true; });
+                try {
+                    const accepted = await request(`${endpoint}commit/`, 'POST', {
+                        catalog_id: plan.catalog_id, visible: plan.visible, version: plan.version,
+                        operation_id: plan.operation_id, revision: plan.revision, review_token: plan.review_token,
+                    });
+                    if (!body.isConnected) return;
+                    current = accepted; draft.catalog_id = accepted.catalog_id; draft.visible = accepted.visible;
+                    render(text('saved'));
+                } finally { if (body.isConnected) body.querySelectorAll('button').forEach(control => { control.disabled = false; }); }
+            }, plan.visible ? 'btn-primary' : 'btn-danger');
+            body.append(node('div', { class: 'd-flex flex-wrap gap-2' }, publish,
+                button(text('revise'), () => render())));
+        }
+        render();
+    }
+    return { open, website };
 };

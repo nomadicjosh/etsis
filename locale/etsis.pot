@@ -3297,3 +3297,255 @@ msgstr ""
 #: resources/views/shared/prerequisite-origin-labels.php
 msgid "Effective coursework source"
 msgstr ""
+
+#: resources/views/frontend/portal/programs.phtml
+msgid "FIND YOUR DIRECTION"
+msgstr ""
+
+#: resources/views/frontend/portal/programs.phtml
+msgid "Explore academic programs"
+msgstr ""
+
+#: resources/views/frontend/portal/programs.phtml
+msgid "Discover your options, review the published program, then take the next step toward applying."
+msgstr ""
+
+#: resources/views/frontend/portal/programs.phtml
+msgid "Academic program catalog"
+msgstr ""
+
+#: resources/views/frontend/portal/programs.phtml
+msgid "Program code or title"
+msgstr ""
+
+#: resources/views/frontend/portal/programs.phtml
+msgid "Find programs"
+msgstr ""
+
+#: resources/views/frontend/portal/programs.phtml
+msgid "Published academic year"
+msgstr ""
+
+#: resources/views/frontend/portal/programs.phtml
+msgid "View program"
+msgstr ""
+
+#: resources/views/frontend/portal/programs.phtml
+msgid "No published programs match this search."
+msgstr ""
+
+#: resources/views/frontend/portal/programs.phtml
+msgid "Program catalog pages"
+msgstr ""
+
+#: resources/views/frontend/portal/programs.phtml
+msgid "Back to first results"
+msgstr ""
+
+#: resources/views/frontend/portal/programs.phtml
+msgid "More programs"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Academic level"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Award"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Field of study"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Primary campus/site"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Majors"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Minors"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Specializations"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Back to programs"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "About this program"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Contact admissions to learn more about this program."
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Additional offering sites"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Explore your academic options"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Apply to the program first. Major, minor and specialization choices follow the institution’s advising and curriculum-selection process."
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Your next step"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Choose an entry term, then sign in or create an account to complete your private application."
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Apply to this program"
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Applications are not currently available for this program. Contact admissions for the next opportunity."
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml
+msgid "Explore available courses"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Website catalog"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Choose the published academic program version visitors may see. Draft edits stay private until a new version is deliberately selected here."
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Published program definition"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Choose a publication"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Current selected publication"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Show this program in the public catalog"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Review website catalog"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Confirm catalog publication"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Confirm removal from public catalog"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Revise catalog settings"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Back to catalog settings"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Public program preview"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Visitors will see this selected program version."
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "This program will be removed from the public catalog. Academic records and application forms remain unchanged."
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Website catalog updated."
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Publish an academic program definition before adding it to the website catalog."
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Older publications"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Newer publications"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Reload catalog settings"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "View public program"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Academic year"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Published academic options"
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "No published description."
+msgstr ""
+
+#: resources/views/backend/workspace/program-discovery-labels.php
+msgid "Website visibility does not accept an applicant, select a major or change any student’s retained curriculum."
+msgstr ""
+
+#: resources/views/frontend/portal/components/programs.phtml
+msgid "Explore programs"
+msgstr ""
+
+#: resources/views/frontend/portal/components/programs.phtml
+msgid "Published programs will appear here when available."
+msgstr ""
+
+#: public/themes/campus-harbor/layouts/portal/view.php
+msgid "Recent notifications"
+msgstr ""
+
+#: public/themes/campus-harbor/layouts/portal/view.php
+msgid "Programs"
+msgstr ""
+
+#: public/themes/campus-harbor/layouts/portal/view.php
+msgid "Additional website links"
+msgstr ""
+
+#: public/themes/campus-harbor/layouts/portal/view.php
+msgid "Campus notification"
+msgstr ""
+
+#: public/themes/campus-harbor/layouts/portal/view.php
+msgid "There are no notifications from this page."
+msgstr ""
+
+#: public/themes/campus-harbor/layouts/portal/view.php
+msgid "Recent action feedback stays only in this page. Reloading or signing out clears it. Check the relevant service for your current records and request status."
+msgstr ""
+
+#: src/Application/Http/Controller/ProgramDiscoveryController.php
+msgid "Program unavailable"
+msgstr ""

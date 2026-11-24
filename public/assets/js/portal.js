@@ -889,6 +889,8 @@
             term,
             config.terms.map((item) => ({ id: item.id, label: item.code })),
         );
+        const requestedTerm = new URLSearchParams(location.search).get('term');
+        if (requestedTerm) term.value = requestedTerm;
         form.append(
             el(
                 'button',
@@ -939,7 +941,7 @@
                                         'a',
                                         {
                                             class: 'btn campus-button',
-                                            href: '/register/',
+                                            href: `/register/?${new URLSearchParams({ program: program.value, term: term.value })}`,
                                         },
                                         'Create your account',
                                     ),
@@ -947,7 +949,7 @@
                                         'a',
                                         {
                                             class: 'btn campus-button-outline',
-                                            href: `${config.loginUrl || '/login/'}?continue=apply`,
+                                            href: `${config.loginUrl || '/login/'}?${new URLSearchParams({ continue: 'apply', program: program.value, term: term.value })}`,
                                         },
                                         'Sign in to apply',
                                     ),

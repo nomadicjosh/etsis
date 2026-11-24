@@ -196,6 +196,8 @@ if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/lo
     if ($path === '/portal/courses/') {
         $template = 'catalog';
         $title = 'Explore courses';
+    } elseif ($path === '/portal/programs/' || str_starts_with($path, '/portal/programs/')) {
+        require __DIR__ . '/program-discovery-fixture.php';
     } elseif ($path === '/portal/events/') {
         require __DIR__ . '/public-events-fixture.php';
         $template = 'events';
@@ -213,6 +215,7 @@ if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/lo
     } elseif ($path === '/login/' || $path === '/register/') {
         $template = 'auth'; $data += ['mode' => $path === '/login/' ? 'login' : 'register',
             'continue' => true, 'signInFailed' => ($_GET['notice'] ?? '') === 'credentials',
+            'applicationSelection' => \Application\Http\Security\ApplicationContinuation::selection($_GET),
             'url' => $path === '/login/' ? '/auth/' : '/create/'];
     } elseif (
         in_array($path, [

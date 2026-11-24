@@ -19,13 +19,19 @@ use InvalidArgumentException;
 
 final readonly class CampusPortalController
 {
-    public function __construct(private CampusService $service, private CampusRenderer $renderer, private Gate $gate)
-    {
+    public function __construct(
+        private CampusService $service,
+        private CampusRenderer $renderer,
+        private Gate $gate,
+        private \Domain\Portal\Service\ProgramDiscoveryService $discovery,
+    ) {
     }
 
     public function home(): ResponseInterface
     {
-        return $this->renderer->render("home", "A place for your next chapter", $this->service->publicData());
+        $data = $this->service->publicData();
+        $data['programs'] = $this->discovery->page()['items'];
+        return $this->renderer->render("home", "A place for your next chapter", $data);
     }
 
     public function landing(ServerRequest $request): ResponseInterface
@@ -34,7 +40,9 @@ final readonly class CampusPortalController
             return new RedirectResponse($this->renderer->loginUrl());
         }
         if (($request->getQueryParams()["continue"] ?? null) === "apply") {
-            return new RedirectResponse("/portal/apply/");
+            return new RedirectResponse(
+                \Application\Http\Security\ApplicationContinuation::target($request->getQueryParams()),
+            );
         }
         return new RedirectResponse($this->renderer->canUseWorkspace() ? "/admin/" : "/portal/student/");
     }
@@ -63,11 +71,21 @@ final readonly class CampusPortalController
         return $this->renderer->render("article", $article["title"], ["article" => $article]);
     }
 
-    public function apply(): ResponseInterface
+    public function apply(ServerRequest $request): ResponseInterface
     {
+        $data = $this->service->publicData();
+        $selected = new FormInput($request->getQueryParams())->optionalId('program');
+        if ($selected !== null && !in_array($selected->value, array_column($data['programs'], 'id'), true)) {
+            foreach ($this->service->programs($selected->value)['items'] as $item) {
+                if ($item['id'] === $selected->value) {
+                    $data['programs'][] = $item;
+                    break;
+                }
+            }
+        }
         return $this->renderer->render("workspace", "Start your application", [
             "section" => "applications",
-            "public" => $this->service->publicData(),
+            "public" => $data,
             "applicationPage" => true,
         ]);
     }

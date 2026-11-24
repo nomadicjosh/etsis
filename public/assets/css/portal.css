@@ -1307,3 +1307,15 @@
     .academic-timetable-days { grid-template-columns: repeat(7, minmax(0, 1fr)); }
     .academic-timetable-weekday, .academic-timetable-spacer { display: block; }
 }
+/* Published program discovery uses the shared campus surfaces and narrow-screen reflow. */
+.campus-program-detail { display: grid; gap: 1.5rem; padding-block-end: 3rem; min-width: 0; }
+.campus-program-description { white-space: pre-wrap; overflow-wrap: anywhere; }
+.campus-program-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 1rem; }
+.campus-program-facts dd { margin: .3rem 0 0; overflow-wrap: anywhere; }
+.campus-program-card { min-width: 0; overflow-wrap: anywhere; }
+.campus-catalog-filters.campus-program-filters { display: grid; grid-template-columns: minmax(0, 1fr) auto; max-width: 48rem; }
+.campus-catalog-filters.campus-program-filters > div:first-child { min-width: 0; }
+.campus-program-filters > button { justify-self: start; }
+@media (max-width: 600px) {
+    .campus-catalog-filters.campus-program-filters { grid-template-columns: minmax(0, 1fr); }
+}

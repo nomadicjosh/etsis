@@ -1089,6 +1089,11 @@ return static function (Psr7Router $router): void {
     $router->post("/sis/programs/{id}/publication/review/", [$programPublications, "review"]);
     $router->post("/sis/programs/{id}/publication/commit/", [$programPublications, "publish"]);
     $router->post("/sis/programs/{id}/publication/page/", [$programPublications, "page"]);
+    $discovery = \Application\Http\Controller\ProgramDiscoveryController::class;
+    $router->get('/sis/programs/{id}/website-catalog/', [$discovery, 'current']);
+    $router->get('/sis/programs/{id}/website-catalog/choices/', [$discovery, 'choices']);
+    $router->post('/sis/programs/{id}/website-catalog/review/', [$discovery, 'review']);
+    $router->post('/sis/programs/{id}/website-catalog/commit/', [$discovery, 'commit']);
     $classificationController = \Application\Http\Controller\SisClassificationController::class;
     $router->post("/sis/catalog/classifications/{kind}/page/", [$classificationController, "page"]);
     $router->post("/sis/catalog/classifications/{kind}/save/", [$classificationController, "save"]);

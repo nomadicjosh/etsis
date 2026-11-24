@@ -17,6 +17,8 @@ The page builder can replace the public homepage at `/` and create additional pu
 
 **The `/` homepage override does not also replace `/portal/`.** These are separate routes; `/portal/` continues to show its built-in page.
 
+The [public program catalog](public-program-catalog.md) at `/portal/programs/` and its program-detail routes are application-owned screens. **Live academic programs** shows only explicitly approved website selections of published academic definitions and links to those details. Its presentation settings stay editable in the builder; program descriptions, academic options and visibility use **Academic catalog → Programs → Website catalog**. The application handoff and private applicant/student services retain their existing authorization and submission rules.
+
 To add a website page, choose **Website pages → Create a page**, select a layout and enter an unused **Public route** for each language. Save the settings, design and save the page, then submit it for publication review. Add the page to **Website menus** when it should appear in navigation. Changing a page's route or approving it does not override an existing application route.
 
 ## Page settings and canvas editing

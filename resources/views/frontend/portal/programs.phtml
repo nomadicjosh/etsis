@@ -1,0 +1,76 @@
+<?php
+
+use function Codefy\Framework\Helpers\trans_html;
+
+$context = array_filter(
+    ['q' => $search, 'after' => $after ?? null],
+    static fn (?string $v): bool => $v !== null && $v !== '',
+);
+$detailQuery = $context === [] ? '' : '?' . http_build_query($context);
+$firstUrl = '/portal/programs/?' . http_build_query(['q' => $search]);
+
+?>
+<header class="campus-container campus-page-heading">
+    <p class="campus-eyebrow"><?= trans_html('FIND YOUR DIRECTION'); ?></p>
+    <h1><?= trans_html('Explore academic programs'); ?></h1>
+    <p class="campus-lead">
+        <?= trans_html(
+            'Discover your options, review the published program, then take the next step toward applying.',
+        ); ?>
+    </p>
+</header>
+<section class="campus-container campus-catalog" aria-label="<?= trans_html('Academic program catalog'); ?>">
+    <form class="campus-catalog-filters campus-program-filters" role="search" action="/portal/programs/" method="get">
+        <div class="campus-search-field">
+            <label for="public-program-search" class="form-label"><?= trans_html('Program code or title'); ?></label>
+            <input
+                id="public-program-search"
+                class="form-control"
+                type="search"
+                name="q"
+                maxlength="80"
+                value="<?= $this->esc($search); ?>"
+            >
+        </div>
+        <button class="btn campus-button" type="submit">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <?= trans_html('Find programs'); ?>
+        </button>
+    </form>
+    <div class="campus-program-grid mt-4">
+        <?php foreach ($items as $item): ?>
+            <a
+                class="campus-program-card"
+                href="<?= $this->esc('/portal/programs/' . $item['id'] . '/' . $detailQuery); ?>"
+            >
+                <span class="campus-program-code"><?= $this->esc($item['code']); ?></span>
+                <h2 class="h4"><?= $this->esc($item['title']); ?></h2>
+                <p><?= trans_html('Published academic year'); ?>: <?= $this->esc($item['academic_year_code']); ?></p>
+                <span>
+                    <?= trans_html('View program'); ?>
+                    <i class="bi bi-arrow-right" aria-hidden="true"></i>
+                </span>
+            </a>
+        <?php endforeach; ?>
+        <?php if ($items === []): ?>
+            <p class="campus-empty"><?= trans_html('No published programs match this search.'); ?></p>
+        <?php endif; ?>
+    </div>
+    <nav class="campus-actions mt-4" aria-label="<?= trans_html('Program catalog pages'); ?>">
+        <?php if ($hasPrevious): ?>
+            <a class="btn campus-button-outline" href="<?= $this->esc($firstUrl); ?>">
+                <i class="bi bi-arrow-counterclockwise" aria-hidden="true"></i>
+                <?= trans_html('Back to first results'); ?>
+            </a>
+        <?php endif; ?>
+        <?php if ($next_after !== null): ?>
+            <a
+                class="btn campus-button-outline"
+                href="/portal/programs/?<?= $this->esc(http_build_query(['q' => $search, 'after' => $next_after])); ?>"
+            >
+                <?= trans_html('More programs'); ?>
+                <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </a>
+        <?php endif; ?>
+    </nav>
+</section>

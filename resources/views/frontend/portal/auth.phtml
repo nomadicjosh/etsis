@@ -1,5 +1,7 @@
 <?php
 
+use Application\Http\Security\ApplicationContinuation;
+
 use function Codefy\Framework\Helpers\trans;
 use function Codefy\Framework\Helpers\trans_html;
 
@@ -24,6 +26,10 @@ $authSubmitLabel = match (true) {
     $register => trans_html('Create account'),
     default => trans_html('Sign in'),
 };
+$applicationSelection ??= [];
+$applicationLoginUrl = $loginUrl . ApplicationContinuation::query(['continue' => 'apply'] + $applicationSelection);
+$applicationRegisterUrl = '/register/'
+    . ($applicationSelection === [] ? '' : '?' . http_build_query($applicationSelection));
 ?>
 <section class="campus-container campus-auth" aria-labelledby="campus-auth-title">
     <div class="campus-auth-intro">
@@ -58,6 +64,9 @@ $authSubmitLabel = match (true) {
             <?= $csrfMarkup ?? csrf_field() ?>
             <?php if ($continue): ?>
                 <input type="hidden" name="continue" value="apply" />
+                <?php foreach (($applicationSelection ?? []) as $field => $value): ?>
+                    <input type="hidden" name="<?= $this->esc($field); ?>" value="<?= $this->esc($value); ?>" />
+                <?php endforeach; ?>
             <?php endif; ?>
             <?php if (!$logout): ?>
                 <div class="mb-4">
@@ -158,10 +167,12 @@ $authSubmitLabel = match (true) {
                     <a href="/portal/student/"><?=trans_html('Return to my campus');?></a>
                 <?php elseif ($register): ?>
                     <?=trans_html('Have an account?');?>
-                    <a href="<?= $this->esc($loginUrl) ?>?continue=apply"><?=trans_html('Sign in to apply');?></a>
+                    <a href="<?= $this->esc($applicationLoginUrl); ?>"><?=trans_html('Sign in to apply');?></a>
                 <?php else: ?>
                     <?=trans_html('New here?');?>
-                    <a href="/register/"><?=trans_html('Create your campus account');?></a>
+                    <a href="<?= $this->esc($applicationRegisterUrl); ?>">
+                        <?=trans_html('Create your campus account'); ?>
+                    </a>
                 <?php endif; ?>
             </p>
         <?php endif; ?>

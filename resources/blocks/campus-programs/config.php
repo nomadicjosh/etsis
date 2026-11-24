@@ -23,7 +23,7 @@ return [
         "link_label" => [
             "type" => "text",
             "label" => trans_html("Section link label"),
-            "value" => "Explore applications",
+            "value" => "Explore programs",
         ],
         "introduction" => [
             "type" => "text",

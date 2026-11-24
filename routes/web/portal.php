@@ -111,6 +111,9 @@ return static function (Psr7Router $router): void {
     $router->map(['POST'], '/portal/api/timetable/view/', [$timetable, 'view'])->name('portal.timetable.view');
     $router->map(["GET"], "/portal/sign-in/", [Portal::class, "landing"])->name("portal.landing");
     $router->map(["GET"], "/portal/courses/", [Portal::class, "catalog"])->name("portal.courses");
+    $programCatalog = \Application\Http\Controller\ProgramDiscoveryController::class;
+    $router->get('/portal/programs/', [$programCatalog, 'page'])->name('portal.program.catalog');
+    $router->get('/portal/programs/{id}/', [$programCatalog, 'detail'])->name('portal.program.detail');
     $router->map(["GET"], "/portal/news/", [Portal::class, "news"])->name("portal.news");
     $router->map(["GET"], "/portal/news/{code}/", [Portal::class, "article"])->name("portal.article");
     $router->map(["GET"], "/portal/apply/", [Portal::class, "apply"])->name("portal.apply");

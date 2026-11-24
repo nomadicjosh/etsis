@@ -2304,6 +2304,10 @@ window.createWorkspaceOperations = function (ui) {
                             () => ui.programs().open(row.id),
                             "btn-primary",
                         ),
+                        ...(can('sis:portal:manage') && can('sis:portal:publish') ? [button(
+                            ui.discoveryLabels?.title || 'Website catalog',
+                            () => ui.programs().website(row.id), 'btn-outline-secondary',
+                        )] : []),
                         button("Academic years", () => ui.calendar().years(), "btn-outline-secondary"),
                     ],
                 ),

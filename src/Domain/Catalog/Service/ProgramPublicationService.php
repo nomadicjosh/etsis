@@ -451,6 +451,31 @@ final readonly class ProgramPublicationService
         ];
     }
 
+    /** Verify an explicit immutable publication for another authorized catalog workflow. */
+    public function published(EntityId $program, EntityId $version): array
+    {
+        $actor = $this->access->requirePermission('sis:catalog:manage');
+        $retained = $this->details->retained($version);
+        if ($retained === null || $retained['program_id'] !== $program->value) {
+            throw new \Domain\Shared\Exception\RecordNotFoundException('Program publication unavailable.');
+        }
+        $year = new EntityId($retained['academic_year_id']);
+        [, $accepted] = $this->load($program, $year, $version);
+        if ($accepted === null) {
+            throw new CorruptHistoryException();
+        }
+        $payload = $accepted->event->payload();
+        $expected = ['program_id' => $program->value, 'academic_year_id' => $year->value,
+            'academic_year_code' => $payload['academic_year_code'],
+            'catalog_revision' => $payload['catalog_revision'], 'stream_version' => $accepted->event->playhead(),
+            'definition' => $payload['definition'], 'specializations' => $payload['specializations']];
+        if ($this->hash($retained) !== $this->hash($expected)) {
+            throw new CorruptHistoryException();
+        }
+        $this->authorize($actor);
+        return $retained;
+    }
+
     /** @return array{ProgramPublication, ?StoredEvent, ?StoredEvent} */
     private function load(EntityId $program, EntityId $year, ?EntityId $operation = null): array
     {

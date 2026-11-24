@@ -15,6 +15,7 @@ use Qubus\Routing\Exceptions\NamedRouteNotFoundException;
 use Qubus\Routing\Exceptions\RouteParamFailedConstraintException;
 use Qubus\Routing\Psr7Router;
 use Domain\Shared\Operations\MaintenanceMode;
+use Application\Http\Security\ApplicationContinuation;
 
 final readonly class AuthController
 {
@@ -31,10 +32,10 @@ final readonly class AuthController
     public function auth(ServerRequest $request): ResponseInterface
     {
         $body = $request->getParsedBody();
-        $continue = is_array($body) && ($body["continue"] ?? null) === "apply";
+        $query = ApplicationContinuation::query(is_array($body) ? $body : []);
         // The session cookie is written after this response. Resolve access on the next GET.
         return new RedirectResponse($this->maintenance->status()->paused()
-            ? '/admin/' : "/portal/sign-in/" . ($continue ? "?continue=apply" : ""));
+            ? '/admin/' : "/portal/sign-in/" . $query);
     }
 
     /**
@@ -44,9 +45,10 @@ final readonly class AuthController
     public function login(ServerRequest $request): ResponseInterface
     {
         $continue = ($request->getQueryParams()["continue"] ?? null) === "apply";
+        $query = ApplicationContinuation::query($request->getQueryParams());
         $maintenance = $this->maintenance->status()->paused();
         if (!$maintenance && $this->gate->isLoggedIn()) {
-            return new RedirectResponse("/portal/sign-in/" . ($continue ? "?continue=apply" : ""));
+            return new RedirectResponse("/portal/sign-in/" . $query);
         }
         $failed = ($request->getQueryParams()["notice"] ?? null) === "credentials";
         return $this->renderer->render("auth", $failed ? "Check your sign-in details" : "Welcome back", [
@@ -54,6 +56,7 @@ final readonly class AuthController
             "mode" => "login",
             "url" => $this->router->url("auth"),
             "continue" => $continue,
+            'applicationSelection' => $continue ? ApplicationContinuation::selection($request->getQueryParams()) : [],
             "maintenanceActive" => $maintenance,
         ]);
     }

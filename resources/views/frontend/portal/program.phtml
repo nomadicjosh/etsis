@@ -1,0 +1,103 @@
+<?php
+
+use function Codefy\Framework\Helpers\trans_html;
+
+$classificationLabels = [
+    'academic_level' => trans_html('Academic level'), 'award' => trans_html('Award'),
+    'school' => trans_html('School/college'), 'field_of_study' => trans_html('Field of study'),
+    'campus' => trans_html('Primary campus/site'),
+];
+$kindLabels = ['major' => trans_html('Majors'), 'minor' => trans_html('Minors'),
+    'specialization' => trans_html('Specializations')];
+?>
+<header class="campus-container campus-page-heading">
+    <a class="campus-text-link" href="<?= $this->esc($backUrl ?? '/portal/programs/'); ?>">
+        <i class="bi bi-arrow-left" aria-hidden="true"></i>
+        <?= trans_html('Back to programs'); ?>
+    </a>
+    <p class="campus-eyebrow mt-4"><?= $this->esc($program['code']); ?></p>
+    <h1><?= $this->esc($program['title']); ?></h1>
+    <p class="campus-muted">
+        <?= trans_html('Published academic year'); ?>: <?= $this->esc($program['academic_year_code']); ?>
+    </p>
+</header>
+<div class="campus-container campus-program-detail">
+    <section class="campus-service-panel" aria-labelledby="program-about-heading">
+        <h2 id="program-about-heading"><?= trans_html('About this program'); ?></h2>
+        <?php if ($program['description'] !== null): ?>
+            <p class="campus-program-description"><?= $this->esc($program['description']); ?></p>
+        <?php else: ?>
+            <p><?= trans_html('Contact admissions to learn more about this program.'); ?></p>
+        <?php endif; ?>
+        <dl class="campus-program-facts">
+            <?php foreach ($classificationLabels as $kind => $label): ?>
+                <?php if ($program['classifications'][$kind] !== null): ?>
+                    <div>
+                        <dt><?= $label; ?></dt>
+                        <dd><?= $this->esc($program['classifications'][$kind]['title']); ?></dd>
+                    </div>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </dl>
+        <?php if ($program['additional_campuses'] !== []): ?>
+            <h3 class="h5"><?= trans_html('Additional offering sites'); ?></h3>
+            <ul>
+                <?php foreach ($program['additional_campuses'] as $site): ?>
+                    <li><?= $this->esc($site['title']); ?></li>
+                <?php endforeach; ?>
+            </ul>
+        <?php endif; ?>
+    </section>
+    <?php if ($program['components'] !== []): ?>
+        <section class="campus-service-panel" aria-labelledby="program-options-heading">
+            <h2 id="program-options-heading"><?= trans_html('Explore your academic options'); ?></h2>
+            <p>
+                <?= trans_html(
+                    'Apply to the program first. Major, minor and specialization choices follow '
+                    . 'the institution’s advising and curriculum-selection process.',
+                ); ?>
+            </p>
+            <?php foreach ($kindLabels as $kind => $label): ?>
+                <?php
+                $components = array_filter(
+                    $program['components'],
+                    static fn (array $r): bool => $r['kind'] === $kind,
+                );
+                ?>
+                <?php if ($components !== []): ?>
+                    <h3 class="h5"><?= $label; ?></h3>
+                    <ul>
+                        <?php foreach ($components as $component): ?>
+                            <li><?= $this->esc($component['title']); ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+            <?php endforeach; ?>
+        </section>
+    <?php endif; ?>
+    <section class="campus-service-panel" aria-labelledby="program-next-heading">
+        <h2 id="program-next-heading"><?= trans_html('Your next step'); ?></h2>
+        <?php if ($program['application_available']): ?>
+            <p>
+                <?= trans_html(
+                    'Choose an entry term, then sign in or create an account to complete your private application.',
+                ); ?>
+            </p>
+            <a class="btn campus-button" href="/portal/apply/?program=<?= $this->esc($program['id']); ?>">
+                <?= trans_html('Apply to this program'); ?>
+                <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            </a>
+        <?php else: ?>
+            <p>
+                <?= trans_html(
+                    'Applications are not currently available for this program. '
+                    . 'Contact admissions for the next opportunity.',
+                ); ?>
+            </p>
+        <?php endif; ?>
+        <a class="campus-text-link d-inline-flex mt-3" href="/portal/courses/">
+            <?= trans_html('Explore available courses'); ?>
+            <i class="bi bi-arrow-up-right" aria-hidden="true"></i>
+        </a>
+    </section>
+</div>
