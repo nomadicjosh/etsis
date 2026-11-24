@@ -25,6 +25,31 @@ final class RegistrationConcurrencyTest extends TestCase
         $this->race(true);
     }
 
+    public function testRecordedStreamPositionCannotBeInsertedTwice(): void
+    {
+        $r = new WorkflowRecoveryFixture();
+        try {
+            $f = $r->sis;
+            $student = $f->student();
+            $section = $f->section(1, 1250);
+            $f->service->register($student->id, $section->id, true);
+            $before = $r->facts();
+            $duplicate = $f->sql->rows('sis_history_events', limit: 1)[0];
+            // Distinct row/event identities isolate the stream-position constraint under test.
+            $duplicate['id'] = \Domain\Shared\ValueObject\EntityId::generate()->value;
+            $duplicate['event_id'] = \Domain\Shared\ValueObject\EntityId::generate()->value;
+            try {
+                $f->transactions->run(static fn () => $f->sql->insert('sis_history_events', $duplicate));
+                self::fail('A duplicate recorded stream position was accepted.');
+            } catch (\PDOException $error) {
+                self::assertContains((string) $error->getCode(), ['23000', '23505']);
+            }
+            self::assertSame($before, $r->facts());
+        } finally {
+            $r->close();
+        }
+    }
+
     private function race(bool $sameStudent): void
     {
         $r = new WorkflowRecoveryFixture();

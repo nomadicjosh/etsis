@@ -23,8 +23,8 @@ stream_set_timeout(STDIN, 8);
 try {
     $input = json_decode((string) fgets(STDIN, 131072), true, 16, JSON_THROW_ON_ERROR);
     if (($input['native'] ?? null) !== null) {
-        require_once __DIR__ . '/MysqlQualificationDatabase.php';
-        $connection = \Tests\Support\MysqlQualificationDatabase::workerConnection($input['native']);
+        require_once __DIR__ . '/NativeQualificationDatabase.php';
+        $connection = \Tests\Support\NativeQualificationDatabase::workerConnection($input['native']);
     } else {
         $connection = new Sqlite(['driver' => 'pdo_sqlite', 'dsn' => 'sqlite:' . $input['path']]);
         $connection->pdo->exec('PRAGMA busy_timeout = 3000');

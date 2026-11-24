@@ -45,7 +45,7 @@ XDEBUG_MODE=off timeout 35s nice -n 19 "$ETSIS_TEST_PHP" -d memory_limit=128M \
 
 The eight cases use at most two active child workers, each capped at 96 MiB and ten seconds. Protocol waits stop after four seconds and SQLite busy waits after three. The parent uses a private directory with mode `0700` and creates the database with a restrictive umask. Fictional protection keys and review proofs pass through private stdin, never command arguments, jobs or logs. Workers emit fixed protocol phases and minimized fictional results; provider exceptions remain out of their output. Teardown stops remaining children and removes database/journal/WAL artifacts. No scheduled worker, application command, report, schema change or external service is added.
 
-The 25-student check exercises the current synchronous selection limit. Larger populations, long histories, other native engines/versions, fresh migration installation, host/power failure, backup restoration and institution-led acceptance remain open. The selected MariaDB result is described in the [native qualification guide](native-workflow-qualification.md). Process termination is not a substitute for those checks.
+The 25-student check exercises the current synchronous selection limit. Larger populations, long histories, other native engines/versions, fresh migration installation, host/power failure, backup restoration and institution-led acceptance remain open. The selected MariaDB and PostgreSQL results, the shared native runner and exact remaining limits are described in the [native qualification guide](native-workflow-qualification.md). Process termination is not a substitute for those checks.
 
 ## Recover an interrupted confirmation
 

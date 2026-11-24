@@ -7,15 +7,16 @@ namespace Tests\Support;
 use Dotenv\Dotenv;
 use LogicException;
 use PDO;
-use Qubus\Expressive\Connection\Pdo\Mysql;
+use Qubus\Expressive\Connection\DriverConnection;
+use Qubus\Expressive\Connection\PdoConnection;
 use RuntimeException;
 use Throwable;
 
 /** Opt-in disposable database. The configured application schema is never selected or mutated. */
-final class MysqlQualificationDatabase
+final class NativeQualificationDatabase
 {
-    private ?Mysql $server = null;
-    private ?Mysql $database = null;
+    private ?PdoConnection $server = null;
+    private ?PdoConnection $database = null;
     private bool $created = false;
     private bool $marked = false;
     private readonly string $name;
@@ -27,6 +28,9 @@ final class MysqlQualificationDatabase
     private string $phase = 'created';
     private bool $schemaReady = false;
     private static ?self $shared = null;
+    private ?PdoConnection $source = null;
+    private string $driver;
+    private array $seedOrder = [];
 
     public static function acquire(string $directory): self
     {
@@ -35,7 +39,7 @@ final class MysqlQualificationDatabase
 
     public function __construct(?string $leaseDirectory = null)
     {
-        if (getenv('ETSIS_WORKFLOW_MYSQL_QUALIFICATION') !== '1') {
+        if (getenv('ETSIS_WORKFLOW_NATIVE_QUALIFICATION') !== '1') {
             throw new LogicException('Native workflow qualification requires explicit opt-in.');
         }
         if ($leaseDirectory === null || !is_dir($leaseDirectory) || (fileperms($leaseDirectory) & 0077) !== 0) {
@@ -65,25 +69,51 @@ final class MysqlQualificationDatabase
         self::$active[$this] = true;
         try {
             $environment = Dotenv::createArrayBacked(dirname(__DIR__, 2))->load();
-            if (($environment['DB_CONNECTION'] ?? null) !== 'mysql') {
-                throw new LogicException('This qualification requires the configured MySQL-family connection.');
+            $this->driver = $environment['DB_CONNECTION'] ?? '';
+            if (!in_array($this->driver, ['mysql', 'pgsql'], true)) {
+                throw new LogicException('Select a configured MySQL-family or PostgreSQL database.');
             }
             $original = ['dsn' => $environment['DB_DSN'] ?? '', 'username' => $environment['DB_USER'] ?? '',
                 'password' => $environment['DB_PASSWORD'] ?? ''];
-            if (!preg_match('/(?:^mysql:|;)dbname=([a-zA-Z0-9_]+)(?:;|$)/D', $original['dsn'], $source)) {
+            if (!preg_match('/(?:^(?:mysql|pgsql):|;)dbname=([a-zA-Z0-9_]+)(?:;|$)/D', $original['dsn'], $source)) {
                 throw new LogicException('Use an explicit configured source-schema name.');
             }
             $this->sourceSchema = $source[1];
-            $endpoint = getenv('ETSIS_QUALIFICATION_MYSQL_ENDPOINT');
+            $endpoint = getenv('ETSIS_QUALIFICATION_ENDPOINT');
             $this->settings = self::settingsFor($original, $this->name, $endpoint === false ? null : $endpoint);
+            if ($this->settings['driver'] !== 'pdo_' . $this->driver) {
+                throw new LogicException('The configured driver and DSN family must agree.');
+            }
             $server = $this->settings;
-            $server['dsn'] = preg_replace('/;dbname=[^;]+/', '', $server['dsn']);
-            $this->server = self::connect($server);
-            $this->server->pdo->exec('CREATE DATABASE `' . $this->name .
-                '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+            $this->phase = 'creating';
+            if (!$this->writeLease() || !chmod($this->lease, 0600)) {
+                throw new RuntimeException('Preserve the private qualification ownership lease before creation.');
+            }
+            if ($this->driver === 'pgsql') {
+                // The application owner keeps no CREATEDB grant. Control credentials never reach workers.
+                $file = getenv('ETSIS_QUALIFICATION_CONTROL_FILE');
+                if (!is_string($file) || !is_file($file) || is_link($file) || (fileperms($file) & 0077) !== 0) {
+                    throw new LogicException('Use a private PostgreSQL database-creation credential file.');
+                }
+                $control = json_decode(file_get_contents($file), true, 4, JSON_THROW_ON_ERROR);
+                if (!preg_match('/^[a-z][a-z0-9_]{0,62}$/D', $this->settings['username'])) {
+                    throw new LogicException('Review the configured PostgreSQL owner name.');
+                }
+                $server['dsn'] = preg_replace('/;dbname=[^;]+$/D', ';dbname=postgres', $server['dsn']);
+                $server['username'] = $control['username'];
+                $server['password'] = $control['password'];
+                $this->server = self::connect($server);
+                $this->server->pdo->exec('CREATE DATABASE "' . $this->name . '" OWNER "' .
+                    $this->settings['username'] . '" TEMPLATE template0');
+            } else {
+                $server['dsn'] = preg_replace('/;dbname=[^;]+/', '', $server['dsn']);
+                $this->server = self::connect($server);
+                $this->server->pdo->exec('CREATE DATABASE `' . $this->name .
+                    '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
+            }
             $this->created = true;
             $this->database = self::connect($this->settings);
-            if ($this->database->pdo->query('SELECT DATABASE()')->fetchColumn() !== $this->name) {
+            if (self::selectedDatabase($this->database) !== $this->name) {
                 throw new LogicException('Native qualification isolation failed.');
             }
             $this->database->pdo->exec('CREATE TABLE etsis_qualification_owner (id CHAR(32) PRIMARY KEY)');
@@ -112,9 +142,13 @@ final class MysqlQualificationDatabase
             throw new LogicException('Use a generated disposable qualification database.');
         }
         $dsn = $configuration['dsn'] ?? null;
-        if (!is_string($dsn) || !str_starts_with($dsn, 'mysql:') || preg_match('/[\x00-\x1F\x7F]/', $dsn)) {
-            throw new LogicException('Use the configured MySQL-family DSN.');
+        if (
+            !is_string($dsn) || !preg_match('/^(mysql|pgsql):/', $dsn, $family) ||
+            preg_match('/[\x00-\x1F\x7F]/', $dsn)
+        ) {
+            throw new LogicException('Use the configured MySQL-family or PostgreSQL DSN.');
         }
+        $driver = $family[1];
         $parts = [];
         foreach (explode(';', substr($dsn, 6)) as $part) {
             if ($part === '') {
@@ -122,7 +156,8 @@ final class MysqlQualificationDatabase
             }
             [$key, $value] = array_pad(explode('=', $part, 2), 2, null);
             if (
-                !in_array($key, ['host', 'port', 'dbname', 'charset', 'unix_socket'], true) ||
+                !in_array($key, $driver === 'mysql' ? ['host', 'port', 'dbname', 'charset', 'unix_socket'] :
+                    ['host', 'port', 'dbname'], true) ||
                 $value === null || $value === '' || isset($parts[$key])
             ) {
                 throw new LogicException('Use an unambiguous MySQL-family DSN.');
@@ -148,8 +183,8 @@ final class MysqlQualificationDatabase
         }
         unset($parts['dbname']);
         $parts['dbname'] = $name;
-        $configuration['driver'] = 'pdo_mysql';
-        $configuration['dsn'] = 'mysql:' . implode(';', array_map(
+        $configuration['driver'] = 'pdo_' . $driver;
+        $configuration['dsn'] = $driver . ':' . implode(';', array_map(
             static fn (string $key, string $value): string => $key . '=' . $value,
             array_keys($parts),
             array_values($parts)
@@ -160,7 +195,7 @@ final class MysqlQualificationDatabase
         return $configuration;
     }
 
-    public function connection(): Mysql
+    public function connection(): PdoConnection
     {
         return $this->database ?? throw new LogicException('The qualification database is closed.');
     }
@@ -173,6 +208,10 @@ final class MysqlQualificationDatabase
         $tables = $prototype->connection->listTables();
         if (count($tables) > 400) {
             throw new LogicException('The native qualification schema exceeds its bounded table inventory.');
+        }
+        if ($this->driver === 'pgsql') {
+            $this->seedPostgres($prototype, $tables);
+            return;
         }
         $this->database->pdo->exec('SET SESSION FOREIGN_KEY_CHECKS = 0');
         if (!$this->schemaReady) {
@@ -257,6 +296,59 @@ final class MysqlQualificationDatabase
         $this->writeLease();
     }
 
+    private static function selectedDatabase(PdoConnection $connection): string
+    {
+        $sql = $connection->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql'
+        ? 'SELECT current_database()' : 'SELECT DATABASE()';
+        return (string) $connection->pdo->query($sql)->fetchColumn();
+    }
+
+    private function seedPostgres(\SisFixture $prototype, array $tables): void
+    {
+        require_once __DIR__ . '/PostgresQualificationSchema.php';
+        if (!$this->schemaReady) {
+            $source = $this->settings;
+            $source['dsn'] = preg_replace('/;dbname=[^;]+$/D', ';dbname=' . $this->sourceSchema, $source['dsn']);
+            $this->source = self::connect($source);
+            $this->source->pdo->exec('SET default_transaction_read_only = on');
+            $schema = new PostgresQualificationSchema($this->source->pdo, $this->database->pdo);
+            $this->seedOrder = $schema->copy($tables);
+            $this->schemaReady = true;
+        }
+        $this->phase = 'seeding';
+        $this->writeLease();
+        $this->database->pdo->beginTransaction();
+        $native = new \Infrastructure\Persistence\SqlRecords($this->database->queryBuilder());
+        try {
+            $quoted = array_map($native->quote(...), $this->seedOrder);
+            // Every fixture relationship is internal. No CASCADE, disabled constraints or application rows.
+            $this->database->pdo->exec('TRUNCATE TABLE ' . implode(', ', $quoted));
+            $total = 0;
+            foreach ($this->seedOrder as $table) {
+                $rows = $prototype->sql->rows($table, limit: 1000);
+                $total += count($rows);
+                if (count($rows) >= 1000 || $total > 2000) {
+                    throw new LogicException('The fictional native seed exceeds its row allowance.');
+                }
+                foreach ($rows as $row) {
+                    $native->insert($table, $row);
+                }
+            }
+            $this->database->pdo->commit();
+        } catch (Throwable $error) {
+            if ($this->database->pdo->inTransaction()) {
+                $this->database->pdo->rollBack();
+            }
+            throw $error;
+        }
+        \EventStoreFixture::shareConfig(
+            $this->database->queryBuilder(),
+            \EventStoreFixture::config($prototype->connection->queryBuilder())
+        );
+        $this->phase = 'ready';
+        $this->writeLease();
+    }
+
     private function writeLease(): bool
     {
         return file_put_contents($this->lease, json_encode(['database' => $this->name,
@@ -321,7 +413,7 @@ final class MysqlQualificationDatabase
         return $this->settings + ['qualification_owner' => $this->owner];
     }
 
-    public static function workerConnection(#[\SensitiveParameter] array $settings): Mysql
+    public static function workerConnection(#[\SensitiveParameter] array $settings): PdoConnection
     {
         if (
             !preg_match('/;dbname=(etsis_qualify_[a-f0-9]{32})$/D', $settings['dsn'] ?? '', $match) ||
@@ -331,7 +423,7 @@ final class MysqlQualificationDatabase
         }
         $connection = self::connect($settings);
         if (
-            $connection->pdo->query('SELECT DATABASE()')->fetchColumn() !== $match[1] ||
+            self::selectedDatabase($connection) !== $match[1] ||
             $connection->pdo->query('SELECT id FROM etsis_qualification_owner')->fetchAll(PDO::FETCH_COLUMN)
                 !== [$settings['qualification_owner']]
         ) {
@@ -340,11 +432,21 @@ final class MysqlQualificationDatabase
         return $connection;
     }
 
-    private static function connect(#[\SensitiveParameter] array $settings): Mysql
+    private static function connect(#[\SensitiveParameter] array $settings): PdoConnection
     {
-        $connection = new Mysql($settings);
-        $connection->pdo->exec('SET SESSION innodb_lock_wait_timeout = 3');
-        $connection->pdo->exec('SET SESSION lock_wait_timeout = 3');
+        $connection = ($settings['driver'] ?? null) === 'pdo_pgsql'
+        ? new \Infrastructure\Persistence\PostgresConnection($settings) : DriverConnection::make($settings);
+        if (!$connection instanceof PdoConnection) {
+            throw new LogicException('Native qualification requires PDO.');
+        }
+        if ($connection->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql') {
+            $connection->pdo->exec("SET lock_timeout = '3s'");
+            $connection->pdo->exec("SET statement_timeout = '5s'");
+            $connection->pdo->exec("SET idle_in_transaction_session_timeout = '8s'");
+        } else {
+            $connection->pdo->exec('SET SESSION innodb_lock_wait_timeout = 3');
+            $connection->pdo->exec('SET SESSION lock_wait_timeout = 3');
+        }
         return $connection;
     }
 
@@ -362,13 +464,18 @@ final class MysqlQualificationDatabase
             $this->database->pdo->rollBack();
         }
         if (
-            $this->marked && ($this->database->pdo->query('SELECT DATABASE()')->fetchColumn() !== $this->name ||
+            $this->marked && (self::selectedDatabase($this->database) !== $this->name ||
             $this->database->pdo->query('SELECT id FROM etsis_qualification_owner')->fetchAll(PDO::FETCH_COLUMN)
                 !== [$this->owner])
         ) {
             throw new LogicException('Refusing cleanup without the original qualification ownership marker.');
         }
-        $this->server->pdo->exec('DROP DATABASE `' . $this->name . '`');
+        $this->database = $this->source = null;
+        // PostgreSQL requires all fixture connections closed before dropping its database.
+        gc_collect_cycles();
+        $quote = $this->driver === 'pgsql' ? '"' : '`';
+        $this->server->pdo->exec('DROP DATABASE ' . $quote . $this->name . $quote .
+            ($this->driver === 'pgsql' ? ' WITH (FORCE)' : ''));
         $this->created = false;
         $this->database = $this->server = null;
         $this->settings = [];

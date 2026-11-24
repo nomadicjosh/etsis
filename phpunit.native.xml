@@ -5,7 +5,7 @@
         <ini name="zend.exception_ignore_args" value="1"/>
     </php>
     <testsuites>
-        <testsuite name="Isolated MySQL-family workflow qualification">
+        <testsuite name="Isolated native workflow qualification">
             <file>tests/Integration/RegistrationConcurrencyTest.php</file>
             <file>tests/Integration/WorkflowRecoveryTest.php</file>
         </testsuite>

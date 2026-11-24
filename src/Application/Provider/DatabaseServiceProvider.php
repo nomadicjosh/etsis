@@ -10,6 +10,7 @@ use Qubus\Expressive\Database;
 use Qubus\Expressive\Connection;
 use Qubus\Expressive\Connection\DriverConnection;
 use Infrastructure\Persistence\SqliteConnection;
+use Infrastructure\Persistence\PostgresConnection;
 
 class DatabaseServiceProvider extends CodefyServiceProvider
 {
@@ -25,6 +26,10 @@ class DatabaseServiceProvider extends CodefyServiceProvider
             ) {
                 $settings["driver"] = "pdo_sqlite";
                 return new SqliteConnection($settings);
+            }
+            if (is_array($settings) && in_array($settings['driver'] ?? null, ['pgsql', 'pdo_pgsql'], true)) {
+                $settings['driver'] = 'pdo_pgsql';
+                return new PostgresConnection($settings);
             }
             return DriverConnection::make($settings);
         });

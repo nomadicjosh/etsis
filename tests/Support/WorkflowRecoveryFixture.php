@@ -34,7 +34,7 @@ final class WorkflowRecoveryFixture
     private readonly string $directory;
     private readonly string $cipherKey;
     private array $workers = [];
-    private ?MysqlQualificationDatabase $native = null;
+    private ?NativeQualificationDatabase $native = null;
 
     public function __construct()
     {
@@ -49,9 +49,9 @@ final class WorkflowRecoveryFixture
         $config->setConfigKey('app', ['crypto_key' => $this->cipherKey]);
         $mask = umask(0077);
         try {
-            if (getenv('ETSIS_WORKFLOW_MYSQL_QUALIFICATION') === '1') {
-                require_once __DIR__ . '/MysqlQualificationDatabase.php';
-                $this->native = MysqlQualificationDatabase::acquire($this->directory);
+            if (getenv('ETSIS_WORKFLOW_NATIVE_QUALIFICATION') === '1') {
+                require_once __DIR__ . '/NativeQualificationDatabase.php';
+                $this->native = NativeQualificationDatabase::acquire($this->directory);
                 $prototype = new SisFixture(cipher: new DefuseMessageCipher($config));
                 $this->native->seed($prototype);
             }
@@ -164,7 +164,8 @@ final class WorkflowRecoveryFixture
             'pause_at' => $pauseAt,
             'lose_reply' => $loseReply,
         ], JSON_THROW_ON_ERROR) . "\n");
-        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M', __DIR__ . '/WorkflowRecoveryWorker.php']);
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M', '-d', 'zend.exception_ignore_args=1',
+            __DIR__ . '/WorkflowRecoveryWorker.php']);
         $process->setInput($input);
         $process->setTimeout(10);
         $process->start();
@@ -236,9 +237,9 @@ final class WorkflowRecoveryFixture
             'sis_waitlist_entries', 'sis_registration_updates', 'sis_registration_batches', 'sis_audit'] as $table
         ) {
             $rows = $this->sis->sql->rows($table);
-            $facts[$table] = [
-                'count' => count($rows), 'digest' => hash('sha256', json_encode($rows, JSON_THROW_ON_ERROR)),
-            ];
+            $encoded = array_map(static fn (array $row): string => json_encode($row, JSON_THROW_ON_ERROR), $rows);
+            sort($encoded, SORT_STRING);
+            $facts[$table] = ['count' => count($rows), 'digest' => hash('sha256', implode('\n', $encoded))];
         }
         return $facts;
     }
