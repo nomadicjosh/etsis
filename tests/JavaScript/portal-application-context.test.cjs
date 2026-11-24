@@ -25,14 +25,23 @@ async function startup(section, response) {
     const document = {
         querySelector: selector => ({ '#campus-config': config, '#campus-error': error,
             '#campus-service-content': content })[selector] || null,
-        createElement: () => new Node(), createTextNode: text => new Node(text),
+        createElement(tag) {
+            if (tag === 'div') { rendering = true; throw new Error('Stopped before DOM rendering.'); }
+            return new Node();
+        },
+        createTextNode: text => new Node(text),
         createDocumentFragment() { rendering = true; throw new Error('Stopped before DOM rendering.'); },
     };
-    vm.runInNewContext(source, { document, Node, window: { addEventListener() {} },
+    const context = vm.createContext({ document, Node, window: { addEventListener() {} },
         fetch: async (url, options) => {
             requests.push({ url, options });
             return { ok: true, status: 200, json: async () => response };
-        } }, { filename: 'portal.js', timeout: 500 });
+        } });
+    for (const asset of ['registration-drops.js', 'application-history.js']) {
+        vm.runInContext(readFileSync(path.join(__dirname, '../../public/assets/js', asset), 'utf8'),
+            context, { filename: asset, timeout: 500 });
+    }
+    vm.runInContext(source, context, { filename: 'portal.js', timeout: 500 });
     await new Promise(setImmediate);
     return { requests, rendering, error: error.textContent };
 }

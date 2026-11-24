@@ -104,3 +104,8 @@ An exact accepted retry returns its original submitted-state receipt after later
 
 
 Focused fictional validation covers 205 distinct PHP/HTTP/adjacent cases, including source/authority/audit rollback, original and revised answers after program correction, stale prior decisions, corrected-program matriculation, protected original receipts and read-only projection verification. Three one-worker browser cases cover revision/retry, denied access, compatible-form guidance, Back/Escape/close controls, axe checks and 320 px enlarged-text reflow. These SQLite/routed/view checks do not certify this new admissions workflow on every native database; the configured PostgreSQL journal was separately verified read-only.
+
+
+## Applicant visibility after a correction
+
+The [owner application history](admissions-workbench.md#applicant-application-history) distinguishes genuine original submission details from the current planned program/intake. It shows retained program/intake before/after labels and neutral decision/status chronology while withholding staff reasons, actor identities, evidence and private offer contents. Applicants reach it from their application record or an admissions update, then return to existing next-step/offer controls. Older missing submission timing stays unknown, and opening history creates no correction or observation.

@@ -85,6 +85,7 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
         <script defer src="/assets/js/admission-offers.js"></script>
         <script defer src="/assets/js/admission-withdrawals.js"></script>
         <script defer src="/assets/js/admission-readiness.js"></script>
+        <script defer src="/assets/js/application-history.js"></script>
         <script defer src="/assets/js/admission-casework.js"></script>
         <script defer src="/assets/js/person-addresses.js"></script>
         <script defer src="/assets/js/academic-timetable.js"></script>
@@ -248,6 +249,12 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
                 </div>
             </div>
         </div>
+        <script id="campus-application-history-config" type="application/json">
+            <?= json_encode(
+                require dirname(__DIR__, 5) . '/resources/views/shared/application-history-labels.php',
+                JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR
+            ); ?>
+        </script>
         <?php $ceuLabels = require dirname(__DIR__, 5) . '/resources/views/shared/ceu-labels.php'; ?>
         <script id="campus-ceu-config" type="application/json">
             <?= json_encode(

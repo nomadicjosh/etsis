@@ -57,6 +57,9 @@ return static function (Psr7Router $router): void {
 
     $router->map(['GET'], '/portal/admissions-updates/', [Portal::class, 'admissionsUpdates'])
         ->name('portal.admissionsupdates');
+    $router->get('/portal/api/applications/{id}/history/', [
+        \Application\Http\Controller\ApplicantApplicationHistoryController::class, 'page',
+    ])->name('portal.applications.history');
     $router->map(['GET'], '/portal/api/admissions-updates/', [AdmissionUpdates::class, 'page'])
         ->name('portal.admissionsupdates.page');
     $router->map(['POST'], '/portal/api/admissions-updates/{id}/read/', [AdmissionUpdates::class, 'read'])

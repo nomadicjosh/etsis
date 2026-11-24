@@ -337,6 +337,7 @@ try {
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/AdmissionDeferralBootChecks.php';
             require __DIR__ . '/AdmissionProgramBootChecks.php';
+            require __DIR__ . '/ApplicantApplicationHistoryBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-grade-certification') {
             $kernel->bootstrap();

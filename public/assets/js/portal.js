@@ -726,17 +726,20 @@
             : programName(application.program_id);
         const termLabel = application => application.term_code || termName(application.entry_term_id);
         function close() {
-            if (revisionEditor && !revisionEditor.beforeLeave()) return;
+            if (revisionEditor && !revisionEditor.beforeLeave()) return false;
             revisionEditor = null; serial++; loading = false;
             detail.replaceChildren(); detail.hidden = true;
             opener?.setAttribute('aria-expanded', 'false'); opener?.removeAttribute('aria-busy');
             if (opener?.isConnected) opener.focus();
-            opener = null;
+            opener = null; return true;
         }
+        const historyArea = el('div');
+        const history = window.createApplicantApplicationHistory({ node: el, request, task }).mount(historyArea, { beforeOpen: close });
         async function view(application, trigger, retry = false) {
             if (opener === trigger && !retry) { close(); return; }
             if (opener === trigger && loading) return;
             if (revisionEditor && !revisionEditor.beforeLeave()) return;
+            history.close({ focus: false });
             revisionEditor = null;
             const ticket = ++serial;
             opener?.setAttribute('aria-expanded', 'false'); opener?.removeAttribute('aria-busy');
@@ -795,12 +798,14 @@
                     application.status = result.application_status; showProgress(application.status);
                 });
             documentGuards?.push(guard);
-            return [programLabel(application), termLabel(application), next, steps, answers];
+            const records = el('div', { class: 'd-flex flex-wrap gap-2' }, answers,
+                history.trigger(application.id, `${programLabel(application)} · ${termLabel(application)}`, () => guard.openNextSteps()));
+            return [programLabel(application), termLabel(application), next, steps, records];
         });
         return surface('Your applications', applications.length === 50
             ? el('p', { class: 'campus-muted' }, 'Showing up to 50 applications.') : null,
-            table(['Program', 'Entry term', 'Progress', 'Next steps', 'Answers'], rows,
-            'Your admissions applications'), documentArea, detail);
+            table(['Program', 'Entry term', 'Progress', 'Next steps', window.applicationHistoryLabels.records], rows,
+            'Your admissions applications'), documentArea, detail, historyArea);
     }
 
     function applications(container) {

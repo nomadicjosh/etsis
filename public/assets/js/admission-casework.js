@@ -332,14 +332,15 @@
             const identity = `casework-applicant-${++sequence}`;
             const content = node('section', { id: identity, class: 'mt-3', hidden: true, 'aria-label': 'Application next steps' });
             let generation = 0, expanded = false;
-            const toggle = button('Next steps', async () => {
+            const showNextSteps = async () => {
                 if (expanded) { generation++; expanded = false; content.replaceChildren(); content.hidden = true; toggle.setAttribute('aria-expanded', 'false'); return; }
                 const ticket = ++generation;
                 const data = await request(`/portal/api/applications/${applicationId}/next-steps/`);
                 if (ticket !== generation || !container.isConnected) return;
                 expanded = true; content.hidden = false; toggle.setAttribute('aria-expanded', 'true');
                 guidance(content, data);
-            });
+            };
+            const toggle = button('Next steps', showNextSteps);
             toggle.setAttribute('aria-controls', identity); toggle.setAttribute('aria-expanded', 'false');
             if (label) toggle.setAttribute('aria-label', `Next steps for ${label}`);
             container.replaceChildren(toggle, content);
@@ -357,7 +358,8 @@
                         onOutcome(result);
                         try { await offerEditor.refresh(); } catch { notify('Request saved. Reopen the offer to refresh its status.'); }
                     } });
-            return { beforeLeave: () => documentEditor.beforeLeave() && offerEditor.beforeLeave() && withdrawalEditor.beforeLeave() };
+            return { beforeLeave: () => documentEditor.beforeLeave() && offerEditor.beforeLeave() && withdrawalEditor.beforeLeave(),
+                openNextSteps: async () => { if (!expanded) await showNextSteps(); toggle.focus(); } };
         }
         function queue(container, openApplication, initial = null) {
             const state = initial || { scope: 'all', due: false, after: '', stack: [] };
@@ -448,6 +450,9 @@
                     if (ticket !== detailRequest || !container.isConnected) return;
                     guidance(body, data);
                     body.append(node('a', { href: '/portal/apply/', class: 'btn btn-outline-primary mt-3' }, 'View application'));
+                    const historyArea = node('div'); body.append(historyArea);
+                    const history = window.createApplicantApplicationHistory({ node, request, task }).mount(historyArea);
+                    body.append(history.trigger(item.application_id, `${item.program_code} · ${item.term_code}`, () => heading.focus()));
                     loaded = true; progress.textContent = 'Your current next steps are ready.';
                     const result = await request(`/portal/api/admissions-updates/${item.id}/read/`, 'POST', { revision: item.revision });
                     if (ticket !== detailRequest || !container.isConnected) return;
