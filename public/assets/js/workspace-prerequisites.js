@@ -2,6 +2,14 @@
 window.createWorkspacePrerequisites = function (ui) {
     "use strict";
     const { node, request, task, openDrawer } = ui;
+    const originDefaults = {
+        field: 'Qualifying prerequisite coursework', either: 'Institutional or transfer',
+        institutional: 'Institutional work only', transfer: 'Transfer work only',
+        help: 'Applies to every prerequisite requirement. Co-requisites use their separate policy.',
+        scope: 'This rule does not change earned credits or decide which work counts toward a degree.',
+    };
+    const originText = key => ui.prerequisiteOriginLabels?.[key] || originDefaults[key];
+
     const button = (label, run, style = "btn-outline-primary", aria = label) => node("button", {
         type: "button", class: `btn ${style}`, "aria-label": aria,
         onclick: event => task(run, event.currentTarget),
@@ -127,9 +135,9 @@ window.createWorkspacePrerequisites = function (ui) {
         const body = openDrawer("Course prerequisites", "ACADEMIC CATALOG");
         const saved = await request(`/sis/courses/${course}/prerequisite-groups/`);
         if (!body.isConnected) return;
-        const state = { rule: saved.rule ? structuredClone(saved.rule) : null, minimum_requirements: saved.minimum_requirements ?? null, groups: saved.groups.map(group => [...group]), minimums: [...saved.minimums], grade_points_milli: [...floors(saved)], corequisites: [...(saved.corequisites || [])],
+        const state = { credit_origin: saved.credit_origin ?? null, rule: saved.rule ? structuredClone(saved.rule) : null, minimum_requirements: saved.minimum_requirements ?? null, groups: saved.groups.map(group => [...group]), minimums: [...saved.minimums], grade_points_milli: [...floors(saved)], corequisites: [...(saved.corequisites || [])],
             labels: new Map(saved.courses.map(row => [row.id, row])) };
-        const fingerprint = value => JSON.stringify([value.rule ?? null, value.minimum_requirements ?? null, value.groups, value.minimums, floors(value), [...(value.corequisites || [])].sort()]);
+        const fingerprint = value => JSON.stringify([value.credit_origin ?? null, value.rule ?? null, value.minimum_requirements ?? null, value.groups, value.minimums, floors(value), [...(value.corequisites || [])].sort()]);
         const describeRequirement = index => `Requirement ${index + 1} · ${state.minimums[index]} of: ` +
             state.groups[index].map(id => state.labels.get(id)?.code || "Course label unavailable").join(", ");
         const incomplete = () => (state.minimum_requirements !== null &&
@@ -141,17 +149,27 @@ window.createWorkspacePrerequisites = function (ui) {
         function render(notice = "") {
             const body = openDrawer("Course prerequisites", "EDIT DRAFT → REVIEW PUBLICATION");
             const corequisiteCards = node("div"), rulePreview = node("div");
+            const origin = node('select', { id: 'prerequisite-credit-origin', class: 'form-select',
+                'aria-describedby': 'prerequisite-credit-origin-help' },
+                ...['either', 'institutional', 'transfer'].map(value => node('option', {
+                    value, selected: value === (state.credit_origin || 'either'),
+                }, originText(value))));
+            origin.addEventListener('change', () => {
+                state.credit_origin = origin.value === 'either' ? null : origin.value;
+            });
+
             const cards = node("div"), status = node("p", { role: "status", class: "form-text" });
             const save = button("Save requirements", async () => {
                 if (incomplete()) return;
                 const submitted = fingerprint(state);
                 const result = await request(`/sis/courses/${course}/prerequisite-groups/`, "POST", {
+                    credit_origin: state.groups.length ? state.credit_origin : null,
                     rule: state.rule ? structuredClone(state.rule) : null, minimum_requirements: state.minimum_requirements, revision: saved.revision, groups: state.groups.map(group => [...group]), minimums: [...state.minimums],
                     grade_points_milli: [...state.grade_points_milli], corequisites: [...state.corequisites].sort(),
                 });
                 const laterEdits = fingerprint(state) !== submitted;
                 Object.assign(saved, result);
-                if (!laterEdits) { state.rule = result.rule ? structuredClone(result.rule) : null; state.minimum_requirements = result.minimum_requirements ?? null; state.groups = result.groups.map(group => [...group]); state.minimums = [...result.minimums]; state.grade_points_milli = [...floors(result)]; state.corequisites = [...(result.corequisites || [])]; }
+                if (!laterEdits) { state.credit_origin = result.credit_origin ?? null; state.rule = result.rule ? structuredClone(result.rule) : null; state.minimum_requirements = result.minimum_requirements ?? null; state.groups = result.groups.map(group => [...group]); state.minimums = [...result.minimums]; state.grade_points_milli = [...floors(result)]; state.corequisites = [...(result.corequisites || [])]; }
                 if (body.isConnected) render("Entry requirements saved.");
             }, "btn-primary");
             const publish = button("Review course publication", () =>
@@ -204,6 +222,9 @@ window.createWorkspacePrerequisites = function (ui) {
                 draw();
             }
             function draw() {
+                origin.disabled = state.groups.length === 0;
+                if (!state.groups.length) { state.credit_origin = null; origin.value = 'either'; }
+
                 update();
                 rulePreview.replaceChildren(...(state.rule ? [ruleView(state.rule, describeRequirement)] : []));
                 cards.replaceChildren(...state.groups.map((group, index) => {
@@ -261,6 +282,10 @@ window.createWorkspacePrerequisites = function (ui) {
                 node("section", { class: "surface border p-3 mb-3", "aria-label": "Overall prerequisite rule" },
                     node("div", { class: "form-check mb-3" }, alternative,
                         node("label", { for: alternative.id, class: "form-check-label" }, "Allow alternative requirements")),
+                    node('div', { class: 'mb-3' },
+                        node('label', { for: origin.id, class: 'form-label' }, originText('field')), origin,
+                        node('p', { id: 'prerequisite-credit-origin-help', class: 'form-text' }, originText('help')),
+                        node('p', { class: 'form-text' }, originText('scope'))),
                     neededField, overallText, rulePreview,
                     node("div", { class: "inline-actions" },
                         button("Arrange rule", () => {
@@ -314,6 +339,8 @@ window.createWorkspacePrerequisites = function (ui) {
         const minimums = definition.prerequisite_group_minimums || groups.map(() => 1);
         const view = node("details", {}, node("summary", {}, rule ? "Nested prerequisite rule" : required != null ? `Meet ${required} of ${groups.length} prerequisite requirements` : !groups.length ? `${corequisites.length} co-requisite courses` : minimums.some(count => count > 1)
             ? `Meet the course counts in ${groups.length} requirements` : `Complete one course from each of ${groups.length} requirements`));
+        if (definition.prerequisite_credit_origin) view.append(
+            node('p', { class: 'form-text' }, `${originText('field')}: ${originText(definition.prerequisite_credit_origin)}`));
         let loading = false, loaded = false;
         view.addEventListener("toggle", () => {
             if (!view.open || loading || loaded) return;

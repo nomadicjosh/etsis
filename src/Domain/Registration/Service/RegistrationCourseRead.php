@@ -46,6 +46,7 @@ final class RegistrationCourseRead
             $definition->creditPolicy?->describe() !== $course->creditPolicy?->describe() ||
             $definition->text->transcriptTitle !== $course->publishedTranscriptTitle ||
             $definition->prerequisites !== $course->publishedPrerequisites ||
+            $definition->prerequisiteGroups?->creditOrigin !== $course->prerequisiteGroups?->creditOrigin ||
             $definition->prerequisiteGroups?->rule?->definition !== $course->prerequisiteGroups?->rule?->definition ||
             $definition->prerequisiteGroups?->minimumRequirements !==
                 $course->prerequisiteGroups?->minimumRequirements ||
@@ -68,7 +69,7 @@ final class RegistrationCourseRead
             $course->id->value, $course->code, $course->title, $course->creditsMilli, $course->active,
             $course->publishedTranscriptTitle, $course->publicationVersionId?->value, $required,
             $course->prerequisiteGroups?->groups, $course->prerequisiteGroups?->minimums,
-            $course->prerequisiteGroups?->minimumRequirements,
+            $course->prerequisiteGroups?->minimumRequirements, $course->prerequisiteGroups?->creditOrigin,
             $course->prerequisiteGroups?->rule?->definition,
             $course->prerequisiteGroups?->minimumGradePointsMilli, $course->prerequisiteGroups?->corequisites,
             $course->creditPolicy?->describe(), $course->registrationCreditsMilli(),

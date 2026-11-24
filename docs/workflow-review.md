@@ -4,6 +4,12 @@ The legacy system is the feature inventory, not a requirement to reproduce its s
 
 “Working” below describes a workflow available in the current code. “Partial” means useful pieces work but the broader recommendation still needs implementation. “Proposed” is a design recommendation, not completed functionality.
 
+## Completed: prerequisite coursework-source policy
+
+**Working.** [Qualifying prerequisite coursework](course-publication.md#qualifying-prerequisite-coursework) now connects institutional source selection, retained course publications/clones and shared student/staff registration readiness. The default continues accepting institutional or transfer work; source restrictions apply to prerequisites only. Degree-credit and co-requisite policies remain separate.
+
+Working saves preserve stale/pending draft choices. Original publications/evidence omit the new field when it was absent; selected versions and accepted retries retain their meanings. Actual source filtering precedes attempt selection and respects existing pursuit, passing-grade, grade-floor and counted/nested rules. Registrar exceptions keep unmet coursework honest. Final source-policy changes roll back enrollment, credit, charges and receipts together. Nullable projection columns are added in place without journal conversion or automatic grants; broader equivalence and per-requirement policies remain open.
+
 ## Completed: submitted entry-term corrections and retained calendar review
 
 **Working.** [Correct a planned intake before an admissions decision](admissions-corrections.md#correct-an-entry-term-before-a-decision) through **application → More → Entry term**. Independent correction authority, bounded future-intake choices, required reasons, before/after review, draft-preserving revision and a direct application return keep the workflow explicit. Accepted deferment retains its separate authority and fresh-offer requirements.

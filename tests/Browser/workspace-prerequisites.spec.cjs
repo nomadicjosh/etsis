@@ -11,11 +11,11 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
         { id: id(4), code: 'ENG.101', title: 'Academic writing', active: true },
         { id: id(5), code: 'CHEM.101L', title: 'Fictional laboratory', active: true },
     ];
-    let minimumRequirements = null;
+    let minimumRequirements = null, creditOrigin = null;
     let gradePoints = [], minimums = [], groups = [], corequisites = [], revision = 'a'.repeat(64), stale = true;
     const calls = [], errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    const definition = () => ({ code: target.code, title: target.title, credits_milli: 3000,
+    const definition = () => ({ ...(creditOrigin ? { prerequisite_credit_origin: creditOrigin } : {}), code: target.code, title: target.title, credits_milli: 3000,
         prerequisites: [...new Set(groups.flat())].sort(), prerequisite_group_minimums: minimums, prerequisite_grade_points_milli: gradePoints, prerequisite_groups: groups.map(group => [...group]), corequisites: [...corequisites],
         ...(minimumRequirements == null ? {} : { prerequisite_requirement_minimum: minimumRequirements }),
         transcript_title: null, description: null, subject: null,
@@ -32,10 +32,10 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
         else if (path.endsWith('/prerequisite-groups/')) {
             if (data && stale) { stale = false; return route.fulfill({ status: 409, json: { error: 'Reload the prerequisite editor before saving your changes.' } }); }
             if (data) {
-                minimumRequirements = data.minimum_requirements ?? null; corequisites = [...data.corequisites]; groups = data.groups.map(group => [...group].sort()); minimums = [...data.minimums]; gradePoints = [...data.grade_points_milli]; revision = 'b'.repeat(64);
+                creditOrigin = data.credit_origin ?? null; minimumRequirements = data.minimum_requirements ?? null; corequisites = [...data.corequisites]; groups = data.groups.map(group => [...group].sort()); minimums = [...data.minimums]; gradePoints = [...data.grade_points_milli]; revision = 'b'.repeat(64);
                 await page.getByRole('button', { name: 'Add requirement', exact: true }).click();
             }
-            result = { course: target, minimum_requirements: minimumRequirements, groups, minimums, grade_points_milli: gradePoints, corequisites, courses: choices.filter(row => [...groups.flat(), ...corequisites].includes(row.id)), revision };
+            result = { course: target, credit_origin: creditOrigin, minimum_requirements: minimumRequirements, groups, minimums, grade_points_milli: gradePoints, corequisites, courses: choices.filter(row => [...groups.flat(), ...corequisites].includes(row.id)), revision };
         } else if (path === '/sis/prerequisite-labels/') result = { items: choices.filter(row => data.ids.includes(row.id)) };
         else if (path.endsWith('/publication/page/')) result = { items: [], next_cursor: null };
         else if (path.endsWith('/publication/review/')) result = { expected_version: 0, definition: definition(),
@@ -80,6 +80,7 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
     await expect(page.getByRole('button', { name: 'Choose MATH.101', exact: true })).toBeVisible();
     await page.getByRole('button', { name: counted ? 'Choose MATH.110' : 'Choose ENG.101', exact: true }).click();
     if (counted) await page.getByRole('region', { name: 'Requirement 2', exact: true }).getByLabel('Minimum grade points', { exact: true }).fill('0');
+    await page.getByLabel('Qualifying prerequisite coursework', { exact: true }).selectOption(counted ? 'transfer' : 'institutional');
     await page.getByRole('button', { name: 'Add co-requisite', exact: true }).click();
     await page.getByRole('button', { name: 'Choose CHEM.101L', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Remove co-requisite CHEM.101L', exact: true })).toBeVisible();
@@ -96,6 +97,7 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
     expect(scan.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) }))).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await page.getByRole('button', { name: 'Save requirements', exact: true }).click();
+    await expect(page.getByLabel('Qualifying prerequisite coursework', { exact: true })).toHaveValue(counted ? 'transfer' : 'institutional');
     await expect(page.getByRole('region', { name: 'Requirement 1', exact: true })).toContainText('MATH.110');
     await expect(page.getByRole('region', { name: 'Requirement 2', exact: true })).toContainText(counted ? 'MATH.110' : 'ENG.101');
     if (counted) await expect(page.getByRole('region', { name: 'Requirement 1', exact: true }).getByLabel('Minimum grade points', { exact: true })).toHaveValue('2.675');

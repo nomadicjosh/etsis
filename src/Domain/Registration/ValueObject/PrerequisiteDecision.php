@@ -71,6 +71,9 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
             }
             if (
                 !in_array($reference["origin"], ["institutional", "transfer"], true) ||
+                ($groups?->creditOrigin !== null &&
+                $groups->creditOrigin !== 'either' &&
+                    $reference["origin"] !== $groups->creditOrigin) ||
                 !in_array($reference["course_id"], $required, true) ||
                 isset($courses[$reference["course_id"]]) ||
                 isset($credits[$reference["credit_id"]])
@@ -154,12 +157,16 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         if ($this->groups === null) {
             return null;
         }
+        $origin = $this->groups->creditOrigin === null ? [] : ['credit_origin' => $this->groups->creditOrigin];
         if ($this->groups->rule !== null) {
-            return ['rule' => $this->groups->rule->status(array_column($this->groupStatuses(), 'met'))];
+            return ['rule' => $this->groups->rule->status(array_column($this->groupStatuses(), 'met'))] + $origin;
         }
         return ['required_count' => $this->groups->requiredRequirements(),
             'total_count' => count($this->groups->groups),
-            'completed_count' => count(array_filter($this->groupStatuses(), static fn(array $g): bool => $g['met']))];
+            'completed_count' => count(array_filter(
+                $this->groupStatuses(),
+                static fn(array $g): bool => $g['met']
+            ))] + $origin;
     }
 
     /** @return list<string> */
@@ -236,6 +243,12 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
             }
             $keys[] = 'requirement_minimum';
         }
+        if (array_key_exists('credit_origin', $facts)) {
+            if (!array_key_exists('requirement_groups', $facts) || !is_string($facts['credit_origin'])) {
+                throw new CorruptHistoryException();
+            }
+            $keys[] = 'credit_origin';
+        }
         if (array_key_exists('requirement_rule', $facts)) {
             if (!array_key_exists('requirement_groups', $facts) || !is_array($facts['requirement_rule'])) {
                 throw new CorruptHistoryException();
@@ -263,7 +276,8 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
                         $facts['requirement_minimums'] ?? null,
                         $facts['requirement_grade_points_milli'] ?? null,
                         minimumRequirements: $facts['requirement_minimum'] ?? null,
-                        rule: $facts['requirement_rule'] ?? null
+                        rule: $facts['requirement_rule'] ?? null,
+                        creditOrigin: $facts['credit_origin'] ?? null
                     ) : null,
                 permission: isset($facts['permission'])
                     ? new PrerequisitePermissionReference($facts['permission']) : null,
@@ -291,6 +305,7 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         ($this->groups?->minimumRequirements === null ? [] :
         ['requirement_minimum' => $this->groups->minimumRequirements]) +
         ($this->groups?->rule === null ? [] : ['requirement_rule' => $this->groups->rule->definition]) +
+        ($this->groups?->creditOrigin === null ? [] : ['credit_origin' => $this->groups->creditOrigin]) +
         ($this->permission === null ? [] : ['permission' => $this->permission->data]);
     }
 

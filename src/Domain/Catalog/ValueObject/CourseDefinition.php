@@ -96,6 +96,12 @@ final readonly class CourseDefinition
                 $keys[] = $field;
             }
         }
+        if (array_key_exists('prerequisite_credit_origin', $data)) {
+            if (!array_key_exists('prerequisite_groups', $data) || !is_string($data['prerequisite_credit_origin'])) {
+                throw new InvalidArgumentException('Prerequisite coursework origin requires complete course groups.');
+            }
+            $keys[] = 'prerequisite_credit_origin';
+        }
         if (array_key_exists('prerequisite_requirement_minimum', $data)) {
             if (!array_key_exists('prerequisite_groups', $data) || !is_int($data['prerequisite_requirement_minimum'])) {
                 throw new InvalidArgumentException('Provide a whole-number prerequisite requirement minimum.');
@@ -135,7 +141,8 @@ final readonly class CourseDefinition
                     $data["prerequisite_grade_points_milli"] ?? null,
                     $data["corequisites"] ?? null,
                     $data["prerequisite_requirement_minimum"] ?? null,
-                    $data['prerequisite_rule'] ?? null
+                    $data['prerequisite_rule'] ?? null,
+                    $data['prerequisite_credit_origin'] ?? null
                 ) : null,
             isset($data['credit_policy']) ? CreditPolicy::fromArray($data['credit_policy']) : null,
         );
@@ -161,6 +168,8 @@ final readonly class CourseDefinition
         ['prerequisite_requirement_minimum' => $this->prerequisiteGroups->minimumRequirements]) +
         ($this->prerequisiteGroups?->rule === null ? [] :
         ['prerequisite_rule' => $this->prerequisiteGroups->rule->definition]) +
+        ($this->prerequisiteGroups?->creditOrigin === null ? [] :
+        ['prerequisite_credit_origin' => $this->prerequisiteGroups->creditOrigin]) +
         $this->text->describe() + [
             "subject" => $this->subject?->describe(),
             "classifications" => $this->classifications->describe(),

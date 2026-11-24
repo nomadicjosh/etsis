@@ -36,6 +36,14 @@ final readonly class SisCoursePrerequisiteController
         if (isset($body['rule']) && !is_array($body['rule'])) {
             throw new \InvalidArgumentException('Provide a nested prerequisite rule or clear it explicitly.');
         }
+        if (
+            !array_key_exists('credit_origin', $body)
+            || ($body['credit_origin'] !== null && !is_string($body['credit_origin']))
+        ) {
+            throw new \InvalidArgumentException(
+                'Provide prerequisite coursework origin or explicitly use the default.'
+            );
+        }
         $f = FormInput::from($request);
         return new JsonResponse($this->service->save(
             new EntityId($id),
@@ -45,7 +53,8 @@ final readonly class SisCoursePrerequisiteController
             array_key_exists('grade_points_milli', $body) ? $f->values('grade_points_milli', 100) : null,
             array_key_exists('corequisites', $body) ? $f->values('corequisites', 20) : null,
             $f->optionalInteger('minimum_requirements'),
-            $body['rule'] ?? null
+            $body['rule'] ?? null,
+            $body['credit_origin']
         ));
     }
 

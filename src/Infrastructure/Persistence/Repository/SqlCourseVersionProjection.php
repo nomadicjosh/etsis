@@ -42,6 +42,9 @@ final readonly class SqlCourseVersionProjection
                 }
                 $definition['prerequisite_requirement_minimum'] = $minimum;
             }
+            if ($r['prerequisite_credit_origin'] !== null) {
+                $definition['prerequisite_credit_origin'] = $r['prerequisite_credit_origin'];
+            }
             if ($r['rule_json'] !== null) {
                 if (!is_string($r['rule_json']) || strlen($r['rule_json']) > 16384) {
                     throw new CorruptHistoryException();
@@ -186,6 +189,7 @@ final readonly class SqlCourseVersionProjection
             "id" => $definition->versionId->value,
             "course_id" => $definition->courseId->value,
             "schema_version" => 1,
+            'prerequisite_credit_origin' => $definition->definition->prerequisiteGroups?->creditOrigin,
             "requirement_minimum" => $definition->definition->prerequisiteGroups?->minimumRequirements,
             'rule_json' => $definition->definition->prerequisiteGroups?->rule === null ? null :
                 json_encode($definition->definition->prerequisiteGroups->rule->definition, JSON_THROW_ON_ERROR),

@@ -28,6 +28,7 @@ final readonly class PrerequisiteGroups
         ?array $corequisites = null,
         public ?int $minimumRequirements = null,
         ?array $rule = null,
+        public ?string $creditOrigin = null,
     ) {
         if (
             !array_is_list($groups) || count($groups) > 100 ||
@@ -41,6 +42,12 @@ final readonly class PrerequisiteGroups
         }
         if ($minimumRequirements !== null && ($minimumRequirements < 1 || $minimumRequirements > count($groups))) {
             throw new InvalidArgumentException('Require at least one and no more than the number of prerequisites.');
+        }
+        if (
+            $creditOrigin !== null && (!in_array($creditOrigin, ['either', 'institutional', 'transfer'], true)
+            || $groups === [])
+        ) {
+            throw new InvalidArgumentException('Choose institutional, transfer or either prerequisite coursework.');
         }
         $ids = [];
         foreach ($groups as $index => &$group) {
@@ -209,7 +216,8 @@ final readonly class PrerequisiteGroups
             $this->minimumGradePointsMilli === null ? null : $floors,
             $this->corequisites === null ? null : array_values(array_intersect($this->corequisites, $selected)),
             $groups === [] ? null : $this->minimumRequirements,
-            $groups === [] ? null : $this->rule?->definition
+            $groups === [] ? null : $this->rule?->definition,
+            $groups === [] ? null : $this->creditOrigin
         );
     }
 }

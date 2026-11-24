@@ -739,7 +739,14 @@ final class SisFixture
             $this->registration->lockStudent($student);
             $assignment = $this->workPursuits()->activePursuit($student);
             return $this->prerequisites()
-                ->evaluate($student, $assignment, $required ?? $this->registration->requiredCourses($course))->isMet();
+                ->evaluate(
+                    $student,
+                    $assignment,
+                    $required ?? $this->registration->requiredCourses($course),
+                    groups: $required === null ? new \Infrastructure\Persistence\Repository\SqlCatalogWorkflowRepository(
+                        $this->sql
+                    )->prerequisiteGroups($course) : null
+                )->isMet();
         });
     }
     public function inputVerifier(): \Domain\DegreeAudit\Service\AcademicInputVerifier

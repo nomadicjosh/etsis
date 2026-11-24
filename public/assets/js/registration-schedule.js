@@ -2,6 +2,15 @@
 window.createRegistrationSchedule = function (ui) {
     "use strict";
     const { node } = ui;
+    const configElement = typeof document === 'undefined' ? null :
+        document.getElementById('workspace-config') || document.getElementById('campus-config');
+    const originLabels = ui.prerequisiteOriginLabels ||
+        (configElement ? JSON.parse(configElement.textContent).prerequisite_origin_labels : null) || {};
+    const originDefaults = { field: 'Qualifying prerequisite coursework', either: 'Institutional or transfer',
+        institutional: 'Institutional work only', transfer: 'Transfer work only',
+        scope: 'This rule does not change earned credits or decide which work counts toward a degree.' };
+    const originText = key => originLabels[key] || originDefaults[key];
+
     const text = (value) => {
         if (!value?.status || value.status === "not_recorded") return "Timetable check not recorded";
         if (value.status === "not_rechecked") return "Existing enrollment — unchanged";
@@ -94,6 +103,9 @@ window.createRegistrationSchedule = function (ui) {
         if (!courses.length || !value?.course_statuses?.length) return null;
         const nested = value.group_policy?.rule;
         const details = node("details", { class: "mb-3" }, node("summary", {}, nested ? "Prerequisite rule" : value.group_policy?.required_count < value.group_policy?.total_count ? "Prerequisite options" : "Required courses"));
+        if (value.group_policy?.credit_origin) details.append(
+            node('p', { class: 'form-text' }, `${originText('field')}: ${originText(value.group_policy.credit_origin)}`),
+            node('p', { class: 'form-text' }, originText('scope')));
         if (value.permission) details.append(node("p", { class: "alert alert-info" }, `Registration permitted by a registrar prerequisite exception until ${new Date(value.permission.expires_at).toLocaleString()}. Courses below still show the academic requirements; no completion or credit is awarded by this exception.`));
         let rendered = false;
         details.addEventListener("toggle", () => {

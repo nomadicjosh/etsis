@@ -163,6 +163,7 @@ async function portal({ result = conflict(true), gate = null } = {}) {
         window,
         el: node,
         me: { students: [{ id: "student", primary_program_id: "program" }] },
+        feedbackText: (key, fallback) => fallback,
         pageLeaving: false,
         portalDialogGeneration: 0,
         programName: () => "Fictional Program",
@@ -509,4 +510,19 @@ test("nested prerequisite readiness shows the qualifying route without a mislead
     assert.match(details.textContent, /Requirement 3 · Not met/);
     assert.match(details.textContent, /Unmet alternatives may remain/);
     assert.doesNotMatch(details.textContent, /undefined|Meet each requirement|Needs attention:/);
+});
+
+test('source-specific prerequisite guidance is minimized and translated using semantic keys', () => {
+    const window = {};
+    vm.runInNewContext(presentation, { window, Intl });
+    const ui = window.createRegistrationSchedule({ node, prerequisiteOriginLabels: {
+        field: 'Travaux préalables', transfer: '<img> Transfert', scope: 'La politique du diplôme reste distincte.',
+    } });
+    const detail = ui.prerequisites({ course_statuses: ['missing'],
+        groups: [{ positions: [0], required_count: 1, completed_count: 0, met: false }],
+        group_policy: { credit_origin: 'transfer', required_count: 1, completed_count: 0, total_count: 1 },
+    }, [{ code: 'HIST 101', title: 'Fictional history' }]);
+    assert.ok(detail.textContent.includes('Travaux préalables: <img> Transfert'));
+    assert.ok(detail.textContent.includes('La politique du diplôme reste distincte.'));
+    assert.equal(walk(detail).some(element => element.tag === 'img'), false);
 });

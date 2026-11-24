@@ -47,8 +47,14 @@ final readonly class PrerequisiteService
         foreach ($inputs->items as $work) {
             // Zero-credit passing courses can satisfy a prerequisite. Current rows alone cannot prove a grade.
             if (
-                $work['history_recorded'] && $work['grade_recorded'] && $work['grade'] !== null &&
-                $work['grade']['passes'] && in_array($work['status'], ['A', 'N'], true)
+                $work['history_recorded'] &&
+                $work['grade_recorded'] &&
+                $work['grade'] !== null &&
+                $work['grade']['passes'] &&
+                in_array($work['status'], ['A', 'N'], true) &&
+                ($groups?->creditOrigin === null ||
+                $groups->creditOrigin === 'either' ||
+                    ($references[$work['id']]['origin'] ?? null) === $groups->creditOrigin)
             ) {
                 $course = $work['course_id'];
                 $gradePoints = $work['grade']['points_milli'];

@@ -3165,3 +3165,27 @@ msgstr ""
 #: resources/views/shared/site-navigation.phtml:45
 msgid "Open menu"
 msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php
+msgid "Qualifying prerequisite coursework"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php
+msgid "Institutional or transfer"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php
+msgid "Institutional work only"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php
+msgid "Transfer work only"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php
+msgid "Applies to every prerequisite requirement. Co-requisites use their separate policy."
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php
+msgid "This rule does not change earned credits or decide which work counts toward a degree."
+msgstr ""

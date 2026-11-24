@@ -28,7 +28,7 @@ if ($response->getStatusCode() !== 200 || ($draft['groups'] ?? null) !== []) {
 }
 $groups = [[$first->courseId->value, $alternative->courseId->value, $additional->courseId->value],
     [$alternative->courseId->value]];
-$input = ['minimum_requirements' => 1, 'groups' => $groups, 'minimums' => [2, 1],
+$input = ['credit_origin' => null, 'minimum_requirements' => 1, 'groups' => $groups, 'minimums' => [2, 1],
     'grade_points_milli' => [2675, null], 'corequisites' => [$corequisite->courseId->value],
     'revision' => $draft['revision']];
 foreach ([0, -1, 3, 1.5, [], true] as $invalid) {
@@ -176,4 +176,39 @@ if (
     $teachingPost('/sis/prerequisite-labels/', ['ids' => [$first->courseId->value]])->getStatusCode() !== 403
 ) {
     throw new RuntimeException('Registration authority bypassed prerequisite catalog management.');
+}
+
+
+// Explicit source selection uses the same draft, publication and private HTTP boundaries.
+$sis->access->staff = true;
+foreach (['institutional', 'transfer', 'either', null] as $origin) {
+    $originDraft = json_decode((string) $read()->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    $originInput = array_replace($input, ['revision' => $originDraft['revision'], 'credit_origin' => $origin]);
+    foreach (['unknown', '', 4, true, []] as $invalidOrigin) {
+        if (
+            $teachingPost($base . 'prerequisite-groups/', array_replace($originInput, [
+            'credit_origin' => $invalidOrigin,
+            ]))->getStatusCode() !== 422
+        ) {
+            throw new RuntimeException('Malformed prerequisite coursework origin bypassed validation.');
+        }
+    }
+    $missingOrigin = $originInput;
+    unset($missingOrigin['credit_origin']);
+    if ($teachingPost($base . 'prerequisite-groups/', $missingOrigin)->getStatusCode() !== 422) {
+        throw new RuntimeException('Prerequisite mutations silently omitted their coursework-origin choice.');
+    }
+    $originSaved = $teachingPost($base . 'prerequisite-groups/', $originInput);
+    $originResult = json_decode((string) $originSaved->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if ($originSaved->getStatusCode() !== 200 || ($originResult['credit_origin'] ?? null) !== $origin) {
+        throw new RuntimeException('The prerequisite origin choice did not persist through actual providers.');
+    }
+    $originReview = $teachingPost($base . 'publication/review/', ['reason' => 'Fictional origin publication.']);
+    $originPlan = json_decode((string) $originReview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+    if (
+        $originReview->getStatusCode() !== 200
+        || ($originPlan['definition']['prerequisite_credit_origin'] ?? null) !== $origin
+    ) {
+        throw new RuntimeException('The course publication review lost its prerequisite origin.');
+    }
 }

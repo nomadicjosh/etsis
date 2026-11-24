@@ -167,3 +167,23 @@ Co-requisites belong to the retained course publication. Section version selecti
 Use **Registration policy** in registration settings to choose whether qualifying prior completion counts and whether unsupported drops are blocked or warned. See [registration and linked drops](registration-history.md#co-requisites-and-linked-drops) for the staff/student workflow. These institutional settings are audited CRUD configuration; accepted registration/drop evidence remains protected in the existing authoritative enrollment events.
 
 Migration `20261119000012_AddSisCorequisites` adds nullable draft/publication fields and three defaulted fields to the existing registration-policy table. It creates no event table and performs no historical conversion. Earlier publications and decisions without co-requisites retain their exact representations. The configured MariaDB upgrade preserved all twenty events and the event, stream-head and operation-table checksums; the existing publication has no inferred co-requisites. Isolated tests cover SQLite behavior and schema compilation for the five framework databases.
+
+## Qualifying prerequisite coursework
+
+Open **Academic catalog → course → Prerequisites**. Under **Overall prerequisite rule**, choose **Qualifying prerequisite coursework**:
+
+- **Institutional or transfer** keeps the existing default: either source can satisfy a course prerequisite.
+- **Institutional work only** accepts qualifying institutional coursework for every prerequisite requirement.
+- **Transfer work only** accepts qualifying posted transfer coursework for every prerequisite requirement.
+
+This setting applies to prerequisites for this course. It does **not** decide which credits count toward a student's degree, remove earned credit or change a transfer award. Co-requisites retain their separate institutional policy. Each prerequisite requirement still keeps its course count and grade-point minimum; flat alternatives and nested routes continue to work together with the source restriction. Only verified passing work allowed for the current program pursuit qualifies. Unknown earlier completion is not inferred.
+
+Add at least one prerequisite before selecting a source restriction. Removing every prerequisite resets this setting to the default; co-requisites remain independent. **Save requirements** saves the working definition, preserving edits made while a save is pending. A stale save leaves the proposed choice available for review. Saving setup does not append an academic decision or change an earlier publication/student record.
+
+Use **Review course publication** to retain the policy in an immutable course version. A section using that selected course publication keeps its policy after later draft edits or publications. Sections without a selected publication continue their existing working-definition registration behavior; publishing alone does not automatically replace their selected definition. Review the section's retained course selection separately when changing future registration requirements.
+
+Course cloning preserves the policy when selected prerequisites remain. Partial course removals retain it for the remaining requirements, along with their counts/grade floors; explicitly cloning or clearing every prerequisite clears the restriction. Ordinary relationship edits cannot silently change a remaining policy.
+
+Staff and student registration reviews explain the selected source beside prerequisite readiness. A registrar's independently authorized exception can permit registration with an unmet source requirement; it awards no completion or credit. Retained registration evidence identifies the original source policy and actual qualifying academic references. Existing accepted retries keep their original evidence after later policy or grade changes.
+
+Apply migration `20261123000008_AddSisPrerequisiteCreditOrigin` before using this setting. It adds nullable policy columns to the existing draft and course-version projections. Earlier null/absent values keep the original either-source behavior; no earlier publication, event or institution choice is rewritten. Catalog authority, CSRF/private responses, publication review/confirmation and registration source/authority/audit checks use their existing boundaries. The prerequisite-save API now requires an explicit nullable `credit_origin` field. Course equivalence, per-requirement source overrides and further institutional prerequisite policies remain separate roadmap work.
