@@ -38,6 +38,14 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
         }
         $row["additional_campus_ids"] = array_column($sites, "campus_id");
         sort($row["additional_campus_ids"], SORT_STRING);
+        $owners = $this->sql->rows('sis_program_departments', ['program_id' => $program->value], 6);
+        $row['additional_department_ids'] = array_map(
+            static fn (EntityId $id): string => $id->value,
+            \Domain\Catalog\ValueObject\AdditionalDepartments::ids(
+                array_map(static fn (array $owner): EntityId => new EntityId($owner['department_id']), $owners),
+                $row['department_id'] === null ? null : new EntityId($row['department_id']),
+            ),
+        );
         return $row;
     }
 
@@ -46,6 +54,7 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
         ?string $description,
         array $choices,
         array $additionalCampuses = [],
+        array $additionalDepartments = [],
     ): void {
         $row = ["description" => $description];
         foreach ($choices as $kind => $id) {
@@ -81,6 +90,28 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
                     "program_id" => $program->value,
                     "campus_id" => $id,
                 ]);
+            }
+        }
+        $owners = \Domain\Catalog\ValueObject\AdditionalDepartments::ids(
+            $additionalDepartments,
+            $choices['department'],
+        );
+        $ownerIds = array_map(static fn (EntityId $id): string => $id->value, $owners);
+        $current = $this->sql->rows('sis_program_departments', ['program_id' => $program->value], 6);
+        if (count($current) > 5) {
+            throw new CorruptHistoryException();
+        }
+        foreach ($current as $owner) {
+            if (!in_array($owner['department_id'], $ownerIds, true)) {
+                $this->sql->execute('DELETE FROM ' . $this->sql->quote('sis_program_departments')
+                    . ' WHERE ' . $this->sql->quote('id') . ' = ?', [$owner['id']]);
+            }
+        }
+        $existing = array_column($current, 'department_id');
+        foreach ($ownerIds as $id) {
+            if (!in_array($id, $existing, true)) {
+                $this->sql->insert('sis_program_departments', ['id' => EntityId::generate()->value,
+                    'program_id' => $program->value, 'department_id' => $id]);
             }
         }
     }
@@ -158,6 +189,42 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
             } elseif ($sites !== []) {
                 throw new CorruptHistoryException();
             }
+            $ownershipRecorded = match ($row['department_ownership_recorded'] ?? null) {
+                0, '0' => false,
+                1, '1' => true,
+                default => throw new CorruptHistoryException(),
+            };
+            $ownership = $this->sql->rows('sis_program_catalog_ownership', ['id' => $version->value], 1);
+            if ($ownershipRecorded !== ($ownership !== [])) {
+                throw new CorruptHistoryException();
+            }
+            if ($ownershipRecorded) {
+                $saved = $ownership[0];
+                if (!is_string($saved['snapshot_json']) || strlen($saved['snapshot_json']) > 16384) {
+                    throw new CorruptHistoryException();
+                }
+                $data = json_decode($saved['snapshot_json'], true, 8, JSON_THROW_ON_ERROR);
+                if (
+                    $saved['program_id'] !== $row['program_id']
+                    || filter_var($saved['stream_version'], FILTER_VALIDATE_INT)
+                        !== filter_var($row['stream_version'], FILTER_VALIDATE_INT)
+                    || !is_array($data) || count($data) !== 3
+                    || array_diff(
+                        array_keys($data),
+                        ['department', 'department_school', 'additional_departments'],
+                    ) !== []
+                    || !hash_equals(
+                        $saved['snapshot_hash'],
+                        hash('sha256', ProtectedEventCodec::canonical($data)),
+                    )
+                    || ProtectedEventCodec::canonical(['department' => $data['department']])
+                        !== ProtectedEventCodec::canonical(['department' => $choices['department']])
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                $choices['department_school'] = $data['department_school'];
+                $choices['additional_departments'] = $data['additional_departments'];
+            }
             $definition = ProgramDefinition::fromArray([
                 "code" => $catalog["program_code"],
                 "title" => $catalog["program_title"],
@@ -223,6 +290,7 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
             "school_field_recorded" => (int) $definition->classifications->schoolAndFieldRecorded,
             "campus_recorded" => (int) $definition->classifications->campusRecorded,
             "additional_campuses_recorded" => (int) $definition->classifications->additionalCampusesRecorded,
+            'department_ownership_recorded' => (int) $definition->classifications->departmentOwnershipRecorded,
         ];
         $values = $definition->classifications->describe();
         foreach (ClassificationKind::programKinds() as $category) {
@@ -258,6 +326,7 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
             $old["school_field_recorded"] = (int) $old["school_field_recorded"];
             $old["campus_recorded"] = (int) $old["campus_recorded"];
             $old["additional_campuses_recorded"] = (int) $old["additional_campuses_recorded"];
+            $old['department_ownership_recorded'] = (int) $old['department_ownership_recorded'];
             if (ProtectedEventCodec::canonical($old) !== ProtectedEventCodec::canonical($row)) {
                 throw new CorruptHistoryException();
             }
@@ -267,6 +336,27 @@ final readonly class SqlProgramDefinitionRepository implements ProgramDefinition
             $definition->classifications->additionalCampuses,
         );
         if ($this->retainedSites($version) !== $expectedSites) {
+            throw new CorruptHistoryException();
+        }
+        $ownership = $this->sql->rows('sis_program_catalog_ownership', ['id' => $version->value], 1)[0] ?? null;
+        if ($definition->classifications->departmentOwnershipRecorded) {
+            $json = ProtectedEventCodec::canonical(array_intersect_key(
+                $values,
+                array_flip(['department', 'department_school', 'additional_departments'])
+            ));
+            $expected = ['id' => $version->value, 'program_id' => $program->value, 'stream_version' => $position,
+                'snapshot_json' => $json, 'snapshot_hash' => hash('sha256', $json)];
+            if ($ownership === null && $old === null) {
+                $this->sql->insert('sis_program_catalog_ownership', $expected);
+            } else {
+                if ($ownership !== null) {
+                    $ownership['stream_version'] = (int) $ownership['stream_version'];
+                }
+                if ($ownership !== $expected) {
+                    throw new CorruptHistoryException();
+                }
+            }
+        } elseif ($ownership !== null) {
             throw new CorruptHistoryException();
         }
         $context = [

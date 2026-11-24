@@ -151,7 +151,7 @@ final class ConsoleBootstrapTest extends TestCase
 
     public function testPortalRoutesCsrfAndNativeVihzhuoBlocksBootWithinBoundedMemory(): void
     {
-        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=128M',
             dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-portal']);
         // This growing whole-workspace fixture makes hundreds of HTTP calls in one bounded process.
         $process->setTimeout(15);

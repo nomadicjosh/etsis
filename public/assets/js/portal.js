@@ -1324,6 +1324,8 @@
                     { class: "col-12 col-md-6" },
                     el("h3", {}, component.label),
                     el("p", {}, component.progress.context.name),
+                    component.kind === 'degree' && component.progress.context.program_ownership
+                        ? el('p', {}, window.curriculumOrganizationText(component.progress.context.program_ownership)) : null,
                     component.kind === "specialization" ? el("p", {}, window.curriculumOrganizationText(component)) : null,
                     component.kind === "specialization" ? el("p", {}, window.curriculumMajorText(component)) : null,
                     button(`Review ${component.label}`, () => inspect(index)),
@@ -1345,6 +1347,9 @@
         const body = el("div", { class: "progress-guide-review" });
         layout.append(body);
         container.replaceChildren(heading, layout);
+        if (data.status === 'review' && data.context.program_ownership) {
+            body.append(el('p', {}, window.curriculumOrganizationText(data.context.program_ownership)));
+        }
         const state = { open: false, side: "right", topic: "steps" };
         const steps = window.createDegreeProgressNextSteps(el, data);
         const slot = el("div", { class: "progress-guide-inline" }, steps);

@@ -78,6 +78,28 @@ if ($extraResponse->getStatusCode() !== 200) {
     throw new RuntimeException("An additional campus could not be created through the shared library.");
 }
 $input["additional_campus_ids"] = [$extra["id"]];
+if ($teachingPost($base . "details/", $input)->getStatusCode() !== 422) {
+    throw new RuntimeException("Omitting joint departments silently cleared program ownership.");
+}
+$jointSchool = json_decode((string) $teachingPost("/sis/catalog/classifications/school/save/", [
+    "code" => "LANG", "title" => "Fictional Languages college", "active" => true,
+])->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$jointDepartment = json_decode((string) $teachingPost("/sis/catalog/classifications/department/save/", [
+    "code" => "LING", "title" => "Fictional Languages department", "active" => true,
+    "school_id" => $jointSchool["id"],
+])->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$input["additional_department_ids"] = [$jointDepartment["id"]];
+$invalidOwners = [null, "invalid", [$jointDepartment["id"], $jointDepartment["id"]],
+    array_fill(0, 6, $jointDepartment["id"])];
+foreach ($invalidOwners as $invalid) {
+    $invalidResponse = $teachingPost($base . "details/", array_replace($input, [
+        "additional_department_ids" => $invalid,
+    ]));
+    if ($invalidResponse->getStatusCode() !== 422) {
+        throw new RuntimeException("Malformed joint program departments bypassed the private boundary.");
+    }
+}
+
 if ($teachingPost($base . "details/", $input)->getStatusCode() !== 200) {
     throw new RuntimeException("Program references could not be saved through actual providers.");
 }
@@ -87,7 +109,9 @@ $review = json_decode((string) $reviewResponse->getBody(), true, flags: JSON_THR
 if (
     $reviewResponse->getStatusCode() !== 200 ||
     ($review["definition"]["classifications"]["field_of_study"]["code"] ?? null) !== "11.0701" ||
-    ($review["definition"]["classifications"]["campus"]["code"] ?? null) !== "MAIN"
+    ($review["definition"]["classifications"]["campus"]["code"] ?? null) !== "MAIN" ||
+    ($review["definition"]["classifications"]["additional_departments"][0]["school"]["title"] ?? null) !==
+    "Fictional Languages college"
 ) {
     throw new RuntimeException("The program publication omitted a reviewed classification.");
 }

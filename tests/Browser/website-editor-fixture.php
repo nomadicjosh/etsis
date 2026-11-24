@@ -13,6 +13,8 @@ $websiteConfig["storage"]["database"] = ["dsn" => "sqlite::memory:", "prefix" =>
 $websiteConfig["auth"]["use_login"] = false;
 $websiteConfig["website_manager"]["use_website_manager"] = false;
 $websiteConfig["pagebuilder"]["url"] = "/fixture/website-editor/";
+require_once dirname(__DIR__) . "/Support/PageBuilderFixtureTheme.php";
+$websiteConfig["theme"]["class"] = \Tests\Support\PageBuilderFixtureTheme::class;
 $websiteConfig["theme"]["folder"] = dirname(__DIR__) . "/Support";
 $websiteConfig["theme"]["active_theme"] = "PageBuilderTheme";
 $websiteConfig["theme"]["parents"] = [];
@@ -44,13 +46,17 @@ $record->setData([
     "nav_type" => "primary",
     "data" => [
         "html" => [
-            '[block slug="editable" id="editable-one"][block slug="dynamic" id="dynamic-one"]',
+            '[block slug="editable" id="IDeditable-one"][block slug="dynamic" id="IDdynamic-one"]',
         ],
         "css" => "",
+        "components" => [[
+            ["tagName" => "phpb-block", "attributes" => ["slug" => "editable", "id" => "IDeditable-one"]],
+            ["tagName" => "phpb-block", "attributes" => ["slug" => "dynamic", "id" => "IDdynamic-one"]],
+        ]],
         "blocks" => [
             "en" => [
-                "editable-one" => ["slug" => "editable", "settings" => ["attributes" => []]],
-                "dynamic-one" => ["slug" => "dynamic", "settings" => ["attributes" => []]],
+                "IDeditable-one" => ["slug" => "editable", "settings" => ["attributes" => []]],
+                "IDdynamic-one" => ["slug" => "dynamic", "settings" => ["attributes" => []]],
             ],
         ],
     ],

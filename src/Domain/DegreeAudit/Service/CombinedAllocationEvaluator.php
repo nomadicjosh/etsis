@@ -126,6 +126,10 @@ final readonly class CombinedAllocationEvaluator
                 "specialization" => $r["specialization"] ?? null,
                 "cohort_changed" => false,
                 "group_reuse" => $r["definition"]["policies"]["group_reuse"] ?? null,
+                ...isset($r['program_publication']['definition']['classifications']['additional_departments'])
+                    ? ['program_ownership' => \Domain\Catalog\ValueObject\ProgramClassifications::fromArray(
+                        $r['program_publication']['definition']['classifications'],
+                    )->ownership()] : [],
             ];
             foreach ($review["allocation"]["groups"] as $index => $group) {
                 $positions[$id][$group["id"]] = ["component" => count($reviews), "group" => $index];

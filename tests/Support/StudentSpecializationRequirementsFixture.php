@@ -28,6 +28,7 @@ final class StudentSpecializationRequirementsFixture
         bool $selectInitial = true,
         bool $organized = false,
         array $parentMajorCodes = [],
+        ?Closure $configureProgram = null,
     )
     {
         $this->r = $r ??= new ReusableGroupFixture();
@@ -81,6 +82,7 @@ final class StudentSpecializationRequirementsFixture
                 isset($parentMajorCodes[$code]) ? new EntityId($this->choices[$parentMajorCodes[$code]]['id']) : null,
             );
         }
+        $configureProgram?->__invoke($this->program);
         $review = $this->program->service->review($s->program, $r->year, 'Fictional offered choices.');
         $this->programVersion = $this->program->service->publish($s->program, $review['review_token'])['operation_id'];
         foreach ($this->choices as $code => $choice) {

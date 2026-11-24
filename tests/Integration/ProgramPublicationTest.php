@@ -292,6 +292,7 @@ final class ProgramPublicationTest extends TestCase
         $p = new ProgramPublicationFixture();
         $year = $p->calendar->year(2024);
         $receipt = $this->publish($p, $year);
+        $p->sis->sql->execute('DELETE FROM sis_program_catalog_ownership WHERE id = ?', [$receipt['operation_id']]);
         $p->sis->sql->execute("DELETE FROM sis_program_catalog_details WHERE id = ?", [
             $receipt["operation_id"],
         ]);

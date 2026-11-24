@@ -66,6 +66,25 @@ final readonly class StudentDegreeProgress
             "cohort_changed",
             "group_reuse",
         ]);
+        if (array_key_exists('program_ownership', $review['context'])) {
+            $ownership = $review['context']['program_ownership'];
+            if (
+                !is_array($ownership) || count($ownership) !== 2
+                || !array_key_exists('department', $ownership)
+                || !is_array($ownership['additional_departments'] ?? null)
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $additional = new \Domain\Catalog\ValueObject\AdditionalDepartments(
+                $ownership['additional_departments'],
+                $ownership['department'] === null ? null
+                    : new \Domain\Shared\ValueObject\EntityId($ownership['department']['id']),
+            );
+            $data['context']['program_ownership'] = [
+                'department' => self::department($ownership['department']),
+                'additional_departments' => array_map(self::department(...), $additional->definitions),
+            ];
+        }
         $data["minimums"] = array_map(
             static fn(array $value): array => $pick($value, [
                 "key",

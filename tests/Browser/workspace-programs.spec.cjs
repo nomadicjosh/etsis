@@ -4,7 +4,7 @@ const id = number => `01K000000000000000000000${String(number).padStart(2, '0')}
 
 async function fixture(page, options = {}) {
     const calls = [], errors = [], publications = [];
-    let definition = { code: 'BSCS', title: 'Computer Science', description: options.description || null, classifications: { department: null, academic_level: null, award: null, school: null, field_of_study: null, campus: null, additional_campuses: [] } };
+    let definition = { code: 'BSCS', title: 'Computer Science', description: options.description || null, classifications: { department: null, academic_level: null, award: null, school: null, field_of_study: null, campus: null, additional_campuses: [], department_school: null, additional_departments: [] } };
     const rows = [
         { id: id(3), kind: 'department', code: 'SCI', title: 'Sciences', active: true, school_id: id(7), school: { id: id(7), code: 'ARTS', title: 'College of Arts <b>fictional</b>' } },
         { id: id(4), kind: 'academic_level', code: 'UG', title: 'Undergraduate', active: true },
@@ -19,6 +19,7 @@ async function fixture(page, options = {}) {
         id: id(60 + index), kind: 'department', code: `JOINT.${index}`, title: `Fictional joint department ${index}`,
         active: true, school_id: id(70 + index), school: { id: id(70 + index), code: `COL.${index}`, title: `Fictional joint college ${index} <b>example</b>` },
     });
+    let detailsFailure = !!options.detailsFailure;
     let reviews = 0, accepted = null;
     const specializations = options.specializations ? Array.from({length:23},(_,i)=>({id:id(30+i),program_id:id(1),code:`FOCUS.${String(i).padStart(2,'0')}`,title:`Fictional specialization ${i} <b>example</b>`,description:'A fictional description.',revision:1,active:true,kind:'specialization'})) : [];
     if (options.linked) specializations[0].kind = 'major';
@@ -41,6 +42,7 @@ async function fixture(page, options = {}) {
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/data/programs/') result = { items: [{ id: id(1), code: definition.code, title: definition.title }], next_after: null };
         else if (path === `/sis/programs/${id(1)}/details/`) {
+            if (data && detailsFailure) { detailsFailure = false; await route.fulfill({ status: 409, json: { error: 'Fictional draft conflict. Review and retry.' } }); return; }
             if (data) definition = { code: data.code, title: data.title, description: data.description, classifications: Object.fromEntries(['department', 'academic_level', 'award', 'school', 'field_of_study', 'campus'].map(kind => {
                 const row = rows.find(row => row.id === data[`${kind}_id`]);
                 return [kind, row ? { id: row.id, code: row.code, title: row.title } : null];
@@ -49,6 +51,13 @@ async function fixture(page, options = {}) {
                 const row = rows.find(value => value.id === site);
                 return { id: row.id, code: row.code, title: row.title };
             });
+            if (data) {
+                definition.classifications.department_school = rows.find(row => row.id === data.department_id)?.school || null;
+                definition.classifications.additional_departments = data.additional_department_ids.map(owner => {
+                    const row = rows.find(row => row.id === owner);
+                    return { id: row.id, code: row.code, title: row.title, school: row.school };
+                });
+            }
             result = { id: id(1), definition, revision: 'a'.repeat(64) };
         } else if (path === `/sis/programs/${id(1)}/specializations/page/`) {
             const matches = specializations.filter(row=>(!data.kind||row.kind===data.kind)&&(!data.after||row.id>data.after)&&`${row.code} ${row.title}`.toLowerCase().includes(data.search.toLowerCase())).sort((a,b)=>a.id.localeCompare(b.id));
@@ -823,5 +832,69 @@ test('required major chooser preserves a concentration draft and retains its lin
     await expect(context).toContainText('Requires major: FOCUS.00');
     await expect(context.locator('b')).toHaveCount(0);
     await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('whole program joint departments preserve draft entries and retain independent college labels through publication', async ({ page }) => {
+    const f = await fixture(page, { jointOwners: true, detailsFailure: true });
+    await page.getByRole('textbox', { name: 'Program title', exact: true }).fill('Fictional joint program');
+    await page.getByRole('textbox', { name: 'Program description', exact: true }).fill('A preserved program draft.');
+    await page.getByRole('button', { name: 'Choose department', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose SCI', exact: true }).click();
+    await page.getByRole('button', { name: 'Add responsible department', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to program details', exact: true }).click();
+    for (const code of ['SCI', 'JOINT.0', 'JOINT.0', 'JOINT.1']) {
+        await page.getByRole('button', { name: 'Add responsible department', exact: true }).click();
+        await page.getByRole('button', { name: `Choose ${code}`, exact: true }).click();
+    }
+    await expect(page.getByRole('region', { name: 'Program department ownership', exact: true })).toContainText('Fictional joint college 1 <b>example</b>');
+    await expect(page.getByRole('button', { name: 'Remove department JOINT.0', exact: true })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Save program details', exact: true }).click();
+    await expect(page.getByRole('textbox', { name: 'Program title', exact: true })).toHaveValue('Fictional joint program');
+    await expect(page.getByRole('button', { name: 'Remove department JOINT.1', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Save program details', exact: true }).click();
+    const saves = f.calls.filter(c => c.path.endsWith('/details/'));
+    expect(saves.map(c => c.data.additional_department_ids)).toEqual([[id(60), id(61)], [id(60), id(61)]]);
+    expect(saves[1].data).toMatchObject({ department_id: id(3), school_id: null, title: 'Fictional joint program', description: 'A preserved program draft.' });
+    await page.getByRole('button', { name: 'Publish for an academic year', exact: true }).click();
+    await page.getByLabel('Reason for program publication', { exact: true }).fill('Fictional reviewed program owners.');
+    await page.getByRole('button', { name: 'Choose academic year', exact: true }).click();
+    await page.getByRole('button', { name: 'Use academic year 2024-2025', exact: true }).click();
+    await page.getByRole('button', { name: 'Review program publication', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional joint college 0 <b>example</b>');
+    await page.getByRole('button', { name: 'Confirm program publication', exact: true }).click();
+    await page.getByRole('button', { name: 'Published program details', exact: true }).click();
+    await page.getByText('2024-2025 · Revision 1 · Fictional joint program', { exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional joint college 1 <b>example</b>');
+    expect(await page.locator('#drawer-body b, #drawer-body img').count()).toBe(0);
+    await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+test('whole program owners enforce five choices, promote primary departments and remove with the keyboard', async ({ page }) => {
+    const f = await fixture(page, { jointOwners: true });
+    for (let number = 0; number < 5; number++) {
+        await page.getByRole('button', { name: 'Add responsible department', exact: true }).click();
+        await page.getByRole('button', { name: `Choose JOINT.${number}`, exact: true }).click();
+    }
+    await expect(page.getByRole('button', { name: 'Add responsible department', exact: true })).toBeDisabled();
+    await page.setViewportSize({ width: 375, height: 812 });
+    await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+    await page.getByRole('button', { name: 'Remove department JOINT.4', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await page.getByRole('button', { name: 'Choose department', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose JOINT.0', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Remove department JOINT.0', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('region', { name: 'Program department ownership', exact: true })).toContainText('removed from the additional list');
+    await accessible(page);
+    await page.getByRole('region', { name: 'Program department ownership', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/etsis-program-owners-mobile.png' });
+    await page.getByRole('button', { name: 'Save program details', exact: true }).click();
+    expect(f.calls.find(c => c.path.endsWith('/details/')).data).toMatchObject({ department_id: id(60), additional_department_ids: [id(61), id(62), id(63)] });
+    await page.getByRole('button', { name: 'Clear department', exact: true }).click();
+    for (const number of [1, 2, 3]) await page.getByRole('button', { name: `Remove department JOINT.${number}`, exact: true }).click();
+    await page.getByRole('button', { name: 'Save program details', exact: true }).click();
+    expect(f.calls.filter(c => c.path.endsWith('/details/')).at(-1).data).toMatchObject({ department_id: null, additional_department_ids: [] });
     expect(f.errors).toEqual([]);
 });

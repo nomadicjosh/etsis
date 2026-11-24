@@ -104,6 +104,10 @@ async function fixture(page,options={}) {
             data.work_summary.placement_established = false;
             data.work_summary.unused_completed_count = null;
         }
+        if (options.programOwners && data.status === 'review') data.context.program_ownership = {
+            department: { code: 'ENG', title: 'Retained program English', school: { code: 'ARTS', title: 'Retained program Arts college' } },
+            additional_departments: [{ code: 'LING', title: 'Retained program Linguistics <department>', school: { code: 'LANG', title: 'Retained program Languages <college>' } }],
+        };
         if (options.combined && data.status === "review") {
             const degree = structuredClone(data), specialization = structuredClone(data);
             specialization.context.name = "Data <b>fictional</b> requirements";
@@ -671,5 +675,22 @@ test('student progress explains independent card grade floors with accessible po
     await page.setViewportSize({width:320,height:1000});await accessible(page);
     expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('owner program responsibility stays visible in degree cards and their captured drilldown', async ({ page }) => {
+    const f = await fixture(page, { combined: true, typed: true, programOwners: true });
+    await page.getByRole('button', { name: 'Review progress · BSCS · 26/FA', exact: true }).click();
+    await expect(page.locator('body')).toContainText('Retained program Languages <college>');
+    await expect(page.locator('body')).toContainText('Responsible department: ENG — Fictional English <department>');
+    await page.getByRole('button', { name: 'Review Degree', exact: true }).click();
+    await expect(page.locator('body')).toContainText('Retained program Arts college');
+    await expect(page.locator('body')).toContainText('Retained program Languages <college>');
+    await expect(page.locator('body department, body college')).toHaveCount(0);
+    expect(f.calls.filter(c => c.path.endsWith('/degree-progress/'))).toHaveLength(1);
+    await page.setViewportSize({ width: 320, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });

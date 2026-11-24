@@ -10,6 +10,8 @@ final readonly class ProgramClassifications
 {
     /** @var list<ClassificationSnapshot> */
     public array $additionalCampuses;
+    /** @var list<array<string,mixed>> */
+    public array $additionalDepartments;
 
     /** @param list<ClassificationSnapshot> $additionalCampuses */
     public function __construct(
@@ -23,7 +25,17 @@ final readonly class ProgramClassifications
         public bool $campusRecorded = true,
         array $additionalCampuses = [],
         public bool $additionalCampusesRecorded = true,
+        public ?ClassificationSnapshot $departmentSchool = null,
+        array $additionalDepartments = [],
+        public bool $departmentOwnershipRecorded = true,
     ) {
+        if (
+            (!$departmentOwnershipRecorded && ($departmentSchool !== null || $additionalDepartments !== []))
+            || ($department === null && $departmentSchool !== null)
+        ) {
+            throw new InvalidArgumentException('Preserve explicit program department ownership and earlier unknowns.');
+        }
+        $this->additionalDepartments = new AdditionalDepartments($additionalDepartments, $department?->id)->definitions;
         if (
             count($additionalCampuses) > 20 ||
             !array_is_list($additionalCampuses) ||
@@ -67,6 +79,19 @@ final readonly class ProgramClassifications
     /** Missing historical keys remain absent; an explicit blank is a different recorded fact. */
     public static function fromArray(array $data): self
     {
+        $ownershipRecorded = array_key_exists('department_school', $data)
+        || array_key_exists('additional_departments', $data);
+        if (
+            $ownershipRecorded && (!array_key_exists('department_school', $data)
+            || !array_key_exists('additional_departments', $data)
+            || !is_array($data['additional_departments'])
+            || ($data['department_school'] !== null && !is_array($data['department_school'])))
+        ) {
+            throw new InvalidArgumentException('Retain the complete program department ownership.');
+        }
+        $departmentSchool = $data['department_school'] ?? null;
+        $departments = $data['additional_departments'] ?? [];
+        unset($data['department_school'], $data['additional_departments']);
         $sitesRecorded = array_key_exists("additional_campuses", $data);
         $sites = $sitesRecorded ? $data["additional_campuses"] : [];
         if ($sitesRecorded && (!is_array($sites) || !array_is_list($sites) || count($sites) > 20)) {
@@ -110,6 +135,9 @@ final readonly class ProgramClassifications
                 return ClassificationSnapshot::fromArray($site);
             }, $sites),
             additionalCampusesRecorded: $sitesRecorded,
+            departmentSchool: $departmentSchool === null ? null : ClassificationSnapshot::fromArray($departmentSchool),
+            additionalDepartments: $departments,
+            departmentOwnershipRecorded: $ownershipRecorded,
         );
     }
 
@@ -136,6 +164,20 @@ final readonly class ProgramClassifications
                 $this->additionalCampuses,
             );
         }
+        if ($this->departmentOwnershipRecorded) {
+            $values['department_school'] = $this->departmentSchool?->describe();
+            $values['additional_departments'] = $this->additionalDepartments;
+        }
         return $values;
+    }
+
+    /** Organization labels use the same retained definition, independently of the program's own college. */
+    public function ownership(): array
+    {
+        return [
+            'department' => $this->department === null ? null : $this->department->describe()
+                + ($this->departmentOwnershipRecorded ? ['school' => $this->departmentSchool?->describe()] : []),
+            ...$this->departmentOwnershipRecorded ? ['additional_departments' => $this->additionalDepartments] : [],
+        ];
     }
 }

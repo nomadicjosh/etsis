@@ -5,6 +5,12 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'program' => trans_html('Program department ownership'),
+    'program_help' => trans_html(
+        'Add up to five departments that jointly administer this program. Each department keeps its own college. '
+        . 'Program ownership is independent of major/minor ownership and grants no access or eligibility.',
+    ),
+    'program_duplicate' => trans_html('That department is already selected for this program.'),
     "primary" => trans_html("Responsible department"),
     "unknown" => trans_html("not recorded in this publication"),
     "unassigned" => trans_html("not assigned"),

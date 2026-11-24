@@ -7,6 +7,7 @@ h1{font-size:clamp(1.65rem,3vw,2.4rem);font-weight:650;max-width:48ch;overflow-w
 .site-intro{max-width:76ch;line-height:1.7}
 .btn-primary{--bs-btn-bg:#245b8e;--bs-btn-border-color:#245b8e;--bs-btn-hover-bg:#19496f;--bs-btn-hover-border-color:#19496f}
 .btn-outline-primary{--bs-btn-color:#245b8e;--bs-btn-border-color:#245b8e;--bs-btn-hover-bg:#245b8e;--bs-btn-hover-border-color:#245b8e}
+.btn-outline-secondary{--bs-btn-color:#40566e;--bs-btn-border-color:#40566e;--bs-btn-hover-bg:#40566e;--bs-btn-hover-border-color:#40566e}
 .btn-link{--bs-btn-color:#245b8e;--bs-btn-hover-color:#173f68}
 body .text-secondary{color:#4a5d74!important}
 .btn{min-height:2.65rem;white-space:normal;text-align:left;display:inline-flex;align-items:center;justify-content:center;gap:.45rem}

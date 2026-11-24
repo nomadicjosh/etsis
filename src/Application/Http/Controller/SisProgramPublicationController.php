@@ -48,6 +48,14 @@ final readonly class SisProgramPublicationController
             throw new InvalidArgumentException("Provide the additional campus choices, or an empty list.");
         }
         $input = FormInput::from($request);
+        if (
+            !is_array($body['additional_department_ids'] ?? null)
+            || !array_is_list($body['additional_department_ids'])
+            || count($body['additional_department_ids']) > 5
+            || array_any($body['additional_department_ids'], static fn (mixed $id): bool => !is_string($id))
+        ) {
+            throw new InvalidArgumentException('Provide the additional department choices, or an empty list.');
+        }
         return new JsonResponse(
             $this->programs->save(
                 new EntityId($id),
@@ -64,6 +72,10 @@ final readonly class SisProgramPublicationController
                 additionalCampuses: array_map(
                     static fn(string $site): EntityId => new EntityId($site),
                     $body["additional_campus_ids"],
+                ),
+                additionalDepartments: array_map(
+                    static fn (string $id): EntityId => new EntityId($id),
+                    $body['additional_department_ids']
                 ),
             ),
         );

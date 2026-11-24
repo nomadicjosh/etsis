@@ -14,10 +14,15 @@ final class CampusPageTemplate
             'campus-programs', 'campus-events', 'campus-invitation'];
         $html = [];
         $blocks = [];
+        $components = [];
         foreach ($slugs as $slug) {
-            $html[] = '[block slug="' . $slug . '" id="' . $slug . '"]';
-            $blocks[$slug] = ['slug' => $slug, 'settings' => ['attributes' => []]];
+            // Native Vihzhuo reserves ID-prefixed instances for editable body content.
+            $instance = 'ID' . $slug;
+            $html[] = '[block slug="' . $slug . '" id="' . $instance . '"]';
+            $blocks[$instance] = ['slug' => $slug, 'settings' => ['attributes' => []]];
+            $components[] = ['tagName' => 'phpb-block', 'attributes' => ['slug' => $slug, 'id' => $instance]];
         }
-        return ['html' => [implode("\n", $html)], 'css' => '', 'blocks' => ['en' => $blocks]];
+        return ['html' => [implode("\n", $html)], 'css' => '',
+            'components' => [$components], 'blocks' => ['en' => $blocks]];
     }
 }

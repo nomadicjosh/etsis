@@ -5,7 +5,7 @@ const {node,walk}=require('./support/elements.cjs');
 const wait=()=>new Promise(resolve=>setImmediate(resolve));
 const summary=()=>({as_of_date:'2026-08-10',outcome:'feasible',current_record_count:1,components:[{label:'Degree',context:{name:'Fictional degree',academic_year_code:'2026',version:1},minimums:[],gpa:{cumulative:{ready:true,milli:4000},overall:{ready:false,milli:null}},groups:[]}]});
 function fixture({owner=false,uncertain=false,deferred=false,groups=[]}={}) {
-    const window={};vm.runInNewContext(fs.readFileSync('public/assets/js/degree-progress-guide.js','utf8'),{window});
+    const window={};vm.runInNewContext(fs.readFileSync('public/assets/js/degree-progress-guide.js','utf8'),{window,document:{getElementById:()=>null}});
     const sent=[];let release;
     const grant={operation_id:'record',revision:'revision',reason:'Fictional reason',review_token:'private-proof',summary:summary()};
     const c=window.createRecordedDegreeProgress({node,request:async(path,method,data)=>{

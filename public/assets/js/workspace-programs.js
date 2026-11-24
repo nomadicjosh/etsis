@@ -47,6 +47,8 @@ window.createWorkspacePrograms = function (ui) {
                     definition.classifications.additional_campuses === undefined ? "Not recorded in this publication" :
                     definition.classifications.additional_campuses.length ?
                         definition.classifications.additional_campuses.map(site => `${site.code} — ${site.title}`).join("; ") : "No additional sites")),
+                node('div', {}, node('dt', {}, window.curriculumOwnershipLabels?.program || 'Program department ownership'),
+                    node('dd', {}, window.programOrganizationText(definition.classifications))),
             ),
         );
     }
@@ -60,6 +62,7 @@ window.createWorkspacePrograms = function (ui) {
             classifications: structuredClone(current.definition.classifications),
         };
         let siteNotice = "";
+        let ownerNotice = '';
         async function render() {
             const body = openDrawer(
                 "Program details",
@@ -112,6 +115,13 @@ window.createWorkspacePrograms = function (ui) {
                                     code: row.code,
                                     title: row.title,
                                 };
+                                if (kind === 'department') {
+                                    draft.classifications.department_school = row.school;
+                                    if (draft.classifications.additional_departments.some(owner => owner.id === row.id)) {
+                                        draft.classifications.additional_departments = draft.classifications.additional_departments.filter(owner => owner.id !== row.id);
+                                        ownerNotice = window.curriculumOwnershipLabels.promoted;
+                                    }
+                                }
                                 await render();
                             },
                             render,
@@ -124,12 +134,44 @@ window.createWorkspacePrograms = function (ui) {
                         button(`Clear ${label.toLowerCase()}`, () => {
                             capture();
                             draft.classifications[kind] = null;
+                            if (kind === 'department') draft.classifications.department_school = null;
                             return render();
                         }),
                     );
                 cards.append(node("div", { class: "col-12 col-xl-4" }, card));
             });
             const sites = draft.classifications.additional_campuses || [];
+            const owners = draft.classifications.additional_departments || [];
+            const ownerLabels = window.curriculumOwnershipLabels;
+            const organization = node('section', { class: 'surface p-3 mb-3', 'aria-label': ownerLabels.program },
+                node('h3', { class: 'h5' }, ownerLabels.program),
+                node('p', { class: 'form-text' }, ownerLabels.program_help),
+                node('p', {}, window.programOrganizationText(draft.classifications)));
+            const addOwner = button(ownerLabels.add, () => {
+                capture();
+                return ui.references().library('department', '', null, [], async row => {
+                    if (row.id === draft.classifications.department?.id || owners.some(owner => owner.id === row.id)) {
+                        ownerNotice = ownerLabels.program_duplicate;
+                    } else {
+                        draft.classifications.additional_departments = [...owners,
+                            { id: row.id, code: row.code, title: row.title, school: row.school }]
+                            .sort((a, b) => a.id.localeCompare(b.id));
+                        ownerNotice = '';
+                    }
+                    await render();
+                }, render, 'Back to program details');
+            });
+            addOwner.disabled = owners.length >= 5;
+            organization.append(addOwner);
+            for (const owner of owners) organization.append(node('div', {
+                class: 'd-flex flex-wrap align-items-center justify-content-between gap-2 mt-3',
+            }, node('span', { class: 'text-break' }, `${owner.code} — ${owner.title}`),
+            button(`${ownerLabels.remove} ${owner.code}`, () => {
+                capture();
+                draft.classifications.additional_departments = owners.filter(value => value.id !== owner.id);
+                return render();
+            })));
+            organization.append(node('p', { role: 'status', class: 'form-text mt-3 mb-0' }, ownerNotice));
             const locations = node("section", { class: "surface p-3 mb-3", "aria-label": "Additional offering sites" },
                 node("h3", { class: "h5" }, "Additional offering sites"),
                 node("p", { class: "form-text" }, "Choose up to 20 other campuses or sites where this program is offered. These do not assign a student to a location or restrict online delivery."));
@@ -192,13 +234,14 @@ window.createWorkspacePrograms = function (ui) {
                         field_of_study_id: draft.classifications.field_of_study?.id ?? null,
                         campus_id: draft.classifications.campus?.id ?? null,
                         additional_campus_ids: (draft.classifications.additional_campuses || []).map(site => site.id),
+                        additional_department_ids: owners.map(owner => owner.id),
                         revision: current.revision,
                     });
                     await ui.refreshDirectory();
                     await open(id, true);
                 }, save);
             });
-            form.append(cards, locations, save);
+            form.append(cards, organization, locations, save);
             state();
             body.append(
                 form,

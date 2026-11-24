@@ -452,6 +452,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 node("summary", {}, `Retained program · ${definition.code} — ${definition.title}`),
                 node("p", {}, `${program.academic_year_code} · Catalog revision ${program.catalog_revision}`),
                 node("p", { class: "course-description-text" }, definition.description || "No description specified."),
+                node('p', {}, window.programOrganizationText(definition.classifications)),
             );
             for (const [kind, label] of Object.entries({
                 department: "Department",
@@ -3119,6 +3120,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 { class: "audit-card" },
                 node("h2", { class: "h4" }, label),
                 node("h3", { class: "h5" }, context.name),
+                context.program_ownership ? node('p', { class: 'form-text' }, window.curriculumOrganizationText(context.program_ownership)) : null,
                 context.specialization ? node("p", { class: "form-text" }, window.curriculumOrganizationText(context.specialization)) : null,
                 context.specialization ? node("p", { class: "form-text" }, window.curriculumMajorText(context.specialization)) : null,
                 node(
@@ -3311,6 +3313,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 { class: "audit-status" },
                 `${data.context.name} · ${data.context.academic_year_code} · ${progressVersionLabel(data.context)}`,
             ),
+            data.context.program_ownership ? node('p', { class: 'form-text' }, window.curriculumOrganizationText(data.context.program_ownership)) : null,
         );
         body.append(
             node(

@@ -64,6 +64,7 @@ final readonly class ProgramPublicationService
     }
 
     /** @param list<EntityId> $additionalCampuses
+     * @param list<EntityId> $additionalDepartments
      * @return array<string, mixed> */
     public function save(
         EntityId $program,
@@ -78,8 +79,13 @@ final readonly class ProgramPublicationService
         ?EntityId $fieldOfStudy = null,
         ?EntityId $campus = null,
         array $additionalCampuses = [],
+        array $additionalDepartments = [],
     ): array {
         $actor = $this->access->requirePermission("sis:catalog:manage");
+        $additionalDepartments = \Domain\Catalog\ValueObject\AdditionalDepartments::ids(
+            $additionalDepartments,
+            $department,
+        );
         if (
             !array_is_list($additionalCampuses) ||
             count($additionalCampuses) > 20 ||
@@ -119,23 +125,31 @@ final readonly class ProgramPublicationService
             $description,
             $choices,
             $additionalCampuses,
+            $additionalDepartments,
             $revision,
             $actor,
         ): array {
             $this->catalog->lock("programs", $program);
-            $this->lockChoices($program, [...array_values(array_filter($choices)), ...$additionalCampuses]);
+            $this->lockChoices($program, [...array_values(array_filter($choices)), ...$additionalCampuses,
+                ...$additionalDepartments]);
             $this->authorize($actor);
             $old = $this->definition($program)->describe();
             if (!hash_equals($this->hash($old), $revision)) {
                 throw new ConcurrentModificationException("Reload the program details before saving.");
             }
             $values = [];
+            $previousOwners = array_filter([
+                $old['classifications']['department']['id'] ?? null,
+                ...array_column($old['classifications']['additional_departments'], 'id'),
+            ]);
             foreach ($choices as $kind => $id) {
                 $row = $id === null ? null : $this->classifications->get($id);
                 if (
                     $row !== null &&
                     ($row["kind"] !== $kind ||
-                        (!$row["active"] && ($old["classifications"][$kind]["id"] ?? null) !== $id->value))
+                        (!$row["active"] && ($kind === 'department'
+                            ? !in_array($id->value, $previousOwners, true)
+                            : ($old["classifications"][$kind]["id"] ?? null) !== $id->value)))
                 ) {
                     throw new ValidationException([
                         [
@@ -146,6 +160,21 @@ final readonly class ProgramPublicationService
                 }
                 $values[$kind] =
                     $row === null ? null : array_intersect_key($row, array_flip(["id", "code", "title"]));
+            }
+            $values['department_school'] = $choices['department'] === null ? null
+                : $this->classifications->get($choices['department'])['school'];
+            $values['additional_departments'] = [];
+            foreach ($additionalDepartments as $owner) {
+                $row = $this->classifications->get($owner);
+                if (
+                    $row['kind'] !== 'department' || (!$row['active']
+                    && !in_array($owner->value, $previousOwners, true))
+                ) {
+                    throw new ValidationException([['field' => 'additional_department_ids',
+                        'message' => 'Choose active additional departments from the department library.']]);
+                }
+                $values['additional_departments'][] =
+                    \Domain\Catalog\ValueObject\DepartmentDefinition::fromClassification($row)->data;
             }
             $values["additional_campuses"] = [];
             $previousSites = array_column($old["classifications"]["additional_campuses"], null, "id");
@@ -174,7 +203,13 @@ final readonly class ProgramPublicationService
                 "code" => $definition->code,
                 "title" => $definition->title,
             ]);
-            $this->details->saveDraft($program, $definition->description, $choices, $additionalCampuses);
+            $this->details->saveDraft(
+                $program,
+                $definition->description,
+                $choices,
+                $additionalCampuses,
+                $additionalDepartments
+            );
             $this->audit->record($actor, "program.details_saved", $program);
             $this->authorize($actor);
             foreach ($choices as $kind => $id) {
@@ -184,7 +219,9 @@ final readonly class ProgramPublicationService
                 $row = $this->classifications->get($id);
                 if (
                     $row["kind"] !== $kind ||
-                    (!$row["active"] && ($old["classifications"][$kind]["id"] ?? null) !== $id->value)
+                    (!$row["active"] && ($kind === 'department'
+                        ? !in_array($id->value, $previousOwners, true)
+                        : ($old["classifications"][$kind]["id"] ?? null) !== $id->value))
                 ) {
                     throw new ConcurrentModificationException(
                         "A program reference changed while saving. Reload the draft.",
@@ -478,8 +515,10 @@ final readonly class ProgramPublicationService
     {
         $draft = $this->details->draft($program);
         $owners = $this->specializations->classificationIds($program);
+        $programOwners = $this->ownershipIds($draft);
         $ids = [
             ...$owners,
+            ...$programOwners,
             ...array_map(static fn(EntityId $id): string => $id->value, $additional),
             ...$draft["additional_campus_ids"],
         ];
@@ -488,12 +527,21 @@ final readonly class ProgramPublicationService
                 $ids[] = $draft[$kind->value . "_id"];
             }
         }
+        foreach ($additional as $reference) {
+            $row = $this->classifications->get($reference);
+            if ($row['kind'] === 'department' && $row['school_id'] !== null) {
+                $ids[] = $row['school_id'];
+            }
+        }
         $ids = array_unique($ids);
         sort($ids, SORT_STRING);
         foreach ($ids as $id) {
             $this->classifications->lock(new EntityId($id));
         }
-        if ($this->specializations->classificationIds($program) !== $owners) {
+        if (
+            $this->specializations->classificationIds($program) !== $owners
+            || $this->ownershipIds($this->details->draft($program)) !== $programOwners
+        ) {
             throw new ConcurrentModificationException(
                 'Component organization changed while preparing publication. Review again.',
             );
@@ -514,6 +562,14 @@ final readonly class ProgramPublicationService
             $choices[$kind->value] =
             $row === null ? null : array_intersect_key($row, array_flip(["id", "code", "title"]));
         }
+        $primary = $draft['department_id'];
+        $choices['department_school'] = $primary === null ? null
+        : $this->classifications->get(new EntityId($primary))['school'];
+        $choices['additional_departments'] = array_map(function (string $id): array {
+            return \Domain\Catalog\ValueObject\DepartmentDefinition::fromClassification(
+                $this->classifications->get(new EntityId($id)),
+            )->data;
+        }, $draft['additional_department_ids']);
         $choices["additional_campuses"] = [];
         foreach ($draft["additional_campus_ids"] as $id) {
             $row = $this->classifications->get(new EntityId($id));
@@ -575,9 +631,27 @@ final readonly class ProgramPublicationService
 
     private function authorize(EntityId $actor): void
     {
-        if ($this->access->requirePermission("sis:catalog:manage")->value !== $actor->value) {
+        if (
+            $this->access->requirePermission("sis:catalog:manage")->value !== $actor->value
+            || $this->access->authenticatedUserId()->value !== $actor->value
+        ) {
             throw new AccessDeniedException("Access denied.");
         }
+    }
+
+    /** @return list<string> */
+    private function ownershipIds(array $draft): array
+    {
+        $ids = array_filter([$draft['department_id'], ...$draft['additional_department_ids']]);
+        foreach ($ids as $id) {
+            $row = $this->classifications->get(new EntityId($id));
+            if ($row['school_id'] !== null) {
+                $ids[] = $row['school_id'];
+            }
+        }
+        $ids = array_values(array_unique($ids));
+        sort($ids, SORT_STRING);
+        return $ids;
     }
 
     private function stream(EntityId $program): StreamReference

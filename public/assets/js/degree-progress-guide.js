@@ -49,7 +49,7 @@ window.curriculumOrganizationText = function (choice) {
             ? t("unknown", "not recorded in this publication")
             : department
                 ? `${department.code} — ${department.title}. ${t("school", "School/college")}: ` +
-                    (department.school
+                    (!Object.hasOwn(department, 'school') ? t('unknown', 'not recorded in this publication') : department.school
                         ? `${department.school.code} — ${department.school.title}`
                         : t("unassigned", "not assigned"))
                 : t("unassigned", "not assigned");
@@ -60,6 +60,16 @@ window.curriculumOrganizationText = function (choice) {
                 ? choice.additional_departments.map(describe).join("; ")
                 : t("none", "none");
     return `${t("primary", "Responsible department")}: ${primary}. ${t("additional", "Additional responsible departments")}: ${additional}`;
+};
+window.programOrganizationText = function (classifications) {
+    const department = classifications?.department;
+    return window.curriculumOrganizationText({
+        department: department ? { ...department,
+            ...Object.hasOwn(classifications, 'department_school') ? { school: classifications.department_school } : {},
+        } : null,
+        ...classifications && Object.hasOwn(classifications, 'additional_departments')
+            ? { additional_departments: classifications.additional_departments } : {},
+    });
 };
 window.curriculumOwnershipLabels = JSON.parse(
     document.getElementById("curriculum-ownership-labels")?.textContent || "{}",

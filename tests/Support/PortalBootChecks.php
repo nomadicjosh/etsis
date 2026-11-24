@@ -3086,7 +3086,7 @@ foreach (["campus-harbor", "campus-quad", "campus-horizon"] as $slug) {
         "campus-invitation",
     ];
     foreach ($foreachItems as $block) {
-        if (!isset($blocks[$block]) || $blocks[$block]->get("cache") !== false) {
+        if (!isset($blocks[$block]) || ($blocks[$block]->isPhpBlock() && $blocks[$block]->get("cache") !== false)) {
             throw new RuntimeException("Native campus block registration or privacy failed.");
         }
     }
@@ -3102,8 +3102,8 @@ foreach (["campus-harbor", "campus-quad", "campus-horizon"] as $slug) {
         );
     }
     $editor = new \Vihzhuo\Modules\GrapesJS\Block\BlockRenderer($theme, $page, true);
-    $html = $editor->renderWithSlug("campus-hero", [
-        "settings" => ["attributes" => ["headline" => "<script>fictional</script>"]],
+    $html = $editor->renderWithSlug("campus-courses", [
+        "settings" => ["attributes" => ["heading" => "<script>fictional</script>"]],
     ]);
     if (
         !str_contains($html, "&lt;script&gt;fictional&lt;/script&gt;") ||
@@ -3128,7 +3128,8 @@ $editor = new \Application\Service\PageEditor();
 $response = $editor->renderPageBuilder($empty);
 if (
     $response->getStatusCode() !== 200 ||
-    $empty->getBuilderData() !== \Application\Service\CampusPageTemplate::data()
+    $empty->getBuilderData() !== \Application\Service\CampusPageTemplate::data() ||
+    count($editor->getPageComponents($empty)[0]) !== 7
 ) {
     throw new RuntimeException("An empty portal page did not offer an editable starter.");
 }
@@ -4471,6 +4472,7 @@ if (
         "field_of_study_id" => null,
         "campus_id" => null,
         "additional_campus_ids" => [],
+        "additional_department_ids" => [],
         "award_id" => $programAward["id"],
         "revision" => $programDraft["revision"],
     ])->getStatusCode() !== 200
@@ -4515,6 +4517,9 @@ $specializationSave = [
     'kind' => 'specialization',
     'id' => null,
     'revision' => null,
+    'department_id' => null,
+    'parent_major_id' => null,
+    'additional_department_ids' => [],
     'code' => 'FOCUS.FICTIONAL',
     'title' => 'Fictional specialization',
     'description' => null,

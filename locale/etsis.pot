@@ -2604,3 +2604,15 @@ msgstr ""
 #: resources/views/backend/manager/editor-guide.phtml:39
 msgid "Page designer navigation"
 msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php
+msgid "Program department ownership"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php
+msgid "Add up to five departments that jointly administer this program. Each department keeps its own college. Program ownership is independent of major/minor ownership and grants no access or eligibility."
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php
+msgid "That department is already selected for this program."
+msgstr ""

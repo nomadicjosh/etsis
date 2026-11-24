@@ -235,6 +235,12 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                             "academic_year_code" => $r["context"]["academic_year_code"],
                             "cohort_changed" => $degree["cohort_changed"],
                             "group_reuse" => $r["definition"]["policies"]["group_reuse"] ?? null,
+                            ...isset(
+                                $r['program_publication']['definition']['classifications']['additional_departments'],
+                            )
+                                ? ['program_ownership' => \Domain\Catalog\ValueObject\ProgramClassifications::fromArray(
+                                    $r['program_publication']['definition']['classifications'],
+                                )->ownership()] : [],
                         ],
                     ];
                 }
@@ -351,6 +357,14 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                         "academic_year_code" => $requirements["context"]["academic_year_code"],
                         "cohort_changed" => $context["cohort_changed"],
                         "group_reuse" => $requirements["definition"]["policies"]["group_reuse"] ?? null,
+                        ...isset(
+                            $requirements['program_publication']['definition']['classifications'][
+                                'additional_departments'
+                            ],
+                        )
+                            ? ['program_ownership' => \Domain\Catalog\ValueObject\ProgramClassifications::fromArray(
+                                $requirements['program_publication']['definition']['classifications'],
+                            )->ownership()] : [],
                     ],
                 ];
             });

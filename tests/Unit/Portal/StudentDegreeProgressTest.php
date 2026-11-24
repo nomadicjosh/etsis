@@ -27,6 +27,24 @@ final class StudentDegreeProgressTest extends TestCase
             ->describe()['components'][1]);
     }
 
+    public function testProgramOwnershipIsRedactedAndEarlierUnknownOwnershipIsNotInvented(): void
+    {
+        $review = $this->review();
+        self::assertArrayNotHasKey('program_ownership', new StudentDegreeProgress($review)->describe()['context']);
+        $department = ['id' => \Domain\Shared\ValueObject\EntityId::generate()->value,
+            'code' => 'LING', 'title' => 'Fictional Languages',
+            'school' => ['id' => \Domain\Shared\ValueObject\EntityId::generate()->value,
+                'code' => 'ARTS', 'title' => 'Fictional Arts college']];
+        $review['context']['program_ownership'] = ['department' => null, 'additional_departments' => [$department]];
+        $safe = new StudentDegreeProgress($review)->describe()['context']['program_ownership'];
+        self::assertSame('Fictional Arts college', $safe['additional_departments'][0]['school']['title']);
+        self::assertArrayNotHasKey('id', $safe['additional_departments'][0]);
+        self::assertArrayNotHasKey('id', $safe['additional_departments'][0]['school']);
+        $review['context']['program_ownership']['additional_departments'][] = $department;
+        $this->expectException(\Domain\Shared\Exception\ValidationException::class);
+        new StudentDegreeProgress($review);
+    }
+
     private function review(string $outcome = "feasible"): array
     {
         $secret = "fictional-staff-only-detail";

@@ -139,10 +139,16 @@ final readonly class ProgramAssistanceService
             : ["code" => $value["code"], "title" => $value["title"]];
         $classifications = $definition->classifications->describe();
         $sites = $classifications["additional_campuses"] ?? null;
-        unset($classifications["additional_campuses"]);
+        $departments = $classifications['additional_departments'] ?? null;
+        unset($classifications["additional_campuses"], $classifications['additional_departments']);
         $classifications = array_map($labels, $classifications);
         if ($sites !== null) {
             $classifications["additional_campuses"] = array_map($labels, $sites);
+        }
+        if ($departments !== null) {
+            $classifications['additional_departments'] = array_map(static fn (array $owner): array => [
+                'code' => $owner['code'], 'title' => $owner['title'], 'school' => $labels($owner['school']),
+            ], $departments);
         }
         return [
             "kind" => "academic_program",
