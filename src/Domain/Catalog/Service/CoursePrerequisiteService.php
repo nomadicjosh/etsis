@@ -49,6 +49,7 @@ final readonly class CoursePrerequisiteService
         ?int $minimumRequirements = null,
         ?array $rule = null,
         ?string $creditOrigin = null,
+        ?array $requirementCreditOrigins = null,
     ): array {
         $actor = $this->authorize();
         $groups = new PrerequisiteGroups(
@@ -58,7 +59,8 @@ final readonly class CoursePrerequisiteService
             $corequisites,
             $minimumRequirements,
             $rule,
-            $creditOrigin
+            $creditOrigin,
+            $requirementCreditOrigins,
         );
         if (in_array($course->value, $groups->references(), true)) {
             throw new ValidationException([['field' => 'groups', 'message' => 'A course cannot require itself.']]);
@@ -122,6 +124,7 @@ final readonly class CoursePrerequisiteService
             'minimum_requirements' => $groups->minimumRequirements,
             'rule' => $groups->rule?->definition,
             'credit_origin' => $groups->creditOrigin,
+            'requirement_credit_origins' => $groups->requirementCreditOrigins,
             'grade_points_milli' => $groups->gradeFloors(), 'corequisites' => $groups->corequisites ?? [],
             'courses' => $this->relationships->prerequisiteLabels($groups->references())];
     }

@@ -45,6 +45,17 @@ final readonly class SqlCourseVersionProjection
             if ($r['prerequisite_credit_origin'] !== null) {
                 $definition['prerequisite_credit_origin'] = $r['prerequisite_credit_origin'];
             }
+            if ($r['requirement_origins_json'] !== null) {
+                if (!is_string($r['requirement_origins_json']) || strlen($r['requirement_origins_json']) > 2048) {
+                    throw new CorruptHistoryException();
+                }
+                $definition['prerequisite_requirement_credit_origins'] = json_decode(
+                    $r['requirement_origins_json'],
+                    true,
+                    4,
+                    JSON_THROW_ON_ERROR,
+                );
+            }
             if ($r['rule_json'] !== null) {
                 if (!is_string($r['rule_json']) || strlen($r['rule_json']) > 16384) {
                     throw new CorruptHistoryException();
@@ -185,11 +196,13 @@ final readonly class SqlCourseVersionProjection
     public function retain(PublishedCourseDefinition $definition): void
     {
         $floors = $definition->definition->prerequisiteGroups?->minimumGradePointsMilli;
+        $origins = $definition->definition->prerequisiteGroups?->requirementCreditOrigins;
         $r = [
             "id" => $definition->versionId->value,
             "course_id" => $definition->courseId->value,
             "schema_version" => 1,
             'prerequisite_credit_origin' => $definition->definition->prerequisiteGroups?->creditOrigin,
+            'requirement_origins_json' => $origins === null ? null : json_encode($origins, JSON_THROW_ON_ERROR),
             "requirement_minimum" => $definition->definition->prerequisiteGroups?->minimumRequirements,
             'rule_json' => $definition->definition->prerequisiteGroups?->rule === null ? null :
                 json_encode($definition->definition->prerequisiteGroups->rule->definition, JSON_THROW_ON_ERROR),

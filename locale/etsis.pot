@@ -3277,3 +3277,23 @@ msgstr ""
 #: resources/views/shared/notification-labels.php
 msgid "Delete notification"
 msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php
+msgid "Default for requirements without a coursework-source override. Co-requisites use their separate policy."
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php
+msgid "Coursework source for this requirement"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php
+msgid "Use course default"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php
+msgid "Override the default for this requirement only. Each counted course must meet this source and grade minimum together."
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php
+msgid "Effective coursework source"
+msgstr ""

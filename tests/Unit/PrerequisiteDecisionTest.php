@@ -77,4 +77,29 @@ final class PrerequisiteDecisionTest extends TestCase
         $this->expectException(CorruptHistoryException::class);
         PrerequisiteDecision::fromRetained($facts);
     }
+
+    public function testMalformedRequirementOriginsAreRejectedAndEarlierEvidenceKeepsItsShape(): void
+    {
+        $id = self::id(2);
+        $cases = [[], ['institutional', null], ['unknown'], [false], [[]], ['requirement' => 'either']];
+        foreach ($cases as $origins) {
+            try {
+                new \Domain\Catalog\ValueObject\PrerequisiteGroups([[$id]], requirementCreditOrigins: $origins);
+                self::fail('Malformed requirement sources were accepted.');
+            } catch (\InvalidArgumentException) {
+                self::assertTrue(true);
+            }
+        }
+        $facts = self::valid();
+        self::assertSame($facts, PrerequisiteDecision::fromRetained($facts)->retained());
+        foreach ([null, [], 'transfer', ['transfer'], [false]] as $origins) {
+            $bad = $facts + ['requirement_groups' => [[$id]], 'requirement_credit_origins' => $origins];
+            try {
+                PrerequisiteDecision::fromRetained($bad);
+                self::fail('Malformed or conflicting retained sources were accepted.');
+            } catch (CorruptHistoryException) {
+                self::assertSame('institutional', $facts['support'][0]['origin']);
+            }
+        }
+    }
 }

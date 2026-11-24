@@ -28,7 +28,8 @@ if ($response->getStatusCode() !== 200 || ($draft['groups'] ?? null) !== []) {
 }
 $groups = [[$first->courseId->value, $alternative->courseId->value, $additional->courseId->value],
     [$alternative->courseId->value]];
-$input = ['credit_origin' => null, 'minimum_requirements' => 1, 'groups' => $groups, 'minimums' => [2, 1],
+$input = ['requirement_credit_origins' => null, 'credit_origin' => null, 'minimum_requirements' => 1,
+    'groups' => $groups, 'minimums' => [2, 1],
     'grade_points_milli' => [2675, null], 'corequisites' => [$corequisite->courseId->value],
     'revision' => $draft['revision']];
 foreach ([0, -1, 3, 1.5, [], true] as $invalid) {
@@ -57,6 +58,22 @@ foreach ([null, [], [-1, null], [10001, null], ['2675', null], [2.5, null]] as $
         throw new RuntimeException('Malformed grade minima bypassed the actual prerequisite route.');
     }
 }
+foreach (['invalid', [], ['transfer'], ['either', false], ['bad', null], ['row' => 'transfer']] as $invalid) {
+    if (
+        $teachingPost($base . 'prerequisite-groups/', array_replace(
+            $input,
+            ['requirement_credit_origins' => $invalid]
+        ))->getStatusCode() !== 422
+    ) {
+        throw new RuntimeException('Malformed per-requirement sources bypassed the actual private route.');
+    }
+}
+$missingOrigins = $input;
+unset($missingOrigins['requirement_credit_origins']);
+if ($teachingPost($base . 'prerequisite-groups/', $missingOrigins)->getStatusCode() !== 422) {
+    throw new RuntimeException('The current prerequisite API accepted an omitted source-policy choice.');
+}
+$input['requirement_credit_origins'] = ['institutional', 'either'];
 foreach (
     [null, 'invalid', [123], [$target->courseId->value],
     [$corequisite->courseId->value, $corequisite->courseId->value]] as $invalid
@@ -93,6 +110,7 @@ if (
     ($review['definition']['prerequisite_group_minimums'] ?? null) !== [2, 1] ||
     ($review['definition']['prerequisite_requirement_minimum'] ?? null) !== 1 ||
     ($review['definition']['prerequisite_grade_points_milli'] ?? null) !== [2675, null] ||
+    ($review['definition']['prerequisite_requirement_credit_origins'] ?? null) !== ['institutional', 'either'] ||
     ($review['definition']['corequisites'] ?? null) !== [$corequisite->courseId->value]
 ) {
     throw new RuntimeException('Course publication omitted the reviewed prerequisite choices.');
@@ -111,6 +129,7 @@ if ($before !== $sis->sql->rows('sis_history_events')) {
 $currentNested = json_decode((string) $read()->getBody(), true, flags: JSON_THROW_ON_ERROR);
 $nestedRule = ['minimum' => 2, 'children' => [0, ['minimum' => 1, 'children' => [1, 2]]]];
 $nestedInput = array_replace($input, ['revision' => $currentNested['revision'], 'minimum_requirements' => null,
+    'requirement_credit_origins' => ['institutional', 'either', null],
     'rule' => $nestedRule, 'groups' => [...$groups, [$additional->courseId->value]], 'minimums' => [2, 1, 1],
     'grade_points_milli' => [2675, null, null]]);
 foreach (

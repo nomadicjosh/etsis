@@ -400,6 +400,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 $remaining->minimumRequirements,
                 $remaining->rule?->definition,
                 $remaining->creditOrigin,
+                $remaining->requirementCreditOrigins,
             ));
             return;
         }
@@ -433,7 +434,9 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 $groups->minimums === null ? null : [...$groups->minimums, 1],
                 $groups->minimumGradePointsMilli === null ? null : [...$groups->minimumGradePointsMilli, null],
                 $groups->corequisites,
-                creditOrigin: $groups->creditOrigin
+                creditOrigin: $groups->creditOrigin,
+                requirementCreditOrigins: $groups->requirementCreditOrigins === null ? null :
+                    [...$groups->requirementCreditOrigins, null],
             ));
             return;
         }

@@ -29,6 +29,7 @@ final readonly class PrerequisiteGroups
         public ?int $minimumRequirements = null,
         ?array $rule = null,
         public ?string $creditOrigin = null,
+        public ?array $requirementCreditOrigins = null,
     ) {
         if (
             !array_is_list($groups) || count($groups) > 100 ||
@@ -50,6 +51,17 @@ final readonly class PrerequisiteGroups
             throw new InvalidArgumentException('Choose institutional, transfer or either prerequisite coursework.');
         }
         $ids = [];
+        if (
+            $requirementCreditOrigins !== null && ($groups === [] || !array_is_list($requirementCreditOrigins)
+            || count($requirementCreditOrigins) !== count($groups))
+        ) {
+            throw new InvalidArgumentException('Provide one optional coursework-source override per requirement.');
+        }
+        foreach ($requirementCreditOrigins ?? [] as $origin) {
+            if ($origin !== null && !in_array($origin, ['either', 'institutional', 'transfer'], true)) {
+                throw new InvalidArgumentException('Choose inherited, institutional, transfer or either coursework.');
+            }
+        }
         foreach ($groups as $index => &$group) {
             if (!is_array($group) || !array_is_list($group) || $group === [] || count($group) > 100) {
                 throw new InvalidArgumentException('Every prerequisite requirement needs at least one course.');
@@ -143,17 +155,38 @@ final readonly class PrerequisiteGroups
      * @param array<string,int> $points */
     public function missing(array $completed, array $points = []): int
     {
-        $missing = 0;
         $met = [];
         $counts = $this->counts();
         foreach ($this->groups as $index => $group) {
             $met[$index] = count($this->completedInGroup($index, $completed, $points)) >= $counts[$index];
-            $missing += (int) !$met[$index];
         }
-        if ($this->rule !== null) {
-            return $this->rule->missing($met);
+        return $this->missingFromOutcomes($met);
+    }
+
+    /** The caller qualifies actual coursework separately for each requirement. */
+    public function missingFromOutcomes(array $met): int
+    {
+        return $this->rule?->missing($met) ?? max(
+            0,
+            $this->requiredRequirements() - count(array_filter($met)),
+        );
+    }
+
+    public function originForRequirement(int $index): string
+    {
+        return $this->requirementCreditOrigins[$index] ?? $this->creditOrigin ?? 'either';
+    }
+
+    /** A course may occur in several requirements with different source policies. */
+    public function acceptsOrigin(string $course, string $origin): bool
+    {
+        foreach ($this->groups as $index => $group) {
+            $policy = $this->originForRequirement($index);
+            if (in_array($course, $group, true) && ($policy === 'either' || $policy === $origin)) {
+                return true;
+            }
         }
-        return max(0, $this->requiredRequirements() - (count($this->groups) - $missing));
+        return false;
     }
 
     public function requiredRequirements(): int
@@ -184,7 +217,7 @@ final readonly class PrerequisiteGroups
      * @param list<string> $selected */
     public function subset(array $selected): self
     {
-        $groups = $minimums = $floors = [];
+        $groups = $minimums = $floors = $origins = [];
         $counts = $this->counts();
         foreach ($this->groups as $index => $group) {
             $remaining = array_values(array_intersect($group, $selected));
@@ -200,6 +233,7 @@ final readonly class PrerequisiteGroups
             $groups[] = $remaining;
             $minimums[] = $counts[$index];
             $floors[] = $this->minimumGradePointsMilli[$index] ?? null;
+            $origins[] = $this->requirementCreditOrigins[$index] ?? null;
         }
         if ($groups !== [] && $this->minimumRequirements !== null && count($groups) < $this->minimumRequirements) {
             throw new ValidationException([['field' => 'prerequisites',
@@ -217,7 +251,8 @@ final readonly class PrerequisiteGroups
             $this->corequisites === null ? null : array_values(array_intersect($this->corequisites, $selected)),
             $groups === [] ? null : $this->minimumRequirements,
             $groups === [] ? null : $this->rule?->definition,
-            $groups === [] ? null : $this->creditOrigin
+            $groups === [] ? null : $this->creditOrigin,
+            $groups === [] || $this->requirementCreditOrigins === null ? null : $origins,
         );
     }
 }

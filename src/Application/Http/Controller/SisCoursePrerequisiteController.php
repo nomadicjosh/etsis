@@ -45,6 +45,12 @@ final readonly class SisCoursePrerequisiteController
             );
         }
         $f = FormInput::from($request);
+        if (
+            !array_key_exists('requirement_credit_origins', $body)
+            || ($body['requirement_credit_origins'] !== null && !is_array($body['requirement_credit_origins']))
+        ) {
+            throw new \InvalidArgumentException('Provide requirement coursework sources or explicitly inherit all.');
+        }
         return new JsonResponse($this->service->save(
             new EntityId($id),
             $f->values('groups', 100),
@@ -54,7 +60,8 @@ final readonly class SisCoursePrerequisiteController
             array_key_exists('corequisites', $body) ? $f->values('corequisites', 20) : null,
             $f->optionalInteger('minimum_requirements'),
             $body['rule'] ?? null,
-            $body['credit_origin']
+            $body['credit_origin'],
+            $body['requirement_credit_origins'],
         ));
     }
 

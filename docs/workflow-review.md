@@ -4,6 +4,14 @@ The legacy system is the feature inventory, not a requirement to reproduce its s
 
 “Working” below describes a workflow available in the current code. “Partial” means useful pieces work but the broader recommendation still needs implementation. “Proposed” is a design recommendation, not completed functionality.
 
+## Completed: per-requirement prerequisite coursework sources
+
+**Working.** [Requirement-specific source policies](course-publication.md#coursework-source-for-each-prerequisite-requirement) connect existing catalog cards, default inheritance, count/grade minima, cloning/removal, retained course definitions and shared staff/student registration review. An explicit either-source override can broaden a restrictive default. Repeated courses with different source policies retain distinct actual support; a grade from an excluded source cannot satisfy a requirement. Counted/nested routes, pursuit allowance and independent exceptions retain their semantics.
+
+Draft changes preserve pending/stale edits. Original publications/accepted retries keep their absent fields or exact recorded overrides/evidence; no policy is inferred. Confirmation-local retained-definition comparisons and source fingerprints include overrides, so final source/authority/audit changes roll back registration effects. The additive nullable draft/version columns require no journal conversion. Explicit course equivalence and further institutional eligibility overrides remain open.
+
+Validation: **131 distinct PHP tests / 1,048 assertions**, **26 browser scenarios** and **19 JavaScript cases** pass. Coverage includes actual private/CSRF routes, retained evidence, source/grade-specific repeated work, selected publications, independent exceptions, clone/subset rules and pending/stale edits. Keyboard, enlarged-text/320px reflow and automated WCAG checks include full effective-source text beneath narrow selectors; screenshots were inspected. Migration 11 is applied to the inspected configured MariaDB, preserving twenty protected events with the same checksum and leaving the earlier course publication's new field null. Five-dialect compilation and populated SQLite preservation supplement native acceptance; broader live deployment and institutional qualification remain open. Heavy checks ran sequentially at low priority with explicit memory/time limits and one browser worker.
+
 ## Completed: waitlist outcome updates and personal notification deletion
 
 **Working.** [New waitlist outcomes](registration-history.md#private-waitlist-outcome-updates) now connect accepted registrations/staff removals with canonical account-pinned notices in the shared staff/portal bell. Twenty-row on-demand pages, read filters, explicit refresh and registration navigation expose only the person's own minimized outcome. Failed commands and accepted retries create none; earlier facts are not backfilled. Queue, academic and finance history remains protected in the existing journal.

@@ -87,6 +87,7 @@ final readonly class CourseDefinition
         }
         $groupFields = [
             'prerequisite_group_minimums', 'prerequisite_grade_points_milli', 'corequisites', 'prerequisite_rule',
+            'prerequisite_requirement_credit_origins',
         ];
         foreach ($groupFields as $field) {
             if (array_key_exists($field, $data)) {
@@ -142,7 +143,8 @@ final readonly class CourseDefinition
                     $data["corequisites"] ?? null,
                     $data["prerequisite_requirement_minimum"] ?? null,
                     $data['prerequisite_rule'] ?? null,
-                    $data['prerequisite_credit_origin'] ?? null
+                    $data['prerequisite_credit_origin'] ?? null,
+                    $data['prerequisite_requirement_credit_origins'] ?? null,
                 ) : null,
             isset($data['credit_policy']) ? CreditPolicy::fromArray($data['credit_policy']) : null,
         );
@@ -170,6 +172,8 @@ final readonly class CourseDefinition
         ['prerequisite_rule' => $this->prerequisiteGroups->rule->definition]) +
         ($this->prerequisiteGroups?->creditOrigin === null ? [] :
         ['prerequisite_credit_origin' => $this->prerequisiteGroups->creditOrigin]) +
+        ($this->prerequisiteGroups?->requirementCreditOrigins === null ? [] :
+        ['prerequisite_requirement_credit_origins' => $this->prerequisiteGroups->requirementCreditOrigins]) +
         $this->text->describe() + [
             "subject" => $this->subject?->describe(),
             "classifications" => $this->classifications->describe(),

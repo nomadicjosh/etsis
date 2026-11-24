@@ -14,13 +14,14 @@ for (const context of ['workspace-config', 'campus-config']) {
                     el.append(...children); return el;
                 };
                 document.getElementById('checks').append(window.createRegistrationSchedule({ node }).prerequisites({
-                    course_statuses: ['missing'], groups: [{ positions: [0], required_count: 1, completed_count: 0, met: false }],
+                    course_statuses: ['missing'], groups: [{ positions: [0], required_count: 1, completed_count: 0, met: false, credit_origin: origin === 'transfer' ? 'institutional' : 'transfer' }],
                     group_policy: { credit_origin: origin, required_count: 1, completed_count: 0, total_count: 1 },
                 }, [{ code: '<img> HIST 101', title: 'Fictional history' }]));
             }, origin);
             await page.getByText('Required courses', { exact: true }).press('Enter');
             const label = { institutional: 'Institutional work only', transfer: 'Transfer work only', either: 'Institutional or transfer' }[origin];
             await expect(page.getByText(`Qualifying prerequisite coursework: ${label}`, { exact: true })).toBeVisible();
+            await expect(page.locator('ol').getByText(`Qualifying prerequisite coursework: ${origin === 'transfer' ? 'Institutional work only' : 'Transfer work only'}`, { exact: true })).toBeVisible();
             await expect(page.getByText('This rule does not change earned credits or decide which work counts toward a degree.', { exact: true })).toBeVisible();
             await expect(page.locator('img')).toHaveCount(0);
             await page.setViewportSize({ width: 320, height: 800 });

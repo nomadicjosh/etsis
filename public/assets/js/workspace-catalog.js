@@ -2,6 +2,8 @@
 window.createWorkspaceCatalog = function (ui) {
     "use strict";
     const { node, request, task, buildForm, formData, openDrawer, table, money } = ui;
+    const prerequisiteOriginText = key => ui.prerequisiteOriginLabels?.[key] ||
+        { either: 'Institutional or transfer', institutional: 'Institutional work only', transfer: 'Transfer work only' }[key];
     const button = (label, callback, style = "btn-outline-primary") =>
         node(
             "button",
@@ -138,6 +140,7 @@ window.createWorkspaceCatalog = function (ui) {
         const body = openDrawer("Review course clone", "DETAILS → REVIEW → SAVE DRAFT");
         const groups = (review.prerequisite_groups || []).map((group, index) => ({
             selected: group.filter(id => prerequisites.includes(id)), minimum: review.prerequisite_minimums?.[index] || 1, grade: review.prerequisite_grade_points_milli?.[index] ?? null,
+            origin: review.prerequisite_requirement_credit_origins?.[index] ?? review.prerequisite_credit_origin ?? 'either',
         })).filter(group => group.selected.length);
         const overallMinimum = groups.length ? review.prerequisite_requirement_minimum : null;
         const invalidChoices = groups.some(group => group.selected.length < group.minimum) ||
@@ -173,7 +176,8 @@ window.createWorkspaceCatalog = function (ui) {
                 `${review.prerequisite_rule ? "Retained nested rule" : overallMinimum == null ? "All retained requirements" : `Meet ${overallMinimum} of ${groups.length} retained requirements`}: ` + groups.map(group => `${group.minimum > 1 ? `At least ${group.minimum} of: ` : ""}` +
                     group.selected.map(id => review.prerequisites.find(row => row.id === id)?.code || "Course")
                         .join(group.minimum > 1 ? "; " : " OR ") +
-                    (group.grade === null ? "" : ` · Minimum ${group.grade / 1000} grade points per counted course`)).join(overallMinimum == null ? " AND " : "; ") +
+                    (group.grade === null ? "" : ` · Minimum ${group.grade / 1000} grade points per counted course`) +
+                    (review.prerequisite_requirement_credit_origins ? ` · ${prerequisiteOriginText(group.origin)}` : '')).join(overallMinimum == null ? " AND " : "; ") +
                     (review.prerequisite_rule ? ". Keep every nested requirement or clear all prerequisites; restructure the cloned draft afterwards." : ". Unselected groups are omitted from the cloned draft.")) : null,
             groups.length && review.prerequisite_rule ? ui.prerequisites().ruleView(review.prerequisite_rule) : null,
             review.corequisites?.some(id => prerequisites.includes(id)) ? node("p", { class: "form-text" },

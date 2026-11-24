@@ -51,28 +51,31 @@ final readonly class PrerequisiteService
                 $work['grade_recorded'] &&
                 $work['grade'] !== null &&
                 $work['grade']['passes'] &&
-                in_array($work['status'], ['A', 'N'], true) &&
-                ($groups?->creditOrigin === null ||
-                $groups->creditOrigin === 'either' ||
-                    ($references[$work['id']]['origin'] ?? null) === $groups->creditOrigin)
+                in_array($work['status'], ['A', 'N'], true)
             ) {
                 $course = $work['course_id'];
-                $gradePoints = $work['grade']['points_milli'];
-                if (
-                    !in_array($course, $required, true) ||
-                    (isset($completed[$course]) &&
-                        (($withPoints && $points[$course] > $gradePoints) ||
-                        ((!$withPoints || $points[$course] === $gradePoints) &&
-                            strcmp($completed[$course]['credit_id'], $work['id']) < 0)))
-                ) {
+                if (!in_array($course, $required, true)) {
                     continue;
                 }
                 $ref = $references[$work['id']] ?? null;
                 if ($ref === null) {
                     throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
                 }
-                $points[$course] = $gradePoints;
-                $completed[$course] = ['course_id' => $course, 'credit_id' => $work['id'],
+                if ($groups !== null && !$groups->acceptsOrigin($course, $ref['origin'])) {
+                    continue;
+                }
+                $key = $groups?->requirementCreditOrigins === null ? $course : $course . ':' . $ref['origin'];
+                $gradePoints = $work['grade']['points_milli'];
+                if (
+                    (isset($completed[$key]) &&
+                        (($withPoints && $points[$key] > $gradePoints) ||
+                        ((!$withPoints || $points[$key] === $gradePoints) &&
+                            strcmp($completed[$key]['credit_id'], $work['id']) < 0)))
+                ) {
+                    continue;
+                }
+                $points[$key] = $gradePoints;
+                $completed[$key] = ['course_id' => $course, 'credit_id' => $work['id'],
                     'origin' => $ref['origin'], 'source_id' => $ref['source_id'],
                     'academic_version' => $ref['academic_version'],
                     'registration_version' => $ref['registration_version'],
