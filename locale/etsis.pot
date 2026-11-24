@@ -2700,3 +2700,95 @@ msgstr ""
 #: resources/views/shared/profile-request-labels.php
 msgid "Kept in restricted profile history. The resolution note is the message shown to the owner."
 msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Policy for this determination"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Use the current effective policy"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "The institution policy applies unless this program has a current override."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Choose a published policy"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Select a publication only when the institution authorizes its use for this determination. The reason must explain the choice. Registration quantities are verified as of today; this selection does not reconstruct an earlier census or set a default for this pursuit."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Publication scope"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Institution"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "This program"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Publication {version} · {date}"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Use publication {version}"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "No credit bands in this publication. It cannot be selected."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "No policy publications are available in this scope."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "More publications"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Previous publications"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Back to determination"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Retry publication list"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Loading verified policy publications…"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Policy publications could not be loaded. Retry or return to the determination."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Explicitly selected publication for this determination"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Current effective policy at determination"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "The selection basis and publication date were not separately recorded."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "Record the current term using verified registered credits and the reviewed policy. This action does not backdate a census, replace an earlier determination or change registrations or charges."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php
+msgid "{label}: from {credits} credits"
+msgstr ""

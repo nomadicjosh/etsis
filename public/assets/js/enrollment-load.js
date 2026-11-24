@@ -2,9 +2,17 @@
 window.createEnrollmentLoadReview = function (ui) {
     "use strict";
     const { node, request, task, historyCheckLabels: labels = {} } = ui;
+    const policyLabels = JSON.parse(document.getElementById('enrollment-load-labels')?.textContent || '{}');
+    const dates = new Intl.DateTimeFormat(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' });
+    const publication = policy => policyLabels.publication?.replace('{version}', policy.publication_version).replace('{date}', dates.format(new Date(policy.published_at)));
+    const threshold = band => policyLabels.threshold?.replace('{label}', band.label).replace('{credits}', credits(band.min_credits_milli));
+    const policyBasis = policy => node('div', { class: 'small mb-2' },
+        node('p', { class: 'mb-1' }, policy.basis === 'selected_publication' ? policyLabels.selected
+            : policy.basis === 'current_policy' ? policyLabels.effective : policyLabels.unrecorded),
+        policy.publication_version ? node('p', { class: 'mb-1 text-break' }, publication(policy)) : null);
     const credits = milli => (milli / 1000).toLocaleString(undefined, { maximumFractionDigits: 3 });
     let sequence = 0;
-    return function mount(container, base, { canDetermine = false, canReadDeterminations = true, correctCredits = null, checkDetermination = null, initialHistory = null } = {}) {
+    return function mount(container, base, { canDetermine = false, canSelectPolicy = false, canReadDeterminations = true, correctCredits = null, checkDetermination = null, initialHistory = null } = {}) {
         const root = node("section", { class: "surface border rounded p-3 my-3", "aria-label": "Enrollment load" });
         container.append(root);
         let serial = 0;
@@ -58,6 +66,7 @@ window.createEnrollmentLoadReview = function (ui) {
             for (const item of data.items) {
                 const details = node("details", {}, node("summary", {}, "Recorded policy and basis"),
                     node("p", {}, `${item.program.code} · ${item.program.title}. Policy: ${item.policy.source === 'program' ? 'Program' : 'Institution'}. Basis: accepted registered credits.`),
+                    policyBasis(item.policy),
                     node("ul", {}, ...item.policy.definition.bands.map(band => node("li", {}, `${band.label}: from ${credits(band.min_credits_milli)} credits`))),
                     node("p", { class: "form-text" }, "Individual registration sources remain in protected academic history."));
                 root.append(node("article", { class: "border rounded p-3 my-2" },
@@ -73,16 +82,99 @@ window.createEnrollmentLoadReview = function (ui) {
         }
         function determinationForm(term) {
             const identity = `load-determination-${++sequence}`;
+            let selection = null, selectionPage = 0;
             const input = node("textarea", { id: identity, class: "form-control", required: true, maxlength: "1000" });
             const submit = node("button", { type: "submit", class: "btn btn-primary mt-2" }, "Review load determination");
-            const form = node("form", { class: "mt-3" }, node("label", { for: identity, class: "form-label" }, "Reason for recording load"), input,
-                node("p", { class: "form-text" }, "Record the current term using its published policy and original accepted registration quantities. This action does not backdate a census, replace an earlier determination or change registrations or charges."), submit);
+            const chosen = node('div', { role: 'status', class: 'mb-2' });
+            const chooser = node('div', { class: 'border rounded p-3 mb-3', hidden: true });
+            const controls = node('fieldset', { class: 'border-0 p-0 m-0' },
+                node('legend', { class: 'h6' }, policyLabels.policy), chosen);
+            function currentPolicy() {
+                ++selectionPage;
+                selection = null;
+                chooser.hidden = true;
+                submit.disabled = false;
+                chosen.replaceChildren(node('p', { class: 'mb-1' }, policyLabels.current),
+                    node('p', { class: 'form-text' }, policyLabels.current_help));
+            }
+            async function publications(source = 'global', cursor = null, stack = []) {
+                const pageToken = ++selectionPage;
+                const rootToken = serial;
+                chooser.hidden = false;
+                submit.disabled = true;
+                const close = () => {
+                    ++selectionPage;
+                    chooser.hidden = true;
+                    submit.disabled = false;
+                    input.focus();
+                };
+                chooser.replaceChildren(node('p', { role: 'status' }, policyLabels.loading), button(policyLabels.close, close));
+                let data;
+                try {
+                    data = await request(`${base}policy-choices/`, 'POST', { source, cursor });
+                } catch (error) {
+                    if (alive(rootToken) && pageToken === selectionPage) {
+                        chooser.replaceChildren(node('p', { role: 'alert' }, policyLabels.failed),
+                            button(policyLabels.retry, () => publications(source, cursor, stack)), button(policyLabels.close, close));
+                    }
+                    throw error;
+                }
+                if (!alive(rootToken) || pageToken !== selectionPage) return;
+                const scopeId = `${identity}-scope`;
+                const scope = node('select', { id: scopeId, class: 'form-select mb-3' },
+                    node('option', { value: 'global' }, policyLabels.global), node('option', { value: 'program' }, policyLabels.program));
+                scope.value = source;
+                scope.addEventListener('change', () => task(() => publications(scope.value)));
+                chooser.replaceChildren(node('label', { for: scopeId, class: 'form-label' }, policyLabels.source), scope,
+                    node('p', { class: 'form-text' }, policyLabels.selection_help));
+                for (const item of data.items) {
+                    const card = node('article', { class: 'border rounded p-3 my-2 text-break' },
+                        node('h4', { class: 'h6' }, publication(item)));
+                    if (item.definition) {
+                        card.append(node('ul', {}, ...item.definition.bands.map(band => node('li', {}, threshold(band)))),
+                            button(policyLabels.pick.replace('{version}', item.publication_version), () => {
+                                ++selectionPage;
+                                selection = { source, version_id: item.version_id };
+                                chosen.replaceChildren(node('p', { class: 'mb-1' }, policyLabels.selected),
+                                    node('p', { class: 'mb-1 text-break' }, `${policyLabels[source]} · ${publication(item)}`),
+                                    node('ul', {}, ...item.definition.bands.map(band => node('li', {}, threshold(band)))));
+                                chooser.hidden = true;
+                                submit.disabled = false;
+                                input.focus();
+                            }));
+                    } else card.append(node('p', { class: 'form-text' }, policyLabels.cleared));
+                    chooser.append(card);
+                }
+                if (!data.items.length) chooser.append(node('p', { role: 'status' }, policyLabels.empty));
+                const navigation = node('div', { class: 'd-flex flex-wrap gap-2' });
+                if (stack.length) navigation.append(button(policyLabels.previous, () => publications(source, stack.at(-1), stack.slice(0, -1))));
+                if (data.next_cursor) navigation.append(button(policyLabels.more, () => publications(source, data.next_cursor, [...stack, cursor])));
+                navigation.append(button(policyLabels.close, close));
+                chooser.append(navigation);
+                scope.focus();
+            }
+            const pick = button(policyLabels.select, () => publications());
+            if (canSelectPolicy) controls.append(node('div', { class: 'd-flex flex-wrap gap-2 mb-3' }, pick,
+                button(policyLabels.current, () => { currentPolicy(); input.focus(); })));
+            controls.append(chooser, node("label", { for: identity, class: "form-label" }, "Reason for recording load"), input,
+                node("p", { class: "form-text" }, policyLabels.record_help), submit);
+            const form = node("form", { class: "mt-3" }, controls);
+            currentPolicy();
             form.addEventListener("submit", event => {
                 event.preventDefault();
+                if (controls.disabled || !chooser.hidden) return;
                 task(async () => {
                     if (!form.reportValidity()) return;
                     const token = ++serial;
-                    const review = await request(`${base}record-review/`, "POST", { term_id: term.id, reason: input.value });
+                    ++selectionPage;
+                    const reviewedSelection = selection ? { ...selection } : null;
+                    controls.disabled = true;
+                    let review;
+                    try {
+                        review = await request(`${base}record-review/`, "POST", { term_id: term.id, reason: input.value, policy_selection: reviewedSelection });
+                    } finally {
+                        controls.disabled = false;
+                    }
                     if (!alive(token)) return;
                     form.hidden = true;
                     const result = review.result;
@@ -90,13 +182,15 @@ window.createEnrollmentLoadReview = function (ui) {
                         node("h3", { class: "h6" }, "Review this retained determination"),
                         node("p", {}, `${result.term.code} · ${result.as_of_date} · ${credits(result.credits_milli)} registered credits · ${result.classification?.label || 'Not registered'}`),
                         node("p", {}, `Policy: ${result.policy.source === 'program' ? 'Program' : 'Institution'} · ${result.enrollment_count} active registrations`),
+                        policyBasis(result.policy),
                         node("details", {}, node("summary", {}, "Reviewed policy and registrations"),
                             node("ul", {}, ...result.policy.definition.bands.map(band => node("li", {}, `${band.label}: from ${credits(band.min_credits_milli)} credits`))),
                             node("ul", {}, ...result.items.map(item => node("li", {}, `${item.course_code} · ${item.course_title} · ${credits(item.credits_milli)} credits`)))),
                         node("p", { style: "white-space: pre-wrap" }, review.reason),
                         button("Confirm load determination", async () => {
                             await request(`${base}record-confirm/`, "POST", { term_id: term.id, operation_id: review.operation_id,
-                                revision: review.revision, reason: review.reason, review_token: review.review_token });
+                                revision: review.revision, reason: review.reason, review_token: review.review_token,
+                                policy_selection: reviewedSelection });
                             if (alive(token)) await history(term);
                         }),
                         button("Back to determination editing", () => { ++serial; confirmation.remove(); form.hidden = false; input.focus(); }));
@@ -287,7 +381,7 @@ window.createWorkspaceEnrollmentLoad = function (ui) {
     }
     function open(student, pursuit, initialHistory = null) {
         const body = openDrawer("Enrollment load", "STUDENT PROGRAM");
-        mount(body, `/sis/students/${student}/programs/${pursuit}/load/`, { canDetermine: can("sis:load:determine"), canReadDeterminations: can("sis:load:determine"),
+        mount(body, `/sis/students/${student}/programs/${pursuit}/load/`, { canDetermine: can("sis:load:determine"), canSelectPolicy: can('sis:load:policy'), canReadDeterminations: can("sis:load:determine"),
             initialHistory,
             checkDetermination: can("sis:load:determine") && can("sis:student:read") && can("sis:history:verify") && can("sis:audit:read")
                 ? (id, state) => ui.historyChecks().open('load', id, () => open(student, pursuit, state)) : null,

@@ -9,6 +9,15 @@ use Symfony\Component\Process\Process;
 
 final class ConsoleBootstrapTest extends TestCase
 {
+    public function testLoadPublicationChoicesUseActualProvidersCsrfAndIndependentPolicyAuthority(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-enrollment-load']);
+        $process->setTimeout(12);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testAnnouncementRoutesKeepPrivateOwnerStateCsrfAndExistingPublications(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',

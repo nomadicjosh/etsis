@@ -7,7 +7,7 @@ const id = n => String(n).padStart(26, '0');
 test('load bands review, preserve a draft, publish and review selected student registrations on demand', async ({ page }) => {
     const student = id(1), pursuit = id(3), program = id(4), term = id(5);
     const calls = [], errors = [];
-    let definition = null, revision = 'a'.repeat(64), position = 0, recorded = false, confirmations = 0, releaseConfirm = null;
+    let definition = null, revision = 'a'.repeat(64), position = 0, recorded = false, confirmations = 0, releaseConfirm = null, choices = 0, reviews = 0, releaseReview = null;
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -23,7 +23,12 @@ test('load bands review, preserve a draft, publish and review selected student r
         else if (path === `/sis/students/${student}/`) result = { id: student, person_id: id(2), given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', active: true, primary_program: { id: program, code: 'BS.CS', title: 'Fictional computing' }, entry_term: { id: term, code: '26/FA' }, revision: 'student' };
         else if (path.endsWith('/programs/')) result = { items: [{ id: pursuit, program_id: program, program_code: 'BS.CS', program_title: 'Fictional computing', term_code: '26/FA', status: 'active', is_primary: true }], next_after: null };
         else if (path.endsWith('/load/terms/')) result = { items: [{ id: term, code: '26/FA', starts_on: '2026-08-24', ends_on: '2026-12-18' }], next_after: null };
-        else if (path.endsWith('/load/record-review/')) result = { operation_id: id(25), revision: 'c'.repeat(64), reason: data.reason, review_token: 'fictional-record-proof', result: { term: { code: '26/FA' }, as_of_date: '2026-11-21', credits_milli: 6250, classification: { label: 'Full time' }, enrollment_count: 1, policy: { source: 'global', definition }, items: [{ course_code: 'MATH.101', course_title: 'Fictional <b>Algebra</b>', credits_milli: 6250 }] } };
+        else if (path.endsWith('/load/policy-choices/')) {
+            if (++choices === 1) return route.fulfill({ status: 503, json: { error: 'Fictional temporary policy failure.' } });
+            const publication = { version_id: id(23), publication_version: data.cursor ? 21 : 1, published_at: '2026-08-01T12:00:00+00:00', definition };
+            result = { source: data.source, items: data.source === 'program' ? [{ ...publication, definition: null }] : [publication], next_cursor: data.source === 'global' && !data.cursor ? 'fictional-protected-cursor' : null };
+        }
+        else if (path.endsWith('/load/record-review/')) { if (++reviews === 1) await new Promise(resolve => { releaseReview = resolve; }); result = { operation_id: id(25), revision: 'c'.repeat(64), reason: data.reason, policy_selection: data.policy_selection, review_token: 'fictional-record-proof', result: { term: { code: '26/FA' }, as_of_date: '2026-11-21', credits_milli: 6250, classification: { label: 'Full time' }, enrollment_count: 1, policy: { source: 'global', definition, basis: data.policy_selection ? 'selected_publication' : 'current_policy', publication_version: 1, published_at: '2026-08-01T12:00:00+00:00' }, items: [{ course_code: 'MATH.101', course_title: 'Fictional <b>Algebra</b>', credits_milli: 6250 }] } }; }
         else if (path.endsWith('/load/record-confirm/')) { confirmations++; if (confirmations === 1) return route.fulfill({ status: 409, json: { error: 'Fictional stale evidence. Review again.' } }); if (confirmations === 2) await new Promise(resolve => { releaseConfirm = resolve; }); recorded = true; result = { status: 'recorded' }; }
         else if (path.endsWith('/load/determinations/')) result = { items: recorded ? [{ term: { code: '26/FA' }, program: { code: 'BS.CS', title: 'Fictional computing' }, as_of_date: '2026-11-21', recorded_at: '2026-11-21T12:00:00Z', credits_milli: 6250, classification: { label: 'Full time' }, enrollment_count: 1, policy: { source: 'global', definition } }] : [], next_after: null };
         else if (path.endsWith('/load/review/')) result = { status: 'ready', term: { code: '26/FA' }, term_timing: 'current', program: { code: 'BS.CS', title: 'Fictional computing' }, credits_milli: 6250, classification: { label: 'Full time' }, policy: { source: 'global' }, items: [{ course_code: 'MATH.101', course_title: 'Fictional <b>Algebra</b>', credits_milli: 6250 }] };
@@ -64,9 +69,42 @@ test('load bands review, preserve a draft, publish and review selected student r
     await expect(page.locator('#drawer-body b')).toHaveCount(0);
     await expect(page.locator('#drawer-body')).toContainText('not an official census');
     await page.getByLabel('Reason for recording load', { exact: true }).fill('Fictional retained enrollment decision.');
+    expect(calls.some(c => c.path.endsWith('/load/policy-choices/'))).toBe(false);
+    await page.getByRole('button', { name: 'Choose a published policy', exact: true }).click();
+    await expect(page.getByText('Policy publications could not be loaded. Retry or return to the determination.', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Retry publication list', exact: true }).click();
+    await page.getByLabel('Publication scope', { exact: true }).selectOption('program');
+    await expect(page.getByText('No credit bands in this publication. It cannot be selected.', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Use publication 1', exact: true })).toHaveCount(0);
+    await page.getByLabel('Publication scope', { exact: true }).selectOption('global');
+    await page.getByRole('button', { name: 'More publications', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Use publication 21', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Previous publications', exact: true }).click();
+    await page.setViewportSize({ width: 320, height: 812 });
+    const chooserAxe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(chooserAxe.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) }))).toEqual([]);
+    await page.screenshot({ path: '/tmp/etsis-load-chooser.png', fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Use publication 1', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByLabel('Reason for recording load', { exact: true })).toBeFocused();
+    await expect(page.getByLabel('Reason for recording load', { exact: true })).toHaveValue('Fictional retained enrollment decision.');
     await page.getByRole('button', { name: 'Review load determination', exact: true }).click();
+    await expect.poll(() => typeof releaseReview).toBe('function');
+    await expect(page.getByLabel('Reason for recording load', { exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Use the current effective policy', exact: true })).toBeDisabled();
+    releaseReview();
+    await expect(page.getByRole('region', { name: 'Confirm enrollment load determination', exact: true })).toContainText('Explicitly selected publication for this determination');
     await page.getByRole('button', { name: 'Back to determination editing', exact: true }).click();
     await expect(page.getByLabel('Reason for recording load', { exact: true })).toHaveValue('Fictional retained enrollment decision.');
+    await expect(page.getByRole('status').filter({ hasText: 'Explicitly selected publication for this determination' })).toBeVisible();
+    await page.getByRole('button', { name: 'Use the current effective policy', exact: true }).click();
+    await page.getByRole('button', { name: 'Review load determination', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Confirm enrollment load determination', exact: true })).toContainText('Current effective policy at determination');
+    expect(calls.filter(c => c.path.endsWith('/load/record-review/')).at(-1).data.policy_selection).toBe(null);
+    await page.getByRole('button', { name: 'Back to determination editing', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose a published policy', exact: true }).click();
+    await page.getByRole('button', { name: 'Use publication 1', exact: true }).click();
     await page.getByRole('button', { name: 'Review load determination', exact: true }).click();
     await page.getByText('Reviewed policy and registrations', { exact: true }).click();
     await expect(page.getByRole('region', { name: 'Confirm enrollment load determination', exact: true })).toContainText('Fictional <b>Algebra</b>');
@@ -88,12 +126,14 @@ test('load bands review, preserve a draft, publish and review selected student r
     await expect(page.locator('#drawer-body')).toContainText('2026-11-21 · 6.25 credits · Full time');
     await page.getByText('Recorded policy and basis', { exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Full time: from 6.25 credits');
+    await expect(page.locator('#drawer-body')).toContainText('The selection basis and publication date were not separately recorded.');
     await expect(page.locator('#drawer-body')).not.toContainText('Algebra');
     await page.setViewportSize({ width: 320, height: 812 });
     const recordsAxe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(recordsAxe.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) }))).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(calls.filter(c => c.data).every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    expect(calls.filter(c => c.path.endsWith('/load/record-confirm/')).every(c => c.data.policy_selection.source === 'global' && c.data.policy_selection.version_id === id(23))).toBe(true);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(errors).toEqual([]);
 });
@@ -110,7 +150,7 @@ test('assigned advisor opens load only on request, withholds a total on incomple
         else if (path.endsWith('/standing/')) result = { items: [], as_of: '2026-08-10' };
         else if (path.endsWith('/progress/')) result = { status: 'needs_selection' };
         else if (path.endsWith('/load/terms/')) result = { items: [{ id: id(5), code: '26/FA', starts_on: '2026-08-24', ends_on: '2026-12-18' }], next_after: null };
-        else if (path.endsWith('/load/determinations/')) result = { items: [{ term: { code: '26/FA' }, program: { code: 'BS.CS', title: 'Computing' }, as_of_date: '2026-08-10', recorded_at: '2026-08-10T12:00:00Z', credits_milli: 3000, classification: { label: 'Part time' }, enrollment_count: 1, policy: { source: 'global', definition: { bands: [{ label: 'Part time', min_credits_milli: 0 }] } } }], next_after: null };
+        else if (path.endsWith('/load/determinations/')) result = { items: [{ term: { code: '26/FA' }, program: { code: 'BS.CS', title: 'Computing' }, as_of_date: '2026-08-10', recorded_at: '2026-08-10T12:00:00Z', credits_milli: 3000, classification: { label: 'Part time' }, enrollment_count: 1, policy: { source: 'global', basis: 'selected_publication', publication_version: 2, published_at: '2026-08-01T12:00:00+00:00', definition: { bands: [{ label: 'Part time', min_credits_milli: 0 }] } } }], next_after: null };
         else if (path.endsWith('/load/review/')) result = { status: 'needs_review', term: { code: '26/FA' }, program: { code: 'BS.CS', title: 'Computing' }, credits_milli: null, classification: null, items: [] };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
@@ -124,8 +164,12 @@ test('assigned advisor opens load only on request, withholds a total on incomple
     await expect(page.getByRole('region', { name: 'Enrollment load', exact: true })).not.toContainText('registered credits ·');
     await page.getByRole('button', { name: 'Recorded determinations for this term', exact: true }).click();
     await expect(page.getByRole('region', { name: 'Enrollment load', exact: true })).toContainText('2026-08-10 · 3 credits · Part time');
+    await page.getByText('Recorded policy and basis', { exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Enrollment load', exact: true })).toContainText('Explicitly selected publication for this determination');
+    await expect(page.getByRole('region', { name: 'Enrollment load', exact: true })).toContainText('Publication 2 ·');
     await expect(page.getByRole('button', { name: 'Review load determination', exact: true })).toHaveCount(0);
     expect(calls.some(c => c.path.includes('/record-confirm/') || c.path.includes('/record-review/'))).toBe(false);
+    expect(calls.some(c => c.path.includes('/policy-choices/'))).toBe(false);
     await page.setViewportSize({ width: 375, height: 812 });
     const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(axe.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) }))).toEqual([]);

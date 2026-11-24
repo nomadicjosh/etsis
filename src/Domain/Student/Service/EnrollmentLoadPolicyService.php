@@ -23,6 +23,7 @@ use Domain\Student\Event\EnrollmentLoadPolicyWasPublished;
 use Domain\Student\Repository\EnrollmentLoadPolicyRepository;
 use Domain\Student\ValueObject\EnrollmentLoadBands;
 use Domain\Student\ValueObject\EnrollmentLoadPolicyId;
+use Domain\Student\ValueObject\EnrollmentLoadPolicySelection;
 
 final readonly class EnrollmentLoadPolicyService
 {
@@ -68,6 +69,84 @@ final readonly class EnrollmentLoadPolicyService
     public function resolve(EntityId $program): array
     {
         return $this->context($program)["effective"];
+    }
+
+    /** The calling determination workflow authorizes the student and current active pursuit. */
+    public function resolveForDetermination(
+        EntityId $program,
+        ?EnrollmentLoadPolicySelection $selection,
+        HistoryReadBudget $budget,
+    ): array {
+        $actor = $selection === null ? null : $this->authorize();
+        $policy = $selection?->describe() ?? $this->resolve($program);
+        if ($policy['source'] === 'not_configured') {
+            return $policy;
+        }
+        $scope = $policy['source'] === 'program' ? $program : null;
+        $verified = $this->readPublications($scope, $budget);
+        foreach ($verified['events'] as $stored) {
+            $data = $stored->event->payload();
+            if ($data['operation_id'] !== $policy['version_id']) {
+                continue;
+            }
+            if ($data['definition'] === null) {
+                break;
+            }
+            if ($actor !== null) {
+                $this->authorize($actor);
+            }
+            return [
+                'source' => $policy['source'],
+                'version_id' => $data['operation_id'],
+                'definition' => $data['definition'],
+                'basis' => $selection === null ? 'current_policy' : 'selected_publication',
+                'publication_version' => $stored->event->playhead(),
+                'published_at' => $stored->context->effectiveAt->format(DATE_ATOM),
+            ];
+        }
+        throw new ValidationException([
+            ['field' => 'policy_selection', 'message' => 'Choose a published policy with credit bands in this scope.'],
+        ]);
+    }
+
+    /** Minimized private chooser; publication reasons and actors are not part of this workflow. */
+    public function choicesForDetermination(
+        EntityId $program,
+        string $source,
+        ?string $cursor,
+        HistoryReadBudget $budget,
+    ): array {
+        $actor = $this->authorize();
+        if (!in_array($source, ['global', 'program'], true)) {
+            throw new ValidationException([
+                ['field' => 'source', 'message' => 'Choose institution or program publications.'],
+            ]);
+        }
+        $scope = $source === 'program' ? $program : null;
+        $verified = $this->readPublications($scope, $budget);
+        $page = $budget->page($this->history, $this->stream($scope), $cursor);
+        if ($page->throughVersion !== $verified['root']->state()['position']) {
+            throw new ConcurrentModificationException('Policy publications changed. Open the list again.');
+        }
+        $items = [];
+        foreach ($page->events as $stored) {
+            $accepted = $verified['events'][$stored->event->playhead() - 1] ?? null;
+            if (
+                $accepted === null || $accepted->event->payload() !== $stored->event->payload() ||
+                $accepted->context != $stored->context
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $data = $stored->event->payload();
+            $items[] = [
+                'version_id' => $data['operation_id'],
+                'publication_version' => $stored->event->playhead(),
+                'published_at' => $stored->context->effectiveAt->format(DATE_ATOM),
+                'definition' => $data['definition'],
+            ];
+        }
+        $this->authorize($actor);
+        return ['source' => $source, 'items' => $items, 'next_cursor' => $page->nextCursor];
     }
 
     public function review(
@@ -293,20 +372,26 @@ final readonly class EnrollmentLoadPolicyService
 
     private function load(?EntityId $program): EnrollmentLoadPolicy
     {
+        return $this->readPublications($program, new HistoryReadBudget())['root'];
+    }
+
+    private function readPublications(?EntityId $program, HistoryReadBudget $budget): array
+    {
         $root = EnrollmentLoadPolicy::root($this->stream($program)->aggregateId);
-        $budget = new HistoryReadBudget();
+        $events = [];
         $cursor = null;
         do {
             $page = $budget->page($this->history, $this->stream($program), $cursor);
             foreach ($page->events as $stored) {
                 $root->accept($stored);
+                $events[] = $stored;
             }
             $cursor = $page->nextCursor;
         } while ($cursor !== null);
         if ($root->state() !== $this->records->current($program)) {
             throw new CorruptHistoryException();
         }
-        return $root;
+        return ['root' => $root, 'events' => $events];
     }
 
     private function authorize(?EntityId $expected = null): EntityId

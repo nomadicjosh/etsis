@@ -27,6 +27,7 @@ use Domain\Student\Repository\LoadDeterminationRepository;
 use Domain\Student\Repository\StudentRecordRepository;
 use Domain\Student\ValueObject\LoadDeterminationId;
 use Domain\Student\ValueObject\LoadDeterminationSnapshot;
+use Domain\Student\ValueObject\EnrollmentLoadPolicySelection;
 
 final readonly class LoadDeterminationService
 {
@@ -74,8 +75,10 @@ final readonly class LoadDeterminationService
         EntityId $pursuit,
         EntityId $term,
         #[\SensitiveParameter] string $reason,
+        ?EnrollmentLoadPolicySelection $selection = null,
     ): array {
         $actor = $this->authorize($student, $pursuit, "staff");
+        $this->authorizeSelection($selection, $actor);
         $this->reason($reason);
         return $this->transactions->run(function () use (
             $student,
@@ -83,13 +86,16 @@ final readonly class LoadDeterminationService
             $term,
             $reason,
             $actor,
+            $selection,
         ): array {
-            $snapshot = $this->context($student, $pursuit, $term, new HistoryReadBudget());
+            $snapshot = $this->context($student, $pursuit, $term, new HistoryReadBudget(), $selection);
             $operation = EntityId::generate();
             $revision = $snapshot->fingerprint();
             $intent = $this->intent($student, $pursuit, $term, $revision, $reason);
             $this->authorize($student, $pursuit, "staff", $actor);
+            $this->authorizeSelection($selection, $actor);
             return [
+                'policy_selection' => $selection?->describe(),
                 "operation_id" => $operation->value,
                 "revision" => $revision,
                 "reason" => trim($reason),
@@ -113,8 +119,10 @@ final readonly class LoadDeterminationService
         string $revision,
         #[\SensitiveParameter] string $reason,
         #[\SensitiveParameter] string $token,
+        ?EnrollmentLoadPolicySelection $selection = null,
     ): array {
         $actor = $this->authorize($student, $pursuit, "staff");
+        $this->authorizeSelection($selection, $actor);
         $this->reason($reason);
         $intent = $this->intent($student, $pursuit, $term, $revision, $reason);
         return $this->transactions->run(function () use (
@@ -127,6 +135,7 @@ final readonly class LoadDeterminationService
             $token,
             $actor,
             $intent,
+            $selection,
         ): array {
             $this->students->lock($student);
             $budget = new HistoryReadBudget();
@@ -144,7 +153,13 @@ final readonly class LoadDeterminationService
             if ($stored !== null) {
                 $payload = $stored->event->payload();
                 $snapshot = new LoadDeterminationSnapshot($payload["snapshot"]);
+                $policy = $snapshot->data['policy'];
+                $retainedSelection = ($policy['basis'] ?? null) === 'selected_publication'
+                    ? new EnrollmentLoadPolicySelection($policy['source'], new EntityId($policy['version_id']))
+                    : null;
+                $this->authorizeSelection($retainedSelection, $actor);
                 if (
+                    $retainedSelection?->describe() !== $selection?->describe() ||
                     $stored->context->actor?->value !== $actor->value ||
                     $payload["intent"] !== $intent ||
                     $snapshot->data["student_id"] !== $student->value ||
@@ -154,9 +169,10 @@ final readonly class LoadDeterminationService
                     throw new AccessDeniedException();
                 }
                 $this->authorize($student, $pursuit, "staff", $actor);
+                $this->authorizeSelection($retainedSelection, $actor);
                 return ["status" => "recorded", "operation_id" => $operation->value];
             }
-            $snapshot = $this->context($student, $pursuit, $term, $budget);
+            $snapshot = $this->context($student, $pursuit, $term, $budget, $selection);
             $this->same($revision, $snapshot->fingerprint());
             $this->audit->record($actor, "student.load_determined", $operation);
             $this->authorize($student, $pursuit, "staff", $actor);
@@ -172,7 +188,7 @@ final readonly class LoadDeterminationService
             // Preserve the exact facts reviewed, including after the final required audit.
             $this->same(
                 $revision,
-                $this->context($student, $pursuit, $term, $budget)->fingerprint(),
+                $this->context($student, $pursuit, $term, $budget, $selection)->fingerprint(),
             );
             $event = EnrollmentLoadWasDetermined::occur(
                 new LoadDeterminationId($operation->value),
@@ -193,6 +209,7 @@ final readonly class LoadDeterminationService
             $this->history->append($this->stream($operation), $operation, 0, $context, [$event]);
             $this->records->insert($this->ledger->projection($operation, $snapshot, $context->effectiveAt));
             $this->authorize($student, $pursuit, "staff", $actor);
+            $this->authorizeSelection($selection, $actor);
             $this->proofs->validate(
                 $token,
                 "load-determination",
@@ -260,6 +277,7 @@ final readonly class LoadDeterminationService
         EntityId $pursuit,
         EntityId $term,
         HistoryReadBudget $budget,
+        ?EnrollmentLoadPolicySelection $selection = null,
     ): LoadDeterminationSnapshot {
         $this->students->lock($student);
         $this->terms->lockTerm($term);
@@ -268,7 +286,7 @@ final readonly class LoadDeterminationService
             throw new AccessDeniedException();
         }
         $this->policies->lockScope($assignment->programId);
-        $data = $this->loads->determinationContext($student, $pursuit, $term, $budget);
+        $data = $this->loads->determinationContext($student, $pursuit, $term, $budget, $selection);
         if (
             !in_array($data["status"], ["ready", "not_registered"], true) ||
             $data["term_timing"] !== "current" ||
@@ -303,6 +321,16 @@ final readonly class LoadDeterminationService
         }
         return new LoadDeterminationSnapshot($snapshot);
     }
+    private function authorizeSelection(?EnrollmentLoadPolicySelection $selection, EntityId $actor): void
+    {
+        if (
+            $selection !== null &&
+            $this->access->requirePermission(EnrollmentLoadPolicyService::PERMISSION)->value !== $actor->value
+        ) {
+            throw new AccessDeniedException();
+        }
+    }
+
     private function authorize(
         EntityId $student,
         EntityId $pursuit,

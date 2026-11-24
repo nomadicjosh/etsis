@@ -25,6 +25,7 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\EnrollmentLoadRepository;
 use Domain\Student\Repository\StudentRecordRepository;
 use Domain\Student\ValueObject\EnrollmentLoadBands;
+use Domain\Student\ValueObject\EnrollmentLoadPolicySelection;
 
 /** Working current-term review, never an official dated/census determination or eligibility decision. */
 final readonly class EnrollmentLoadService
@@ -81,9 +82,32 @@ final readonly class EnrollmentLoadService
         EntityId $pursuit,
         EntityId $term,
         HistoryReadBudget $budget,
+        ?EnrollmentLoadPolicySelection $selection = null,
     ): array {
         $this->access->requirePermission('sis:load:determine');
-        return $this->collect($student, $pursuit, $term, 'staff', true, $budget);
+        return $this->collect($student, $pursuit, $term, 'staff', true, $budget, $selection);
+    }
+
+    public function policyChoices(
+        EntityId $student,
+        EntityId $pursuit,
+        string $source,
+        ?string $cursor = null,
+    ): array {
+        $actor = $this->authorize($student, $pursuit, 'staff');
+        $this->access->requirePermission(LoadDeterminationService::PERMISSION);
+        $this->access->requirePermission(EnrollmentLoadPolicyService::PERMISSION);
+        return $this->transactions->run(function () use ($student, $pursuit, $source, $cursor, $actor): array {
+            $this->registration->lockStudent($student);
+            $budget = new HistoryReadBudget();
+            [, $assignment] = $this->scope($student, $pursuit, $budget);
+            $result = $this->policies->choicesForDetermination($assignment->programId, $source, $cursor, $budget);
+            $this->scope($student, $pursuit, $budget);
+            $this->authorize($student, $pursuit, 'staff', $actor);
+            $this->access->requirePermission(LoadDeterminationService::PERMISSION);
+            $this->access->requirePermission(EnrollmentLoadPolicyService::PERMISSION);
+            return $result;
+        });
     }
 
     private function collect(
@@ -93,6 +117,7 @@ final readonly class EnrollmentLoadService
         string $channel,
         bool $retain = false,
         ?HistoryReadBudget $shared = null,
+        ?EnrollmentLoadPolicySelection $selection = null,
     ): array {
 
         $actor = $this->authorize($student, $pursuit, $channel);
@@ -104,6 +129,7 @@ final readonly class EnrollmentLoadService
             $actor,
             $retain,
             $shared,
+            $selection,
         ): array {
             $this->registration->lockStudent($student);
             $this->authorize($student, $pursuit, $channel, $actor);
@@ -124,12 +150,14 @@ final readonly class EnrollmentLoadService
                 "official" => false,
             ];
             try {
-                $policy = $this->policies->resolve($p->programId);
+                $budget = $shared ?? new HistoryReadBudget();
+                $policy = $retain
+                    ? $this->policies->resolveForDetermination($p->programId, $selection, $budget)
+                    : $this->policies->resolve($p->programId);
                 $inventory = $this->records->inventory($student, $term);
                 if (count($inventory) > 200) {
                     throw new HistoryReadLimitException();
                 }
-                $budget = $shared ?? new HistoryReadBudget();
                 $sources = [];
                 $total = 0;
                 $unknown = false;
@@ -210,6 +238,9 @@ final readonly class EnrollmentLoadService
             $this->scope($student, $pursuit, $shared);
             if ($retain) {
                 $this->access->requirePermission("sis:load:determine");
+            }
+            if ($selection !== null) {
+                $this->access->requirePermission(EnrollmentLoadPolicyService::PERMISSION);
             }
             return $result;
         });

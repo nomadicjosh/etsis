@@ -84,6 +84,10 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
         <script defer src="/assets/js/registration-drops.js"></script>
         <script defer src="/assets/js/gradebook-calculation.js"></script>
         <script defer src="/assets/js/advising-checkins.js"></script>
+        <script id="enrollment-load-labels" type="application/json"><?= json_encode(
+            require dirname(__DIR__, 5) . '/resources/views/shared/enrollment-load-labels.php',
+            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR,
+        ) ?></script>
         <script defer src="/assets/js/enrollment-load.js"></script>
         <script defer src="/assets/vendor/purify.min.js"></script>
         <script defer src="/assets/js/campus-rich-text.js"></script>

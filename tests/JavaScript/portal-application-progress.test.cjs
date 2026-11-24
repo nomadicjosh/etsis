@@ -8,6 +8,8 @@ const vm = require('node:vm');
 // Load the actual portal script with no page, server, credentials or browser process.
 const context = { window: { addEventListener() {} }, document: { querySelector: () => null },
     fetch: () => { throw new Error('Progress guidance must not make a request.'); } };
+vm.runInNewContext(readFileSync(path.join(__dirname, '../../public/assets/js/registration-drops.js'), 'utf8'),
+    context, { filename: 'registration-drops.js', timeout: 500 });
 vm.runInNewContext(readFileSync(path.join(__dirname, '../../public/assets/js/portal.js'), 'utf8'),
     context, { filename: 'portal.js', timeout: 500 });
 const progress = context.window.campusApplicationProgress;

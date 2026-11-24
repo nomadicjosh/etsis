@@ -6,12 +6,18 @@ namespace Tests\Integration;
 
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Service\LoadDeterminationService;
+use Domain\Student\ValueObject\EnrollmentLoadPolicySelection;
 use Domain\Advising\Service\AdvisorProgressAccess;
 use EventStoreFixture;
 use Infrastructure\Persistence\Repository\SqlEnrollmentLoadRepository;
 use Infrastructure\Persistence\Repository\SqlEnrollmentLoadPolicyRepository;
 use Infrastructure\Persistence\Repository\SqlLoadDeterminationRepository;
 use Infrastructure\Persistence\Repository\SqlStudentRecordRepository;
+use Domain\Shared\Exception\AccessDeniedException;
+use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\ValidationException;
+use Domain\Shared\EventSourcing\CorruptHistoryException;
+use Domain\Student\ValueObject\LoadDeterminationSnapshot;
 use PHPUnit\Framework\TestCase;
 use SisFixture;
 
@@ -77,6 +83,222 @@ final class LoadDeterminationTest extends TestCase
             $r["review_token"],
         );
     }
+
+    private function selection(SisFixture $s): EnrollmentLoadPolicySelection
+    {
+        $policy = $s->loadPolicies()->resolve($s->program);
+        return new EnrollmentLoadPolicySelection('global', new EntityId($policy['version_id']));
+    }
+
+    public function testSelectedPublicationUsesTodaysQuantitiesAndRetainsItsBasisAfterLaterPublication(): void
+    {
+        $s = new SisFixture();
+        [$student, $pursuit] = $this->setupStudent($s);
+        $first = $s->loadPolicies()->resolve($s->program);
+        $selection = new EnrollmentLoadPolicySelection('global', new EntityId($first['version_id']));
+        $s->service->register($student, $s->section()->id);
+        $this->policy($s, 6000);
+        $working = $s->enrollmentLoad()->review($student, $pursuit, $s->term, 'staff');
+        self::assertSame('PART', $working['classification']['code']);
+        $service = $this->service($s);
+        $review = $service->review($student, $pursuit, $s->term, 'Fictional authorized retained policy.', $selection);
+        self::assertSame('FULL', $review['result']['classification']['code']);
+        self::assertSame('selected_publication', $review['result']['policy']['basis']);
+        self::assertSame(1, $review['result']['policy']['publication_version']);
+        self::assertSame($selection->describe(), $review['policy_selection']);
+        $this->policy($s, 9000);
+        $receipt = $this->confirm($s, $student, $pursuit, $review);
+        $before = $this->facts($s);
+        $s->clock->time = $s->clock->time->modify('+21 minutes');
+        self::assertSame($receipt, $this->confirm($s, $student, $pursuit, $review));
+        self::assertSame($before, $this->facts($s));
+        $owner = $service->listing($student, $pursuit, $s->term, 'owner')['items'][0];
+        $visiblePolicy = $review['result']['policy'];
+        unset($visiblePolicy['version_id']);
+        self::assertEquals($visiblePolicy, $owner['policy']);
+        self::assertArrayNotHasKey('reason', $owner);
+        self::assertArrayNotHasKey('sources', $owner);
+        $working = $s->enrollmentLoad()->review($student, $pursuit, $s->term, 'owner');
+        self::assertSame('PART', $working['classification']['code']);
+        $current = $service->review($student, $pursuit, $s->term, 'Fictional current publication.');
+        self::assertSame('current_policy', $current['result']['policy']['basis']);
+        self::assertSame(3, $current['result']['policy']['publication_version']);
+    }
+
+    public function testFreshAndAcceptedConfirmationsBindTheExplicitSelectionIncludingItsAbsence(): void
+    {
+        $s = new SisFixture();
+        [$student, $pursuit] = $this->setupStudent($s);
+        $selection = $this->selection($s);
+        $r = $this->service($s)->review($student, $pursuit, $s->term, 'Fictional selected publication.', $selection);
+        $without = $r;
+        $without['policy_selection'] = null;
+        $before = $this->facts($s);
+        $this->reject(fn() => $this->confirm($s, $student, $pursuit, $without), ConcurrentModificationException::class);
+        self::assertSame($before, $this->facts($s));
+        $this->confirm($s, $student, $pursuit, $r);
+        $before = $this->facts($s);
+        $this->reject(fn() => $this->confirm($s, $student, $pursuit, $without), AccessDeniedException::class);
+        $changed = $r;
+        $changed['policy_selection'] = ['source' => 'program', 'version_id' => $selection->versionId->value];
+        $this->reject(fn() => $this->confirm($s, $student, $pursuit, $changed), AccessDeniedException::class);
+        self::assertSame($before, $this->facts($s));
+        $current = $this->service($s)->review($student, $pursuit, $s->term, 'Fictional current policy.');
+        $this->confirm($s, $student, $pursuit, $current);
+        $current['policy_selection'] = $selection->describe();
+        $this->reject(fn() => $this->confirm($s, $student, $pursuit, $current), AccessDeniedException::class);
+    }
+
+    public function testHistoricalChoiceRequiresIndependentPolicyAuthorityEvenOnAcceptedRetries(): void
+    {
+        $s = new SisFixture();
+        [$student, $pursuit] = $this->setupStudent($s);
+        $selection = $this->selection($s);
+        $r = $this->service($s)->review($student, $pursuit, $s->term, 'Fictional selected publication.', $selection);
+        $s->access->staff = false;
+        $s->access->grants = ['sis:student:read', 'sis:load:determine'];
+        $current = $this->service($s)->review($student, $pursuit, $s->term, 'Fictional current policy.');
+        self::assertSame('current_policy', $current['result']['policy']['basis']);
+        $before = $this->facts($s);
+        foreach (
+            [
+            fn() => $s->enrollmentLoad()->policyChoices($student, $pursuit, 'global'),
+            fn() => $this->service($s)->review($student, $pursuit, $s->term, 'Fictional selection.', $selection),
+            fn() => $this->confirm($s, $student, $pursuit, $r),
+            ] as $action
+        ) {
+            $this->reject($action, AccessDeniedException::class);
+        }
+        self::assertSame($before, $this->facts($s));
+        $s->access->grants[] = 'sis:load:policy';
+        $this->confirm($s, $student, $pursuit, $r);
+        array_pop($s->access->grants);
+        $before = $this->facts($s);
+        $this->reject(fn() => $this->confirm($s, $student, $pursuit, $r), AccessDeniedException::class);
+        $r['policy_selection'] = null;
+        $this->reject(fn() => $this->confirm($s, $student, $pursuit, $r), AccessDeniedException::class);
+        self::assertSame($before, $this->facts($s));
+    }
+
+    public function testSelectionCannotFallBackFromUnknownWrongScopeOrClearedPublications(): void
+    {
+        $s = new SisFixture();
+        [$student, $pursuit] = $this->setupStudent($s);
+        $first = $s->loadPolicies()->resolve($s->program);
+        $service = $s->loadPolicies();
+        $clear = $service->review(null, null, $service->view()['revision'], 'Fictional cleared institution policy.');
+        $service->publish(
+            null,
+            new EntityId($clear['operation_id']),
+            null,
+            $clear['revision'],
+            $clear['reason'],
+            $clear['review_token'],
+        );
+        $before = $this->facts($s);
+        foreach (
+            [
+            new EnrollmentLoadPolicySelection('global', EntityId::generate()),
+            new EnrollmentLoadPolicySelection('program', new EntityId($first['version_id'])),
+            new EnrollmentLoadPolicySelection('global', new EntityId($clear['operation_id'])),
+            ] as $selection
+        ) {
+            $this->reject(
+                fn() => $this->service($s)->review(
+                    $student,
+                    $pursuit,
+                    $s->term,
+                    'Fictional invalid selection.',
+                    $selection,
+                ),
+                ValidationException::class,
+            );
+        }
+        self::assertSame($before, $this->facts($s));
+        $valid = new EnrollmentLoadPolicySelection('global', new EntityId($first['version_id']));
+        $review = $this->service($s)->review(
+            $student,
+            $pursuit,
+            $s->term,
+            'Fictional retained policy despite clear.',
+            $valid,
+        );
+        self::assertSame('selected_publication', $review['result']['policy']['basis']);
+        $invalidSelections = [
+            [], ['source' => 'global'], ['source' => 'other', 'version_id' => $first['version_id']],
+            ['source' => 'global', 'version_id' => 'malformed'],
+            ['source' => 'global', 'version_id' => $first['version_id'], 'program_id' => $s->program->value],
+        ];
+        foreach ($invalidSelections as $invalid) {
+            $this->reject(fn() => EnrollmentLoadPolicySelection::fromArray($invalid), ValidationException::class);
+        }
+    }
+
+    public function testSelectedPolicyConfirmationRechecksQuantitiesAndPolicyAuthorityAfterAudit(): void
+    {
+        foreach (['quantity', 'authority'] as $case) {
+            $s = new SisFixture();
+            [$student, $pursuit] = $this->setupStudent($s);
+            $selection = $this->selection($s);
+            $r = $this->service($s)->review($student, $pursuit, $s->term, 'Fictional selection.', $selection);
+            $section = $s->section();
+            $audit = $this->createStub(\Domain\Audit\Repository\AuditTrail::class);
+            $audit->method('record')->willReturnCallback(static function () use ($s, $student, $section, $case): void {
+                if ($case === 'quantity') {
+                    $s->service->register($student, $section->id);
+                } else {
+                    $s->access->staff = false;
+                    $s->access->grants = ['sis:student:read', 'sis:load:determine'];
+                }
+            });
+            $before = $this->facts($s);
+            $this->reject(
+                fn() => $this->service($s, $audit)->confirm(
+                    $student,
+                    $pursuit,
+                    $s->term,
+                    new EntityId($r['operation_id']),
+                    $r['revision'],
+                    $r['reason'],
+                    $r['review_token'],
+                    $selection
+                ),
+                $case === 'quantity' ? ConcurrentModificationException::class : AccessDeniedException::class
+            );
+            self::assertSame($before, $this->facts($s));
+        }
+    }
+
+    public function testEarlierSnapshotsRemainExactAndNewPublicationMetadataFailsClosed(): void
+    {
+        $s = new SisFixture();
+        [$student, $pursuit] = $this->setupStudent($s);
+        $r = $this->service($s)->review($student, $pursuit, $s->term, 'Fictional current policy.');
+        $this->confirm($s, $student, $pursuit, $r);
+        $root = \Domain\Student\EnrollmentLoadDetermination::reconstituteFromEventStream(
+            EventStoreFixture::framework($s->connection->queryBuilder())->getAggregateHistoryFor(
+                new \Domain\Student\ValueObject\LoadDeterminationId($r['operation_id']),
+            ),
+        );
+        $data = $root->snapshot()->data;
+        $legacy = $data;
+        foreach (['basis', 'publication_version', 'published_at'] as $field) {
+            unset($legacy['policy'][$field]);
+        }
+        $snapshot = new LoadDeterminationSnapshot($legacy);
+        self::assertSame($legacy, $snapshot->data);
+        self::assertArrayNotHasKey('basis', $snapshot->view()['policy']);
+        $invalidFields = [
+            'basis' => 'inferred', 'publication_version' => 0, 'published_at' => '2026-02-30T12:00:00+00:00',
+        ];
+        foreach ($invalidFields as $field => $invalid) {
+            $broken = $data;
+            $broken['policy'][$field] = $invalid;
+            $this->reject(fn() => new LoadDeterminationSnapshot($broken), CorruptHistoryException::class);
+        }
+        unset($data['policy']['published_at']);
+        $this->reject(fn() => new LoadDeterminationSnapshot($data), CorruptHistoryException::class);
+    }
     private function confirm(SisFixture $s, EntityId $student, EntityId $pursuit, array $r): array
     {
         return $this->service($s)->confirm(
@@ -87,6 +309,7 @@ final class LoadDeterminationTest extends TestCase
             $r["revision"],
             $r["reason"],
             $r["review_token"],
+            isset($r['policy_selection']) ? EnrollmentLoadPolicySelection::fromArray($r['policy_selection']) : null,
         );
     }
     public function testRetainedPolicyAndRegisteredCreditsSurviveLaterDropsAndPolicyChanges(): void
@@ -180,7 +403,7 @@ final class LoadDeterminationTest extends TestCase
             $before = $this->facts($s);
             $this->reject(
                 fn() => $this->confirm($s, $student, $pursuit, $r),
-                \Domain\Shared\Exception\ConcurrentModificationException::class,
+                ConcurrentModificationException::class,
             );
             self::assertSame($before, $this->facts($s));
         }
@@ -265,7 +488,7 @@ final class LoadDeterminationTest extends TestCase
                     $s->term,
                     "Fictional decision.",
                 ),
-                \Domain\Shared\Exception\ValidationException::class,
+                ValidationException::class,
             );
             self::assertSame([], $s->sql->rows("sis_load_determinations"));
         }
@@ -307,7 +530,7 @@ final class LoadDeterminationTest extends TestCase
                     $r["review_token"],
                 ),
                 $case === "authority"
-                    ? \Domain\Shared\Exception\AccessDeniedException::class
+                    ? AccessDeniedException::class
                     : \RuntimeException::class,
             );
             self::assertSame($before, $this->facts($s));
@@ -323,7 +546,7 @@ final class LoadDeterminationTest extends TestCase
         $s->access->grants = ["sis:student:read"];
         $this->reject(
             fn() => $this->confirm($s, $student, $pursuit, $r),
-            \Domain\Shared\Exception\AccessDeniedException::class,
+            AccessDeniedException::class,
         );
         self::assertCount(
             1,
@@ -333,11 +556,11 @@ final class LoadDeterminationTest extends TestCase
         $s->access->grants = ["sis:student:read", "sis:load:determine"];
         $this->reject(
             fn() => $this->service($s)->listing($student, $pursuit, $s->term, "owner"),
-            \Domain\Shared\Exception\AccessDeniedException::class,
+            AccessDeniedException::class,
         );
         $this->reject(
             fn() => $this->confirm($s, $student, $pursuit, $r),
-            \Domain\Shared\Exception\AccessDeniedException::class,
+            AccessDeniedException::class,
         );
     }
     public function testDamagedProjectionOrProtectedEventNeverGetsRepairedOnReadsOrRetries(): void
@@ -370,12 +593,12 @@ final class LoadDeterminationTest extends TestCase
             $before = $this->facts($s);
             $this->reject(
                 fn() => $this->confirm($s, $student, $pursuit, $r),
-                \Domain\Shared\EventSourcing\CorruptHistoryException::class,
+                CorruptHistoryException::class,
             );
             if ($case !== "missing_row") {
                 $this->reject(
                     fn() => $this->service($s)->listing($student, $pursuit, $s->term, "staff"),
-                    \Domain\Shared\EventSourcing\CorruptHistoryException::class,
+                    CorruptHistoryException::class,
                 );
             }
             self::assertSame($before, $this->facts($s));
@@ -475,7 +698,7 @@ final class LoadDeterminationTest extends TestCase
         $s->access->grants = ["sis:reporting:run", "sis:reporting:manage", "sis:student:read"];
         $this->reject(
             fn() => $reports->run($id, 0),
-            \Domain\Shared\Exception\AccessDeniedException::class,
+            AccessDeniedException::class,
         );
         self::assertNotContains(
             "load_determinations",
@@ -486,7 +709,7 @@ final class LoadDeterminationTest extends TestCase
         $s->access->grants = ["sis:reporting:run", "sis:load:determine"];
         $this->reject(
             fn() => $reports->run($id, 0),
-            \Domain\Shared\Exception\AccessDeniedException::class,
+            AccessDeniedException::class,
         );
     }
     public function testReportTotalsRejectRelatedRegistrationFanoutAndCompileForEveryDriver(): void
@@ -496,7 +719,7 @@ final class LoadDeterminationTest extends TestCase
         $d["joins"] = ["registration" => "left"];
         $this->reject(
             fn() => new \Domain\Reporting\ValueObject\ReportQuery($d, $schema),
-            \Domain\Shared\Exception\ValidationException::class,
+            ValidationException::class,
         );
         unset($d["joins"]);
         foreach (["mysql", "pgsql", "sqlite", "sqlsrv", "oci"] as $driver) {
@@ -556,7 +779,7 @@ final class LoadDeterminationTest extends TestCase
                 $s->term,
                 "Fictional new decision.",
             ),
-            \Domain\Shared\Exception\ValidationException::class,
+            ValidationException::class,
         );
     }
 

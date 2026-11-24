@@ -805,6 +805,7 @@ return static function (Psr7Router $router): void {
         'record-review' => 'recordReview',
         'record-confirm' => 'recordConfirm',
         'determinations' => 'staffRecords',
+        'policy-choices' => 'policyChoices',
         ] as $suffix => $method
     ) {
         $router->map(['POST'], '/sis/students/{student}/programs/{pursuit}/load/' . $suffix . '/', [$load, $method]);

@@ -11,6 +11,10 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Service\EnrollmentLoadPolicyService;
 use Domain\Student\ValueObject\EnrollmentLoadBands;
 use Domain\Student\ValueObject\EnrollmentLoadPolicyId;
+use Domain\Shared\EventSourcing\CorruptHistoryException;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
+use Domain\Shared\EventSourcing\HistoryReadLimitException;
+use Domain\Student\ValueObject\EnrollmentLoadPolicySelection;
 use PHPUnit\Framework\TestCase;
 use SisFixture;
 
@@ -64,6 +68,121 @@ final class EnrollmentLoadTest extends TestCase
         return new EntityId(
             $s->sql->rows("sis_student_programs", ["student_id" => $student->value], 1)[0]["id"],
         );
+    }
+
+    public function testDeterminationPublicationChooserPagesVerifiedMinimizedScopes(): void
+    {
+        $s = new SisFixture();
+        $service = $s->loadPolicies();
+        for ($index = 1; $index <= 22; $index++) {
+            $this->publish($service, null, $this->bands($index * 1000));
+        }
+        $this->publish($service, $s->program, $this->bands(6250));
+        $this->publish($service, $s->program, null);
+        $student = $s->student();
+        $pursuit = $this->pursuit($s, $student->id);
+        $events = $s->sql->rows('sis_history_events');
+        $page = $s->enrollmentLoad()->policyChoices($student->id, $pursuit, 'global');
+        self::assertCount(20, $page['items']);
+        self::assertNotNull($page['next_cursor']);
+        self::assertSame(
+            ['version_id', 'publication_version', 'published_at', 'definition'],
+            array_keys($page['items'][0]),
+        );
+        $next = $s->enrollmentLoad()->policyChoices($student->id, $pursuit, 'global', $page['next_cursor']);
+        self::assertSame([21, 22], array_column($next['items'], 'publication_version'));
+        self::assertNull($next['next_cursor']);
+        $program = $s->enrollmentLoad()->policyChoices($student->id, $pursuit, 'program');
+        self::assertCount(2, $program['items']);
+        self::assertNull($program['items'][1]['definition']);
+        self::assertSame($events, $s->sql->rows('sis_history_events'));
+        $selected = new EnrollmentLoadPolicySelection('program', new EntityId($program['items'][0]['version_id']));
+        $resolved = $service->resolveForDetermination($s->program, $selected, new HistoryReadBudget());
+        self::assertSame('program', $resolved['source']);
+        self::assertSame(6250, $resolved['definition']['bands'][1]['min_credits_milli']);
+        foreach (
+            [fn() => $s->enrollmentLoad()->policyChoices($student->id, $pursuit, 'program', $page['next_cursor']),
+            fn() => $s->enrollmentLoad()->policyChoices($student->id, $pursuit, 'global', 'invalid-cursor')] as $read
+        ) {
+            try {
+                $read();
+                self::fail('A foreign or damaged publication cursor was accepted.');
+            } catch (CorruptHistoryException) {
+                self::assertTrue(true);
+            }
+        }
+        $this->publish($service, null, $this->bands(23000));
+        $this->expectException(ConcurrentModificationException::class);
+        $s->enrollmentLoad()->policyChoices($student->id, $pursuit, 'global', $page['next_cursor']);
+    }
+
+    public function testPublicationSelectionVerifiesEarlierHistoryAndUsesTheSharedReadBudget(): void
+    {
+        $s = new SisFixture();
+        $service = $s->loadPolicies();
+        $this->publish($service, null, $this->bands(3000));
+        $first = $service->resolve($s->program);
+        $this->publish($service, null, $this->bands(6000));
+        $selection = new EnrollmentLoadPolicySelection('global', new EntityId($first['version_id']));
+        try {
+            $service->resolveForDetermination($s->program, $selection, new HistoryReadBudget(maximumEvents: 1));
+            self::fail('Selection exceeded the shared read budget.');
+        } catch (HistoryReadLimitException) {
+            self::assertTrue(true);
+        }
+        $head = $s->sql->rows('sis_history_streams', ['aggregate_id' => EnrollmentLoadPolicyId::GLOBAL])[0];
+        $s->sql->update(
+            'sis_history_events',
+            ['sealed_event' => 'Fictional damaged earlier publication'],
+            ['stream_id' => $head['id'], 'position' => 1],
+        );
+        $before = $s->sql->rows('sis_history_events');
+        foreach (
+            [fn() => $service->resolveForDetermination($s->program, $selection, new HistoryReadBudget()),
+            fn() => $service->choicesForDetermination($s->program, 'global', null, new HistoryReadBudget())] as $read
+        ) {
+            try {
+                $read();
+                self::fail('A damaged publication history was accepted.');
+            } catch (CorruptHistoryException) {
+                self::assertTrue(true);
+            }
+        }
+        self::assertSame($before, $s->sql->rows('sis_history_events'));
+    }
+
+    public function testPublicationChoicesCannotCrossStudentPursuitOrProgramScope(): void
+    {
+        $s = new SisFixture();
+        $student = $s->student();
+        $pursuit = $this->pursuit($s, $student->id);
+        $otherStudent = $s->student();
+        $otherProgram = EntityId::generate();
+        $s->sql->insert('sis_programs', [
+            'id' => $otherProgram->value, 'code' => 'OTHER', 'title' => 'Fictional other program',
+        ]);
+        $service = $s->loadPolicies();
+        $this->publish($service, $otherProgram, $this->bands());
+        $operation = $service->view($otherProgram)['state']['operation_id'];
+        $before = $s->sql->rows('sis_history_events');
+        try {
+            $s->enrollmentLoad()->policyChoices($otherStudent->id, $pursuit, 'program');
+            self::fail('Another student opened this pursuit policy chooser.');
+        } catch (\Domain\Shared\Exception\RecordNotFoundException) {
+            self::assertTrue(true);
+        }
+        self::assertSame([], $s->enrollmentLoad()->policyChoices($student->id, $pursuit, 'program')['items']);
+        try {
+            $service->resolveForDetermination(
+                $s->program,
+                new EnrollmentLoadPolicySelection('program', new EntityId($operation)),
+                new HistoryReadBudget(),
+            );
+            self::fail('Another program publication was selected.');
+        } catch (ValidationException) {
+            self::assertTrue(true);
+        }
+        self::assertSame($before, $s->sql->rows('sis_history_events'));
     }
 
     public function testExactBoundariesUseInstitutionBandsInsteadOfHardCodedThresholds(): void

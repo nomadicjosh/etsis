@@ -9,6 +9,7 @@ use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Service\EnrollmentLoadPolicyService;
 use Domain\Student\Service\EnrollmentLoadService;
+use Domain\Student\ValueObject\EnrollmentLoadPolicySelection;
 use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 use Qubus\Http\ServerRequest;
@@ -197,7 +198,8 @@ final readonly class SisEnrollmentLoadController
             new EntityId($student),
             new EntityId($pursuit),
             $f->id('term_id'),
-            $f->bodyText('reason')
+            $f->bodyText('reason'),
+            $this->selection($request),
         ));
     }
     public function recordConfirm(
@@ -213,7 +215,34 @@ final readonly class SisEnrollmentLoadController
             $f->id('operation_id'),
             $f->text('revision', 64),
             $f->bodyText('reason'),
-            $f->bodyText('review_token')
+            $f->bodyText('review_token'),
+            $this->selection($request),
+        ));
+    }
+
+    private function selection(#[\SensitiveParameter] ServerRequest $request): ?EnrollmentLoadPolicySelection
+    {
+        $body = $request->getParsedBody();
+        if (
+            !is_array($body) || !array_key_exists('policy_selection', $body) ||
+            ($body['policy_selection'] !== null && !is_array($body['policy_selection']))
+        ) {
+            throw new ValidationException([
+                ['field' => 'policy_selection', 'message' => 'Explicitly choose the current policy or a publication.'],
+            ]);
+        }
+        return $body['policy_selection'] === null
+        ? null : EnrollmentLoadPolicySelection::fromArray($body['policy_selection']);
+    }
+
+    public function policyChoices(ServerRequest $request, string $student, string $pursuit): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->loads->policyChoices(
+            new EntityId($student),
+            new EntityId($pursuit),
+            $f->text('source', 7),
+            $f->optionalText('cursor', 8192),
         ));
     }
 

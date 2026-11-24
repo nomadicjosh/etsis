@@ -49,7 +49,24 @@ final readonly class LoadDeterminationSnapshot
             ) {
                 throw new CorruptHistoryException();
             }
-            self::keys($data["policy"], ["source", "version_id", "definition"]);
+            $policyFields = ['source', 'version_id', 'definition'];
+            if (array_key_exists('basis', $data['policy'])) {
+                $policyFields = [...$policyFields, 'basis', 'publication_version', 'published_at'];
+                $policy = $data['policy'];
+                if (
+                    !in_array($policy['basis'], ['current_policy', 'selected_publication'], true) ||
+                    !is_int($policy['publication_version'] ?? null) ||
+                    $policy['publication_version'] < 1 || $policy['publication_version'] > 2000 ||
+                    !is_string($policy['published_at'] ?? null)
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                $published = \DateTimeImmutable::createFromFormat(DATE_ATOM, $policy['published_at']);
+                if ($published === false || $published->format(DATE_ATOM) !== $policy['published_at']) {
+                    throw new CorruptHistoryException();
+                }
+            }
+            self::keys($data["policy"], $policyFields);
             if (!in_array($data["policy"]["source"], ["global", "program"], true)) {
                 throw new CorruptHistoryException();
             }
