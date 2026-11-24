@@ -56,6 +56,7 @@ final class TimeDecision extends EventSourcedAggregate
             $data["entry_id"] !== $evidence->data["target"]["id"] ||
             $evidence->data["target"]["status"] !== "pending" ||
             ($data["next_status"] === "approved" && $evidence->data["scope"] === "rejection") ||
+            ($data['next_status'] === 'approved' && $evidence->summary['approval_blocked']) ||
             !in_array($data["next_status"], ["approved", "rejected"], true) ||
             ($data["next_status"] === "approved" &&
                 $evidence->summary["requires_exception"] &&
@@ -84,6 +85,9 @@ final class TimeDecision extends EventSourcedAggregate
             $event->playhead() !== 1 ||
             $stored->context->origin !== "command" ||
             $stored->context->actor === null ||
+            (isset($p['evidence']['primary_position']) &&
+                $p['evidence']['primary_position']['checked_on'] !==
+                    $stored->context->effectiveAt?->format('Y-m-d')) ||
             $stored->context->correlation?->value !== $p["operation_id"] ||
             $stored->context->reason !== ($p["exception_reason"] ?? "Reviewed time-entry decision.")
         ) {

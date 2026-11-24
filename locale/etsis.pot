@@ -2792,3 +2792,87 @@ msgstr ""
 #: resources/views/shared/enrollment-load-labels.php
 msgid "{label}: from {credits} credits"
 msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "Require a current primary position before time approval"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "Pending work can still be submitted. HR must record or reaffirm a primary appointment covering today before approval. This does not change the position worked, compensation or earlier decisions."
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "Primary position for approval"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "Current primary designation required"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "Primary designation is optional"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "This earlier policy did not record a primary-position rule."
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "Primary position check"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "This check concerns the designation at review and confirmation. It does not establish a primary position on the earlier work date."
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "Checked on {date}"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "Current at this review"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "No primary designation has been recorded"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "The primary designation was explicitly cleared"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "The designated appointment changed and needs reaffirmation"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "The designated appointment has ended"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "The designated appointment was marked incorrect"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "The designated appointment has not started"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "The primary designation was not assessed for this rejection"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "Approval is unavailable until HR records or reaffirms a current primary position. The time-exception duty cannot bypass this requirement. The entry can still be rejected."
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "Review primary position"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "Back to time entry"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php
+msgid "No configured clocked-time exceptions found."
+msgstr ""

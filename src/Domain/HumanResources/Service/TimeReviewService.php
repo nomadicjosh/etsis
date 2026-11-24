@@ -21,6 +21,7 @@ final readonly class TimeReviewService
     public function __construct(
         private TimeRepository $entries,
         private TimeApprovalPolicyService $policies,
+        private PrimaryPositionLedger $primaryPositions,
     ) {
     }
     public function capture(
@@ -29,6 +30,7 @@ final readonly class TimeReviewService
         bool $proposed = false,
         bool $rejection = false,
     ): TimeReviewEvidence {
+        $budget ??= new HistoryReadBudget(maximumBytes: 4_194_304, maximumMilliseconds: 5000);
         $policy = $this->policies->current($budget);
         $rules = new TimeApprovalRules($policy["rules"]);
         $entries = [$target];
@@ -82,6 +84,9 @@ final readonly class TimeReviewService
                 : ($rules->hasChecks()
                     ? "affected_weeks"
                     : "selected_entry"),
+            ...$rules->requiresPrimaryPosition() && !$rejection
+                ? ['primary_position' => $this->primaryPositions->approvalEvidence($target->employeeId, $budget)]
+                : [],
         ]);
     }
 }

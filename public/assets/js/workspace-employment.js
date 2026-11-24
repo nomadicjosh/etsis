@@ -1,6 +1,7 @@
 /* Connected employment and time review. Private data stays in memory. */
 window.createWorkspaceEmployment = function (ui) {
     "use strict";
+    const primaryLabels = JSON.parse(globalThis.document?.getElementById?.('time-primary-labels')?.textContent || '{}');
     const {
         node,
         request,
@@ -511,7 +512,7 @@ window.createWorkspaceEmployment = function (ui) {
         const body = openDrawer(name(record), "TIME ENTRY REVIEW");
         if (can("sis:audit:read"))
             body.append(button("View audit history", () => showAudit("timesheets", id)));
-        body.append(
+        body.append(...[
             node("p", {}, `${record.institutional_id} · ${record.job_title}`),
             node(
                 "p",
@@ -545,7 +546,7 @@ window.createWorkspaceEmployment = function (ui) {
                 { class: "form-text" },
                 "Times use your browser’s local timezone. Recorded elapsed time excludes no breaks and applies no payroll rounding.",
             ),
-        );
+        ].filter(Boolean));
         if (weekly)
             body.append(
                 button("Back to weekly time review", () => week(weekly.employee, weekly.week)),
@@ -576,6 +577,13 @@ window.createWorkspaceEmployment = function (ui) {
                     "Earlier decision policy evidence was not recorded.",
                 ),
             );
+        if (record.status === 'pending' && record.time_review?.policy.rules.require_primary_position && can('sis:hr:manage')) {
+            const context = { back: () => entry(id, weekly), backLabel: primaryLabels.back_time };
+            body.append(button(primaryLabels.open, () => ui.positions().primary(record.employee_id, undefined, {
+                ...context,
+                list: () => ui.positions().page(record.employee_id, null, [], context),
+            })));
+        }
         if (record.exception_reason)
             body.append(node("p", {}, `Recorded exception reason: ${record.exception_reason}`));
         if (record.status === "pending" && !record.is_self) {
@@ -628,10 +636,10 @@ window.createWorkspaceEmployment = function (ui) {
                 );
                 if (
                     (required && !record.can_approve_exception) ||
-                    (approve && record.time_review_limited)
+                    (approve && (record.time_review_limited || record.time_review?.approval_blocked))
                 ) {
                     control.disabled = true;
-                    body.append(
+                    if (required && !record.can_approve_exception) body.append(
                         node(
                             "p",
                             { class: "form-text" },

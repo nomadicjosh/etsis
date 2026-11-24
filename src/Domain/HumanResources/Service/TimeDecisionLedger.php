@@ -15,6 +15,7 @@ use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\StreamReference;
+use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\DerivedIdentity;
 use Domain\Shared\ValueObject\EntityId;
@@ -96,13 +97,20 @@ final readonly class TimeDecisionLedger
         $event = TimeEntryWasDecided::occur(new TimeDecisionId($before->id->value), $data, [
             "__aggregate_type" => "timesheet_decision",
         ])->withPlayhead(1);
+        $at = $this->clock->now();
+        if (
+            isset($evidence->data['primary_position']) &&
+            $evidence->data['primary_position']['checked_on'] !== $at->format('Y-m-d')
+        ) {
+            throw new ConcurrentModificationException('The primary-position review date changed. Reload the review.');
+        }
         $this->history->append(
             $this->stream($before),
             $operation,
             0,
             new EventContext(
                 $actor,
-                $this->clock->now(),
+                $at,
                 $operation,
                 reason: $reason ?? "Reviewed time-entry decision.",
             ),

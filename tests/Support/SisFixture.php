@@ -1459,6 +1459,7 @@ final class SisFixture
             new \Domain\HumanResources\Service\TimeReviewService(
                 $repository ?? new \Infrastructure\Persistence\Repository\SqlTimeRepository($this->sql, $this->dropCipher),
                 $this->timeApprovalPolicies(),
+                $this->primaryPositionLedger(),
             ),
             new \Domain\HumanResources\Service\TimeDecisionLedger(
                 EventStoreFixture::history($this->connection->queryBuilder()), $this->clock,

@@ -1126,6 +1126,8 @@ h3 { font-size: .9rem; font-weight: 650; }
 @media (max-width: 639px) { .hr-definition-fields { grid-template-columns: minmax(0, 1fr); } }
 .time-policy-form .record-form-section, .time-policy-context, .time-policy-review-section { background: #fff; }
 .time-policy-form .form-label { display: block; }
+.time-policy-choice-text { min-width: 0; flex: 1; overflow-wrap: anywhere; }
+.time-policy-choice-text .form-check-label { display: block; padding-left: 0; }
 .time-policy-context, .time-policy-review-section { min-width: 0; padding: 1rem; margin-bottom: 1.25rem; border: 1px solid var(--campus-line); border-radius: .75rem; overflow-wrap: anywhere; }
 .time-policy-review-section .record-summary { margin-bottom: 0; padding: .5rem 0 0; border: 0; }
 .time-policy-reason { white-space: pre-wrap; overflow-wrap: anywhere; margin-bottom: 0; }

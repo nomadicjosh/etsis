@@ -4,6 +4,12 @@ The legacy system is the feature inventory, not a requirement to reproduce its s
 
 “Working” below describes a workflow available in the current code. “Partial” means useful pieces work but the broader recommendation still needs implementation. “Proposed” is a design recommendation, not completed functionality.
 
+## Completed: required primary designation before time approval
+
+**Working.** [Primary-position approval policy](human-resources.md#require-a-primary-position-for-time-approval) connects reviewed institutional setup, verified pending-entry guidance and an explicit designation-resolution return through existing paged agreements. The optional-by-default rule blocks approval when a designation is missing, cleared, changed, ended, scheduled or voided. Exception approval does not bypass it; pending work and rejection remain available.
+
+New approvals retain exact policy/designation/appointment versions and one current HR check date in the existing protected time-decision evidence. Final source/authority/date/audit checks and shared bounded replay prevent partial acceptance. Earlier decisions/receipts remain exact. Owner/staff check summaries omit HR reasons, compensation and raw references. This concerns the designation at approval, not an inferred historical primary appointment on a work date. Broader employment-wide requirements, scheduled/backdated designation, further exceptions and payroll remain open.
+
 ## Completed: recorded-identity correction follow-up
 
 **Working.** [Identity follow-up](person-identity-and-accounts.md#identity-correction-follow-up) connects the existing encrypted person-request model with person contact work, an identity-only Admissions panel, owner review/reply beside an application draft and inline authorized canonical name correction. Current identity reads expose only verified names and institutional ID, with required audit and final actor/source checks. Staff corrections require a protected 1–1,000-character reason, preserve directory privacy, update the same linked account/person and retain both histories. Name edits and owner-visible request outcomes remain separate decisions. No reply or closure changes admissions, identity or access automatically.

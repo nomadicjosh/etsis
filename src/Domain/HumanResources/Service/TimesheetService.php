@@ -21,6 +21,8 @@ use Domain\Scheduling\TimeSlot;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
+use Domain\Shared\EventSourcing\HistoryReadLimitException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
@@ -492,7 +494,8 @@ final readonly class TimesheetService
             if ($expectedVersion !== null && $entry->version !== $expectedVersion) {
                 throw new ConcurrentModificationException("Reload the time entry before deciding.");
             }
-            $evidence = $this->timeReviews->capture($entry, rejection: !$approve);
+            $budget = new HistoryReadBudget(maximumBytes: 4_194_304, maximumMilliseconds: 5000);
+            $evidence = $this->timeReviews->capture($entry, $budget, rejection: !$approve);
             if (
                 $approve &&
                 $reviewRevision !== null &&
@@ -503,11 +506,14 @@ final readonly class TimesheetService
                 );
             }
             $this->exceptionAuthority($evidence, $approve, $actor, $exceptionReason);
-            if ($approve && $evidence->summary["requires_exception"] && $reviewRevision === null) {
+            if (
+                $approve && $reviewRevision === null &&
+                ($evidence->summary['requires_exception'] || $evidence->summary['primary_position'] !== null)
+            ) {
                 throw new ValidationException([
                     [
                         "field" => "review",
-                        "message" => "Review the current exceptions before approving.",
+                        "message" => "Review the current time-policy checks before approving.",
                     ],
                 ]);
             }
@@ -522,7 +528,7 @@ final readonly class TimesheetService
             if ($this->access->requirePermission("sis:hr:manage")->value !== $actor->value) {
                 throw new AccessDeniedException("The time reviewer changed.");
             }
-            $fresh = $this->timeReviews->capture($this->repository->get($id), rejection: !$approve);
+            $fresh = $this->timeReviews->capture($this->repository->get($id), $budget, rejection: !$approve);
             if (!hash_equals($fresh->summary["revision"], $evidence->summary["revision"])) {
                 throw new ConcurrentModificationException(
                     "The time entries or review policy changed. Reload the review.",
@@ -546,6 +552,14 @@ final readonly class TimesheetService
         EntityId $actor,
         #[\SensitiveParameter] ?string $reason,
     ): void {
+        if ($approve && $evidence->summary['approval_blocked']) {
+            throw new ValidationException([
+                [
+                    'field' => 'primary_position',
+                    'message' => 'HR must record or reaffirm a current primary position before approving this time.',
+                ],
+            ]);
+        }
         if ($approve && $evidence->summary["requires_exception"]) {
             if (
                 $this->access->requirePermission("sis:hr:time-exception")->value !== $actor->value
@@ -616,7 +630,7 @@ final readonly class TimesheetService
                         : new \Domain\HumanResources\ValueObject\TimeReviewEvidence(
                             $stored["evidence"],
                         )->summary);
-        } catch (ValidationException $failure) {
+        } catch (ValidationException | HistoryReadLimitException $failure) {
             if ($entry->status !== "pending") {
                 throw $failure;
             }

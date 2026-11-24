@@ -12,6 +12,7 @@ use Domain\HumanResources\ValueObject\PrimaryPositionId;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\HistoryReadLimitException;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -35,6 +36,7 @@ final readonly class PrimaryPositionLedger
         ?EntityId $operation = null,
         ?EntityId $actor = null,
         ?string $intent = null,
+        ?HistoryReadBudget $budget = null,
     ): array {
         $root = PrimaryPositionHistory::root(new PrimaryPositionId($employee->value));
         $cursor = null;
@@ -43,11 +45,10 @@ final readonly class PrimaryPositionLedger
         $receipt = false;
         $items = [];
         do {
-            $page = $this->history->page(
-                new StreamReference($root->aggregateId(), "employment_primary_position"),
-                $cursor,
-                100,
-            );
+            $stream = new StreamReference($root->aggregateId(), 'employment_primary_position');
+            $page = $budget === null
+            ? $this->history->page($stream, $cursor, 100)
+            : $budget->page($this->history, $stream, $cursor);
             if ($page->throughVersion > 2000) {
                 throw new HistoryReadLimitException();
             }
@@ -101,7 +102,12 @@ final readonly class PrimaryPositionLedger
     /** Current, minimized context; never grants authority or selects the position actually worked.
      * @return array<string,mixed>
      */
-    public function summary(PrimaryPosition $designation): array
+    public function summary(PrimaryPosition $designation, ?HistoryReadBudget $budget = null): array
+    {
+        return $this->summaryOn($designation, $budget, $this->clock->now()->format('Y-m-d'));
+    }
+
+    private function summaryOn(PrimaryPosition $designation, ?HistoryReadBudget $budget, string $today): array
     {
         $selection = $designation->selection;
         $status = $designation->version === 0 ? "unrecorded" : "cleared";
@@ -109,6 +115,7 @@ final readonly class PrimaryPositionLedger
             $current = $this->positions->verified(
                 $designation->employee,
                 new EntityId($selection["id"]),
+                $budget,
             );
             if (
                 $selection["version"] > $current->version ||
@@ -119,7 +126,6 @@ final readonly class PrimaryPositionLedger
             ) {
                 throw new CorruptHistoryException();
             }
-            $today = $this->clock->now()->format("Y-m-d");
             if ($selection['version'] === $current->version && $selection !== PrimaryPosition::selection($current)) {
                 throw new CorruptHistoryException();
             }
@@ -134,6 +140,21 @@ final readonly class PrimaryPositionLedger
                             : "current")));
         }
         return ["selection" => $selection, "version" => $designation->version, "status" => $status];
+    }
+
+    /** Internal approval observation; callers authorize and lock the employee. No pay or HR reasons. */
+    public function approvalEvidence(EntityId $employee, HistoryReadBudget $budget): array
+    {
+        $checkedOn = $this->clock->now()->format('Y-m-d');
+        $designation = $this->inspect($employee, budget: $budget)['root']->designation();
+        $summary = $this->summaryOn($designation, $budget, $checkedOn);
+        return [
+            'designation_version' => $designation->version,
+            'status' => $summary['status'],
+            'position_id' => $designation->selection['id'] ?? null,
+            'position_version' => $designation->selection['version'] ?? null,
+            'checked_on' => $checkedOn,
+        ];
     }
 
     public function record(

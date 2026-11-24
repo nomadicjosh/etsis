@@ -1,6 +1,7 @@
 window.createTimeReviewPolicy = function (ui) {
     "use strict";
     const { node, request, task, openDrawer, table, recordSummary, backToWorkspace } = ui;
+    const primaryLabels = JSON.parse(globalThis.document?.getElementById?.('time-primary-labels')?.textContent || '{}');
     const button = (label, run, style = "btn-outline-primary") =>
         node(
             "button",
@@ -30,6 +31,15 @@ window.createTimeReviewPolicy = function (ui) {
             "section",
             { class: "record-section", "aria-label": "Time policy review" },
             node("h3", { class: "h6" }, "Time policy review"),
+            node('section', { class: 'mb-3', 'aria-label': primaryLabels.check },
+                node('h4', { class: 'h6' }, primaryLabels.check),
+                node('p', {}, r.require_primary_position === undefined ? primaryLabels.unrecorded_rule
+                    : r.require_primary_position ? primaryLabels.required : primaryLabels.optional),
+                data.primary_position ? node('p', { role: 'status' }, primaryLabels[data.primary_position.status]) : null,
+                data.primary_position?.checked_on ? node('p', { class: 'form-text' },
+                    primaryLabels.checked_on.replace('{date}', data.primary_position.checked_on)) : null,
+                r.require_primary_position ? node('p', { class: 'form-text' }, primaryLabels.context) : null,
+                data.approval_blocked ? node('p', { class: 'alert alert-warning', role: 'status' }, primaryLabels.blocked) : null),
             node(
                 "p",
                 {},
@@ -45,7 +55,7 @@ window.createTimeReviewPolicy = function (ui) {
                 { role: "status", class: data.flags.length ? "alert alert-warning" : "form-text" },
                 data.flags.length
                     ? data.flags.map((flag) => labels[flag] || flag).join(" · ")
-                    : "No configured time-policy exceptions found.",
+                    : primaryLabels.no_time_flags,
             ),
             node(
                 "p",
@@ -218,6 +228,12 @@ window.createTimeReviewPolicy = function (ui) {
             required: true,
             maxlength: 80,
         });
+        const primary = node('input', { type: 'checkbox', id: 'time-policy-primary', class: 'form-check-input',
+            checked: data.rules.require_primary_position === true, 'aria-describedby': 'time-policy-primary-help' });
+        time.append(node('div', { class: 'record-form-field record-form-wide form-check' }, primary,
+            node('div', { class: 'time-policy-choice-text' },
+                node('label', { for: primary.id, class: 'form-check-label' }, primaryLabels.setting),
+                node('p', { id: 'time-policy-primary-help', class: 'form-text mb-0' }, primaryLabels.setting_help))));
         field(
             time,
             "Institutional timezone",
@@ -349,13 +365,22 @@ window.createTimeReviewPolicy = function (ui) {
                     overlaps: overlap.checked,
                     mode: mode.value,
                     timezone: zone.value,
+                    require_primary_position: primary.checked,
                 };
                 try {
-                    const review = await request("/sis/time-policy/review/", "POST", {
-                        rules,
-                        version: data.version,
-                        reason: reason.value,
-                    });
+                    let review;
+                    form.inert = true;
+                    form.setAttribute('aria-busy', 'true');
+                    try {
+                        review = await request("/sis/time-policy/review/", "POST", {
+                            rules,
+                            version: data.version,
+                            reason: reason.value,
+                        });
+                    } finally {
+                        form.inert = false;
+                        form.removeAttribute('aria-busy');
+                    }
                     if (!body.isConnected) return;
                     const reviewedRules = review.rules;
                     stage("Review timesheet policy");
@@ -385,6 +410,8 @@ window.createTimeReviewPolicy = function (ui) {
                                     : "Exception approval required",
                             ],
                             ["Institutional timezone", reviewedRules.timezone],
+                            [primaryLabels.rule, reviewedRules.require_primary_position
+                                ? primaryLabels.required : primaryLabels.optional],
                         ]),
                         reviewSection("Teaching contact hours", [
                             ["Instructional minutes per contact hour", reviewedRules.contact_unit_minutes],

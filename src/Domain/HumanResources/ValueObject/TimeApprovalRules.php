@@ -14,6 +14,12 @@ final readonly class TimeApprovalRules implements \JsonSerializable
     public function __construct(#[\SensitiveParameter] array $data)
     {
         $valid = array_keys($data);
+        if (array_key_exists('require_primary_position', $data)) {
+            if (!is_bool($data['require_primary_position'])) {
+                self::invalid();
+            }
+            $valid = array_values(array_diff($valid, ['require_primary_position']));
+        }
         sort($valid);
         if (
             $valid !== [
@@ -60,6 +66,8 @@ final readonly class TimeApprovalRules implements \JsonSerializable
             "overlaps" => $data["overlaps"],
             "mode" => $data["mode"],
             "timezone" => $data["timezone"],
+            ...array_key_exists('require_primary_position', $data)
+                ? ['require_primary_position' => $data['require_primary_position']] : [],
         ];
     }
     public static function defaults(DateTimeZone $zone): self
@@ -72,8 +80,14 @@ final readonly class TimeApprovalRules implements \JsonSerializable
             "overlaps" => false,
             "mode" => "advisory",
             "timezone" => $zone->getName(),
+            'require_primary_position' => false,
         ]);
     }
+    public function requiresPrimaryPosition(): bool
+    {
+        return $this->data['require_primary_position'] ?? false;
+    }
+
     public function hasChecks(): bool
     {
         return $this->data["overlaps"] ||

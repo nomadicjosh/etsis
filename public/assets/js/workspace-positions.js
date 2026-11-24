@@ -157,9 +157,9 @@ window.createWorkspacePositions = function (ui) {
             ["Agreed rate", rate(record)],
             ["Workload", workload(record.weekly_minutes)],
         ]);
-    async function page(employee, after = null, stack = []) {
+    async function page(employee, after = null, stack = [], context = {}) {
         let state = { after, stack: [...stack] };
-        const back = () => page(employee, state.after, state.stack);
+        const back = () => page(employee, state.after, state.stack, context);
         const body = openDrawer("Position assignments", "HUMAN RESOURCES", { record: null });
         const add = button(
             "Record position assignment",
@@ -169,7 +169,7 @@ window.createWorkspacePositions = function (ui) {
         let data = null;
         add.disabled = true;
         body.append(
-            button("Back to employment", () => openEmployee(employee), "btn-link"),
+            button(context.backLabel || "Back to employment", context.back || (() => openEmployee(employee)), "btn-link"),
             node(
                 "div",
                 { class: "inline-actions" },

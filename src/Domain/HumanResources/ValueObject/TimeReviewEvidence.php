@@ -18,7 +18,10 @@ final readonly class TimeReviewEvidence implements \JsonSerializable
     public function __construct(#[\SensitiveParameter] public array $data)
     {
         try {
-            self::keys($data, ["employee_id", "target", "policy", "sources", "scope"]);
+            self::keys($data, [
+                'employee_id', 'target', 'policy', 'sources', 'scope',
+                ...array_key_exists('primary_position', $data) ? ['primary_position'] : [],
+            ]);
             new EntityId($data["employee_id"]);
             self::keys($data["policy"], ["publication_id", "version", "rules"]);
             if (
@@ -38,6 +41,7 @@ final readonly class TimeReviewEvidence implements \JsonSerializable
                 new EntityId($policy["publication_id"]);
             }
             $rules = new TimeApprovalRules($policy["rules"]);
+            $primary = $this->primaryPosition($data, $rules);
             $target = self::entry($data["target"]);
             if (
                 $data["target"]["status"] === "rejected" ||
@@ -119,12 +123,53 @@ final readonly class TimeReviewEvidence implements \JsonSerializable
                 "source_count" => count($sources),
                 "requires_exception" =>
                     $rules->data["mode"] === "exception_required" && $flags !== [],
+                'primary_position' => $primary,
+                'approval_blocked' => $primary !== null &&
+                    !in_array($primary['status'], ['current', 'not_assessed'], true),
                 "revision" => TimeApprovalRules::hash($data),
             ];
         } catch (\Throwable) {
             throw new CorruptHistoryException();
         }
     }
+
+    private function primaryPosition(#[\SensitiveParameter] array $data, TimeApprovalRules $rules): ?array
+    {
+        $required = $rules->requiresPrimaryPosition() && $data['scope'] !== 'rejection';
+        if (array_key_exists('primary_position', $data) !== $required) {
+            throw new CorruptHistoryException();
+        }
+        if (!$required) {
+            return $rules->requiresPrimaryPosition() ? ['required' => true, 'status' => 'not_assessed'] : null;
+        }
+        $primary = $data['primary_position'];
+        self::keys($primary, [
+            'designation_version', 'status', 'position_id', 'position_version', 'checked_on',
+        ]);
+        $states = ['unrecorded', 'cleared', 'current', 'changed', 'ended', 'voided', 'scheduled'];
+        if (
+            !in_array($primary['status'], $states, true) ||
+            !is_int($primary['designation_version']) ||
+            $primary['designation_version'] < 0 || $primary['designation_version'] > 2000 ||
+            ($primary['designation_version'] === 0) !== ($primary['status'] === 'unrecorded') ||
+            (($primary['position_id'] === null) !== in_array($primary['status'], ['unrecorded', 'cleared'], true)) ||
+            (($primary['position_id'] === null) !== ($primary['position_version'] === null))
+        ) {
+            throw new CorruptHistoryException();
+        }
+        if ($primary['position_id'] !== null) {
+            new EntityId($primary['position_id']);
+            if (
+                !is_int($primary['position_version']) ||
+                $primary['position_version'] < 1 || $primary['position_version'] > 2000
+            ) {
+                throw new CorruptHistoryException();
+            }
+        }
+        \Domain\HumanResources\EmployeePosition::date($primary['checked_on'], 'checked_on');
+        return ['required' => true, 'status' => $primary['status'], 'checked_on' => $primary['checked_on']];
+    }
+
     public static function facts(TimeEntry $entry): array
     {
         $utc = new DateTimeZone("UTC");

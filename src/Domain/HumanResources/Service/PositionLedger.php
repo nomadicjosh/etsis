@@ -17,6 +17,7 @@ use Domain\Scheduling\TimeSlot;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\EventSourcing\HistoryReadLimitException;
 use Domain\Shared\EventSourcing\StoredEvent;
 use Domain\Shared\EventSourcing\StreamReference;
@@ -170,13 +171,16 @@ final readonly class PositionLedger
     }
 
     /** Internal selected-appointment verification; the caller must authorize the employee. */
-    public function verified(EntityId $employee, EntityId $id): EmployeePosition
-    {
+    public function verified(
+        EntityId $employee,
+        EntityId $id,
+        ?HistoryReadBudget $budget = null,
+    ): EmployeePosition {
         $position = $this->rows->find($id) ?? throw new CorruptHistoryException();
         if ($position->employeeId->value !== $employee->value) {
             throw new AccessDeniedException('The work position belongs to another employee.');
         }
-        $this->verify($this->load($id)['root'], $position);
+        $this->verify($this->load($id, budget: $budget)['root'], $position);
         return $position;
     }
 
@@ -228,7 +232,8 @@ final readonly class PositionLedger
         EntityId $id,
         ?EntityId $operation = null,
         ?EntityId $actor = null,
-        ?string $intent = null
+        ?string $intent = null,
+        ?HistoryReadBudget $budget = null,
     ): array {
         $root = PositionHistory::root(new EmployeePositionId($id->value));
         $cursor = null;
@@ -237,7 +242,9 @@ final readonly class PositionLedger
         $receipt = false;
         $last = null;
         do {
-            $page = $this->history->page($this->stream($id), $cursor, 100);
+            $page = $budget === null
+            ? $this->history->page($this->stream($id), $cursor, 100)
+            : $budget->page($this->history, $this->stream($id), $cursor);
             if ($page->throughVersion > self::MAX_EVENTS) {
                 throw new HistoryReadLimitException();
             }

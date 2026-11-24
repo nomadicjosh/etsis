@@ -54,10 +54,12 @@ test('policy settings and review separate clocked time, teaching contact and pub
     await page.getByLabel('Weekly limit in minutes (optional)', { exact: true }).fill('2400');
     await page.getByLabel('How flags affect approval', { exact: true }).selectOption('exception_required');
     await page.getByLabel('Flag overlapping work intervals', { exact: true }).check();
+    await page.getByLabel('Require a current primary position before time approval', { exact: true }).check();
     await page.getByLabel('Instructional minutes per contact hour', { exact: true }).fill('60');
     await page.getByLabel('Contact-hours rounding', { exact: true }).selectOption('down');
     await f.reason(); await button(page, 'Review time policy').click();
     await expect(page.getByRole('region', { name: 'Clocked-time review', exact: true })).toContainText('480 minutes');
+    await expect(page.getByRole('region', { name: 'Clocked-time review', exact: true })).toContainText('Current primary designation required');
     await expect(page.getByRole('region', { name: 'Teaching contact hours', exact: true })).toContainText('Typical teaching week');
     await expect(page.getByRole('region', { name: 'Publication reason', exact: true })).toContainText('Reviewed by HR.');
     await button(page, 'Back to policy settings').click();
@@ -65,11 +67,12 @@ test('policy settings and review separate clocked time, teaching contact and pub
     await expect(page.getByLabel('Instructional minutes per contact hour', { exact: true })).toHaveValue('60');
     await expect(page.getByLabel('Contact-hours rounding', { exact: true })).toHaveValue('down');
     await expect(page.getByLabel('Flag overlapping work intervals', { exact: true })).toBeChecked();
+    await expect(page.getByLabel('Require a current primary position before time approval', { exact: true })).toBeChecked();
     await expect(page.getByLabel('Reason for policy publication', { exact: true })).toHaveValue('Fictional institution policy\nReviewed by HR.');
     await button(page, 'Review time policy').click(); await button(page, 'Confirm time policy').click();
     await expect(body(page)).toContainText('Timesheet policy published.');
     expect(f.calls.find(call => call.path.endsWith('/publish/')).data).toEqual(f.review);
-    expect(f.rules).toMatchObject({ daily_minutes: 480, weekly_minutes: 2400, overlaps: true, mode: 'exception_required', contact_unit_minutes: 60, contact_rounding: 'down' });
+    expect(f.rules).toMatchObject({ daily_minutes: 480, weekly_minutes: 2400, overlaps: true, mode: 'exception_required', contact_unit_minutes: 60, contact_rounding: 'down', require_primary_position: true });
     expect(f.calls.filter(call => call.path.endsWith('/review/') || call.path.endsWith('/publish/')).every(call => call.csrf === 'fictional-test-token')).toBe(true);
     await button(page, 'View current policy').click();
     await expect(page.getByRole('region', { name: 'Current policy', exact: true })).toContainText('Published policy 1');
