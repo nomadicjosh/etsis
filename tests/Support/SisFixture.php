@@ -144,6 +144,35 @@ final class SisFixture
         );
     }
 
+    /** Real workflow wiring with one injectable completion boundary for isolated recovery checks. */
+    public function courseRegistrationService(?\Domain\Audit\Repository\AuditTrail $audit = null): RegistrationService
+    {
+        return new RegistrationService(
+            $this->registration,
+            $this->admissions,
+            $this->access,
+            $this->transactions,
+            $this->registrationBilling,
+            $audit ?? $this->audit,
+            $this->clock,
+            $this->drops,
+            $this->academicCredits(),
+            $this->enrollmentLedger(),
+            $this->activityLedger(),
+            $this->primaryProgramLedger(),
+            $this->workPursuits(),
+            new \Domain\Registration\Service\PrerequisiteService(
+                $this->inputVerifier(),
+                $this->workPursuits(),
+                $this->prerequisitePermissionLedger(),
+            ),
+            $this->schedules(),
+            $this->corequisites(),
+            $this->windowPolicies(),
+            $this->waitlistGuard($audit),
+        );
+    }
+
     public function financialCommands(): \Domain\Finance\Service\FinancialCommandPolicy
     {
         return new \Domain\Finance\Service\FinancialCommandPolicy($this->access, $this->clock);
@@ -328,7 +357,11 @@ final class SisFixture
         bool $versionedGrades = true,
         bool $initialize = true,
         ?EntityId $actor = null,
+        ?\Infrastructure\Communications\DefuseMessageCipher $cipher = null,
     ) {
+        if ($cipher !== null) {
+            $this->dropCipher = $cipher;
+        }
         $this->connection = $connection ?? new Sqlite(["driver" => "pdo_sqlite", "dsn" => "sqlite::memory:"]);
         if ($initialize) {
             $this->connection->pdo->exec(
@@ -425,30 +458,7 @@ final class SisFixture
         );
         $this->registrationBilling = $billing;
         $this->drops = $this->dropService($billing);
-        $this->service = new RegistrationService(
-            $this->registration,
-            $this->admissions,
-            $this->access,
-            $this->transactions,
-            $billing,
-            $this->audit,
-            $this->clock,
-            $this->drops,
-            $this->academicCredits(),
-            $this->enrollmentLedger(),
-            $this->activityLedger(),
-            $this->primaryProgramLedger(),
-            $this->workPursuits(),
-            new \Domain\Registration\Service\PrerequisiteService(
-                $this->inputVerifier(),
-                $this->workPursuits(),
-                $this->prerequisitePermissionLedger(),
-            ),
-            $this->schedules(),
-            $this->corequisites(),
-            $this->windowPolicies(),
-            $this->waitlistGuard(),
-        );
+        $this->service = $this->courseRegistrationService();
         if (!$initialize) {
             $this->term = new EntityId($this->sql->rows("sis_terms", [], 1)[0]["id"]);
             $this->program = new EntityId($this->sql->rows("sis_programs", [], 1)[0]["id"]);

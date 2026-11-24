@@ -2,6 +2,10 @@
 
 Accepted registrations, early/late drops and reviewed tracked late-withdrawal reinstatements have their own replayable enrollment history in **`sis_history_events`**. Each enrollment ULID identifies one `EnrollmentHistory` stream. [Academic-credit decisions](academic-credit-history.md) and finance remain separate domain facts, saved in the same transaction. There is one authoritative event table.
 
+## Interrupted confirmations and process-loss checks
+
+The [bounded recovery qualification](workflow-recovery-qualification.md) now covers terminated final-seat and 25-student confirmations, retained course/offering bindings, lost replies, competing early drops, waitlist notices and payment-linked refunds. Accepted retries preserve original receipts after later removals and registrations. These fictional SQLite checks supplement ordinary concurrency coverage; native multi-engine, large-population and restore acceptance remain separate work. See [the operator recovery guidance](workflow-recovery-qualification.md#recover-an-interrupted-confirmation) before creating a new command to replace an uncertain confirmation.
+
 ## Publish registration windows and course limits
 
 In **Academic catalog → Terms**, open a term and choose **Registration policy**. Set when student registration opens/closes and the maximum number of registered courses. Enter a reason, choose **Review policy**, then **Publish policy**. **Revise** and **Policy history** preserve the unsaved form. Dates in this editor use the browser's stated timezone; the server receives explicit offsets and retains exact UTC instants. The institution timezone is retained with the publication. The closing instant remains inclusive.

@@ -4,6 +4,14 @@ The legacy system is the feature inventory, not a requirement to reproduce its s
 
 “Working” below describes a workflow available in the current code. “Partial” means useful pieces work but the broader recommendation still needs implementation. “Proposed” is a design recommendation, not completed functionality.
 
+## Completed: bounded registration and finance process-loss qualification
+
+**Qualified within the documented SQLite scope.** [Workflow recovery checks](workflow-recovery-qualification.md) now terminate real isolated PHP workers before commit or after acceptance but before a reply. The eight cases cover final-seat contention, a whole 25-student batch, retained course/offering references, waitlist priority and disposable notices, early-drop/charge reversal, competing linked refunds and original receipts after later decisions/postings. Counts and fingerprints verify that uncommitted projections, event/support rows, receipts and audit never become accepted partial work. Owner-deleted notices stay deleted after accepted retries.
+
+The [operator guide](workflow-recovery-qualification.md#recover-an-interrupted-confirmation) explains original-confirmation reuse, current-record inspection and the distinct payment, account-credit and recorded-refund steps. Test-only wiring shares fictional keys through private stdin, caps children at two/96 MiB, bounds waits and removes private SQLite artifacts; it introduces no production command, schema, business-rule change, report or external effect.
+
+Validation: **195 distinct PHP tests / 1,055 assertions** across the adjacent registration/finance/person foundation regressions, final eight recovery cases and two actual-provider portal/waitlist checks. New/changed PHP standards, syntax and whitespace pass. The configured MariaDB remains at twenty events, seventeen stream heads and twenty operation receipts with its original protected-event checksum. Heavy runs stayed sequential and low priority, with a 128 MiB parent and fixed 10–45-second deadlines; the broad batch completed in 44.704 seconds and the eight focused cases in 3.002 seconds. No browser change required another interface test. Native multi-engine/load, host/power loss, independent restore/backup and institution-led acceptance remain open.
+
 ## Completed: incompatible curriculum choices and retained selection rules
 
 **Working.** [Incompatible curriculum pairs](program-publication.md#incompatible-curriculum-choices) connect active program choices, the existing selection-policy editor, reviewed academic publications, registrar decisions and public catalog explanations. Up to thirty-two symmetric pairs retain exact identities under the selected program publication. Typed count limits and required-major relationships remain independent. Impossible or bounded-incomplete combinations cannot be published; stale reviews, source/authority changes and required-audit failures preserve the original state.
