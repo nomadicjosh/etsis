@@ -58,6 +58,14 @@ final readonly class AdmissionApplication
         );
     }
 
+    public function correctProgram(EntityId $program): self
+    {
+        if ($this->status !== ApplicationStatus::Submitted || $this->programId->value === $program->value) {
+            throw new DomainException('Choose a different program for an application awaiting a decision.');
+        }
+        return new self($this->id, $this->personId, $program, $this->entryTermId, $this->status, $this->version + 1);
+    }
+
     public function approveEntryTerm(EntityId $term): self
     {
         if (!in_array($this->status, [ApplicationStatus::Submitted, ApplicationStatus::Accepted], true)) {

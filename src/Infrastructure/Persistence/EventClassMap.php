@@ -71,6 +71,7 @@ final class EventClassMap
             \Domain\Admissions\Event\AdmissionReviewStateWasChanged::class,
             \Domain\Admissions\Event\AdmissionOfferWasRecorded::class,
             \Domain\Admissions\Event\ApplicationAnswersWereResubmitted::class,
+            \Domain\Admissions\Event\AdmissionProgramWasCorrected::class,
             \Domain\Admissions\Event\AdmissionEntryTermWasApproved::class,
             \Domain\Admissions\Event\StudentWasMatriculated::class,
             \Domain\Student\Event\StudentActivityWasStarted::class,

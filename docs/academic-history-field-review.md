@@ -180,3 +180,8 @@ Course groups can retain an optional maximum age in whole calendar months, measu
 ## Submitted application intake corrections (2026-11-23)
 
 The application's planned entry term is distinct from its original submitted intake and eventual student cohort. [Reviewed pre-decision corrections](admissions-corrections.md#correct-an-entry-term-before-a-decision) retain original form/answer/index facts while publishing genuine before/after calendar snapshots in the existing application stream. A fresh acceptance uses the corrected intake; matriculation selects its academic-year/catalog context. A current observation on an older untracked application establishes no original submission date. Program changes, backdated intakes and post-matriculation consequences remain separate decisions.
+
+
+## Submitted application program corrections (2026-11-24)
+
+The planned admissions program is distinct from the original submitted program and eventual student pursuit. [Reviewed pre-decision program corrections](admissions-corrections.md#correct-a-planned-program-before-a-decision) retain original form/answer/submission facts and exact before/after program labels in the same protected admissions stream. Direct applications and targets using the same active shared academic-level form are supported, with explicit retained form evidence; program-specific/cross-form conversion remains open. Replay verifies current placement against the genuine correction and original artifacts against their initial program. A fresh acceptance/matriculation uses the corrected program; an older decision review cannot survive the change. No student/pursuit reassignment, answer conversion, inferred historical submission, new report or schema migration is introduced.

@@ -36,6 +36,18 @@ interface AdmissionsRepository
     /** Projection CAS only; the entry-term service owns authorization, locks and the transaction. */
     public function saveResubmission(AdmissionApplication $before, AdmissionApplication $after): void;
     public function saveEntryTerm(AdmissionApplication $before, AdmissionApplication $after): void;
+    /** Projection CAS only; the program-correction service owns the complete transaction. */
+    public function saveProgram(AdmissionApplication $before, AdmissionApplication $after): void;
+    /** @return array{id:string,code:string,title:string} */
+    public function program(EntityId $id): array;
+    /** @return list<array{id:string,code:string,title:string}> */
+    public function programChoices(
+        string $search,
+        EntityId $exclude,
+        ?EntityId $after = null,
+        ?EntityId $sharedForm = null,
+    ): array;
+
     /** @return list<array<string,mixed>> */
     public function entryTerms(
         string $today,

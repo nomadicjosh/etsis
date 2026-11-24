@@ -515,6 +515,8 @@ window.createWorkspacePeople = function (ui) {
                 actions.append(button('Return to review', () => mayLeave() && reviewState(row, false), 'btn-primary'));
             }
         }
+        if (app.status === 'submitted' && can('sis:admissions:manage') && can('sis:admissions:correct'))
+            extra.push(button(ui.admissionProgramLabels?.title || 'Correct application program', () => mayLeave() && programCorrection(row)));
         if ((app.status === 'accepted' && can('sis:admissions:defer'))
             || (app.status === 'submitted' && can('sis:admissions:correct')))
             extra.push(button(ui.admissionEntryLabels?.entry_title || 'Entry term', () => mayLeave() && entryTerm(row)));
@@ -584,6 +586,14 @@ window.createWorkspacePeople = function (ui) {
                     "This application was entered directly. No application-form answers are attached.",
                 ),
             );
+    }
+    function programCorrection(row) {
+        const labels = ui.admissionProgramLabels;
+        const body = openDrawer(labels.title, labels.context);
+        let editor = null;
+        body.append(button(labels.back, () => (editor?.beforeLeave() ?? true) && application(row)));
+        editor = window.createAdmissionProgram({ node, request, task, notify, labels }).mount(body, row.id,
+            { onComplete: () => application(row) });
     }
     function entryTerm(row) {
         const body = openDrawer(ui.admissionEntryLabels?.entry_title || 'Entry term', ui.admissionEntryLabels?.entry_context || 'ADMISSIONS INTAKE');
@@ -943,7 +953,7 @@ window.createWorkspacePeople = function (ui) {
                     node(
                         "h3",
                         {},
-                        resubmission ? 'Application answers resubmitted' : entry ? ({ entry_defer: ui.admissionEntryLabels?.history_defer || 'Entry deferred', entry_reconfirm: ui.admissionEntryLabels?.history_reconfirm || 'Updated intake approved', entry_correct: ui.admissionEntryLabels?.history_correct || 'Entry term corrected', entry_recheck: ui.admissionEntryLabels?.history_recheck || 'Corrected intake calendar reviewed' }[item.kind])
+                        item.kind === 'program_correction' ? ui.admissionProgramLabels.history : resubmission ? 'Application answers resubmitted' : entry ? ({ entry_defer: ui.admissionEntryLabels?.history_defer || 'Entry deferred', entry_reconfirm: ui.admissionEntryLabels?.history_reconfirm || 'Updated intake approved', entry_correct: ui.admissionEntryLabels?.history_correct || 'Entry term corrected', entry_recheck: ui.admissionEntryLabels?.history_recheck || 'Corrected intake calendar reviewed' }[item.kind])
                         : offer ? `Admission offer: ${item.status}` : observed
                             ? "Observed current application"
                             : reviewState ? (item.kind === 'withdrawal' ? (item.withdrawal_channel === 'applicant' ? 'Applicant withdrew application' : 'Application withdrawn') : 'Returned to review')
@@ -971,6 +981,8 @@ window.createWorkspacePeople = function (ui) {
                             : `Effective: ${item.effective_at}. Recorded: ${item.recorded_at}.`,
                     ),
                 );
+                if (item.program) section.append(node('p', { class: 'text-break' },
+                    `${item.program.before.code} · ${item.program.before.title} → ${item.program.after.code} · ${item.program.after.title}`));
                 if (item.checklist) section.append(window.createAdmissionReadiness({ node }).history(item.checklist));
                 else if (['decision', 'correction'].includes(item.kind)) section.append(
                     node('p', { class: 'form-text' }, 'The checklist used for this earlier decision was not recorded.'));

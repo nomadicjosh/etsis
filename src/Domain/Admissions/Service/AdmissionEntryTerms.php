@@ -30,7 +30,7 @@ final readonly class AdmissionEntryTerms
         return $out;
     }
     /** Term, program, then year locks follow the existing catalog ordering. */
-    public function lock(AdmissionApplication $a, ?EntityId $target = null): void
+    public function lock(AdmissionApplication $a, ?EntityId $target = null, ?EntityId $program = null): void
     {
         $terms = [$a->entryTermId->value => $a->entryTermId];
         if ($target !== null) {
@@ -45,7 +45,14 @@ final readonly class AdmissionEntryTerms
                 $years[$row['academic_year_id']] = new EntityId($row['academic_year_id']);
             }
         }
-        $this->catalogs->lockProgram($a->programId);
+        $programs = [$a->programId->value => $a->programId];
+        if ($program !== null) {
+            $programs[$program->value] = $program;
+        }
+        ksort($programs);
+        foreach ($programs as $id) {
+            $this->catalogs->lockProgram($id);
+        }
         ksort($years);
         foreach ($years as $year) {
             $this->catalogs->lockYear($year);

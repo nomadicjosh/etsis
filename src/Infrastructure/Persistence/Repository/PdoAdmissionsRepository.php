@@ -207,6 +207,64 @@ final readonly class PdoAdmissionsRepository implements AdmissionsRepository
         $this->transition($after, $before->version, ApplicationStatus::Submitted, ApplicationStatus::Submitted);
     }
 
+    public function saveProgram(AdmissionApplication $before, AdmissionApplication $after): void
+    {
+        if ($before->correctProgram($after->programId) != $after) {
+            throw new DomainException('A program correction must preserve identity and advance one revision.');
+        }
+        $sql = new SqlRecords($this->db);
+        $q = $sql->quote(...);
+        $statement = $this->db->getConnection()->pdo->prepare('UPDATE ' . $q('sis_applications')
+            . ' SET ' . $q('program_id') . ' = ?, ' . $q('version') . ' = ? WHERE ' . $q('id')
+            . ' = ? AND ' . $q('program_id') . ' = ? AND ' . $q('person_id') . ' = ? AND '
+            . $q('entry_term_id') . ' = ? AND ' . $q('version') . ' = ? AND ' . $q('status') . ' = ?');
+        $statement->execute([$after->programId->value, $after->version, $before->id->value,
+            $before->programId->value, $before->personId->value, $before->entryTermId->value,
+            $before->version, 'submitted']);
+        if ($statement->rowCount() !== 1) {
+            throw new ConcurrentModificationException('The application changed. Review the program again.');
+        }
+    }
+
+    public function program(EntityId $id): array
+    {
+        $row = (new SqlRecords($this->db))->one('sis_programs', ['id' => $id->value]);
+        return ['id' => $row['id'], 'code' => $row['code'], 'title' => $row['title']];
+    }
+
+    public function programChoices(
+        string $search,
+        EntityId $exclude,
+        ?EntityId $after = null,
+        ?EntityId $sharedForm = null,
+    ): array {
+        $sql = new SqlRecords($this->db);
+        $q = $sql->quote(...);
+        $where = [$q('id') . ' <> ?'];
+        $args = [$exclude->value];
+        if ($sharedForm !== null) {
+            $key = $q('sis_programs') . '.' . $q('id');
+            $where[] = 'EXISTS (SELECT 1 FROM ' . $q('sis_program_details') . ' d JOIN '
+            . $q('sis_level_forms') . ' f ON f.' . $q('academic_level_id') . ' = d.' . $q('academic_level_id')
+            . ' WHERE d.' . $q('id') . ' = ' . $key . ' AND f.' . $q('form_id') . ' = ?)';
+            $where[] = 'NOT EXISTS (SELECT 1 FROM ' . $q('sis_program_forms') . ' o WHERE o.'
+            . $q('program_id') . ' = ' . $key . ')';
+            $args[] = $sharedForm->value;
+        }
+        if ($search !== '') {
+            $where[] = '(' . $q('code') . " LIKE ? ESCAPE '~' OR " . $q('title') . " LIKE ? ESCAPE '~')";
+            $like = '%' . strtr($search, ['~' => '~~', '%' => '~%', '_' => '~_']) . '%';
+            array_push($args, $like, $like);
+        }
+        if ($after !== null) {
+            $where[] = $q('id') . ' > ?';
+            $args[] = $after->value;
+        }
+        return $sql->fetch('SELECT ' . implode(', ', array_map($q, ['id', 'code', 'title']))
+            . ' FROM ' . $q('sis_programs') . ' WHERE ' . implode(' AND ', $where)
+            . ' ORDER BY ' . $q('id'), $args, 21);
+    }
+
     public function saveEntryTerm(AdmissionApplication $before, AdmissionApplication $after): void
     {
         if ($before->approveEntryTerm($after->entryTermId) != $after) {

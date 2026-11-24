@@ -102,6 +102,11 @@ return static function (Psr7Router $router): void {
     $router->map(['GET'], '/sis/applications/{id}/answers/', [$revisions, 'current']);
     $router->map(['POST'], '/sis/applications/{id}/answers/review/', [$revisions, 'review']);
     $router->map(['POST'], '/sis/applications/{id}/answers/commit/', [$revisions, 'commit']);
+    $programCorrection = \Application\Http\Controller\AdmissionProgramCorrectionController::class;
+    $router->map(['GET'], '/sis/applications/{id}/program/', [$programCorrection, 'current']);
+    $router->map(['GET'], '/sis/applications/{id}/program/choices/', [$programCorrection, 'choices']);
+    $router->map(['POST'], '/sis/applications/{id}/program/review/', [$programCorrection, 'review']);
+    $router->map(['POST'], '/sis/applications/{id}/program/commit/', [$programCorrection, 'commit']);
     $entry = \Application\Http\Controller\AdmissionDeferralController::class;
     $router->map(['GET'], '/sis/applications/{id}/entry/', [$entry, 'current']);
     $router->map(['GET'], '/sis/applications/{id}/entry/terms/', [$entry, 'choices']);

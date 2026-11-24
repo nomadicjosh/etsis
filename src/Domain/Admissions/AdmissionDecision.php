@@ -124,6 +124,32 @@ final class AdmissionDecision extends EventSourcedAggregate
         $this->source = $p['source'];
         $this->entryApproval = $p;
     }
+    private ?string $initialProgram = null;
+    public function initialProgram(): ?string
+    {
+        return $this->initialProgram;
+    }
+    public function whenAdmissionProgramWasCorrected(
+        #[\SensitiveParameter] \Domain\Admissions\Event\AdmissionProgramWasCorrected $event
+    ): void {
+        $p = $event->payload();
+        if (
+            $this->application === null || $this->application['status'] !== 'submitted'
+            || ($this->submission !== null && $p['shared_form'] !== null
+                && $p['shared_form']['definition'] !== $this->submission['form_definition_hash'])
+            || $p['before']['id'] !== $this->application['program_id']
+            || $p['previous_decision_id'] !== $this->decision
+            || $p['application_version'] !== $this->application['version'] + 1
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->assertSubmission($p['source']);
+        $this->application['program_id'] = $p['after']['id'];
+        $this->application['version'] = $p['application_version'];
+        $this->decision = $p['decision_id'];
+        $this->source = $p['source'];
+    }
+
     public function acceptHistorical(#[\SensitiveParameter] DomainEvent $event): void
     {
         if (array_key_exists('admission_checklist', $event->metadata())) {
@@ -162,7 +188,9 @@ final class AdmissionDecision extends EventSourcedAggregate
         ) {
             throw new CorruptHistoryException();
         }
-        if ($event instanceof \Domain\Admissions\Event\ApplicationAnswersWereResubmitted) {
+        if ($event instanceof \Domain\Admissions\Event\AdmissionProgramWasCorrected) {
+            \Domain\Admissions\ValueObject\AdmissionProgramCorrectionSchema::validate($event->payload());
+        } elseif ($event instanceof \Domain\Admissions\Event\ApplicationAnswersWereResubmitted) {
             \Domain\Admissions\ValueObject\ApplicationRevisionSchema::validate($event->payload());
         } elseif ($event instanceof \Domain\Admissions\Event\AdmissionEntryTermWasApproved) {
             \Domain\Admissions\ValueObject\AdmissionDeferralSchema::validate($event->payload());
@@ -195,6 +223,7 @@ final class AdmissionDecision extends EventSourcedAggregate
         }
         $this->submission = $p;
         $this->application = $p["application"];
+        $this->initialProgram = $p["application"]["program_id"];
         $this->initialEntryTerm = $p["application"]["entry_term_id"];
         $this->decision = $p["decision_id"];
     }
@@ -210,6 +239,7 @@ final class AdmissionDecision extends EventSourcedAggregate
             throw new CorruptHistoryException();
         }
         $this->application = $p["application"];
+        $this->initialProgram = $p["application"]["program_id"];
         $this->initialEntryTerm = $p["application"]["entry_term_id"];
         $this->decision = $p["decision_id"];
     }
@@ -239,6 +269,7 @@ final class AdmissionDecision extends EventSourcedAggregate
             throw new CorruptHistoryException();
         }
         $this->application = $p["application"];
+        $this->initialProgram = $p["application"]["program_id"];
         $this->initialEntryTerm = $p["application"]["entry_term_id"];
         $this->source = $p["source"];
         $this->decision = $p["decision_id"];

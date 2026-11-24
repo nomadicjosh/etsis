@@ -214,6 +214,10 @@ final readonly class HistoricalSchemaRegistry
                 'type' => 'admission_decision', 'root' => \Domain\Admissions\AdmissionDecision::class,
                 'fields' => \Domain\Admissions\ValueObject\ApplicationRevisionSchema::FIELDS,
             ],
+            \Domain\Admissions\Event\AdmissionProgramWasCorrected::class => [
+                'type' => 'admission_decision', 'root' => \Domain\Admissions\AdmissionDecision::class,
+                'fields' => \Domain\Admissions\ValueObject\AdmissionProgramCorrectionSchema::FIELDS,
+            ],
             \Domain\Admissions\Event\AdmissionEntryTermWasApproved::class => [
                 'type' => 'admission_decision', 'root' => \Domain\Admissions\AdmissionDecision::class,
                 'fields' => \Domain\Admissions\ValueObject\AdmissionDeferralSchema::FIELDS,
@@ -829,7 +833,9 @@ final readonly class HistoricalSchemaRegistry
                 $definition["fields"][] = "grade_scale";
             }
             if ($stream->type === "admission_decision") {
-                if ($class === \Domain\Admissions\Event\ApplicationAnswersWereResubmitted::class) {
+                if ($class === \Domain\Admissions\Event\AdmissionProgramWasCorrected::class) {
+                    \Domain\Admissions\ValueObject\AdmissionProgramCorrectionSchema::validate($payload);
+                } elseif ($class === \Domain\Admissions\Event\ApplicationAnswersWereResubmitted::class) {
                     \Domain\Admissions\ValueObject\ApplicationRevisionSchema::validate($payload);
                 } elseif ($class === \Domain\Admissions\Event\AdmissionEntryTermWasApproved::class) {
                     \Domain\Admissions\ValueObject\AdmissionDeferralSchema::validate($payload);

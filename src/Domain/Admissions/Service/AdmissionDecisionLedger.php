@@ -65,7 +65,8 @@ final readonly class AdmissionDecisionLedger
         if ($birth !== null && ($birth["source"]["submission"]["id"] ?? null) !== $submission->value) {
             throw new CorruptHistoryException();
         }
-        return $birth === null ? null : ['entry_term_id' => $birth['application']['entry_term_id'],
+        return $birth === null ? null : ['program_id' => $birth['application']['program_id'],
+            'entry_term_id' => $birth['application']['entry_term_id'],
             'entry_term_code' => $birth['source']['entry_term_code']];
     }
     /** @return array<string,mixed>|null */
@@ -264,6 +265,59 @@ final readonly class AdmissionDecisionLedger
         $this->verify($after);
         return $this->entryResult($before->id, $p, $at->format(DATE_ATOM));
     }
+    /** The projection CAS is part of the caller's complete transaction. */
+    public function correctProgram(
+        AdmissionApplication $before,
+        AdmissionApplication $after,
+        array $programs,
+        array $source,
+        EntityId $operation,
+        EntityId $actor,
+        #[\SensitiveParameter] string $reason
+    ): array {
+        if ($this->access->authenticatedUserId()->value !== $actor->value) {
+            throw new AccessDeniedException('The program correction actor changed.');
+        }
+        $root = $this->observe(
+            $before,
+            $operation,
+            $actor,
+            $this->context->source($before),
+            \Domain\Admissions\Event\AdmissionProgramWasCorrected::class
+        );
+        $p = ['decision_id' => $operation->value, 'previous_decision_id' => $root->decision(),
+            'application_version' => $after->version, 'before' => $programs['before'],
+            'after' => $programs['after'], 'source' => $source, 'shared_form' => $programs['target_form']];
+        $version = $root->playhead();
+        $event = \Domain\Admissions\Event\AdmissionProgramWasCorrected::occur(
+            new AdmissionDecisionId($before->id->value),
+            $p,
+            ['__aggregate_type' => 'admission_decision']
+        )->withPlayhead($version + 1);
+        $root->acceptHistorical($event);
+        $at = $this->clock->now();
+        $this->history->append(
+            $this->stream($before->id),
+            $operation,
+            $version,
+            new EventContext($actor, $at, $operation, reason: $reason),
+            [$event]
+        );
+        $this->verify($after);
+        return $this->programResult($before->id, $p, $at->format(DATE_ATOM));
+    }
+
+    private function programResult(EntityId $id, array $p, string $at): array
+    {
+        $before = $p['before'];
+        $after = $p['after'];
+        ksort($before);
+        ksort($after);
+        return ['application_id' => $id->value, 'decision_id' => $p['decision_id'], 'kind' => 'program_correction',
+            'status' => 'submitted', 'version' => $p['application_version'], 'before' => $before,
+            'after' => $after, 'effective_at' => $at];
+    }
+
     private function entryResult(EntityId $id, array $p, string $at): array
     {
         $before = $p['before'];
@@ -523,24 +577,32 @@ final readonly class AdmissionDecisionLedger
             $offer = $e instanceof \Domain\Admissions\Event\AdmissionOfferWasRecorded;
             $revision = $e instanceof \Domain\Admissions\Event\ApplicationAnswersWereResubmitted;
             $entry = $e instanceof \Domain\Admissions\Event\AdmissionEntryTermWasApproved;
+            $program = $e instanceof \Domain\Admissions\Event\AdmissionProgramWasCorrected;
+            $kind = match (true) {
+                $program => 'program_correction',
+                $revision => 'resubmission',
+                $entry => 'entry_' . $p['kind'],
+                $offer => 'offer_' . $p['action'],
+                $observed => 'observation',
+                $initial => 'submission',
+                $correction => 'correction',
+                $reviewState => $p['status'] === 'withdrawn' ? 'withdrawal' : 'review_resumed',
+                default => 'decision',
+            };
+            $status = match (true) {
+                $program, $revision => 'submitted',
+                $entry => \Domain\Admissions\ValueObject\AdmissionDeferralSchema::correction($p['kind'])
+                ? 'submitted' : 'accepted',
+                $offer => $p['offer']['status'],
+                default => $p['status'] ?? $p['application']['status'],
+            };
             $items[] = [
-                "kind" => $revision ? "resubmission"
-                    : ($entry ? "entry_" . $p["kind"] : ($offer ? "offer_" . $p["action"] : ($observed
-                    ? "observation"
-                    : ($initial
-                        ? "submission"
-                        : ($correction
-                            ? "correction"
-                            : ($reviewState
-                                ? ($p['status'] === 'withdrawn' ? 'withdrawal' : 'review_resumed')
-                                : "decision")))))),
-                "status" => $revision ? "submitted" : ($entry
-                    ? (\Domain\Admissions\ValueObject\AdmissionDeferralSchema::correction($p['kind'])
-                        ? 'submitted' : 'accepted')
-                    : ($offer ? $p["offer"]["status"] : ($p["status"] ?? $p["application"]["status"]))),
+                'kind' => $kind,
+                'status' => $status,
                 "checklist" => array_key_exists('admission_checklist', $e->metadata())
                     ? AdmissionChecklistProof::summary($e->metaParam('admission_checklist')) : null,
                 "answer_revision_id" => $revision ? $p["revision"]["id"] : null,
+                "program" => $program ? ["before" => $p["before"], "after" => $p["after"]] : null,
                 "entry" => $entry ? ["before" => $p["before"], "after" => $p["after"]] : null,
                 "offer" => $offer ? $p["offer"] : null,
                 "previous_status" => $p["previous_status"] ?? null,
@@ -654,6 +716,7 @@ final readonly class AdmissionDecisionLedger
                     $observedDecision = $stored->event->payload()['decision_id'];
                 }
                 if (
+                    $stored->event instanceof \Domain\Admissions\Event\AdmissionProgramWasCorrected ||
                     $stored->event instanceof \Domain\Admissions\Event\AdmissionEntryTermWasApproved ||
                     $stored->event instanceof AdmissionWasDecided ||
                     $stored->event instanceof \Domain\Admissions\Event\AdmissionDecisionWasCorrected ||
@@ -668,13 +731,19 @@ final readonly class AdmissionDecisionLedger
                                 "This admissions receipt belongs to another actor.",
                             );
                         }
-                        $receipt = $stored->event instanceof \Domain\Admissions\Event\AdmissionEntryTermWasApproved
+                        $receipt = $stored->event instanceof \Domain\Admissions\Event\AdmissionProgramWasCorrected
+                        ? $this->programResult(
+                            $a->id,
+                            $stored->event->payload(),
+                            $at ?? throw new CorruptHistoryException()
+                        )
+                        : ($stored->event instanceof \Domain\Admissions\Event\AdmissionEntryTermWasApproved
                         ? $this->entryResult(
                             $a->id,
                             $stored->event->payload(),
                             $at ?? throw new CorruptHistoryException()
                         )
-                        : $this->result($root, $at ?? throw new CorruptHistoryException());
+                        : $this->result($root, $at ?? throw new CorruptHistoryException()));
                     }
                 }
             }
@@ -687,7 +756,15 @@ final readonly class AdmissionDecisionLedger
                 if ($birthActor === null || $birthAt === null || $birthRecordedAt === null) {
                     throw new CorruptHistoryException();
                 }
-                $this->context->verify($a, $birth, new EntityId($birthActor));
+                $original = new AdmissionApplication(
+                    $a->id,
+                    $a->personId,
+                    new EntityId($birth['application']['program_id']),
+                    $a->entryTermId,
+                    $a->status,
+                    $a->version
+                );
+                $this->context->verify($original, $birth, new EntityId($birthActor));
             }
             if (
                 ($root->source() === null &&
@@ -700,9 +777,16 @@ final readonly class AdmissionDecisionLedger
             ) {
                 throw new CorruptHistoryException();
             }
-            if ($birth === null && $root->entryApproval() !== null) {
+            if ($birth === null && $root->source() !== null) {
                 $this->context->verifyRetained(
-                    $a,
+                    new AdmissionApplication(
+                        $a->id,
+                        $a->personId,
+                        new EntityId($root->initialProgram() ?? throw new CorruptHistoryException()),
+                        $a->entryTermId,
+                        $a->status,
+                        $a->version
+                    ),
                     $root->source(),
                     new EntityId($root->initialEntryTerm() ?? throw new CorruptHistoryException())
                 );

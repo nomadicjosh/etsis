@@ -58,8 +58,7 @@ final readonly class ApplicationSubmissionService
                 $this->recheckDirect($actor);
                 $existing = $this->admissions->application($id);
                 if (
-                    $existing->personId->value !== $person->value ||
-                    $existing->programId->value !== $program->value
+                    $existing->personId->value !== $person->value
                 ) {
                     throw new ConcurrentModificationException(
                         "This application identifier has already been used.",
@@ -68,6 +67,7 @@ final readonly class ApplicationSubmissionService
                 $receipt = $this->ledger->submissionReceipt($existing, $id, $actor);
                 if (
                     $receipt === null || $receipt["channel"] !== "direct"
+                    || $receipt["application"]["program_id"] !== $program->value
                     || $receipt["application"]["entry_term_id"] !== $term->value
                 ) {
                     throw new ConcurrentModificationException(
@@ -145,12 +145,14 @@ final readonly class ApplicationSubmissionService
                 $a = $this->admissions->application($id);
                 $this->recheck($person, $actor);
                 if (
-                    $a->personId->value !== $person->value ||
-                    $a->programId->value !== $program->value
+                    $a->personId->value !== $person->value
                 ) {
                     throw new CorruptHistoryException();
                 }
-                $this->ledger->verifySubmission($a, $submission);
+                $origin = $this->ledger->verifySubmission($a, $submission);
+                if (($origin['program_id'] ?? $a->programId->value) !== $program->value) {
+                    throw new CorruptHistoryException();
+                }
                 // Earlier receipts remain usable without inventing their original submission events.
                 $this->ledger->submissionReceipt($a, $submission, $actor);
                 return $id;
