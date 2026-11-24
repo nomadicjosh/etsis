@@ -119,6 +119,8 @@ final readonly class CourseCloneService
             }
             $policy?->requireChoice($draft->creditsMilli);
             $this->catalog->save("courses", $draft->id, [
+                'continuing_education' => $context['source']['continuing_education'] === null ? null
+                    : json_encode($context['source']['continuing_education'], JSON_THROW_ON_ERROR),
                 'credit_policy' => $policy === null ? null : json_encode($policy->describe(), JSON_THROW_ON_ERROR),
                 "transcript_title" => $context["source"]["transcript_title"],
                 "description" => $context["source"]["description"],
@@ -233,6 +235,7 @@ final readonly class CourseCloneService
                 "title" => $course->title,
                 "credits_milli" => $course->creditsMilli,
                 'credit_policy' => $course->creditPolicy?->describe(),
+                'continuing_education' => $course->continuingEducation?->describe(),
                 "active" => $course->active,
                 "transcript_title" => $text["transcript_title"],
                 "description" => $text["description"],

@@ -19,6 +19,7 @@ use Domain\Shared\ValueObject\DateRange;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Restriction;
 use Infrastructure\Persistence\SqlRecords;
+use Domain\Catalog\ValueObject\ContinuingEducationUnits;
 
 final readonly class SqlRegistrationRepository implements RegistrationRepository
 {
@@ -82,6 +83,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             (bool) $r["active"],
             $r["published_transcript_title"],
             creditPolicy: \Domain\Catalog\ValueObject\CreditPolicy::stored($r['credit_policy']),
+            continuingEducation: ContinuingEducationUnits::stored($r['continuing_education']),
         );
     }
 
@@ -100,6 +102,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 prerequisiteGroups: new SqlCatalogWorkflowRepository($this->sql)->prerequisiteGroups($current->id),
                 creditPolicy: $current->creditPolicy,
                 offeringCreditsMilli: $section->offeringCreditsMilli,
+                continuingEducation: $current->continuingEducation,
             );
         }
         return new Course(
@@ -114,6 +117,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             $bound->definition->prerequisiteGroups,
             $bound->definition->creditPolicy,
             $section->offeringCreditsMilli,
+            $bound->definition->continuingEducation,
         );
     }
 
@@ -161,6 +165,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                     throw new \Domain\Shared\EventSourcing\CorruptHistoryException() : (int) $r['minimum_enrollment']),
             isset($classes["reporting_group_id"]) ? new EntityId($classes["reporting_group_id"]) : null,
             $r['offering_credits_milli'] === null ? null : (int) $r['offering_credits_milli'],
+            \Domain\Registration\ValueObject\OfferingCeuChoice::stored($r['continuing_education']),
         );
     }
 
@@ -333,6 +338,8 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             "code" => $course->code,
             "title" => $course->title,
             "credits_milli" => $course->creditsMilli,
+            'continuing_education' => $course->continuingEducation === null ? null :
+                json_encode($course->continuingEducation->describe(), JSON_THROW_ON_ERROR),
             'credit_policy' => $course->creditPolicy === null ? null :
                 json_encode($course->creditPolicy->describe(), JSON_THROW_ON_ERROR),
             "active" => (int) $course->active,
@@ -349,6 +356,8 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 "faculty_user_id" => $section->facultyUserId?->value,
                 "code" => $section->code,
                 "capacity" => $section->capacity,
+                'continuing_education' => $section->continuingEducation->mode === 'inherit' ? null :
+                    json_encode($section->continuingEducation->describe(), JSON_THROW_ON_ERROR),
                 "minimum_enrollment" => $section->minimumEnrollment,
                 "active" => (int) $section->active,
                 "web_registration" => (int) $section->webRegistration,

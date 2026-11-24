@@ -22,6 +22,7 @@ final readonly class Course
         public ?\Domain\Catalog\ValueObject\PrerequisiteGroups $prerequisiteGroups = null,
         public ?\Domain\Catalog\ValueObject\CreditPolicy $creditPolicy = null,
         public ?int $offeringCreditsMilli = null,
+        public ?\Domain\Catalog\ValueObject\ContinuingEducationUnits $continuingEducation = null,
     ) {
         $creditPolicy?->requireChoice($creditsMilli);
         if (in_array($id->value, $prerequisiteGroups?->references() ?? [], true)) {

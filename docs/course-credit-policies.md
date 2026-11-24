@@ -2,7 +2,7 @@
 
 A course defines a default number of academic credits and either a fixed value or a permitted range. A course section chooses **one fixed offering value** within its selected course policy. For example, a course can allow 1–6 credits in 0.5-credit increments, defaulting to 3; one section can offer 2.5 credits and another 4.
 
-Every new student registering in that section receives its selected offering quantity. Student-selected quantities within a section and separate continuing education units (CEUs) remain open in the roadmap. Academic credits are never converted to or labelled as CEUs. Contact hours remain a separate institutional calculation.
+Every new student registering in that section receives its selected offering quantity. Student-selected academic credit quantities within a section remain open. Separate continuing education units (CEUs) can now be declared on courses and offerings as described below; earned CEU awards and their correction/transcript workflows remain open. Academic credits are never converted to or labelled as CEUs. Contact hours remain a separate institutional calculation.
 
 ## Configure and publish a course
 
@@ -37,3 +37,27 @@ New course publications retain `credit_policy`; new section publications retain 
 Migration **20261123000003_AddSisOfferingCreditPolicies** adds four nullable columns to existing draft/publication tables. It is retry-safe and refuses destructive rollback. Five SQL compiler dialects and populated SQLite preservation are tested. On the configured development MariaDB database, all original values across these tables and all journal/support bytes matched before and after. Earlier new fields stayed null, and independent journal/support checksums matched.
 
 Focused tests cover precision, immutable binding, unpublished choices, stale reviews, offering-plan activation, future amendments, pricing/attempt/load quantities, clone rollback, tampered projections, audit/source/authority rollback and real private provider/CSRF routes. Five browser workflows cover exact editing, publication/record returns, failure/access handling, detached responses, draft/retained labels, narrow screens, enlarged text and WCAG scans. Existing publication, registration, billing, waitlist, correction and portal regressions pass in bounded sequential batches. Student-selected quantities, CEUs, populated multi-engine qualification and broader historical reconciliation remain open.
+
+## Separate continuing education units
+
+CEUs describe continuing education independently of academic credits and the institution's contact-hours calculation. There is **no automatic conversion** among these units. Declaring offered CEUs does not award earned CEUs, change attempted/completed academic credits or GPA, satisfy degree requirements, change academic-credit load, or recalculate charges. Earned CEU decisions, reasoned award corrections and CEU transcript output remain separate unfinished workflows.
+
+### Declare course CEUs
+
+1. Open **Academic catalog → Courses → a course → Course CEUs**.
+2. Choose **No CEUs**, or **Declare a CEU value** and enter **Continuing education units (CEUs)**. Values are exact thousandths from 0 to 999.999. Zero is an explicit quantity; **No CEUs** is an explicit declaration without a quantity.
+3. Choose **Save CEU draft**, then **Review publication**. Complete the ordinary reasoned course publication; a draft edit leaves earlier publications unchanged.
+4. Choose that course publication for the section. A clone copies its reviewed source declaration, and a CEU-only source change invalidates a stale clone review.
+
+### Declare and publish offered CEUs
+
+1. Open **Academic catalog → Sections → a section → Offered CEUs**.
+2. Keep **Use the retained course declaration**, choose **No CEUs**, or **Declare a CEU value**. A section can override the declaration without changing academic credits. Unbound sections explicitly identify the course draft and require a course publication before offering publication.
+3. Choose **Save CEU draft**, then **Review publication**. Publish and select the offering using the existing dated publication workflow. Offering-plan activation resolves the same declaration for each section.
+4. Change an already selected offering through a fresh publication and reviewed **future offering amendment**. Individual and grouped registrations refuse a changed draft until the retained offering matches. Original accepted retries return their earlier receipt.
+
+Course/section publication reviews and history display CEUs separately from credits. Public course discovery shows **Offered CEUs** from the selected offering, never an unpublished CEU draft. **Your registered sections** shows **Accepted offered CEUs** from each enrollment's exact retained offering; subsequent drafts, new course publications and future-only amendments leave that value unchanged. These labels describe what was offered, not what the student earned.
+
+The editors provide **Back to record**, revision checks and required atomic audit/final authority/source checks. Failed saves retain values; authority loss clears the form; detached responses cannot replace a later record. Drafts are kept only in page memory. Shared literal translations use semantic JavaScript keys and text-only output, with Bootstrap controls/icons and narrow/enlarged-text reflow.
+
+Migration **20261124000000_AddSisContinuingEducationUnits** adds nullable `continuing_education` text columns to the existing course/section draft and version tables. Draft sections retain an inheritance/none/fixed choice; immutable publications retain only the resolved declaration. Earlier missing declarations stay **Not recorded in this publication**, including inheritance from an earlier course with no CEU field. New explicit **No CEUs** and zero values remain distinct. No historical declaration, award or event is backfilled. Publications use the existing protected course/section streams, expected versions, original receipts and verified reconstructible version projections; there is no parallel CEU journal. Destructive downgrade is refused.

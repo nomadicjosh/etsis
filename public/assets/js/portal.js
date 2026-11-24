@@ -8,6 +8,8 @@
     const config = one('#campus-config')
         ? JSON.parse(one('#campus-config').textContent)
         : {};
+    const ceuLabels = one('#campus-ceu-config') ? JSON.parse(one('#campus-ceu-config').textContent) : {};
+    const ceuText = value => window.continuingEducationText(value, ceuLabels);
     const notificationLabels = one('#campus-notification-config')
         ? JSON.parse(one('#campus-notification-config').textContent) : {};
     const notifications = one('#campus-notifications-open') ? window.createWorkspaceNotifications({
@@ -401,6 +403,7 @@
                 {},
                 `Section ${course.section_code} · ${Number(course.credits_milli) / 1000} credits`,
             ),
+            el('p', {}, `${ceuLabels.section_title || 'Offered CEUs'}: ${ceuText(course.continuing_education)}`),
             course.course_number ? el('p', {}, `Course number ${course.course_number}`) : null,
             el('p', {}, course.delivery_label || 'Delivery to be confirmed'),
             el('p', {}, `${seats} of ${course.capacity} seats available`),
@@ -1885,14 +1888,16 @@
             container.append(
                 surface(
                     'Your registered sections',
+                    el('p', { class: 'campus-muted' }, ceuLabels.offered_help || 'Offered CEUs are not earned units.'),
                     button('Drop selected courses', () => dropPlans.start(student.id, renderService)),
                     button('Your waitlist requests', () => waitlistUi().mine(student.id, renderService)),
                     student.enrollments.length
                         ? table(
-                              ['Course', 'Section', 'Status', 'Actions'],
+                              ['Course', 'Section', ceuLabels.accepted_title || 'Accepted offered CEUs', 'Status', 'Actions'],
                               student.enrollments.map((item) => [
                                   item.course_code,
                                   item.section_code,
+                                  el('span', {}, ceuText(item.continuing_education)),
                                   chip(
                                       {
                                           A: 'Registered',

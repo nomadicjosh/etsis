@@ -43,6 +43,7 @@ final class RegistrationCourseRead
             $definition->code !== $course->code ||
             $definition->title !== $course->title ||
             $definition->creditsMilli !== $course->creditsMilli ||
+            $definition->continuingEducation?->describe() !== $course->continuingEducation?->describe() ||
             $definition->creditPolicy?->describe() !== $course->creditPolicy?->describe() ||
             $definition->text->transcriptTitle !== $course->publishedTranscriptTitle ||
             $definition->prerequisites !== $course->publishedPrerequisites ||
@@ -76,6 +77,7 @@ final class RegistrationCourseRead
             $course->prerequisiteGroups?->rule?->definition,
             $course->prerequisiteGroups?->minimumGradePointsMilli, $course->prerequisiteGroups?->corequisites,
             $course->creditPolicy?->describe(), $course->registrationCreditsMilli(),
+            $course->continuingEducation?->describe(),
         ], JSON_THROW_ON_ERROR));
         $old = $this->selections[$section->value] ?? null;
         if ($old !== null && !hash_equals($old, $fingerprint)) {

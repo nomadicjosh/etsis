@@ -7,6 +7,7 @@ namespace Domain\Registration;
 use Domain\Finance\ValueObject\Money;
 use Domain\Registration\Enum\DeliveryMode;
 use Domain\Shared\ValueObject\EntityId;
+use Domain\Registration\ValueObject\OfferingCeuChoice;
 use InvalidArgumentException;
 
 final readonly class Section
@@ -28,6 +29,7 @@ final readonly class Section
         public int $minimumEnrollment = 0,
         public ?EntityId $reportingGroupId = null,
         public ?int $offeringCreditsMilli = null,
+        public OfferingCeuChoice $continuingEducation = new OfferingCeuChoice(),
     ) {
         if ($offeringCreditsMilli !== null && ($offeringCreditsMilli < 0 || $offeringCreditsMilli > 999999)) {
             throw new InvalidArgumentException('Use nonnegative academic-credit thousandths.');

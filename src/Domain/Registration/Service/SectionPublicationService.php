@@ -454,6 +454,8 @@ final readonly class SectionPublicationService
                         $selected?->definition->data ?? [],
                         recordCredits: $selected === null
                             || array_key_exists("credits_milli", $selected->definition->data),
+                        recordContinuingEducation: $selected === null
+                            || array_key_exists("continuing_education", $selected->definition->data),
                     );
             if (
                 $course !== null &&
@@ -572,6 +574,7 @@ final readonly class SectionPublicationService
                         array_key_exists("minimum_enrollment", $d),
                         array_key_exists("contact_hours", $d),
                         recordCredits: array_key_exists("credits_milli", $d),
+                        recordContinuingEducation: array_key_exists("continuing_education", $d),
                     ),
                 ) !== $this->fingerprint($d) ||
                 !$this->matchingClassifications($definition, $row)
@@ -713,7 +716,7 @@ final readonly class SectionPublicationService
             ) {
                 throw new CorruptHistoryException();
             }
-            $this->assertContactPublication($section, $definition);
+            $this->assertOfferingValues($section, $definition);
             $event = \Domain\Registration\Event\SectionOfferingVersionWasSelected::occur(
                 $stream->aggregateId,
                 $payload,
@@ -741,18 +744,23 @@ final readonly class SectionPublicationService
                 $section,
             );
             $this->authorize($actor);
-            $this->assertContactPublication($section, $definition);
+            $this->assertOfferingValues($section, $definition);
             return $receipt;
         });
     }
 
-    private function assertContactPublication(EntityId $section, PublishedSectionDefinition $definition): void
+    private function assertOfferingValues(EntityId $section, PublishedSectionDefinition $definition): void
     {
         $data = $definition->definition->data;
         $row = $this->catalog->get('sections', $section);
         $course = $this->bindings->bound($section);
         if ($course === null) {
             throw new CorruptHistoryException();
+        }
+        $ceu = \Domain\Registration\ValueObject\OfferingCeuChoice::stored($row['continuing_education'])
+            ->resolve($course->definition->continuingEducation);
+        if (($data['continuing_education'] ?? null) !== $ceu?->describe()) {
+            throw new ConcurrentModificationException('Offered CEUs changed. Review the offering again.');
         }
         $credits = $row['offering_credits_milli'] === null ? $course->definition->creditsMilli
         : (int) $row['offering_credits_milli'];
@@ -857,6 +865,7 @@ final readonly class SectionPublicationService
                         array_key_exists("minimum_enrollment", $d),
                         array_key_exists("contact_hours", $d),
                         recordCredits: array_key_exists("credits_milli", $d),
+                        recordContinuingEducation: array_key_exists("continuing_education", $d),
                     ),
                 ) !== $this->fingerprint($d) ||
                 !$this->matchingClassifications($definition, $row)
@@ -1114,6 +1123,7 @@ final readonly class SectionPublicationService
         bool $recordContact = true,
         array $retainedContact = [],
         bool $recordCredits = true,
+        bool $recordContinuingEducation = true,
     ): array {
         $data = [
             "course_id" => $row["course_id"],
@@ -1150,6 +1160,16 @@ final readonly class SectionPublicationService
             throw new ConcurrentModificationException(
                 'Publish the chosen offering credits before selecting this version.',
             );
+        }
+        $ceu = \Domain\Registration\ValueObject\OfferingCeuChoice::stored($row['continuing_education'])
+            ->resolve(isset($course['definition']['continuing_education'])
+                ? \Domain\Catalog\ValueObject\ContinuingEducationUnits::fromArray(
+                    $course['definition']['continuing_education'],
+                ) : null);
+        if ($recordContinuingEducation && $ceu !== null) {
+            $data['continuing_education'] = $ceu->describe();
+        } elseif (!$recordContinuingEducation && $ceu !== null) {
+            throw new ConcurrentModificationException('Publish the chosen CEUs before selecting this offering.');
         }
         if ($recordContact) {
             $data['contact_hours'] = array_key_exists('contact_hours', $retainedContact)

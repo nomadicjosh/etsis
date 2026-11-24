@@ -21,6 +21,7 @@ final readonly class CourseDefinition
         public CourseClassifications $classifications = new CourseClassifications(),
         public ?PrerequisiteGroups $prerequisiteGroups = null,
         public ?CreditPolicy $creditPolicy = null,
+        public ?ContinuingEducationUnits $continuingEducation = null,
     ) {
         $creditPolicy?->requireChoice($creditsMilli);
         if (
@@ -70,6 +71,12 @@ final readonly class CourseDefinition
             "subject",
             "classifications",
         ];
+        if (array_key_exists('continuing_education', $data)) {
+            $keys[] = 'continuing_education';
+            if (!is_array($data['continuing_education'])) {
+                throw new InvalidArgumentException('Use the complete CEU definition.');
+            }
+        }
         if (array_key_exists('credit_policy', $data)) {
             $keys[] = 'credit_policy';
             if (!is_array($data['credit_policy'])) {
@@ -147,6 +154,8 @@ final readonly class CourseDefinition
                     $data['prerequisite_requirement_credit_origins'] ?? null,
                 ) : null,
             isset($data['credit_policy']) ? CreditPolicy::fromArray($data['credit_policy']) : null,
+            isset($data['continuing_education'])
+                ? ContinuingEducationUnits::fromArray($data['continuing_education']) : null,
         );
     }
 
@@ -158,7 +167,9 @@ final readonly class CourseDefinition
             "title" => $this->title,
             "credits_milli" => $this->creditsMilli,
             "prerequisites" => $this->prerequisites,
-        ] + ($this->creditPolicy === null ? [] : ['credit_policy' => $this->creditPolicy->describe()]) +
+        ] + ($this->continuingEducation === null ? [] :
+        ['continuing_education' => $this->continuingEducation->describe()]) +
+        ($this->creditPolicy === null ? [] : ['credit_policy' => $this->creditPolicy->describe()]) +
         ($this->prerequisiteGroups === null ? [] : ["prerequisite_groups" => $this->prerequisiteGroups->groups]) +
         ($this->prerequisiteGroups?->minimums === null ? [] :
         ['prerequisite_group_minimums' => $this->prerequisiteGroups->minimums]) +

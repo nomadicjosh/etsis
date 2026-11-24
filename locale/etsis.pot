@@ -78,6 +78,7 @@ msgstr ""
 
 #: resources/views/backend/manager/site-labels.php:23
 #: resources/views/backend/workspace/credit-policy-labels.php:34
+#: resources/views/shared/ceu-labels.php:34
 msgid "Review publication"
 msgstr ""
 
@@ -718,6 +719,7 @@ msgid "Offering credits"
 msgstr ""
 
 #: resources/views/backend/workspace/credit-policy-labels.php:10
+#: resources/views/shared/ceu-labels.php:10
 msgid "Back to record"
 msgstr ""
 
@@ -794,6 +796,7 @@ msgid "Use a nonnegative credit value with up to three decimal places, at most 9
 msgstr ""
 
 #: resources/views/backend/workspace/credit-policy-labels.php:36
+#: resources/views/shared/ceu-labels.php:12
 msgid "Not recorded in this publication"
 msgstr ""
 
@@ -3676,4 +3679,80 @@ msgstr ""
 
 #: resources/views/backend/workspace/history-check-labels.php:25
 msgid "Compare retained advisor assignments or the selected degree baseline with history, using a 200-event allowance. Current advisor eligibility and degree completion need their own reviews; this check changes neither access nor academic requirements."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:8
+msgid "Course CEUs"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:9
+msgid "Offered CEUs"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:11
+msgid "Loading CEU settings…"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:13
+msgid "No CEUs"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:14
+msgid "{value} CEUs"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:15
+msgid "Course declaration: {value}"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:17
+msgid "No course publication is selected. The declaration above comes from the course draft. Select a course publication before publishing this offering."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:20
+msgid "Use the course draft declaration"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:21
+msgid "Use the retained course declaration"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:22
+msgid "Declare a CEU value"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:23
+msgid "CEU declaration"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:24
+msgid "Continuing education units (CEUs)"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:26
+msgid "Use up to three decimal places, at most 999.999. CEUs do not convert to academic credits or contact hours."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:30
+msgid "Save the draft, then publish it. Offered CEUs describe the offering; they do not award earned units. Existing registrations retain their accepted publications."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:33
+msgid "Save CEU draft"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:35
+msgid "CEU draft saved. Review its publication before using it."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:36
+msgid "Use a CEU value from 0 to 999.999 with up to three decimal places."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:37
+msgid "Accepted offered CEUs"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:38
+msgid "Offered CEUs are not earned units."
 msgstr ""

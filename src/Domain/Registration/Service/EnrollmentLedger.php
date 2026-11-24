@@ -598,6 +598,12 @@ final readonly class EnrollmentLedger
             throw new CorruptHistoryException();
         }
         if (
+            $selected === null &&
+            ($section->continuingEducation->mode !== 'inherit' || $course->continuingEducation?->milli !== null)
+        ) {
+            throw new \DomainException('Publish and select the offered CEUs before registration.');
+        }
+        if (
             $selected !== null &&
             !$selected->matchesOffering($section, $course)
         ) {

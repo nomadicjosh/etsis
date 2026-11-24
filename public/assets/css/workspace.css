@@ -934,6 +934,11 @@ h3 { font-size: .9rem; font-weight: 650; }
 .record-drawer .offcanvas-title { font-size: 1.25rem; line-height: 1.4; overflow-wrap: anywhere; }
 .record-drawer .eyebrow { margin-bottom: .3rem; font-size: .65rem; letter-spacing: .1em; }
 .record-drawer .offcanvas-body { background: #f8fafc; padding-top: 0; }
+/* Inset form, summary and task panels contrast with the drawer's gray canvas. */
+.record-drawer :is(.record-form-section, .record-task-card, .comparison-policy-summary,
+    .report-match-group, .report-row-selection-summary, .report-column-conditions, .position-source) {
+    background: #fff;
+}
 .record-task-content { min-width: 0; padding-top: 1.5rem; }
 .record-task-navigation { position: sticky; top: 0; z-index: 4; display: flex; align-items: center; gap: .8rem; padding: .85rem 0; border-bottom: 1px solid var(--campus-line); background: #f8fafc; }
 .record-task-return { flex-shrink: 0; display: inline-flex; align-items: center; gap: .5rem; min-height: 40px; max-width: 100%; white-space: normal; text-align: start; overflow-wrap: anywhere; background: #fff; }

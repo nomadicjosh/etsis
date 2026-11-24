@@ -49,6 +49,7 @@ try {
                 'check-curriculum-reports',
                 'check-registered-credits',
                 'check-credit-policies',
+                'check-ceus',
                 'check-website-publications',
                 'check-coursework-grade-policy',
                 'check-curriculum-components',
@@ -271,6 +272,11 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/WebsitePublicationBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-ceus') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/ContinuingEducationBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-credit-policies') {
             $kernel->bootstrap();

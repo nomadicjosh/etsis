@@ -160,6 +160,7 @@ window.createWorkspaceCatalog = function (ui) {
                 "btn-link",
             ),
             node("h3", {}, `${draft.code} — ${draft.title}`),
+            node("p", {}, `${ui.ceuLabels?.course_title || "Course CEUs"}: ${window.continuingEducationText(review.source.continuing_education, ui.ceuLabels)}`),
             node(
                 "p",
                 {},
@@ -1086,6 +1087,8 @@ window.createWorkspaceCatalog = function (ui) {
             node("div", {}, node("dt", {}, "Credits"), node("dd", {}, definition.credits_milli / 1000)),
             node('div', {}, node('dt', {}, ui.creditLabels?.course_title || 'Course credit policy'),
                 node('dd', {}, creditPolicyText(definition.credit_policy))),
+            node("div", {}, node("dt", {}, ui.ceuLabels?.course_title || "Course CEUs"),
+                node("dd", {}, window.continuingEducationText(definition.continuing_education, ui.ceuLabels))),
             ...classifications,
             node(
                 "div",
@@ -1429,6 +1432,7 @@ window.createWorkspaceCatalog = function (ui) {
             ["Capacity", definition.capacity],
             [ui.creditLabels?.section_title || 'Offering credits', definition.credits_milli === undefined
                 ? ui.creditLabels?.unrecorded || 'Not recorded in this publication' : definition.credits_milli / 1000],
+            [ui.ceuLabels?.section_title || "Offered CEUs", window.continuingEducationText(definition.continuing_education, ui.ceuLabels)],
             ["Minimum enrollment target", definition.minimum_enrollment === undefined ? "Not recorded in this publication"
                 : definition.minimum_enrollment ? `${definition.minimum_enrollment} students` : "No target"],
             ["Student self-registration", typeof definition.web_registration === "boolean"
@@ -2038,6 +2042,12 @@ window.createWorkspaceCatalog = function (ui) {
             .replace('{min}', policy.minimum_milli / 1000).replace('{max}', policy.maximum_milli / 1000)
             .replace('{step}', policy.increment_milli / 1000);
     }
+    function ceus(kind, row, back) {
+        return window.createWorkspaceCeus({ node, request, task, openDrawer, labels: ui.ceuLabels })
+            .open(kind, row.id, back, () => kind === "courses"
+                ? publications(row.id, null, [], back, undefined, ui.ceuLabels?.back || "Back to record")
+                : sectionPublications(row.id, null, [], null, back));
+    }
     function credits(kind, row, back) {
         return window.createWorkspaceCreditPolicy({ node, request, task, openDrawer, labels: ui.creditLabels,
             saved: result => { row.credits_milli = result.offering_credits_milli ?? result.credits_milli;
@@ -2045,5 +2055,5 @@ window.createWorkspaceCatalog = function (ui) {
         }).open(kind, row.id, back, () => kind === 'courses' ? publications(row.id, null, [], back, undefined, ui.creditLabels?.back || 'Back to record')
             : sectionPublications(row.id, null, [], null, back));
     }
-    return { credits, contactHours, enrollmentReview, subjects, courseSubject, clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
+    return { ceus, credits, contactHours, enrollmentReview, subjects, courseSubject, clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
 };

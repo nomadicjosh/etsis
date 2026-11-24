@@ -31,6 +31,9 @@ return static function (Psr7Router $router): void {
     $router->post('/sis/website/menus/{slot}/', [$website, 'saveMenu']);
     $router->post('/sis/website/menus/{slot}/review/', [$website, 'reviewMenu']);
     $router->post('/sis/website/menus/{slot}/publish/', [$website, 'publishMenu']);
+    $ceus = \Application\Http\Controller\SisContinuingEducationController::class;
+    $router->get('/sis/ui/catalog/{kind}/{id}/ceus/', [$ceus, 'show']);
+    $router->post('/sis/ui/catalog/{kind}/{id}/ceus/', [$ceus, 'save']);
     $credits = \Application\Http\Controller\SisCreditPolicyController::class;
     $router->get('/sis/ui/catalog/{kind}/{id}/credits/', [$credits, 'show']);
     $router->post('/sis/ui/catalog/{kind}/{id}/credits/', [$credits, 'save']);

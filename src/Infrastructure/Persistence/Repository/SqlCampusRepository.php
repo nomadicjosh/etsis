@@ -162,6 +162,7 @@ final readonly class SqlCampusRepository implements CampusRepository
                 $description .
                 " AS " .
                 $q("description") .
+                ', offered.' . $q('continuing_education') . ' AS ' . $q('continuing_education') .
                 ', ' . $courseNumber . ' AS ' . $q('course_number') .
                 ', ' . $numberRecorded . ' AS ' . $q('course_number_recorded') .
                 ", pcs." . $q("code") . " AS " . $q("subject_code") .
@@ -209,6 +210,10 @@ final readonly class SqlCampusRepository implements CampusRepository
                 " = c." .
                 $q("id") .
                 $course->joins("s") .
+                ' LEFT JOIN ' . $q('sis_section_offering_versions') . ' choice ON choice.' . $q('id') .
+                    ' = s.' . $q('id') .
+                ' LEFT JOIN ' . $q('sis_section_versions') . ' offered ON offered.' . $q('id') .
+                    ' = choice.' . $q('publication_id') .
                 " WHERE " .
                 implode(" AND ", $where) .
                 " ORDER BY s." .
@@ -218,6 +223,9 @@ final readonly class SqlCampusRepository implements CampusRepository
             25,
         );
         foreach ($rows as &$row) {
+            $row['continuing_education'] = \Domain\Catalog\ValueObject\ContinuingEducationUnits::stored(
+                $row['continuing_education'],
+            )?->describe();
             $row["delivery_mode"] ??= "unspecified";
             $row["delivery_label"] = \Domain\Registration\Enum\DeliveryMode::parse(
                 $row["delivery_mode"],
@@ -419,7 +427,7 @@ final readonly class SqlCampusRepository implements CampusRepository
     {
         $q = $this->sql->quote(...);
         $course = new \Infrastructure\Persistence\SectionCourseSql($this->sql);
-        return $this->sql->fetch(
+        $rows = $this->sql->fetch(
             "SELECT e." .
                 $q("id") .
                 ", e." .
@@ -445,6 +453,7 @@ final readonly class SqlCampusRepository implements CampusRepository
                     $course->value("credits_milli", "c." . $q("credits_milli")) . ')' .
                 " AS " .
                 $q("credits_milli") .
+                ', accepted.' . $q('continuing_education') . ' AS ' . $q('continuing_education') .
                 ", scb." .
                 $q("course_version_id") .
                 " FROM " .
@@ -473,6 +482,13 @@ final readonly class SqlCampusRepository implements CampusRepository
             [$student->value],
             100,
         );
+        foreach ($rows as &$row) {
+            $row['continuing_education'] = \Domain\Catalog\ValueObject\ContinuingEducationUnits::stored(
+                $row['continuing_education'],
+            )?->describe();
+        }
+        unset($row);
+        return $rows;
     }
 
     public function addTranscriptRequest(EntityId $id, array $data): void

@@ -32,9 +32,9 @@ final readonly class SectionDefinitionV1
     public function __construct(public array $data)
     {
         if (
-            count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 4 ||
+            count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 5 ||
             array_diff(array_keys($data), [...self::FIELDS, 'web_registration', 'minimum_enrollment',
-                'contact_hours', 'credits_milli']) !== [] ||
+                'contact_hours', 'credits_milli', 'continuing_education']) !== [] ||
             array_diff(self::FIELDS, array_keys($data)) !== [] ||
             (array_key_exists('web_registration', $data) && !is_bool($data['web_registration']))
         ) {
@@ -122,6 +122,12 @@ final readonly class SectionDefinitionV1
             throw new InvalidArgumentException(
                 "Valid capacity, delivery and fee values are required.",
             );
+        }
+        if (array_key_exists('continuing_education', $data)) {
+            if (!is_array($data['continuing_education'])) {
+                throw new InvalidArgumentException('Use the complete offering CEU definition.');
+            }
+            \Domain\Catalog\ValueObject\ContinuingEducationUnits::fromArray($data['continuing_education']);
         }
         $dateFields = ["term_starts_on", "term_ends_on", "instruction_starts_on", "instruction_ends_on"];
         foreach ($dateFields as $field) {

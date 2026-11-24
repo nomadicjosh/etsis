@@ -117,6 +117,70 @@ final readonly class CatalogEditor
                 $course->creditsMilli, $policy->describe()], JSON_THROW_ON_ERROR))];
     }
 
+    /** @return array<string, mixed> */
+    public function continuingEducationSettings(string $kind, EntityId $id): array
+    {
+        $actor = $this->access->requirePermission('sis:catalog:manage');
+        $row = $this->repository->get($kind, $id);
+        $result = $this->continuingEducationContext($kind, $id, $row);
+        $this->sameActor($actor);
+        return $result;
+    }
+
+    public function continuingEducation(
+        string $kind,
+        EntityId $id,
+        \Domain\Registration\ValueObject\OfferingCeuChoice $choice,
+        string $revision,
+    ): void {
+        if ($kind === 'courses' && $choice->mode === 'inherit') {
+            throw new \InvalidArgumentException('Choose declared or no course CEUs.');
+        }
+        $actor = $this->access->requirePermission('sis:catalog:manage');
+        $this->transactions->run(function () use ($kind, $id, $choice, $revision, $actor): void {
+            $this->repository->lock($kind, $id);
+            $row = $this->repository->get($kind, $id);
+            if ($kind === 'sections') {
+                $this->repository->lock('courses', new EntityId($row['course_id']));
+            }
+            $current = $this->continuingEducationContext($kind, $id, $row);
+            $this->sameActor($actor);
+            if (!hash_equals($current['revision'], $revision)) {
+                throw new ConcurrentModificationException('The CEU source changed. Reload before saving.');
+            }
+            $value = $kind === 'courses' ? $choice->resolve(null)->describe() : $choice->describe();
+            $this->repository->save($kind, $id, [
+                'continuing_education' => json_encode($value, JSON_THROW_ON_ERROR),
+            ]);
+            $expected = $this->continuingEducationSettings($kind, $id);
+            $this->audit->record($actor, 'catalog.' . $kind . '.continuing_education.updated', $id);
+            $this->sameActor($actor);
+            if ($this->continuingEducationSettings($kind, $id) !== $expected) {
+                throw new ConcurrentModificationException('The CEU source changed before completion.');
+            }
+        });
+    }
+
+    /** @param array<string, scalar|null> $row
+     * @return array<string, mixed> */
+    private function continuingEducationContext(string $kind, EntityId $id, array $row): array
+    {
+        if ($kind === 'courses') {
+            $ceu = \Domain\Catalog\ValueObject\ContinuingEducationUnits::stored($row['continuing_education']);
+            return ['mode' => $ceu?->milli === null ? 'none' : 'fixed', 'ceu_milli' => $ceu?->milli,
+                'revision' => $this->revision($row)];
+        }
+        if ($kind !== 'sections') {
+            throw new \InvalidArgumentException('Choose a course or section CEU draft.');
+        }
+        $course = $this->registration->courseForSection($this->registration->section($id));
+        $choice = \Domain\Registration\ValueObject\OfferingCeuChoice::stored($row['continuing_education']);
+        return $choice->describe() + ['course_continuing_education' => $course->continuingEducation?->describe(),
+            'course_version_id' => $course->publicationVersionId?->value,
+            'revision' => hash('sha256', json_encode([$this->revision($row), $course->publicationVersionId?->value,
+                $course->continuingEducation?->describe()], JSON_THROW_ON_ERROR))];
+    }
+
     public function courseText(EntityId $course, \Domain\Catalog\ValueObject\CourseText $text, string $revision): void
     {
         $this->save("courses", $course, $revision, $text->describe());

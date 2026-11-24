@@ -12,6 +12,7 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Infrastructure\EventSourcing\ProtectedEventCodec;
 use Infrastructure\Persistence\SqlRecords;
+use Domain\Catalog\ValueObject\ContinuingEducationUnits;
 use Throwable;
 
 final readonly class SqlSectionVersionRepository implements SectionVersionRepository
@@ -220,6 +221,10 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
             if ($row['credits_milli'] !== null) {
                 $facts['credits_milli'] = $this->integer($row['credits_milli']);
             }
+            if ($row['continuing_education'] !== null) {
+                $facts['continuing_education'] =
+                ContinuingEducationUnits::stored($row['continuing_education'])->describe();
+            }
             if ($row['contact_hours'] !== null) {
                 if (!is_string($row['contact_hours']) || strlen($row['contact_hours']) > 2048) {
                     throw new CorruptHistoryException();
@@ -269,9 +274,11 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 "schema_version" =>
                     $definition->classifications === null ? 1 : 2,
             ] + array_diff_key($definition->definition->data, [
-                'web_registration' => true, 'contact_hours' => true,
+                'web_registration' => true, 'contact_hours' => true, 'continuing_education' => true,
             ]) +
-                ['web_registration' => array_key_exists('web_registration', $definition->definition->data) ?
+                ['continuing_education' => array_key_exists('continuing_education', $definition->definition->data)
+                    ? json_encode($definition->definition->data['continuing_education'], JSON_THROW_ON_ERROR) : null,
+                'web_registration' => array_key_exists('web_registration', $definition->definition->data) ?
                     (int) $definition->definition->data['web_registration'] : null,
                 'contact_hours' => array_key_exists('contact_hours', $definition->definition->data)
                     ? json_encode($definition->definition->data['contact_hours'], JSON_THROW_ON_ERROR) : null],

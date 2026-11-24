@@ -9,6 +9,7 @@ use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\EventSourcing\ProtectedEventCodec;
 use Infrastructure\Persistence\SqlRecords;
+use Domain\Catalog\ValueObject\ContinuingEducationUnits;
 use Throwable;
 
 /** Shared reconstructible course-version projection for verified section and transfer references. */
@@ -27,6 +28,10 @@ final readonly class SqlCourseVersionProjection
                 "credits_milli" => (int) $r["credits_milli"],
                 "prerequisites" => json_decode($r["prerequisites"], true, 8, JSON_THROW_ON_ERROR),
             ];
+            if ($r['continuing_education'] !== null) {
+                $definition['continuing_education'] =
+                ContinuingEducationUnits::stored($r['continuing_education'])->describe();
+            }
             if ($r['credit_policy'] !== null) {
                 $definition['credit_policy'] = \Domain\Catalog\ValueObject\CreditPolicy::stored(
                     $r['credit_policy'],
@@ -209,6 +214,8 @@ final readonly class SqlCourseVersionProjection
             "code" => $definition->definition->code,
             "title" => $definition->definition->title,
             "credits_milli" => $definition->definition->creditsMilli,
+            'continuing_education' => $definition->definition->continuingEducation === null ? null :
+                json_encode($definition->definition->continuingEducation->describe(), JSON_THROW_ON_ERROR),
             'credit_policy' => $definition->definition->creditPolicy === null ? null :
                 json_encode($definition->definition->creditPolicy->describe(), JSON_THROW_ON_ERROR),
             "transcript_title" => $definition->definition->text->transcriptTitle,

@@ -304,6 +304,8 @@ final readonly class CoursePublicationService
             $this->relationships->prerequisiteGroups($course),
             \Domain\Catalog\ValueObject\CreditPolicy::stored($row['credit_policy'])
                 ?? \Domain\Catalog\ValueObject\CreditPolicy::fixed((int) $row['credits_milli']),
+            \Domain\Catalog\ValueObject\ContinuingEducationUnits::stored($row['continuing_education'])
+                ?? new \Domain\Catalog\ValueObject\ContinuingEducationUnits(),
         );
     }
 }

@@ -101,6 +101,7 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
         <script defer src="/assets/vendor/purify.min.js"></script>
         <script defer src="/assets/js/campus-rich-text.js"></script>
         <script defer src="/assets/js/section-waitlist.js"></script>
+        <script defer src="/assets/js/workspace-ceus.js"></script>
         <script defer src="/assets/js/portal.js"></script>
     </head>
     <body class="campus-site">
@@ -247,6 +248,13 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
                 </div>
             </div>
         </div>
+        <?php $ceuLabels = require dirname(__DIR__, 5) . '/resources/views/shared/ceu-labels.php'; ?>
+        <script id="campus-ceu-config" type="application/json">
+            <?= json_encode(
+                $ceuLabels,
+                JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR,
+            ) ?>
+        </script>
         <?php if ($signedIn) : ?>
             <?php
             $notificationLabels = require dirname(__DIR__, 5) . '/resources/views/shared/notification-labels.php';
