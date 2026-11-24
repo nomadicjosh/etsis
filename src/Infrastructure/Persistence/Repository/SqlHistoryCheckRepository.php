@@ -8,6 +8,7 @@ use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Support\HistoryCheckReceipt;
 use Domain\Support\HistoryCheckScope;
+use Domain\Support\Enum\HistoryCheckSubject;
 use Domain\Support\Repository\HistoryCheckRepository;
 use Infrastructure\Persistence\SqlRecords;
 
@@ -47,6 +48,23 @@ final readonly class SqlHistoryCheckRepository implements HistoryCheckRepository
                 "checked_at" => $receipt->checkedAt,
             ],
         );
+    }
+
+    public function employmentSubject(HistoryCheckSubject $kind, EntityId $id): EntityId
+    {
+        if ($kind === HistoryCheckSubject::PrimaryPosition) {
+            return $id;
+        }
+        $table = match ($kind) {
+            HistoryCheckSubject::Position => 'sis_employee_positions',
+            HistoryCheckSubject::TimeEntry => 'sis_timesheets',
+            default => throw new \InvalidArgumentException('Choose an employment history subject.'),
+        };
+        $q = $this->sql->quote(...);
+        $row = $this->sql->fetch('SELECT ' . $q('employee_id') . ' FROM ' . $q($table)
+            . ' WHERE ' . $q('id') . ' = ?', [$id->value], 1)[0]
+        ?? throw new RecordNotFoundException('Employment history subject not found.');
+        return new EntityId($row['employee_id']);
     }
 
     public function page(HistoryCheckScope $scope, ?EntityId $after): array

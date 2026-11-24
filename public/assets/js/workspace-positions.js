@@ -1,6 +1,8 @@
 /* Dated employee assignments. Private drafts and reviewed terms stay in page memory. */
 window.createWorkspacePositions = function (ui) {
     "use strict";
+    const checkLabels = ui.historyCheckLabels || {};
+    const canCheck = () => ui.historyChecks && can('sis:hr:manage') && can('sis:history:verify') && can('sis:audit:read');
     const {
         node,
         request,
@@ -292,6 +294,8 @@ window.createWorkspacePositions = function (ui) {
             "aria-label": "Position assignment tasks",
         });
         const more = [];
+        if (canCheck()) more.push(button(checkLabels.check_position,
+            () => ui.historyChecks().open('position', id, back)));
         if (!record.voided) {
             actions.append(
                 button("Change position terms", async () => {
@@ -736,6 +740,8 @@ window.createWorkspacePositions = function (ui) {
         const allowed = can("sis:hr:manage") && can("sis:hr:primary");
         let reason = null;
         const tasks = node("div", { class: "inline-actions position-actions" });
+        if (canCheck()) tasks.append(button(checkLabels.check_primary, () => ui.historyChecks().open('primary', employee,
+            () => primary(employee, proposed, context, reason?.value ?? draftReason))));
         if (can("sis:hr:manage")) tasks.append(button("Choose from position assignments", list));
         if (can("sis:hr:manage") && can("sis:audit:read"))
             tasks.append(

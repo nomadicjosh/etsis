@@ -13,6 +13,7 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Finance\Repository\AccountProjectionVerifier;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Person\Repository\PersonProjectionVerifier;
+use Domain\HumanResources\Repository\EmploymentProjectionVerifier;
 use Domain\Shared\EventSourcing\HistoricalIntegrityVerifier;
 use Domain\Shared\EventSourcing\HistoryVerificationFailedException;
 use InvalidArgumentException;
@@ -35,6 +36,10 @@ final class VerifyHistoryCommand extends ConsoleCommand
         ['application', null, 'required', 'Compare one admissions application with protected history; no cursor.'],
         ['standing', null, 'required', 'Compare standing under one program pursuit with protected history; no cursor.'],
         ['load', null, 'required', 'Compare one retained load determination with protected history; no cursor.'],
+        ['primary-position', null, 'required',
+            'Compare one employee primary designation with protected history; no cursor.'],
+        ['position', null, 'required', 'Compare one position agreement with protected history; no cursor.'],
+        ['time-entry', null, 'required', 'Compare one retained time decision with its working row; no cursor.'],
     ];
     public function __construct(Application $codefy)
     {
@@ -62,9 +67,23 @@ final class VerifyHistoryCommand extends ConsoleCommand
             $application = $this->getOptions('application');
             $standing = $this->getOptions('standing');
             $load = $this->getOptions('load');
-            $subjects = [$account, $student, $person, $application, $standing, $load];
+            $employment = [
+                'primary-position' => $this->getOptions('primary-position'),
+                'position' => $this->getOptions('position'),
+                'time-entry' => $this->getOptions('time-entry'),
+            ];
+            $subjects = [$account, $student, $person, $application, $standing, $load, ...array_values($employment)];
             if (count(array_filter($subjects, static fn(mixed $id): bool => $id !== null)) > 1) {
                 throw new InvalidArgumentException();
+            }
+            foreach ($employment as $kind => $reference) {
+                if ($reference === null) {
+                    continue;
+                }
+                if (!is_string($reference) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
+                    throw new InvalidArgumentException();
+                }
+                return $this->employment($kind, new EntityId($reference), $events, $json);
             }
             if ($standing !== null || $load !== null) {
                 $reference = $standing ?? $load;
@@ -109,7 +128,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 "invalid_input",
                 "Use --streams=1..50, --events=1..2000 and a valid optional verification cursor. "
                     . 'Use one of --person=ULID, --account=ULID, --student=ULID, --application=ULID, '
-                    . '--standing=PURSUIT_ULID or --load=DETERMINATION_ULID '
+                    . '--standing=PURSUIT_ULID, --load=DETERMINATION_ULID, --primary-position=EMPLOYEE_ULID, '
+                    . '--position=POSITION_ULID or --time-entry=ENTRY_ULID '
                     . 'with --events and optional --json.',
                 self::INVALID,
             );
@@ -160,6 +180,35 @@ final class VerifyHistoryCommand extends ConsoleCommand
             );
         }
         return $result->complete ? self::SUCCESS : 3;
+    }
+
+    private function employment(string $kind, EntityId $id, int $events, bool $json): int
+    {
+        $verifier = $this->codefy->make(EmploymentProjectionVerifier::class);
+        $result = match ($kind) {
+            'primary-position' => $verifier->primaryPosition($id, $events),
+            'position' => $verifier->position($id, $events),
+            'time-entry' => $verifier->timeEntry($id, $events),
+        };
+        if ($json) {
+            $this->output->writeln(json_encode($result->describe(), JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
+        } else {
+            $this->terminalRaw('Employment ' . $kind . ' ' . $id->value . ': ' . $result->status . '.');
+            $this->terminalRaw($result->events . ' events checked; '
+                . ($result->records ?? 'unknown') . ' retained records compared.');
+            if ($result->issues !== []) {
+                $this->terminalRaw('Components requiring review: ' . implode(', ', $result->issues) . '.');
+            }
+            $this->terminalRaw('No records were changed. This checks selected retained history and projections, '
+                . 'not appointment eligibility, employment approval, wages, payroll, every retry receipt '
+                . 'or archive completeness. '
+                . 'An empty observation does not establish earlier history.');
+        }
+        return match ($result->status) {
+            'verified' => self::SUCCESS,
+            'history_gaps', 'observed_empty', 'changed', 'limited' => 3,
+            default => self::FAILURE,
+        };
     }
 
     private function decision(bool $standing, EntityId $id, int $events, bool $json): int

@@ -2876,3 +2876,79 @@ msgstr ""
 #: resources/views/shared/time-primary-labels.php
 msgid "No configured clocked-time exceptions found."
 msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Primary position designation"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Position agreement"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Retained time decision"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Check primary designation history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Check position agreement history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Check retained time decision"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Selected HR records checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Primary designation and projection"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Retained position agreement and projection"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Retained time decision and working entry"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Earlier time decision not recorded"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "The entry has a decision status, but its earlier decision was not recorded. This observation cannot verify that decision."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Employment and person routing"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "No recorded primary designation observed"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "No protected designation was found. This does not establish earlier primary history."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "No retained time decision observed"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "The entry is pending with no recorded decision. This check does not approve or reject it."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Run one selected HR observation with a 200-event allowance and bounded replay. It does not approve employment or time, recalculate current appointment eligibility, determine wages/payroll or certify archive completeness."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Earlier checks describe their recorded observation. HR reasons, pay terms, work intervals, raw event payloads and credentials are not displayed here."
+msgstr ""

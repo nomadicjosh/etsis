@@ -26,14 +26,15 @@ final readonly class TimeDecisionLedger
     {
     }
     /** Selected private decision only; caller authorizes before/after and curates owner responses. */
-    public function inspect(TimeEntry $entry): ?array
+    public function inspect(TimeEntry $entry, ?HistoryReadBudget $budget = null): ?array
     {
         $root = TimeDecision::root(new TimeDecisionId($entry->id->value));
-        $page = new HistoryReadBudget(
+        $budget ??= new HistoryReadBudget(
             maximumEvents: 2,
             maximumBytes: 131072,
             maximumMilliseconds: 5000,
-        )->page($this->history, $this->stream($entry));
+        );
+        $page = $budget->page($this->history, $this->stream($entry));
         if ($page->throughVersion > 1 || $page->nextCursor !== null) {
             throw new CorruptHistoryException();
         }

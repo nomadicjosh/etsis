@@ -19,7 +19,8 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         history_help: "Previous results describe their recorded observation, not a continuing guarantee about the current record. No event payloads, application answers, private profile values, financial amounts or credentials are displayed.",
     };
     const text = key => labels[key] || fallbackLabels[key];
-    const kinds = { person: 'Person profile', student: 'Student academic records', account: 'Student account', application: text('application'), standing: text('program_standing'), load: text('retained_load') };
+    const kinds = { person: 'Person profile', student: 'Student academic records', account: 'Student account', application: text('application'), standing: text('program_standing'), load: text('retained_load'), primary: text('primary_position'), position: text('position'), time: text('time_entry') };
+    const employmentKinds = ['primary', 'position', 'time'];
     const statuses = {
         verified: ['Verified within this check', 'The selected recorded sources matched their projections at the observed point.'],
         history_gaps: ['Earlier history is incomplete', 'Available evidence matched, but earlier observations or unrecorded components prevent a complete-history conclusion.'],
@@ -32,7 +33,16 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         addresses: 'Address projection', emergency_contacts: 'Emergency-contact projection', education: 'Education projection',
         unavailable: 'Verification source unavailable', student_identity: 'Student identity', academic_sources: 'Academic sources',
         account_identity: 'Account identity', balance: 'Balance projection', postings: 'Posting projection',
-        application: text('application_components'), intake: text('intake_component'), pursuit_identity: text('pursuit_identity'), standing: text('standing_components'), load_decision: text('load_components') };
+        application: text('application_components'), intake: text('intake_component'), pursuit_identity: text('pursuit_identity'), standing: text('standing_components'), load_decision: text('load_components'), primary_position: text('primary_components'), position: text('position_components'), time_decision: text('time_components'), earlier_decision: text('earlier_time') };
+    function observation(kind, state) {
+        if (kind === 'time' && state === 'history_gaps') return [text('earlier_time'), text('earlier_time_help')];
+        if (state === 'observed_empty') {
+            if (kind === 'standing') return [text('standing_empty'), text('standing_empty_help')];
+            if (kind === 'primary') return [text('primary_empty'), text('primary_empty_help')];
+            if (kind === 'time') return [text('time_empty'), text('time_empty_help')];
+        }
+        return statuses[state] || statuses.unverified;
+    }
     function open(kind, id, back) {
         if (!Object.hasOwn(kinds, kind)) throw new Error('Choose a supported history check.');
         const body = openDrawer('Record history check', kinds[kind].toUpperCase());
@@ -67,18 +77,16 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
             const data = await request(base + 'run/', 'POST', {});
             if (!body.isConnected) return;
             const check = data.result, receipt = data.receipt;
-            const [label, description] = kind === 'standing' && check.status === 'observed_empty'
-                ? [text('standing_empty'), text('standing_empty_help')]
-                : statuses[check.status] || statuses.unverified;
+            const [label, description] = observation(kind, check.status);
             result.replaceChildren(node('h3', { class: 'h5' }, label), node('p', {}, description),
                 node('p', { class: 'text-break' }, `Support reference: ${receipt.reference}`),
                 node('p', {}, `Observed ${receipt.checked_at} · ${check.events_checked} events checked (maximum ${data.event_limit}).`));
             if (check.records_checked != null) result.append(node('p', {},
-                `${text(kind === 'standing' ? 'standing_count' : 'load_count')}: ${check.records_checked}.`));
+                `${text(employmentKinds.includes(kind) ? 'hr_count' : kind === 'standing' ? 'standing_count' : 'load_count')}: ${check.records_checked}.`));
             if (check.position != null) result.append(node('p', {}, `Observed stream position: ${check.position}.`));
             if (check.current_records != null) result.append(node('p', {}, `Current academic records checked: ${check.current_records}.`));
             if (check.expected_postings != null) result.append(node('p', {}, `Expected postings checked: ${check.expected_postings}.`));
-            const components = (check.issues || []).filter(key => Object.hasOwn(issues, key)).map(key => issues[key]);
+            const components = (check.issues || []).filter(key => Object.hasOwn(issues, key)).map(key => key === 'identity' && employmentKinds.includes(kind) ? text('hr_identity') : issues[key]);
             if (components.length) result.append(node('p', {}, `Components for review: ${components.join(', ')}.`));
             after = null; stack = [];
             await load();
@@ -91,8 +99,8 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         controls.append(run, button('Refresh previous checks', () => load()));
         if (back) controls.append(node('button', { type: 'button', class: 'btn btn-link', onclick: event => task(back, event.currentTarget) }, 'Back to record'));
         body.append(node('h3', { class: 'h5' }, kinds[kind]),
-            node('p', {}, text('check_help')),
-            node('p', { class: 'form-text' }, text('history_help')),
+            node('p', {}, text(employmentKinds.includes(kind) ? 'hr_help' : 'check_help')),
+            node('p', { class: 'form-text' }, text(employmentKinds.includes(kind) ? 'hr_history_help' : 'history_help')),
             controls, status, result, history, node('div', { class: 'd-flex gap-2 flex-wrap' }, previous, older));
         async function load() {
             const page = await request(base + 'history/', 'POST', { after });
@@ -100,8 +108,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
             next = page.next_after; older.hidden = !next; previous.hidden = !stack.length;
             history.replaceChildren(node('h3', { class: 'h5' }, 'Previous checks'));
             for (const item of page.items) history.append(node('article', { class: 'border rounded p-3 mb-3 text-break' },
-                node('h4', { class: 'h6' }, kind === 'standing' && item.status === 'observed_empty'
-                    ? text('standing_empty') : (statuses[item.status] || statuses.unverified)[0]),
+                node('h4', { class: 'h6' }, observation(kind, item.status)[0]),
                 node('p', {}, `Observed ${item.checked_at} · ${item.events_checked} events checked.`),
                 node('p', {}, `Support reference: ${item.reference}`)));
             if (!page.items.length) history.append(node('p', {}, 'No previous checks for the current record routing on this page.'));

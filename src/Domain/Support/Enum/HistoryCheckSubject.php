@@ -12,6 +12,9 @@ enum HistoryCheckSubject: string
     case Application = "application";
     case Standing = "standing";
     case Load = "load";
+    case PrimaryPosition = 'primary';
+    case Position = 'position';
+    case TimeEntry = 'time';
 
     public function permissions(): array
     {
@@ -22,6 +25,7 @@ enum HistoryCheckSubject: string
             self::Application => ["sis:admissions:manage"],
             self::Standing => ["sis:student:read", "sis:standing:manage"],
             self::Load => ["sis:student:read", "sis:load:determine"],
+            self::PrimaryPosition, self::Position, self::TimeEntry => ['sis:hr:manage'],
         };
     }
 
@@ -34,6 +38,9 @@ enum HistoryCheckSubject: string
             self::Application => "admissions_application",
             self::Standing => "student_standing",
             self::Load => "enrollment_load_determination",
+            self::PrimaryPosition => 'employment_primary_position',
+            self::Position => 'employment_position',
+            self::TimeEntry => 'timesheet_decision',
         };
     }
 
@@ -42,6 +49,8 @@ enum HistoryCheckSubject: string
         return match ($this) {
             self::Standing => "pursuit_reference",
             self::Load => "determination_reference",
+            self::PrimaryPosition => 'primary_position_reference',
+            self::TimeEntry => 'time_entry_reference',
             default => $this->value . "_reference",
         };
     }

@@ -12,6 +12,8 @@ use Domain\Admissions\Repository\ApplicationProjectionVerifier;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Finance\Repository\AccountProjectionVerifier;
 use Domain\Finance\ValueObject\AccountId;
+use Domain\HumanResources\Repository\EmploymentProjectionVerifier;
+use Domain\HumanResources\Repository\TimeRepository;
 use Domain\Person\Repository\PersonProfileRepository;
 use Domain\Person\Repository\PersonProjectionVerifier;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -49,6 +51,8 @@ final readonly class HistoryCheckService
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private Clock $clock,
+        private EmploymentProjectionVerifier $employmentHistory,
+        private TimeRepository $employees,
     ) {
     }
 
@@ -62,6 +66,9 @@ final readonly class HistoryCheckService
                 throw new AccessDeniedException();
             }
         }
+        $employee = in_array($kind, [
+            HistoryCheckSubject::PrimaryPosition, HistoryCheckSubject::Position, HistoryCheckSubject::TimeEntry,
+        ], true) ? $this->receipts->employmentSubject($kind, $id) : null;
         $load = $kind === HistoryCheckSubject::Load
         ? ($this->loads->find($id) ?? throw new RecordNotFoundException("Load determination not found."))
         : null;
@@ -72,6 +79,7 @@ final readonly class HistoryCheckService
         };
         $student = match ($kind) {
             HistoryCheckSubject::Person => null,
+            HistoryCheckSubject::PrimaryPosition, HistoryCheckSubject::Position, HistoryCheckSubject::TimeEntry => null,
             HistoryCheckSubject::Application => null,
             HistoryCheckSubject::Student => $id,
             HistoryCheckSubject::Standing => $this->students->assignment($id)->studentId,
@@ -79,8 +87,9 @@ final readonly class HistoryCheckService
             HistoryCheckSubject::Account => $this->receipts->accountStudent($id),
         };
         $person = $this->admissions->person(
-            $kind === HistoryCheckSubject::Application ? $this->admissions->application($id)->personId
-                : ($student === null ? $id : $this->admissions->student($student)->personId),
+            $employee !== null ? $this->employees->employee($employee)->personId
+                : ($kind === HistoryCheckSubject::Application ? $this->admissions->application($id)->personId
+                    : ($student === null ? $id : $this->admissions->student($student)->personId)),
         );
         if (
             $actor->value !== $this->access->authenticatedUserId()->value ||
@@ -92,7 +101,7 @@ final readonly class HistoryCheckService
                 "This history check requires current support authority.",
             );
         }
-        return new HistoryCheckScope($kind, $id, $person->id, $person->ownerUserId, $student, $pursuit);
+        return new HistoryCheckScope($kind, $id, $person->id, $person->ownerUserId, $student, $pursuit, $employee);
     }
 
     private function recheck(HistoryCheckScope $scope, EntityId $actor): void
@@ -101,6 +110,7 @@ final readonly class HistoryCheckService
         if (
             $scope->criteria() !== $current->criteria()
             || $scope->pursuit?->value !== $current->pursuit?->value
+            || $scope->employee?->value !== $current->employee?->value
         ) {
             throw new ConcurrentModificationException(
                 "Record routing changed. Reopen the record before checking its history.",
@@ -168,6 +178,12 @@ final readonly class HistoryCheckService
                 HistoryCheckSubject::Load => $this->decisions
                     ->load($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)
                     ->describe(),
+                HistoryCheckSubject::PrimaryPosition => $this->employmentHistory
+                    ->primaryPosition($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
+                HistoryCheckSubject::Position => $this->employmentHistory
+                    ->position($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
+                HistoryCheckSubject::TimeEntry => $this->employmentHistory
+                    ->timeEntry($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Application => $this->applications
                     ->verify($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)
                     ->describe(),
@@ -199,6 +215,9 @@ final readonly class HistoryCheckService
         $this->people->lock($scope->person);
         if ($scope->student !== null) {
             $this->students->lock($scope->student);
+        }
+        if ($scope->employee !== null) {
+            $this->employees->lockEmployee($scope->employee);
         }
         if ($scope->kind === HistoryCheckSubject::Application) {
             $this->admissions->lockApplication($scope->subject);

@@ -2,6 +2,7 @@
 window.createWorkspaceEmployment = function (ui) {
     "use strict";
     const primaryLabels = JSON.parse(globalThis.document?.getElementById?.('time-primary-labels')?.textContent || '{}');
+    const checkLabels = ui.historyCheckLabels || {};
     const {
         node,
         request,
@@ -512,6 +513,8 @@ window.createWorkspaceEmployment = function (ui) {
         const body = openDrawer(name(record), "TIME ENTRY REVIEW");
         if (can("sis:audit:read"))
             body.append(button("View audit history", () => showAudit("timesheets", id)));
+        if (ui.historyChecks && can('sis:hr:manage') && can('sis:history:verify') && can('sis:audit:read'))
+            body.append(button(checkLabels.check_time, () => ui.historyChecks().open('time', id, () => entry(id, weekly))));
         body.append(...[
             node("p", {}, `${record.institutional_id} · ${record.job_title}`),
             node(

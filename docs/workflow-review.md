@@ -4,6 +4,14 @@ The legacy system is the feature inventory, not a requirement to reproduce its s
 
 “Working” below describes a workflow available in the current code. “Partial” means useful pieces work but the broader recommendation still needs implementation. “Proposed” is a design recommendation, not completed functionality.
 
+## Completed: contextual HR history checks
+
+**Working.** [Selected employment verification](event-history-foundation.md#selected-employment-checks-for-trusted-operators) now connects primary designation, position agreement and retained time decisions to the existing operator command and shared support drawer. It reuses normal protected-history validators, compares bounded routing/projection/head observations outside wrapping snapshots and distinguishes changed, limited, missing-earlier and empty results without repairing business records.
+
+The staff facade requires HR, support and audit duties together, protects super-linked owners and retains only the existing minimized operational receipts. **Back to record** preserves proposed primary reasons and original assignment/time routes. The in-place routing-width migration fixes the existing `application` subject length without converting values. The configured MariaDB update preserves four receipts and twenty journal event envelopes/checksums; SQLite preserves its populated table/indexes without a rebuild.
+
+Validation: **79 distinct PHP tests / 603 assertions**, including actual command/provider/private-route checks, source/authority/audit rollback, read-only enforcement, shared bounds, earlier unknowns, concurrency and adjacent HR policies/designations/time; **40 distinct browser cases** across HR checks, shared support and employment/assignment navigation. Coding standards, PHP syntax, JavaScript parsing, translations and whitespace pass. Runs remained sequential for heavy batches, deadline bounded and low priority, with one browser worker. Broader workflow diagnostics, operational rebuild/restore qualification and release acceptance remain open.
+
 ## Completed: required primary designation before time approval
 
 **Working.** [Primary-position approval policy](human-resources.md#require-a-primary-position-for-time-approval) connects reviewed institutional setup, verified pending-entry guidance and an explicit designation-resolution return through existing paged agreements. The optional-by-default rule blocks approval when a designation is missing, cleared, changed, ended, scheduled or voided. Exception approval does not bypass it; pending work and rejection remain available.

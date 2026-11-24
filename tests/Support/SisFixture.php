@@ -266,6 +266,20 @@ final class SisFixture
         );
     }
 
+    public function employmentVerifier(): \Infrastructure\Projection\SqlEmploymentProjectionVerifier
+    {
+        return new \Infrastructure\Projection\SqlEmploymentProjectionVerifier(
+            $this->sql,
+            new \Infrastructure\Persistence\Repository\SqlPrimaryPositionRepository($this->sql, $this->dropCipher),
+            new \Infrastructure\Persistence\Repository\SqlTimeRepository($this->sql, $this->dropCipher),
+            $this->primaryPositionLedger(),
+            $this->positionLedger(),
+            new \Domain\HumanResources\Service\TimeDecisionLedger(
+                EventStoreFixture::history($this->connection->queryBuilder()), $this->clock,
+            ),
+        );
+    }
+
     public function studentDecisionVerifier(): \Infrastructure\Projection\SqlStudentDecisionProjectionVerifier
     {
         $history = \EventStoreFixture::history($this->connection->queryBuilder());

@@ -38,6 +38,7 @@ final class HistoryCheckServiceTest extends TestCase
         ?AcademicProjectionVerifier $academics = null,
         ?\Domain\Admissions\Repository\ApplicationProjectionVerifier $applications = null,
         ?\Domain\Student\Repository\StudentDecisionProjectionVerifier $decisions = null,
+        ?\Domain\HumanResources\Repository\EmploymentProjectionVerifier $employment = null,
     ): HistoryCheckService {
         $s = $c->sis;
         return new HistoryCheckService(
@@ -88,6 +89,8 @@ final class HistoryCheckServiceTest extends TestCase
             $s->transactions,
             $audit ?? $s->audit,
             $s->clock,
+            $employment ?? $s->employmentVerifier(),
+            new \Infrastructure\Persistence\Repository\SqlTimeRepository($s->sql, $s->dropCipher),
         );
     }
 
@@ -344,6 +347,117 @@ final class HistoryCheckServiceTest extends TestCase
         }
         self::assertSame($before, $this->facts($c));
         self::assertFalse($s->connection->pdo->inTransaction());
+    }
+
+    public function testEmploymentChecksUseExistingReceiptsAndRequireAllDutiesEvenForOwners(): void
+    {
+        require_once dirname(__DIR__) . '/Support/EmploymentHistoryFixture.php';
+        $c = new CampusFixture();
+        $f = new \Tests\Support\EmploymentHistoryFixture($c->sis);
+        $s = $c->sis;
+        $service = $this->service($c);
+        $cases = [[HistoryCheckSubject::PrimaryPosition, $f->employee],
+            [HistoryCheckSubject::Position, $f->position], [HistoryCheckSubject::TimeEntry, $f->entry]];
+        $before = $f->facts();
+        foreach ($cases as [$kind, $id]) {
+            self::assertLessThanOrEqual(8, strlen($kind->value));
+            $checked = $service->run($kind, $id);
+            self::assertSame('verified', $checked['result']['status']);
+            self::assertSame('verified', $checked['receipt']['status']);
+            self::assertSame(200, $checked['event_limit']);
+            self::assertCount(1, $service->history($kind, $id)['items']);
+            $json = json_encode($checked, JSON_THROW_ON_ERROR);
+            foreach (['Private', 'Fictional', 'encrypted_', 'starts_at', '4321', 'owner_user_id'] as $private) {
+                self::assertStringNotContainsString($private, $json);
+            }
+            $s->access->staff = false;
+            $s->access->actor = $f->owner;
+            $all = ['sis:hr:manage', 'sis:history:verify', 'sis:audit:read'];
+            foreach ($all as $missing) {
+                $s->access->grants = array_values(array_diff($all, [$missing]));
+                $this->rejects(fn() => $service->run($kind, $id), AccessDeniedException::class);
+                $this->rejects(fn() => $service->history($kind, $id), AccessDeniedException::class);
+            }
+            $s->access->staff = true;
+        }
+        self::assertSame($before, $f->facts());
+    }
+
+    public function testEmploymentChecksProtectSuperOwnersAndRollBackRoutingAuditAndAuthorityFailures(): void
+    {
+        require_once dirname(__DIR__) . '/Support/EmploymentHistoryFixture.php';
+        foreach (['super', 'routing', 'audit', 'authority'] as $case) {
+            $c = new CampusFixture();
+            $f = new \Tests\Support\EmploymentHistoryFixture($c->sis);
+            $s = $c->sis;
+            if ($case === 'super') {
+                $roles = new SqlAccessRepository($s->sql);
+                $superRole = $roles->roleNamed('super')->id;
+                $roles->assign(\Domain\Access\Enum\GrantKind::UserRole, $f->owner, $superRole, true);
+                $this->rejects(
+                    fn() => $this->service($c)->run(HistoryCheckSubject::Position, $f->position),
+                    AccessDeniedException::class,
+                );
+                self::assertSame([], $s->sql->rows('sis_history_checks'));
+                continue;
+            }
+            $other = $s->student($s->user());
+            $audit = $this->createStub(AuditTrail::class);
+            $audit->method('record')->willReturnCallback(static function () use ($s, $f, $other, $case): void {
+                if ($case === 'routing') {
+                    $s->sql->update(
+                        'sis_employees',
+                        ['person_id' => $other->personId->value],
+                        ['id' => $f->employee->value],
+                    );
+                } elseif ($case === 'authority') {
+                    $s->access->staff = false;
+                    $s->access->grants = [];
+                } else {
+                    throw new \RuntimeException('Private failed required audit.');
+                }
+            });
+            $before = $f->facts();
+            $this->rejects(
+                fn() => $this->service($c, audit: $audit)->run(HistoryCheckSubject::TimeEntry, $f->entry),
+                $case === 'routing' ? ConcurrentModificationException::class
+                    : ($case === 'authority' ? AccessDeniedException::class : \RuntimeException::class),
+            );
+            self::assertSame([], $s->sql->rows('sis_history_checks'));
+            self::assertSame($before, $f->facts());
+        }
+    }
+
+    public function testEmploymentProviderAllowanceAndResultRoutingAreCheckedBeforeAReceipt(): void
+    {
+        require_once dirname(__DIR__) . '/Support/EmploymentHistoryFixture.php';
+        $c = new CampusFixture();
+        $f = new \Tests\Support\EmploymentHistoryFixture($c->sis);
+        $provider = $this->createMock(\Domain\HumanResources\Repository\EmploymentProjectionVerifier::class);
+        $provider->expects(self::once())->method('primaryPosition')->with($f->employee, 200)->willReturn(
+            new \Domain\HumanResources\ValueObject\EmploymentProjectionCheck(
+                'limited',
+                'employment_primary_position',
+                $f->employee,
+                200,
+                1,
+            ),
+        );
+        $result = $this->service($c, employment: $provider)->run(HistoryCheckSubject::PrimaryPosition, $f->employee);
+        self::assertSame('limited', $result['receipt']['status']);
+        self::assertSame(200, $result['receipt']['events_checked']);
+        $wrong = $this->createStub(\Domain\HumanResources\Repository\EmploymentProjectionVerifier::class);
+        $wrong->method('position')->willReturn(new \Domain\HumanResources\ValueObject\EmploymentProjectionCheck(
+            'verified',
+            'employment_position',
+            EntityId::generate(),
+            1,
+            1,
+            1,
+        ));
+        $result = $this->service($c, employment: $wrong)->run(HistoryCheckSubject::Position, $f->position);
+        self::assertSame('unverified', $result['receipt']['status']);
+        self::assertSame(['unavailable'], $result['result']['issues']);
     }
 
     public function testEveryContextNeedsAllIndependentDutiesEvenForTheOwner(): void

@@ -1,11 +1,13 @@
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
+const { recordAction } = require('./support/workspace-actions.cjs');
 const id = n => String(n).padStart(26, '0');
 const body = page => page.locator('#drawer-body');
 const button = (page, name) => body(page).getByRole('button', { name, exact: true });
 
-async function fixture(page) {
-    const f = { calls: [], errors: [], primary: false, status: 'pending', deny: false };
+async function fixture(page, { url = '/admin/' } = {}) {
+    const f = { calls: [], errors: [], primary: false, status: 'pending', deny: false,
+        checks: new Map(), checkStatus: 'verified', denyCheck: false };
     const employee = id(1), entry = id(3), base = `/sis/employees/${employee}`;
     const profile = { id: employee, person_id: id(2), given_name: 'Alex', family_name: 'Example',
         institutional_id: 'P-FICTIONAL', job_title: 'Fictional assistant', active: true, is_self: false,
@@ -25,7 +27,24 @@ async function fixture(page) {
         f.calls.push({ path, data, csrf: req.headers()['x-csrf-token'], method: req.method() });
         if (f.deny && path.includes('/primary-position/')) return route.fulfill({ status: 403, json: { error: 'Fictional primary access denied.' } });
         let result = { items: [], next_after: null };
-        if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+        const check = path.match(/^\/sis\/history-checks\/(primary|position|time)\/([^/]+)\/(run|history)\/$/);
+        if (check) {
+            if (f.denyCheck) return route.fulfill({ status: 403, json: { error: 'Fictional support access denied.' } });
+            const [, kind, reference, action] = check;
+            const key = `${kind}/${reference}`;
+            const receipt = { reference: id(900), status: f.checkStatus, events_checked: 1, checked_at: '2026-11-23T18:00:00Z' };
+            if (action === 'history') result = { items: data.after ? [] : (f.checks.get(key) || []), next_after: !data.after && f.checks.has(key) ? id(901) : null };
+            else {
+                f.checks.set(key, [receipt]);
+                const empty = ['observed_empty', 'history_gaps'].includes(f.checkStatus);
+                result = { receipt, event_limit: 200, result: { status: f.checkStatus,
+                    scope: { primary: 'employment_primary_position', position: 'employment_position', time: 'timesheet_decision' }[kind],
+                    [{ primary: 'primary_position_reference', position: 'position_reference', time: 'time_entry_reference' }[kind]]: reference,
+                    events_checked: 1, position: empty ? 0 : 1, records_checked: f.checkStatus === 'verified' ? 1 : f.checkStatus === 'observed_empty' ? 0 : null,
+                    issues: f.checkStatus === 'history_gaps' ? ['earlier_decision'] : [], records_changed: false } };
+            }
+        }
+        else if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/data/employees/') result.items = [profile];
         else if (path === `${base}/`) result = profile;
         else if (path === `${base}/time-entries/`) result.items = [{ ...time, status: f.status }];
@@ -48,7 +67,7 @@ async function fixture(page) {
         else if (path === `/sis/timesheets/${entry}/decision/`) { f.status = data.approve ? 'approved' : 'rejected'; result = { status: 'decided' }; }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
-    await page.goto('/admin/');
+    await page.goto(url);
     await page.locator('.workspace-nav-link[data-workspace="employees"]').click();
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     await button(page, 'Review time entry').click();
@@ -126,5 +145,88 @@ test('denied designation access clears the affected view and preserves the block
     await expect(button(page, 'Approve time entry')).toBeDisabled();
     await expect(button(page, 'Reject time entry')).toBeEnabled();
     expect(f.calls.some(c => c.path.endsWith('/primary-position/confirm/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('time support checks retain minimized receipts, page locally and return to the original time entry', async ({ page }) => {
+    const f = await fixture(page);
+    expect(f.calls.some(c => c.path.includes('/history-checks/'))).toBe(false);
+    await button(page, 'Check retained time decision').click();
+    expect(f.calls.some(c => c.path.endsWith('/run/'))).toBe(false);
+    f.checkStatus = 'history_gaps';
+    await button(page, 'Run history check').click();
+    await expect(body(page)).toContainText('Earlier time decision not recorded');
+    await expect(body(page)).not.toContainText('Fictional worked position');
+    await expect(body(page)).not.toContainText('2500');
+    await button(page, 'Older checks').click();
+    await button(page, 'Previous checks page').click();
+    f.checkStatus = 'observed_empty';
+    await button(page, 'Run history check').click();
+    await expect(body(page)).toContainText('No retained time decision observed');
+    await page.setViewportSize({ width: 320, height: 812 });
+    await accessible(page);
+    await page.screenshot({ path: '/tmp/etsis-time-history-check-phone.png', fullPage: true });
+    await button(page, 'Back to record').click();
+    await expect(body(page)).toContainText('Position worked: LAB · Fictional worked position');
+    await expect(button(page, 'Approve time entry')).toBeDisabled();
+    expect(f.calls.filter(c => c.method === 'POST').every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('position and primary support return through the retained assignment page and preserve the designation reason', async ({ page }) => {
+    const f = await fixture(page);
+    await button(page, 'Review primary position').click();
+    await button(page, 'Choose from position assignments').click();
+    await button(page, 'Next assignments').click();
+    await button(page, 'Open position assignment').click();
+    await recordAction(page, 'Check position agreement history');
+    await button(page, 'Run history check').click();
+    await expect(body(page)).toContainText('Selected HR records checked: 1');
+    await button(page, 'Back to record').click();
+    await expect(body(page)).toContainText('Fictional appointment 5');
+    await button(page, 'Designate as primary position').click();
+    await page.getByLabel('Reason for primary designation', { exact: true }).fill('Fictional preserved HR reason.');
+    await button(page, 'Check primary designation history').click();
+    f.checkStatus = 'observed_empty';
+    await button(page, 'Run history check').click();
+    await expect(body(page)).toContainText('No recorded primary designation observed');
+    await expect(body(page)).not.toContainText('Fictional preserved HR reason.');
+    await button(page, 'Back to record').focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByLabel('Reason for primary designation', { exact: true })).toHaveValue('Fictional preserved HR reason.');
+    await button(page, 'Back to assignment').click();
+    await button(page, 'Back to assignments').click();
+    await expect(body(page)).toContainText('Fictional appointment 5');
+    await button(page, 'Back to time entry').click();
+    await expect(button(page, 'Check retained time decision')).toBeVisible();
+    expect(f.errors).toEqual([]);
+});
+
+test('lost support duty clears current results and receipts without changing the time entry', async ({ page }) => {
+    const f = await fixture(page);
+    await button(page, 'Check retained time decision').click();
+    await button(page, 'Run history check').click();
+    await expect(body(page)).toContainText('Verified within this check');
+    f.denyCheck = true;
+    await button(page, 'Refresh previous checks').click();
+    await expect(body(page)).toContainText('Fictional support access denied.');
+    await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toBeEmpty();
+    await expect(page.getByRole('region', { name: 'Previous history checks', exact: true })).toBeEmpty();
+    await button(page, 'Back to record').click();
+    await expect(body(page)).toContainText('pending');
+    expect(f.calls.some(c => c.path.endsWith('/decision/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('ordinary HR duty does not expose support-check controls on time, primary or position records', async ({ page }) => {
+    const f = await fixture(page, { url: '/admin/hr-only-fixture/' });
+    await expect(button(page, 'Check retained time decision')).toHaveCount(0);
+    await button(page, 'Review primary position').click();
+    await expect(button(page, 'Check primary designation history')).toHaveCount(0);
+    await button(page, 'Choose from position assignments').click();
+    await button(page, 'Open position assignment').click();
+    await expect(body(page).getByRole('button', { name: 'Check position agreement history', exact: true, includeHidden: true })).toHaveCount(0);
+    expect(f.calls.some(c => c.path.includes('/history-checks/'))).toBe(false);
     expect(f.errors).toEqual([]);
 });
