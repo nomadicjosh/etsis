@@ -17,7 +17,7 @@ final class AdmissionDeferralSchema
         if (
             count($p) !== count(self::FIELDS) || array_diff(array_keys($p), self::FIELDS) !== []
             || !is_int($p['application_version']) || $p['application_version'] < 1
-            || !in_array($p['kind'], ['defer', 'reconfirm'], true)
+            || !in_array($p['kind'], ['defer', 'reconfirm', 'correct', 'recheck'], true)
         ) {
             throw new CorruptHistoryException();
         }
@@ -35,7 +35,8 @@ final class AdmissionDeferralSchema
             || $p['after']['ends_on'] > $p['after']['year_ends_on']
             || ($p['kind'] === 'defer' && ($p['before']['id'] === $p['after']['id']
                 || $p['after']['starts_on'] <= $p['before']['starts_on']))
-            || ($p['kind'] === 'reconfirm' && ($p['before']['id'] !== $p['after']['id']
+            || ($p['kind'] === 'correct' && $p['before']['id'] === $p['after']['id'])
+            || (in_array($p['kind'], ['reconfirm', 'recheck'], true) && ($p['before']['id'] !== $p['after']['id']
                 || $p['before'] === $p['after']))
         ) {
             throw new CorruptHistoryException();
@@ -44,6 +45,10 @@ final class AdmissionDeferralSchema
         if ($p['source']['entry_term_code'] !== $p['after']['code']) {
             throw new CorruptHistoryException();
         }
+    }
+    public static function correction(string $kind): bool
+    {
+        return in_array($kind, ['correct', 'recheck'], true);
     }
     public static function term(mixed $t): void
     {

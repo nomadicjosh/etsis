@@ -37,7 +37,13 @@ interface AdmissionsRepository
     public function saveResubmission(AdmissionApplication $before, AdmissionApplication $after): void;
     public function saveEntryTerm(AdmissionApplication $before, AdmissionApplication $after): void;
     /** @return list<array<string,mixed>> */
-    public function defermentTerms(string $afterStart, string $today, string $search, ?EntityId $after = null): array;
+    public function entryTerms(
+        string $today,
+        string $search,
+        EntityId $exclude,
+        ?EntityId $after = null,
+        ?string $afterStart = null
+    ): array;
 
     public function lockPerson(EntityId $id): void;
     public function lockApplication(EntityId $id): void;

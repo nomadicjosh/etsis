@@ -68,3 +68,58 @@ if (
     throw new RuntimeException('The real intake approval or its original retry result failed.');
 }
 $sis->access->staff = true;
+
+// Submitted-entry correction reuses the same private pipeline with independent correction authority.
+$correctionApplication = \Domain\Shared\ValueObject\EntityId::generate();
+$sis->submissionService()->apply($correctionApplication, $entryPerson->id, $sis->program, $sis->term);
+$correctionBase = '/sis/applications/' . $correctionApplication->value . '/entry/';
+$sis->access->staff = false;
+$sis->access->grants = ['sis:admissions:manage', 'sis:admissions:defer'];
+if (
+    $teachingPost($correctionBase . 'review/', [
+    'target_term' => $entryTerm->value, 'kind' => 'correct', 'reason' => 'Fictional correction.',
+    ])->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Deferment authority granted a submitted-entry correction through HTTP.');
+}
+$sis->access->grants = ['sis:admissions:manage', 'sis:admissions:correct'];
+$correctionCurrent = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $correctionBase
+)));
+$correctionData = json_decode((string) $correctionCurrent->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$correctionEvents = $sis->sql->rows('sis_history_events');
+$correctionReview = $teachingPost($correctionBase . 'review/', [
+    'target_term' => $entryTerm->value, 'kind' => 'correct', 'reason' => 'Fictional private correction.',
+]);
+$correctionPlan = json_decode((string) $correctionReview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $correctionCurrent->getStatusCode() !== 200 || $correctionData['application_status'] !== 'submitted'
+    || $correctionReview->getStatusCode() !== 200 || !isset($correctionPlan['review_token'])
+    || $correctionEvents !== $sis->sql->rows('sis_history_events')
+    || !str_contains($correctionReview->getHeaderLine('Cache-Control'), 'no-store')
+    || $correctionReview->hasHeader('phpdebugbar-id')
+) {
+    throw new RuntimeException('The submitted-entry private review wrote facts or failed to boot.');
+}
+$correctionCommit = $teachingPost($correctionBase . 'commit/', ['review_token' => $correctionPlan['review_token']]);
+$correctionResult = json_decode((string) $correctionCommit->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$correctionRetry = $teachingPost($correctionBase . 'commit/', ['review_token' => $correctionPlan['review_token']]);
+if (
+    $correctionCommit->getStatusCode() !== 200 || ($correctionResult['status'] ?? null) !== 'submitted'
+    || ($correctionResult['kind'] ?? null) !== 'correct'
+    || $sis->admissions->application($correctionApplication)->entryTermId->value !== $entryTerm->value
+    || json_decode((string) $correctionRetry->getBody(), true, flags: JSON_THROW_ON_ERROR) !== $correctionResult
+    || !str_contains($correctionCommit->getHeaderLine('Cache-Control'), 'no-store')
+    || $correctionCommit->hasHeader('phpdebugbar-id')
+) {
+    throw new RuntimeException('The submitted-entry correction or original retry failed through HTTP.');
+}
+$sis->access->grants = ['sis:admissions:manage', 'sis:admissions:defer'];
+if (
+    $teachingPost($correctionBase . 'commit/', [
+    'review_token' => $correctionPlan['review_token'],
+    ])->getStatusCode() !== 403
+) {
+    throw new RuntimeException('An original correction retry bypassed current correction authority.');
+}
+$sis->access->staff = true;

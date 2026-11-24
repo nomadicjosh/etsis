@@ -220,17 +220,28 @@ final readonly class PdoAdmissionsRepository implements AdmissionsRepository
             . ' SET ' . $q('entry_term_id') . ' = ?, ' . $q('version') . ' = ? WHERE ' . $q('id')
             . ' = ? AND ' . $q('entry_term_id') . ' = ? AND ' . $q('version') . ' = ? AND ' . $q('status') . ' = ?');
         $statement->execute([$after->entryTermId->value, $after->version, $before->id->value,
-            $before->entryTermId->value, $before->version, ApplicationStatus::Accepted->value]);
+            $before->entryTermId->value, $before->version, $before->status->value]);
         if ($statement->rowCount() !== 1) {
             throw new ConcurrentModificationException('This application changed. Review its entry term again.');
         }
     }
-    public function defermentTerms(string $afterStart, string $today, string $search, ?EntityId $after = null): array
-    {
+    public function entryTerms(
+        string $today,
+        string $search,
+        EntityId $exclude,
+        ?EntityId $after = null,
+        ?string $afterStart = null
+    ): array {
         $sql = new SqlRecords($this->db);
         $q = $sql->quote(...);
-        $where = ['t.' . $q('starts_on') . ' > ?', 't.' . $q('starts_on') . ' >= ?'];
-        $args = [$afterStart, $today];
+        $where = ['t.' . $q('starts_on') . ' >= ?', 't.' . $q('id') . ' <> ?',
+            't.' . $q('starts_on') . ' >= y.' . $q('starts_on'),
+            't.' . $q('ends_on') . ' <= y.' . $q('ends_on')];
+        $args = [$today, $exclude->value];
+        if ($afterStart !== null) {
+            $where[] = 't.' . $q('starts_on') . ' > ?';
+            $args[] = $afterStart;
+        }
         if ($search !== '') {
             $where[] = '(t.' . $q('code') . " LIKE ? ESCAPE '~' OR c." . $q('name') . " LIKE ? ESCAPE '~')";
             $like = '%' . strtr($search, ['~' => '~~', '%' => '~%', '_' => '~_']) . '%';

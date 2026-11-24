@@ -11,6 +11,8 @@ use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Admissions\Repository\AdmissionWithdrawalRepository;
 use Domain\Admissions\Repository\AdmissionUpdatesRepository;
 use Domain\Admissions\ValueObject\AdmissionDecisionSchema;
+use Domain\Admissions\ValueObject\AdmissionDeferralSchema;
+use Domain\Admissions\Repository\ApplicationRevisionRepository;
 use Domain\Admissions\ValueObject\AdmissionOfferSchema;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Communications\Service\MessageCipher;
@@ -38,59 +40,72 @@ final readonly class AdmissionDeferralService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private ApplicationRevisionRepository $answers,
     ) {
     }
     public function current(EntityId $id): array
     {
-        $actor = $this->actor();
+        $this->access->requirePermission('sis:admissions:manage');
         $route = $this->admissions->application($id);
-        return $this->transactions->run(function () use ($actor, $route): array {
-            $a = $this->lock($route, $actor);
+        $correction = $route->status === ApplicationStatus::Submitted;
+        $actor = $this->actor($correction);
+        return $this->transactions->run(function () use ($actor, $route, $correction): array {
+            $a = $this->lock($route, $actor, $correction);
             $current = $this->terms->snapshot($a->entryTermId);
             $entry = $this->ledger->entryApproval($a);
             $result = ['person' => $this->person($a), 'current' => $current, 'approved' => $entry['after'] ?? null,
                 'application_status' => $a->status->value,
+                'answers_pending' => $this->answers->pending($a->id) !== null,
                     'withdrawal_pending' => $this->requests->pending($a->id) !== null,
                 'needs_review' => $entry !== null && $current != $entry['after']];
-            $this->authorize($actor);
+            $this->authorize($actor, $correction);
             return $result;
         });
     }
     public function choices(EntityId $id, string $search, ?EntityId $after = null): array
     {
-        $actor = $this->actor();
+        $this->access->requirePermission('sis:admissions:manage');
         if (
-            !mb_check_encoding(
-                $search,
-                'UTF-8'
-            ) || mb_strlen($search) > 80 || preg_match('/[\x00-\x1F\x7F]/', $search)
+            !mb_check_encoding($search, 'UTF-8') || mb_strlen($search) > 80
+            || preg_match('/[\x00-\x1F\x7F]/', $search)
         ) {
             throw new ValidationException([['field' => 'search',
                 'message' => 'Enter a term code or name up to 80 characters.']]);
         }
-        $a = $this->admissions->application($id);
-        $current = $this->terms->snapshot($a->entryTermId);
-        $rows = $this->admissions->defermentTerms(
-            $current['starts_on'],
-            $this->clock->now()->format('Y-m-d'),
-            trim($search),
-            $after
-        );
-        $more = count($rows) > 20;
-        $rows = array_slice($rows, 0, 20);
-        $this->authorize($actor);
-        return ['items' => $rows, 'next' => $more ? $rows[array_key_last($rows)]['id'] : null];
+        $route = $this->admissions->application($id);
+        $correction = $route->status === ApplicationStatus::Submitted;
+        $actor = $this->actor($correction);
+        return $this->transactions->run(function () use ($route, $actor, $correction, $search, $after): array {
+            $a = $this->lock($route, $actor, $correction);
+            $this->eligible($a, $correction);
+            $current = $this->terms->snapshot($a->entryTermId);
+            $rows = $this->admissions->entryTerms(
+                $this->clock->now()->format('Y-m-d'),
+                trim($search),
+                $a->entryTermId,
+                $after,
+                $correction ? null : $current['starts_on']
+            );
+            $more = count($rows) > 20;
+            $rows = array_slice($rows, 0, 20);
+            $this->authorize($actor, $correction);
+            return ['items' => $rows, 'next' => $more ? $rows[array_key_last($rows)]['id'] : null];
+        });
     }
     public function review(EntityId $id, EntityId $target, string $kind, #[\SensitiveParameter] string $reason): array
     {
-        $actor = $this->actor();
+        $correction = AdmissionDeferralSchema::correction($kind);
+        $actor = $this->actor($correction);
+        if (!in_array($kind, ['defer', 'reconfirm', 'correct', 'recheck'], true)) {
+            throw new ValidationException([['field' => 'kind', 'message' => 'Choose an intake action.']]);
+        }
         if (!AdmissionOfferSchema::text($reason, 2000)) {
             throw new ValidationException([['field' => 'reason',
                 'message' => 'Enter an approval reason up to 2,000 characters.']]);
         }
         $route = $this->admissions->application($id);
-        return $this->transactions->run(function () use ($route, $actor, $target, $kind, $reason): array {
-            $a = $this->lock($route, $actor);
+        return $this->transactions->run(function () use ($route, $actor, $target, $kind, $reason, $correction): array {
+            $a = $this->lock($route, $actor, $correction);
             $this->terms->lock($a, $target);
             $plan = $this->plan($a, $target, $kind);
             $after = $a->approveEntryTerm($target);
@@ -103,14 +118,14 @@ final readonly class AdmissionDeferralService
                 'expires' => $this->clock->now()->getTimestamp() + 1200],
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE
             ));
-            $this->authorize($actor);
+            $this->authorize($actor, $correction);
             return $plan + ['person' => $this->person($a),
                 'source' => AdmissionDecisionSchema::displaySource($source), 'review_token' => $token];
         });
     }
     public function commit(EntityId $id, #[\SensitiveParameter] string $token): array
     {
-        $actor = $this->actor();
+        $actor = $this->access->requirePermission('sis:admissions:manage');
         try {
             if (strlen($token) > 100000) {
                 throw new \InvalidArgumentException();
@@ -119,7 +134,7 @@ final readonly class AdmissionDeferralService
             if (
                 !is_array($p) || count($p) !== 9 || ($p['purpose'] ?? null) !== 'admission-entry-term'
                 || ($p['application'] ?? null) !== $id->value || ($p['actor'] ?? null) !== $actor->value
-                || !in_array($p['kind'] ?? null, ['defer', 'reconfirm'], true)
+                || !in_array($p['kind'] ?? null, ['defer', 'reconfirm', 'correct', 'recheck'], true)
                 || !AdmissionOfferSchema::text($p['reason'] ?? null, 2000) || !is_string($p['context'] ?? null)
                 || !is_int($p['expires'] ?? null)
             ) {
@@ -131,12 +146,14 @@ final readonly class AdmissionDeferralService
             throw new ValidationException([['field' => 'review_token',
                 'message' => 'Review this intake approval again.']]);
         }
+        $correction = AdmissionDeferralSchema::correction($p['kind']);
+        $this->authorize($actor, $correction);
         $route = $this->admissions->application($id);
-        return $this->transactions->run(function () use ($route, $actor, $p, $operation, $target): array {
-            $a = $this->lock($route, $actor);
+        return $this->transactions->run(function () use ($route, $actor, $p, $operation, $target, $correction): array {
+            $a = $this->lock($route, $actor, $correction);
             $receipt = $this->ledger->receipt($a, $operation, $actor);
             if ($receipt !== null) {
-                $this->authorize($actor);
+                $this->authorize($actor, $correction);
                 return $receipt;
             }
             $this->terms->lock($a, $target);
@@ -159,18 +176,22 @@ final readonly class AdmissionDeferralService
                     $this->clock->now()->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s.u\Z')
                 );
             }
+            $accepted = $this->fingerprint($after, $plan, $source);
             $this->audit->record($actor, 'admissions.entry_' . $p['kind'], $a->id);
-            $this->authorize($actor);
+            $this->authorize($actor, $correction);
+            if (
+                $this->admissions->application($after->id) != $after
+                || !hash_equals($accepted, $this->fingerprint($after, $plan, $this->context->source($after)))
+            ) {
+                throw new ConcurrentModificationException('The intake changed during confirmation. Review it again.');
+            }
             return $result;
         });
     }
     private function plan(AdmissionApplication $a, EntityId $target, string $kind): array
     {
-        if ($a->status !== ApplicationStatus::Accepted || $this->requests->pending($a->id) !== null) {
-            throw new ValidationException([['field' => 'application',
-                'message' => 'Choose an accepted, unmatriculated application '
-                    . 'and resolve any withdrawal request first.']]);
-        }
+        $correction = AdmissionDeferralSchema::correction($kind);
+        $this->eligible($a, $correction);
         $entry = $this->ledger->entryApproval($a);
         $before = $entry['after'] ?? $this->terms->snapshot($a->entryTermId);
         $after = $this->terms->snapshot($target);
@@ -182,16 +203,18 @@ final readonly class AdmissionDeferralService
                 'message' => 'Link the target term to its correct academic year '
                     . 'and review its calendar dates first.']]);
         }
-        if ($kind === 'defer') {
+        if (in_array($kind, ['defer', 'correct'], true)) {
             if (
-                $target->value === $a->entryTermId->value || $after['starts_on'] <= $before['starts_on']
+                $target->value === $a->entryTermId->value
+                || (!$correction && $after['starts_on'] <= $before['starts_on'])
                 || $after['starts_on'] < $this->clock->now()->format('Y-m-d')
             ) {
                 throw new ValidationException([['field' => 'target_term',
-                    'message' => 'Choose a later intake that has not started.']]);
+                    'message' => $correction ? 'Choose a different intake that has not started.'
+                        : 'Choose a later intake that has not started.']]);
             }
         } elseif (
-            $kind !== 'reconfirm' || $entry === null
+            !in_array($kind, ['reconfirm', 'recheck'], true) || $entry === null
             || $target->value !== $a->entryTermId->value || $before == $after
         ) {
             throw new ValidationException([['field' => 'target_term',
@@ -199,34 +222,50 @@ final readonly class AdmissionDeferralService
         }
         return ['kind' => $kind, 'before' => $before, 'after' => $after];
     }
+    private function eligible(AdmissionApplication $a, bool $correction): void
+    {
+        $expected = $correction ? ApplicationStatus::Submitted : ApplicationStatus::Accepted;
+        if ($a->status !== $expected || $this->requests->pending($a->id) !== null) {
+            throw new ValidationException([['field' => 'application',
+                'message' => 'Review the application status and resolve any withdrawal request first.']]);
+        }
+        if ($correction && $this->answers->pending($a->id) !== null) {
+            throw new ValidationException([['field' => 'answers',
+                'message' => 'Resolve the answer correction request before correcting the entry term.']]);
+        }
+    }
     private function person(AdmissionApplication $a): array
     {
         $p = $this->admissions->person($a->personId);
         return ['given_name' => $p->givenName, 'family_name' => $p->familyName,
             'institutional_id' => $p->institutionalId->value];
     }
-    private function actor(): EntityId
+    private function actor(bool $correction = false): EntityId
     {
         $actor = $this->access->requirePermission('sis:admissions:manage');
-        if ($this->access->requirePermission('sis:admissions:defer')->value !== $actor->value) {
+        $permission = $correction ? 'sis:admissions:correct' : 'sis:admissions:defer';
+        if ($this->access->requirePermission($permission)->value !== $actor->value) {
             throw new AccessDeniedException('The intake approval actor changed.');
         }
         return $actor;
     }
-    private function authorize(EntityId $actor): void
+    private function authorize(EntityId $actor, bool $correction = false): void
     {
-        if ($this->actor()->value !== $actor->value) {
+        if ($this->actor($correction)->value !== $actor->value) {
             throw new AccessDeniedException('The intake approval actor changed.');
         }
     }
-    private function lock(AdmissionApplication $route, EntityId $actor): AdmissionApplication
+    private function lock(AdmissionApplication $route, EntityId $actor, bool $correction = false): AdmissionApplication
     {
         $this->permissions->lock();
         $this->admissions->lockPerson($route->personId);
         $this->admissions->lockApplication($route->id);
-        $this->authorize($actor);
+        $this->authorize($actor, $correction);
         $a = $this->admissions->application($route->id);
-        if ($a->personId->value !== $route->personId->value || $a->programId->value !== $route->programId->value) {
+        if (
+            $a->personId->value !== $route->personId->value || $a->programId->value !== $route->programId->value
+            || $a->status !== $route->status
+        ) {
             throw new ConcurrentModificationException('The application changed. Reload it.');
         }
         $this->ledger->verify($a);
@@ -237,7 +276,8 @@ final readonly class AdmissionDeferralService
         $person = $this->admissions->person($a->personId);
         $submission = $this->context->submission($a->id);
         return hash('sha256', json_encode([AdmissionDecisionSchema::facts($a), $this->ledger->verify($a),
-            $this->requests->revision($a->id), $person->identityVersion, $person->ownerUserId?->value,
+            $this->requests->revision($a->id), $this->answers->revision($a->id),
+            $person->identityVersion, $person->ownerUserId?->value,
             $person->givenName, $person->familyName, $person->institutionalId->value, $plan, $source,
             $this->terms->snapshot($a->entryTermId), $this->clock->now()->format('Y-m-d'),
             $submission === null ? null : hash('sha256', $submission['encrypted_answers'])], JSON_THROW_ON_ERROR));

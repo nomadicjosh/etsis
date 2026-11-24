@@ -157,6 +157,8 @@ Fictional tests cover original answers and intake, new offer/acceptance policy, 
 [Application answer corrections and resubmission](application-submission-history.md#corrections-and-resubmission) now preserve separate answer versions under the same application. Open correction requests pause decisions; acceptance/rejection and outcome-correction previews show the current revised answers when present.
 
 
+Submitted applications now have a separate [reviewed entry-term correction](admissions-corrections.md#correct-an-entry-term-before-a-decision). It preserves original intake/answers and awaiting-decision status, requires correction authority and follows the normal offer policy after acceptance. Accepted applications continue using the deferment and calendar-reapproval workflow above.
+
 ## Checklist policy before acceptance
 
 Open **Admissions → Policies → Acceptance checklist**. Check **Require checklist completion before acceptance** to enforce the application's needed checklist items. It is **off by default**, leaving checklists advisory. Saving requires both `sis:admissions:manage` and the existing protected `sis:admissions:policy` authority. The setting has an independent revision; saving it preserves offer, withdrawal and answer-revision policies and their unsaved screen choices.

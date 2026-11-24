@@ -515,8 +515,9 @@ window.createWorkspacePeople = function (ui) {
                 actions.append(button('Return to review', () => mayLeave() && reviewState(row, false), 'btn-primary'));
             }
         }
-        if (app.status === 'accepted' && can('sis:admissions:defer'))
-            extra.push(button('Entry term', () => mayLeave() && entryTerm(row)));
+        if ((app.status === 'accepted' && can('sis:admissions:defer'))
+            || (app.status === 'submitted' && can('sis:admissions:correct')))
+            extra.push(button(ui.admissionEntryLabels?.entry_title || 'Entry term', () => mayLeave() && entryTerm(row)));
         if (app.status === "matriculated")
             extra.push(button("Matriculation history", () => mayLeave() && matriculationHistory(row)));
         actions.append(
@@ -585,10 +586,10 @@ window.createWorkspacePeople = function (ui) {
             );
     }
     function entryTerm(row) {
-        const body = openDrawer('Entry term', 'ADMISSIONS APPROVAL');
+        const body = openDrawer(ui.admissionEntryLabels?.entry_title || 'Entry term', ui.admissionEntryLabels?.entry_context || 'ADMISSIONS INTAKE');
         let editor = null;
-        body.append(button('Back to application', () => (editor?.beforeLeave() ?? true) && application(row)));
-        editor = window.createAdmissionEntry({ node, request, task, notify }).mount(body, row.id,
+        body.append(button(ui.admissionEntryLabels?.back_application || 'Back to application', () => (editor?.beforeLeave() ?? true) && application(row)));
+        editor = window.createAdmissionEntry({ node, request, task, notify, labels: ui.admissionEntryLabels }).mount(body, row.id,
             { onComplete: () => application(row) });
     }
     async function decide(row, accept, preset = {}) {
@@ -942,7 +943,7 @@ window.createWorkspacePeople = function (ui) {
                     node(
                         "h3",
                         {},
-                        resubmission ? 'Application answers resubmitted' : entry ? (item.kind === 'entry_defer' ? 'Entry deferred' : 'Updated intake approved')
+                        resubmission ? 'Application answers resubmitted' : entry ? ({ entry_defer: ui.admissionEntryLabels?.history_defer || 'Entry deferred', entry_reconfirm: ui.admissionEntryLabels?.history_reconfirm || 'Updated intake approved', entry_correct: ui.admissionEntryLabels?.history_correct || 'Entry term corrected', entry_recheck: ui.admissionEntryLabels?.history_recheck || 'Corrected intake calendar reviewed' }[item.kind])
                         : offer ? `Admission offer: ${item.status}` : observed
                             ? "Observed current application"
                             : reviewState ? (item.kind === 'withdrawal' ? (item.withdrawal_channel === 'applicant' ? 'Applicant withdrew application' : 'Application withdrawn') : 'Returned to review')

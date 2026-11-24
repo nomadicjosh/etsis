@@ -1569,7 +1569,8 @@ final class SisFixture
             $this->transactions,
             $audit ?? $this->audit,
             $this->dropCipher,
-            $this->clock
+            $this->clock,
+            $this->applicationRevisions()
         );
     }
     public function withdrawalRepository(): \Domain\Admissions\Repository\AdmissionWithdrawalRepository

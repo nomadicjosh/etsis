@@ -4,6 +4,12 @@ The legacy system is the feature inventory, not a requirement to reproduce its s
 
 “Working” below describes a workflow available in the current code. “Partial” means useful pieces work but the broader recommendation still needs implementation. “Proposed” is a design recommendation, not completed functionality.
 
+## Completed: submitted entry-term corrections and retained calendar review
+
+**Working.** [Correct a planned intake before an admissions decision](admissions-corrections.md#correct-an-entry-term-before-a-decision) through **application → More → Entry term**. Independent correction authority, bounded future-intake choices, required reasons, before/after review, draft-preserving revision and a direct application return keep the workflow explicit. Accepted deferment retains its separate authority and fresh-offer requirements.
+
+One application/person retains original intake/answers and awaiting-decision status. Pending answer/withdrawal requests pause corrections; completed request cycles and term changes invalidate stale intake/answer/decision reviews. Genuine correction/calendar-recheck facts append to the same protected application stream; current projection, required audit, receipt and private inbox commit together with final source/authority rechecks. Applicant current-term guidance and matriculation use the corrected intake, while retained answers stay tied to their original submission. Ordinary institutional offer policy remains in force. Program/backdated/applicant target changes and post-matriculation consequences remain open.
+
 ## Completed: contextual HR history checks
 
 **Working.** [Selected employment verification](event-history-foundation.md#selected-employment-checks-for-trusted-operators) now connects primary designation, position agreement and retained time decisions to the existing operator command and shared support drawer. It reuses normal protected-history validators, compares bounded routing/projection/head observations outside wrapping snapshots and distinguishes changed, limited, missing-earlier and empty results without repairing business records.

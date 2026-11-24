@@ -11,7 +11,7 @@ const current = () => ({ person, current: term('old', '26/FA'), approved: null, 
 function fixture(callback, options = {}) {
     const root = new Element('root'), calls = [], errors = [], tasks = [], window = { confirm: () => false };
     vm.runInNewContext(source, { window, URLSearchParams }, { timeout: 500 });
-    const guard = window.createAdmissionEntry({ node, notify() {},
+    const guard = window.createAdmissionEntry({ node, labels: options.labels || {}, notify() {},
         request: async (...args) => { calls.push(args); return callback(...args); },
         task: run => { const p = Promise.resolve().then(run).catch(e => errors.push(e)); tasks.push(p); return p; }
     }).mount(root, 'application', options);
@@ -84,4 +84,66 @@ test('detached late responses cannot mount a review into another application', a
     await new Promise(done => setImmediate(done)); assert.equal(f.guard.beforeLeave(), false);
     f.root.isConnected = false; resolve({ person, before: term('old', '26/FA'), after: term('new', '27/FA'), review_token: 'private' });
     await f.flush(); assert.equal(f.button('Approve intake'), undefined); assert.equal(f.errors.length, 0);
+});
+
+test('submitted intake corrections use their own review, wording and preserved draft', async () => {
+    let completed = false;
+    const f = fixture(async (url, method, body) => {
+        if (url.includes('terms/?')) return { items: [term('new', '27/FA')], next: null };
+        if (url.endsWith('/review/')) {
+            assert.equal(body.kind, 'correct'); assert.equal(body.reason, 'Fictional correction.');
+            return { person, before: term('old', '26/FA'), after: term('new', '27/FA'), review_token: 'correction-token' };
+        }
+        if (url.endsWith('/commit/')) { assert.equal(body.review_token, 'correction-token'); return { status: 'submitted' }; }
+        return { ...current(), application_status: 'submitted' };
+    }, { onComplete: () => { completed = true; } });
+    await f.flush(); assert.equal(f.button('Choose later intake'), undefined);
+    await f.click('Correct entry term');
+    f.find(e => e.attributes.type === 'radio').events.change();
+    const reason = f.find(e => e.tag === 'textarea'); reason.value = 'Fictional correction.';
+    await f.submit(); await f.click('Revise'); assert.equal(reason.value, 'Fictional correction.');
+    await f.submit(); assert.ok(f.root.textContent.includes('application stays awaiting a decision'));
+    await f.click('Confirm entry-term correction'); assert.equal(completed, true);
+    assert.equal(f.errors.length, 0);
+});
+test('pending answer corrections block intake changes and changed calendars use submitted recheck', async () => {
+    const blocked = fixture(async () => ({ ...current(), application_status: 'submitted', answers_pending: true }));
+    await blocked.flush(); assert.equal(blocked.button('Correct entry term'), undefined);
+    assert.ok(blocked.root.textContent.includes('Resolve the answer correction request'));
+    const f = fixture(async (url, method, body) => {
+        if (url.endsWith('/review/')) {
+            assert.equal(body.kind, 'recheck'); assert.equal(body.target_term, 'old');
+            return { person, before: term('old', '26/FA'), after: term('old', '26/FA'), review_token: 'recheck' };
+        }
+        return { ...current(), application_status: 'submitted', approved: term('old', '26/FA'), needs_review: true };
+    });
+    await f.flush(); await f.click('Review current intake');
+    f.find(e => e.tag === 'textarea').value = 'Fictional calendar review.';
+    await f.submit(); assert.ok(f.button('Confirm entry-term correction'));
+    assert.equal(f.calls.some(c => c[0].includes('terms/?')), false);
+});
+test('permission loss clears private reasons, applicant details and confirmation and permits return', async () => {
+    const f = fixture(async (url, method, body) => {
+        if (url.includes('terms/?')) return { items: [term('new', '27/FA')], next: null };
+        if (url.endsWith('/review/')) throw Object.assign(new Error('Fictional denial.'), { status: 403 });
+        return { ...current(), application_status: 'submitted' };
+    });
+    await f.flush(); await f.click('Correct entry term');
+    f.find(e => e.attributes.type === 'radio').events.change();
+    f.find(e => e.tag === 'textarea').value = 'Private fictional reason.';
+    await f.submit(); assert.equal(f.find(e => e.tag === 'textarea'), undefined);
+    assert.equal(f.root.textContent.includes(person.family_name), false);
+    assert.equal(f.button('Confirm entry-term correction'), undefined);
+    assert.equal(f.guard.beforeLeave(), true);
+    assert.ok(f.root.textContent.includes('Access changed'));
+});
+
+test('semantic translated labels and placeholders are inserted as text', async () => {
+    const f = fixture(async () => ({ ...current(), application_status: 'submitted' }), {
+        labels: { choose_term: '<img> Corriger', institutional_id: 'Identifiant : {id}', correction_help: 'Texte privé.' },
+    });
+    await f.flush(); assert.ok(f.button('<img> Corriger'));
+    assert.ok(f.root.textContent.includes('Identifiant : F-123'));
+    assert.ok(f.root.textContent.includes('Texte privé.'));
+    assert.equal(walk(f.root).some(e => e.tag === 'img'), false);
 });

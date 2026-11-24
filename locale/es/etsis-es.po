@@ -2,8 +2,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: etSIS\n"
-"POT-Creation-Date: 2026-11-22 20:45-0800\n"
-"PO-Revision-Date: 2026-11-22 20:45-0800\n"
+"POT-Creation-Date: 2026-11-23 19:46-0800\n"
+"PO-Revision-Date: 2026-11-23 19:46-0800\n"
 "Last-Translator: Joshua Parker <joshua@joshuaparker.dev>\n"
 "Language-Team: Joshua Parker <joshua@joshuaparker.dev>\n"
 "Language: es\n"
@@ -22,9 +22,1100 @@ msgstr ""
 
 #: config/auth.php:51
 #: src/Application/Http/Controller/PageBuilderController.php:62
-#: src/Application/Http/Controller/WebsiteManagerController.php:43
 msgid "Access denied."
 msgstr "Acceso denegado."
+
+#: resources/views/backend/manager/site-labels.php:8
+msgid "Back to pages"
+msgstr "Volver a Páginas"
+
+#: resources/views/backend/manager/site-labels.php:9
+#, fuzzy
+msgid "Inspect saved design"
+msgstr "Inspeccionar el diseño guardado"
+
+#: resources/views/backend/manager/site-labels.php:10
+#, fuzzy
+msgid "Remove page"
+msgstr "Eliminar página"
+
+#: resources/views/backend/manager/site-labels.php:12
+#, fuzzy
+msgid ""
+"Removing this page removes its public route. Menu links to it will stop "
+"appearing."
+msgstr ""
+"Eliminar esta página elimina su ruta pública. Los enlaces al menú dejarán de "
+"aparecer."
+
+#: resources/views/backend/manager/site-labels.php:14
+#, fuzzy
+msgid "Loading page destination…"
+msgstr "Destino de la página cargando..."
+
+#: resources/views/backend/manager/site-labels.php:15
+#, fuzzy
+msgid "This page is unavailable. Choose another destination."
+msgstr "Esta página no está disponible. Elija otro destino."
+
+#: resources/views/backend/manager/site-labels.php:16
+#, fuzzy
+msgid "Add at top level"
+msgstr "Añadir en el nivel superior"
+
+#: resources/views/backend/manager/site-labels.php:17
+#, fuzzy
+msgid "Loading website settings…"
+msgstr "Cargando la configuración del sitio web..."
+
+#: resources/views/backend/manager/site-labels.php:18
+#, fuzzy
+msgid "Unable to complete this request. Your working entries remain here."
+msgstr ""
+"No se ha podido completar esta solicitud. Tus entradas de trabajo permanecen "
+"aquí."
+
+#: resources/views/backend/manager/site-labels.php:19
+#, fuzzy
+msgid "Your website access ended. Sign in or ask an administrator for access."
+msgstr ""
+"Su acceso al sitio web ha finalizado. Inicie sesión o solicite acceso a un "
+"administrador."
+
+#: resources/views/backend/manager/site-labels.php:20
+#, fuzzy
+msgid "Draft saved. Review it before publishing."
+msgstr "Borrador guardado. Revísalo antes de publicarlo."
+
+#: resources/views/backend/manager/site-labels.php:21
+#, fuzzy
+msgid "Publication confirmed."
+msgstr "Publicación confirmada."
+
+#: resources/views/backend/manager/site-labels.php:22
+#, fuzzy
+msgid "Save menu draft"
+msgstr "Guardar borrador del menú"
+
+#: resources/views/backend/manager/site-labels.php:23
+#: resources/views/backend/workspace/credit-policy-labels.php:34
+#, fuzzy
+msgid "Review publication"
+msgstr "Publicación de revisión"
+
+#: resources/views/backend/manager/site-labels.php:24
+#, fuzzy
+msgid "Confirm publication"
+msgstr "Confirmar publicación"
+
+#: resources/views/backend/manager/site-labels.php:25
+msgid "Back to editor"
+msgstr "Volver al editor"
+
+#: resources/views/backend/manager/site-labels.php:26
+#, fuzzy
+#| msgid "Overview"
+msgid "Close review"
+msgstr "Revisión detallada"
+
+#: resources/views/backend/manager/site-labels.php:27
+msgid "Primary menu"
+msgstr "Menú principal"
+
+#: resources/views/backend/manager/site-labels.php:28
+msgid "Secondary menu"
+msgstr "Menú secundario"
+
+#: resources/views/backend/manager/site-labels.php:29
+msgid "Footer menu"
+msgstr "Menú de pie de página"
+
+#: resources/views/backend/manager/site-labels.php:30
+#, fuzzy
+msgid "Menu location"
+msgstr "Ubicación del menú"
+
+#: resources/views/backend/manager/site-labels.php:31
+msgid "Add item"
+msgstr "Agregar elemento"
+
+#: resources/views/backend/manager/site-labels.php:32
+msgid "Custom link"
+msgstr "Enlace personalizado"
+
+#: resources/views/backend/manager/site-labels.php:33
+#, fuzzy
+#| msgid "Website Manager"
+msgid "Website page"
+msgstr "Página web"
+
+#: resources/views/backend/manager/site-labels.php:34
+#, fuzzy
+msgid "Dropdown group"
+msgstr "Grupo desplegable"
+
+#: resources/views/backend/manager/site-labels.php:35
+msgid "Divider"
+msgstr "Separador"
+
+#: resources/views/backend/manager/site-labels.php:36
+msgid "New link"
+msgstr "Añadir enlace"
+
+#: resources/views/backend/manager/site-labels.php:37
+#, fuzzy
+msgid "New dropdown"
+msgstr "Nuevo desplegable"
+
+#: resources/views/backend/manager/site-labels.php:38
+msgid "Undo"
+msgstr "Deshacer"
+
+#: resources/views/backend/manager/site-labels.php:39
+msgid "Redo"
+msgstr "Rehacer"
+
+#: resources/views/backend/manager/site-labels.php:40
+msgid "Responsive preview"
+msgstr "Vista previa Responsiva"
+
+#: resources/views/backend/manager/site-labels.php:42
+#, fuzzy
+msgid ""
+"This preview shows your draft structure. Page links appear on the public "
+"website only while their exact page revision is approved and visible."
+msgstr ""
+"Esta vista previa muestra tu estructura de borrador. Los enlaces de página "
+"aparecen en la página web pública solo mientras su revisión exacta de página "
+"está aprobada y visible."
+
+#: resources/views/backend/manager/site-labels.php:45
+#, fuzzy
+msgid "Add a page, custom link or dropdown group to begin."
+msgstr ""
+"Añade una página, un enlace personalizado o un grupo desplegable para "
+"comenzar."
+
+#: resources/views/backend/manager/site-labels.php:46
+#, fuzzy
+msgid "Select an item to edit its label, destination and display settings."
+msgstr ""
+"Selecciona un elemento para editar su etiqueta, destino y configuración de "
+"visualización."
+
+#: resources/views/backend/manager/site-labels.php:47
+#, fuzzy
+msgid "Navigation label"
+msgstr "Etiqueta de navegación"
+
+#: resources/views/backend/manager/site-labels.php:48
+#, fuzzy
+msgid "Accessible description"
+msgstr "Descripción accesible"
+
+#: resources/views/backend/manager/site-labels.php:49
+msgid "Link address"
+msgstr "Dirección de enlace"
+
+#: resources/views/backend/manager/site-labels.php:50
+#, fuzzy
+msgid "Bootstrap icon"
+msgstr "Icono de arranque"
+
+#: resources/views/backend/manager/site-labels.php:51
+msgid "No icon"
+msgstr "Sin icono"
+
+#: resources/views/backend/manager/site-labels.php:52
+#, fuzzy
+msgid "Show this item"
+msgstr "Mostrar este artículo"
+
+#: resources/views/backend/manager/site-labels.php:53
+msgid "Open link in a new tab"
+msgstr "Abrir enlace en una nueva pestaña"
+
+#: resources/views/backend/manager/site-labels.php:54
+#, fuzzy
+msgid "Child items"
+msgstr "Elementos secundarios"
+
+#: resources/views/backend/manager/site-labels.php:55
+msgid "Item settings"
+msgstr "Opciones de los artículos"
+
+#: resources/views/backend/manager/site-labels.php:56
+#, fuzzy
+#| msgid "Actions"
+msgid "Item actions"
+msgstr "Acciones de ítem"
+
+#: resources/views/backend/manager/site-labels.php:57
+msgid "Move up"
+msgstr "Mover hacia arriba"
+
+#: resources/views/backend/manager/site-labels.php:58
+msgid "Move down"
+msgstr "Mover hacia abajo"
+
+#: resources/views/backend/manager/site-labels.php:59
+#, fuzzy
+msgid "Nest under previous item"
+msgstr "Anidar bajo el elemento anterior"
+
+#: resources/views/backend/manager/site-labels.php:60
+#, fuzzy
+msgid "Move out one level"
+msgstr "Muévete un nivel"
+
+#: resources/views/backend/manager/site-labels.php:61
+#, fuzzy
+msgid "Duplicate item"
+msgstr "Elemento duplicado"
+
+#: resources/views/backend/manager/site-labels.php:62
+msgid "Remove item"
+msgstr "Eliminar elemento"
+
+#: resources/views/backend/manager/site-labels.php:63
+msgid "Edit item"
+msgstr "Editar elemento"
+
+#: resources/views/backend/manager/site-labels.php:64
+msgid "Drag to reorder"
+msgstr "Arrastra para reordenar"
+
+#: resources/views/backend/manager/site-labels.php:65
+#, fuzzy
+msgid "Use at most 100 items and three navigation levels."
+msgstr "Utiliza como máximo 100 objetos y tres niveles de navegación."
+
+#: resources/views/backend/manager/site-labels.php:66
+#, fuzzy
+msgid "Unsaved menu changes"
+msgstr "Cambios en el menú sin guardar"
+
+#: resources/views/backend/manager/site-labels.php:67
+#, fuzzy
+msgid "Reload saved menu"
+msgstr "Menú de recarga guardado"
+
+#: resources/views/backend/manager/site-labels.php:68
+msgid "Discard changes"
+msgstr "Descartar cambios"
+
+#: resources/views/backend/manager/site-labels.php:69
+msgid "Keep editing"
+msgstr "Sigue editando"
+
+#: resources/views/backend/manager/site-labels.php:70
+#, fuzzy
+msgid ""
+"You have unsaved changes. Keep editing or discard them before changing menu "
+"locations."
+msgstr ""
+"Tienes cambios sin guardar. Sigue editándolos o deséjalos antes de cambiar "
+"la ubicación del menú."
+
+#: resources/views/backend/manager/site-labels.php:71
+#, fuzzy
+#| msgid "Website Manager"
+msgid "Website pages"
+msgstr "Páginas del sitio web"
+
+#: resources/views/backend/manager/site-labels.php:72
+#, fuzzy
+msgid "More page choices"
+msgstr "Más opciones de página"
+
+#: resources/views/backend/manager/site-labels.php:73
+#, fuzzy
+msgid "Choose a website page"
+msgstr "Elige una página web"
+
+#: resources/views/backend/manager/site-labels.php:74
+#, fuzzy
+msgid "Add selected page"
+msgstr "Añadir página seleccionada"
+
+#: resources/views/backend/manager/site-labels.php:75
+msgid "Menu structure"
+msgstr "Estructura de menú"
+
+#: resources/views/backend/manager/site-labels.php:77
+#, fuzzy
+msgid ""
+"Drag by the grip to reorder or nest items. Use each item’s action menu for "
+"keyboard ordering. Menus support three levels and 100 items."
+msgstr ""
+"Arrastra por el agarre para reordenar o anidar los elementos. Utiliza el "
+"menú de acciones de cada elemento para ordenar con el teclado. Los menús "
+"admiten tres niveles y 100 elementos."
+
+#: resources/views/backend/manager/site-labels.php:81
+#, fuzzy
+msgid ""
+"Check labels, destinations, nesting and new-tab choices. Publishing uses "
+"this saved draft; later edits stay separate until another review."
+msgstr ""
+"Compruebe etiquetas, destinos, opciones de anidamiento y de nueva pestaña. "
+"La publicación utiliza este borrador guardado; las ediciones posteriores "
+"permanecen separadas hasta otra revisión."
+
+#: resources/views/backend/manager/site-labels.php:84
+#, fuzzy
+msgid "Save your menu draft before reviewing publication."
+msgstr "Guarda tu borrador de menú antes de revisar la publicación."
+
+#: resources/views/backend/manager/site-labels.php:85
+#, fuzzy
+msgid "Save the page in the page builder before requesting review."
+msgstr ""
+"Guarda la página en el generador de páginas antes de solicitar la revisión."
+
+#: resources/views/backend/manager/site-labels.php:86
+#, fuzzy
+msgid "Design page"
+msgstr "Página de diseño"
+
+#: resources/views/backend/manager/site-labels.php:87
+msgid "Page settings"
+msgstr "Configuración de página"
+
+#: resources/views/backend/manager/site-labels.php:88
+#, fuzzy
+msgid "Publication settings"
+msgstr "Configuraciones de publicación"
+
+#: resources/views/backend/manager/site-labels.php:89
+msgid "Create a page"
+msgstr "Crear una página"
+
+#: resources/views/backend/manager/site-labels.php:91
+#, fuzzy
+msgid ""
+"No website pages yet. Create a page, design it, then submit the saved "
+"revision for review."
+msgstr ""
+"Aún no hay páginas web. Crea una página, diseñala y luego envía la revisión "
+"guardada para revisión."
+
+#: resources/views/backend/manager/site-labels.php:93
+#, fuzzy
+msgid "Next pages"
+msgstr "Páginas siguientes"
+
+#: resources/views/backend/manager/site-labels.php:94
+#, fuzzy
+msgid "Previous pages"
+msgstr "Páginas anteriores"
+
+#: resources/views/backend/manager/site-labels.php:95
+msgid "Status"
+msgstr "Estado"
+
+#: resources/views/backend/manager/site-labels.php:96
+msgid "Draft"
+msgstr "Borrador"
+
+#: resources/views/backend/manager/site-labels.php:97
+msgid "Awaiting review"
+msgstr "A la espera de revisión"
+
+#: resources/views/backend/manager/site-labels.php:98
+msgid "Approved"
+msgstr "Aprobado"
+
+#: resources/views/backend/manager/site-labels.php:99
+msgid "Archived"
+msgstr "Archivado"
+
+#: resources/views/backend/manager/site-labels.php:100
+msgid "Submit for review"
+msgstr "Enviar una opinión"
+
+#: resources/views/backend/manager/site-labels.php:101
+#, fuzzy
+msgid "Approve publication"
+msgstr "Aprobar la publicación"
+
+#: resources/views/backend/manager/site-labels.php:102
+#, fuzzy
+msgid "Return to author"
+msgstr "Volver al autor"
+
+#: resources/views/backend/manager/site-labels.php:103
+msgid "Archive page"
+msgstr "Página de archivo"
+
+#: resources/views/backend/manager/site-labels.php:104
+#, fuzzy
+msgid "Publication action"
+msgstr "Acción de publicación"
+
+#: resources/views/backend/manager/site-labels.php:105
+#, fuzzy
+msgid "Publication starts (UTC)"
+msgstr "Comienza la publicación (UTC)"
+
+#: resources/views/backend/manager/site-labels.php:106
+#, fuzzy
+msgid "Publication ends (UTC)"
+msgstr "Finaliza la publicación (UTC)"
+
+#: resources/views/backend/manager/site-labels.php:108
+#, fuzzy
+msgid ""
+"Leave the start blank for immediate publication and the end blank for "
+"ongoing visibility. Scheduled pages appear automatically at their approved "
+"time."
+msgstr ""
+"Deja el inicio en blanco para publicación inmediata y el final en blanco "
+"para visibilidad continua. Las páginas programadas aparecen automáticamente "
+"en su momento aprobado."
+
+#: resources/views/backend/manager/site-labels.php:111
+#, fuzzy
+msgid "Review note for the author"
+msgstr "Nota de reseña para el autor"
+
+#: resources/views/backend/manager/site-labels.php:112
+#, fuzzy
+msgid ""
+"Explain the requested correction. This note stays in website management."
+msgstr ""
+"Explique la corrección solicitada. Esta nota permanece en la gestión del "
+"sitio web."
+
+#: resources/views/backend/manager/site-labels.php:114
+#, fuzzy
+msgid ""
+"Approval covers the saved page, all translations, routes and navigation "
+"settings. Any later edit needs a fresh review."
+msgstr ""
+"La aprobación cubre la página guardada, todas las traducciones, rutas y "
+"configuraciones de navegación. Cualquier edición posterior necesita una "
+"revisión nueva."
+
+#: resources/views/backend/manager/site-labels.php:117
+#, fuzzy
+msgid "Public route"
+msgstr "Ruta pública"
+
+#: resources/views/backend/manager/site-labels.php:118
+#, fuzzy
+msgid "Review this action"
+msgstr "Revisa esta acción"
+
+#: resources/views/backend/manager/site-labels.php:119
+#, fuzzy
+msgid "Confirm reviewed action"
+msgstr "Confirmar la acción revisada"
+
+#: resources/views/backend/manager/site-labels.php:120
+msgid "opens in a new tab"
+msgstr "se abre en una nueva pestaña"
+
+#: resources/views/backend/manager/site-labels.php:121
+#, fuzzy
+msgid "Revise this action"
+msgstr "Revisar esta acción"
+
+#: resources/views/backend/manager/site-labels.php:122
+#, fuzzy
+msgid "Reload saved page"
+msgstr "Recargar página guardada"
+
+#: resources/views/backend/manager/site-labels.php:124
+#, fuzzy
+msgid ""
+"The review is no longer current. Keep your entries and review the saved "
+"revision again."
+msgstr ""
+"La reseña ya no está vigente. Conserva tus entradas y revisa de nuevo la "
+"revisión guardada."
+
+#: resources/views/backend/manager/site-labels.php:126
+#, fuzzy
+msgid "Copy from another menu"
+msgstr "Copiar desde otro menú"
+
+#: resources/views/backend/manager/site-labels.php:127
+#, fuzzy
+msgid "Copy items into this draft"
+msgstr "Copiar elementos en este borrador"
+
+#: resources/views/backend/manager/site-labels.php:128
+#, fuzzy
+msgid "Copying replaces this draft only. Save and review before publishing."
+msgstr ""
+"Copiar reemplaza únicamente este borrador. Guarda y revisa antes de publicar."
+
+#: resources/views/backend/manager/site-labels.php:129
+#, fuzzy
+msgid "Find in loaded pages"
+msgstr "Buscar en páginas cargadas"
+
+#: resources/views/backend/manager/site-labels.php:130
+#, fuzzy
+msgid "Add child items to this dropdown before publishing."
+msgstr "Añade elementos secundarios a este desplegable antes de publicarlos."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:8
+#, fuzzy
+msgid "Loading entry term…"
+msgstr "Historial de retención de carga..."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:9
+#, fuzzy
+msgid ""
+"The intake could not be loaded. Return to the application and try again."
+msgstr ""
+"No se pudo cargar la entrada. Vuelva a la aplicación e intente de nuevo."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:10
+#, fuzzy
+msgid ""
+"Access changed. Return to the application to review your available actions."
+msgstr ""
+"Acceso cambiado. Regrese a la aplicación para revisar sus acciones "
+"disponibles."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:11
+#, fuzzy
+msgid "Previously approved intake"
+msgstr "Admisión previamente aprobada"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:12
+#, fuzzy
+msgid "Current entry term"
+msgstr "Periodo de ingreso actual"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:14
+#, fuzzy
+msgid ""
+"Keep this application and its answers. A new intake approval needs a fresh "
+"offer under institutional policy."
+msgstr ""
+"Mantén la misma solicitud y las respuestas enviadas. Una nueva aprobación de "
+"admisión requiere una oferta nueva. Su aceptación sigue la política "
+"institucional. Los requisitos del programa y del grado se seleccionan en la "
+"matriculación."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:17
+#, fuzzy
+msgid ""
+"Correct the planned intake before a decision. Keep original intake and "
+"answers; no student is created."
+msgstr ""
+"Corrija la convocatoria prevista mientras esta solicitud espera una "
+"decisión. La convocatoria y las respuestas originalmente enviadas permanecen "
+"en el historial. Esto no acepta la solicitud ni crea un estudiante."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:19
+#, fuzzy
+msgid "Resolve the pending withdrawal request before approving an intake."
+msgstr ""
+"Resuelva la solicitud de retirada pendiente antes de aprobar una admisión."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:20
+#, fuzzy
+msgid "Resolve the answer correction request before correcting the entry term."
+msgstr ""
+"Resuelva la solicitud de corrección de respuesta antes de corregir el "
+"término de entrada."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:21
+#, fuzzy
+msgid ""
+"Only submitted or accepted, unmatriculated applications can receive an "
+"intake change."
+msgstr ""
+"Solo las solicitudes presentadas o aceptadas, sin matriculación, pueden "
+"recibir un cambio de admisión."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:23
+#, fuzzy
+msgid ""
+"The approved calendar changed. Review the current intake before issuing an "
+"offer or matriculating."
+msgstr ""
+"El calendario cambió tras la aprobación anterior. Revise la convocatoria "
+"actualizada antes de emitir una oferta o matricularse."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:25
+#, fuzzy
+msgid "Review current intake"
+msgstr "Revisar la admisión actual"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:26
+#, fuzzy
+msgid "Choose later intake"
+msgstr "Elige una admisión posterior"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:27
+#, fuzzy
+msgid "Correct entry term"
+msgstr "Término de entrada correcto"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:28
+#, fuzzy
+msgid "Replace the unfinished intake review?"
+msgstr "¿Reemplazar la revisión de admisión sin terminar?"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:29
+#, fuzzy
+msgid "Choose a later intake"
+msgstr "Elige una admisión posterior"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:30
+#, fuzzy
+msgid "Correct planned intake"
+msgstr "Ingesta planificada correcta"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:31
+#, fuzzy
+msgid "Review updated intake"
+msgstr "Revisar la admisión actualizada"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:32
+#, fuzzy
+msgid "Term code or name"
+msgstr "Término, código o nombre"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:33
+#, fuzzy
+#| msgid "Have an account?"
+msgid "Available intakes"
+msgstr "Entradas disponibles"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:34
+#, fuzzy
+msgid "Intake search pages"
+msgstr "Páginas de búsqueda de admisión"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:35
+msgid "Find terms"
+msgstr "Buscar Términos"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:36
+#, fuzzy
+msgid "Find an intake"
+msgstr "Encuentra una admisión"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:37
+#, fuzzy
+msgid "Find a later intake"
+msgstr "Busca una convocatoria posterior"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:38
+#, fuzzy
+msgid "Finding available intakes…"
+msgstr "Encontrar las entradas disponibles..."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:39
+#, fuzzy
+msgid "Finding later intakes…"
+msgstr "Encontrar entradas posteriores..."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:40
+#, fuzzy
+msgid "Search changed. Choose Find terms."
+msgstr "Búsqueda modificada. Elige Buscar términos."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:41
+#, fuzzy
+#| msgid "First name"
+msgid "First results"
+msgstr "Primeros resultados"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:42
+#, fuzzy
+msgid "More terms"
+msgstr "Más términos"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:43
+#, fuzzy
+msgid "Choose an intake, then add the reason."
+msgstr "Elige una convocatoria y luego añade el motivo de aprobación."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:45
+#, fuzzy
+msgid ""
+"No matching intakes. Choose a term that has not started and has an academic "
+"year with valid dates."
+msgstr ""
+"No hay admisión igualada. Elige un trimestre que no haya empezado y tenga un "
+"año académico con fechas válidas."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:47
+#, fuzzy
+msgid ""
+"No matching later intakes. Review academic year and term setup with the "
+"catalog office."
+msgstr ""
+"No se permiten coincidencias de convocatorias posteriores. Revisa la "
+"configuración del año académico y del periodo con la oficina del catálogo."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:48
+#, fuzzy
+msgid "Could not find terms. Your reason and selected intake are unchanged."
+msgstr ""
+"No se han podido encontrar los términos. Tu motivo y la admisión "
+"seleccionada no han cambiado."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:49
+#, fuzzy
+msgid "Updated calendar definition"
+msgstr "Definición de calendario actualizada"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:50
+#, fuzzy
+msgid "Review intake"
+msgstr "Revisar la ingesta"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:51
+#, fuzzy
+msgid "Reason for approval"
+msgstr "Motivo de aprobación"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:52
+#, fuzzy
+msgid "Reason for correction"
+msgstr "Motivo de la corrección"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:53
+#, fuzzy
+msgid "Choose an intake first."
+msgstr "Elige primero una admisión."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:54
+#, fuzzy
+msgid "Choose a later intake first."
+msgstr "Elige primero una cita posterior."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:55
+#, fuzzy
+msgid "Preparing intake review…"
+msgstr "Preparando la revisión de admisión..."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:56
+#, fuzzy
+msgid "Review before confirming"
+msgstr "Revisar antes de confirmar"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:57
+msgid "Before correction"
+msgstr "Antes del reembolso"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:58
+msgid "After correction"
+msgstr "Después del reembolso"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:59
+#, fuzzy
+msgid "Before approval"
+msgstr "Antes de la aprobación"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:60
+#, fuzzy
+msgid "After approval"
+msgstr "Tras la aprobación"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:62
+#, fuzzy
+msgid ""
+"Keep earlier terms, answers and offers. Issue a fresh offer for this intake; "
+"no student is created."
+msgstr ""
+"Los periodos, respuestas y ofertas anteriores permanecen en la historia. "
+"Emita una nueva oferta para esta admisión aprobada. No se crea ningún "
+"registro estudiantil aquí."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:65
+#, fuzzy
+msgid ""
+"The application stays awaiting a decision. Earlier intake and answers "
+"remain; no student is created."
+msgstr ""
+"La solicitud permanece a la espera de una decisión. Se conservan las "
+"versiones originales de admisión y respuesta. Los requisitos de oferta "
+"siguen la política institucional tras la aceptación. No se crea ningún "
+"registro estudiantil aquí."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:67
+#, fuzzy
+msgid "Revise"
+msgstr "Revisar"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:68
+#, fuzzy
+msgid "Approve intake"
+msgstr "Aprobar la admisión"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:69
+#, fuzzy
+msgid "Confirm entry-term correction"
+msgstr "Confirmar corrección de término de entrada"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:70
+#, fuzzy
+msgid "Intake approved. Issue a fresh offer."
+msgstr "Entrada aprobada. Haz una nueva oferta."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:71
+#, fuzzy
+msgid "Entry term corrected. The application still awaits a decision."
+msgstr ""
+"Término de entrada corregido. La solicitud aún está a la espera de una "
+"decisión."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:72
+#, fuzzy
+msgid ""
+"The change could not be completed. Retry this confirmation or revise the "
+"review."
+msgstr ""
+"No se pudo completar la aprobación. Intente de nuevo esta confirmación o "
+"revise la revisión."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:73
+#, fuzzy
+msgid "Review ready. Confirm to save."
+msgstr "Lista para revisar. Confirma para guardar."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:74
+#, fuzzy
+msgid "Review could not be completed. Your reason and choice are still shown."
+msgstr ""
+"No se pudo completar la reseña. Tu motivo y tu elección siguen mostradas."
+
+#: resources/views/backend/workspace/admission-entry-labels.php:75
+#, fuzzy
+msgid "Leave the unfinished intake review?"
+msgstr "¿Reemplazar la revisión de admisión sin terminar?"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:76
+#, fuzzy
+msgid "{start} through {end}"
+msgstr "{start} a través de {end}"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:77
+#, fuzzy
+msgid "Academic year {year}"
+msgstr "Año académico {year}"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:78
+#, fuzzy
+msgid "Academic year not linked"
+msgstr "Año académico no vinculado"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:79
+#, fuzzy
+msgid "Institutional ID: {id}"
+msgstr "ID institucional: {id}"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:80
+#, fuzzy
+#| msgid "Select a role"
+msgid "Selected intake: {code}"
+msgstr "Convocatoria seleccionada: {code}"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:81
+#, fuzzy
+msgid "Selected intake: {code} · {year}"
+msgstr "Convocatoria seleccionada: {code} · {year}"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:82
+#, fuzzy
+msgid "Entry term"
+msgstr "Periodo de ingreso"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:83
+#, fuzzy
+msgid "ADMISSIONS INTAKE"
+msgstr "ADMISIÓN INGRESO"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:84
+#, fuzzy
+msgid "Back to application"
+msgstr "Volver a la aplicación"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:85
+#, fuzzy
+msgid "Entry term corrected"
+msgstr "Término de entrada corregido"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:86
+#, fuzzy
+msgid "Corrected intake calendar reviewed"
+msgstr "Calendario de admisión corregido revisado"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:87
+#, fuzzy
+msgid "Entry deferred"
+msgstr "Entrada aplazada"
+
+#: resources/views/backend/workspace/admission-entry-labels.php:88
+#, fuzzy
+msgid "Updated intake approved"
+msgstr "Entrada actualizada aprobada"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:8
+#, fuzzy
+msgid "Course credit policy"
+msgstr "Política de créditos de cursos"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:9
+#, fuzzy
+msgid "Offering credits"
+msgstr "Ofreciendo créditos"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:10
+#, fuzzy
+msgid "Back to record"
+msgstr "Volver al registro"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:11
+#, fuzzy
+msgid "Loading credit settings…"
+msgstr "Cargando ajustes de crédito..."
+
+#: resources/views/backend/workspace/credit-policy-labels.php:12
+#, fuzzy
+msgid "Default academic credits"
+msgstr "Créditos académicos predeterminados"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:13
+#, fuzzy
+msgid "Course credit rule"
+msgstr "Regla de créditos de curso"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:14
+#, fuzzy
+msgid "Fixed credits"
+msgstr "Créditos fijos"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:15
+#, fuzzy
+msgid "Credit range"
+msgstr "Rango de créditos"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:16
+#, fuzzy
+msgid "Minimum academic credits"
+msgstr "Créditos académicos mínimos"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:17
+#, fuzzy
+msgid "Maximum academic credits"
+msgstr "Créditos académicos máximos"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:18
+#, fuzzy
+msgid "Credit increment"
+msgstr "Incremento de crédito"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:19
+#, fuzzy
+msgid "Use the retained course default"
+msgstr "Usa el curso retenido por defecto"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:20
+#, fuzzy
+msgid "Fixed credits for this offering"
+msgstr "Créditos fijos para esta oferta"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:21
+#, fuzzy
+msgid "Allowed: {min}–{max} academic credits, in increments of {step}."
+msgstr "Permitidos: créditos académicos {min}–{max}, en incrementos de {step}."
+
+#: resources/views/backend/workspace/credit-policy-labels.php:22
+#, fuzzy
+msgid "The retained course allows {value} academic credits."
+msgstr "El curso retenido permite {value} créditos académicos."
+
+#: resources/views/backend/workspace/credit-policy-labels.php:23
+#, fuzzy
+msgid ""
+"Use up to three decimal places. These are academic credits; CEUs are "
+"separate."
+msgstr ""
+"Utilice hasta tres decimales. Estos son créditos académicos; Los CEU son "
+"independientes."
+
+#: resources/views/backend/workspace/credit-policy-labels.php:25
+#, fuzzy
+msgid ""
+"Save a draft default and permitted credit range together, then publish the "
+"course definition. Existing publications, student attempts and charges "
+"retain their accepted facts."
+msgstr ""
+"Guarda un borrador de créditos impago y un rango de créditos permitidos "
+"juntos, y luego publica la definición del curso. Las publicaciones "
+"existentes, los intentos de los estudiantes y las comisiones conservan los "
+"datos aceptados."
+
+#: resources/views/backend/workspace/credit-policy-labels.php:29
+#, fuzzy
+msgid ""
+"Choose one fixed offering value within its selected course policy. Publish "
+"and select the offering before new registrations use it. Students cannot "
+"choose individual credit values in this stage."
+msgstr ""
+"Elige un valor fijo de oferta dentro de la política de cursos seleccionada. "
+"Publica y selecciona la oferta antes de que las nuevas inscripciones la "
+"utilicen. Los estudiantes no pueden elegir valores individuales de créditos "
+"en esta fase."
+
+#: resources/views/backend/workspace/credit-policy-labels.php:32
+#, fuzzy
+msgid "Save credit draft"
+msgstr "Guardar la cuenta bancaria"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:33
+#, fuzzy
+msgid ""
+"Credit draft saved. Review its publication before using it for new "
+"registrations."
+msgstr ""
+"Borrador de crédito guardado. Revise su publicación antes de usarlo para "
+"nuevas inscripciones."
+
+#: resources/views/backend/workspace/credit-policy-labels.php:35
+#, fuzzy
+msgid ""
+"Use a nonnegative credit value with up to three decimal places, at most "
+"999.999."
+msgstr ""
+"Utilice un valor crediticio no negativo con hasta tres decimales, como "
+"máximo 999.999."
+
+#: resources/views/backend/workspace/credit-policy-labels.php:36
+#, fuzzy
+msgid "Not recorded in this publication"
+msgstr "No registrado en esta publicación"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:38
+#, fuzzy
+msgid ""
+"No course publication is selected. These limits come from the course draft. "
+"Choose a published course definition before publishing this offering."
+msgstr ""
+"No se selecciona ninguna publicación del curso. Estos límites provienen del "
+"borrador del curso. Elija una definición de curso publicada antes de "
+"publicar esta oferta."
+
+#: resources/views/backend/workspace/credit-policy-labels.php:41
+#, fuzzy
+msgid "Use the course draft default"
+msgstr "Usar el borrador del curso por defecto"
+
+#: resources/views/backend/workspace/credit-policy-labels.php:42
+#, fuzzy
+msgid "The course draft allows {value} academic credits."
+msgstr "El borrador del curso permite {value} créditos académicos."
 
 #: resources/views/backend/workspace/document-hold-labels.php:10
 #, fuzzy
@@ -563,14 +1654,1550 @@ msgstr ""
 msgid "days from upload"
 msgstr "días desde la subida"
 
+#: resources/views/backend/workspace/history-check-labels.php:8
+#, fuzzy
+msgid "Program standing"
+msgstr "Posición del programa"
+
+#: resources/views/backend/workspace/history-check-labels.php:9
+#, fuzzy
+msgid "Retained enrollment load"
+msgstr "Carga de matrícula retenida"
+
+#: resources/views/backend/workspace/history-check-labels.php:10
+#, fuzzy
+msgid "Program pursuit identity"
+msgstr "Identidad de persecución de programa"
+
+#: resources/views/backend/workspace/history-check-labels.php:11
+#, fuzzy
+msgid "Standing periods and history"
+msgstr "Periodos de estandarte e historia"
+
+#: resources/views/backend/workspace/history-check-labels.php:12
+#, fuzzy
+msgid "Retained load decision and projection"
+msgstr "Decisión y proyección de carga retenida"
+
+#: resources/views/backend/workspace/history-check-labels.php:13
+#, fuzzy
+msgid "No recorded standing observed"
+msgstr "No se observó ninguna posición registrada"
+
+#: resources/views/backend/workspace/history-check-labels.php:15
+#, fuzzy
+msgid ""
+"No standing decision was found for this pursuit. Earlier standing remains "
+"unknown."
+msgstr ""
+"No se encontró ninguna decisión de legitimación para esta búsqueda. La "
+"legitimación anterior sigue siendo desconocida."
+
+#: resources/views/backend/workspace/history-check-labels.php:17
+#, fuzzy
+msgid "Standing periods checked"
+msgstr "Periodos de pie comprobados"
+
+#: resources/views/backend/workspace/history-check-labels.php:18
+#, fuzzy
+msgid "Retained determinations checked"
+msgstr "Determinaciones retenidas comprobadas"
+
+#: resources/views/backend/workspace/history-check-labels.php:19
+#, fuzzy
+msgid "Check standing history"
+msgstr "Consulta el historial de astandos"
+
+#: resources/views/backend/workspace/history-check-labels.php:20
+#, fuzzy
+msgid "Check retained load history"
+msgstr "Comprobar historial de cargas retenidas"
+
+#: resources/views/backend/workspace/history-check-labels.php:21
+#, fuzzy
+msgid "Primary position designation"
+msgstr "Designación del puesto principal"
+
+#: resources/views/backend/workspace/history-check-labels.php:22
+#, fuzzy
+msgid "Position agreement"
+msgstr "Acuerdo de posición"
+
+#: resources/views/backend/workspace/history-check-labels.php:23
+#, fuzzy
+msgid "Retained time decision"
+msgstr "Decisión sobre el tiempo retenido"
+
+#: resources/views/backend/workspace/history-check-labels.php:24
+#, fuzzy
+msgid "Check primary designation history"
+msgstr "Consulta el historial de designación primaria"
+
+#: resources/views/backend/workspace/history-check-labels.php:25
+#, fuzzy
+msgid "Check position agreement history"
+msgstr "Consulta el historial de acuerdos de posición"
+
+#: resources/views/backend/workspace/history-check-labels.php:26
+#, fuzzy
+msgid "Check retained time decision"
+msgstr "Decisión sobre el control de tiempo retenido"
+
+#: resources/views/backend/workspace/history-check-labels.php:27
+#, fuzzy
+msgid "Selected HR records checked"
+msgstr "Registros de RRHH seleccionados comprobados"
+
+#: resources/views/backend/workspace/history-check-labels.php:28
+#, fuzzy
+msgid "Primary designation and projection"
+msgstr "Designación primaria y proyección"
+
+#: resources/views/backend/workspace/history-check-labels.php:29
+#, fuzzy
+msgid "Retained position agreement and projection"
+msgstr "Acuerdo y proyección de posición retenida"
+
+#: resources/views/backend/workspace/history-check-labels.php:30
+#, fuzzy
+msgid "Retained time decision and working entry"
+msgstr "Decisión sobre tiempo retenido y entrada de trabajo"
+
+#: resources/views/backend/workspace/history-check-labels.php:31
+#, fuzzy
+msgid "Earlier time decision not recorded"
+msgstr "Decisión de hora anterior no registrada"
+
+#: resources/views/backend/workspace/history-check-labels.php:33
+#, fuzzy
+msgid ""
+"The entry has a decision status, but its earlier decision was not recorded. "
+"This observation cannot verify that decision."
+msgstr ""
+"La entrada tiene estatus de decisión, pero su decisión anterior no fue "
+"registrada. Esta observación no puede verificar dicha decisión."
+
+#: resources/views/backend/workspace/history-check-labels.php:36
+#, fuzzy
+msgid "Employment and person routing"
+msgstr "Empleo y enrutamiento de personas"
+
+#: resources/views/backend/workspace/history-check-labels.php:37
+#, fuzzy
+msgid "No recorded primary designation observed"
+msgstr "No se observó ninguna designación primaria registrada"
+
+#: resources/views/backend/workspace/history-check-labels.php:39
+#, fuzzy
+msgid ""
+"No protected designation was found. This does not establish earlier primary "
+"history."
+msgstr ""
+"No se encontró ninguna designación protegida. Esto no establece la historia "
+"primaria anterior."
+
+#: resources/views/backend/workspace/history-check-labels.php:41
+#, fuzzy
+msgid "No retained time decision observed"
+msgstr "No se observó ninguna decisión sobre el tiempo retenido"
+
+#: resources/views/backend/workspace/history-check-labels.php:43
+#, fuzzy
+msgid ""
+"The entry is pending with no recorded decision. This check does not approve "
+"or reject it."
+msgstr ""
+"La entrada está pendiente sin ninguna decisión registrada. Esta comprobación "
+"no la aprueba ni la rechaza."
+
+#: resources/views/backend/workspace/history-check-labels.php:46
+#, fuzzy
+msgid ""
+"Run one selected HR observation with a 200-event allowance and bounded "
+"replay. It does not approve employment or time, recalculate current "
+"appointment eligibility, determine wages/payroll or certify archive "
+"completeness."
+msgstr ""
+"Ejecuta una observación seleccionada de RRHH con una asignación de 200 "
+"eventos y repetición acotada. No aprueba empleo ni tiempo, no recalcula la "
+"elegibilidad actual para el nombramiento, no determina salarios/nóminas ni "
+"certifica la integridad del archivo."
+
+#: resources/views/backend/workspace/history-check-labels.php:51
+#, fuzzy
+msgid ""
+"Earlier checks describe their recorded observation. HR reasons, pay terms, "
+"work intervals, raw event payloads and credentials are not displayed here."
+msgstr ""
+"Las comprobaciones anteriores describen su observación registrada. No se "
+"muestran aquí las razones de RR. HH., las condiciones salariales, los "
+"intervalos de trabajo, las cargas útiles brutas de eventos y credenciales."
+
+#: resources/views/backend/workspace/history-check-labels.php:54
+#, fuzzy
+msgid "Admissions application"
+msgstr "Solicitud de admisión"
+
+#: resources/views/backend/workspace/history-check-labels.php:55
+#, fuzzy
+msgid "Check application history"
+msgstr "Consulta el historial de solicitudes"
+
+#: resources/views/backend/workspace/history-check-labels.php:56
+#, fuzzy
+msgid "Application facts and history"
+msgstr "Datos e historia de la aplicación"
+
+#: resources/views/backend/workspace/history-check-labels.php:57
+#, fuzzy
+msgid "Application intake projection"
+msgstr "Proyección de admisión de aplicaciones"
+
+#: resources/views/backend/workspace/history-check-labels.php:59
+#, fuzzy
+msgid ""
+"Business records were not changed. A restricted support receipt was recorded."
+msgstr ""
+"Los registros comerciales no se modificaron. Se registró un recibo de "
+"manutención restringido."
+
+#: resources/views/backend/workspace/history-check-labels.php:62
+#, fuzzy
+msgid ""
+"Run one selected-record observation with a 200-event allowance and bounded "
+"replay. It does not repair data, approve admissions, academic or financial "
+"decisions, verify external settlement, or certify archive completeness or "
+"restore readiness."
+msgstr ""
+"Ejecutar una observación de registro seleccionado con una autorización de "
+"200 eventos y repetición acotada. No repara datos, no aprueba admisiones, "
+"decisiones académicas o financieras, verifica liquidación externa, ni "
+"certifica la completitud del archivo ni restaura la preparación."
+
+#: resources/views/backend/workspace/history-check-labels.php:68
+#, fuzzy
+msgid ""
+"Previous results describe their recorded observation, not a continuing "
+"guarantee about the current record. No event payloads, application answers, "
+"private profile values, financial amounts or credentials are displayed."
+msgstr ""
+"Los resultados anteriores describen su observación registrada, no una "
+"garantía continua sobre el registro actual. No se muestran cargas útiles de "
+"eventos, respuestas de aplicaciones, valores de perfil privado, importes "
+"financieros ni credenciales."
+
+#: resources/views/backend/workspace/section-reporting-labels.php:8
+#, fuzzy
+msgid "Reporting group"
+msgstr "Grupo de reporte"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:9
+#, fuzzy
+msgid "Reporting groups"
+msgstr "Grupos de informes"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:10
+#, fuzzy
+msgid "Choose reporting group"
+msgstr "Elegir grupo de informes"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:11
+#, fuzzy
+msgid "Clear reporting group"
+msgstr "Grupo de informes claros"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:12
+#, fuzzy
+msgid "Find reporting groups"
+msgstr "Buscar grupos de informes"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:13
+#, fuzzy
+msgid "Add reporting group"
+msgstr "Añadir grupo de informes"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:14
+#, fuzzy
+msgid "Edit reporting group"
+msgstr "Grupo de Edición de informes"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:15
+#, fuzzy
+msgid "Reporting group code"
+msgstr "Código del grupo de informes"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:16
+#, fuzzy
+msgid "Reporting group name"
+msgstr "Nombre del grupo de reporte"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:17
+#, fuzzy
+msgid "Back to reporting groups"
+msgstr "Volver a los grupos de informes"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:18
+msgid "Choose"
+msgstr "Elegir"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:19
+msgid "Edit"
+msgstr "Editar"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:21
+#, fuzzy
+msgid ""
+"An optional institutional reporting period or group shared by related "
+"sections. It does not change instructional terms, dates, credits, charges or "
+"census rules."
+msgstr ""
+"Un periodo o grupo opcional de presentación institucional compartido por "
+"secciones relacionadas. No modifica los términos de instrucción, fechas, "
+"créditos, cargos ni normas del censo."
+
+#: resources/views/backend/workspace/section-reporting-labels.php:24
+#, fuzzy
+msgid "Section classifications"
+msgstr "Clasificaciones de secciones"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:25
+#, fuzzy
+msgid "Current section reporting group"
+msgstr "Grupo de informes de la sección actual"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:26
+#, fuzzy
+msgid "Current reporting group reference"
+msgstr "Referencia actual del grupo de reporte"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:27
+#, fuzzy
+msgid "Current reporting group code"
+msgstr "Código actual del grupo de informes"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:28
+#, fuzzy
+msgid "Current reporting group name"
+msgstr "Nombre actual del grupo de reporte"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:29
+#, fuzzy
+msgid "Retained reporting group reference"
+msgstr "Referencia de grupo de reporte retenido"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:30
+#, fuzzy
+msgid "Retained reporting group code"
+msgstr "Código de grupo de informes retenido"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:31
+#, fuzzy
+msgid "Retained reporting group name"
+msgstr "Nombre del grupo de reporte conservado"
+
+#: resources/views/backend/workspace/section-reporting-labels.php:32
+#, fuzzy
+msgid "Reporting group choice recorded in accepted offering"
+msgstr "Informe de la elección de grupo registrada en la oferta aceptada"
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:9
+msgid "Remove"
+msgstr "Eliminar"
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:12
+#, fuzzy
+msgid "All recorded standing definitions"
+msgstr "Todas las definiciones de posición registradas"
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:15
+#, fuzzy
+msgid "Selected standing definitions"
+msgstr "Definiciones de posición seleccionadas"
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:18
+#, fuzzy
+#| msgid "Have an account?"
+msgid "Unavailable definition"
+msgstr "Definición no disponible"
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:21
+#, fuzzy
+msgid "Find definitions"
+msgstr "Buscar definiciones"
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:24
+#, fuzzy
+msgid "More definitions"
+msgstr "Más definiciones"
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:27
+#, fuzzy
+msgid "Previous definitions"
+msgstr "Definiciones anteriores"
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:30
+#, fuzzy
+msgid "Available standing definitions"
+msgstr "Definiciones disponibles de posición"
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:33
+#, fuzzy
+msgid "Find a standing definition"
+msgstr "Encuentra una definición permanente"
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:36
+#, fuzzy
+msgid "Standings to include"
+msgstr "Clasificación para incluir"
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:39
+#, fuzzy
+msgid ""
+"Choose up to 25 standing definitions. Retired definitions can still identify "
+"earlier recorded periods. Transcripts keep the original recorded labels."
+msgstr ""
+"Elige hasta 25 definiciones permanentes. Las definiciones retiradas aún "
+"pueden identificar periodos grabados anteriores. Las transcripciones "
+"conservan las etiquetas originales de la grabación."
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:43
+#, fuzzy
+msgid "Choose at least one definition or include all standings."
+msgstr "Elige al menos una definición o incluye todas las clasificaciones."
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:46
+#, fuzzy
+msgid "Remove selection"
+msgstr "Eliminar selección"
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:49
+#, fuzzy
+msgid "Loading standing definitions…"
+msgstr "Definiciones de carga de posición de pie..."
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:52
+#, fuzzy
+msgid "Retired definition"
+msgstr "Definición retirada"
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:55
+#, fuzzy
+msgid ""
+"Choose the definitions to include. Other recorded standings will be omitted."
+msgstr ""
+"Elija las definiciones que desea incluir. Se omitirán otras clasificaciones "
+"registradas."
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:58
+#, fuzzy
+msgid "No standing definitions match this search."
+msgstr "No hay definiciones permanentes que coincidan con esta búsqueda."
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:61
+#, fuzzy
+msgid ""
+"Standing definitions could not be loaded. Your choices are kept; try again."
+msgstr ""
+"No se pudieron cargar definiciones permanentes. Tus opciones se mantienen "
+"intactas; inténtalo de nuevo."
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:64
+#, fuzzy
+msgid ""
+"Transcript setup is no longer available. Reopen it after access is restored."
+msgstr ""
+"La configuración de la transcripción ya no está disponible. Vuelva a abrirla "
+"después de que se haya restaurado el acceso."
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:67
+#, fuzzy
+msgid "Transcript setup saved."
+msgstr "Configuración de la transcripción guardada."
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:70
+#, fuzzy
+msgid "Transcript setup saved. Newer edits are still unsaved."
+msgstr ""
+"Configuración de la transcripción guardada. Las ediciones más recientes aún "
+"no se han guardado."
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:73
+#, fuzzy
+msgid ""
+"This setup selects particular standing definitions for new preparations."
+msgstr ""
+"Esta configuración selecciona definiciones permanentes particulares para "
+"nuevas preparaciones."
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:76
+#, fuzzy
+msgid "This document includes institution-selected standing definitions."
+msgstr ""
+"Este documento incluye definiciones de posición de estandarte seleccionadas "
+"por la institución."
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:79
+#, fuzzy
+msgid "No selected academic standing is included through this date."
+msgstr "No se incluye ningún nivel académico seleccionado hasta esta fecha."
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:8
+#, fuzzy
+msgid "Waitlist priority bypass"
+msgstr "Omisión de prioridad en lista de espera"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:9
+#, fuzzy
+msgid "Review priority bypass"
+msgstr "Revisar la emisión de prioridad"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:10
+#, fuzzy
+msgid "Institutional reason for this bypass"
+msgstr "Razón institucional de este desvío"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:11
+#, fuzzy
+msgid "Review bypass and registration"
+msgstr "Revisar el bypass y el registro"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:12
+#, fuzzy
+msgid "Confirm bypass and register"
+msgstr "Confirmar el bypass y registrarse"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:13
+#, fuzzy
+msgid "Revise reason"
+msgstr "Revisar la razón"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:14
+#, fuzzy
+msgid "Refresh bypass review"
+msgstr "Revisión de bypass de actualización"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:15
+#, fuzzy
+msgid "Back to queue"
+msgstr "Volver a la cola"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:16
+#, fuzzy
+msgid "Registration completed with the reviewed waitlist bypass."
+msgstr "Registro completado con el bypass revisado de la lista de espera."
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:18
+#, fuzzy
+msgid ""
+"Register this later request ahead of earlier waiting requests for a "
+"documented institutional reason. Earlier requests keep their places. Normal "
+"registration eligibility, capacity and charges still apply."
+msgstr ""
+"Registre esta solicitud posterior antes de las solicitudes pendientes "
+"anteriores por un motivo institucional documentado. Las solicitudes "
+"anteriores mantienen su plaza. La elegibilidad normal, la capacidad y los "
+"cargos siguen aplicándose."
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:22
+#, fuzzy
+msgid ""
+"Check the selected student, section, charges and reason. This review expires "
+"after twenty minutes and reserves no seat. A changed queue, registration "
+"source or price requires a fresh review."
+msgstr ""
+"Consulta al estudiante seleccionado, la sección, los cargos y el motivo. "
+"Esta reseña caduca tras veinte minutos y no reserva plaza. Un cambio en la "
+"cola, fuente de inscripción o precio requiere una revisión nueva."
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:25
+#, fuzzy
+msgid "Student (current)"
+msgstr "Estudiante (actual)"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:26
+msgid "Section"
+msgstr "Sección"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:27
+msgid "Course"
+msgstr "Curso"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:28
+#, fuzzy
+msgid "Academic credits"
+msgstr "Créditos académicos"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:29
+#, fuzzy
+msgid "Earlier waiting requests"
+msgstr "Solicitudes en espera anticipadas"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:30
+#, fuzzy
+msgid "Registration charges"
+msgstr "Cargos de registro"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:31
+#, fuzzy
+#| msgid "New here?"
+msgid "New charge"
+msgstr "Nueva carga"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:32
+#, fuzzy
+msgid "Already assessed; no new charge"
+msgstr "Ya evaluado; sin cargos nuevos"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:33
+#, fuzzy
+msgid "Available seats"
+msgstr "Asientos disponibles"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:34
+#, fuzzy
+msgid "Total new charges"
+msgstr "Total de cargos nuevos"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:35
+msgid "Reason"
+msgstr "Razón"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:36
+#, fuzzy
+msgid "Registration checks"
+msgstr "Comprobaciones de registro"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:37
+#, fuzzy
+msgid "This review explicitly requests an exception to waitlist priority."
+msgstr ""
+"Esta revisión solicita explícitamente una excepción a la prioridad de la "
+"lista de espera."
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:38
+#, fuzzy
+msgid ""
+"Resolve the listed registration, seat or pricing issues, then refresh this "
+"review."
+msgstr ""
+"Resuelve los problemas listados de inscripción, asiento o precios y luego "
+"actualiza esta reseña."
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:39
+#, fuzzy
+msgid ""
+"Your reason changed while the review loaded. Review your latest text again."
+msgstr ""
+"Tu motivo cambió mientras cargaba la reseña. Revisa tu último texto otra vez."
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:40
+msgid "Unavailable"
+msgstr "No disponible"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:41
+#, fuzzy
+msgid "Bypass decision history"
+msgstr "Historial de decisiones de bypass"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:42
+#, fuzzy
+msgid "Refresh bypass history"
+msgstr "Actualizar historial de bypass"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:43
+#, fuzzy
+msgid "Loading recorded bypass decisions…"
+msgstr "Cargando decisiones de bypass registradas..."
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:44
+#, fuzzy
+msgid "No waitlist bypass decisions are recorded for this section."
+msgstr ""
+"No se registran decisiones de elusión por lista de espera para esta sección."
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:46
+#, fuzzy
+msgid ""
+"Recorded reasons and registration references remain unchanged after later "
+"queue changes or drops. Student names and institutional IDs below are "
+"current. Access to this history does not grant profile access."
+msgstr ""
+"Los motivos registrados y las referencias de registro permanecen sin cambios "
+"tras cambios o eliminaciones posteriores en la cola. Los nombres de "
+"estudiantes y los identificadores institucionales que aparecen a "
+"continuación están actualizados. El acceso a este historial no concede "
+"acceso al perfil."
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:50
+#, fuzzy
+msgid "Recorded decision time"
+msgstr "Tiempo de decisión registrado"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:51
+#, fuzzy
+msgid "Staff account reference"
+msgstr "Referencia de cuenta de personal"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:52
+#, fuzzy
+msgid "Accepted registration reference"
+msgstr "Referencia de registro aceptada"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:53
+#, fuzzy
+msgid "Older bypass decisions"
+msgstr "Decisiones de elusión antiguas"
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:54
+#, fuzzy
+msgid "Newer bypass decisions"
+msgstr "Decisiones de elusión más recientes"
+
+#: resources/views/shared/curriculum-ownership-labels.php:8
+#, fuzzy
+msgid "Program department ownership"
+msgstr "Propiedad del departamento de programa"
+
+#: resources/views/shared/curriculum-ownership-labels.php:10
+#, fuzzy
+msgid ""
+"Add up to five departments that jointly administer this program. Each "
+"department keeps its own college. Program ownership is independent of major/"
+"minor ownership and grants no access or eligibility."
+msgstr ""
+"Suma hasta cinco departamentos que administran conjuntamente este programa. "
+"Cada departamento mantiene su propia facultad. La propiedad del programa es "
+"independiente de la propiedad mayor/menor y no otorga acceso ni elegibilidad."
+
+#: resources/views/shared/curriculum-ownership-labels.php:13
+#, fuzzy
+msgid "That department is already selected for this program."
+msgstr "Ese departamento ya está seleccionado para este programa."
+
+#: resources/views/shared/curriculum-ownership-labels.php:14
+#, fuzzy
+msgid "Responsible department"
+msgstr "Departamento responsable"
+
+#: resources/views/shared/curriculum-ownership-labels.php:15
+#, fuzzy
+msgid "not recorded in this publication"
+msgstr "no registrado en esta publicación"
+
+#: resources/views/shared/curriculum-ownership-labels.php:16
+#, fuzzy
+msgid "not assigned"
+msgstr "no asignado"
+
+#: resources/views/shared/curriculum-ownership-labels.php:17
+#, fuzzy
+msgid "School/college"
+msgstr "Escuela/colegio"
+
+#: resources/views/shared/curriculum-ownership-labels.php:18
+#, fuzzy
+msgid "Additional responsible departments"
+msgstr "Departamentos responsables adicionales"
+
+#: resources/views/shared/curriculum-ownership-labels.php:19
+msgid "none"
+msgstr "ninguno"
+
+#: resources/views/shared/curriculum-ownership-labels.php:20
+#, fuzzy
+msgid "Add responsible department"
+msgstr "Añadir departamento responsable"
+
+#: resources/views/shared/curriculum-ownership-labels.php:21
+#, fuzzy
+msgid "Remove department"
+msgstr "Eliminar departamento"
+
+#: resources/views/shared/curriculum-ownership-labels.php:23
+#, fuzzy
+msgid ""
+"Add up to five other departments that jointly own this curriculum component. "
+"Each department keeps its own school/college. These choices grant no access "
+"or eligibility."
+msgstr ""
+"Suma hasta cinco departamentos más que poseen conjuntamente este componente "
+"curricular. Cada departamento mantiene su propio colegio/colegio. Estas "
+"opciones no otorgan acceso ni elegibilidad."
+
+#: resources/views/shared/curriculum-ownership-labels.php:27
+#, fuzzy
+msgid "That department is already selected for this component."
+msgstr "Ese departamento ya está seleccionado para este componente."
+
+#: resources/views/shared/curriculum-ownership-labels.php:30
+#, fuzzy
+msgid "The chosen responsible department was removed from the additional list."
+msgstr ""
+"El departamento responsable elegido fue retirado de la lista adicional."
+
+#: resources/views/shared/enrollment-load-labels.php:8
+#, fuzzy
+msgid "Policy for this determination"
+msgstr "Política para esta determinación"
+
+#: resources/views/shared/enrollment-load-labels.php:9
+#, fuzzy
+msgid "Use the current effective policy"
+msgstr "Utilice la política vigente"
+
+#: resources/views/shared/enrollment-load-labels.php:10
+#, fuzzy
+msgid ""
+"The institution policy applies unless this program has a current override."
+msgstr ""
+"La política de la institución se aplica salvo que este programa tenga una "
+"excepción vigente."
+
+#: resources/views/shared/enrollment-load-labels.php:11
+#, fuzzy
+msgid "Choose a published policy"
+msgstr "Elige una política publicada"
+
+#: resources/views/shared/enrollment-load-labels.php:13
+#, fuzzy
+msgid ""
+"Select a publication only when the institution authorizes its use for this "
+"determination. The reason must explain the choice. Registration quantities "
+"are verified as of today; this selection does not reconstruct an earlier "
+"census or set a default for this pursuit."
+msgstr ""
+"Seleccione una publicación solo cuando la institución autorice su uso para "
+"esta determinación. El motivo debe explicar la elección. Las cantidades de "
+"registro se verifican a día de hoy; esta selección no reconstruye un censo "
+"anterior ni establece un predeterminado para esta prosecución."
+
+#: resources/views/shared/enrollment-load-labels.php:17
+#, fuzzy
+msgid "Publication scope"
+msgstr "Ámbito de publicación"
+
+#: resources/views/shared/enrollment-load-labels.php:18
+msgid "Institution"
+msgstr "Institución"
+
+#: resources/views/shared/enrollment-load-labels.php:19
+msgid "This program"
+msgstr "Y es un programa que"
+
+#: resources/views/shared/enrollment-load-labels.php:20
+#, fuzzy
+msgid "Publication {version} · {date}"
+msgstr "Publicación {version} · {date}"
+
+#: resources/views/shared/enrollment-load-labels.php:21
+#, fuzzy
+msgid "{label}: from {credits} credits"
+msgstr "{label}: de {credits} créditos"
+
+#: resources/views/shared/enrollment-load-labels.php:22
+#, fuzzy
+msgid "Use publication {version}"
+msgstr "Usa {version} de publicación"
+
+#: resources/views/shared/enrollment-load-labels.php:23
+#, fuzzy
+msgid "No credit bands in this publication. It cannot be selected."
+msgstr "No hay bandas de crédito en esta publicación. No puede seleccionarse."
+
+#: resources/views/shared/enrollment-load-labels.php:24
+#, fuzzy
+msgid "No policy publications are available in this scope."
+msgstr "No hay publicaciones políticas disponibles en este ámbito."
+
+#: resources/views/shared/enrollment-load-labels.php:25
+#, fuzzy
+msgid "More publications"
+msgstr "Más publicaciones"
+
+#: resources/views/shared/enrollment-load-labels.php:26
+#, fuzzy
+msgid "Previous publications"
+msgstr "Publicaciones anteriores"
+
+#: resources/views/shared/enrollment-load-labels.php:27
+#, fuzzy
+msgid "Back to determination"
+msgstr "De vuelta a la determinación"
+
+#: resources/views/shared/enrollment-load-labels.php:28
+#, fuzzy
+msgid "Retry publication list"
+msgstr "Lista de publicaciones de reintentos"
+
+#: resources/views/shared/enrollment-load-labels.php:29
+#, fuzzy
+msgid "Loading verified policy publications…"
+msgstr "Cargando publicaciones de políticas verificadas..."
+
+#: resources/views/shared/enrollment-load-labels.php:30
+#, fuzzy
+msgid ""
+"Policy publications could not be loaded. Retry or return to the "
+"determination."
+msgstr ""
+"No se pudieron cargar las publicaciones de políticas. Intente de nuevo o "
+"vuelva a la determinación."
+
+#: resources/views/shared/enrollment-load-labels.php:31
+#, fuzzy
+msgid "Explicitly selected publication for this determination"
+msgstr "Publicación explícitamente seleccionada para esta determinación"
+
+#: resources/views/shared/enrollment-load-labels.php:32
+#, fuzzy
+msgid "Current effective policy at determination"
+msgstr "Política actual efectiva en el momento de la determinación"
+
+#: resources/views/shared/enrollment-load-labels.php:33
+#, fuzzy
+msgid "The selection basis and publication date were not separately recorded."
+msgstr ""
+"La base de selección y la fecha de publicación no se registraron por "
+"separado."
+
+#: resources/views/shared/enrollment-load-labels.php:35
+#, fuzzy
+msgid ""
+"Record the current term using verified registered credits and the reviewed "
+"policy. This action does not backdate a census, replace an earlier "
+"determination or change registrations or charges."
+msgstr ""
+"Registre el término actual utilizando créditos registrados verificados y la "
+"póliza revisada. Esta acción no retrofecha un censo, no sustituye una "
+"determinación anterior ni modifica registros o cargos."
+
+#: resources/views/shared/notification-labels.php:8
+#, fuzzy
+msgid "Campus announcements"
+msgstr "Anuncios del campus"
+
+#: resources/views/shared/notification-labels.php:10
+#, fuzzy
+msgid ""
+"After approval, campus news appears in the notification bell for signed-in "
+"applicants, students and staff. Publication times control its availability. "
+"Public website news is separate."
+msgstr ""
+"Tras la aprobación, las noticias del campus aparecen en la campana de "
+"notificación para solicitantes, estudiantes y personal registrados. Los "
+"horarios de publicación regulan su disponibilidad. Las noticias en sitios "
+"web públicos son independientes."
+
+#: resources/views/shared/notification-labels.php:13
+#, fuzzy
+msgid "This announcement changed or is unavailable. Refresh the list."
+msgstr "Este anuncio ha cambiado o no está disponible. Actualice la lista."
+
+#: resources/views/shared/notification-labels.php:14
+#, fuzzy
+msgid "Announcements could not load. Use Refresh announcements to try again."
+msgstr ""
+"No se pudieron cargar los anuncios. Utilice Actualizar anuncios para "
+"intentarlo de nuevo."
+
+#: resources/views/shared/notification-labels.php:15
+#, fuzzy
+msgid "Loading campus announcements…"
+msgstr "Cargando anuncios del campus..."
+
+#: resources/views/shared/notification-labels.php:16
+#, fuzzy
+msgid "New campus announcements are available."
+msgstr "Ya están disponibles los nuevos anuncios del campus."
+
+#: resources/views/shared/notification-labels.php:17
+msgid "Unread"
+msgstr "No leído"
+
+#: resources/views/shared/notification-labels.php:18
+msgid "Read"
+msgstr "Leer"
+
+#: resources/views/shared/notification-labels.php:19
+#, fuzzy
+msgid "Announcement pages"
+msgstr "Páginas de anuncios"
+
+#: resources/views/shared/notification-labels.php:20
+#, fuzzy
+msgid "Previous announcements"
+msgstr "Anuncios anteriores"
+
+#: resources/views/shared/notification-labels.php:21
+#, fuzzy
+msgid "More announcements"
+msgstr "Más anuncios"
+
+#: resources/views/shared/notification-labels.php:22
+#, fuzzy
+msgid "There are no matching campus announcements."
+msgstr "No hay anuncios coincidentes en el campus."
+
+#: resources/views/shared/notification-labels.php:23
+#, fuzzy
+msgid "Campus announcements loaded. Reading state is saved to your account."
+msgstr ""
+"Anuncios del campus cargados. El estado de lectura se guarda en tu cuenta."
+
+#: resources/views/shared/notification-labels.php:24
+msgid "Mark as read"
+msgstr "Marcar como leído"
+
+#: resources/views/shared/notification-labels.php:25
+#, fuzzy
+msgid "Marked as read. This is not a policy acknowledgement."
+msgstr "Marcado como leído. Esto no es un reconocimiento de política."
+
+#: resources/views/shared/notification-labels.php:26
+msgid "Back to list"
+msgstr "Volver al listado"
+
+#: resources/views/shared/notification-labels.php:27
+#, fuzzy
+msgid "Refresh announcements"
+msgstr "Anuncios de actualización"
+
+#: resources/views/shared/notification-labels.php:29
+#, fuzzy
+msgid ""
+"Published campus news is available to signed-in applicants, students and "
+"staff. Open an announcement before marking its current version as read."
+msgstr ""
+"Las noticias publicadas del campus están disponibles para solicitantes, "
+"estudiantes y personal registrados. Abre un anuncio antes de marcar su "
+"versión actual como leída."
+
+#: resources/views/shared/notification-labels.php:32
+#, fuzzy
+msgid "Show read items"
+msgstr "Mostrar elementos leídos"
+
+#: resources/views/shared/notification-labels.php:33
+msgid "Notifications"
+msgstr "Notificaciones"
+
+#: resources/views/shared/notification-labels.php:34
+#, fuzzy
+msgid "Recent workspace notifications"
+msgstr "Notificaciones recientes del espacio de trabajo"
+
+#: resources/views/shared/notification-labels.php:35
+#, fuzzy
+msgid "Workspace notification"
+msgstr "Notificación del espacio de trabajo"
+
+#: resources/views/shared/notification-labels.php:36
+#, fuzzy
+msgid "Close notifications"
+msgstr "Cerrar notificaciones"
+
+#: resources/views/shared/notification-labels.php:37
+msgid "Dismiss notification"
+msgstr "Descartar aviso"
+
+#: resources/views/shared/notification-labels.php:38
+#, fuzzy
+msgid "Clear recent notifications"
+msgstr "Borrar notificaciones recientes"
+
+#: resources/views/shared/notification-labels.php:39
+#, fuzzy
+msgid "There are no notifications from this workspace session."
+msgstr "No hay notificaciones de esta sesión del espacio de trabajo."
+
+#: resources/views/shared/notification-labels.php:41
+#, fuzzy
+msgid ""
+"Recent action feedback stays only in this page. Reloading or signing out "
+"clears it. Recorded decisions and background job status remain in their own "
+"workspaces."
+msgstr ""
+"La retroalimentación sobre acciones recientes permanece únicamente en esta "
+"página. Recargar o cerrar sesión la borra. Las decisiones registradas y el "
+"estado de la tarea en segundo plano permanecen en sus propios espacios de "
+"trabajo."
+
+#: resources/views/shared/notification-labels.php:44
+#, fuzzy
+msgid "Play notification sounds"
+msgstr "Reproduce sonidos de notificación"
+
+#: resources/views/shared/notification-labels.php:45
+msgid "Notification sound"
+msgstr "Sonido de notificación"
+
+#: resources/views/shared/notification-labels.php:46
+#, fuzzy
+msgid "Choose a sound, then test it. Changing this choice does not play audio."
+msgstr ""
+"Elige un sonido y luego pruébalo. Cambiar esta opción no reproduce audio."
+
+#: resources/views/shared/notification-labels.php:47
+#, fuzzy
+msgid "Short tone"
+msgstr "Tono corto"
+
+#: resources/views/shared/notification-labels.php:48
+#, fuzzy
+msgid "Message"
+msgstr "Mensaje"
+
+#: resources/views/shared/notification-labels.php:49
+#, fuzzy
+msgid "Warm success"
+msgstr "Éxito cálido"
+
+#: resources/views/shared/notification-labels.php:50
+msgid "Bird"
+msgstr "Pájaro"
+
+#: resources/views/shared/notification-labels.php:51
+msgid "Piano"
+msgstr "Piano"
+
+#: resources/views/shared/notification-labels.php:52
+#, fuzzy
+msgid "Preparing sound…"
+msgstr "Preparando el sonido..."
+
+#: resources/views/shared/notification-labels.php:53
+#, fuzzy
+msgid "Sound preview played."
+msgstr "Se ha reproducido una vista previa de sonido."
+
+#: resources/views/shared/notification-labels.php:54
+#, fuzzy
+msgid "Keep notifications on screen until dismissed"
+msgstr "Mantenga las notificaciones en pantalla hasta que se desestimen"
+
+#: resources/views/shared/notification-labels.php:56
+#, fuzzy
+msgid ""
+"Only these display and sound preferences are saved in this browser. "
+"Notification messages and campus records are never saved here."
+msgstr ""
+"Solo estas preferencias de visualización y sonido se guardan en este "
+"navegador. Los mensajes de notificación y los registros del campus nunca se "
+"guardan aquí."
+
+#: resources/views/shared/notification-labels.php:59
+#, fuzzy
+msgid "Test notification sound"
+msgstr "Prueba el sonido de notificación"
+
+#: resources/views/shared/notification-labels.php:60
+#, fuzzy
+msgid "Sound is unavailable. Visual notifications will still appear."
+msgstr ""
+"El sonido no está disponible. Las notificaciones visuales seguirán "
+"apareciendo."
+
+#: resources/views/shared/notification-labels.php:61
+msgid "Completed"
+msgstr "Completado"
+
+#: resources/views/shared/notification-labels.php:62
+msgid "Update"
+msgstr "Actualizar"
+
+#: resources/views/shared/notification-labels.php:63
+msgid "Needs attention"
+msgstr "Necesita atención"
+
+#: resources/views/shared/notification-labels.php:64
+#, fuzzy
+msgid ""
+"Export queued. Its download will be available after preparation finishes."
+msgstr ""
+"Exportación en cola. Su descarga estará disponible una vez finalizada la "
+"preparación."
+
+#: resources/views/shared/notification-labels.php:65
+#, fuzzy
+msgid "Your report export is ready. Open the export controls to download it."
+msgstr ""
+"Su exportación de informe está lista. Abra los controles de exportación para "
+"descargarlo."
+
+#: resources/views/shared/notification-labels.php:66
+#, fuzzy
+msgid ""
+"The report export could not finish. Review its status before trying again."
+msgstr ""
+"La exportación del informe no pudo finalizar. Revise su estado antes de "
+"intentarlo de nuevo."
+
+#: resources/views/shared/notification-labels.php:67
+#, fuzzy
+msgid "Report export cancelled."
+msgstr "Reportar la exportación cancelada."
+
+#: resources/views/shared/notification-labels.php:68
+#, fuzzy
+msgid ""
+"Delivery processing finished. Review confirmed sends and closed outcomes."
+msgstr ""
+"Procesamiento de entrega finalizado. Revisa envíos confirmados y resultados "
+"cerrados."
+
+#: resources/views/shared/notification-labels.php:69
+#, fuzzy
+msgid "Recipients queued. No messages have been sent."
+msgstr "Destinatarios en cola. No se han enviado mensajes."
+
+#: resources/views/shared/notification-labels.php:70
+#, fuzzy
+msgid "Background delivery confirmed. You can leave this screen."
+msgstr "Entrega en segundo plano confirmada. Puede salir de esta pantalla."
+
+#: resources/views/shared/notification-labels.php:71
+#, fuzzy
+msgid ""
+"Delivery needs review. Unconfirmed messages will not be retried "
+"automatically."
+msgstr ""
+"La entrega necesita revisar. Los mensajes no confirmados no se intentarán de "
+"nuevo automáticamente."
+
+#: resources/views/shared/notification-labels.php:72
+#, fuzzy
+msgid ""
+"Delivery stopped. Review access, recipients and institutional mail settings."
+msgstr ""
+"Entrega detenida. Revise el acceso, los destinatarios y la configuración de "
+"correo institucional."
+
+#: resources/views/shared/notification-labels.php:73
+#, fuzzy
+msgid "Your contact information is up to date."
+msgstr "Tu información de contacto está actualizada."
+
+#: resources/views/shared/notification-labels.php:74
+#, fuzzy
+msgid "Application submitted. Here’s to your next chapter."
+msgstr "Solicitud enviada. Por tu próximo capítulo."
+
+#: resources/views/shared/notification-labels.php:76
+#, fuzzy
+msgid ""
+"Your section was changed. The original course charges were reversed and "
+"replacement charges applied together."
+msgstr ""
+"Tu sección fue cambiada. Se revirtieron los cargos originales del curso y se "
+"aplicaron cargos de reemplazo conjuntamente."
+
+#: resources/views/shared/notification-labels.php:79
+#, fuzzy
+msgid ""
+"Your course was removed. Its course charge was reversed if present. Any "
+"account credit is reviewed separately for a cash refund."
+msgstr ""
+"Tu curso fue eliminado. Su cargo por el curso fue revertido si existía. "
+"Cualquier crédito de cuenta se revisa por separado para un reembolso en "
+"efectivo."
+
+#: resources/views/shared/notification-labels.php:83
+#, fuzzy
+msgid ""
+"Your course stays on your record with grade {grade} and zero earned credits. "
+"Its course charge is retained."
+msgstr ""
+"Tu curso permanece en tu expediente con nota {grade} y cero créditos "
+"obtenidos. Se mantiene el cargo por curso."
+
+#: resources/views/shared/notification-labels.php:85
+#, fuzzy
+msgid "{count} course sections registered together."
+msgstr "{count} secciones del curso se registraron conjuntamente."
+
+#: resources/views/shared/notification-labels.php:86
+#, fuzzy
+msgid "You’re registered. Your semester is taking shape."
+msgstr "Estás registrado. Tu semestre está tomando forma."
+
+#: resources/views/shared/notification-labels.php:87
+#, fuzzy
+msgid "Your request is with the registrar. Follow its progress below."
+msgstr ""
+"Tu solicitud está con el registrador. Sigue su progreso a continuación."
+
+#: resources/views/shared/notification-labels.php:88
+#, fuzzy
+msgid "Transcript request cancelled."
+msgstr "Solicitud de transcripción cancelada."
+
+#: resources/views/shared/profile-request-labels.php:8
+#, fuzzy
+msgid "Recorded identity"
+msgstr "Identidad registrada"
+
+#: resources/views/shared/profile-request-labels.php:9
+#, fuzzy
+msgid "Identity correction requests"
+msgstr "Solicitudes de corrección de identidad"
+
+#: resources/views/shared/profile-request-labels.php:10
+#, fuzzy
+msgid "Request an identity correction"
+msgstr "Solicitar una corrección de identidad"
+
+#: resources/views/shared/profile-request-labels.php:11
+#, fuzzy
+msgid "Review recorded identity"
+msgstr "Revisar la identidad registrada"
+
+#: resources/views/shared/profile-request-labels.php:12
+#, fuzzy
+msgid "Current recorded identity"
+msgstr "Identidad registrada actual"
+
+#: resources/views/shared/profile-request-labels.php:13
+#, fuzzy
+msgid "Loading recorded identity…"
+msgstr "Cargando la identidad registrada..."
+
+#: resources/views/shared/profile-request-labels.php:14
+#, fuzzy
+msgid "Recorded identity could not be loaded. Retry this review."
+msgstr "No se pudo cargar la identidad registrada. Intente esta revisión."
+
+#: resources/views/shared/profile-request-labels.php:15
+#, fuzzy
+msgid "Save or discard your name changes before leaving this editor."
+msgstr "Guarda o descarta tus cambios de nombre antes de salir de este editor."
+
+#: resources/views/shared/profile-request-labels.php:16
+#, fuzzy
+msgid "Close identity review"
+msgstr "Revisión cerrada de identidad"
+
+#: resources/views/shared/profile-request-labels.php:17
+#, fuzzy
+msgid "Refresh recorded identity"
+msgstr "Actualizar la identidad registrada"
+
+#: resources/views/shared/profile-request-labels.php:18
+#, fuzzy
+msgid "Edit person names"
+msgstr "Editar nombres de personas"
+
+#: resources/views/shared/profile-request-labels.php:19
+msgid "Given name"
+msgstr "Nombre"
+
+#: resources/views/shared/profile-request-labels.php:20
+msgid "Family name"
+msgstr "Apellido"
+
+#: resources/views/shared/profile-request-labels.php:21
+#, fuzzy
+msgid "Institutional ID"
+msgstr "Identificación institucional"
+
+#: resources/views/shared/profile-request-labels.php:22
+#, fuzzy
+msgid "Save person names"
+msgstr "Guardar nombres de personas"
+
+#: resources/views/shared/profile-request-labels.php:23
+#, fuzzy
+msgid "Reason for profile correction"
+msgstr "Motivo de la corrección del perfil"
+
+#: resources/views/shared/profile-request-labels.php:25
+#, fuzzy
+msgid ""
+"Kept in restricted profile history. The resolution note is the message shown "
+"to the owner."
+msgstr ""
+"Guardado en el historial restringido del perfil. La nota de resolución es el "
+"mensaje mostrado al propietario."
+
+#: resources/views/shared/profile-request-labels.php:27
+#, fuzzy
+msgid "Back to identity review"
+msgstr "Volver a la revisión de identidad"
+
+#: resources/views/shared/profile-request-labels.php:28
+#, fuzzy
+msgid "Person names saved. Review the details before resolving the request."
+msgstr ""
+"Nombres de personas guardados. Revisa los detalles antes de resolver la "
+"solicitud."
+
+#: resources/views/shared/profile-request-labels.php:30
+#, fuzzy
+msgid ""
+"Review your current names and institutional ID, then explain the correction "
+"in your reply. Sending a reply does not change identity details, sign-in "
+"access or an admissions decision."
+msgstr ""
+"Revisa tus nombres actuales y tu ID institucional, y luego explica la "
+"corrección en tu respuesta. Enviar una respuesta no cambia los datos de "
+"identidad, el acceso de inicio de sesión ni la decisión de admisión."
+
+#: resources/views/shared/profile-request-labels.php:34
+#, fuzzy
+msgid ""
+"Review the current identity and the owner response. Apply verified name "
+"corrections with the person editor, then record a separate request outcome. "
+"Institutional ID changes use the existing identifier workflow."
+msgstr ""
+"Revisa la identidad actual y la respuesta del propietario. Aplica "
+"correcciones verificadas de nombre con el editor de personas y luego "
+"registra un resultado de solicitud separado. Los cambios en el ID "
+"institucional utilizan el flujo de trabajo de identificador existente."
+
+#: resources/views/shared/profile-request-labels.php:38
+#, fuzzy
+msgid ""
+"These are current identity details. Earlier academic records, issued "
+"documents and this request retain their separate histories."
+msgstr ""
+"Estos son datos de identidad actuales. Los registros académicos anteriores, "
+"los documentos expedidos y esta solicitud conservan sus historiales "
+"separados."
+
+#: resources/views/shared/profile-request-labels.php:42
+#, fuzzy
+msgid ""
+"Identity follow-up belongs to your person record and can apply across "
+"applications. Review requested corrections here without changing your "
+"application draft."
+msgstr ""
+"El seguimiento de identidad corresponde a tu registro personal y puede "
+"aplicarse a todas las solicitudes. Revisa aquí las correcciones solicitadas "
+"sin modificar tu borrador de solicitud."
+
+#: resources/views/shared/time-primary-labels.php:8
+#, fuzzy
+msgid "Require a current primary position before time approval"
+msgstr "Exigir un puesto principal actual antes de la aprobación temporal"
+
+#: resources/views/shared/time-primary-labels.php:10
+#, fuzzy
+msgid ""
+"Pending work can still be submitted. HR must record or reaffirm a primary "
+"appointment covering today before approval. This does not change the "
+"position worked, compensation or earlier decisions."
+msgstr ""
+"El trabajo pendiente aún puede presentarse. RRHH debe registrar o reafirmar "
+"una cita principal que cubra hoy antes de su aprobación. Esto no cambia el "
+"puesto desempeñado, la remuneración ni las decisiones anteriores."
+
+#: resources/views/shared/time-primary-labels.php:13
+#, fuzzy
+msgid "Primary position for approval"
+msgstr "Posición principal para la aprobación"
+
+#: resources/views/shared/time-primary-labels.php:14
+#, fuzzy
+msgid "Current primary designation required"
+msgstr "Designación primaria actual requerida"
+
+#: resources/views/shared/time-primary-labels.php:15
+#, fuzzy
+msgid "Primary designation is optional"
+msgstr "La designación primaria es opcional"
+
+#: resources/views/shared/time-primary-labels.php:16
+#, fuzzy
+msgid "This earlier policy did not record a primary-position rule."
+msgstr "Esta política anterior no recogía una regla de posición primaria."
+
+#: resources/views/shared/time-primary-labels.php:17
+#, fuzzy
+msgid "Primary position check"
+msgstr "Comprobación de posición primaria"
+
+#: resources/views/shared/time-primary-labels.php:19
+#, fuzzy
+msgid ""
+"This check concerns the designation at review and confirmation. It does not "
+"establish a primary position on the earlier work date."
+msgstr ""
+"Esta comprobación se refiere a la designación en revisión y confirmación. No "
+"establece una posición principal sobre la fecha de trabajo anterior."
+
+#: resources/views/shared/time-primary-labels.php:22
+#, fuzzy
+msgid "Checked on {date}"
+msgstr "He comprobado {date}"
+
+#: resources/views/shared/time-primary-labels.php:23
+#, fuzzy
+msgid "Current at this review"
+msgstr "Actualizado en esta reseña"
+
+#: resources/views/shared/time-primary-labels.php:24
+#, fuzzy
+msgid "No primary designation has been recorded"
+msgstr "No se ha registrado ninguna designación primaria"
+
+#: resources/views/shared/time-primary-labels.php:25
+#, fuzzy
+msgid "The primary designation was explicitly cleared"
+msgstr "La designación principal fue explícitamente aprobada"
+
+#: resources/views/shared/time-primary-labels.php:26
+#, fuzzy
+msgid "The designated appointment changed and needs reaffirmation"
+msgstr "El nombramiento designado cambió y necesita reafirmación"
+
+#: resources/views/shared/time-primary-labels.php:27
+#, fuzzy
+msgid "The designated appointment has ended"
+msgstr "El nombramiento designado ha terminado"
+
+#: resources/views/shared/time-primary-labels.php:28
+#, fuzzy
+msgid "The designated appointment was marked incorrect"
+msgstr "El nombramiento designado fue marcado incorrectamente"
+
+#: resources/views/shared/time-primary-labels.php:29
+#, fuzzy
+msgid "The designated appointment has not started"
+msgstr "La cita designada no ha comenzado"
+
+#: resources/views/shared/time-primary-labels.php:30
+#, fuzzy
+msgid "The primary designation was not assessed for this rejection"
+msgstr "La designación primaria no fue evaluada para este rechazo"
+
+#: resources/views/shared/time-primary-labels.php:32
+#, fuzzy
+msgid ""
+"Approval is unavailable until HR records or reaffirms a current primary "
+"position. The time-exception duty cannot bypass this requirement. The entry "
+"can still be rejected."
+msgstr ""
+"La aprobación no está disponible hasta que RRHH registre o reafirme un "
+"puesto principal actual. El deber de excepción temporal no puede eludir este "
+"requisito. La entrada aún puede ser rechazada."
+
+#: resources/views/shared/time-primary-labels.php:35
+#, fuzzy
+msgid "Review primary position"
+msgstr "Revisar la posición principal"
+
+#: resources/views/shared/time-primary-labels.php:36
+#, fuzzy
+msgid "Back to time entry"
+msgstr "Entrada de vuelta en el tiempo"
+
+#: resources/views/shared/time-primary-labels.php:37
+#, fuzzy
+msgid "No configured clocked-time exceptions found."
+msgstr "No se han encontrado excepciones configuradas en tiempo de reloj."
+
 #: src/Application/Http/Controller/ProfileController.php:52
 msgid "User Profile"
 msgstr "Perfil del usuario"
-
-#: src/Application/Http/Controller/WebsiteManagerController.php:86
-#: src/Application/Http/Controller/WebsiteManagerController.php:116
-msgid "Website Manager"
-msgstr "Gestor de sitios web"
 
 #: src/Application/Http/Response/MaintenanceResponse.php:45
 #: src/Application/Http/Response/MaintenanceResponse.php:66
@@ -1026,6 +3653,11 @@ msgstr "Iniciar sesión"
 msgid "Dashboard"
 msgstr "Escritorio"
 
+#: resources/views/app-layout.phtml:51
+#: resources/views/partials/desktop-nav.phtml:55
+msgid "Website Manager"
+msgstr "Gestor de sitios web"
+
 #: resources/views/app-layout.phtml:53
 #: resources/views/partials/desktop-nav.phtml:64
 msgid "Profile"
@@ -1138,23 +3770,373 @@ msgstr ""
 msgid "Manage Users →"
 msgstr "Gestionar usuarios →"
 
-#: resources/views/backend/manager/index.phtml:100
-#: resources/views/backend/partials/x-delete-user-modal.phtml:14
-#: resources/views/backend/partials/x-delete-user-modal.phtml:46
-msgid "Delete"
-msgstr "Borrar"
+#: resources/views/backend/manager/editor-guide.phtml:10
+#, fuzzy
+msgid "Page designer"
+msgstr "Diseñador de páginas"
 
-#: resources/views/backend/manager/index.phtml:108
+#: resources/views/backend/manager/editor-guide.phtml:12
+#: resources/views/backend/manager/editor-guide.phtml:49
+#, fuzzy
+msgid ""
+"Select content to see how it can be edited. The layout provides the fixed "
+"page structure."
+msgstr ""
+"Selecciona el contenido para ver cómo puede editarse. El diseño proporciona "
+"la estructura fija de la página."
+
+#: resources/views/backend/manager/editor-guide.phtml:16
+#, fuzzy
+msgid ""
+"Editable content: change text, images and links directly on the canvas. Use "
+"the block controls to move or remove it."
+msgstr ""
+"Contenido editable: cambia texto, imágenes y enlaces directamente en el "
+"lienzo. Usa los controles de bloque para moverlo o eliminarlo."
+
+#: resources/views/backend/manager/editor-guide.phtml:20
+#, fuzzy
+msgid ""
+"Dynamic content: use the Settings controls for this block. Theme-rendered "
+"text and live data cannot be edited directly."
+msgstr ""
+"Contenido dinámico: utilice los controles de Configuración para este bloque. "
+"El texto renderizado por tema y los datos en vivo no pueden editarse "
+"directamente."
+
+#: resources/views/backend/manager/editor-guide.phtml:24
+#, fuzzy
+msgid ""
+"Content area: add, move or remove blocks here. The surrounding layout "
+"remains fixed."
+msgstr ""
+"Área de contenido: añadir, mover o quitar bloques aquí. La disposición "
+"circundante permanece fija."
+
+#: resources/views/backend/manager/editor-guide.phtml:27
+msgid "Settings"
+msgstr "Ajustes"
+
+#: resources/views/backend/manager/editor-guide.phtml:28
+#, fuzzy
+msgid "Save page"
+msgstr "Guardar página"
+
+#: resources/views/backend/manager/editor-guide.phtml:29
+#, fuzzy
+msgid "View public page"
+msgstr "Ver página pública"
+
+#: resources/views/backend/manager/editor-guide.phtml:30
+msgid "Preview size"
+msgstr "Tamaño de la vista previa"
+
+#: resources/views/backend/manager/editor-guide.phtml:31
+msgid "Desktop preview"
+msgstr "Vista previa de escritorio"
+
+#: resources/views/backend/manager/editor-guide.phtml:32
+#, fuzzy
+msgid "Tablet preview"
+msgstr "Vista previa de tableta"
+
+#: resources/views/backend/manager/editor-guide.phtml:33
+#, fuzzy
+msgid "Phone preview"
+msgstr "Vista previa del teléfono"
+
+#: resources/views/backend/manager/editor-guide.phtml:34
+#, fuzzy
+msgid "Toggle editing panels"
+msgstr "Alternar paneles de edición"
+
+#: resources/views/backend/manager/editor-guide.phtml:35
+msgid "Search blocks"
+msgstr "Buscar bloques"
+
+#: resources/views/backend/manager/editor-guide.phtml:39
+#, fuzzy
+msgid "Page designer navigation"
+msgstr "Navegación del diseñador de páginas"
+
+#: resources/views/backend/manager/header.phtml:24
+msgid "Skip to main content"
+msgstr "Saltar al contenido principal"
+
+#: resources/views/backend/manager/header.phtml:28
+#, fuzzy
+#| msgid "Website Manager"
+msgid "Website management"
+msgstr "Gestión del sitio web"
+
+#: resources/views/backend/manager/header.phtml:34
+#, fuzzy
+#| msgid "Workspace"
+msgid "Staff workspace"
+msgstr "Espacio de trabajo para el personal"
+
+#: resources/views/backend/manager/header.phtml:47
+#: resources/views/backend/manager/site.phtml:22
+#, fuzzy
+#| msgid "Website Manager"
+msgid "Website menus"
+msgstr "Menús del sitio web"
+
+#: resources/views/backend/manager/header.phtml:51
+#: resources/views/backend/manager/site.phtml:23
+#, fuzzy
+#| msgid "Website Manager"
+msgid "Website settings"
+msgstr "Configuración del sitio web"
+
+#: resources/views/backend/manager/page-settings.phtml:14
+#, fuzzy
+msgid "Create a website page"
+msgstr "Crear una página web"
+
+#: resources/views/backend/manager/page-settings.phtml:15
+msgid "Create page"
+msgstr "Crear nueva Página"
+
+#: resources/views/backend/manager/page-settings.phtml:15
+#, fuzzy
+msgid "Save page settings"
+msgstr "Guardar configuración de página"
+
+#: resources/views/backend/manager/page-settings.phtml:42
+#, fuzzy
+msgid "Page location"
+msgstr "Ubicación de página"
+
+#: resources/views/backend/manager/page-settings.phtml:46
+#, fuzzy
+msgid "Back to website pages"
+msgstr "Volver a las páginas del sitio web"
+
+#: resources/views/backend/manager/page-settings.phtml:50
+#: resources/views/backend/manager/site.phtml:34
+#, fuzzy
+msgid "CAMPUS WEBSITE"
+msgstr "SITIO WEB DEL CAMPUS"
+
+#: resources/views/backend/manager/page-settings.phtml:53
+#, fuzzy
+msgid ""
+"Set the page identity, layout and language details. Save these settings, "
+"then design the page and submit it for publication review."
+msgstr ""
+"Configura la identidad de la página, el diseño y los detalles del idioma. "
+"Guarda estos ajustes, luego diseña la página y envíala para revisión de "
+"publicaciones."
+
+#: resources/views/backend/manager/page-settings.phtml:60
+#, fuzzy
+msgid "The page was not saved. Check the fields below and try again."
+msgstr ""
+"La página no se guardó. Compruebe los campos de abajo e inténtelo de nuevo."
+
+#: resources/views/backend/manager/page-settings.phtml:67
+#, fuzzy
+msgid "Page identity and layout"
+msgstr "Identidad y diseño de página"
+
+#: resources/views/backend/manager/page-settings.phtml:69
+#, fuzzy
+msgid ""
+"The internal page name helps staff identify this page. Visitors see the "
+"title for their language."
+msgstr ""
+"El nombre interno de la página ayuda al personal a identificar esta página. "
+"Los visitantes ven el título de su idioma."
+
+#: resources/views/backend/manager/page-settings.phtml:73
+#, fuzzy
+msgid "Internal page name"
+msgstr "Nombre de página interna"
+
+#: resources/views/backend/manager/page-settings.phtml:82
+msgid "Page layout"
+msgstr "Diseño de página"
+
+#: resources/views/backend/manager/page-settings.phtml:96
+#, fuzzy
+msgid ""
+"The layout provides the fixed page structure. Add and edit content inside "
+"its designated page area."
+msgstr ""
+"El diseño proporciona la estructura fija de página. Añade y edita contenido "
+"dentro del área de página designada."
+
+#: resources/views/backend/manager/page-settings.phtml:107
+msgid "Page title"
+msgstr "Título de página"
+
+#: resources/views/backend/manager/page-settings.phtml:128
+#, fuzzy
+msgid ""
+"Use a site path such as /about/. The page becomes public after its saved "
+"design and settings are approved."
+msgstr ""
+"Utiliza una ruta de sitio como /about/. La página se vuelve pública tras "
+"aprobarse su diseño guardado y sus configuraciones."
+
+#: resources/views/backend/manager/page-settings.phtml:135
+#, fuzzy
+msgid "Search result title"
+msgstr "Título del resultado de búsqueda"
+
+#: resources/views/backend/manager/page-settings.phtml:137
+#: resources/views/backend/manager/page-settings.phtml:151
+msgid "(optional)"
+msgstr "(opcional)"
+
+#: resources/views/backend/manager/page-settings.phtml:149
+#, fuzzy
+msgid "Search result description"
+msgstr "Descripción del resultado de búsqueda"
+
+#: resources/views/backend/manager/page-settings.phtml:162
+#, fuzzy
+msgid "Automatic navigation"
+msgstr "Navegación automática"
+
+#: resources/views/backend/manager/page-settings.phtml:164
+#, fuzzy
+msgid ""
+"These choices apply to automatic navigation until a menu is published for "
+"that location. Use Website menus to arrange published custom menus."
+msgstr ""
+"Estas opciones se aplican a la navegación automática hasta que se publique "
+"un menú para esa ubicación. Utilice menús del sitio web para organizar los "
+"menús personalizados publicados."
+
+#: resources/views/backend/manager/page-settings.phtml:171
+#, fuzzy
+msgid "Include in automatic navigation"
+msgstr "Incluir en la navegación automática"
+
+#: resources/views/backend/manager/page-settings.phtml:180
+msgid "No"
+msgstr "No"
+
+#: resources/views/backend/manager/page-settings.phtml:185
+msgid "Yes"
+msgstr "Sí"
+
+#: resources/views/backend/manager/page-settings.phtml:193
+#, fuzzy
+msgid "Navigation location"
+msgstr "Ubicación de navegación"
+
+#: resources/views/backend/manager/page-settings.phtml:215
+#, fuzzy
+msgid "Navigation order"
+msgstr "Orden de navegación"
+
+#: resources/views/backend/manager/page-settings.phtml:236
 #: resources/views/backend/partials/x-create-user-modal.phtml:101
 #: resources/views/backend/partials/x-delete-user-modal.phtml:53
 #: resources/views/backend/partials/x-edit-user-modal.phtml:81
 msgid "Cancel"
 msgstr "Cancelar"
 
-#: resources/views/backend/manager/index.phtml:138
+#: resources/views/backend/manager/page-settings.phtml:240
 #, fuzzy
-msgid "Use Ctrl/Cmd to select multiple."
-msgstr "Usa Ctrl/Cmd para seleccionar varios."
+msgid "Build, review and publish"
+msgstr "Compilar, revisar y publicar"
+
+#: resources/views/backend/manager/page-settings.phtml:242
+#, fuzzy
+msgid "Save the page settings."
+msgstr "Guarda la configuración de la página."
+
+#: resources/views/backend/manager/page-settings.phtml:243
+#, fuzzy
+msgid "Design the page and save its content."
+msgstr "Diseña la página y guarda su contenido."
+
+#: resources/views/backend/manager/page-settings.phtml:244
+#, fuzzy
+msgid "Return to Website pages and submit the saved page for review."
+msgstr ""
+"Regresa a las páginas del sitio web y envía la página guardada para su "
+"revisión."
+
+#: resources/views/backend/manager/page-settings.phtml:245
+#, fuzzy
+msgid "A publisher approves the page and its visibility dates."
+msgstr "Un editor aprueba la página y sus fechas de visibilidad."
+
+#: resources/views/backend/manager/page-settings.phtml:248
+#, fuzzy
+msgid ""
+"Editable blocks let you change text, images and links on the canvas. Dynamic "
+"blocks use their Settings controls and designated content areas. The layout "
+"and live data stay controlled by the theme."
+msgstr ""
+"Los bloques editables te permiten cambiar texto, imágenes y enlaces en el "
+"lienzo. Los bloques dinámicos utilizan sus controles de Configuración y "
+"áreas de contenido designadas. El diseño y los datos en vivo permanecen "
+"controlados por el tema."
+
+#: resources/views/backend/manager/site.phtml:27
+#, fuzzy
+msgid "Build a clear path through your website"
+msgstr "Crea un camino claro a través de tu sitio web"
+
+#: resources/views/backend/manager/site.phtml:28
+#, fuzzy
+msgid "Configure your website languages"
+msgstr "Configura los idiomas de tu sitio web"
+
+#: resources/views/backend/manager/site.phtml:29
+#, fuzzy
+msgid "From saved draft to approved page"
+msgstr "Del borrador guardado a la página aprobada"
+
+#: resources/views/backend/manager/site.phtml:38
+#, fuzzy
+msgid ""
+"Arrange links into clear dropdown menus. Save your draft, inspect the "
+"structure and publish when ready."
+msgstr ""
+"Organiza los enlaces en menús desplegables claros. Guarda tu borrador, "
+"inspecciona la estructura y publícala cuando estés listo."
+
+#: resources/views/backend/manager/site.phtml:42
+#, fuzzy
+msgid ""
+"Design pages in the page builder, hand them over for review and choose when "
+"approved content becomes public."
+msgstr ""
+"Diseña páginas en el constructor de páginas, entrégalas para revisión y "
+"elige cuándo el contenido aprobado se vuelve público."
+
+#: resources/views/backend/manager/site.phtml:50
+#, fuzzy
+#| msgid "Website Manager"
+msgid "Website languages"
+msgstr "Idiomas del sitio web"
+
+#: resources/views/backend/manager/site.phtml:51
+#, fuzzy
+msgid "Active languages"
+msgstr "Idiomas activos"
+
+#: resources/views/backend/manager/site.phtml:54
+#, fuzzy
+msgid "Use Ctrl or Command to select multiple languages."
+msgstr "Usa Ctrl o Command para seleccionar varios idiomas."
+
+#: resources/views/backend/manager/site.phtml:66
+#, fuzzy
+msgid "Save website settings"
+msgstr "Guardar la configuración del sitio web"
+
+#: resources/views/backend/manager/site.phtml:78
+#, fuzzy
+msgid "Review before publishing"
+msgstr "Revisar antes de publicar"
 
 #: resources/views/backend/partials/x-create-user-modal.phtml:13
 msgid "Add New User"
@@ -1222,13 +4204,10 @@ msgstr "Contraseña"
 msgid "Create"
 msgstr "Crear"
 
-#: resources/views/backend/partials/x-edit-user-modal.phtml:14
-msgid "Edit"
-msgstr "Editar"
-
-#: resources/views/backend/partials/x-edit-user-modal.phtml:74
-msgid "Update"
-msgstr "Actualizar"
+#: resources/views/backend/partials/x-delete-user-modal.phtml:14
+#: resources/views/backend/partials/x-delete-user-modal.phtml:46
+msgid "Delete"
+msgstr "Borrar"
 
 #: resources/views/backend/users.phtml:15
 msgid "All Users"
@@ -1298,15 +4277,15 @@ msgstr "CONFIRMADO"
 msgid "Import complete"
 msgstr "Importación completada"
 
-#: resources/views/backend/workspace/index.phtml:230
+#: resources/views/backend/workspace/index.phtml:262
 msgid "Overview"
 msgstr "Resumen"
 
-#: resources/views/backend/workspace/index.phtml:230
+#: resources/views/backend/workspace/index.phtml:262
 msgid "Workspace"
 msgstr "Espacio de trabajo"
 
-#: resources/views/backend/workspace/index.phtml:317
+#: resources/views/backend/workspace/index.phtml:363
 #, fuzzy
 msgid "Loading workspace…"
 msgstr "Cargando espacio de trabajo..."
@@ -1432,14 +4411,6 @@ msgstr ""
 msgid "Email address"
 msgstr "Dirección de correo electrónico"
 
-#: resources/views/frontend/portal/auth.phtml:100
-msgid "Given name"
-msgstr "Nombre"
-
-#: resources/views/frontend/portal/auth.phtml:112
-msgid "Family name"
-msgstr "Apellido"
-
 #: resources/views/frontend/portal/auth.phtml:146
 #, fuzzy, php-format
 msgid "Use at least %s characters. A memorable passphrase works well."
@@ -1480,6 +4451,22 @@ msgstr "Apellido"
 #: resources/views/partials/desktop-nav.phtml:24
 msgid "Menu"
 msgstr "Menú"
+
+#: resources/views/shared/site-navigation.phtml:36
+msgid "(opens in a new tab)"
+msgstr "(se abre en una pestaña nueva)"
+
+#: resources/views/shared/site-navigation.phtml:45
+msgid "Open menu"
+msgstr "Abrir menú"
+
+#, fuzzy
+#~ msgid "Loading approved intake…"
+#~ msgstr "Cargando la admisión aprobada..."
+
+#, fuzzy
+#~ msgid "Leave the unfinished intake approval?"
+#~ msgstr "¿Dejar la aprobación de admisión sin terminar?"
 
 #~ msgid "Home"
 #~ msgstr "Hogar"

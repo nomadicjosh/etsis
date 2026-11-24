@@ -1,8 +1,8 @@
 msgid ""
 msgstr ""
 "Project-Id-Version: etSIS\n"
-"POT-Creation-Date: 2026-11-22 20:46-0800\n"
-"PO-Revision-Date: 2026-11-22 20:46-0800\n"
+"POT-Creation-Date: 2026-11-23 19:46-0800\n"
+"PO-Revision-Date: 2026-11-23 19:46-0800\n"
 "Last-Translator: Joshua Parker <joshua@joshuaparker.dev>\n"
 "Language-Team: Joshua Parker <joshua@joshuaparker.dev>\n"
 "Language: en_US\n"
@@ -21,8 +21,846 @@ msgstr ""
 
 #: config/auth.php:51
 #: src/Application/Http/Controller/PageBuilderController.php:62
-#: src/Application/Http/Controller/WebsiteManagerController.php:43
 msgid "Access denied."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:8
+msgid "Back to pages"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:9
+msgid "Inspect saved design"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:10
+msgid "Remove page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:12
+msgid ""
+"Removing this page removes its public route. Menu links to it will stop "
+"appearing."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:14
+msgid "Loading page destination…"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:15
+msgid "This page is unavailable. Choose another destination."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:16
+msgid "Add at top level"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:17
+msgid "Loading website settings…"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:18
+msgid "Unable to complete this request. Your working entries remain here."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:19
+msgid "Your website access ended. Sign in or ask an administrator for access."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:20
+msgid "Draft saved. Review it before publishing."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:21
+msgid "Publication confirmed."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:22
+msgid "Save menu draft"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:23
+#: resources/views/backend/workspace/credit-policy-labels.php:34
+msgid "Review publication"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:24
+msgid "Confirm publication"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:25
+msgid "Back to editor"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:26
+msgid "Close review"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:27
+msgid "Primary menu"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:28
+msgid "Secondary menu"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:29
+msgid "Footer menu"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:30
+msgid "Menu location"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:31
+msgid "Add item"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:32
+msgid "Custom link"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:33
+msgid "Website page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:34
+msgid "Dropdown group"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:35
+msgid "Divider"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:36
+msgid "New link"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:37
+msgid "New dropdown"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:38
+msgid "Undo"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:39
+msgid "Redo"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:40
+msgid "Responsive preview"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:42
+msgid ""
+"This preview shows your draft structure. Page links appear on the public "
+"website only while their exact page revision is approved and visible."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:45
+msgid "Add a page, custom link or dropdown group to begin."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:46
+msgid "Select an item to edit its label, destination and display settings."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:47
+msgid "Navigation label"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:48
+msgid "Accessible description"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:49
+msgid "Link address"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:50
+msgid "Bootstrap icon"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:51
+msgid "No icon"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:52
+msgid "Show this item"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:53
+msgid "Open link in a new tab"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:54
+msgid "Child items"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:55
+msgid "Item settings"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:56
+msgid "Item actions"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:57
+msgid "Move up"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:58
+msgid "Move down"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:59
+msgid "Nest under previous item"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:60
+msgid "Move out one level"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:61
+msgid "Duplicate item"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:62
+msgid "Remove item"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:63
+msgid "Edit item"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:64
+msgid "Drag to reorder"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:65
+msgid "Use at most 100 items and three navigation levels."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:66
+msgid "Unsaved menu changes"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:67
+msgid "Reload saved menu"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:68
+msgid "Discard changes"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:69
+msgid "Keep editing"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:70
+msgid ""
+"You have unsaved changes. Keep editing or discard them before changing menu "
+"locations."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:71
+msgid "Website pages"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:72
+msgid "More page choices"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:73
+msgid "Choose a website page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:74
+msgid "Add selected page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:75
+msgid "Menu structure"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:77
+msgid ""
+"Drag by the grip to reorder or nest items. Use each item’s action menu for "
+"keyboard ordering. Menus support three levels and 100 items."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:81
+msgid ""
+"Check labels, destinations, nesting and new-tab choices. Publishing uses "
+"this saved draft; later edits stay separate until another review."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:84
+msgid "Save your menu draft before reviewing publication."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:85
+msgid "Save the page in the page builder before requesting review."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:86
+msgid "Design page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:87
+msgid "Page settings"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:88
+msgid "Publication settings"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:89
+msgid "Create a page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:91
+msgid ""
+"No website pages yet. Create a page, design it, then submit the saved "
+"revision for review."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:93
+msgid "Next pages"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:94
+msgid "Previous pages"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:95
+msgid "Status"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:96
+msgid "Draft"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:97
+msgid "Awaiting review"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:98
+msgid "Approved"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:99
+msgid "Archived"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:100
+msgid "Submit for review"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:101
+msgid "Approve publication"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:102
+msgid "Return to author"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:103
+msgid "Archive page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:104
+msgid "Publication action"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:105
+msgid "Publication starts (UTC)"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:106
+msgid "Publication ends (UTC)"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:108
+msgid ""
+"Leave the start blank for immediate publication and the end blank for "
+"ongoing visibility. Scheduled pages appear automatically at their approved "
+"time."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:111
+msgid "Review note for the author"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:112
+msgid ""
+"Explain the requested correction. This note stays in website management."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:114
+msgid ""
+"Approval covers the saved page, all translations, routes and navigation "
+"settings. Any later edit needs a fresh review."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:117
+msgid "Public route"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:118
+msgid "Review this action"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:119
+msgid "Confirm reviewed action"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:120
+msgid "opens in a new tab"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:121
+msgid "Revise this action"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:122
+msgid "Reload saved page"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:124
+msgid ""
+"The review is no longer current. Keep your entries and review the saved "
+"revision again."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:126
+msgid "Copy from another menu"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:127
+msgid "Copy items into this draft"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:128
+msgid "Copying replaces this draft only. Save and review before publishing."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:129
+msgid "Find in loaded pages"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:130
+msgid "Add child items to this dropdown before publishing."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:8
+msgid "Loading entry term…"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:9
+msgid ""
+"The intake could not be loaded. Return to the application and try again."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:10
+msgid ""
+"Access changed. Return to the application to review your available actions."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:11
+msgid "Previously approved intake"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:12
+msgid "Current entry term"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:14
+msgid ""
+"Keep this application and its answers. A new intake approval needs a fresh "
+"offer under institutional policy."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:17
+msgid ""
+"Correct the planned intake before a decision. Keep original intake and "
+"answers; no student is created."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:19
+msgid "Resolve the pending withdrawal request before approving an intake."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:20
+msgid "Resolve the answer correction request before correcting the entry term."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:21
+msgid ""
+"Only submitted or accepted, unmatriculated applications can receive an "
+"intake change."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:23
+msgid ""
+"The approved calendar changed. Review the current intake before issuing an "
+"offer or matriculating."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:25
+msgid "Review current intake"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:26
+msgid "Choose later intake"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:27
+msgid "Correct entry term"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:28
+msgid "Replace the unfinished intake review?"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:29
+msgid "Choose a later intake"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:30
+msgid "Correct planned intake"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:31
+msgid "Review updated intake"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:32
+msgid "Term code or name"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:33
+msgid "Available intakes"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:34
+msgid "Intake search pages"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:35
+msgid "Find terms"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:36
+msgid "Find an intake"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:37
+msgid "Find a later intake"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:38
+msgid "Finding available intakes…"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:39
+msgid "Finding later intakes…"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:40
+msgid "Search changed. Choose Find terms."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:41
+msgid "First results"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:42
+msgid "More terms"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:43
+msgid "Choose an intake, then add the reason."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:45
+msgid ""
+"No matching intakes. Choose a term that has not started and has an academic "
+"year with valid dates."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:47
+msgid ""
+"No matching later intakes. Review academic year and term setup with the "
+"catalog office."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:48
+msgid "Could not find terms. Your reason and selected intake are unchanged."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:49
+msgid "Updated calendar definition"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:50
+msgid "Review intake"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:51
+msgid "Reason for approval"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:52
+msgid "Reason for correction"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:53
+msgid "Choose an intake first."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:54
+msgid "Choose a later intake first."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:55
+msgid "Preparing intake review…"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:56
+msgid "Review before confirming"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:57
+msgid "Before correction"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:58
+msgid "After correction"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:59
+msgid "Before approval"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:60
+msgid "After approval"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:62
+msgid ""
+"Keep earlier terms, answers and offers. Issue a fresh offer for this intake; "
+"no student is created."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:65
+msgid ""
+"The application stays awaiting a decision. Earlier intake and answers "
+"remain; no student is created."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:67
+msgid "Revise"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:68
+msgid "Approve intake"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:69
+msgid "Confirm entry-term correction"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:70
+msgid "Intake approved. Issue a fresh offer."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:71
+msgid "Entry term corrected. The application still awaits a decision."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:72
+msgid ""
+"The change could not be completed. Retry this confirmation or revise the "
+"review."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:73
+msgid "Review ready. Confirm to save."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:74
+msgid "Review could not be completed. Your reason and choice are still shown."
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:75
+msgid "Leave the unfinished intake review?"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:76
+msgid "{start} through {end}"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:77
+msgid "Academic year {year}"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:78
+msgid "Academic year not linked"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:79
+msgid "Institutional ID: {id}"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:80
+msgid "Selected intake: {code}"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:81
+msgid "Selected intake: {code} · {year}"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:82
+msgid "Entry term"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:83
+msgid "ADMISSIONS INTAKE"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:84
+msgid "Back to application"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:85
+msgid "Entry term corrected"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:86
+msgid "Corrected intake calendar reviewed"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:87
+msgid "Entry deferred"
+msgstr ""
+
+#: resources/views/backend/workspace/admission-entry-labels.php:88
+msgid "Updated intake approved"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:8
+msgid "Course credit policy"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:9
+msgid "Offering credits"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:10
+msgid "Back to record"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:11
+msgid "Loading credit settings…"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:12
+msgid "Default academic credits"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:13
+msgid "Course credit rule"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:14
+msgid "Fixed credits"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:15
+msgid "Credit range"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:16
+msgid "Minimum academic credits"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:17
+msgid "Maximum academic credits"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:18
+msgid "Credit increment"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:19
+msgid "Use the retained course default"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:20
+msgid "Fixed credits for this offering"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:21
+msgid "Allowed: {min}–{max} academic credits, in increments of {step}."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:22
+msgid "The retained course allows {value} academic credits."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:23
+msgid ""
+"Use up to three decimal places. These are academic credits; CEUs are "
+"separate."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:25
+msgid ""
+"Save a draft default and permitted credit range together, then publish the "
+"course definition. Existing publications, student attempts and charges "
+"retain their accepted facts."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:29
+msgid ""
+"Choose one fixed offering value within its selected course policy. Publish "
+"and select the offering before new registrations use it. Students cannot "
+"choose individual credit values in this stage."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:32
+msgid "Save credit draft"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:33
+msgid ""
+"Credit draft saved. Review its publication before using it for new "
+"registrations."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:35
+msgid ""
+"Use a nonnegative credit value with up to three decimal places, at most "
+"999.999."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:36
+msgid "Not recorded in this publication"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:38
+msgid ""
+"No course publication is selected. These limits come from the course draft. "
+"Choose a published course definition before publishing this offering."
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:41
+msgid "Use the course draft default"
+msgstr ""
+
+#: resources/views/backend/workspace/credit-policy-labels.php:42
+msgid "The course draft allows {value} academic credits."
 msgstr ""
 
 #: resources/views/backend/workspace/document-hold-labels.php:10
@@ -442,13 +1280,1162 @@ msgstr ""
 msgid "days from upload"
 msgstr ""
 
-#: src/Application/Http/Controller/ProfileController.php:52
-msgid "User Profile"
+#: resources/views/backend/workspace/history-check-labels.php:8
+msgid "Program standing"
 msgstr ""
 
-#: src/Application/Http/Controller/WebsiteManagerController.php:86
-#: src/Application/Http/Controller/WebsiteManagerController.php:116
-msgid "Website Manager"
+#: resources/views/backend/workspace/history-check-labels.php:9
+msgid "Retained enrollment load"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:10
+msgid "Program pursuit identity"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:11
+msgid "Standing periods and history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:12
+msgid "Retained load decision and projection"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:13
+msgid "No recorded standing observed"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:15
+msgid ""
+"No standing decision was found for this pursuit. Earlier standing remains "
+"unknown."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:17
+msgid "Standing periods checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:18
+msgid "Retained determinations checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:19
+msgid "Check standing history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:20
+msgid "Check retained load history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:21
+msgid "Primary position designation"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:22
+msgid "Position agreement"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:23
+msgid "Retained time decision"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:24
+msgid "Check primary designation history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:25
+msgid "Check position agreement history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:26
+msgid "Check retained time decision"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:27
+msgid "Selected HR records checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:28
+msgid "Primary designation and projection"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:29
+msgid "Retained position agreement and projection"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:30
+msgid "Retained time decision and working entry"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:31
+msgid "Earlier time decision not recorded"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:33
+msgid ""
+"The entry has a decision status, but its earlier decision was not recorded. "
+"This observation cannot verify that decision."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:36
+msgid "Employment and person routing"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:37
+msgid "No recorded primary designation observed"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:39
+msgid ""
+"No protected designation was found. This does not establish earlier primary "
+"history."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:41
+msgid "No retained time decision observed"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:43
+msgid ""
+"The entry is pending with no recorded decision. This check does not approve "
+"or reject it."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:46
+msgid ""
+"Run one selected HR observation with a 200-event allowance and bounded "
+"replay. It does not approve employment or time, recalculate current "
+"appointment eligibility, determine wages/payroll or certify archive "
+"completeness."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:51
+msgid ""
+"Earlier checks describe their recorded observation. HR reasons, pay terms, "
+"work intervals, raw event payloads and credentials are not displayed here."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:54
+msgid "Admissions application"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:55
+msgid "Check application history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:56
+msgid "Application facts and history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:57
+msgid "Application intake projection"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:59
+msgid ""
+"Business records were not changed. A restricted support receipt was recorded."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:62
+msgid ""
+"Run one selected-record observation with a 200-event allowance and bounded "
+"replay. It does not repair data, approve admissions, academic or financial "
+"decisions, verify external settlement, or certify archive completeness or "
+"restore readiness."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:68
+msgid ""
+"Previous results describe their recorded observation, not a continuing "
+"guarantee about the current record. No event payloads, application answers, "
+"private profile values, financial amounts or credentials are displayed."
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:8
+msgid "Reporting group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:9
+msgid "Reporting groups"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:10
+msgid "Choose reporting group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:11
+msgid "Clear reporting group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:12
+msgid "Find reporting groups"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:13
+msgid "Add reporting group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:14
+msgid "Edit reporting group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:15
+msgid "Reporting group code"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:16
+msgid "Reporting group name"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:17
+msgid "Back to reporting groups"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:18
+msgid "Choose"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:19
+msgid "Edit"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:21
+msgid ""
+"An optional institutional reporting period or group shared by related "
+"sections. It does not change instructional terms, dates, credits, charges or "
+"census rules."
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:24
+msgid "Section classifications"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:25
+msgid "Current section reporting group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:26
+msgid "Current reporting group reference"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:27
+msgid "Current reporting group code"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:28
+msgid "Current reporting group name"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:29
+msgid "Retained reporting group reference"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:30
+msgid "Retained reporting group code"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:31
+msgid "Retained reporting group name"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php:32
+msgid "Reporting group choice recorded in accepted offering"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:9
+msgid "Remove"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:12
+msgid "All recorded standing definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:15
+msgid "Selected standing definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:18
+msgid "Unavailable definition"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:21
+msgid "Find definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:24
+msgid "More definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:27
+msgid "Previous definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:30
+msgid "Available standing definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:33
+msgid "Find a standing definition"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:36
+msgid "Standings to include"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:39
+msgid ""
+"Choose up to 25 standing definitions. Retired definitions can still identify "
+"earlier recorded periods. Transcripts keep the original recorded labels."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:43
+msgid "Choose at least one definition or include all standings."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:46
+msgid "Remove selection"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:49
+msgid "Loading standing definitions…"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:52
+msgid "Retired definition"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:55
+msgid ""
+"Choose the definitions to include. Other recorded standings will be omitted."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:58
+msgid "No standing definitions match this search."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:61
+msgid ""
+"Standing definitions could not be loaded. Your choices are kept; try again."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:64
+msgid ""
+"Transcript setup is no longer available. Reopen it after access is restored."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:67
+msgid "Transcript setup saved."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:70
+msgid "Transcript setup saved. Newer edits are still unsaved."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:73
+msgid ""
+"This setup selects particular standing definitions for new preparations."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:76
+msgid "This document includes institution-selected standing definitions."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:79
+msgid "No selected academic standing is included through this date."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:8
+msgid "Waitlist priority bypass"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:9
+msgid "Review priority bypass"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:10
+msgid "Institutional reason for this bypass"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:11
+msgid "Review bypass and registration"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:12
+msgid "Confirm bypass and register"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:13
+msgid "Revise reason"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:14
+msgid "Refresh bypass review"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:15
+msgid "Back to queue"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:16
+msgid "Registration completed with the reviewed waitlist bypass."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:18
+msgid ""
+"Register this later request ahead of earlier waiting requests for a "
+"documented institutional reason. Earlier requests keep their places. Normal "
+"registration eligibility, capacity and charges still apply."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:22
+msgid ""
+"Check the selected student, section, charges and reason. This review expires "
+"after twenty minutes and reserves no seat. A changed queue, registration "
+"source or price requires a fresh review."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:25
+msgid "Student (current)"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:26
+msgid "Section"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:27
+msgid "Course"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:28
+msgid "Academic credits"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:29
+msgid "Earlier waiting requests"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:30
+msgid "Registration charges"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:31
+msgid "New charge"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:32
+msgid "Already assessed; no new charge"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:33
+msgid "Available seats"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:34
+msgid "Total new charges"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:35
+msgid "Reason"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:36
+msgid "Registration checks"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:37
+msgid "This review explicitly requests an exception to waitlist priority."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:38
+msgid ""
+"Resolve the listed registration, seat or pricing issues, then refresh this "
+"review."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:39
+msgid ""
+"Your reason changed while the review loaded. Review your latest text again."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:40
+msgid "Unavailable"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:41
+msgid "Bypass decision history"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:42
+msgid "Refresh bypass history"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:43
+msgid "Loading recorded bypass decisions…"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:44
+msgid "No waitlist bypass decisions are recorded for this section."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:46
+msgid ""
+"Recorded reasons and registration references remain unchanged after later "
+"queue changes or drops. Student names and institutional IDs below are "
+"current. Access to this history does not grant profile access."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:50
+msgid "Recorded decision time"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:51
+msgid "Staff account reference"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:52
+msgid "Accepted registration reference"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:53
+msgid "Older bypass decisions"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-bypass-labels.php:54
+msgid "Newer bypass decisions"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:8
+msgid "Program department ownership"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:10
+msgid ""
+"Add up to five departments that jointly administer this program. Each "
+"department keeps its own college. Program ownership is independent of major/"
+"minor ownership and grants no access or eligibility."
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:13
+msgid "That department is already selected for this program."
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:14
+msgid "Responsible department"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:15
+msgid "not recorded in this publication"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:16
+msgid "not assigned"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:17
+msgid "School/college"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:18
+msgid "Additional responsible departments"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:19
+msgid "none"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:20
+msgid "Add responsible department"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:21
+msgid "Remove department"
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:23
+msgid ""
+"Add up to five other departments that jointly own this curriculum component. "
+"Each department keeps its own school/college. These choices grant no access "
+"or eligibility."
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:27
+msgid "That department is already selected for this component."
+msgstr ""
+
+#: resources/views/shared/curriculum-ownership-labels.php:30
+msgid "The chosen responsible department was removed from the additional list."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:8
+msgid "Policy for this determination"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:9
+msgid "Use the current effective policy"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:10
+msgid ""
+"The institution policy applies unless this program has a current override."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:11
+msgid "Choose a published policy"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:13
+msgid ""
+"Select a publication only when the institution authorizes its use for this "
+"determination. The reason must explain the choice. Registration quantities "
+"are verified as of today; this selection does not reconstruct an earlier "
+"census or set a default for this pursuit."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:17
+msgid "Publication scope"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:18
+msgid "Institution"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:19
+msgid "This program"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:20
+msgid "Publication {version} · {date}"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:21
+msgid "{label}: from {credits} credits"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:22
+msgid "Use publication {version}"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:23
+msgid "No credit bands in this publication. It cannot be selected."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:24
+msgid "No policy publications are available in this scope."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:25
+msgid "More publications"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:26
+msgid "Previous publications"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:27
+msgid "Back to determination"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:28
+msgid "Retry publication list"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:29
+msgid "Loading verified policy publications…"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:30
+msgid ""
+"Policy publications could not be loaded. Retry or return to the "
+"determination."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:31
+msgid "Explicitly selected publication for this determination"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:32
+msgid "Current effective policy at determination"
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:33
+msgid "The selection basis and publication date were not separately recorded."
+msgstr ""
+
+#: resources/views/shared/enrollment-load-labels.php:35
+msgid ""
+"Record the current term using verified registered credits and the reviewed "
+"policy. This action does not backdate a census, replace an earlier "
+"determination or change registrations or charges."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:8
+msgid "Campus announcements"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:10
+msgid ""
+"After approval, campus news appears in the notification bell for signed-in "
+"applicants, students and staff. Publication times control its availability. "
+"Public website news is separate."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:13
+msgid "This announcement changed or is unavailable. Refresh the list."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:14
+msgid "Announcements could not load. Use Refresh announcements to try again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:15
+msgid "Loading campus announcements…"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:16
+msgid "New campus announcements are available."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:17
+msgid "Unread"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:18
+msgid "Read"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:19
+msgid "Announcement pages"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:20
+msgid "Previous announcements"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:21
+msgid "More announcements"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:22
+msgid "There are no matching campus announcements."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:23
+msgid "Campus announcements loaded. Reading state is saved to your account."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:24
+msgid "Mark as read"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:25
+msgid "Marked as read. This is not a policy acknowledgement."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:26
+msgid "Back to list"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:27
+msgid "Refresh announcements"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:29
+msgid ""
+"Published campus news is available to signed-in applicants, students and "
+"staff. Open an announcement before marking its current version as read."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:32
+msgid "Show read items"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:33
+msgid "Notifications"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:34
+msgid "Recent workspace notifications"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:35
+msgid "Workspace notification"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:36
+msgid "Close notifications"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:37
+msgid "Dismiss notification"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:38
+msgid "Clear recent notifications"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:39
+msgid "There are no notifications from this workspace session."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:41
+msgid ""
+"Recent action feedback stays only in this page. Reloading or signing out "
+"clears it. Recorded decisions and background job status remain in their own "
+"workspaces."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:44
+msgid "Play notification sounds"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:45
+msgid "Notification sound"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:46
+msgid "Choose a sound, then test it. Changing this choice does not play audio."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:47
+msgid "Short tone"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:48
+msgid "Message"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:49
+msgid "Warm success"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:50
+msgid "Bird"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:51
+msgid "Piano"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:52
+msgid "Preparing sound…"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:53
+msgid "Sound preview played."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:54
+msgid "Keep notifications on screen until dismissed"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:56
+msgid ""
+"Only these display and sound preferences are saved in this browser. "
+"Notification messages and campus records are never saved here."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:59
+msgid "Test notification sound"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:60
+msgid "Sound is unavailable. Visual notifications will still appear."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:61
+msgid "Completed"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:62
+msgid "Update"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:63
+msgid "Needs attention"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:64
+msgid ""
+"Export queued. Its download will be available after preparation finishes."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:65
+msgid "Your report export is ready. Open the export controls to download it."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:66
+msgid ""
+"The report export could not finish. Review its status before trying again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:67
+msgid "Report export cancelled."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:68
+msgid ""
+"Delivery processing finished. Review confirmed sends and closed outcomes."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:69
+msgid "Recipients queued. No messages have been sent."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:70
+msgid "Background delivery confirmed. You can leave this screen."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:71
+msgid ""
+"Delivery needs review. Unconfirmed messages will not be retried "
+"automatically."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:72
+msgid ""
+"Delivery stopped. Review access, recipients and institutional mail settings."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:73
+msgid "Your contact information is up to date."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:74
+msgid "Application submitted. Here’s to your next chapter."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:76
+msgid ""
+"Your section was changed. The original course charges were reversed and "
+"replacement charges applied together."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:79
+msgid ""
+"Your course was removed. Its course charge was reversed if present. Any "
+"account credit is reviewed separately for a cash refund."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:83
+msgid ""
+"Your course stays on your record with grade {grade} and zero earned credits. "
+"Its course charge is retained."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:85
+msgid "{count} course sections registered together."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:86
+msgid "You’re registered. Your semester is taking shape."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:87
+msgid "Your request is with the registrar. Follow its progress below."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:88
+msgid "Transcript request cancelled."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:8
+msgid "Recorded identity"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:9
+msgid "Identity correction requests"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:10
+msgid "Request an identity correction"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:11
+msgid "Review recorded identity"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:12
+msgid "Current recorded identity"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:13
+msgid "Loading recorded identity…"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:14
+msgid "Recorded identity could not be loaded. Retry this review."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:15
+msgid "Save or discard your name changes before leaving this editor."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:16
+msgid "Close identity review"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:17
+msgid "Refresh recorded identity"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:18
+msgid "Edit person names"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:19
+msgid "Given name"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:20
+msgid "Family name"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:21
+msgid "Institutional ID"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:22
+msgid "Save person names"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:23
+msgid "Reason for profile correction"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:25
+msgid ""
+"Kept in restricted profile history. The resolution note is the message shown "
+"to the owner."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:27
+msgid "Back to identity review"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:28
+msgid "Person names saved. Review the details before resolving the request."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:30
+msgid ""
+"Review your current names and institutional ID, then explain the correction "
+"in your reply. Sending a reply does not change identity details, sign-in "
+"access or an admissions decision."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:34
+msgid ""
+"Review the current identity and the owner response. Apply verified name "
+"corrections with the person editor, then record a separate request outcome. "
+"Institutional ID changes use the existing identifier workflow."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:38
+msgid ""
+"These are current identity details. Earlier academic records, issued "
+"documents and this request retain their separate histories."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php:42
+msgid ""
+"Identity follow-up belongs to your person record and can apply across "
+"applications. Review requested corrections here without changing your "
+"application draft."
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:8
+msgid "Require a current primary position before time approval"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:10
+msgid ""
+"Pending work can still be submitted. HR must record or reaffirm a primary "
+"appointment covering today before approval. This does not change the "
+"position worked, compensation or earlier decisions."
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:13
+msgid "Primary position for approval"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:14
+msgid "Current primary designation required"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:15
+msgid "Primary designation is optional"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:16
+msgid "This earlier policy did not record a primary-position rule."
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:17
+msgid "Primary position check"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:19
+msgid ""
+"This check concerns the designation at review and confirmation. It does not "
+"establish a primary position on the earlier work date."
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:22
+msgid "Checked on {date}"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:23
+msgid "Current at this review"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:24
+msgid "No primary designation has been recorded"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:25
+msgid "The primary designation was explicitly cleared"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:26
+msgid "The designated appointment changed and needs reaffirmation"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:27
+msgid "The designated appointment has ended"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:28
+msgid "The designated appointment was marked incorrect"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:29
+msgid "The designated appointment has not started"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:30
+msgid "The primary designation was not assessed for this rejection"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:32
+msgid ""
+"Approval is unavailable until HR records or reaffirms a current primary "
+"position. The time-exception duty cannot bypass this requirement. The entry "
+"can still be rejected."
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:35
+msgid "Review primary position"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:36
+msgid "Back to time entry"
+msgstr ""
+
+#: resources/views/shared/time-primary-labels.php:37
+msgid "No configured clocked-time exceptions found."
+msgstr ""
+
+#: src/Application/Http/Controller/ProfileController.php:52
+msgid "User Profile"
 msgstr ""
 
 #: src/Application/Http/Response/MaintenanceResponse.php:45
@@ -759,6 +2746,11 @@ msgstr ""
 msgid "Dashboard"
 msgstr ""
 
+#: resources/views/app-layout.phtml:51
+#: resources/views/partials/desktop-nav.phtml:55
+msgid "Website Manager"
+msgstr ""
+
 #: resources/views/app-layout.phtml:53
 #: resources/views/partials/desktop-nav.phtml:64
 msgid "Profile"
@@ -853,21 +2845,285 @@ msgstr ""
 msgid "Manage Users →"
 msgstr ""
 
-#: resources/views/backend/manager/index.phtml:100
-#: resources/views/backend/partials/x-delete-user-modal.phtml:14
-#: resources/views/backend/partials/x-delete-user-modal.phtml:46
-msgid "Delete"
+#: resources/views/backend/manager/editor-guide.phtml:10
+msgid "Page designer"
 msgstr ""
 
-#: resources/views/backend/manager/index.phtml:108
+#: resources/views/backend/manager/editor-guide.phtml:12
+#: resources/views/backend/manager/editor-guide.phtml:49
+msgid ""
+"Select content to see how it can be edited. The layout provides the fixed "
+"page structure."
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:16
+msgid ""
+"Editable content: change text, images and links directly on the canvas. Use "
+"the block controls to move or remove it."
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:20
+msgid ""
+"Dynamic content: use the Settings controls for this block. Theme-rendered "
+"text and live data cannot be edited directly."
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:24
+msgid ""
+"Content area: add, move or remove blocks here. The surrounding layout "
+"remains fixed."
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:27
+msgid "Settings"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:28
+msgid "Save page"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:29
+msgid "View public page"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:30
+msgid "Preview size"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:31
+msgid "Desktop preview"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:32
+msgid "Tablet preview"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:33
+msgid "Phone preview"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:34
+msgid "Toggle editing panels"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:35
+msgid "Search blocks"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:39
+msgid "Page designer navigation"
+msgstr ""
+
+#: resources/views/backend/manager/header.phtml:24
+msgid "Skip to main content"
+msgstr ""
+
+#: resources/views/backend/manager/header.phtml:28
+msgid "Website management"
+msgstr ""
+
+#: resources/views/backend/manager/header.phtml:34
+msgid "Staff workspace"
+msgstr ""
+
+#: resources/views/backend/manager/header.phtml:47
+#: resources/views/backend/manager/site.phtml:22
+msgid "Website menus"
+msgstr ""
+
+#: resources/views/backend/manager/header.phtml:51
+#: resources/views/backend/manager/site.phtml:23
+msgid "Website settings"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:14
+msgid "Create a website page"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:15
+msgid "Create page"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:15
+msgid "Save page settings"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:42
+msgid "Page location"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:46
+msgid "Back to website pages"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:50
+#: resources/views/backend/manager/site.phtml:34
+msgid "CAMPUS WEBSITE"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:53
+msgid ""
+"Set the page identity, layout and language details. Save these settings, "
+"then design the page and submit it for publication review."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:60
+msgid "The page was not saved. Check the fields below and try again."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:67
+msgid "Page identity and layout"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:69
+msgid ""
+"The internal page name helps staff identify this page. Visitors see the "
+"title for their language."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:73
+msgid "Internal page name"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:82
+msgid "Page layout"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:96
+msgid ""
+"The layout provides the fixed page structure. Add and edit content inside "
+"its designated page area."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:107
+msgid "Page title"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:128
+msgid ""
+"Use a site path such as /about/. The page becomes public after its saved "
+"design and settings are approved."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:135
+msgid "Search result title"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:137
+#: resources/views/backend/manager/page-settings.phtml:151
+msgid "(optional)"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:149
+msgid "Search result description"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:162
+msgid "Automatic navigation"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:164
+msgid ""
+"These choices apply to automatic navigation until a menu is published for "
+"that location. Use Website menus to arrange published custom menus."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:171
+msgid "Include in automatic navigation"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:180
+msgid "No"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:185
+msgid "Yes"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:193
+msgid "Navigation location"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:215
+msgid "Navigation order"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:236
 #: resources/views/backend/partials/x-create-user-modal.phtml:101
 #: resources/views/backend/partials/x-delete-user-modal.phtml:53
 #: resources/views/backend/partials/x-edit-user-modal.phtml:81
 msgid "Cancel"
 msgstr ""
 
-#: resources/views/backend/manager/index.phtml:138
-msgid "Use Ctrl/Cmd to select multiple."
+#: resources/views/backend/manager/page-settings.phtml:240
+msgid "Build, review and publish"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:242
+msgid "Save the page settings."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:243
+msgid "Design the page and save its content."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:244
+msgid "Return to Website pages and submit the saved page for review."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:245
+msgid "A publisher approves the page and its visibility dates."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:248
+msgid ""
+"Editable blocks let you change text, images and links on the canvas. Dynamic "
+"blocks use their Settings controls and designated content areas. The layout "
+"and live data stay controlled by the theme."
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:27
+msgid "Build a clear path through your website"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:28
+msgid "Configure your website languages"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:29
+msgid "From saved draft to approved page"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:38
+msgid ""
+"Arrange links into clear dropdown menus. Save your draft, inspect the "
+"structure and publish when ready."
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:42
+msgid ""
+"Design pages in the page builder, hand them over for review and choose when "
+"approved content becomes public."
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:50
+msgid "Website languages"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:51
+msgid "Active languages"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:54
+msgid "Use Ctrl or Command to select multiple languages."
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:66
+msgid "Save website settings"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:78
+msgid "Review before publishing"
 msgstr ""
 
 #: resources/views/backend/partials/x-create-user-modal.phtml:13
@@ -935,12 +3191,9 @@ msgstr ""
 msgid "Create"
 msgstr ""
 
-#: resources/views/backend/partials/x-edit-user-modal.phtml:14
-msgid "Edit"
-msgstr ""
-
-#: resources/views/backend/partials/x-edit-user-modal.phtml:74
-msgid "Update"
+#: resources/views/backend/partials/x-delete-user-modal.phtml:14
+#: resources/views/backend/partials/x-delete-user-modal.phtml:46
+msgid "Delete"
 msgstr ""
 
 #: resources/views/backend/users.phtml:15
@@ -1003,15 +3256,15 @@ msgstr ""
 msgid "Import complete"
 msgstr ""
 
-#: resources/views/backend/workspace/index.phtml:230
+#: resources/views/backend/workspace/index.phtml:262
 msgid "Overview"
 msgstr ""
 
-#: resources/views/backend/workspace/index.phtml:230
+#: resources/views/backend/workspace/index.phtml:262
 msgid "Workspace"
 msgstr ""
 
-#: resources/views/backend/workspace/index.phtml:317
+#: resources/views/backend/workspace/index.phtml:363
 msgid "Loading workspace…"
 msgstr ""
 
@@ -1112,14 +3365,6 @@ msgstr ""
 msgid "Email address"
 msgstr ""
 
-#: resources/views/frontend/portal/auth.phtml:100
-msgid "Given name"
-msgstr ""
-
-#: resources/views/frontend/portal/auth.phtml:112
-msgid "Family name"
-msgstr ""
-
 #: resources/views/frontend/portal/auth.phtml:146
 #, php-format
 msgid "Use at least %s characters. A memorable passphrase works well."
@@ -1156,4 +3401,12 @@ msgstr ""
 
 #: resources/views/partials/desktop-nav.phtml:24
 msgid "Menu"
+msgstr ""
+
+#: resources/views/shared/site-navigation.phtml:36
+msgid "(opens in a new tab)"
+msgstr ""
+
+#: resources/views/shared/site-navigation.phtml:45
+msgid "Open menu"
 msgstr ""

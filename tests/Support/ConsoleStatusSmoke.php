@@ -61,6 +61,7 @@ try {
                 'check-profile-requests',
                 'check-portal',
                 'check-admission-readiness',
+                'check-admission-intake',
                 'check-drop-policy',
                 'check-hiatus-history',
                 'check-transcript-reviews',
@@ -309,6 +310,11 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/WorkloadPolicyBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-admission-intake') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/AdmissionDeferralBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-grade-certification') {
             $kernel->bootstrap();

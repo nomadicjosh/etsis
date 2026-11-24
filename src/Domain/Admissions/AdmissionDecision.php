@@ -106,12 +106,14 @@ final class AdmissionDecision extends EventSourcedAggregate
     ): void {
         $p = $event->payload();
         if (
-            $this->application === null || $this->application['status'] !== 'accepted'
+            $this->application === null || $this->application['status'] !==
+                (\Domain\Admissions\ValueObject\AdmissionDeferralSchema::correction($p['kind'])
+                    ? 'submitted' : 'accepted')
             || $p['before']['id'] !== $this->application['entry_term_id']
             || $p['previous_decision_id'] !== $this->decision
             || $p['application_version'] !== $this->application['version'] + 1
             || ($this->entryApproval !== null && $p['before'] != $this->entryApproval['after'])
-            || ($p['kind'] === 'reconfirm' && $this->entryApproval === null)
+            || (in_array($p['kind'], ['reconfirm', 'recheck'], true) && $this->entryApproval === null)
         ) {
             throw new CorruptHistoryException();
         }

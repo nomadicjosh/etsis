@@ -271,7 +271,8 @@ final readonly class AdmissionDecisionLedger
         ksort($before);
         ksort($after);
         return ['application_id' => $id->value, 'decision_id' => $p['decision_id'], 'kind' => $p['kind'],
-            'status' => 'accepted', 'version' => $p['application_version'], 'before' => $before,
+            'status' => \Domain\Admissions\ValueObject\AdmissionDeferralSchema::correction($p['kind'])
+                ? 'submitted' : 'accepted', 'version' => $p['application_version'], 'before' => $before,
             'after' => $after, 'effective_at' => $at];
     }
     public function hasRecordedAcceptance(AdmissionApplication $a): bool
@@ -533,7 +534,9 @@ final readonly class AdmissionDecisionLedger
                             : ($reviewState
                                 ? ($p['status'] === 'withdrawn' ? 'withdrawal' : 'review_resumed')
                                 : "decision")))))),
-                "status" => $revision ? "submitted" : ($entry ? "accepted"
+                "status" => $revision ? "submitted" : ($entry
+                    ? (\Domain\Admissions\ValueObject\AdmissionDeferralSchema::correction($p['kind'])
+                        ? 'submitted' : 'accepted')
                     : ($offer ? $p["offer"]["status"] : ($p["status"] ?? $p["application"]["status"]))),
                 "checklist" => array_key_exists('admission_checklist', $e->metadata())
                     ? AdmissionChecklistProof::summary($e->metaParam('admission_checklist')) : null,

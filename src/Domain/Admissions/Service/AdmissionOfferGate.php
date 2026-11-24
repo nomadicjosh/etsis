@@ -44,7 +44,10 @@ final readonly class AdmissionOfferGate
         $state = $this->ledger->offerState($a);
         $this->entryTerms->verify($a, $state['entry']);
         $record = $state['offer'];
-        if ($state['entry'] !== null && $record === null) {
+        if (
+            $state['entry'] !== null && $record === null
+            && !\Domain\Admissions\ValueObject\AdmissionDeferralSchema::correction($state['entry']['kind'])
+        ) {
             throw new ValidationException([['field' => 'offer',
                 'message' => 'Issue a fresh offer for the approved intake before matriculation.']]);
         }

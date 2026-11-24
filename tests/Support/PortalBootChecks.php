@@ -3019,6 +3019,7 @@ $profileWrite->getBody()->write(
             "given_name" => $personRow["given_name"],
             "family_name" => $personRow["family_name"],
             "directory_restricted" => false,
+            "reason" => "Fictional reviewed profile correction.",
             "revision" => $profile["revision"],
         ]),
     ]),

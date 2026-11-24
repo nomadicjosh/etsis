@@ -60,8 +60,8 @@ final readonly class AdmissionApplication
 
     public function approveEntryTerm(EntityId $term): self
     {
-        if ($this->status !== ApplicationStatus::Accepted) {
-            throw new DomainException('Only an accepted, unmatriculated application can receive an intake approval.');
+        if (!in_array($this->status, [ApplicationStatus::Submitted, ApplicationStatus::Accepted], true)) {
+            throw new DomainException('Only a submitted or accepted application can receive an intake approval.');
         }
         return new self($this->id, $this->personId, $this->programId, $term, $this->status, $this->version + 1);
     }
