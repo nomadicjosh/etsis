@@ -35,6 +35,124 @@ final class PersonAccountFoundationTest extends TestCase
     {
         require_once dirname(__DIR__) . '/Support/PersonManagementFixture.php';
     }
+    public function testStaffProfileReasonsBindTheCorrectionAndRemainProtectedWithTheOriginalFacts(): void
+    {
+        $f = new PersonManagementFixture();
+        $person = $f->person();
+        $before = $f->sis->sql->rows('sis_history_events');
+        $record = $f->profiles->view($person->id);
+        foreach (['', str_repeat('x', 1001), "Invalid\x00reason"] as $invalid) {
+            try {
+                $f->profiles->save(
+                    $person->id,
+                    'Corrected',
+                    'Example',
+                    true,
+                    $record['revision'],
+                    $invalid,
+                );
+                self::fail('An invalid correction reason was accepted.');
+            } catch (ValidationException) {
+                self::assertSame($before, $f->sis->sql->rows('sis_history_events'));
+            }
+        }
+        $reason = 'Fictional verified name evidence; staff-only correction context.';
+        $f->profiles->save(
+            $person->id,
+            'Corrected',
+            'Example',
+            true,
+            $record['revision'],
+            $reason,
+        );
+        $profile = $this->history($f->sis)->page(new StreamReference(
+            new PersonProfileId($person->id->value),
+            'person_profile',
+        ))->events;
+        self::assertSame($reason, $profile[array_key_last($profile)]->context->reason);
+        self::assertSame(
+            'Current profile observed; earlier personal history is unknown.',
+            $profile[0]->context->reason,
+        );
+        $account = $this->history($f->sis)->page(new StreamReference(
+            new UserId($person->ownerUserId->value),
+            'user',
+        ))->events;
+        self::assertSame($reason, $account[array_key_last($account)]->context->reason);
+        $accepted = $f->sis->sql->rows('sis_history_events');
+        self::assertStringNotContainsString($reason, json_encode($accepted, JSON_THROW_ON_ERROR));
+        foreach ($before as $row) {
+            self::assertSame($row, $f->sis->sql->one('sis_history_events', ['id' => $row['id']]));
+        }
+        $f->profiles->save(
+            $person->id,
+            'Corrected',
+            'Example',
+            true,
+            $record['revision'],
+            $reason,
+        );
+        self::assertSame($accepted, $f->sis->sql->rows('sis_history_events'));
+        $this->expectException(ConcurrentModificationException::class);
+        $f->profiles->save(
+            $person->id,
+            'Corrected',
+            'Example',
+            true,
+            $record['revision'],
+            'Different fictional evidence.',
+        );
+    }
+
+    public function testProfileCorrectionRechecksSourceAndAuthorityAfterAuditAndRollsBackBothHistories(): void
+    {
+        foreach (['source', 'authority'] as $failure) {
+            $f = new PersonManagementFixture();
+            $s = $f->sis;
+            $person = $f->person();
+            $record = $f->profiles->view($person->id);
+            $tables = ['sis_persons', 'users', 'sis_history_events', 'sis_history_streams',
+                'sis_history_operations', 'sis_audit'];
+            $before = array_map($s->sql->rows(...), $tables);
+            $audit = $this->createStub(\Domain\Audit\Repository\AuditTrail::class);
+            $audit->method('record')->willReturnCallback(static function () use ($s, $person, $failure): void {
+                if ($failure === 'source') {
+                    $s->sql->update(
+                        'sis_persons',
+                        ['family_name' => 'Fictional late change'],
+                        ['id' => $person->id->value],
+                    );
+                } else {
+                    $s->access->staff = false;
+                    $s->access->grants = ['admin:edit:user'];
+                }
+            });
+            $editor = new \Domain\Person\Service\PersonProfileEditor(
+                $s->admissions,
+                new \Infrastructure\Persistence\Repository\SqlPersonProfileRepository($s->sql),
+                $f->users,
+                $f->guard,
+                $s->access,
+                $s->transactions,
+                $audit,
+                $s->profileLedger()
+            );
+            try {
+                $editor->save(
+                    $person->id,
+                    'Fictional corrected',
+                    'Example',
+                    true,
+                    $record['revision'],
+                    'Fictional verified institutional evidence.'
+                );
+                self::fail('An unfinished profile correction committed.');
+            } catch (ConcurrentModificationException | \Domain\Shared\Exception\AccessDeniedException) {
+                self::assertSame($before, array_map($s->sql->rows(...), $tables));
+            }
+        }
+    }
+
     private function history(SisFixture $s): SqlHistoricalEventStore
     {
         return new SqlHistoricalEventStore(
@@ -95,19 +213,27 @@ final class PersonAccountFoundationTest extends TestCase
         self::assertCount(1, $s->sql->rows('sis_persons'));
         self::assertSame([], $s->sql->rows('sis_students'));
         self::assertSame([], $s->sql->rows('sis_employees'));
-        self::assertSame('fictional@example.invalid', $s->sql->one('users', ['user_id' => $p->ownerUserId->value])['email']);
+        self::assertSame(
+            'fictional@example.invalid',
+            $s->sql->one('users', ['user_id' => $p->ownerUserId->value])['email'],
+        );
         $role = new SqlAccessRepository($s->sql);
         self::assertFalse($role->isSuper($p->ownerUserId->value));
         $before = $s->sql->rows('sis_history_events');
         $again = $creator->staff($op, 'Fictional', 'Applicant', 'fictional@example.invalid', '001234');
         self::assertSame($p->id->value, $again->id->value);
         self::assertSame($before, $s->sql->rows('sis_history_events'));
-        $stored = $this->history($s)->page(new StreamReference(new PersonProfileId($p->id->value), 'person_profile'))->events[0];
+        $stored = $this->history($s)->page(
+            new StreamReference(new PersonProfileId($p->id->value), 'person_profile'),
+        )->events[0];
         self::assertSame('created', $stored->event->payload()['provenance']);
         self::assertSame($s->access->actor->value, $stored->context->actor->value);
         self::assertSame($p->id->value, $stored->event->payload()['facts']['id']);
         $token = $this->token($s, $p->id);
-        self::assertStringNotContainsString($token, json_encode($s->sql->rows('sis_account_setup'), JSON_THROW_ON_ERROR));
+        self::assertStringNotContainsString(
+            $token,
+            json_encode($s->sql->rows('sis_account_setup'), JSON_THROW_ON_ERROR),
+        );
         self::assertStringNotContainsString('Fictional', json_encode($s->sql->rows('sis_audit'), JSON_THROW_ON_ERROR));
     }
     public function testSelfRegistrationUsesTheSameParentAndDoesNotHashTheValidatedPasswordTwice(): void
@@ -151,13 +277,21 @@ final class PersonAccountFoundationTest extends TestCase
     {
         foreach (['expired', 'credentials'] as $case) {
             $s = new SisFixture();
-            $p = $s->registrationService()->staff(EntityId::generate(), 'Fictional', 'Staff', $case . '@example.invalid');
+            $p = $s->registrationService()->staff(
+                EntityId::generate(),
+                'Fictional',
+                'Staff',
+                $case . '@example.invalid',
+            );
             $token = $this->token($s, $p->id);
             if ($case === 'expired') {
                 $s->clock->time = $s->clock->time->modify('+49 hours');
             } else {
                 $u = $this->users($s)->loadAggregateRoot(new UserId($p->ownerUserId->value));
-                $u->changePassword(new \Qubus\ValueObjects\StringLiteral\StringLiteral(Password::hash(self::PASSWORD)), new \Domain\User\ValueObject\UserToken());
+                $u->changePassword(
+                    new \Qubus\ValueObjects\StringLiteral\StringLiteral(Password::hash(self::PASSWORD)),
+                    new \Domain\User\ValueObject\UserToken(),
+                );
                 $this->users($s)->saveAggregateRoot($u);
             }
             $events = $s->sql->rows('sis_history_events');
@@ -244,7 +378,9 @@ final class PersonAccountFoundationTest extends TestCase
         $p = $s->registrationService()->staff(EntityId::generate(), 'Fictional', 'Staff', 'staff@example.invalid');
         $first = $this->token($s, $p->id);
         $mail = $this->createMock(MailTransport::class);
-        $mail->expects(self::once())->method('send')->willThrowException(new \RuntimeException('Fictional transport uncertainty'));
+        $mail->expects(self::once())->method('send')->willThrowException(
+            new \RuntimeException('Fictional transport uncertainty'),
+        );
         $setup = $this->onboarding($s, $mail);
         self::assertSame(1, $setup->dispatch()['uncertain']);
         self::assertSame(0, $setup->dispatch()['examined']);
@@ -264,7 +400,12 @@ final class PersonAccountFoundationTest extends TestCase
     public function testDisabledSignInCannotCompleteOrReissueOrSendInitialPasswordSetup(): void
     {
         $s = new SisFixture();
-        $p = $s->registrationService()->staff(EntityId::generate(), 'Fictional', 'Applicant', 'disabled@example.invalid');
+        $p = $s->registrationService()->staff(
+            EntityId::generate(),
+            'Fictional',
+            'Applicant',
+            'disabled@example.invalid',
+        );
         $user = $this->users($s);
         $accounts = new \Domain\User\Service\PersonAccountEditor(
             $s->admissions,
@@ -294,7 +435,13 @@ final class PersonAccountFoundationTest extends TestCase
 
         }
         self::assertSame(1, $setup->dispatch()['expired']);
-        $accounts->signIn($p->id, true, $accounts->view($p->id)['version'], EntityId::generate(), 'Fictional restoration');
+        $accounts->signIn(
+            $p->id,
+            true,
+            $accounts->view($p->id)['version'],
+            EntityId::generate(),
+            'Fictional restoration',
+        );
         try {
             $setup->complete($token, self::PASSWORD);
             self::fail('Re-enabling revived an earlier invitation.');
@@ -308,7 +455,12 @@ final class PersonAccountFoundationTest extends TestCase
     public function testPersonStaysTheParentWhenAnEmployeeBecomesAStudent(): void
     {
         $s = new SisFixture();
-        $p = $s->registrationService()->staff(EntityId::generate(), 'Fictional', 'Colleague', 'colleague@example.invalid');
+        $p = $s->registrationService()->staff(
+            EntityId::generate(),
+            'Fictional',
+            'Colleague',
+            'colleague@example.invalid',
+        );
         $hr = $s->timesheetService();
         $employee = $hr->addEmployee($p->id, 'Fictional analyst');
         $app = $s->submissionService()->apply(EntityId::generate(), $p->id, $s->program, $s->term);
@@ -326,12 +478,33 @@ final class PersonAccountFoundationTest extends TestCase
         $f = new PersonManagementFixture();
         $p = $f->person();
         $old = $f->profiles->view($p->id);
-        $f->profiles->save($p->id, 'First', 'Change', false, $old['revision']);
+        $f->profiles->save(
+            $p->id,
+            'First',
+            'Change',
+            false,
+            $old['revision'],
+            'Fictional verified profile correction.',
+        );
         $next = $f->profiles->view($p->id);
-        $f->profiles->save($p->id, 'Later', 'Change', true, $next['revision']);
+        $f->profiles->save(
+            $p->id,
+            'Later',
+            'Change',
+            true,
+            $next['revision'],
+            'Fictional verified profile correction.',
+        );
         $f->sis->admissionsService()->updateInstitutionalId($p->id, 'RETAIN-2', 0);
         $events = $f->sis->sql->rows('sis_history_events');
-        $f->profiles->save($p->id, 'First', 'Change', false, $old['revision']);
+        $f->profiles->save(
+            $p->id,
+            'First',
+            'Change',
+            false,
+            $old['revision'],
+            'Fictional verified profile correction.',
+        );
         $actual = $f->sis->admissions->person($p->id);
         self::assertSame('Later', $actual->givenName);
         self::assertSame('RETAIN-2', $actual->institutionalId->value);
@@ -342,9 +515,23 @@ final class PersonAccountFoundationTest extends TestCase
         $f = new PersonManagementFixture();
         $p = $f->person();
         $old = $f->profiles->view($p->id);
-        $f->profiles->save($p->id, 'First', 'Change', false, $old['revision']);
+        $f->profiles->save(
+            $p->id,
+            'First',
+            'Change',
+            false,
+            $old['revision'],
+            'Fictional verified profile correction.',
+        );
         try {
-            $f->profiles->save($p->id, 'Conflict', 'Change', false, $old['revision']);
+            $f->profiles->save(
+                $p->id,
+                'Conflict',
+                'Change',
+                false,
+                $old['revision'],
+                'Fictional verified profile correction.',
+            );
             self::fail('Accepted a stale edit.');
         } catch (ConcurrentModificationException) {
 

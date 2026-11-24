@@ -32,7 +32,14 @@ final class PersonManagementTest extends TestCase
         $fixture = new PersonManagementFixture();
         $person = $fixture->person();
         $record = $fixture->profiles->view($person->id);
-        $fixture->profiles->save($person->id, 'A', 'Updated', false, $record['revision']);
+        $fixture->profiles->save(
+            $person->id,
+            'A',
+            'Updated',
+            false,
+            $record['revision'],
+            'Fictional verified profile correction.',
+        );
         $current = $fixture->sis->admissions->person($person->id);
         self::assertSame('A', $current->givenName);
         self::assertFalse($current->directoryRestricted);
@@ -44,7 +51,14 @@ final class PersonManagementTest extends TestCase
         self::assertSame('Updated', $account['last_name']);
         self::assertStringNotContainsString('Updated', json_encode($fixture->sis->audit->forSubject($person->id)));
         $this->expectException(ConcurrentModificationException::class);
-        $fixture->profiles->save($person->id, 'Stale', 'Example', true, $record['revision']);
+        $fixture->profiles->save(
+            $person->id,
+            'Stale',
+            'Example',
+            true,
+            $record['revision'],
+            'Fictional verified profile correction.',
+        );
     }
 
     public function testStaffCanEditALinkedProfileButOwnershipAloneCannotEditLegalNames(): void
@@ -52,7 +66,14 @@ final class PersonManagementTest extends TestCase
         $fixture = new PersonManagementFixture();
         $person = $fixture->person();
         $record = $fixture->profiles->view($person->id);
-        $fixture->profiles->save($person->id, 'Jamie', 'Example', true, $record['revision']);
+        $fixture->profiles->save(
+            $person->id,
+            'Jamie',
+            'Example',
+            true,
+            $record['revision'],
+            'Fictional verified profile correction.',
+        );
         self::assertSame('Jamie', $fixture->sis->admissions->person($person->id)->givenName);
         $fixture->sis->access->staff = false;
         $this->expectException(AccessDeniedException::class);
@@ -61,7 +82,8 @@ final class PersonManagementTest extends TestCase
             'Unauthorized',
             'Example',
             false,
-            $fixture->profiles->view($person->id)['revision']
+            $fixture->profiles->view($person->id)['revision'],
+            'Fictional verified profile correction.',
         );
     }
 
@@ -77,7 +99,14 @@ final class PersonManagementTest extends TestCase
         );
         $record = $fixture->profiles->view($person->id);
         try {
-            $fixture->profiles->save($person->id, 'Takeover', 'Attempt', true, $record['revision']);
+            $fixture->profiles->save(
+                $person->id,
+                'Takeover',
+                'Attempt',
+                true,
+                $record['revision'],
+                'Fictional verified profile correction.',
+            );
             self::fail('A non-super editor changed a super profile.');
         } catch (AccessDeniedException) {
             self::assertSame('Alex', $fixture->sis->admissions->person($person->id)->givenName);
@@ -91,7 +120,10 @@ final class PersonManagementTest extends TestCase
         $fixture = new PersonManagementFixture();
         $person = $fixture->person();
         $record = $fixture->accounts->view($person->id);
-        self::assertSame(['username', 'email', 'sign_in_enabled', 'version', 'minimum_password_length', 'is_self'], array_keys($record));
+        self::assertSame(
+            ['username', 'email', 'sign_in_enabled', 'version', 'minimum_password_length', 'is_self'],
+            array_keys($record),
+        );
         $roles = $fixture->access->assignments(GrantKind::UserRole, $person->ownerUserId, null, 100);
         $fixture->accounts->email($person->id, 'updated@example.invalid', $record['version']);
         self::assertSame('updated@example.invalid', $fixture->accounts->view($person->id)['email']);
@@ -146,7 +178,12 @@ final class PersonManagementTest extends TestCase
         $fixture->sis->access->grants = ['admin:profile'];
         $command = new UpdateUserPasswordCommand(['userId' => new UserId($person->ownerUserId->value),
             'password' => new StringLiteral('fictional-prehashed-value'), 'token' => new UserToken()]);
-        $handler = new UpdateUserPasswordCommandHandler($fixture->users, $fixture->guard, $fixture->sis->profileLedger(), $fixture->sis->access);
+        $handler = new UpdateUserPasswordCommandHandler(
+            $fixture->users,
+            $fixture->guard,
+            $fixture->sis->profileLedger(),
+            $fixture->sis->access,
+        );
         $this->expectException(AccessDeniedException::class);
         $handler->handle($command);
     }
@@ -178,7 +215,14 @@ final class PersonManagementTest extends TestCase
         $fixture->sis->access->staff = false;
         $fixture->sis->access->grants = ['sis:person:manage'];
         try {
-            $fixture->profiles->save($person->id, 'Unauthorized', 'Example', false, $record['revision']);
+            $fixture->profiles->save(
+                $person->id,
+                'Unauthorized',
+                'Example',
+                false,
+                $record['revision'],
+                'Fictional verified profile correction.',
+            );
             self::fail('Person directory access implied account editing.');
         } catch (AccessDeniedException) {
             self::assertSame('Alex', $fixture->sis->admissions->person($person->id)->givenName);
@@ -197,11 +241,21 @@ final class PersonManagementTest extends TestCase
             $fixture->sis->profileLedger(),
         );
         try {
-            $editor->save($person->id, 'RolledBack', 'Example', false, $record['revision']);
+            $editor->save(
+                $person->id,
+                'RolledBack',
+                'Example',
+                false,
+                $record['revision'],
+                'Fictional verified profile correction.',
+            );
             self::fail('An unaudited edit committed.');
         } catch (RuntimeException) {
             self::assertSame('Alex', $fixture->sis->admissions->person($person->id)->givenName);
-            self::assertSame('Alex', $fixture->sis->sql->one('users', ['user_id' => $person->ownerUserId->value])['first_name']);
+            self::assertSame(
+                'Alex',
+                $fixture->sis->sql->one('users', ['user_id' => $person->ownerUserId->value])['first_name'],
+            );
             $user = $fixture->users->loadAggregateRoot(new UserId($person->ownerUserId->value));
             self::assertSame('Alex', $user->name()->getFirstName()->toNative());
         }

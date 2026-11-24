@@ -47,7 +47,8 @@ final readonly class SisPersonEditorController
             $f->text('given_name'),
             $f->text('family_name'),
             $f->boolean('directory_restricted', true),
-            $f->text('revision', 64)
+            $f->text('revision', 64),
+            $f->bodyText('reason'),
         );
 
         return new JsonResponse(['status' => 'saved']);

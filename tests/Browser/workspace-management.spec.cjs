@@ -140,6 +140,7 @@ test('person edits, linked account maintenance and bounded access controls', asy
     await page.getByRole('button', { name: 'Edit person profile', exact: true }).click();
     await page.getByLabel('Given name').fill('Alexandra');
     await page.getByLabel('Restrict public directory disclosure').uncheck();
+    await page.getByRole('textbox', { name: 'Reason for profile correction', exact: true }).fill('Fictional profile correction.');
     await accessible(page);
     await page.getByRole('button', { name: 'Save person profile', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Alexandra Example');

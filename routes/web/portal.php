@@ -23,6 +23,7 @@ return static function (Psr7Router $router): void {
         ->name('portal.announcements.read');
     $profileRequests = \Application\Http\Controller\ProfileUpdateRequestController::class;
     $router->get('/portal/api/profile-update-requests/', [$profileRequests, 'mine']);
+    $router->get('/portal/api/profile-update-requests/identity/', [$profileRequests, 'mineIdentity']);
     $router->post('/portal/api/profile-update-requests/{requestId}/respond/', [$profileRequests, 'respond']);
     $revisions = \Application\Http\Controller\ApplicationRevisionController::class;
     $dropPlans = \Application\Http\Controller\SisCourseDropPlanController::class;

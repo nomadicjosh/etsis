@@ -8,6 +8,12 @@ Choose **Admissions → Start an application**, select the existing person, acad
 
 **Back to application setup** retains the selections and unfinished answers for the same person, program, term and published form. Reopen that same selection to resume. A different selection or published form starts with fresh answers; one applicant’s answers are never copied to another. After submission, **Start another application** obtains a fresh submission request. **Back to Admissions** or **Back to person record** returns to the originating workspace.
 
+## Identity correction follow-up
+
+Staff with person-management access open **an application → Identity correction requests** to load the person’s bounded identity-only follow-up list. Request specific owner-visible information, then review the reply and current recorded names/ID. **Edit person names** opens the canonical staff editor inline with a required protected correction reason; applying a correction does not close the request or decide admission. A separate owner-visible resolution closes or cancels the follow-up. Identifier/credential changes retain their existing authorized paths.
+
+Applicants open **Start your application → Identity correction requests**, review their verified current identity and reply without replacing unfinished application answers. Personal information offers the same requests. Ownership, encrypted working messages, current-profile verification, private responses/CSRF, stale-source checks and access-loss cleanup remain in force. The correction reason stays in restricted history; the resolution note is the message shown to the owner. No reply or closure changes an identity, creates a student, imposes an admission requirement or sends mail. See the [complete identity workflow](person-identity-and-accounts.md#identity-correction-follow-up).
+
 ## Institutional policies
 
 Choose **Admissions → Policies**. Acceptance checklist, Application revisions, Offer acceptance and Applicant withdrawal have separate labeled groups, explanations and save actions. Each save sends that policy’s current revision. Saving one policy preserves unsaved choices in the others. While a save is pending, save actions are unavailable; a newer input remains marked as unsaved after the accepted response. Ordinary failures keep the draft; denied access removes the controls. Earlier decisions and issued offers retain their recorded policies.

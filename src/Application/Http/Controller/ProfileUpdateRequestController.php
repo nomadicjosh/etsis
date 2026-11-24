@@ -24,6 +24,14 @@ final readonly class ProfileUpdateRequestController
     {
         return $this->page($request, new EntityId($id), true);
     }
+    public function mineIdentity(): ResponseInterface
+    {
+        return new JsonResponse($this->service->identity(null, false));
+    }
+    public function staffIdentity(string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->identity(new EntityId($id), true));
+    }
     private function page(ServerRequest $request, ?EntityId $person, bool $staff): ResponseInterface
     {
         $form = new FormInput($request->getQueryParams());

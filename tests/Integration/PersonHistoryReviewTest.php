@@ -85,7 +85,14 @@ final class PersonHistoryReviewTest extends TestCase
         self::assertSame(['items' => [], 'through_version' => 0, 'next_after' => null,
             'earlier_history_unknown' => true], $review->page($p->id));
         self::assertSame($events, $s->sql->rows('sis_history_events'));
-        $f->profiles->save($p->id, 'PrivateGiven', 'PrivateFamily', false, $f->profiles->view($p->id)['revision']);
+        $f->profiles->save(
+            $p->id,
+            'PrivateGiven',
+            'PrivateFamily',
+            false,
+            $f->profiles->view($p->id)['revision'],
+            'Fictional verified profile correction.',
+        );
         $contacts = $this->contacts($f);
         $contacts->staffSave($p->id, 'Private preferred', '000secret', 'Private mailing address', 0);
         $contacts->staffSave($p->id, 'Private preferred', '000changed', 'Private mailing address', 1);
@@ -190,7 +197,14 @@ final class PersonHistoryReviewTest extends TestCase
         foreach (['actor', 'permission'] as $case) {
             $f = new PersonManagementFixture();
             $p = $f->person();
-            $f->profiles->save($p->id, 'Changed', 'Example', true, $f->profiles->view($p->id)['revision']);
+            $f->profiles->save(
+                $p->id,
+                'Changed',
+                'Example',
+                true,
+                $f->profiles->view($p->id)['revision'],
+                'Fictional verified profile correction.',
+            );
             $actors = $this->createStub(ActorDirectory::class);
             $actors->method('names')->willReturnCallback(static function () use ($f, $case): array {
                 if ($case === 'actor') {
@@ -227,7 +241,14 @@ final class PersonHistoryReviewTest extends TestCase
     {
         $f = new PersonManagementFixture();
         $p = $f->person();
-        $f->profiles->save($p->id, 'Changed', 'Example', true, $f->profiles->view($p->id)['revision']);
+        $f->profiles->save(
+            $p->id,
+            'Changed',
+            'Example',
+            true,
+            $f->profiles->view($p->id)['revision'],
+            'Fictional verified profile correction.',
+        );
         $actors = $this->createStub(ActorDirectory::class);
         $actors->method('names')->willReturn([]);
         self::assertSame(
@@ -258,7 +279,14 @@ final class PersonHistoryReviewTest extends TestCase
     {
         $f = new PersonManagementFixture();
         $p = $f->person();
-        $f->profiles->save($p->id, 'Changed', 'Example', true, $f->profiles->view($p->id)['revision']);
+        $f->profiles->save(
+            $p->id,
+            'Changed',
+            'Example',
+            true,
+            $f->profiles->view($p->id)['revision'],
+            'Fictional verified profile correction.',
+        );
         $f->sis->sql->update('sis_persons', ['given_name' => 'Fictional drift'], ['id' => $p->id->value]);
         $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
         $this->review($f)->page($p->id);
@@ -267,7 +295,14 @@ final class PersonHistoryReviewTest extends TestCase
     {
         $f = new PersonManagementFixture();
         $p = $f->person();
-        $f->profiles->save($p->id, 'Changed', 'Example', true, $f->profiles->view($p->id)['revision']);
+        $f->profiles->save(
+            $p->id,
+            'Changed',
+            'Example',
+            true,
+            $f->profiles->view($p->id)['revision'],
+            'Fictional verified profile correction.',
+        );
         $page = $this->store($f)->page(new \Domain\Shared\EventSourcing\StreamReference(
             new \Domain\Person\ValueObject\PersonProfileId($p->id->value),
             'person_profile'
@@ -294,7 +329,14 @@ final class PersonHistoryReviewTest extends TestCase
     {
         $f = new PersonManagementFixture();
         $p = $f->person();
-        $f->profiles->save($p->id, 'Changed', 'Example', true, $f->profiles->view($p->id)['revision']);
+        $f->profiles->save(
+            $p->id,
+            'Changed',
+            'Example',
+            true,
+            $f->profiles->view($p->id)['revision'],
+            'Fictional verified profile correction.',
+        );
         $f->sis->sql->execute(
             "UPDATE sis_history_events SET sealed_event = ? WHERE stream_id = ?",
             ['fictional-tampered-envelope', $f->sis->sql->one(

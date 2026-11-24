@@ -30,6 +30,28 @@ final readonly class ProfileUpdateRequestService
     ) {
     }
 
+    /** Current, verified labels only. A follow-up reply is never an identity-change command.
+     * @return array{given_name:string,family_name:string,institutional_id:string}
+     */
+    public function identity(?EntityId $id, bool $staff): array
+    {
+        $actor = $this->authorization->actor();
+        $person = $this->authorization->person($actor, $id, $staff);
+        return $this->transactions->run(function () use ($actor, $person, $staff): array {
+            $this->history->verify($person);
+            $this->audit->record($actor, 'person.profile_identity_read', $person->id);
+            $current = $this->authorization->person($actor, $person->id, $staff);
+            if (
+                \Domain\Person\ValueObject\ProfileFacts::of($person)
+                !== \Domain\Person\ValueObject\ProfileFacts::of($current)
+            ) {
+                throw new ConcurrentModificationException('Identity details changed. Reopen the recorded identity.');
+            }
+            return ['given_name' => $person->givenName, 'family_name' => $person->familyName,
+                'institutional_id' => $person->institutionalId->value];
+        });
+    }
+
     public function listing(
         ?EntityId $id,
         bool $staff,

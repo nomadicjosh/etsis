@@ -5,13 +5,15 @@ async function accessible(page) {
     const result = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(result.violations.map(item => ({ id: item.id, targets: item.nodes.map(node => node.target) }))).toEqual([]);
 }
-async function fixture(page, owner = false, { stale = false, delayed = null, area = 'addresses', denyRefresh = false, workspace = 'contact' } = {}) {
+async function fixture(page, owner = false, { stale = false, delayed = null, area = 'addresses', denyRefresh = false, workspace = 'contact', identityRows = false, identityDelay = null, denyIdentity = false, profileFailure = false, denyProfile = null } = {}) {
     const calls = [], errors = [], fetches = [], person = id(10), user = id(11);
     const endpoint = owner ? '/portal/api/profile-update-requests/' : `/sis/ui/people/${person}/update-requests/`;
-    let rows = owner ? [{ id: id(30), area, status: 'requested', version: 0,
+    let rows = (owner || identityRows) ? [{ id: id(30), area, status: 'requested', version: 0,
         instructions: 'Fictional <script>unsafe()</script> address correction', response: null, resolution: null,
         created_at: '2026-11-20T12:00:00Z' }] : [];
     let reads = 0;
+    let profileConflicts = profileFailure ? 1 : 0;
+    let names = { givenName: 'Fictional', familyName: 'Person', directoryRestricted: true };
     let education = { version: 1, entries: [{key:'school_one',institution:'Fictional School',
         start_date:'2020-08-01',end_date:'2024-05-01',review_status:'changes_requested',feedback:'Correct the final attendance date.'}] };
     const contact = { preferred_name: 'Fictional', phone: '001234', address: '', version: 0, mailing_managed: false };
@@ -32,6 +34,20 @@ async function fixture(page, owner = false, { stale = false, delayed = null, are
         else if (path === '/portal/api/me/') result = { person: { id: person, given_name: 'Fictional', family_name: 'Person',
             institutional_id: 'S-FICTIONAL' }, contact, students: [], programs: [], applications: [], holds: [],
             accounts: [], transcript: [], registrations: [], transcript_requests: [] };
+        else if (path.endsWith('/update-requests/identity/') || path === '/portal/api/profile-update-requests/identity/') {
+            if (identityDelay) await identityDelay();
+            if (denyIdentity) return route.fulfill({ status: 403, json: { error: 'Access removed.' } });
+            result = { given_name: names.givenName, family_name: names.familyName, institutional_id: 'S-FICTIONAL <id>' };
+        }
+        else if (path === `/sis/ui/people/${person}/profile/`) {
+            if (denyProfile === (data ? 'write' : 'read')) return route.fulfill({ status: 403, json: { error: 'Access removed.' } });
+            if (data) {
+                calls.push({ path, data, csrf: req.headers()['x-csrf-token'] });
+                if (profileConflicts-- > 0) return route.fulfill({ status: 409, json: { error: 'Fictional name save conflict.' } });
+                names = { givenName: data.given_name, familyName: data.family_name, directoryRestricted: data.directory_restricted };
+                result = { status: 'saved' };
+            } else result = { person: { ...names }, revision: 'a'.repeat(64) };
+        }
         else if (path.endsWith('/contact/')) result = contact;
         else if (path.endsWith('/addresses/')) result = { addresses: [], version: 0, mailing_managed: false,
             new_ids: Array.from({ length: 10 }, (_, n) => id(100 + n)), today: '2026-11-20',
@@ -70,7 +86,7 @@ async function fixture(page, owner = false, { stale = false, delayed = null, are
                 }
                 result = { status: 'saved' };
             } else if (denyRefresh && reads++ > 0) return route.fulfill({status:403,json:{error:'Access removed.'}});
-            else result = { items: rows.filter(row => ['closed', 'cancelled'].includes(row.status) === (url.searchParams.get('finished') === '1')),
+            else result = { items: rows.filter(row => ['closed', 'cancelled'].includes(row.status) === (url.searchParams.get('finished') === '1') && (!url.searchParams.get('area') || row.area === url.searchParams.get('area'))),
                 next_after: null, new_id: id(50 + calls.length), areas: {} };
         }
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
@@ -86,7 +102,7 @@ async function fixture(page, owner = false, { stale = false, delayed = null, are
     }
     return { calls, errors, fetches, panel: page.getByRole('region', { name: 'Profile update requests', exact: true }) };
 }
-for (const area of ['contact', 'addresses', 'emergency_contacts', 'education']) test(`staff requests and closes ${area} follow-up while contact drafts survive`, async ({ page }) => {
+for (const area of ['identity', 'contact', 'addresses', 'emergency_contacts', 'education']) test(`staff requests and closes ${area} follow-up while contact drafts survive`, async ({ page }) => {
     const f = await fixture(page);
     await page.getByLabel('Phone number', { exact: true }).fill('Draft phone');
     await f.panel.getByRole('button', { name: 'Request a profile update', exact: true }).click();
@@ -233,5 +249,122 @@ test('late education reply cannot restore details after a denied refresh', async
     await expect(f.panel.getByRole('article')).toHaveCount(0);
     await expect(f.panel.getByRole('textbox')).toHaveCount(0);
     await expect(f.panel).toContainText('Private request details cleared');
+    expect(f.errors).toEqual([]);
+});
+
+
+test('owner identity review keeps replies separate and clears private names after access is lost', async ({ page }) => {
+    const f = await fixture(page, true, { area: 'identity', denyRefresh: true });
+    await f.panel.getByLabel('Update for staff', { exact: true }).fill('Fictional corrected spelling.');
+    await f.panel.getByRole('button', { name: 'Review recorded identity', exact: true }).click();
+    const identity = f.panel.getByRole('region', { name: 'Current recorded identity', exact: true });
+    await expect(identity).toContainText('S-FICTIONAL <id>');
+    await expect(f.panel).toContainText('Sending a reply does not change identity details');
+    await expect(identity.getByRole('textbox')).toHaveCount(0);
+    await expect(identity.locator('id')).toHaveCount(0);
+    await identity.getByRole('button', { name: 'Close identity review', exact: true }).click();
+    await expect(f.panel.getByLabel('Update for staff', { exact: true })).toHaveValue('Fictional corrected spelling.');
+    await f.panel.getByRole('button', { name: 'Review recorded identity', exact: true }).click();
+    await page.setViewportSize({ width: 320, height: 1000 });
+    await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await f.panel.getByRole('button', { name: 'Refresh requests', exact: true }).click();
+    await expect(f.panel).toContainText('Private request details cleared');
+    await expect(f.panel).not.toContainText('S-FICTIONAL');
+    await expect(f.panel.getByRole('textbox')).toHaveCount(0);
+    expect(f.calls).toHaveLength(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('staff applies canonical name edits inside identity follow-up without losing reply or contact drafts', async ({ page }) => {
+    const f = await fixture(page, false, { area: 'identity', identityRows: true, profileFailure: true });
+    await page.getByLabel('Phone number', { exact: true }).fill('Preserved contact draft');
+    const note = f.panel.getByLabel('Resolution note visible to the owner', { exact: true });
+    await note.fill('Fictional evidence reviewed; name correction pending.');
+    await f.panel.getByRole('button', { name: 'Review recorded identity', exact: true }).click();
+    await f.panel.getByRole('button', { name: 'Edit person names', exact: true }).click();
+    await f.panel.getByRole('textbox', { name: 'Given name', exact: true }).fill('Fictional Revised <name>');
+    await f.panel.getByRole('textbox', { name: 'Reason for profile correction', exact: true }).fill('Fictional reviewed name evidence.');
+    await f.panel.getByRole('button', { name: 'Finished requests', exact: true }).click();
+    await expect(f.panel.getByRole('button', { name: 'Finished requests', exact: true })).toBeVisible();
+    await f.panel.getByRole('button', { name: 'Save request outcome', exact: true }).click();
+    expect(f.calls).toHaveLength(0);
+    await f.panel.getByRole('button', { name: 'Refresh recorded identity', exact: true }).click();
+    await expect(f.panel.getByRole('textbox', { name: 'Given name', exact: true })).toHaveValue('Fictional Revised <name>');
+    await f.panel.getByRole('button', { name: 'Save person names', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Fictional name save conflict');
+    await expect(f.panel.getByRole('textbox', { name: 'Given name', exact: true })).toHaveValue('Fictional Revised <name>');
+    await expect(note).toHaveValue('Fictional evidence reviewed; name correction pending.');
+    await f.panel.getByRole('button', { name: 'Save person names', exact: true }).click();
+    await expect(f.panel.getByRole('region', { name: 'Current recorded identity', exact: true })).toContainText('Fictional Revised <name>');
+    await page.setViewportSize({ width: 375, height: 1000 });
+    await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    for (const toast of await page.getByRole('button', { name: 'Dismiss notification', exact: true }).all()) await toast.click();
+    await f.panel.getByRole('region', { name: 'Current recorded identity', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/etsis-identity-staff-mobile.png' });
+    await expect(page.getByLabel('Phone number', { exact: true })).toHaveValue('Preserved contact draft');
+    await expect(f.panel).toContainText('Update requested');
+    expect(f.calls.filter(call => call.path.endsWith('/resolve/'))).toHaveLength(0);
+    await f.panel.getByRole('button', { name: 'Save request outcome', exact: true }).click();
+    expect(f.calls.map(call => call.path.endsWith('/profile/') ? call.data.given_name : call.data.action)).toEqual(['Fictional Revised <name>', 'Fictional Revised <name>', 'close']);
+    expect(f.calls[1].data.directory_restricted).toBe(true);
+    expect(f.calls.every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    await page.setViewportSize({ width: 375, height: 1000 }); await accessible(page);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('admissions opens an identity-only follow-up and keeps admission decisions separate', async ({ page }) => {
+    const f = await fixture(page, false, { workspace: 'application', area: 'identity', identityRows: true });
+    await page.getByRole('button', { name: 'Identity correction requests', exact: true }).click();
+    const panel = page.getByRole('region', { name: 'Identity correction requests', exact: true });
+    await expect(panel.getByRole('article')).toHaveCount(1);
+    await panel.getByRole('button', { name: 'Review recorded identity', exact: true }).click();
+    await panel.getByRole('button', { name: 'Edit person names', exact: true }).click();
+    await panel.getByRole('textbox', { name: 'Family name', exact: true }).fill('Revised fictional family');
+    await panel.getByRole('button', { name: 'Back to identity review', exact: true }).click();
+    await expect(panel.getByRole('region', { name: 'Current recorded identity', exact: true })).toContainText('Person');
+    await panel.getByLabel('Resolution note visible to the owner', { exact: true }).fill('Fictional original identity remains correct.');
+    await panel.getByRole('button', { name: 'Save request outcome', exact: true }).click();
+    expect(f.calls.map(call => call.data.action)).toEqual(['close']);
+    expect(f.fetches.some(path => path.endsWith('/identity/'))).toBe(true);
+    await page.setViewportSize({ width: 320, height: 1000 }); await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+test('late identity reads cannot restore a denied request panel', async ({ page }) => {
+    let release;
+    const pending = new Promise(resolve => { release = resolve; });
+    const f = await fixture(page, true, { area: 'identity', denyRefresh: true, identityDelay: () => pending });
+    await f.panel.getByRole('button', { name: 'Review recorded identity', exact: true }).click();
+    await expect(f.panel).toContainText('Loading recorded identity');
+    await f.panel.getByRole('button', { name: 'Refresh requests', exact: true }).click();
+    await expect(f.panel).toContainText('Private request details cleared');
+    const response = page.waitForResponse(value => value.url().includes('/identity/') && value.status() === 200);
+    release(); await response;
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await expect(f.panel).not.toContainText('S-FICTIONAL');
+    await expect(f.panel.getByRole('article')).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});
+
+
+for (const stage of ['read', 'write']) test(`denied staff identity ${stage} clears the whole private follow-up`, async ({ page }) => {
+    const f = await fixture(page, false, { area: 'identity', identityRows: true, denyProfile: stage });
+    await f.panel.getByLabel('Resolution note visible to the owner', { exact: true }).fill('Fictional unfinished resolution.');
+    await f.panel.getByRole('button', { name: 'Review recorded identity', exact: true }).click();
+    await f.panel.getByRole('button', { name: 'Edit person names', exact: true }).click();
+    if (stage === 'write') {
+        await f.panel.getByRole('textbox', { name: 'Family name', exact: true }).fill('Fictional private change');
+        await f.panel.getByRole('textbox', { name: 'Reason for profile correction', exact: true }).fill('Fictional correction evidence.');
+        await f.panel.getByRole('button', { name: 'Save person names', exact: true }).click();
+    }
+    await expect(f.panel).toContainText('Private request details cleared');
+    await expect(f.panel.getByRole('textbox')).toHaveCount(0);
+    await expect(f.panel).not.toContainText('S-FICTIONAL');
+    await expect(f.panel).not.toContainText('Fictional unfinished resolution');
     expect(f.errors).toEqual([]);
 });

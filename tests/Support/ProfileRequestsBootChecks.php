@@ -3,7 +3,11 @@
 declare(strict_types=1);
 
 // Actual routes and providers with fictional accounts, configuration and in-memory storage only.
+require_once __DIR__ . '/PersonManagementFixture.php';
+$management = new PersonManagementFixture();
+$httpSis = $management->sis;
 require __DIR__ . "/SisHttpFixture.php";
+$app->delegate(\Domain\User\Repository\UserAggregateRepository::class, static fn () => $management->users);
 $staff = $sis->access->actor;
 $owner = $sis->user();
 $person = $sis->student($owner)->personId;
@@ -108,5 +112,97 @@ if (
 ) {
     throw new RuntimeException(
         "Finished paging changed profile facts or lost the private query boundary.",
+    );
+}
+
+
+// Identity follow-up reuses genuine person/account events; replies do not change canonical identity.
+$identityPerson = $management->person();
+$identityBase = '/sis/ui/people/' . $identityPerson->id->value . '/update-requests/';
+$identityRequest = \Domain\Shared\ValueObject\EntityId::generate();
+$identityJournal = $sis->sql->rows('sis_history_events');
+if (
+    $teachingPost($identityBase, ['request_id' => $identityRequest->value, 'area' => 'identity',
+    'message' => 'Fictional recorded name needs review.'])->getStatusCode() !== 200
+) {
+    throw new RuntimeException('The identity follow-up could not be created through the real private route.');
+}
+$sis->access->actor = $identityPerson->ownerUserId;
+$sis->access->staff = false;
+$sis->access->grants = [];
+$identityRoute = $get->withUri(new \Laminas\Diactoros\Uri('/portal/api/profile-update-requests/identity/'));
+$identityRead = $app->router->match($identityRoute);
+$identity = json_decode((string) $identityRead->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $identityRead->getStatusCode() !== 200
+    || array_keys($identity) !== ['given_name', 'family_name', 'institutional_id']
+    || $identity['given_name'] !== 'Alex' || !str_contains($identityRead->getHeaderLine('Cache-Control'), 'no-store')
+    || str_contains((string) $identityRead->getBody(), 'phpdebugbar')
+) {
+    throw new RuntimeException('The owner identity reader failed verification, minimization or privacy.');
+}
+if (
+    $teachingPost('/portal/api/profile-update-requests/' . $identityRequest->value . '/respond/', [
+    'version' => 0, 'message' => 'Fictional revised spelling: Alexis Example.',
+    ])->getStatusCode() !== 200 || $identityJournal !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('An identity reply changed a canonical identity or failed its protected route.');
+}
+$profilePath = '/sis/ui/people/' . $identityPerson->id->value . '/profile/';
+if ($app->router->match($get->withUri(new \Laminas\Diactoros\Uri($profilePath)))->getStatusCode() !== 403) {
+    throw new RuntimeException('A follow-up owner gained staff identity editing authority.');
+}
+$sis->access->actor = $owner; // Another account cannot select the original person through an owner query.
+$otherIdentity = $app->router->match($identityRoute->withQueryParams(['person_id' => $identityPerson->id->value]));
+if (
+    $otherIdentity->getStatusCode() !== 200
+    || str_contains((string) $otherIdentity->getBody(), $identityPerson->institutionalId->value)
+) {
+    throw new RuntimeException('An owner identity query selected another person.');
+}
+$sis->access->actor = $staff;
+$sis->access->staff = true;
+$profileResponse = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri($profilePath)));
+$profile = json_decode((string) $profileResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$change = ['given_name' => 'Alexis', 'family_name' => 'Example', 'directory_restricted' => true,
+    'revision' => $profile['revision'], 'reason' => 'Fictional evidence for the name correction.'];
+$withoutReason = $change;
+unset($withoutReason['reason']);
+if (
+    $teachingPost($profilePath, $withoutReason)->getStatusCode() !== 422
+    || $identityJournal !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('A profile correction without its reason wrote canonical facts.');
+}
+if ($teachingPost($profilePath, $change)->getStatusCode() !== 200) {
+    throw new RuntimeException('The existing canonical name editor failed its private CSRF-protected write.');
+}
+$changedJournal = $sis->sql->rows('sis_history_events');
+$account = $sis->sql->one('users', ['user_id' => $identityPerson->ownerUserId->value]);
+if (
+    $account['first_name'] !== 'Alexis' || $changedJournal === $identityJournal
+    || $sis->admissions->person($identityPerson->id)->givenName !== 'Alexis'
+    || $teachingPost($identityBase . $identityRequest->value . '/resolve/', [
+        'version' => 1, 'action' => 'close', 'message' => 'Fictional evidence verified and canonical name corrected.',
+    ])->getStatusCode() !== 200 || $changedJournal !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException(
+        'Name correction lost canonical account history or request closure became an identity decision.',
+    );
+}
+$sis->access->actor = $identityPerson->ownerUserId;
+$sis->access->staff = false;
+$sis->access->grants = [];
+$updatedIdentity = json_decode(
+    (string) $app->router->match($identityRoute)->getBody(),
+    true,
+    flags: JSON_THROW_ON_ERROR,
+);
+if (
+    $updatedIdentity['given_name'] !== 'Alexis'
+    || $updatedIdentity['institutional_id'] !== $identity['institutional_id']
+) {
+    throw new RuntimeException(
+        'The owner identity reader did not retain the stable identifier after the genuine correction.',
     );
 }

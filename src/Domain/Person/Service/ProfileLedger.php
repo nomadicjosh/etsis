@@ -38,9 +38,12 @@ final readonly class ProfileLedger
     public function __construct(private HistoricalEventStore $history, private Clock $clock)
     {
     }
-    public function accountContext(EntityId $actor, EntityId $operation): EventContext
-    {
-        return new EventContext($actor, $this->clock->now(), $operation);
+    public function accountContext(
+        EntityId $actor,
+        EntityId $operation,
+        #[\SensitiveParameter] ?string $reason = null,
+    ): EventContext {
+        return new EventContext($actor, $this->clock->now(), $operation, reason: $reason);
     }
     /** @param array<array-key,mixed> $values */
     public static function intent(#[\SensitiveParameter] array $values): string
@@ -329,8 +332,14 @@ final readonly class ProfileLedger
         }
         $this->append($root, $person, $operation, $actor, $intent, 'created');
     }
-    public function record(Person $before, Person $after, EntityId $operation, EntityId $actor, string $intent): void
-    {
+    public function record(
+        Person $before,
+        Person $after,
+        EntityId $operation,
+        EntityId $actor,
+        string $intent,
+        #[\SensitiveParameter] ?string $reason = null,
+    ): void {
         $root = $this->load($before->id)['root'];
         if (
             $before->id->value !== $after->id->value || ($root->person() !== null &&
@@ -345,7 +354,7 @@ final readonly class ProfileLedger
             $baseline = DerivedIdentity::from($operation, 'person.observation');
             $this->append($root, $before, $baseline, $actor, $intent, 'observed');
         }
-        $this->append($root, $after, $operation, $actor, $intent, 'changed');
+        $this->append($root, $after, $operation, $actor, $intent, 'changed', $reason);
     }
     private function append(
         ProfileHistory $root,
@@ -353,7 +362,8 @@ final readonly class ProfileLedger
         EntityId $operation,
         EntityId $actor,
         string $intent,
-        string $provenance
+        string $provenance,
+        #[\SensitiveParameter] ?string $reason = null,
     ): void {
         $version = $root->playhead();
         $e = PersonProfileWasRecorded::occur(
@@ -364,14 +374,15 @@ final readonly class ProfileLedger
                 'intent' => $intent],
             ['__aggregate_type' => 'person_profile']
         )->withPlayhead($version + 1);
-        $this->commit($root, $e, $operation, $actor, $provenance);
+        $this->commit($root, $e, $operation, $actor, $provenance, $reason);
     }
     private function commit(
         ProfileHistory $root,
         DomainEvent $event,
         EntityId $operation,
         EntityId $actor,
-        string $provenance
+        string $provenance,
+        #[\SensitiveParameter] ?string $reason = null,
     ): void {
         $version = $root->playhead();
         if ($version >= self::MAX_EVENTS) {
@@ -388,7 +399,7 @@ final readonly class ProfileLedger
                 $operation,
                 reason: $provenance === 'observed'
                     ? 'Current profile observed; earlier personal history is unknown.'
-                    : null
+                    : $reason
             ),
             [$event]
         );

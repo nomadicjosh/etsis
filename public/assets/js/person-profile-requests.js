@@ -2,8 +2,10 @@
 (() => {
     'use strict';
     let sequence = 0;
+    const labels = JSON.parse(document.getElementById('profile-request-labels')?.textContent || '{}');
+    window.profileRequestLabels = labels;
     const statuses = { requested: 'Update requested', responded: 'Ready for staff review', closed: 'Closed', cancelled: 'Cancelled' };
-    const areas = { contact: 'Contact information', addresses: 'Dated addresses', emergency_contacts: 'Emergency contacts', education: 'Educational background' };
+    const areas = { contact: 'Contact information', addresses: 'Dated addresses', emergency_contacts: 'Emergency contacts', education: 'Educational background', identity: labels.identity };
     window.createPersonProfileRequests = ({ node, request, task, notify }) => ({
         mount(container, endpoint, { staff = false, openEditor = () => {}, area = null, showHeading = true } = {}) {
             const availableAreas = area ? { [area]: areas[area] } : areas;
@@ -14,9 +16,12 @@
             const formArea = node('div');
             let finished = false, next = null, generation = 0, currentNewId = null, createForm = null, creating = false, createButton = null, accessGeneration = 0;
             const drafts = new Map();
+            const identityEditors = new Set();
+            const identityDraftPending = () => [...identityEditors].some(editor => !editor.beforeLeave());
             const button = (label, handler) => node('button', { type: 'button', class: 'btn btn-outline-primary',
                 onclick: event => task(handler, event.currentTarget) }, label);
             const switcher = button('Finished requests', async () => {
+                if (identityDraftPending()) return;
                 finished = !finished;
                 switcher.textContent = finished ? 'Active requests' : 'Finished requests';
                 await load();
@@ -35,15 +40,72 @@
                 form.append(node('label', { for: id, class: 'form-label' }, label), input);
                 return input;
             }
+            function identityReview(box) {
+                const content = node('section', { class: 'border-top pt-3 mt-3', hidden: true,
+                    'aria-label': labels.current_identity });
+                const review = button(labels.review_identity, loadIdentity);
+                let serial = 0, editor = null;
+                async function loadIdentity() {
+                    if (editor?.beforeLeave && !editor.beforeLeave()) return;
+                    identityEditors.delete(editor); editor = null;
+                    const token = ++serial, access = accessGeneration;
+                    content.hidden = false;
+                    content.replaceChildren(node('p', { role: 'status' }, labels.identity_loading));
+                    let result;
+                    try { result = await request(`${endpoint}identity/`); }
+                    catch (error) {
+                        if (box.isConnected && token === serial) {
+                            clearDenied(error);
+                            if (![401, 403].includes(error.status)) content.replaceChildren(
+                                node('p', { role: 'status' }, labels.identity_failed),
+                                button(labels.refresh_identity, loadIdentity),
+                                button(labels.close_identity, () => {
+                                    serial++; content.replaceChildren(); content.hidden = true; review.focus();
+                                }));
+                        }
+                        throw error;
+                    }
+                    if (!box.isConnected || token !== serial || access !== accessGeneration) return;
+                    const close = button(labels.close_identity, () => {
+                        if (editor?.beforeLeave && !editor.beforeLeave()) return;
+                        identityEditors.delete(editor); editor = null;
+                        serial++; content.replaceChildren(); content.hidden = true; review.focus();
+                    });
+                    const details = node('dl', { class: 'row g-3 mb-3' },
+                        ...['given_name', 'family_name', 'institutional_id'].map(key => node('div', { class: 'col-12 col-lg-6' },
+                            node('dt', {}, labels[key]), node('dd', { class: 'text-break' }, result[key]))));
+                    content.replaceChildren(node('h5', {}, labels.current_identity), details,
+                        node('p', { class: 'form-text' }, labels.current_help));
+                    const actions = node('div', { class: 'd-flex flex-wrap gap-2 mt-3' });
+                    if (staff) {
+                        const host = node('div');
+                        actions.append(button(labels.edit_names, async () => {
+                            try {
+                                editor = await openEditor('identity', host, {
+                                    saved: () => {
+                                        identityEditors.delete(editor); editor = null; return loadIdentity();
+                                    }, denied: clearDenied,
+                                });
+                            } catch (error) { clearDenied(error); throw error; }
+                            if (editor) identityEditors.add(editor);
+                        }));
+                        content.append(actions, host);
+                    } else content.append(actions);
+                    actions.append(button(labels.refresh_identity, loadIdentity), close);
+                    close.focus();
+                }
+                box.append(review, content);
+            }
             function card(item) {
-                const box = node('article', { class: 'border rounded p-3 mb-3', 'aria-label': `${areas[item.area] || 'Profile'} request` });
+                const box = node('article', { class: `border rounded mb-3 ${item.area === 'identity' ? 'p-2 p-sm-3' : 'p-3'}`, 'aria-label': `${areas[item.area] || 'Profile'} request` });
                 box.append(node('h4', {}, areas[item.area] || 'Profile update'),
                     node('p', {}, `${statuses[item.status] || 'Unavailable'} · Requested ${item.created_at || ''}`),
                     node('p', { class: 'text-break', style: 'white-space: pre-wrap' }, item.instructions));
                 if (item.response) box.append(node('p', { class: 'text-break' }, `Owner response: ${item.response}`));
                 if (item.resolution) box.append(node('p', { class: 'text-break' }, `Staff resolution: ${item.resolution}`));
                 const pending = ['requested', 'responded'].includes(item.status);
-                if (pending && areas[item.area]) box.append(button(`Open ${areas[item.area].toLowerCase()}`, () => openEditor(item.area)));
+                if (pending && item.area === 'identity' && !item.owner_changed) identityReview(box);
+                else if (pending && areas[item.area]) box.append(button(`Open ${areas[item.area].toLowerCase()}`, () => openEditor(item.area)));
                 if (item.owner_changed) box.append(node('p', {}, 'The account link changed. Cancel this request before creating another.'));
                 if (!pending || (item.owner_changed && !staff)) {
                     if (drafts.has(item.id)) box.append(node('p', { class: 'text-break' }, `Unsent draft: ${drafts.get(item.id).message}`));
@@ -70,12 +132,14 @@
                 action?.addEventListener('change', remember);
                 const save = node('button', { type: 'submit', class: 'btn btn-primary mt-2' },
                     staff ? 'Save request outcome' : 'Send update for review');
-                form.append(node('p', { class: 'form-text' }, staff
+                form.append(node('p', { class: 'form-text' }, item.area === 'identity'
+                    ? (staff ? labels.staff_help : labels.owner_help) : staff
                     ? 'Review the current details before closing. Closure records follow-up, not approval of a credential or academic decision.'
                     : 'Save any changed details in the editor first. You can also explain why the current information is already correct.'), save);
                 form.addEventListener('submit', event => {
                     event.preventDefault();
                     task(async () => {
+                        if (identityDraftPending()) return;
                         if (!form.reportValidity()) return;
                         const scope = accessGeneration;
                         const data = { version: item.version, message: input.value, ...(staff ? { action: action.value } : {}) };
@@ -103,6 +167,7 @@
                 if (![401, 403].includes(error.status) || !container.isConnected) return;
                 generation++; accessGeneration++; creating = false;
                 drafts.clear(); currentNewId = null; next = null;
+                identityEditors.clear();
                 createForm = null; createButton?.remove(); createButton = null;
                 formArea.replaceChildren(); active.replaceChildren(); more.hidden = true;
                 status.textContent = 'Private request details cleared. Refresh after access is restored.';
@@ -124,7 +189,7 @@
                 createForm.addEventListener('submit', event => {
                     event.preventDefault();
                     task(async () => {
-                        if (creating || !createForm.reportValidity() || !currentNewId) return;
+                        if (identityDraftPending() || creating || !createForm.reportValidity() || !currentNewId) return;
                         creating = true;
                         const scope = accessGeneration;
                         const data = { request_id: currentNewId, area: area.value, message: message.value };
@@ -145,6 +210,7 @@
                 formArea.append(createForm);
             }
             async function load(append = false) {
+                if (identityDraftPending()) return;
                 const token = ++generation;
                 const query = new URLSearchParams({ finished: finished ? '1' : '0' });
                 if (area) query.set('area', area);
@@ -157,7 +223,7 @@
                 }
                 if (!container.isConnected || token !== generation) return;
                 if (!currentNewId) currentNewId = result.new_id;
-                if (!append) active.replaceChildren();
+                if (!append) { active.replaceChildren(); identityEditors.clear(); }
                 const rows = result.items || [];
                 active.append(...rows.map(card));
                 next = result.next_after;
@@ -167,6 +233,7 @@
                 createEditor();
             }
             const beforeLeave = () => {
+                if (identityDraftPending()) return false;
                 const input = [...container.querySelectorAll('textarea')].find(field => field.value.trim());
                 if (creating || input || [...drafts.values()].some(draft => draft.message?.trim())) {
                     status.textContent = creating ? 'Wait for the current request before leaving.'

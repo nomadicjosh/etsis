@@ -2616,3 +2616,87 @@ msgstr ""
 #: resources/views/shared/curriculum-ownership-labels.php
 msgid "That department is already selected for this program."
 msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Recorded identity"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Identity correction requests"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Request an identity correction"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Review recorded identity"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Current recorded identity"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Loading recorded identity…"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Recorded identity could not be loaded. Retry this review."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Save or discard your name changes before leaving this editor."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Close identity review"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Refresh recorded identity"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Edit person names"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Institutional ID"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Save person names"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Back to identity review"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Person names saved. Review the details before resolving the request."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Review your current names and institutional ID, then explain the correction in your reply. Sending a reply does not change identity details, sign-in access or an admissions decision."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Review the current identity and the owner response. Apply verified name corrections with the person editor, then record a separate request outcome. Institutional ID changes use the existing identifier workflow."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "These are current identity details. Earlier academic records, issued documents and this request retain their separate histories."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Identity follow-up belongs to your person record and can apply across applications. Review requested corrections here without changing your application draft."
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Reason for profile correction"
+msgstr ""
+
+#: resources/views/shared/profile-request-labels.php
+msgid "Kept in restricted profile history. The resolution note is the message shown to the owner."
+msgstr ""

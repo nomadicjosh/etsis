@@ -801,12 +801,22 @@
 
     function applications(container) {
         const saved = el('div'); let documentGuards = [];
+        let identityUpdates = null;
         const refreshApplications = () => {
             documentGuards = [];
             saved.replaceChildren(...(me?.applications.length ? [submittedApplications(me.applications, documentGuards)] : []));
         };
         refreshApplications(); container.append(saved);
         if (config.signedIn) {
+            const labels = window.profileRequestLabels;
+            const identity = el('section', { 'aria-label': labels.identity_requests });
+            identity.append(el('p', { class: 'campus-muted' }, labels.application_help),
+                el('button', { type: 'button', class: 'btn campus-button-outline', onclick: () => {
+                    identity.replaceChildren();
+                    identityUpdates = window.createPersonProfileRequests({ node: el, request, task, notify: notice })
+                        .mount(identity, '/portal/api/profile-update-requests/', { area: 'identity', showHeading: false });
+                } }, labels.identity_requests));
+            container.append(surface(labels.identity_requests, identity));
             const education = el('div');
             const editor = window.createPersonEducation({ node: el, request, task, notify: notice })
                 .mount(education, '/portal/api/education/');
@@ -827,12 +837,14 @@
         let statusRequest = 0;
         const status = el('p', { class: 'campus-muted mb-0', role: 'status', 'aria-atomic': 'true' });
         async function reloadApplications() {
+            if (identityUpdates && !identityUpdates.beforeLeave()) return;
             if (documentGuards.some(guard => !guard.beforeLeave())) return;
             const ticket = ++statusRequest;
             status.textContent = 'Checking your application status…';
             try {
                 const result = await readApplicationContext();
                 if (ticket !== statusRequest || pageLeaving || !saved.isConnected || !me) return;
+                if (identityUpdates && !identityUpdates.beforeLeave()) return;
                 if (documentGuards.some(guard => !guard.beforeLeave())) { status.textContent = 'Upload or clear selected documents before refreshing status.'; return; }
                 if (result.person_id !== me.person.id) throw new Error('Application ownership changed.');
                 me.applications = result.items;

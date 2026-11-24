@@ -36,6 +36,7 @@ return static function (Psr7Router $router): void {
     $router->post('/sis/ui/catalog/{kind}/{id}/credits/', [$credits, 'save']);
     $profileRequests = \Application\Http\Controller\ProfileUpdateRequestController::class;
     $router->get('/sis/ui/people/{id}/update-requests/', [$profileRequests, 'staff']);
+    $router->get('/sis/ui/people/{id}/update-requests/identity/', [$profileRequests, 'staffIdentity']);
     $router->post('/sis/ui/people/{id}/update-requests/', [$profileRequests, 'create']);
     $router->post('/sis/ui/people/{id}/update-requests/{requestId}/resolve/', [$profileRequests, 'resolve']);
     $router->map(['GET'], '/sis/applications/{application}/documents/', [Documents::class, 'listing']);

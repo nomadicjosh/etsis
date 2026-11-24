@@ -23,6 +23,123 @@ final class ProfileUpdateRequestTest extends TestCase
     {
         require_once dirname(__DIR__) . "/Support/CampusFixture.php";
     }
+    public function testIdentityFollowUpKeepsTheCurrentNamesAndAcademicHistorySeparateFromReplies(): void
+    {
+        $c = new CampusFixture();
+        $s = $c->sis;
+        $staff = $s->access->actor;
+        $person = $s->registrationService()->staff(
+            EntityId::generate(),
+            'Fictional',
+            'Prospect',
+            'identity-followup@example.invalid'
+        );
+        $service = $this->service($c);
+        $journal = $this->journal($c);
+        $identity = $service->identity($person->id, true);
+        self::assertSame(['given_name', 'family_name', 'institutional_id'], array_keys($identity));
+        self::assertSame('Fictional', $identity['given_name']);
+        $id = EntityId::generate();
+        $service->request($person->id, $id, 'identity', 'Review the fictional recorded family name.');
+        $s->access->actor = $person->ownerUserId;
+        $s->access->staff = false;
+        $s->access->grants = [];
+        self::assertSame($identity, $service->identity(null, false));
+        self::assertCount(1, $service->listing(null, false, area: 'identity')['items']);
+        self::assertCount(0, $service->listing(null, false, area: 'education')['items']);
+        $service->act(null, $id, false, 'respond', 0, 'Fictional requested spelling correction.');
+        self::assertSame($identity, $service->identity(null, false));
+        $s->access->actor = $staff;
+        $s->access->staff = true;
+        $service->act($person->id, $id, true, 'close', 1, 'Fictional current identity verified separately.');
+        self::assertSame($journal, $this->journal($c));
+        self::assertSame([], $s->sql->rows('sis_students'));
+        self::assertSame('Fictional requested spelling correction.', $service->listing(
+            $person->id,
+            true,
+            true,
+            area: 'identity'
+        )['items'][0]['response']);
+    }
+
+    public function testIdentityReadsRequireTheCanonicalOwnerEvenWithStaffGrants(): void
+    {
+        $c = new CampusFixture();
+        $s = $c->sis;
+        $first = $s->registrationService()->staff(
+            EntityId::generate(),
+            'Fictional',
+            'First',
+            'first-identity@example.invalid',
+        );
+        $second = $s->registrationService()->staff(
+            EntityId::generate(),
+            'Fictional',
+            'Second',
+            'second-identity@example.invalid',
+        );
+        $s->access->actor = $second->ownerUserId;
+        $service = $this->service($c);
+        $this->rejects(fn () => $service->identity($first->id, false), AccessDeniedException::class);
+        self::assertSame('Second', $service->identity(null, false)['family_name']);
+        $s->access->staff = false;
+        $s->access->grants = ['sis:admissions:manage'];
+        $this->rejects(fn () => $service->identity($first->id, true), AccessDeniedException::class);
+    }
+
+    public function testIdentityReadsRejectChangedSourcesRevokedAuthorityAndFailedRequiredAuditAtomically(): void
+    {
+        foreach (['source', 'owner', 'authority', 'audit'] as $failure) {
+            $c = new CampusFixture();
+            $s = $c->sis;
+            $person = $s->registrationService()->staff(
+                EntityId::generate(),
+                'Fictional',
+                'Prospect',
+                'identity-audit@example.invalid'
+            );
+            $tables = ['sis_history_events', 'sis_history_streams', 'sis_history_operations',
+                'sis_persons', 'sis_audit'];
+            $before = array_map($s->sql->rows(...), $tables);
+            $audit = $this->createStub(\Domain\Audit\Repository\AuditTrail::class);
+            $audit->method('record')->willReturnCallback(static function () use ($s, $person, $failure): void {
+                match ($failure) {
+                    'source' => $s->sql->update(
+                        'sis_persons',
+                        ['given_name' => 'Fictional changed'], ['id' => $person->id->value],
+                    ),
+                    'owner' => $s->access->actor = EntityId::generate(),
+                    'authority' => $s->access->staff = false,
+                    'audit' => throw new \RuntimeException('Fictional required read-audit failure.'),
+                };
+            });
+            $this->rejects(
+                fn () => $this->service($c, $audit)->identity($person->id, true),
+                $failure === 'source' ? ConcurrentModificationException::class : \RuntimeException::class
+            );
+            self::assertSame($before, array_map($s->sql->rows(...), $tables));
+        }
+    }
+
+    public function testIdentityReadsRejectAChangedTrackedProfileInsteadOfExposingTheProjection(): void
+    {
+        $c = new CampusFixture();
+        $s = $c->sis;
+        $person = $s->registrationService()->staff(
+            EntityId::generate(),
+            'Fictional',
+            'Prospect',
+            'identity-projection@example.invalid'
+        );
+        $before = $this->journal($c);
+        $s->sql->update('sis_persons', ['family_name' => 'Fictional tampering'], ['id' => $person->id->value]);
+        $this->rejects(
+            fn () => $this->service($c)->identity($person->id, true),
+            \Domain\Shared\EventSourcing\CorruptHistoryException::class
+        );
+        self::assertSame($before, $this->journal($c));
+    }
+
     private function service(
         CampusFixture $c,
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
@@ -498,6 +615,7 @@ final class ProfileUpdateRequestTest extends TestCase
         );
         $s->access->staff = false;
         $s->access->grants = ["sis:person:manage"];
+        $this->rejects(fn () => $service->identity($person, true), AccessDeniedException::class);
         $this->expectException(AccessDeniedException::class);
         $service->listing($person, true);
     }

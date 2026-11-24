@@ -8,6 +8,7 @@ Keep runs bounded, low-priority and single-worker. Preserve existing permissions
 
 The [workflow review](workflow-review.md) and [conversation handoff](conversation-handoff.md) record the exact scope and validation of these passes:
 
+- Recorded-identity follow-up now connects Admissions, applicant drafts and inline staff name correction with a required protected reason, preserved replies, explicit resolution and current-identity review/return. Shared Bootstrap mobile/keyboard/WCAG checks preserve the wider open interface queue.
 - Website Manager page setup/settings and the native designer now have three focused browser checks for multilingual submission, mobile/enlarged text/WCAG, preserved drafts and HTML/PHP/PHTML editing boundaries. Program joint-ownership authoring and private retained degree cards add focused returns, failure recovery, keyboard and reflow checks; the wider domain rows below remain open.
 - Shared drawer returns, Bootstrap menus, left-aligned icon/label columns and viewport/sidebar placement.
 - Person/contact screens, classification libraries, transfer catalog/awards and transcript fulfillment.

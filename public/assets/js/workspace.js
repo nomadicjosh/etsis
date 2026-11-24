@@ -1052,6 +1052,7 @@
         people: [
             { title: 'Person details', fields: ['given_name', 'family_name', 'email'], wide: ['email'] },
             { title: 'Directory privacy', fields: ['directory_restricted'], wide: ['directory_restricted'] },
+            { title: window.profileRequestLabels.reason, fields: ['reason'], wide: ['reason'] },
             {
                 title: 'Institutional ID',
                 description: 'Leave blank to let etsis assign an ID.',
@@ -1106,6 +1107,11 @@
                 }
             }
             if (type === 'checkbox') container.append(node('div', { class: 'form-check' }, control, fieldLabel)); else container.append(fieldLabel, control);
+            if (key === 'reason' && layout === 'people') {
+                control.maxLength = 1000;
+                control.setAttribute('aria-describedby', `${id}-help`);
+                container.append(node('p', { id: `${id}-help`, class: 'form-text' }, window.profileRequestLabels.reason_help));
+            }
             if (key === 'minimum_enrollment') {
                 const help = node('p', { id: `${id}-help`, class: 'form-text' },
                     'Advisory target. Leave blank or use zero for no target. It cannot exceed section capacity.');

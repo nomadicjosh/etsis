@@ -29,6 +29,78 @@ window.createWorkspacePeople = function (ui) {
         );
     const personId = (person) => person.id.value;
 
+    async function editIdentityNames(person, host, callbacks) {
+        if (host.identityEditor) {
+            host.querySelector('input')?.focus();
+            return host.identityEditor;
+        }
+        const labels = window.profileRequestLabels;
+        const id = personId(person);
+        const record = await request(`/sis/ui/people/${id}/profile/`);
+        if (!host.isConnected) return null;
+        const fields = [['given_name', labels.given_name], ['family_name', labels.family_name],
+            ['reason', labels.reason, 'textarea']];
+        const preset = { given_name: record.person.givenName, family_name: record.person.familyName, reason: '' };
+        const form = await buildForm(fields, preset, { layout: 'people' });
+        if (!host.isConnected) return null;
+        form.elements.reason.maxLength = 1000;
+        const status = node('p', { role: 'status', class: 'form-text' });
+        let pending = false, closed = false;
+        const dirty = () => fields.some(([key]) => form.elements[key].value !== preset[key]);
+        const editor = { beforeLeave: () => {
+            if (closed || (!pending && !dirty())) return true;
+            status.textContent = labels.names_draft;
+            form.querySelector('input')?.focus(); return false;
+        } };
+        host.identityEditor = editor;
+        const cancel = button(labels.cancel_names, () => {
+            if (pending) return;
+            closed = true; host.identityEditor = null; host.replaceChildren();
+            return callbacks.saved();
+        }, 'btn-outline-secondary');
+        const save = node('button', { type: 'submit', class: 'btn btn-primary' }, labels.save_names);
+        form.append(node('div', { class: 'd-flex flex-wrap gap-2 mt-3' }, save, cancel), status);
+        form.addEventListener('submit', event => {
+            event.preventDefault();
+            task(async () => {
+                if (pending || !form.reportValidity()) return;
+                const data = { ...formData(form, fields), revision: record.revision,
+                    directory_restricted: record.person.directoryRestricted };
+                pending = true;
+                const controls = [...form.querySelectorAll('input, button')];
+                controls.forEach(control => { control.disabled = true; });
+                try {
+                    await request(`/sis/ui/people/${id}/profile/`, 'POST', data);
+                } catch (error) { callbacks.denied(error); throw error; }
+                finally { pending = false; controls.forEach(control => { control.disabled = false; }); }
+                if (!host.isConnected) return;
+                closed = true; host.identityEditor = null; host.replaceChildren();
+                notify(labels.names_saved);
+                await callbacks.saved();
+            }, save);
+        });
+        host.append(form); form.querySelector('input')?.focus();
+        return editor;
+    }
+
+    function identityWorkflow(body, person) {
+        const labels = window.profileRequestLabels;
+        const panel = node('section', { class: 'record-section mt-3', 'aria-label': labels.identity_requests });
+        let workflow = null;
+        const open = button(labels.identity_requests, () => {
+            if (workflow) return workflow.compose('identity');
+            panel.replaceChildren();
+            workflow = window.createPersonProfileRequests({ node, request, task, notify }).mount(
+                panel, `/sis/ui/people/${personId(person)}/update-requests/`, {
+                    staff: true, area: 'identity', openEditor: (area, host, callbacks) =>
+                        editIdentityNames(person, host, callbacks),
+                },
+            );
+        });
+        panel.append(open); body.append(panel);
+        return { beforeLeave: () => workflow?.beforeLeave() ?? true };
+    }
+
     async function editProfile(person) {
         const id = personId(person);
         const record = await request(`/sis/ui/people/${id}/profile/`);
@@ -36,6 +108,7 @@ window.createWorkspacePeople = function (ui) {
         const fields = [
             ["given_name", "Given name"],
             ["family_name", "Family name"],
+            ['reason', window.profileRequestLabels.reason, 'textarea'],
             [
                 "directory_restricted",
                 "Restrict public directory disclosure",
@@ -266,7 +339,8 @@ window.createWorkspacePeople = function (ui) {
         const requests = node("div");
         body.append(contactPanel("Profile update requests", "Request missing information and review the person's replies. Profile edits are saved separately.", "chat-left-text", requests));
         window.createPersonProfileRequests({ node, request, task, notify }).mount(
-            requests, `/sis/ui/people/${id}/update-requests/`, { staff: true, showHeading: false, openEditor: area => {
+            requests, `/sis/ui/people/${id}/update-requests/`, { staff: true, showHeading: false, openEditor: (area, host, callbacks) => {
+                if (area === 'identity') return editIdentityNames(person, host, callbacks);
                 if (area === 'education') {
                     const content = [...contactBody.childNodes];
                     return education(person, () => {
@@ -459,8 +533,9 @@ window.createWorkspacePeople = function (ui) {
         const documentEditor = window.createAdmissionDocuments({ node, request, task, notify, holdLabels: ui.documentHoldLabels, retentionLabels: ui.documentRetentionLabels }).mount(documents, row.id, { staff: true });
         body.append(documents);
         const offerArea = node('div'), withdrawalArea = node('div'); body.append(offerArea, withdrawalArea);
-        let background = null, withdrawalEditor = null, answerEditor = null;
-        const otherForms = () => workbench.beforeLeave() && documentEditor.beforeLeave() && (background?.beforeLeave() ?? true);
+        let background = null, identityUpdates = null, withdrawalEditor = null, answerEditor = null;
+        const otherForms = () => workbench.beforeLeave() && documentEditor.beforeLeave()
+            && (background?.beforeLeave() ?? true) && (identityUpdates?.beforeLeave() ?? true);
         const offerEditor = window.createAdmissionOffers({ node, request, task, notify }).mount(offerArea, row.id,
             { staff: true, canIssue: can('sis:admissions:offers'), canPolicy: can('sis:admissions:policy'),
                 beforeChange: () => otherForms() && (withdrawalEditor?.beforeLeave() ?? true) });
@@ -492,6 +567,7 @@ window.createWorkspacePeople = function (ui) {
         body.append(casework);
         if (can('sis:person:manage')) {
             background = educationWorkflow(body, person, false, mayLeave);
+            identityUpdates = identityWorkflow(body, person);
         }
         if (submission) {
             const section = node('section', { class: 'record-section' });

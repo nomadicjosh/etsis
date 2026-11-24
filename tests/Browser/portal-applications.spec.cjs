@@ -378,3 +378,44 @@ test('applicant education follow-up stays beside an unfinished application and u
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
     expect(state.errors).toEqual([]);
 });
+
+
+test('identity follow-up beside an application preserves new answers and sends only a review reply', async ({ page }) => {
+    const profileWrites = [], profileReads = [];
+    let responded = false;
+    const f = await fixture(page, { applications: [], profileRequests: async route => {
+        const req = route.request(), url = new URL(req.url());
+        profileReads.push(url.pathname);
+        if (url.pathname.endsWith('/identity/')) return route.fulfill({ json: {
+            given_name: 'Fictional <name>', family_name: 'Applicant', institutional_id: 'P-001',
+        } });
+        if (req.method() === 'POST') {
+            profileWrites.push({ data: JSON.parse(new URLSearchParams(req.postData()).get('_workspace_json')),
+                csrf: req.headers()['x-csrf-token'] });
+            responded = true; return route.fulfill({ json: { status: 'saved' } });
+        }
+        expect(url.searchParams.get('area')).toBe('identity');
+        return route.fulfill({ json: { items: [{ id: id(94), area: 'identity', status: responded ? 'responded' : 'requested',
+            version: responded ? 1 : 0, created_at: '2026-11-23T12:00:00Z',
+            instructions: 'Check the fictional recorded name.', response: responded ? 'Fictional spelling correction.' : null,
+        }], next_after: null, new_id: id(95) } });
+    } });
+    await openNewApplication(page);
+    await page.getByRole('button', { name: 'Identity correction requests', exact: true }).click();
+    const panel = page.getByRole('region', { name: 'Identity correction requests', exact: true });
+    await panel.getByLabel('Update for staff', { exact: true }).fill('Fictional spelling correction.');
+    await panel.getByRole('button', { name: 'Review recorded identity', exact: true }).click();
+    await expect(panel).toContainText('Fictional <name>');
+    await expect(page.getByRole('textbox', { name: 'New application note', exact: true })).toHaveValue('Unsaved fictional new answer.');
+    await panel.getByRole('button', { name: 'Send update for review', exact: true }).click();
+    await expect(panel).toContainText('Ready for staff review');
+    expect(profileWrites).toEqual([{ data: { version: 0, message: 'Fictional spelling correction.' }, csrf: 'fictional-test-token' }]);
+    expect(f.writes).toHaveLength(0);
+    await expect(page.getByRole('textbox', { name: 'New application note', exact: true })).toHaveValue('Unsaved fictional new answer.');
+    expect(profileReads.filter(path => path.endsWith('/identity/'))).toHaveLength(1);
+    await page.getByRole('region', { name: 'Identity correction requests', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/etsis-identity-applicant.png' });
+    await page.setViewportSize({ width: 320, height: 1000 }); await accessible(page);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
