@@ -379,6 +379,35 @@ final class StudentDegreeProgressTest extends TestCase
             }
         }
     }
+    public function testCombinedExplanationLimitIsCuratedWithoutInventingEarlierCoverage(): void
+    {
+        $review = $this->combined();
+        self::assertArrayNotHasKey("analysis_limited", new StudentDegreeProgress($review)->describe()["competition"]);
+        $review["competition"] = ["conflicts" => [], "more_conflicts" => false, "analysis_limited" => true];
+        self::assertSame($review["competition"], new StudentDegreeProgress($review)->describe()["competition"]);
+        $review["competition"]["staff_notes"] = "fictional-private-search-detail";
+        self::assertStringNotContainsString(
+            "fictional-private-search-detail",
+            json_encode(new StudentDegreeProgress($review)->describe(), JSON_THROW_ON_ERROR),
+        );
+    }
+    public function testCombinedExplanationLimitRejectsInvalidFlagsAndClaimsOutsideInfeasibility(): void
+    {
+        foreach (["true", 1, null, [], false] as $flag) {
+            $review = $this->combined();
+            $review["competition"]["analysis_limited"] = $flag;
+            if ($flag === false) {
+                $review["outcome"] = "feasible";
+                $review["competition"] = ["conflicts" => [], "more_conflicts" => false, "analysis_limited" => true];
+            }
+            try {
+                new StudentDegreeProgress($review);
+                self::fail("Invalid explanation coverage was accepted.");
+            } catch (\Domain\Shared\EventSourcing\CorruptHistoryException) {
+                self::assertTrue(true);
+            }
+        }
+    }
 
     private function groupSupport(string $outcome = "infeasible"): array
     {

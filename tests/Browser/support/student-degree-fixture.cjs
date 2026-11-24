@@ -513,6 +513,8 @@ async function fixture(page, options = {}) {
             result.records[1].recorded_earned_milli = 0;
             result.records[2].retained_grade = { code: 'D', points_milli: 1000, grading_publication_retained: true };
         }
+        if (options.competitionLimited)
+            result.competition = {...result.competition || {conflicts: [], more_conflicts: false}, analysis_limited: true};
         return result;
     }
     await page.route("**/sis/**", async (route) => {
@@ -775,16 +777,23 @@ async function fixture(page, options = {}) {
                             progress.work_summary.placement_established = false;
                             progress.work_summary.unused_completed_count = null;
                         }
+                        if (options.combinedSubgroup && kind === "degree")
+                            progress.allocation.groups.push({...structuredClone(progress.allocation.groups[0]),
+                                id: id(82), name: "Humanities shared core"});
                         return { kind, progress };
                     });
                     response = { status: "review", outcome: options.combinedInfeasible ? "infeasible" : "feasible",
                         sharing: options.combinedSharing || "one_component", input_status: response.input_status,
                         current_record_count: response.current_record_count, components: parts,
                         competition: { conflicts: options.combinedCompetition ? [{
-                            groups: [{ component: 0, group: 0 }, { component: 1, group: 0 }],
-                            required_credits_milli: 6000, credit_upper_bound_milli: 3000, credit_shortfall_milli: 3000,
-                            required_courses: 2, course_upper_bound: 1, course_shortfall: 1,
-                        }] : [], more_conflicts: !!options.moreCompetition } };
+                            groups: [{ component: 0, group: 0 }, { component: 1, group: 0 },
+                                ...(options.combinedSubgroup ? [{component: 0, group: 1}] : [])],
+                            required_credits_milli: options.combinedSubgroup ? 9000 : 6000,
+                            credit_upper_bound_milli: options.combinedSubgroup ? 6000 : 3000, credit_shortfall_milli: 3000,
+                            required_courses: options.combinedSubgroup ? 3 : 2,
+                            course_upper_bound: options.combinedSubgroup ? 2 : 1, course_shortfall: 1,
+                        }] : [], more_conflicts: !!options.moreCompetition,
+                            ...(options.competitionLimited ? {analysis_limited: true} : {}) } };
                 }
                 response.mode = "combined_curriculum";
             }

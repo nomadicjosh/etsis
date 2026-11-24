@@ -393,6 +393,8 @@ async function fixture(page, options = {}) {
                 policy:{repeat_credit:"highest_earned",repeat_gpa:"all_eligible",transfer_overall_gpa:"exclude",attempt_order:"academic_period"},
             };
             if (options.calculationBlockers) response.issues = [{component:"overall",code:"policy_unknown"}];
+            if (options.competitionLimited)
+                response.allocation.competition = {conflicts: [], more_conflicts: false, analysis_limited: true};
             if (options.rulePlacement) {
                 response.current_record_count=1;
                 response.work_summary.placement_established=true;
@@ -1442,7 +1444,7 @@ test("degree review limits leave editing available without consent or a provider
 });
 
 test("temporary audit workspace tests unsaved degree settings and working groups without publication", async ({page}) => {
-    const f = await fixture(page, {existing:true,calculationBlockers:true});
+    const f = await fixture(page, {existing:true,calculationBlockers:true,competitionLimited:true});
     await openDegree(page, true);
     await page.getByLabel("Requirement title", {exact:true}).fill("Unpublished trial <b>fictional</b>");
     await page.getByLabel("Total earned credits required", {exact:true}).fill("6");
@@ -1462,6 +1464,7 @@ test("temporary audit workspace tests unsaved degree settings and working groups
     await expect(dialog).toContainText("Working draft revision 1");
     await expect(dialog).toContainText("Unpublished trial");
     await expect(dialog).toContainText("No result is saved");
+    await expect(dialog.getByRole("region", {name:"Shared coursework review",exact:true})).toContainText("limit of 512 comparisons");
     await expect(dialog.getByRole("heading",{name:"Overall GPA: Calculation policy not retained"})).toBeVisible();
     await expect(dialog).toContainText("no individual coursework is identified here");
     await expect(dialog).toContainText("Fictional Learner <b>example</b>");

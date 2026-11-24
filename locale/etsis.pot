@@ -3609,3 +3609,19 @@ msgstr ""
 #: resources/views/frontend/portal/program.phtml:78
 msgid "Each pair below cannot be selected together within this program."
 msgstr ""
+
+#: resources/views/shared/degree-competition-labels.php:8
+msgid "Additional shared-course explanations check three- and four-group combinations within a limit of 512 comparisons. Larger or unchecked combinations may require registrar review."
+msgstr ""
+
+#: resources/views/shared/degree-competition-labels.php:12
+msgid "Shared coursework review"
+msgstr ""
+
+#: resources/views/shared/degree-competition-labels.php:13
+msgid "Back to progress review"
+msgstr ""
+
+#: resources/views/shared/degree-competition-labels.php:14
+msgid "No numeric shared-course shortage was identified within this explanation limit. A complete placement is still unavailable; review the retained requirements and sharing rules."
+msgstr ""

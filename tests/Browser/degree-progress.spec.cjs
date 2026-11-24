@@ -257,10 +257,19 @@ test("combined degree progress reuses the same shared-course explanation when op
     await expect(
         studio.getByRole("region", { name: "Groups competing for completed courses", exact: true }),
     ).toContainText("combined credit shortfall is at least 3 credits");
+    await studio.getByRole("region", {name: "Groups competing for completed courses", exact: true})
+        .getByRole("button", {name: "Inspect group General education <b>fictional</b>", exact: true}).focus();
+    await page.keyboard.press("Enter");
+    await expect(studio.getByRole("heading", {name: "General education <b>fictional</b>", exact: true})).toBeVisible();
+    await studio.getByRole("button", {name: "Back to progress review", exact: true}).click();
     await studio.getByRole("button", { name: "Inspect course-group placement", exact: true }).click();
     await expect(
         studio.getByRole("region", { name: "Groups competing for completed courses", exact: true }),
     ).toContainText("Professional studies <script>fictional</script>");
+    await studio.getByRole("region", {name: "Groups competing for completed courses", exact: true})
+        .getByRole("button", {name: "Inspect group Professional studies <script>fictional</script>", exact: true}).click();
+    await expect(studio.getByRole("heading", {name: "Professional studies <script>fictional</script>", exact: true})).toBeVisible();
+    await studio.getByRole("button", {name: "Back to course groups", exact: true}).click();
     expect(f.calls.filter((c) => c.path.endsWith("/progress/"))).toHaveLength(1);
     expect(f.calls.some((c) => c.path.endsWith("/allocation/"))).toBe(false);
     expect(f.errors).toEqual([]);

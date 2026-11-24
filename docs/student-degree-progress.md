@@ -185,6 +185,8 @@ No migration, event append, receipt, stored result or projection change is intro
 
 When a joint review has a supported shared-course shortage, the same explanation offers **Inspect …** buttons that open and focus the affected course-group details. These links use positions within the captured response and perform no extra academic request.
 
+Shortage explanations also examine smaller three- and four-group combinations, so surplus eligible work elsewhere cannot hide a supported subgroup shortage. A notice explains when the 512-comparison limit or larger unchecked combinations leave further explanation work. **Shared coursework review** can appear without a numeric shortage when the joint search found no complete placement but these explanation bounds did not identify its cause. Ask the registrar to review the retained rules; this does not mean requirements are complete or prescribe extra courses. See [shared-course shortages](student-course-placement.md#shared-course-shortages).
+
 The portal verifies the signed-in owner before and after the read; staff permissions do not select another person's student record through this service. Each component passes through the existing student response projection, withholding internal requirement/work/course/approval identities, routing fingerprints, protected reasons and raw rule grammar. Course labels, explanations and response-local evidence links remain accessible. Credits/GPA figures are never added across component cards. Pursuits without selected/required specializations retain the familiar degree-only screen. A required missing specialization or unresolved routing/curriculum context prompts a registrar review instead of presenting partial completion.
 
 

@@ -77,6 +77,9 @@ window.curriculumOwnershipLabels = JSON.parse(
 window.curriculumChoiceLabels = JSON.parse(
     document.getElementById('curriculum-choice-labels')?.textContent || '{}',
 );
+window.degreeCompetitionLabels = JSON.parse(
+    document.getElementById("degree-competition-labels")?.textContent || "{}",
+);
 window.curriculumExclusionPairs = function (snapshot, selected = null) {
     const choices = new Map((snapshot?.offered || []).map(choice => [choice.id, choice]));
     return (snapshot?.component_exclusions || [])
@@ -753,18 +756,26 @@ window.createDegreeNamedCourseReview = function (ui, rows, resolve) {
 
 /* Captured combined-review explanations; no network calls, storage or academic calculations. */
 window.createCurriculumCompetition = function (ui, data, inspect) {
-    if (data.status !== "review" || data.outcome !== "infeasible" || !data.competition?.conflicts?.length) return null;
+    if (data.status !== "review" || data.outcome !== "infeasible" ||
+        (!data.competition?.conflicts?.length && !data.competition?.analysis_limited)) return null;
     const { node, button } = ui;
+    const hasConflicts = data.competition.conflicts.length > 0;
+    const labels = window.degreeCompetitionLabels;
+    const heading = hasConflicts ? "Shared-course shortages" : labels.limit_heading;
     const section = node(
         "section",
-        { class: "border rounded-3 p-3 mb-3", "aria-label": "Shared-course shortages" },
-        node("h2", {}, "Shared-course shortages"),
+        { class: "border rounded-3 p-3 mb-3", "aria-label": heading },
+        node("h2", {}, heading),
         node(
             "p",
             {},
-            "These groups compete for eligible work under the retained sharing rules. The figures describe requirement contributions, not additional earned credits or GPA. No partial placements have been assigned.",
+            hasConflicts
+                ? "These groups compete for eligible work under the retained sharing rules. The figures describe requirement contributions, not additional earned credits or GPA. No partial placements have been assigned."
+                : labels.no_bound,
         ),
     );
+    if (data.competition.analysis_limited)
+        section.append(node("p", { class: "alert alert-info", role: "status" }, labels.limited));
     const credits = (value) => `${value / 1000} credit contribution${value === 1000 ? "" : "s"}`;
     for (const conflict of data.competition.conflicts) {
         const references = conflict.groups.map((reference) => {
@@ -812,7 +823,7 @@ window.createCurriculumCompetition = function (ui, data, inspect) {
                 "More shared-course shortages were found. Showing the first 10 explanations.",
             ),
         );
-    section.append(
+    if (hasConflicts) section.append(
         node(
             "p",
             { class: "form-text" },

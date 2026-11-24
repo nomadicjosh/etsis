@@ -418,8 +418,9 @@ final readonly class StudentDegreeProgress
             !array_is_list($source["conflicts"]) ||
             count($source["conflicts"]) > 10 ||
             !is_bool($source["more_conflicts"] ?? null) ||
+            (array_key_exists("analysis_limited", $source) && !is_bool($source["analysis_limited"])) ||
             (($review["outcome"] ?? null) !== "infeasible" &&
-                ($source["conflicts"] !== [] || $source["more_conflicts"]))
+                ($source["conflicts"] !== [] || $source["more_conflicts"] || ($source["analysis_limited"] ?? false)))
         ) {
             throw new CorruptHistoryException();
         }
@@ -481,7 +482,11 @@ final readonly class StudentDegreeProgress
             }
             $conflicts[] = $row;
         }
-        return ["conflicts" => $conflicts, "more_conflicts" => $source["more_conflicts"]];
+        $result = ["conflicts" => $conflicts, "more_conflicts" => $source["more_conflicts"]];
+        if (array_key_exists("analysis_limited", $source)) {
+            $result["analysis_limited"] = $source["analysis_limited"];
+        }
+        return $result;
     }
 
     /**

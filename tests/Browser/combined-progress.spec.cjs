@@ -217,16 +217,18 @@ test("staff shared-course shortages inspect the captured affected group and retu
         readOnly: true,
         combinedInfeasible: true,
         combinedCompetition: true,
+        combinedSubgroup: true,
     });
     await page.getByRole("button", { name: "Combined curriculum progress", exact: true }).click();
     const studio = page.locator("dialog.degree-audit-studio");
     const shortage = studio.getByRole("region", { name: "Shared-course shortages", exact: true });
     await expect(shortage).toContainText("At least 3 credit contributions more are needed");
     await expect(shortage).toContainText("shortfall is at least 1 course contribution");
+    await expect(shortage.getByRole("button", {name: "Inspect Degree · Humanities shared core", exact: true})).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
     await accessible(page);
     await shortage
-        .getByRole("button", { name: "Inspect Specialization DATA · General education <b>fictional</b>", exact: true })
+        .getByRole("button", { name: "Inspect Component (type not recorded) DATA · General education <b>fictional</b>", exact: true })
         .focus();
     await page.keyboard.press("Enter");
     await expect(
@@ -239,6 +241,25 @@ test("staff shared-course shortages inspect the captured affected group and retu
     expect(f.calls.some((c) => /progress\/$|academic-work\/allocation\/$/.test(c.path))).toBe(false);
     await studio.getByRole("button", { name: "Refresh combined review", exact: true }).click();
     await expect.poll(() => f.calls.filter((c) => c.path === `${f.base}combined/`).length).toBe(2);
+    expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
+});
+
+test("staff shared-course explanation limits remain visible without a proven numeric shortage", async ({ page }) => {
+    const f = await fixture(page, {
+        assigned: true, readOnly: true, combinedInfeasible: true, competitionLimited: true,
+    });
+    await page.getByRole("button", { name: "Combined curriculum progress", exact: true }).click();
+    const review = page.getByRole("region", { name: "Shared coursework review", exact: true });
+    await expect(review).toContainText("No numeric shared-course shortage was identified");
+    await expect(review).toContainText("A complete placement is still unavailable");
+    await expect(review).toContainText("limit of 512 comparisons");
+    await expect(review.getByRole("article")).toHaveCount(0);
+    await expect(review).not.toContainText("More shared-course shortages were found");
+    await page.setViewportSize({width: 320, height: 844});
+    await accessible(page);
+    await review.screenshot({path: "/tmp/etsis-staff-shared-course-limit.png"});
+    expect(f.calls.filter(call => call.path === `${f.base}combined/`)).toHaveLength(1);
     expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
     expect(f.errors).toEqual([]);
 });

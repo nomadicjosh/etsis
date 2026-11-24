@@ -121,6 +121,17 @@ for (const outcome of ["infeasible", "needs_review", "unsupported", "undetermine
         expect(f.errors).toEqual([]);
     });
 }
+
+test("course placement discloses an explanation limit without a numeric shortage", async ({page}) => {
+    const f = await fixture(page, {assigned: true, allocationOutcome: "infeasible", competitionLimited: true});
+    await page.getByRole("button", {name: "Review course placement", exact: true}).click();
+    const review = page.getByRole("region", {name: "Shared coursework review", exact: true});
+    await expect(review).toContainText("No numeric shared-course shortage was identified");
+    await expect(review).toContainText("limit of 512 comparisons");
+    await expect(review.getByRole("article")).toHaveCount(0);
+    expect(f.calls.filter(call => call.path.endsWith("/allocation/"))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
 for (const status of ["needs_selection", "limited"]) {
     test(`placement ${status} provides guidance without fake empty results`, async ({ page }) => {
         const f = await fixture(page, {
@@ -251,7 +262,7 @@ for (const courseCount of [false, true]) {
         await page.setViewportSize({ width: 375, height: 812 });
         await accessible(page);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-        await studio
+        await panel
             .getByRole("button", { name: "Inspect group General education <b>fictional</b>", exact: true })
             .click();
         await studio.getByRole("button", { name: "Back to course groups", exact: true }).click();

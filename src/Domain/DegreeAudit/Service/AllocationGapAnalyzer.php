@@ -121,8 +121,8 @@ final readonly class AllocationGapAnalyzer
 
     /**
      * Proven cross-group shortages only; absence is not proof that a placement exists.
-     * Examine overlapping pairs and complete connected components, never all subsets.
-     * @return array{conflicts:list<array<string,mixed>>,more_conflicts:bool}
+     * Examine pairs, whole connected components and bounded three/four-group subsets.
+     * @return array{conflicts:list<array<string,mixed>>,more_conflicts:bool,analysis_limited?:bool}
      */
     public function competition(AllocationProblem $problem): array
     {
@@ -186,6 +186,7 @@ final readonly class AllocationGapAnalyzer
             }
         }
         $seen = [];
+        $components = [];
         foreach ($ids as $id) {
             if (isset($seen[$id])) {
                 continue;
@@ -208,6 +209,30 @@ final readonly class AllocationGapAnalyzer
             if (count($component) > 2) {
                 sort($component, SORT_STRING);
                 $sets[] = $component;
+                $components[] = $component;
+            }
+        }
+        // Keep the existing pair/component checks even when the additional subset budget is exhausted.
+        $comparisons = 0;
+        foreach ($components as $component) {
+            if (count($component) > 5) {
+                // Proper subsets of five or more groups are outside this explanation's supported bounds.
+                $result["analysis_limited"] = true;
+            }
+        }
+        for ($size = 3; $size <= 4; $size++) {
+            foreach ($components as $component) {
+                if (count($component) <= $size) {
+                    continue;
+                }
+                foreach ($this->subsets($component, $size) as $subset) {
+                    if ($comparisons === 512) {
+                        $result["analysis_limited"] = true;
+                        break 3;
+                    }
+                    $comparisons++;
+                    $sets[] = $subset;
+                }
             }
         }
         usort(
@@ -264,6 +289,18 @@ final readonly class AllocationGapAnalyzer
             ];
         }
         return $result;
+    }
+
+    /** @param list<string> $ids @return \Generator<int,list<string>> */
+    private function subsets(array $ids, int $size, int $start = 0, array $prefix = []): \Generator
+    {
+        if ($size === 0) {
+            yield $prefix;
+            return;
+        }
+        for ($i = $start; $i <= count($ids) - $size; $i++) {
+            yield from $this->subsets($ids, $size - 1, $i + 1, [...$prefix, $ids[$i]]);
+        }
     }
 
     /** @param array<string,int> $amounts */

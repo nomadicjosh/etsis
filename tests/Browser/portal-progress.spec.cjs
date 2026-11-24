@@ -110,6 +110,8 @@ async function fixture(page,options={}) {
         };
         if (options.combined && data.status === "review") {
             const degree = structuredClone(data), specialization = structuredClone(data);
+            if (options.combinedSubgroup)
+                degree.allocation.groups.push({...structuredClone(degree.allocation.groups[0]), name: "Humanities shared core"});
             specialization.context.name = "Data <b>fictional</b> requirements";
             specialization.context.kind = "specialization";
             if (options.combinedShortage) {
@@ -121,11 +123,15 @@ async function fixture(page,options={}) {
                 }
             }
             data = { status: "review", mode: "combined_curriculum", outcome: options.combinedShortage ? "infeasible" : "feasible", sharing: "multiple_components", current_record_count: 21,
-                competition: { conflicts: options.combinedShortage ? [{
-                    groups: [{ component: 0, group: 0 }, { component: 1, group: 0 }],
-                    required_credits_milli: 6000, credit_upper_bound_milli: 3000, credit_shortfall_milli: 3000,
-                    required_courses: 2, course_upper_bound: 1, course_shortfall: 1,
-                }] : [], more_conflicts: false },
+                competition: { conflicts: options.combinedShortage && !options.competitionLimitOnly ? [{
+                    groups: [{ component: 0, group: 0 }, { component: 1, group: 0 },
+                        ...(options.combinedSubgroup ? [{component: 0, group: 1}] : [])],
+                    required_credits_milli: options.combinedSubgroup ? 9000 : 6000,
+                    credit_upper_bound_milli: options.combinedSubgroup ? 6000 : 3000, credit_shortfall_milli: 3000,
+                    required_courses: options.combinedSubgroup ? 3 : 2,
+                    course_upper_bound: options.combinedSubgroup ? 2 : 1, course_shortfall: 1,
+                }] : [], more_conflicts: false,
+                    ...(options.competitionLimited ? {analysis_limited:true} : {}) },
                 components: [{ kind: "degree", label: "Degree", progress: degree },
                     { kind: "specialization", label: options.typed ? "Major DATA" : "Specialization DATA", ...(options.typed ? { department: { code: "ENG", title: "Fictional English <department>", school: { code: "ARTS", title: "Fictional Arts <college>" } } } : {}), progress: specialization },
                     ...(options.typed ? [{ kind: "specialization", label: options.linked ? "Concentration ART" : "Minor ART", parent_major: options.linked ? { code: "DATA", title: "Original <b>major</b>" } : null, progress: specialization }] : [])] };
@@ -421,11 +427,12 @@ test("student combined progress keeps component drilldowns in the captured joint
 test("student shared-course shortages open captured group detail without a second private request", async ({
     page,
 }) => {
-    const f = await fixture(page, { combined: true, combinedShortage: true });
+    const f = await fixture(page, { combined: true, combinedShortage: true, combinedSubgroup: true });
     await page.getByRole("button", { name: "Review progress · BSCS · 26/FA", exact: true }).click();
     const shortage = page.getByRole("region", { name: "Shared-course shortages", exact: true });
     await expect(shortage).toContainText("At least 3 credit contributions more are needed");
     await expect(shortage).toContainText("not a recommended number of new courses");
+    await expect(shortage.getByRole("button", {name: "Inspect Degree · Humanities shared core", exact: true})).toBeVisible();
     await page.setViewportSize({ width: 390, height: 844 });
     await accessible(page);
     await shortage
@@ -449,6 +456,35 @@ test("student shared-course shortages open captured group detail without a secon
     await page.getByRole("button", { name: "Refresh progress", exact: true }).click();
     await expect.poll(() => f.calls.filter((c) => c.path.endsWith("/degree-progress/")).length).toBe(2);
     expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
+    expect(f.errors).toEqual([]);
+});
+
+test("student shared-course shortages disclose unchecked combinations with accessible zoomed review", async ({ page }) => {
+    const f = await fixture(page, { combined: true, combinedShortage: true, competitionLimited: true });
+    await page.getByRole("button", { name: "Review progress · BSCS · 26/FA", exact: true }).click();
+    const review = page.getByRole("region", { name: "Shared-course shortages", exact: true });
+    await expect(review).toContainText("limit of 512 comparisons");
+    await expect(review).toContainText("Larger or unchecked combinations");
+    await page.setViewportSize({width: 640, height: 1000});
+    await page.evaluate(() => { document.documentElement.style.zoom = "2"; });
+    await accessible(page);
+    await page.screenshot({path: "/tmp/etsis-student-shared-course-limit.png", fullPage: true});
+    expect(f.calls.filter(call => call.path.endsWith("/degree-progress/"))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
+
+test("student limit-only review preserves infeasibility without inventing numeric shortages", async ({page}) => {
+    const f = await fixture(page, {
+        combined: true, combinedShortage: true, competitionLimited: true, competitionLimitOnly: true,
+    });
+    await page.getByRole("button", {name: "Review progress · BSCS · 26/FA", exact: true}).click();
+    const review = page.getByRole("region", {name: "Shared coursework review", exact: true});
+    await expect(review).toContainText("No numeric shared-course shortage was identified");
+    await expect(review).toContainText("A complete placement is still unavailable");
+    await expect(review).toContainText("limit of 512 comparisons");
+    await expect(review.getByRole("article")).toHaveCount(0);
+    await expect(review).not.toContainText("These are minimum shortages");
+    expect(f.calls.filter(call => call.path.endsWith("/degree-progress/"))).toHaveLength(1);
     expect(f.errors).toEqual([]);
 });
 

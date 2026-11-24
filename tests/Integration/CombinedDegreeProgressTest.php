@@ -957,6 +957,125 @@ final class CombinedDegreeProgressTest extends TestCase
         );
     }
 
+    private function subgroupFixture(string $sharing = "one_component"): StudentSpecializationRequirementsFixture
+    {
+        $f = $this->fixture($sharing);
+        $r = $f->r;
+        $pool = $r->groupDefinition["courses"];
+        foreach (["SCI.103", "SCI.104"] as $code) {
+            $id = EntityId::generate();
+            $r->sis->registration->addCourse(new \Domain\Catalog\Course($id, $code, "Fictional " . $code, 3000));
+            $review = $r->catalog->publications()->review($id, "Fictional surplus coursework.");
+            $version = $r->catalog->publications()->publish($id, $review["review_token"]);
+            $pool[] = ["course_id" => $id->value, "version_id" => $version["operation_id"]];
+        }
+        $references = $r->definition["groups"];
+        foreach (["Second scarce group", "Connected surplus group"] as $index => $name) {
+            $definition = $r->groupDefinition;
+            $definition["name"] = $name;
+            $definition["courses"] = $index === 0 ? array_slice($pool, 0, 2) : [$pool[0], $pool[2], $pool[3]];
+            $definition["rules"][0]["id"] = EntityId::generate()->value;
+            $definition["rules"][0]["course_ids"] = array_column($definition["courses"], "course_id");
+            $group = EntityId::generate();
+            $r->groups->create($group, new CourseGroupDefinitionV2($definition));
+            $review = $r->groups->review($group, "Fictional subgroup proof fixture.");
+            $version = $r->groups->publish($group, $review["review_token"]);
+            $references[] = ["group_id" => $group->value, "version_id" => $version["operation_id"]];
+        }
+        $row = $r->degrees->view($r->degree);
+        $definition = $row["definition"];
+        $definition["groups"] = $references;
+        $r->degrees->save(
+            $r->degree,
+            $row["revision"],
+            new \Domain\DegreeAudit\ValueObject\AuditRequirementsV3($definition),
+        );
+        $version = new EntityId($r->publishDegree()["operation_id"]);
+        $requirements = $f->requirements();
+        $review = $requirements->review(
+            $f->student,
+            $f->assignment,
+            $r->degree,
+            $version,
+            new \Domain\DegreeAudit\ValueObject\PursuitStart("2026-01-31"),
+            "Fictional retained subgroup requirements.",
+        );
+        $requirements->assign($f->student, $f->assignment, $review["review_token"]);
+        // The work helper uses this course list; the retained first group remains the original two-course pool.
+        $r->groupDefinition["courses"] = $pool;
+        return $f;
+    }
+
+    public function testSubgroupShortageSurvivesOwnerCurationAndFrozenReplayAfterGradeCorrection(): void
+    {
+        $f = $this->subgroupFixture();
+        $s = $f->r->sis;
+        [$section, $enrollment] = $this->work($f, 0);
+        foreach ([1, 2, 3] as $index) {
+            $this->work($f, $index);
+        }
+        $before = $this->snapshot($f);
+        $result = $this->preview($f);
+        self::assertSame("infeasible", $result["outcome"]);
+        self::assertCount(1, $result["competition"]["conflicts"]);
+        $conflict = $result["competition"]["conflicts"][0];
+        self::assertCount(3, $conflict["groups"]);
+        self::assertSame(3000, $conflict["credit_shortfall_milli"]);
+        self::assertSame(1, $conflict["course_shortfall"]);
+        $owner = new \Domain\Portal\ValueObject\StudentDegreeProgress($result)->describe();
+        self::assertEquals($result["competition"], $owner["competition"]);
+        self::assertStringNotContainsString("group_ids", json_encode($owner["competition"], JSON_THROW_ON_ERROR));
+        self::assertSame($before, $this->snapshot($f));
+        $records = $this->recordedService($f);
+        $review = $records->review($f->student, $f->assignment, "Fictional subgroup observation.");
+        $args = [
+            $f->student,
+            $f->assignment,
+            new EntityId($review["operation_id"]),
+            $review["revision"],
+            $review["reason"],
+            $review["review_token"],
+        ];
+        $receipt = $records->confirm(...$args);
+        $original = $records->show($f->student, $f->assignment, $args[2], "staff");
+        $events = iterator_to_array(
+            \EventStoreFixture::framework($s->connection->queryBuilder())->getAggregateHistoryFor(
+                new \Domain\DegreeAudit\ValueObject\DegreeProgressRecordId($review["operation_id"]),
+            ),
+        );
+        $snapshot = new \Domain\DegreeAudit\ValueObject\DegreeProgressSnapshot($events[0]->payload()["snapshot"]);
+        self::assertEquals($result["competition"], $snapshot->data["result"]["competition"]);
+        $grades = array_column(
+            $s->academicCredits()->choices($f->student, $section->id, $enrollment)["items"],
+            "id",
+            "code",
+        );
+        $correction = $s->academicCredits()->review(
+            $f->student,
+            $section->id,
+            $enrollment,
+            new EntityId($grades["F"]),
+            1,
+            reason: "Fictional attributed final-grade correction.",
+        );
+        $s->academicCredits()->commit($f->student, $section->id, $correction["review_token"]);
+        self::assertNotSame($result["competition"], $this->preview($f)["competition"]);
+        self::assertTrue($this->service($f)->verifySnapshot($snapshot));
+        self::assertSame($receipt, $records->confirm(...$args));
+        self::assertSame($original, $records->show($f->student, $f->assignment, $args[2], "staff"));
+    }
+
+    public function testSubgroupBoundRespectsPermittedSharingAcrossCurriculumComponents(): void
+    {
+        $f = $this->subgroupFixture("multiple_components");
+        foreach ([0, 1, 2, 3] as $index) {
+            $this->work($f, $index);
+        }
+        $result = $this->preview($f);
+        self::assertSame("feasible", $result["outcome"]);
+        self::assertSame([], $result["competition"]["conflicts"]);
+    }
+
     public function testRecordedReviewFreezesItsBasisAndOriginalRetryAfterNewAcademicFacts(): void
     {
         $f = $this->fixture();

@@ -3497,7 +3497,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 ),
             ),
         );
-        const competition = groupCompetition({ ...data.allocation, context: data.context });
+        const allocation = { ...data.allocation, context: data.context };
+        const returnToProgress = () => restore();
+        returnToProgress.groupReturnLabel = window.degreeCompetitionLabels.back_progress;
+        const competition = groupCompetition(allocation, (group) =>
+            groupPlacementDetails(allocation, group, returnToProgress),
+        );
         if (competition) body.append(competition);
         const policies = node(
             "details",
@@ -3883,7 +3888,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             body.append(
                 node("p", { class: "alert alert-info" }, placementIssues[issue] || "A retained input needs review."),
             );
-        const competition = groupCompetition(data);
+        const competition = groupCompetition(data, (group) => groupPlacementDetails(data, group, restore));
         if (competition) body.append(competition);
         body.append(node("h2", {}, "Course groups"));
         const groups = node("div", { class: "audit-library-grid" });
@@ -3978,24 +3983,31 @@ window.createWorkspaceDegreeAudit = function (ui) {
             pages.append(button("Next work records", () => renderGroupAllocation(base, back, data, offset + 20)));
         body.append(pages);
     }
-    function groupCompetition(data) {
+    function groupCompetition(data, inspect) {
         if (
             data.outcome !== "infeasible" ||
             data.context.group_reuse !== "one_group" ||
-            !data.competition?.conflicts.length
+            (!data.competition?.conflicts.length && !data.competition?.analysis_limited)
         )
             return null;
         const names = new Map(data.groups.map((group) => [group.id, group.name]));
+        const hasConflicts = data.competition.conflicts.length > 0;
+        const labels = window.degreeCompetitionLabels;
+        const heading = hasConflicts ? "Groups competing for completed courses" : labels.limit_heading;
         const section = node(
             "section",
-            { class: "record-section", "aria-label": "Groups competing for completed courses" },
-            node("h2", {}, "Groups competing for completed courses"),
+            { class: "record-section", "aria-label": heading },
+            node("h2", {}, heading),
             node(
                 "p",
                 {},
-                "These groups compete for eligible work under the retained one-group policy. Their combined requirements exceed the shared evidence available. No partial placements have been assigned.",
+                hasConflicts
+                    ? "These groups compete for eligible work under the retained one-group policy. Their combined requirements exceed the shared evidence available. No partial placements have been assigned."
+                    : labels.no_bound,
             ),
         );
+        if (data.competition.analysis_limited)
+            section.append(node("p", { class: "alert alert-info", role: "status" }, labels.limited));
         const creditUnits = (value) => `${text(value)} credit${value === 1000 ? "" : "s"}`;
         for (const conflict of data.competition.conflicts) {
             const card = node(
@@ -4026,6 +4038,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                     "Review the retained requirements and approved alternatives before planning additional work. These bounds do not select a course to take or change an academic record.",
                 ),
             );
+            const links = node("div", { class: "d-flex flex-wrap gap-2" });
+            for (const id of conflict.group_ids)
+                links.append(button(`Inspect group ${names.get(id)}`, () =>
+                    inspect(data.groups.find((group) => group.id === id)),
+                ));
+            card.append(links);
             section.append(card);
         }
         if (data.competition.more_conflicts)

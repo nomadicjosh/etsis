@@ -112,6 +112,86 @@ final class GroupCompetitionTest extends TestCase
         self::assertSame(3000, $r["conflicts"][0]["credit_shortfall_milli"]);
         self::assertSame(1, $r["conflicts"][0]["course_shortfall"]);
     }
+    public function testThreeGroupShortageIsNotHiddenBySurplusElsewhereInTheComponent(): void
+    {
+        $p = $this->problem(
+            array_map(fn($id) => $this->group($id), [10, 20, 30, 40]),
+            [
+                $this->course(1, [10, 20, 30, 40]),
+                $this->course(2, [10, 20, 30]),
+                $this->course(3, [40]),
+                $this->course(4, [40]),
+            ],
+        );
+        $result = new AllocationGapAnalyzer()->competition($p);
+        self::assertCount(1, $result["conflicts"]);
+        self::assertSame(array_map(self::id(...), [10, 20, 30]), $result["conflicts"][0]["group_ids"]);
+        self::assertSame(3000, $result["conflicts"][0]["credit_shortfall_milli"]);
+        self::assertSame(1, $result["conflicts"][0]["course_shortfall"]);
+        self::assertArrayNotHasKey("analysis_limited", $result);
+        self::assertSame(AllocationOutcome::Infeasible, new CourseAllocationPlanner()->plan($p)->outcome);
+    }
+    public function testFourGroupShortageIsNotHiddenBySurplusElsewhereInTheComponent(): void
+    {
+        $groups = array_map(fn($id) => $this->group($id), [10, 20, 30, 40, 50]);
+        $courses = [
+            $this->course(1, [10, 20, 30, 40, 50]),
+            $this->course(2, [10, 20, 30, 40]),
+            $this->course(3, [10, 20, 30, 40]),
+            $this->course(4, [50]),
+            $this->course(5, [50]),
+        ];
+        $analyzer = new AllocationGapAnalyzer();
+        $result = $analyzer->competition($this->problem($groups, $courses));
+        self::assertCount(1, $result["conflicts"]);
+        self::assertSame(array_map(self::id(...), [10, 20, 30, 40]), $result["conflicts"][0]["group_ids"]);
+        self::assertSame(3000, $result["conflicts"][0]["credit_shortfall_milli"]);
+        self::assertSame(1, $result["conflicts"][0]["course_shortfall"]);
+        self::assertArrayNotHasKey("analysis_limited", $result);
+        self::assertSame(
+            $result,
+            $analyzer->competition($this->problem(array_reverse($groups), array_reverse($courses))),
+        );
+        self::assertSame(
+            AllocationOutcome::Infeasible,
+            new CourseAllocationPlanner()->plan($this->problem($groups, $courses))->outcome,
+        );
+    }
+    public function testComparisonLimitDoesNotInventAProvenShortageOrExhaustiveSearch(): void
+    {
+        $ids = range(10, 34);
+        $groups = array_map(fn($id) => $this->group($id), $ids);
+        $courses = [];
+        foreach (range(1, 25) as $id) {
+            $courses[] = $this->course($id, $id <= 2 ? $ids : range(10, 31), target: ($id % 6) + 1);
+        }
+        // The last three groups need three courses but share only two. Their triple is past the budget.
+        $result = new AllocationGapAnalyzer()->competition($this->problem($groups, $courses));
+        self::assertSame([], $result["conflicts"]);
+        self::assertFalse($result["more_conflicts"]);
+        self::assertTrue($result["analysis_limited"]);
+        $lastThree = $this->problem(
+            array_slice($groups, -3),
+            [$this->course(1, [32, 33, 34]), $this->course(2, [32, 33, 34])],
+        );
+        self::assertCount(1, new AllocationGapAnalyzer()->competition($lastThree)["conflicts"]);
+    }
+    public function testLargerUnsupportedSubsetsAreDisclosedEvenWithoutBudgetExhaustion(): void
+    {
+        $groups = array_map(fn($id) => $this->group($id), range(10, 15));
+        $courses = [$this->course(1, range(10, 15))];
+        foreach ([2, 3, 4] as $id) {
+            $courses[] = $this->course($id, range(10, 14));
+        }
+        $courses[] = $this->course(5, [15]);
+        $courses[] = $this->course(6, [15]);
+        $problem = $this->problem($groups, $courses);
+        $result = new AllocationGapAnalyzer()->competition($problem);
+        self::assertSame([], $result["conflicts"]);
+        self::assertFalse($result["more_conflicts"]);
+        self::assertTrue($result["analysis_limited"]);
+        self::assertSame(AllocationOutcome::Infeasible, new CourseAllocationPlanner()->plan($problem)->outcome);
+    }
     public function testOverlappingRulesAreNotAddedAndWaivedAllRequirementsDoNotCreateCourseDemand(): void
     {
         $groups = [
@@ -207,7 +287,8 @@ final class GroupCompetitionTest extends TestCase
         $witnesses = $feasible = 0;
         for ($i = 0; $i < 200; $i++) {
             $groups = [];
-            foreach ([10, 20, 30] as $id) {
+            $groupIds = $i % 2 === 0 ? [10, 20, 30] : [10, 20, 30, 40, 50];
+            foreach ($groupIds as $id) {
                 $mode = $random->getInt(0, 2);
                 $rules =
                 $mode === 0
@@ -224,7 +305,7 @@ final class GroupCompetitionTest extends TestCase
             }
             $courses = [];
             foreach (range(1, 5) as $c) {
-                $eligible = array_values(array_filter([10, 20, 30], fn() => $random->getInt(0, 1) === 1));
+                $eligible = array_values(array_filter($groupIds, fn() => $random->getInt(0, 1) === 1));
                 $courses[] = $this->course($c, $eligible, 1500 * $random->getInt(0, 3), ($c % 2) + 1);
             }
             $p = $this->problem($groups, $courses, $random->getInt(0, 1) ? [2] : []);
