@@ -1,0 +1,54 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\config;
+use function Codefy\Framework\Helpers\trans_attr;
+use function Codefy\Framework\Helpers\trans_html;
+
+?>
+<!doctype html>
+<html lang="<?= $esc(config('app.language', 'en')) ?>">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title><?= $pageTitle ?></title>
+        <link rel="icon" href="/assets/images/workspace-mark.svg" type="image/svg+xml" />
+        <link rel="stylesheet" href="/assets/vendor/bootstrap.min.css">
+        <link rel="stylesheet" href="/assets/vendor/icons/bootstrap-icons.min.css">
+        <link rel="stylesheet" href="/assets/css/site-manager.css">
+        <link rel="stylesheet" href="/assets/css/site-navigation.css">
+    </head>
+    <body>
+        <a href="#site-main" class="visually-hidden-focusable p-3"><?= trans_html(
+            "Skip to main content",
+        ) ?></a>
+        <header class="site-header border-bottom bg-white">
+            <nav class="container-fluid site-container d-flex align-items-center flex-wrap gap-3 py-3"
+                aria-label="<?= trans_attr("Website management") ?>">
+                <a
+                    class="site-brand"
+                    href="/admin/"><i
+                    class="bi bi-grid-1x2 me-2"
+                    aria-hidden="true"></i><?= trans_html(
+                        "Staff workspace",
+                    ) ?></a>
+                <a class="btn <?= in_array($mode, ["pages", "page"], true)
+                    ? "btn-primary"
+                    : "btn-light" ?>" href="<?= $esc($managerUrl) ?>"
+                    <?= in_array($mode, ["pages", "page"], true)
+                        ? 'aria-current="page"'
+                        : "" ?>><?= trans_html("Website pages") ?></a>
+                <a class="btn <?= $mode === "menus"
+                    ? "btn-primary"
+                    : "btn-light" ?>" href="<?= $esc($managerUrl) ?>?route=menus"
+                    <?= $mode === "menus"
+                        ? 'aria-current="page"'
+                        : "" ?>><?= trans_html("Website menus") ?></a>
+                <a class="btn <?= $mode === 'settings' ? 'btn-primary' : 'btn-light' ?>"
+                    href="<?= $esc($managerUrl) ?>?route=settings"
+                    <?= $mode === 'settings' ? 'aria-current="page"' : '' ?>>
+                    <?= trans_html('Website settings') ?>
+                </a>
+            </nav>
+        </header>

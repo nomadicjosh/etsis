@@ -1,11 +1,11 @@
 <section class="campus-section campus-container" aria-label="Campus news">
     <div class="campus-section-heading">
         <div>
-            <p class="campus-eyebrow">THE CONVERSATIONS. THE CONNECTIONS.</p>
+            <p class="campus-eyebrow"><?= $this->esc($eyebrow ?? 'THE CONVERSATIONS. THE CONNECTIONS.'); ?></p>
             <h2><?= $this->esc($newsHeading ?? 'Life, learning & everything in between.'); ?></h2>
         </div>
         <a class="campus-text-link" href="/portal/news/">
-            All campus updates
+            <?= $this->esc($linkLabel ?? 'All campus updates'); ?>
             <i class="bi bi-arrow-right" aria-hidden="true"></i>
         </a>
     </div>
@@ -23,7 +23,9 @@
                 </a>
                 <div class="campus-news-content">
                     <p class="campus-eyebrow">CAMPUS UPDATE</p>
-                    <h3><a href="/portal/news/<?= $this->esc($item['code']); ?>/"><?= $this->esc($item['title']); ?></a></h3>
+                    <h3>
+                        <a href="/portal/news/<?= $this->esc($item['code']); ?>/"><?= $this->esc($item['title']); ?></a>
+                    </h3>
                     <p><?= $this->esc(mb_strimwidth($item['excerpt'] ?? $item['content'], 0, 170, '…')); ?></p>
                     <a
                         class="campus-text-link"

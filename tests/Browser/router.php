@@ -52,6 +52,43 @@ if ($path === '/fixture/site-navigation/') {
     return;
 }
 
+if ($path === '/fixture/website-page-settings/') {
+    $loader = new \Qubus\View\Native\NativeLoader(['framework' => $root . '/resources/views']);
+    $record = new \Vihzhuo\Page();
+    $record->setData(['id' => 1, 'name' => 'Fictional admissions <page>', 'layout' => 'portal',
+        'show_in_nav' => 'no', 'nav_position' => 3, 'nav_type' => 'primary']);
+    $record->setTranslations(['en' => ['title' => 'Fictional admissions', 'route' => '/apply/',
+        'meta_title' => '', 'meta_description' => ''], 'es' => ['title' => 'Admisiones', 'route' => '/solicitar/',
+        'meta_title' => '', 'meta_description' => '']]);
+    header('Cache-Control: private, no-store');
+    echo $loader->render('framework::backend/manager/page-settings', [
+        'page' => isset($_GET['create']) ? null : $record, 'submitted' => [],
+        'languageOptions' => ['en' => 'English', 'es' => 'Español'],
+        'layoutOptions' => [['slug' => 'portal', 'title' => 'Campus portal'], ['slug' => 'page-template', 'title' => 'Website page']],
+        'csrfMarkup' => '<input type="hidden" name="csrf_token" value="fictional-test-token">',
+    ]);
+    return;
+}
+
+if (str_starts_with($path, '/fixture/builder-assets/')) {
+    $assetRoot = realpath($root . '/vendor/nomadicjosh/vihzhuo/dist');
+    $asset = realpath($assetRoot . '/' . substr($path, strlen('/fixture/builder-assets/')));
+    if (!$asset || !is_file($asset) || !str_starts_with($asset, $assetRoot . '/')) {
+        http_response_code(404); return;
+    }
+    $extension = pathinfo($asset, PATHINFO_EXTENSION);
+    header('Content-Type: ' . match ($extension) {
+        'js' => 'application/javascript', 'css' => 'text/css', 'svg' => 'image/svg+xml',
+        'png' => 'image/png', 'jpg' => 'image/jpeg', 'woff2' => 'font/woff2', default => 'application/octet-stream',
+    });
+    readfile($asset);
+    return;
+}
+if ($path === '/fixture/website-editor/') {
+    require __DIR__ . '/website-editor-fixture.php';
+    return;
+}
+
 if ($path === '/fixture/website-manager/') {
     $loader = new \Qubus\View\Native\NativeLoader(['framework' => $root . '/resources/views']);
     header('Cache-Control: private, no-store');

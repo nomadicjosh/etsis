@@ -29,56 +29,18 @@ $heading = match ($mode) {
     default => trans_html('From saved draft to approved page'),
 };
 ?>
-<!doctype html>
-<html lang="<?= $esc(config('app.language', 'en')) ?>">
-    <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title><?= $pageTitle ?></title>
-        <link rel="icon" href="/assets/images/workspace-mark.svg" type="image/svg+xml" />
-        <link rel="stylesheet" href="/assets/vendor/bootstrap.min.css">
-        <link rel="stylesheet" href="/assets/vendor/icons/bootstrap-icons.min.css">
-        <link rel="stylesheet" href="/assets/css/site-manager.css">
-        <link rel="stylesheet" href="/assets/css/site-navigation.css">
-    </head>
-    <body>
-        <a href="#site-main" class="visually-hidden-focusable p-3"><?= trans_html(
-            "Skip to main content",
-        ) ?></a>
-        <header class="site-header border-bottom bg-white">
-            <nav class="container-fluid site-container d-flex align-items-center flex-wrap gap-3 py-3"
-                aria-label="<?= trans_attr("Website management") ?>">
-                <a class="site-brand" href="/admin/"><i class="bi bi-grid-1x2 me-2" aria-hidden="true"></i><?= trans_html(
-                    "Staff workspace",
-                ) ?></a>
-                <a class="btn <?= $mode === "pages"
-                    ? "btn-primary"
-                    : "btn-light" ?>" href="<?= $esc($managerUrl) ?>"
-                    <?= $mode === "pages"
-                        ? 'aria-current="page"'
-                        : "" ?>><?= trans_html("Website pages") ?></a>
-                <a class="btn <?= $mode === "menus"
-                    ? "btn-primary"
-                    : "btn-light" ?>" href="<?= $esc($managerUrl) ?>?route=menus"
-                    <?= $mode === "menus"
-                        ? 'aria-current="page"'
-                        : "" ?>><?= trans_html("Website menus") ?></a>
-                <a class="btn <?= $mode === 'settings' ? 'btn-primary' : 'btn-light' ?>"
-                    href="<?= $esc($managerUrl) ?>?route=settings"
-                    <?= $mode === 'settings' ? 'aria-current="page"' : '' ?>>
-                    <?= trans_html('Website settings') ?>
-                </a>
-            </nav>
-        </header>
+<?php require __DIR__ . '/header.phtml'; ?>
         <main id="site-main" class="site-container container-fluid py-4 py-lg-5" tabindex="-1">
             <p class="site-eyebrow"><?= trans_html("CAMPUS WEBSITE") ?></p>
             <h1><?= $heading ?></h1>
             <p class="text-secondary site-intro"><?= $mode === "menus"
                 ? trans_html(
-                    "Arrange links into clear dropdown menus. Save your draft, inspect the structure and publish when ready.",
+                    "Arrange links into clear dropdown menus. Save your draft, inspect the structure "
+                    . "and publish when ready.",
                 )
                 : trans_html(
-                    "Design pages in the page builder, hand them over for review and choose when approved content becomes public.",
+                    "Design pages in the page builder, hand them over for review and choose "
+                    . "when approved content becomes public.",
                 ) ?></p>
             <div id="site-status" role="status" aria-live="polite"></div>
             <div id="site-manager" data-mode="<?= $mode ?>">
@@ -87,7 +49,9 @@ $heading = match ($mode) {
                         <?= $csrfMarkup ?? csrf_field() ?>
                         <h2 class="h4"><?= trans_html('Website languages') ?></h2>
                         <label class="form-label" for="site-languages"><?= trans_html('Active languages') ?></label>
-                        <p id="site-languages-help" class="form-text"><?= trans_html('Use Ctrl or Command to select multiple languages.') ?></p>
+                        <p
+                            id="site-languages-help"
+                            class="form-text"><?= trans_html('Use Ctrl or Command to select multiple languages.') ?></p>
                         <select id="site-languages" name="languages[]" class="form-select" multiple required
                             aria-describedby="site-languages-help">
                             <?php foreach ($languageOptions as $locale => $languageName): ?>
@@ -97,12 +61,18 @@ $heading = match ($mode) {
                                 </option>
                             <?php endforeach; ?>
                         </select>
-                        <button class="btn btn-primary mt-3" type="submit"><?= trans_html('Save website settings') ?></button>
+                        <button
+                            class="btn btn-primary mt-3"
+                            type="submit"><?= trans_html('Save website settings') ?></button>
                     </form>
                 <?php endif; ?>
             </div>
         </main>
-        <div class="offcanvas offcanvas-end site-review" tabindex="-1" id="site-review" aria-labelledby="site-review-title">
+        <div
+            class="offcanvas offcanvas-end site-review"
+            tabindex="-1"
+            id="site-review"
+            aria-labelledby="site-review-title">
             <div class="offcanvas-header border-bottom">
                 <h2 id="site-review-title" class="h4 mb-0"><?= trans_html(
                     "Review before publishing",

@@ -1,0 +1,57 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_attr;
+use function Codefy\Framework\Helpers\trans_html;
+
+$esc = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$labels = [
+    'page' => trans_html('Page designer'),
+    'choose' => trans_html(
+        'Select content to see how it can be edited. The layout provides the ' .
+        'fixed page structure.',
+    ),
+    'html' => trans_html(
+        'Editable content: change text, images and links directly on the ' .
+        'canvas. Use the block controls to move or remove it.',
+    ),
+    'dynamic' => trans_html(
+        'Dynamic content: use the Settings controls for this block. ' .
+        'Theme-rendered text and live data cannot be edited directly.',
+    ),
+    'container' => trans_html(
+        'Content area: add, move or remove blocks here. The surrounding ' .
+        'layout remains fixed.',
+    ),
+    'settings' => trans_html('Settings'),
+    'save' => trans_html('Save page'),
+    'view' => trans_html('View public page'),
+    'devices' => trans_html('Preview size'),
+    'desktop' => trans_html('Desktop preview'),
+    'tablet' => trans_html('Tablet preview'),
+    'mobile' => trans_html('Phone preview'),
+    'sidebar' => trans_html('Toggle editing panels'),
+    'search' => trans_html('Search blocks'),
+];
+?>
+<header id="page-editor-header">
+    <nav aria-label="<?= trans_attr('Page designer navigation') ?>">
+        <a
+            class="page-editor-back"
+            href="<?= $esc($managerUrl) ?>"><i
+            class="bi bi-arrow-left"
+            aria-hidden="true"></i> <?= trans_html('Website pages') ?></a>
+        <h1><?= trans_html('Design page') ?> <span><?= $esc($pageName) ?></span></h1>
+        <div id="page-editor-actions"></div>
+    </nav>
+    <p id="page-editor-guidance" role="status" aria-live="polite"><?= trans_html(
+        'Select content to see how it can be edited. The layout provides the ' .
+        'fixed page structure.',
+    ) ?></p>
+</header>
+<script id="page-editor-labels" type="application/json"><?= json_encode(
+    $labels,
+    JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR,
+) ?></script>
+<script src="/assets/js/page-editor.js"></script>

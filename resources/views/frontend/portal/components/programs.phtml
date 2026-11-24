@@ -2,12 +2,14 @@
     <div class="campus-container">
         <div class="campus-section-heading">
             <div>
-                <p class="campus-eyebrow">LET YOUR INTEREST LEAD THE WAY</p>
-                <h2>A path with your name on it.</h2>
-                <p>Discover an academic program, then see how to make it yours.</p>
+                <p class="campus-eyebrow"><?= $this->esc($eyebrow ?? 'LET YOUR INTEREST LEAD THE WAY'); ?></p>
+                <h2><?= $this->esc($programsHeading ?? 'A path with your name on it.'); ?></h2>
+                <p><?= $this->esc(
+                    $programsIntroduction ?? 'Discover an academic program, then see how to make it yours.',
+                ); ?></p>
             </div>
             <a class="campus-text-link" href="/portal/apply/">
-                Explore applications
+                <?= $this->esc($linkLabel ?? 'Explore applications'); ?>
                 <i class="bi bi-arrow-right" aria-hidden="true"></i>
             </a>
         </div>

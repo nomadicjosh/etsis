@@ -19,8 +19,11 @@ use function Codefy\Framework\Helpers\view;
 
 final class PageEditor extends PageBuilder
 {
+    private ?PageContract $editingPage = null;
+
     public function renderPageBuilder(PageContract $page): ResponseInterface
     {
+        $this->editingPage = $page;
         if ($page->getLayout() === 'portal' && $page->getBuilderData() === []) {
             // Preview the starter on an empty portal page. Saving still requires the normal POST and CSRF token.
             $page->setData(['data' => CampusPageTemplate::data()], false);
@@ -34,7 +37,10 @@ final class PageEditor extends PageBuilder
         ?string $action = null,
         ?PageContract $page = null
     ): ?ResponseInterface {
-        if (in_array($action, ['store', 'upload', 'upload_delete'], true) && $request->getMethod() !== 'POST') {
+        if (
+            in_array($action, ['store', 'upload', 'upload_delete', 'renderBlock', 'renderLanguageVariant'], true)
+            && $request->getMethod() !== 'POST'
+        ) {
             return new Response(status: 405, headers: ['Allow' => 'POST']);
         }
 
@@ -48,6 +54,12 @@ final class PageEditor extends PageBuilder
     public function customScripts(string $location, ?string $scripts = null): string
     {
         $custom = parent::customScripts($location, $scripts);
+        if ($location === 'body' && $scripts === null && $this->editingPage !== null) {
+            return $custom . (string) view('framework::backend/manager/editor-guide', [
+                'pageName' => $this->editingPage->getName(),
+                'managerUrl' => phpb_url('website_manager'),
+            ])->getBody();
+        }
         if ($location !== 'head' || $scripts !== null) {
             return $custom;
         }

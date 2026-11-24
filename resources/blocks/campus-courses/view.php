@@ -4,4 +4,5 @@ $catalog = \Codefy\Framework\Helpers\app()->make(\Domain\Portal\Service\CampusSe
 ?>
 <div class="campus-fragment"><?= \Codefy\Framework\Helpers\view('framework::frontend/portal/components/courses', [
         'items' => $catalog['items'], 'heading' => $block->setting('heading', true),
+        'eyebrow' => $block->setting('eyebrow', true), 'linkLabel' => $block->setting('link_label', true),
     ])->getBody(); ?></div>

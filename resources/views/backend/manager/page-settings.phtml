@@ -1,149 +1,265 @@
 <?php
 
-use Codefy\Framework\Proxy\Codefy;
+declare(strict_types=1);
 
-$this->parent('framework::app-layout');
-$this->block('content', function ($params) {
+use Vihzhuo\Core\HttpContext;
 
-$pageUrlParam = '';
-if (isset($params['page'])) {
-    $pageUrlParam = '&page=' . phpb_e($params['page']->getId());
+use function Codefy\Framework\Helpers\config;
+use function Codefy\Framework\Helpers\trans_attr;
+use function Codefy\Framework\Helpers\trans_html;
+
+$esc = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$mode = 'page';
+$page = $page ?? null;
+$pageTitle = $page === null ? trans_html('Create a website page') : trans_html('Page settings');
+$saveLabel = $page === null ? trans_html('Create page') : trans_html('Save page settings');
+$managerUrl = rtrim((string) config('vihzhuo.website_manager.url', '/admin/manager'), '/') . '/';
+$query = ['route' => 'page_settings', 'action' => $page === null ? 'create' : 'edit'];
+if ($page !== null) {
+    $query['page'] = $page->getId();
 }
-
-$pageTranslations = $params['page'] ? $params['page']->getTranslations() : [];
+$actionUrl = $managerUrl . '?' . http_build_query($query);
+$designUrl = rtrim((string) config('vihzhuo.pagebuilder.url', '/admin/manager/pagebuilder'), '/')
+    . '?page=' . rawurlencode((string) ($page?->getId() ?? ''));
+$translations = $page?->getTranslations() ?? [];
+$pageData = $page?->getData() ?? [];
+$submitted = $submitted ?? (HttpContext::hasRequest() ? HttpContext::request()->getParsedBody() : []);
+$submitted = is_array($submitted) ? $submitted : [];
+$value = static function (string $field, string $fallback = '') use ($submitted, $pageData): string {
+    return is_string($submitted[$field] ?? null) ? $submitted[$field] : (string) ($pageData[$field] ?? $fallback);
+};
+$translation = static function (string $field, string $locale) use ($submitted, $translations): string {
+    $input = is_array($submitted[$field] ?? null) ? $submitted[$field][$locale] ?? null : null;
+    return is_string($input) ? $input : (string) ($translations[$locale][$field] ?? '');
+};
+$languages = $languageOptions ?? phpb_active_languages();
+$layouts = $layoutOptions ?? array_map(static fn ($layout): array => [
+    'slug' => $layout->getSlug(), 'title' => $layout->getTitle(),
+], array_values($theme->getThemeLayouts()));
+require __DIR__ . '/header.phtml';
 ?>
-
-<main class="container mx-auto px-6 py-16 override-width">
-    <?=Codefy::$PHP->flash->display();?>
-    <div class="text-center mb-12">
-        <h2 class="text-4xl font-semibold text-slate-800 mb-3"><?= phpb_trans('website-manager.title') ?></h2>
-    </div>
-
-    <div class="row">
-        <div class="col-12">
-            <form method="post" action="<?= phpb_url('website_manager', ['route' => 'page_settings', 'action' => $params['action']]) ?><?= $pageUrlParam ?>">
-                <?=csrf_field();?>
-                <h3 class="mb-3 display-6">
-                    <?php
-                    if ($params['action'] === 'create'):
-                        echo phpb_trans('website-manager.add-new-page');
-                    else:
-                        echo phpb_trans('website-manager.edit-page');
-                    endif;
-                    ?>
-                </h3>
-
-                <div class="main-spacing">
-                    <div class="form-group required mb-4">
-                        <label for="name">
-                            <?= phpb_trans('website-manager.name') ?> *
-                            <span class="text-muted">(<?= phpb_trans('website-manager.visible-in-page-overview') ?>)</span>
-                        </label>
-                        <input type="text" class="form-control" id="name" name="name" value="<?= phpb_field_value('name', $params['page']) ?>" required>
-                    </div>
-
-                    <div class="row">
-                        <div class="form-group required mb-4 col">
-                            <label for="show-in-nav"><?= phpb_trans('website-manager.show-in-nav') ?> *</label>
-                            <select class="form-control form-select" id="show-in-nav" name="show_in_nav" required>
-                                <?php $value = phpb_field_value('show_in_nav', $params['page']); ?>
-                                <option value="">--------------------</option>
-                                <option value="yes" <?=$value === 'yes' ? 'selected' : '';?>>Yes</option>
-                                <option value="no" <?=$value === 'no' ? 'selected' : '';?>>No</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group required mb-4 col">
-                            <label for="nav-position"><?= phpb_trans('website-manager.nav-position') ?> *</label>
-                            <select class="form-control form-select" id="nav-position" name="nav_position" required>
-                                <?php $value = phpb_field_value('nav_position', $params['page']); ?>
-                                <?php $positions = 20; ?>
-                                <?php for ($i = 0; $i < $positions; $i++) : ?>
-                                    <option value="<?=$i;?>" <?=(int) $value === $i ? 'selected' : '';?>><?=$i;?></option>
-                                <?php endfor; ?>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div class="row">
-                        <div class="form-group required mb-4 col">
-                            <label for="nav-type"><?= phpb_trans('website-manager.nav-type') ?> *</label>
-                            <select class="form-control form-select" id="nav-type" name="nav_type" required>
-                                <?php $value = phpb_field_value('nav_type', $params['page']); ?>
-                                <option value="">--------------------</option>
-                                <option value="primary" <?=$value === 'primary' ? 'selected' : '';?>>Primary</option>
-                                <option value="secondary" <?=$value === 'secondary' ? 'selected' : '';?>>Secondary</option>
-                                <option value="footer" <?=$value === 'footer' ? 'selected' : '';?>>Footer</option>
-                            </select>
-                        </div>
-
-                        <div class="form-group required mb-4 col">
-                            <label for="layout"><?= phpb_trans('website-manager.layout') ?> *</label>
-                            <select class="form-control form-select" id="layout" name="layout" required>
-                                <?php
-                                $value = phpb_field_value('layout', $params['page']);
-                                foreach ($params['theme']->getThemeLayouts() as $layout):
-                                    if ($layout->getSlug() === $value):
-                                        echo '<option value="' . phpb_e($layout->getSlug()) . '" selected>' . phpb_e($layout->getTitle()) . '</option>';
-                                    else:
-                                        echo '<option value="' . phpb_e($layout->getSlug()) . '">' . phpb_e($layout->getTitle()) . '</option>';
-                                    endif;
-                                endforeach;
-                                ?>
-                            </select>
-                        </div>
-                    </div>
-
-                    <?php
-                    foreach (array_keys(phpb_active_languages()) as $languageCode):
-                        ?>
-
-                        <h4 class="pt-2 display-6"><?= phpb_trans('languages.' . $languageCode) ?></h4>
-
-                        <div class="pt-2 pl-3 pr-3">
-                            <div class="form-group required mb-4">
-                                <label for="page-title"><?= phpb_trans('website-manager.page-title') ?> *</label>
-                                <input type="text" class="form-control" id="page-title" name="title[<?= phpb_e($languageCode) ?>]" value="<?= phpb_e($pageTranslations[$languageCode]['title'] ?? '') ?>" required>
-                            </div>
-
-                            <div class="form-group mb-4">
-                                <label for="page-meta-title"><?= phpb_trans('website-manager.page-meta-title') ?></label>
-                                <input type="text" class="form-control" id="page-meta-title" name="meta_title[<?= phpb_e($languageCode) ?>]" value="<?= phpb_e($pageTranslations[$languageCode]['meta_title'] ?? '') ?>">
-                            </div>
-
-                            <div class="form-group mb-4">
-                                <label for="page-meta-description"><?= phpb_trans('website-manager.page-meta-description') ?></label>
-                                <textarea class="form-control" id="page-meta-description" name="meta_description[<?= phpb_e($languageCode) ?>]"><?= phpb_e($pageTranslations[$languageCode]['meta_description'] ?? '') ?></textarea>
-                            </div>
-
-                            <div class="form-group required mb-4">
-                                <label for="route"><?= phpb_trans('website-manager.route') ?> *</label>
-                                <input type="text" class="form-control" id="route" name="route[<?= phpb_e($languageCode) ?>]" value="<?= phpb_e($pageTranslations[$languageCode]['route'] ?? '') ?>" required>
-                            </div>
-                        </div>
-                    <?php
-                    endforeach;
-                    ?>
+        <main id="site-main" class="site-container container-fluid py-4 py-lg-5" tabindex="-1">
+            <nav class="site-breadcrumb mb-4" aria-label="<?= trans_attr('Page location') ?>">
+                <a
+                    href="<?= $esc($managerUrl) ?>"><i
+                    class="bi bi-arrow-left"
+                    aria-hidden="true"></i> <?= trans_html('Back to website pages') ?></a>
+                <span aria-hidden="true">/</span>
+                <span aria-current="page"><?= $pageTitle ?></span>
+            </nav>
+            <p class="site-eyebrow"><?= trans_html('CAMPUS WEBSITE') ?></p>
+            <h1><?= $pageTitle ?></h1>
+            <p class="site-intro text-secondary"><?= trans_html(
+                'Set the page identity, layout and language details. Save these ' .
+                'settings, then design the page and submit it for publication review.',
+            ) ?></p>
+            <?php if ($submitted !== []): ?>
+                <div
+                    class="alert alert-danger"
+                    role="alert">
+                    <?= trans_html('The page was not saved. Check the fields below and try again.') ?>
                 </div>
-
-                <hr class="mb-3">
-
-                <a href="<?= phpb_url('website_manager') ?>" class="inline-flex items-center py-2 px-6 bg-gradient-to-r from-indigo-700 to-pink-600 hover:bg-opacity-95 text-white rounded-md mr-2">
-                    <?= phpb_trans('website-manager.back') ?>
-                </a>
-                <button class="inline-flex items-center py-2 px-6 bg-gradient-to-r from-indigo-700 to-pink-600 hover:bg-opacity-95 text-white rounded-md">
-                    <?php
-                    if ($params['action'] === 'create'):
-                        echo phpb_trans('website-manager.add-new-page');
-                    else:
-                        echo phpb_trans('website-manager.save-changes');
-                    endif;
-                    ?>
-                </button>
-            </form>
-
-        </div>
-    </div>
-</main>
-
-<?php }); ?>
+            <?php endif; ?>
+            <div class="site-page-layout">
+                <form id="site-page-form" method="post" action="<?= $esc($actionUrl) ?>">
+                    <?= $csrfMarkup ?? csrf_field() ?>
+                    <section class="site-card mb-4" aria-labelledby="page-identity-title">
+                        <h2 id="page-identity-title" class="h4"><?= trans_html('Page identity and layout') ?></h2>
+                        <p class="form-text"><?= trans_html(
+                            'The internal page name helps staff identify this page. Visitors see ' .
+                            'the title for their language.',
+                        ) ?></p>
+                        <div class="mb-4">
+                            <label class="form-label" for="page-name"><?= trans_html('Internal page name') ?></label>
+                            <input
+                                class="form-control"
+                                id="page-name"
+                                name="name"
+                                maxlength="191"
+                                value="<?= $esc($value('name')) ?>" required>
+                        </div>
+                        <div>
+                            <label class="form-label" for="page-layout"><?= trans_html('Page layout') ?></label>
+                            <select
+                                class="form-select"
+                                id="page-layout"
+                                name="layout" required
+                                aria-describedby="page-layout-help">
+                                <?php foreach ($layouts as $layout): ?>
+                                    <?php $selected = $layout['slug'] === $value('layout', 'portal'); ?>
+                                    <option
+                                        value="<?= $esc($layout['slug']) ?>"
+                                        <?= $selected ? 'selected' : '' ?>><?= $esc($layout['title']) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                            <p class="form-text mb-0" id="page-layout-help"><?= trans_html(
+                                'The layout provides the fixed page structure. Add and edit content ' .
+                                'inside its designated page area.',
+                            ) ?></p>
+                        </div>
+                    </section>
+                    <?php foreach ($languages as $locale => $languageName): ?>
+                        <fieldset class="site-card mb-4">
+                            <legend class="float-none w-auto h4 px-1"><?= $esc($languageName) ?></legend>
+                            <div class="mb-4">
+                                <label
+                                    class="form-label"
+                                    for="page-title-<?= $esc($locale) ?>"><?= trans_html('Page title') ?></label>
+                                <input
+                                    class="form-control"
+                                    id="page-title-<?= $esc($locale) ?>"
+                                    name="title[<?= $esc($locale) ?>]"
+                                    maxlength="191"
+                                    value="<?= $esc($translation('title', $locale)) ?>" required>
+                            </div>
+                            <div class="mb-4">
+                                <label
+                                    class="form-label"
+                                    for="page-route-<?= $esc($locale) ?>"><?= trans_html('Public route') ?></label>
+                                <input
+                                    class="form-control"
+                                    id="page-route-<?= $esc($locale) ?>"
+                                    name="route[<?= $esc($locale) ?>]"
+                                    maxlength="191"
+                                    value="<?= $esc($translation('route', $locale)) ?>"
+                                    placeholder="/about/"
+                                    aria-describedby="page-route-help-<?= $esc($locale) ?>" required>
+                                <p class="form-text" id="page-route-help-<?= $esc($locale) ?>"><?= trans_html(
+                                    'Use a site path such as /about/. The page becomes public after its ' .
+                                    'saved design and settings are approved.',
+                                ) ?></p>
+                            </div>
+                            <div class="mb-4">
+                                <label
+                                    class="form-label"
+                                    for="page-meta-title-<?= $esc($locale) ?>"><?= trans_html('Search result title') ?>
+                                    <span
+                                    class="fw-normal text-secondary"><?= trans_html('(optional)') ?></span></label>
+                                <input
+                                    class="form-control"
+                                    id="page-meta-title-<?= $esc($locale) ?>"
+                                    name="meta_title[<?= $esc($locale) ?>]"
+                                    maxlength="191"
+                                    value="<?= $esc($translation('meta_title', $locale)) ?>">
+                            </div>
+                            <div>
+                                <label
+                                    class="form-label"
+                                    for="page-description-<?= $esc($locale) ?>">
+                                    <?= trans_html('Search result description') ?>
+                                    <span
+                                    class="fw-normal text-secondary"><?= trans_html('(optional)') ?></span></label>
+                                <textarea
+                                    class="form-control"
+                                    id="page-description-<?= $esc($locale) ?>"
+                                    name="meta_description[<?= $esc($locale) ?>]"
+                                    rows="3"
+                                    maxlength="2000"><?= $esc($translation('meta_description', $locale)) ?></textarea>
+                            </div>
+                        </fieldset>
+                    <?php endforeach; ?>
+                    <section class="site-card mb-4" aria-labelledby="page-navigation-title">
+                        <h2 id="page-navigation-title" class="h4"><?= trans_html('Automatic navigation') ?></h2>
+                        <p class="form-text" id="page-navigation-help"><?= trans_html(
+                            'These choices apply to automatic navigation until a menu is ' .
+                            'published for that location. Use Website menus to arrange published ' .
+                            'custom menus.',
+                        ) ?></p>
+                        <div class="mb-3">
+                            <label
+                                class="form-label"
+                                for="page-show-nav"><?= trans_html('Include in automatic navigation') ?></label>
+                            <select
+                                class="form-select"
+                                id="page-show-nav"
+                                name="show_in_nav"
+                                aria-describedby="page-navigation-help" required>
+                                <option
+                                    value="no"
+                                    <?= $value('show_in_nav', 'no') === 'no' ? 'selected' : '' ?>>
+                                        <?= trans_html('No') ?>
+                                    </option>
+                                <option
+                                    value="yes"
+                                    <?= $value('show_in_nav', 'no') === 'yes' ? 'selected' : '' ?>>
+                                        <?= trans_html('Yes') ?>
+                                    </option>
+                            </select>
+                        </div>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label
+                                    class="form-label"
+                                    for="page-nav-type"><?= trans_html('Navigation location') ?></label>
+                                <select class="form-select" id="page-nav-type" name="nav_type" required>
+                                    <option
+                                        value="primary"
+                                        <?= $value('nav_type', 'primary') === 'primary' ? 'selected' : '' ?>>
+                                            <?= trans_html('Primary menu') ?>
+                                        </option>
+                                    <option
+                                        value="secondary"
+                                        <?= $value('nav_type') === 'secondary' ? 'selected' : '' ?>>
+                                            <?= trans_html('Secondary menu') ?>
+                                        </option>
+                                    <option
+                                        value="footer"
+                                        <?= $value('nav_type') === 'footer' ? 'selected' : '' ?>>
+                                            <?= trans_html('Footer menu') ?>
+                                        </option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label
+                                    class="form-label"
+                                    for="page-nav-position"><?= trans_html('Navigation order') ?></label>
+                                <input
+                                    class="form-control"
+                                    id="page-nav-position"
+                                    type="number"
+                                    min="0"
+                                    max="9999"
+                                    step="1"
+                                    name="nav_position"
+                                    value="<?= $esc($value('nav_position', '0')) ?>" required>
+                            </div>
+                        </div>
+                    </section>
+                    <div class="site-form-actions">
+                        <button
+                            class="btn btn-primary"
+                            type="submit"><i
+                            class="bi bi-check2"
+                            aria-hidden="true"></i> <?= $saveLabel ?></button>
+                        <a
+                            class="btn btn-outline-secondary"
+                            href="<?= $esc($managerUrl) ?>"><?= trans_html('Cancel') ?></a>
+                    </div>
+                </form>
+                <aside class="site-card site-page-guide" aria-labelledby="page-next-title">
+                    <h2 id="page-next-title" class="h5"><?= trans_html('Build, review and publish') ?></h2>
+                    <ol class="ps-3 mb-4">
+                        <li><?= trans_html('Save the page settings.') ?></li>
+                        <li><?= trans_html('Design the page and save its content.') ?></li>
+                        <li><?= trans_html('Return to Website pages and submit the saved page for review.') ?></li>
+                        <li><?= trans_html('A publisher approves the page and its visibility dates.') ?></li>
+                    </ol>
+                    <p class="form-text"><?= trans_html(
+                        'Editable blocks let you change text, images and links on the canvas. ' .
+                        'Dynamic blocks use their Settings controls and designated content ' .
+                        'areas. The layout and live data stay controlled by the theme.',
+                    ) ?></p>
+                    <?php if ($page !== null): ?>
+                        <a
+                            class="btn btn-outline-primary"
+                            href="<?= $esc($designUrl) ?>"><i
+                            class="bi bi-palette"
+                            aria-hidden="true"></i> <?= trans_html('Design page') ?></a>
+                    <?php endif; ?>
+                </aside>
+            </div>
+        </main>
+        <script src="/assets/vendor/bootstrap.bundle.min.js"></script>
+        <script src="/assets/js/site-page-settings.js"></script>
+    </body>
+</html>

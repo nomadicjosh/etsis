@@ -4,6 +4,12 @@ The legacy system is the feature inventory, not a requirement to reproduce its s
 
 “Working” below describes a workflow available in the current code. “Partial” means useful pieces work but the broader recommendation still needs implementation. “Proposed” is a design recommendation, not completed functionality.
 
+## Page-builder follow-up: current setup and editable presentation blocks
+
+The current Website Manager now shares its Bootstrap header with page setup/settings, replacing the remaining old form and duplicate unused controller/view. Grouped fields, unique language labels, saved-page/design/review guidance, unsaved-change protection and record returns preserve the native POST/CSRF workflow. The designer adds an application-owned header and selection guidance while retaining native editing permissions, serialization and PHP Settings rerendering.
+
+[Canvas editing](website-publishing-and-menus.md#page-settings-and-canvas-editing) now uses HTML for static campus welcome/pathways/invitation/Lead blocks, permitting text/headings/images/links to be edited and saved. The four live feeds remain PHP with editable presentation copy and controlled records; included `.phtml` partials follow that contract. The inspected configured database had no saved pages to convert. Actual native provider rendering, block-type/saved-content/escaped-copy checks and focused PHP regressions cover the implementation. Browser scenarios are added, but startup timeouts prevented visual, WCAG and screenshot acceptance; that validation remains open. No migration, institutional publication, academic event, report, dependency or vendor edit was added.
+
 ## Completed: joint curriculum department ownership
 
 **Working.** [Joint department ownership](program-publication.md#joint-department-ownership) connects current component setup, exact program publication and staff/private student progress. Majors, minors and other components can have one optional primary and five additional departments, each keeping its own college. The shared chooser preserves unsaved fields and required-major relationships, provides a record return, rejects duplicate ownership, supports explicit removal/promotion and enforces the bound. Failed saves retain the draft; in-flight saves disable editing. Shared semantic translation labels explain exact retained owners, explicit empty lists and earlier unknowns without extra organization requests, private browser storage, academic calculation changes or departmental grants.

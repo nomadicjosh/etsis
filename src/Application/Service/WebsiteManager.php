@@ -45,6 +45,14 @@ final class WebsiteManager extends \Vihzhuo\Modules\WebsiteManager\WebsiteManage
         return view('framework::backend/manager/site', ['mode' => 'pages']);
     }
 
+    public function handleUpdateSettings(ServerRequestInterface $request): ResponseInterface
+    {
+        return parent::handleUpdateSettings($request)->withHeader(
+            'Location',
+            phpb_url('website_manager', ['route' => 'settings']),
+        );
+    }
+
     public function renderPageSettings(?PageContract $page = null): ResponseInterface
     {
         return view('framework::backend/manager/page-settings', [

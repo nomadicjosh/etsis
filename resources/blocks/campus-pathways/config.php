@@ -1,3 +1,11 @@
 <?php
 
-return ['category' => 'Campus portal', 'title' => 'Student & prospect pathways', 'icon' => 'fa fa-compass', 'cache' => false];
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_html;
+
+return [
+    'category' => trans_html('Campus portal'),
+    'title' => trans_html('Student & prospect pathways'),
+    'icon' => 'fa fa-compass',
+];

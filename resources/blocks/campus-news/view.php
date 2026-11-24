@@ -4,4 +4,5 @@ $public = \Codefy\Framework\Helpers\app()->make(\Domain\Portal\Service\CampusSer
 ?>
 <div class="campus-fragment"><?= \Codefy\Framework\Helpers\view('framework::frontend/portal/components/news', [
         'news' => $public['news'], 'newsHeading' => $block->setting('heading', true),
+        'eyebrow' => $block->setting('eyebrow', true), 'linkLabel' => $block->setting('link_label', true),
     ])->getBody(); ?></div>

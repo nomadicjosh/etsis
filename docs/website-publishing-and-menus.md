@@ -4,6 +4,29 @@ Open **Website Manager** from the staff navigation. **Website pages** connects t
 
 Website work remains audited CRUD. It does not create academic events, reports or student-record copies. Page drafts, menu drafts and review proofs stay out of browser storage. Authors need `vihzhuo:manage`; approving, returning, archiving and publishing also require the existing independent `sis:portal:publish` duty. The migration grants neither duty to an account or role.
 
+## Page settings and canvas editing
+
+**Create a page** and **Page settings** share the current Website Manager header, Bootstrap styling, icons and page navigation. Identity/layout, per-language metadata/routes and automatic navigation are grouped separately. Each language has unique field labels. **Back to website pages**, **Cancel** and **Design page** connect the workflow; leaving changed settings asks before discarding them. Submission keeps the native field names and framework CSRF token. Native creation, editing and language settings still return to the manager; the duplicate older controller and manager view have been removed.
+
+The designer adds a page-specific header, **Website pages** return, accessible preview controls and a shared editing explanation. It keeps Vihzhuo's native component permissions, Settings rerendering, HTML serialization, rich-text editor and asset manager. Saving a design remains separate from publication review. The viewport permits browser zoom, and reduced-motion preferences apply to the new shell.
+
+The view file determines the editing contract:
+
+| Block source | Editing behavior |
+| --- | --- |
+| `view.html` | Text, images and links are editable on the canvas. Edited HTML is saved per page/language and used on the public page. |
+| `view.php` | Theme-controlled markup and application data are rendered on the server. Authors change declared Settings controls; child blocks are editable in designated nested content areas. |
+| Application `.phtml` partial rendered by a PHP block | Follows that PHP block's contract. A partial is not made directly editable merely because it contains headings or images. |
+| Layout outside the page content area | Remains fixed; authors edit the page body and the blocks placed there. |
+
+Native block discovery uses `view.php` or `view.html`; `.phtml` is the application template format used by the PHP-backed views, not a separately discovered native block filename. Do not make live server-rendered records freely editable or assume arbitrary PHP output will survive a later rerender. `[blocks-container]` and the registered nested HTML container block provide deliberate content areas within dynamic structures.
+
+**Campus welcome**, **Student & prospect pathways**, **Application invitation** and **Lead** now use editable HTML. Authors can change their text/headings, welcome image and alternative text, links and layout elements through the normal canvas controls and image manager. The previous PHP Lead view hid its existing HTML view and is removed. The three static campus wrappers are also removed. The inspected configured database contained zero saved pages/translations before these source changes; no stored design needed conversion or was overwritten. Built-in portal views continue to supply their default presentation outside a saved builder page.
+
+**Live course offerings**, **Live academic programs**, **Live public news feed** and **Live public campus events** remain PHP blocks. Select the block and use **Settings** to edit its **Section heading**, **Heading caption** and **Section link label**; academic programs also expose **Introduction**. Saved text is escaped when rendered, including in the underlying `.phtml` views. Course/program/news/event records remain governed by their own publication rules. Navigation/footer blocks and fixed theme chrome keep their theme-controlled behavior.
+
+A page already open in the designer must be reopened to load the changed block definitions. Configure and approve the saved page using the normal review workflow after editing it.
+
 ## Review and schedule a page
 
 1. Create the page, review its routes/translations and design it in the existing page builder. Save your design.
@@ -41,3 +64,6 @@ Private page lists use twenty-row continuations; page selection retains at most 
 Checks cover independent author/publisher duties, exact windows, changed designs/routes, original retries, rollback after audit/source/authority/expiry failures, typed tree/URL/depth limits, five SQL compiler dialects and real provider/CSRF/private transport. Native Vihzhuo rendering is exercised in all three campus themes, including draft rejection and cache-bypass prevention. Browser checks cover actual dragging, keyboard ordering, draft/publish separation, unsaved changes, access clearing, narrow/enlarged text, WCAG scans and public nested dropdowns above a clipped navbar/sidebar.
 
 Final focused validation: **69 PHP tests / 388 assertions** across the new safeguards/provider checks and existing portal/content/announcement/event regressions; **24 browser cases** across the new manager/public menus and existing portal/announcement flows. Targeted coding standards, PHP/view lint, JavaScript syntax, literal translation coverage and whitespace checks pass. Checks were low priority, deadline/memory bounded and used one browser worker.
+
+
+November 23 follow-up validation: **17 focused PHP tests / 89 assertions** pass. The actual-provider check renders the current settings screen and native designer, verifies HTML-versus-PHP block metadata, saved HTML precedence, editable live-feed copy/escaping, current CSRF/private transport and unchanged academic history. Targeted website/portal PHP regressions pass. Thirty scoped PHP/view files pass coding standards; thirty-one PHP/view/fixture files and three JavaScript files pass syntax checks, together with whitespace and fifty-seven new literal translation entries. New browser scenarios cover multilingual submission, unsaved draft protection, narrow/enlarged reflow and native canvas editing/Settings rerendering; local Chromium startup repeatedly timed out before the scenarios could run, so this follow-up has no browser/WCAG/screenshot acceptance claim. Browser execution remains a follow-up check. No database migration, institutional content write, report, dependency or vendor edit was made.

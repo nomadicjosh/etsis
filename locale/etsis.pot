@@ -2376,3 +2376,231 @@ msgstr ""
 #: resources/views/shared/curriculum-ownership-labels.php:23
 msgid "The chosen responsible department was removed from the additional list."
 msgstr ""
+
+#: resources/blocks/campus-courses/config.php:8
+msgid "Campus portal"
+msgstr ""
+
+#: resources/blocks/campus-courses/config.php:9
+msgid "Live course offerings"
+msgstr ""
+
+#: resources/blocks/campus-courses/config.php:15
+msgid "Section heading"
+msgstr ""
+
+#: resources/blocks/campus-courses/config.php:20
+msgid "Heading caption"
+msgstr ""
+
+#: resources/blocks/campus-courses/config.php:25
+msgid "Section link label"
+msgstr ""
+
+#: resources/blocks/campus-events/config.php:9
+msgid "Live public campus events"
+msgstr ""
+
+#: resources/blocks/campus-hero/config.php:9
+msgid "Campus welcome"
+msgstr ""
+
+#: resources/blocks/campus-invitation/config.php:9
+msgid "Application invitation"
+msgstr ""
+
+#: resources/blocks/campus-news/config.php:9
+msgid "Live public news feed"
+msgstr ""
+
+#: resources/blocks/campus-pathways/config.php:9
+msgid "Student & prospect pathways"
+msgstr ""
+
+#: resources/blocks/campus-programs/config.php:9
+msgid "Live academic programs"
+msgstr ""
+
+#: resources/blocks/campus-programs/config.php:30
+msgid "Introduction"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:14
+msgid "Create a website page"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:15
+msgid "Create page"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:15
+msgid "Save page settings"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:42
+msgid "Page location"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:46
+msgid "Back to website pages"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:52
+msgid "Set the page identity, layout and language details. Save these settings, then design the page and submit it for publication review."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:60
+msgid "The page was not saved. Check the fields below and try again."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:67
+msgid "Page identity and layout"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:68
+msgid "The internal page name helps staff identify this page. Visitors see the title for their language."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:73
+msgid "Internal page name"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:82
+msgid "Page layout"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:95
+msgid "The layout provides the fixed page structure. Add and edit content inside its designated page area."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:107
+msgid "Page title"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:127
+msgid "Use a site path such as /about/. The page becomes public after its saved design and settings are approved."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:135
+msgid "Search result title"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:137
+msgid "(optional)"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:149
+msgid "Search result description"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:162
+msgid "Automatic navigation"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:163
+msgid "These choices apply to automatic navigation until a menu is published for that location. Use Website menus to arrange published custom menus."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:171
+msgid "Include in automatic navigation"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:180
+msgid "No"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:185
+msgid "Yes"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:193
+msgid "Navigation location"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:215
+msgid "Navigation order"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:240
+msgid "Build, review and publish"
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:242
+msgid "Save the page settings."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:243
+msgid "Design the page and save its content."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:244
+msgid "Return to Website pages and submit the saved page for review."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:245
+msgid "A publisher approves the page and its visibility dates."
+msgstr ""
+
+#: resources/views/backend/manager/page-settings.phtml:247
+msgid "Editable blocks let you change text, images and links on the canvas. Dynamic blocks use their Settings controls and designated content areas. The layout and live data stay controlled by the theme."
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:10
+msgid "Page designer"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:11
+msgid "Select content to see how it can be edited. The layout provides the fixed page structure."
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:15
+msgid "Editable content: change text, images and links directly on the canvas. Use the block controls to move or remove it."
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:19
+msgid "Dynamic content: use the Settings controls for this block. Theme-rendered text and live data cannot be edited directly."
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:23
+msgid "Content area: add, move or remove blocks here. The surrounding layout remains fixed."
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:27
+msgid "Settings"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:28
+msgid "Save page"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:29
+msgid "View public page"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:30
+msgid "Preview size"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:31
+msgid "Desktop preview"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:32
+msgid "Tablet preview"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:33
+msgid "Phone preview"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:34
+msgid "Toggle editing panels"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:35
+msgid "Search blocks"
+msgstr ""
+
+#: resources/views/backend/manager/editor-guide.phtml:39
+msgid "Page designer navigation"
+msgstr ""

@@ -1,11 +1,12 @@
 <section class="campus-section campus-container" aria-label="Upcoming public campus events">
     <div class="campus-section-heading">
         <div>
-            <p class="campus-eyebrow">COME BE PART OF IT</p>
+            <p class="campus-eyebrow"><?= $this->esc($eyebrow ?? 'COME BE PART OF IT'); ?></p>
             <h2><?= $this->esc($eventsHeading ?? 'Make time for something wonderful.'); ?></h2>
         </div>
         <a class="campus-text-link" href="/portal/events/">
-            Explore the campus calendar <i class="bi bi-arrow-right" aria-hidden="true"></i>
+            <?= $this->esc($linkLabel ?? 'Explore the campus calendar'); ?>
+            <i class="bi bi-arrow-right" aria-hidden="true"></i>
         </a>
     </div>
     <div class="campus-news-grid">
