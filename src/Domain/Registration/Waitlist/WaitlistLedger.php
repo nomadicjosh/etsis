@@ -19,6 +19,7 @@ final readonly class WaitlistLedger
     public function __construct(
         private WaitlistRepository $records,
         private HistoricalEventStore $history,
+        private WaitlistOutcomeNotifications $notifications,
     ) {
     }
     public static function budget(): HistoryReadBudget
@@ -118,6 +119,15 @@ final readonly class WaitlistLedger
         $root->applyAccepted($event, $context);
         $entry = $policy ? null : $root->entries()[$payload["entry_id"]];
         $this->records->save($section, $expected, $root->projection(), $entry);
+        if ($entry !== null) {
+            $this->notifications->record(
+                $section,
+                new EntityId($payload['operation_id']),
+                $expected + 1,
+                $entry,
+                $context->effectiveAt ?? throw new CorruptHistoryException()
+            );
+        }
     }
     private function stream(EntityId $section): StreamReference
     {

@@ -1761,6 +1761,10 @@ final class SisFixture
         return new \Domain\Registration\Waitlist\WaitlistLedger(
             new \Infrastructure\Persistence\Waitlist\SqlWaitlistRepository($this->sql, $this->dropCipher),
             EventStoreFixture::history($this->connection->queryBuilder()),
+            new \Domain\Registration\Waitlist\WaitlistOutcomeNotifications(
+                $this->admissions,
+                new \Infrastructure\Persistence\Repository\SqlRegistrationUpdatesRepository($this->sql)
+            ),
         );
     }
     public function waitlistGuard(

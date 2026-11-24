@@ -23,6 +23,21 @@ const dialog = page => page.getByRole('dialog', { name: 'Recent workspace notifi
 async function emit(page, message, tone = 'success') {
     await page.evaluate(({ message, tone }) => window.testNotifications.notify(message, { tone }), { message, tone });
 }
+test('deleting recent feedback removes its message and toast and keeps a usable focus target', async ({ page }) => {
+    const f = await fixture(page);
+    await emit(page, 'Fictional removable feedback.');
+    await trigger(page).click();
+    await dialog(page).getByRole('button', { name: 'Delete notification', exact: true }).click();
+    await expect(dialog(page).locator('.workspace-notification-entry')).toHaveCount(0);
+    await expect(page.locator('.workspace-notification-toast')).toHaveCount(0);
+    await expect(dialog(page).getByRole('button', { name: 'Close notifications', exact: true })).toBeFocused();
+    await page.keyboard.press('Escape');
+    await trigger(page).click();
+    await expect(dialog(page)).not.toContainText('Fictional removable feedback.');
+    expect(await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } })))
+        .toEqual({ local: {}, session: {} });
+    expect(f.errors).toEqual([]);
+});
 test('bounded Bootstrap toasts retain literal messages without moving keyboard focus', async ({ page }) => {
     const f = await fixture(page);
     await trigger(page).focus();

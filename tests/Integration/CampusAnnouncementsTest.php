@@ -261,4 +261,70 @@ final class CampusAnnouncementsTest extends TestCase
         $this->expectException(AccessDeniedException::class);
         $this->service($c, access: $access)->page();
     }
+    public function testDeletingANotificationErasesReadMetadataAndSuppressesOnlyThisAccountsCurrentVersion(): void
+    {
+        $c = new CampusFixture();
+        $id = $this->draft($c);
+        $c->publish($id, true, 0);
+        $service = $this->service($c);
+        $service->read($id, 1);
+        $posts = $c->sis->sql->rows('sis_portal_posts');
+        self::assertSame(['deleted' => true], $service->delete($id, 1));
+        self::assertSame([], $c->sis->sql->rows('sis_announcement_reads'));
+        self::assertSame([], $service->page(false)['items']);
+        self::assertCount(1, $c->sis->sql->rows('sis_announcement_dismissals'));
+        self::assertSame($posts, $c->sis->sql->rows('sis_portal_posts'));
+        self::assertSame(['deleted' => true], $service->delete($id, 1));
+        try {
+            $service->read($id, 1);
+            self::fail('A deleted announcement recreated its read metadata.');
+        } catch (RecordNotFoundException) {
+            self::assertSame([], $c->sis->sql->rows('sis_announcement_reads'));
+        }
+        $owner = $c->sis->access->actor;
+        $c->sis->access->actor = $c->sis->user();
+        self::assertSame($id->value, $service->page()['items'][0]['id']);
+        $c->sis->access->actor = $owner;
+        $c->content->save(
+            $id,
+            'news',
+            $c->content->get($id)['code'],
+            'Revised announcement',
+            'A revised fictional announcement.',
+            'campus',
+            1
+        );
+        $c->publish($id, true, 2);
+        self::assertSame($id->value, $service->page()['items'][0]['id']);
+        self::assertTrue($service->page()['items'][0]['unread']);
+        $service->delete($id, 1); // An old completed deletion cannot suppress the new publication.
+        self::assertCount(1, $service->page()['items']);
+        self::assertCount(1, $c->sis->sql->rows('sis_announcement_dismissals'));
+    }
+
+    public function testFailedDeletionRollsBackSuppressionAndReadStateTogether(): void
+    {
+        foreach (['audit', 'owner', 'source'] as $failure) {
+            $c = new CampusFixture();
+            $id = $this->draft($c);
+            $c->publish($id, true, 0);
+            $this->service($c)->read($id, 1);
+            $before = $c->sis->sql->rows('sis_announcement_reads');
+            $audit = $this->createStub(AuditTrail::class);
+            $audit->method('record')->willReturnCallback(static function () use ($c, $id, $failure): void {
+                match ($failure) {
+                    'audit' => throw new RuntimeException('Fictional audit failure.'),
+                    'owner' => $c->sis->access->actor = $c->sis->user(),
+                    'source' => $c->sis->sql->update('sis_portal_posts', ['version' => 2], ['id' => $id->value]),
+                };
+            });
+            try {
+                $this->service($c, $audit)->delete($id, 1);
+                self::fail('A partial notification deletion committed.');
+            } catch (RuntimeException | AccessDeniedException | ConcurrentModificationException) {
+                self::assertSame($before, $c->sis->sql->rows('sis_announcement_reads'));
+                self::assertSame([], $c->sis->sql->rows('sis_announcement_dismissals'));
+            }
+        }
+    }
 }

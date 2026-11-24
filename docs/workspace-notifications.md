@@ -1,6 +1,6 @@
 # Workspace and portal toast notifications
 
-Implemented November 23, 2026. Staff and signed-in portal action feedback use the same locally hosted Bootstrap Toast component, colors, icons and accessible controls. The four supplied sound files are selectable. The same bell also provides [persistent campus announcements](campus-announcements.md); automatic domain-triggered/push/email delivery remains separate roadmap work.
+Implemented November 23, 2026. Staff and signed-in portal action feedback use the same locally hosted Bootstrap Toast component, colors, icons and accessible controls. The four supplied sound files are selectable. The same bell provides [campus announcements](campus-announcements.md) and [private waitlist outcome updates](registration-history.md#private-waitlist-outcome-updates), with deletion controls. Further automatic domain triggers and push/email delivery remain separate roadmap work.
 
 ## Use notifications
 
@@ -11,6 +11,16 @@ The bell in the workspace header opens **Recent workspace notifications**. It re
 Expand **Campus announcements** in this panel for reviewed campus news and account-specific read state. It loads separately on demand and retains its read state on the server. Clearing recent action feedback does not clear announcements or mark them read. See [publication, reading and sound behavior](campus-announcements.md).
 
 Only five toasts are visible at once. Further feedback remains available in the recent list. Toasts render as literal text, including any angle brackets in a message. They appear within the active drawer, modal or native report dialog so they remain visible and their dismiss controls work with the active focus boundary. The recent panel, cards and controls reflow on narrow screens and with enlarged text. Toasts do not animate.
+
+## Delete notifications
+
+Personal notifications are disposable operational information and require no historical archive:
+
+- **Delete notification** removes one recent action message and its remaining toast from page memory. **Clear recent notifications** removes all recent action feedback. These messages were never saved to the database.
+- **Registration updates → Delete update** physically deletes the saved personal notice and its read metadata. Reloading or retrying the original accepted command does not recreate it. Marking read alone keeps it available under **Show read updates**.
+- **Campus announcements → Delete announcement**, in either the list or opened item, removes the current publication from this account's drawer, including **Show read items**. Its read metadata is physically deleted. Only one current account/content/revision suppression marker remains so the shared publication cannot immediately reappear. The marker has no message body, reading timestamp or historical revision list. Other accounts and the underlying campus news are unaffected; a later reviewed republication can appear again.
+
+There is no separate notification archive or trash screen. Deletion survives drawer reopening and reload where server state is involved. It never deletes actual academic, registration, financial, publication or other business decisions. Required minimal administrative audit remains independent of notification content. Delete/read confirmations use an inline live status rather than creating replacement recent feedback.
 
 ## Sound and display preferences
 
@@ -28,7 +38,7 @@ Only `{sound, keep_visible, sound_id}` is saved in this browser, under `etsis.wo
 
 Signed-in campus pages have a **Recent notifications** bell, using the same recent-history, dismissal, sound and keep-visible controls. Guests have no private feedback panel or sound downloads. Contact updates, submitted applications, accepted registrations, section changes, drops/withdrawals and transcript request/cancellation acknowledgements use shared toasts. Their original CSRF, owner checks, review commands, preserved facts and request payloads remain in force. Queued transcript requests remain requests, not completed transcript delivery.
 
-Messages are local to the current page, including when moving between portal services or opening the staff workspace. The panel is not an unread campus inbox. Admissions updates, booking updates, records and request status retain their existing private service views. No extra poll, message send, notification table or delivery worker was added. HTTP401/403 and page leave clear recent feedback and stop audio. Toast dismissal inside a modal restores a usable focus target; enlarged portal headings wrap on narrow screens. The assignment-score drawer now passes the portal's actual node factory to the shared gradebook presenter. Service panels retain a connected element so existing stale-response checks do not mistake a rendered page for a disconnected document fragment; replacing the service still disconnects the old panel.
+Action feedback is local to the current page, including when moving between portal services or opening the staff workspace. The bell badge counts this temporary feedback only. The separate collapsed announcement and registration sections load their account-owned server state on demand. Admissions updates, booking updates, records and request status retain their existing private service views. No extra poll, message send or delivery worker was added. HTTP401/403 and page leave clear recent feedback and stop audio. Toast dismissal inside a modal restores a usable focus target; enlarged portal headings wrap on narrow screens. The assignment-score drawer now passes the portal's actual node factory to the shared gradebook presenter. Service panels retain a connected element so existing stale-response checks do not mistake a rendered page for a disconnected document fragment; replacing the service still disconnects the old panel.
 
 ## Connected background outcomes
 
@@ -40,6 +50,6 @@ Report Studio distinguishes **Export queued** from **Your report export is ready
 
 ## Privacy and validation
 
-Messages live only in a bounded in-memory list. Reloading, leaving the page or signing out clears them. Workspace HTTP 401/403 responses clear visible and recent feedback before existing sign-in/access-error handling continues. Toasts contain safe action/outcome wording, not message bodies, addresses, export rows, provider responses or raw events. Existing business authorization, CSRF, command reviews and audit/history remain unchanged.
+Temporary action messages live only in a bounded in-memory list. Reloading, leaving the page or signing out clears them. Saved updates and shared announcements have the separate server deletion rules above. Workspace HTTP 401/403 responses clear visible and recent feedback before existing sign-in/access-error handling continues. Toasts contain safe action/outcome wording, not message bodies, addresses, export rows, provider responses or raw events. Existing business authorization, CSRF, command reviews and audit/history remain unchanged.
 
 Fictional browser checks cover bounded bursts, literal rendering, focus, timed/persistent feedback, sound opt-in/rate limits, local choices/caching, load timeout, delayed unlock/load and mute/choice/background races, blocked audio/storage, reload/privacy clearing, active drawer/modal/native-dialog placement, keyboard use and WCAG narrow/enlarged-text review. Audio playback uses injected contexts; actual WAV/MP3 decoding is checked in an offline browser audio context without device playback. Portal actions retain their original requests; export and communications checks use injected providers and confirm that feedback does not issue sending requests. Native device audio and broader institution-led browser/screen-reader qualification remain deployment acceptance work.

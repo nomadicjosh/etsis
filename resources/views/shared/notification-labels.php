@@ -5,6 +5,31 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'registration_updates' => trans_html('Registration updates'),
+    'registration_loading' => trans_html('Loading registration updates…'),
+    'registration_help' => trans_html(
+        'Waitlist registrations and staff removals appear here. Delete an update when you no longer need it.',
+    ),
+    'registration_empty' => trans_html('There are no matching registration updates.'),
+    'registration_include' => trans_html('Show read updates'),
+    'registration_refresh' => trans_html('Refresh registration updates'),
+    'registration_pages' => trans_html('Registration update pages'),
+    'registration_previous' => trans_html('Previous updates'),
+    'registration_more' => trans_html('More updates'),
+    'registration_registered' => trans_html('Registered from waitlist'),
+    'registration_removed' => trans_html('Waitlist request removed'),
+    'registration_mark' => trans_html('Mark as read'),
+    'registration_delete' => trans_html('Delete update'),
+    'registration_loaded' => trans_html('Registration updates loaded. Course, section and term labels are current.'),
+    'registration_failed' => trans_html('Registration updates could not load. Use Refresh to try again.'),
+    'registration_denied' => trans_html('Registration updates are unavailable for this account.'),
+    'registration_changed' => trans_html('This update changed or is unavailable. Refresh the list.'),
+    'registration_new' => trans_html('New registration updates are available.'),
+    'registration_link' => trans_html('View your registration'),
+    'registration_marked' => trans_html('Registration update marked as read.'),
+    'registration_deleted' => trans_html('Registration update deleted.'),
+    'announcement_delete' => trans_html('Delete announcement'),
+    'delete_notification' => trans_html('Delete notification'),
     'announcements' => trans_html('Campus announcements'),
     'announcement_publish_help' => trans_html(
         'After approval, campus news appears in the notification bell for signed-in applicants, students and staff. '

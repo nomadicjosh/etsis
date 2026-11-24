@@ -50,6 +50,7 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
         <link rel="stylesheet" href="<?= $esc($themeAsset) ?>" />
         <?php if ($signedIn) : ?>
             <link rel="stylesheet" href="/assets/css/notifications.css" />
+            <script defer src="/assets/js/registration-updates.js"></script>
             <script defer src="/assets/js/campus-announcements.js"></script>
             <script defer src="/assets/js/workspace-notifications.js"></script>
         <?php endif; ?>

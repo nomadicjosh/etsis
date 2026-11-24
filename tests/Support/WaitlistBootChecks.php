@@ -134,3 +134,71 @@ if (
     throw new RuntimeException('Owner waitlist outcomes exposed private bypass evidence.');
 }
 echo "Waitlist route checks passed.\n";
+
+// New outcome delivery/read/deletion uses the real account-only private notification routes.
+$noticeStaff = $sis->access->actor;
+$sis->access->staff = true;
+$noticeOwner = $sis->user();
+$noticeStudent = $sis->student($noticeOwner);
+$noticeSection = $sis->section(capacity: 1);
+$sis->service->register($sis->student($sis->user())->id, $noticeSection->id);
+$noticeWaitlists = $sis->waitlists();
+$noticePolicy = $noticeWaitlists->reviewPolicy(
+    $noticeSection->id,
+    new \Domain\Registration\Waitlist\WaitlistPolicy(true, 50)->describe(),
+    0,
+    'Fictional notice policy.'
+);
+$noticeWaitlists->confirmPolicy(
+    $noticeSection->id,
+    new \Domain\Shared\ValueObject\EntityId($noticePolicy['operation_id']),
+    $noticePolicy['policy'],
+    $noticePolicy['version'],
+    $noticePolicy['reason'],
+    $noticePolicy['review_token']
+);
+$noticeEntry = null;
+foreach (['requested', 'removed'] as $noticeAction) {
+    $noticePlan = $noticeWaitlists->review(
+        $noticeStudent->id,
+        $noticeSection->id,
+        $noticeAction,
+        true,
+        $noticeEntry,
+        $noticeAction === 'removed' ? 'Private fictional registrar reason.' : null
+    );
+    $noticeWaitlists->confirm(
+        $noticeStudent->id,
+        $noticeSection->id,
+        new \Domain\Shared\ValueObject\EntityId($noticePlan['operation_id']),
+        $noticeAction,
+        true,
+        $noticePlan['revision'],
+        $noticePlan['review_token'],
+        $noticePlan['reason']
+    );
+    $noticeEntry = new \Domain\Shared\ValueObject\EntityId($noticePlan['entry_id']);
+}
+$sis->access->actor = $noticeOwner;
+$sis->access->staff = false;
+$noticePath = '/portal/api/registration-updates/';
+$noticePacket = $read($noticePath);
+$noticeItem = $noticePacket['items'][0] ?? throw new RuntimeException('The owner notification feed did not resolve.');
+if (
+    $noticeItem['status'] !== 'removed' || array_key_exists('entry_id', $noticeItem)
+    || str_contains(json_encode($noticePacket), 'Private fictional registrar reason.')
+) {
+    throw new RuntimeException('The owner notification feed disclosed restricted decision evidence.');
+}
+$noticeEvents = $sis->sql->rows('sis_history_events');
+$noticeRead = $teachingPost($noticePath . $noticeItem['id'] . '/read/', ['revision' => $noticeItem['revision']]);
+$noticeDelete = $teachingPost($noticePath . $noticeItem['id'] . '/delete/', ['revision' => $noticeItem['revision']]);
+if (
+    $noticeRead->getStatusCode() !== 200 || $noticeDelete->getStatusCode() !== 200
+    || $read($noticePath)['items'] !== []
+    || $noticeEvents !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Owner read/deletion failed private CSRF routing or changed business history.');
+}
+$sis->access->actor = $noticeStaff;
+$sis->access->staff = true;

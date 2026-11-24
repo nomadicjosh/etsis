@@ -30,7 +30,9 @@ async function fixture(page, { staff = false, count = 2, failed = false, rich = 
                 reads.push(body);
                 if (conflict) return route.fulfill({ status: 409, json: { error: 'Fictional stale revision' } });
                 expect(body).toEqual({ revision: item.revision });
-                item.unread = false; json = { unread: false };
+                if (url.pathname.endsWith('/delete/')) {
+                    items = items.filter(row => row.id !== postId); json = { deleted: true };
+                } else { item.unread = false; json = { unread: false }; }
             } else json = { ...item, content: 'Fictional <b>literal</b> announcement content.',
                 content_format: rich ? 'html' : 'plain',
                 content_html: rich ? '<p>Fictional <strong>formatted notice</strong> <a href="https://example.invalid/guide">Guide</a></p><img src=x onerror=alert(1)><script>window.fictionalAttack=1</script>' : null };
@@ -68,6 +70,25 @@ for (const staff of [false, true]) test(`${staff ? 'staff' : 'portal'} reader op
     await expect(f.trigger).toBeFocused();
     expect(await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } })))
         .toEqual({ local: {}, session: {} });
+    expect(f.errors).toEqual([]);
+});
+test('deleting an announcement from either list or detail stays deleted after reopening and reload', async ({ page }) => {
+    const f = await fixture(page);
+    await f.disclosure.click();
+    const first = f.dialog.locator('.campus-announcement-list > li').first();
+    await first.getByRole('button', { name: 'Delete announcement', exact: true }).click();
+    await expect(f.dialog).not.toContainText('Fictional announcement 100');
+    await f.dialog.getByRole('button', { name: 'Fictional announcement 99', exact: true }).click();
+    await f.dialog.getByRole('button', { name: 'Delete announcement', exact: true }).click();
+    await expect(f.dialog).toContainText('There are no matching campus announcements.');
+    await f.dialog.getByLabel('Show read items', { exact: true }).check();
+    await expect(f.dialog).toContainText('There are no matching campus announcements.');
+    await page.keyboard.press('Escape');
+    await page.reload();
+    await f.trigger.click(); await f.disclosure.click();
+    await expect(f.dialog).toContainText('There are no matching campus announcements.');
+    expect(f.requests.filter(row => row.method === 'POST').map(row => row.path))
+        .toEqual([`/portal/api/announcements/${id(100)}/delete/`, `/portal/api/announcements/${id(99)}/delete/`]);
     expect(f.errors).toEqual([]);
 });
 test('announcements page both ways, retry a failed feed and notify only an observed refresh change', async ({ page }) => {
@@ -117,9 +138,9 @@ test('closing the announcement disclosure rejects a late private response', asyn
     await f.dialog.getByRole('button', { name: 'Fictional announcement 100', exact: true }).click();
     await requested;
     await f.disclosure.click(); release();
-    await expect(f.dialog.locator('.campus-announcements-body')).toBeEmpty();
+    await expect(f.disclosure.locator('..').locator('.campus-announcements-body')).toBeEmpty();
     await expect(f.dialog).not.toContainText('Fictional late private text.');
-    const oldDisclosure = await f.dialog.locator('.campus-announcements').elementHandle();
+    const oldDisclosure = await f.disclosure.locator('..').elementHandle();
     await page.keyboard.press('Escape');
     await f.trigger.click();
     await f.disclosure.click();

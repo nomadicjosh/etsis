@@ -4,6 +4,12 @@ The legacy system is the feature inventory, not a requirement to reproduce its s
 
 “Working” below describes a workflow available in the current code. “Partial” means useful pieces work but the broader recommendation still needs implementation. “Proposed” is a design recommendation, not completed functionality.
 
+## Completed: waitlist outcome updates and personal notification deletion
+
+**Working.** [New waitlist outcomes](registration-history.md#private-waitlist-outcome-updates) now connect accepted registrations/staff removals with canonical account-pinned notices in the shared staff/portal bell. Twenty-row on-demand pages, read filters, explicit refresh and registration navigation expose only the person's own minimized outcome. Failed commands and accepted retries create none; earlier facts are not backfilled. Queue, academic and finance history remains protected in the existing journal.
+
+[Delete controls](workspace-notifications.md#delete-notifications) complete the disposable-notification workflow requested by the user. Saved personal updates are physically deleted; shared announcement deletion physically removes the account's read metadata and retains only its current-publication suppression marker. Temporary feedback is removed from page memory, including a still-visible toast. Reloads retain server deletions, later publication revisions can reappear and retries never recreate deleted updates. There is no historical notification archive. Owner/source/revision/required-audit checks remain atomic, private, CSRF-protected and isolated across accounts. Further audiences/triggers, push/email, waitlist offers and large-queue recovery remain open.
+
 ## Completed: prerequisite coursework-source policy
 
 **Working.** [Qualifying prerequisite coursework](course-publication.md#qualifying-prerequisite-coursework) now connects institutional source selection, retained course publications/clones and shared student/staff registration readiness. The default continues accepting institutional or transfer work; source restrictions apply to prerequisites only. Degree-credit and co-requisite policies remain separate.

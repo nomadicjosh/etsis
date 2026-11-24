@@ -78,3 +78,19 @@ if ($request($path . '?include_read=invalid')->getStatusCode() !== 422) {
 if ($before !== $sis->sql->rows('sis_history_events')) {
     throw new RuntimeException('Announcement reading changed authoritative history.');
 }
+
+$deleted = $teachingPost($path . $id->value . '/delete/', ['revision' => 1]);
+if (
+    $deleted->getStatusCode() !== 200 || $sis->sql->rows('sis_announcement_reads') !== []
+    || count($sis->sql->rows('sis_announcement_dismissals')) !== 1
+    || json_decode((string) $request($path . '?include_read=1')->getBody(), true)['items'] !== []
+) {
+    throw new RuntimeException('Announcement deletion did not erase reading state and suppress redelivery.');
+}
+if (
+    $teachingPost($path . $id->value . '/read/', ['revision' => 1])->getStatusCode() !== 404
+    || $teachingPost($path . $id->value . '/delete/', ['revision' => 1])->getStatusCode() !== 200
+    || $before !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Deleted announcements were resurrected or changed business history.');
+}

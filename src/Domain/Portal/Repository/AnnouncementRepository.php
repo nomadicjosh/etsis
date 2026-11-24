@@ -16,5 +16,7 @@ interface AnnouncementRepository
     /** @return array<string, mixed>|null */
     public function readState(EntityId $owner, EntityId $post): ?array;
 
+    public function dismissedRevision(EntityId $owner, EntityId $post): ?int;
+    public function dismiss(EntityId $owner, EntityId $post, int $revision): void;
     public function markRead(EntityId $owner, EntityId $post, int $revision, string $at): void;
 }

@@ -52,7 +52,7 @@ final readonly class CampusAnnouncementService
     public function detail(EntityId $id): array
     {
         $owner = $this->access->authenticatedUserId();
-        $post = $this->visible($id);
+        $post = $this->visible($id, $owner);
         $read = $this->announcements->readState($owner, $id);
         $html = $post->contentFormat === 'html' ? $this->markup->sanitize($post->content) : null;
         $text = $html === null ? $post->content : $this->markup->plainText($html);
@@ -72,14 +72,14 @@ final readonly class CampusAnnouncementService
         return $this->transactions->run(function () use ($id, $revision, $owner): array {
             $this->posts->lock($id);
             $this->owner($owner);
-            $post = $this->visible($id);
+            $post = $this->visible($id, $owner);
             if ($post->version !== $revision) {
                 throw new ConcurrentModificationException('This announcement changed. Read its current version.');
             }
             $previous = $this->announcements->readState($owner, $id);
             if ($previous !== null && (int) $previous['revision'] === $revision) {
                 $this->owner($owner);
-                $this->visible($id);
+                $this->visible($id, $owner);
                 return ['unread' => false];
             }
             if ($previous !== null && (int) $previous['revision'] > $revision) {
@@ -89,7 +89,7 @@ final readonly class CampusAnnouncementService
             $this->announcements->markRead($owner, $id, $revision, $at);
             $this->audit->record($owner, 'portal.announcement.read', $id);
             $this->owner($owner);
-            if ($this->visible($id) != $post) {
+            if ($this->visible($id, $owner) != $post) {
                 throw new ConcurrentModificationException('This announcement changed. Read its current version.');
             }
             $saved = $this->announcements->readState($owner, $id);
@@ -100,11 +100,42 @@ final readonly class CampusAnnouncementService
         });
     }
 
-    private function visible(EntityId $id): PortalPost
+    public function delete(EntityId $id, int $revision): array
+    {
+        if ($revision < 0 || $revision > 2147483646) {
+            throw new InvalidArgumentException('Use a valid announcement revision.');
+        }
+        $owner = $this->access->authenticatedUserId();
+        return $this->transactions->run(function () use ($id, $revision, $owner): array {
+            $this->posts->lock($id);
+            $this->owner($owner);
+            if (($this->announcements->dismissedRevision($owner, $id) ?? -1) >= $revision) {
+                return ['deleted' => true];
+            }
+            $post = $this->visible($id);
+            if ($post->version !== $revision) {
+                throw new ConcurrentModificationException('This announcement changed. Refresh before deleting it.');
+            }
+            $this->announcements->dismiss($owner, $id, $revision);
+            $this->audit->record($owner, 'portal.announcement.deleted', $id);
+            $this->owner($owner);
+            if (
+                $this->visible($id) != $post
+                || $this->announcements->dismissedRevision($owner, $id) !== $revision
+                || $this->announcements->readState($owner, $id) !== null
+            ) {
+                throw new ConcurrentModificationException('The announcement changed before deletion completed.');
+            }
+            return ['deleted' => true];
+        });
+    }
+
+    private function visible(EntityId $id, ?EntityId $owner = null): PortalPost
     {
         $post = $this->posts->get($id);
         if (
-            $post->kind !== 'news' || $post->status !== 'published'
+            ($owner !== null && ($this->announcements->dismissedRevision($owner, $id) ?? -1) >= $post->version)
+            || $post->kind !== 'news' || $post->status !== 'published'
             || !$this->announcements->available($id)
             || !new PublicationWindow($post->visibleFrom, $post->visibleUntil)->visible($this->clock->now())
         ) {

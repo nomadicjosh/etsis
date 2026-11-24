@@ -27,7 +27,7 @@ window.createWorkspaceNotifications = function (ui) {
     const history = [], visible = new Map();
     let dialog = null, list = null, empty = null, audio = null, sequence = 0, lastSound = -Infinity;
     let disposed = false;
-    let announcements = null;
+    let announcements = null, registrationUpdates = null;
     let activeSound = null, pendingSound = null, decodedSound = null, soundGeneration = 0;
     const icons = { success: 'check-circle', info: 'info-circle', warning: 'exclamation-triangle' };
     const titles = { success: 'Completed', info: 'Update', warning: 'Needs attention' };
@@ -168,7 +168,12 @@ window.createWorkspaceNotifications = function (ui) {
             node('div', { class: 'workspace-notification-entry-heading' },
                 glyph(icons[item.tone]), node('strong', {}, text(item.tone, titles[item.tone])),
                 node('time', { datetime: item.at.toISOString() }, item.at.toLocaleTimeString())),
-            node('p', { class: 'mb-0 text-break' }, item.message))));
+            node('p', { class: 'mb-0 text-break' }, item.message),
+            node('button', { type: 'button', class: 'btn btn-outline-danger btn-sm mt-2', onclick: () => {
+                remove(item.id); const index = history.findIndex(row => row.id === item.id);
+                if (index >= 0) history.splice(index, 1); renderHistory();
+                (list.querySelector('button') || dialog?.querySelector('.btn-close'))?.focus();
+            } }, glyph('trash'), text('delete_notification', 'Delete notification')))));
     }
     function notify(message, options = {}) {
         if (disposed || typeof message !== 'string' || !message.trim()) return;
@@ -195,6 +200,7 @@ window.createWorkspaceNotifications = function (ui) {
     function closeHistory() {
         if (!dialog) return;
         announcements?.destroy(); announcements = null;
+        registrationUpdates?.destroy(); registrationUpdates = null;
         const previous = dialog;
         dialog = list = empty = null;
         previous.close(); previous.remove();
@@ -288,6 +294,21 @@ window.createWorkspaceNotifications = function (ui) {
                 }
             });
             currentDialog.querySelector('.workspace-notification-dialog-body').prepend(section);
+            if (window.createRegistrationUpdates) {
+                const updatesBody = node('div', { class: 'campus-announcements-body' });
+                const updatesSection = node('details', { class: 'campus-announcements' },
+                    node('summary', {}, glyph('person-check'), text('registration_updates', 'Registration updates')), updatesBody);
+                updatesSection.addEventListener('toggle', () => {
+                    if (dialog !== currentDialog) return;
+                    registrationUpdates?.destroy(); registrationUpdates = null;
+                    if (updatesSection.open) {
+                        registrationUpdates = window.createRegistrationUpdates({ node, request, labels, notify });
+                        registrationUpdates.mount(updatesBody);
+                    }
+                });
+                currentDialog.querySelector('.workspace-notification-dialog-body').prepend(updatesSection);
+            }
+
         }
         dialog.addEventListener('close', () => { if (dialog === currentDialog) closeHistory(); });
         stack.hidden = true;

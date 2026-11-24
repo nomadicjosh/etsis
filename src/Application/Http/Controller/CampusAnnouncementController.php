@@ -33,6 +33,14 @@ final readonly class CampusAnnouncementController
         return new JsonResponse($this->service->detail(new EntityId($id)));
     }
 
+    public function delete(ServerRequest $request, string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->delete(
+            new EntityId($id),
+            FormInput::from($request)->integer('revision', 0, 2147483646)
+        ));
+    }
+
     public function read(ServerRequest $request, string $id): ResponseInterface
     {
         $input = FormInput::from($request);

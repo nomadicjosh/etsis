@@ -40,8 +40,12 @@ dialog > .workspace-notification-stack { position: absolute; width: min(24rem, c
 .campus-announcements-body { padding: 1rem; border-block-start: 1px solid #d6e0e9; }
 .campus-announcements .btn { max-width: 100%; white-space: normal; overflow-wrap: anywhere; flex-wrap: wrap; }
 .campus-announcement-list > li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .5rem; padding-block: .5rem; border-block-end: 1px solid #d6e0e9; }
-.campus-announcement-list .btn { min-width: 0; max-width: 100%; padding-inline: 0; }
+.campus-announcement-list .btn { min-width: 0; max-width: 100%; }
+.campus-announcement-list .btn-link { padding-inline: 0; }
 .campus-announcement-content { white-space: pre-wrap; overflow-wrap: anywhere; }
+.registration-update-card { padding: 1rem; }
 @media (max-width: 480px) {
     .campus-announcements > summary, .campus-announcements-body { padding: 12px; }
+    .registration-update-card { padding: 12px; }
+    .registration-update-card .btn { padding-inline: 12px; }
 }

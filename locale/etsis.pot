@@ -3189,3 +3189,91 @@ msgstr ""
 #: resources/views/shared/prerequisite-origin-labels.php
 msgid "This rule does not change earned credits or decide which work counts toward a degree."
 msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Registration updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Loading registration updates…"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Waitlist registrations and staff removals appear here. Delete an update when you no longer need it."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "There are no matching registration updates."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Show read updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Refresh registration updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Registration update pages"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Previous updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "More updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Registered from waitlist"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Waitlist request removed"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Delete update"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Registration updates loaded. Course, section and term labels are current."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Registration updates could not load. Use Refresh to try again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Registration updates are unavailable for this account."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "This update changed or is unavailable. Refresh the list."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "New registration updates are available."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "View your registration"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Registration update marked as read."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Registration update deleted."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Delete announcement"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Delete notification"
+msgstr ""

@@ -9,7 +9,8 @@ window.createCampusAnnouncements = function (ui) {
     const seen = new Map();
     const active = turn => !disposed && root?.isConnected && turn === serial;
     const button = (key, fallback, glyph, run) => node('button', {
-        type: 'button', class: 'btn btn-outline-primary btn-sm', onclick: event => run(event.currentTarget),
+        type: 'button', class: `btn btn-sm ${glyph === 'trash' ? 'btn-outline-danger' : 'btn-outline-primary'}`,
+        onclick: event => run(event.currentTarget),
     }, icon(glyph), text(key, fallback));
     function failed(turn, error) {
         if (!active(turn)) return;
@@ -41,7 +42,8 @@ window.createCampusAnnouncements = function (ui) {
                 ...result.items.map(item => node('li', {}, node('span', { class: 'badge text-bg-light border' },
                     item.unread ? text('announcement_unread', 'Unread') : text('announcement_read', 'Read')),
                     node('button', { type: 'button', class: 'btn btn-link text-start text-break',
-                        onclick: () => detail(item.id) }, item.title))));
+                        onclick: () => detail(item.id) }, item.title),
+                    button('announcement_delete', 'Delete announcement', 'trash', () => remove(item)))));
             const paging = node('nav', { class: 'd-flex flex-wrap gap-2',
                 'aria-label': text('announcement_pages', 'Announcement pages') });
             if (stack.length) paging.append(button('announcement_previous', 'Previous announcements', 'arrow-left', () => {
@@ -54,6 +56,17 @@ window.createCampusAnnouncements = function (ui) {
             status.textContent = text('announcement_loaded', 'Campus announcements loaded. Reading state is saved to your account.');
         } catch (error) { failed(turn, error); }
         finally { if (active(turn)) { refresh.disabled = false; include.disabled = false; } }
+    }
+    async function remove(item) {
+        const turn = ++serial;
+        root.querySelectorAll('button, input').forEach(control => { control.disabled = true; });
+        try {
+            await request(`/portal/api/announcements/${encodeURIComponent(item.id)}/delete/`, 'POST', { revision: item.revision });
+            if (!active(turn)) return;
+            await load(cursor, previous);
+            if (!disposed && root?.isConnected) status.focus();
+        } catch (error) { failed(turn, error); }
+        finally { if (active(turn)) root.querySelectorAll('button, input').forEach(control => { control.disabled = false; }); }
     }
     async function detail(id) {
         const turn = ++serial;
@@ -87,7 +100,8 @@ window.createCampusAnnouncements = function (ui) {
                 if (!disposed && root.isConnected) status.focus();
             });
             content.replaceChildren(heading, message, readStatus,
-                node('div', { class: 'd-flex flex-wrap gap-2' }, mark, back));
+                node('div', { class: 'd-flex flex-wrap gap-2' }, mark,
+                    button('announcement_delete', 'Delete announcement', 'trash', () => remove(result)), back));
             status.textContent = '';
             heading.focus();
         } catch (error) { failed(turn, error); }

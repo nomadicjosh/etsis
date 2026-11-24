@@ -22,7 +22,8 @@ final readonly class SqlAnnouncementRepository implements AnnouncementRepository
         $window = SqlPortalVisibility::window($this->sql, 'p', $this->clock->now());
         $where = ["p." . $q('kind') . " = 'news'", "p." . $q('status') . " = 'published'",
             "a." . $q('audience') . " = 'campus'", $window['sql']];
-        $parameters = [$owner->value, ...$window['parameters']];
+        $parameters = [$owner->value, $owner->value, ...$window['parameters']];
+        $where[] = '(d.' . $q('revision') . ' IS NULL OR d.' . $q('revision') . ' < p.' . $q('version') . ')';
         if ($unreadOnly) {
             $where[] = '(r.' . $q('revision') . ' IS NULL OR r.' . $q('revision') . ' <> p.' . $q('version') . ')';
         }
@@ -36,6 +37,8 @@ final readonly class SqlAnnouncementRepository implements AnnouncementRepository
             . ' FROM ' . $q('sis_portal_posts') . ' p JOIN ' . $q('sis_portal_audiences') . ' a ON a.'
             . $q('post_id') . ' = p.' . $q('id') . ' LEFT JOIN ' . $q('sis_announcement_reads') . ' r ON r.'
             . $q('post_id') . ' = p.' . $q('id') . ' AND r.' . $q('owner_user_id') . ' = ?'
+            . ' LEFT JOIN ' . $q('sis_announcement_dismissals') . ' d ON d.' . $q('post_id')
+            . ' = p.' . $q('id') . ' AND d.' . $q('owner_user_id') . ' = ?'
             . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY p.' . $q('id') . ' DESC',
             $parameters,
             21,
@@ -61,6 +64,29 @@ final readonly class SqlAnnouncementRepository implements AnnouncementRepository
         return $this->sql->rows('sis_announcement_reads', [
             'owner_user_id' => $owner->value, 'post_id' => $post->value,
         ], 1)[0] ?? null;
+    }
+
+    public function dismissedRevision(EntityId $owner, EntityId $post): ?int
+    {
+        $row = $this->sql->rows('sis_announcement_dismissals', [
+            'owner_user_id' => $owner->value, 'post_id' => $post->value,
+        ], 1)[0] ?? null;
+        return $row === null ? null : (int) $row['revision'];
+    }
+
+    public function dismiss(EntityId $owner, EntityId $post, int $revision): void
+    {
+        $where = ['owner_user_id' => $owner->value, 'post_id' => $post->value];
+        if ($this->dismissedRevision($owner, $post) === null) {
+            $this->sql->insert('sis_announcement_dismissals', [
+                'id' => EntityId::generate()->value, 'revision' => $revision,
+            ] + $where);
+        } else {
+            $this->sql->update('sis_announcement_dismissals', ['revision' => $revision], $where);
+        }
+        $q = $this->sql->quote(...);
+        $this->sql->execute('DELETE FROM ' . $q('sis_announcement_reads') . ' WHERE '
+            . $q('owner_user_id') . ' = ? AND ' . $q('post_id') . ' = ?', [$owner->value, $post->value]);
     }
 
     public function markRead(EntityId $owner, EntityId $post, int $revision, string $at): void
