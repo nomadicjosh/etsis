@@ -19,7 +19,7 @@ final class CreateSisProgramDiscovery extends Migration
         $t->string('id', 26)->primary()->notNull();
         $t->string('catalog_id', 26);
         $t->string('publication_hash', 64);
-        $t->boolean('visible')->notNull();
+        $t->integer('visible')->size('tiny')->notNull();
         $t->integer('version')->notNull();
         $t->string('operation_id', 26)->notNull();
         $t->string('request_hash', 64)->notNull();

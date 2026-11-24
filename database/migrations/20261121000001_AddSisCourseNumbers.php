@@ -24,7 +24,7 @@ final class AddSisCourseNumbers extends Migration
                 }
                 $this->schema()->alter($table, static function (AlterTable $t) use ($field): void {
                     if (str_ends_with($field, "recorded")) {
-                        $t->boolean($field)->defaultValue(false)->notNull();
+                        $t->integer($field)->size('tiny')->defaultValue(0)->notNull();
                     } else {
                         $t->string($field, 32);
                     }

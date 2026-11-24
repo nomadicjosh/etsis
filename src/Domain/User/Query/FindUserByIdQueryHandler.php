@@ -18,10 +18,9 @@ final readonly class FindUserByIdQueryHandler implements QueryHandler
     {
         /** @var FindUserByIdQuery $query */
 
-        $this->db->setStructure(primaryKeyName: 'user_id');
-
         return $this->db
             ->table(tableName: 'users')
+            ->setStructure(primaryKeyName: 'user_id')
             ->where(condition: 'user_id = ?', parameters: $query->userId->toNative())
             ->findOne();
     }

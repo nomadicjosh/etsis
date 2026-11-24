@@ -1251,11 +1251,29 @@ final class SisFixture
     }
     public function admissionEvidenceService(): \Domain\Admissions\Service\AdmissionEvidenceService
     {
+        $root = sys_get_temp_dir() . '/etsis-fictional-admission-evidence-' . bin2hex(random_bytes(12));
+        register_shutdown_function(static function () use ($root): void {
+            if (!is_dir($root)) {
+                return;
+            }
+            $entries = new RecursiveIteratorIterator(
+                new RecursiveDirectoryIterator($root, FilesystemIterator::SKIP_DOTS),
+                RecursiveIteratorIterator::CHILD_FIRST
+            );
+            foreach ($entries as $entry) {
+                if ($entry->isLink() || $entry->isFile()) {
+                    unlink($entry->getPathname());
+                } elseif ($entry->isDir()) {
+                    rmdir($entry->getPathname());
+                }
+            }
+            rmdir($root);
+        });
         return new \Domain\Admissions\Service\AdmissionEvidenceService(
             new \Infrastructure\Persistence\Repository\SqlAdmissionDocumentRepository($this->sql),
             new \Domain\Admissions\Service\AdmissionDocumentContent(
                 $this->dropCipher,
-                new \Infrastructure\Admissions\PrivateAdmissionDocumentStorage($this->dropCipher)
+                new \Infrastructure\Admissions\PrivateAdmissionDocumentStorage($this->dropCipher, $root)
             ),
             $this->clock
         );

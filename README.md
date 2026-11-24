@@ -44,6 +44,12 @@ COOKIE_SAMESITE=lax
 
 `db`/`db` are DDEV's local database credentials. Set `APP_KEY` to your own generated value; `ddev exec openssl rand -hex 32` generates a suitable value in your terminal. Keep `.env` private. If you change the DDEV project name, use its corresponding HTTPS URL in `APP_BASE_URL`. Optional external services can remain disabled.
 
+### PostgreSQL installations
+
+A separate PostgreSQL 18.7 installation is also qualified for fresh migrations, registration and initial administrator access. Provision an empty database and a role that owns its installation schema, enable PDO PostgreSQL in the selected PHP runtime, and configure the private `.env` with `DB_CONNECTION=pgsql` and a `pgsql:host=HOST;port=PORT;dbname=DATABASE` DSN. Supply that database's own user/password; keep the examples private and replace every placeholder. Continue with the same commands below.
+
+See [fresh-install qualification](docs/fresh-install-qualification.md) for the exact checks and limits, and [PostgreSQL conversion](docs/postgresql-conversion.md) when preserving an existing MariaDB installation. The current development sidecar and MariaDB rollback source are separate from a new empty installation. Broader engine/workflow, institutional upgrade and full restore acceptance remain open.
+
 ### 3. Create the encryption key, database tables and frontend assets
 
 ```sh

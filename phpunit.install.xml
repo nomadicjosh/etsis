@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<phpunit bootstrap="tests/Native/bootstrap.php" colors="true" cacheDirectory="/tmp/etsis-phpunit-native-install-cache">
+    <php>
+        <ini name="memory_limit" value="128M"/>
+        <ini name="zend.exception_ignore_args" value="1"/>
+    </php>
+    <testsuites>
+        <testsuite name="Isolated fresh installation qualification">
+            <file>tests/Integration/AlphaInstallTest.php</file>
+        </testsuite>
+    </testsuites>
+</phpunit>

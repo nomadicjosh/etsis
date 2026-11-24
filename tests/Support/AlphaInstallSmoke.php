@@ -1,11 +1,15 @@
 <?php
+
 declare(strict_types=1);
-// Isolated fresh alpha install. No institutional .env, database, credentials, network or mail.
+
+// Isolated fresh alpha install. Native settings arrive by private stdin for a marked disposable database only.
 require dirname(__DIR__, 2) . "/vendor/autoload.php";
 use Symfony\Component\Process\Process;
+use Tests\Support\NativeQualificationDatabase;
 $root = dirname(__DIR__, 2);
+$mask = umask(0077);
 $fixture = sys_get_temp_dir() . "/etsis-alpha-install-" . bin2hex(random_bytes(8));
-mkdir($fixture);
+mkdir($fixture, 0700);
 foreach (["config", "bootstrap", "database", "storage"] as $dir) {
     mkdir($fixture . "/" . $dir);
 }
@@ -25,9 +29,9 @@ $env = [
     "APP_ENV" => "testing",
     "APP_TIMEZONE" => "UTC",
     "DB_CONNECTION" => "sqlite",
-    "DB_DSN" => getenv("ETSIS_TEST_INSTALL_DSN") ?: "sqlite:" . $fixture . "/database/alpha.sqlite",
-    "DB_USER" => getenv("ETSIS_TEST_INSTALL_USER") ?: "",
-    "DB_PASSWORD" => getenv("ETSIS_TEST_INSTALL_PASSWORD") ?: "",
+    "DB_DSN" => "sqlite:" . $fixture . "/database/alpha.sqlite",
+    "DB_USER" => "",
+    "DB_PASSWORD" => "",
     "SIS_MOODLE_ENABLED" => "false",
     "SIS_MOODLE_LAUNCH_ENABLED" => "false",
     "SIS_MOODLE_PROVISIONING_ENABLED" => "false",
@@ -39,47 +43,51 @@ $env = [
     "MAILER_DSN" => "null://null",
     "XDEBUG_MODE" => "off",
 ];
-if (getenv("ETSIS_TEST_INSTALL_DSN")) {
-    $env["DB_CONNECTION"] = "mysql";
-}
-$run = static function (array $args, string $stage) use ($env, $fixture): void {
-    $process = new Process([PHP_BINARY, "-d", "memory_limit=128M", ...$args], $fixture, $env);
-    $process->setTimeout(($env["DB_CONNECTION"] ?? "") === "mysql" ? 180 : 25);
-    $process->run();
-    if (!$process->isSuccessful()) {
-        $last = "none";
-        if (preg_match_all("/== [0-9]+ ([A-Za-z][A-Za-z0-9]+) migrating/", $process->getOutput(), $matches)) {
-            $last = end($matches[1]);
+try {
+    if (($argv[1] ?? '') === 'native') {
+        try {
+            stream_set_timeout(STDIN, 3);
+            $settings = json_decode((string) fgets(STDIN, 16384), true, 8, JSON_THROW_ON_ERROR);
+            require_once __DIR__ . '/NativeQualificationDatabase.php';
+            $probe = NativeQualificationDatabase::workerConnection($settings);
+            if ($probe->listTables() !== ['etsis_qualification_owner']) {
+                throw new RuntimeException();
+            }
+            $env['DB_CONNECTION'] = (string) $probe->pdo->getAttribute(PDO::ATTR_DRIVER_NAME);
+            $env['DB_DSN'] = $settings['dsn'];
+            $env['DB_USER'] = $settings['username'];
+            $env['DB_PASSWORD'] = $settings['password'];
+            unset($probe, $settings);
+        } catch (Throwable) {
+            // No connection exception, supplied credential or endpoint may reach test output.
+            throw new RuntimeException('External installation checks require an owned empty temporary database.');
         }
-        $state = preg_match("/SQLSTATE\[([A-Z0-9]{5})\]/", $process->getErrorOutput(), $match)
+    }
+    $run = static function (array $args, string $stage) use ($env, $fixture): void {
+        $process = new Process([
+            PHP_BINARY, "-d", "memory_limit=128M", "-d", "zend.exception_ignore_args=1", ...$args,
+        ], $fixture, $env);
+        $process->setTimeout($debug ? 70 : 30);
+        $process->run();
+        if (!$process->isSuccessful()) {
+            $last = "none";
+            if (preg_match_all("/== [0-9]+ ([A-Za-z][A-Za-z0-9]+) migrating/", $process->getOutput(), $matches)) {
+                $last = end($matches[1]);
+            }
+            $state = preg_match("/SQLSTATE\[([A-Z0-9]{5})\]/", $process->getErrorOutput(), $match)
             ? $match[1]
             : "none";
-        throw new RuntimeException(
-            "Fresh alpha setup failed at " .
+            throw new RuntimeException(
+                "Fresh alpha setup failed at " .
                 $stage .
                 ". Last migration: " .
                 $last .
                 "; SQLSTATE: " .
                 $state .
                 ".",
-        );
-    }
-};
-try {
-    if ($env['DB_CONNECTION'] === 'mysql') {
-        if (!str_starts_with($env['DB_DSN'], 'mysql:') || preg_match('/(?:mysql:|;)dbname=etsis_alpha_install_[a-f0-9]{12}(?:;|$)/D', $env['DB_DSN']) !== 1) {
-            throw new RuntimeException('External installation checks require an empty temporary database.');
+            );
         }
-        try {
-            $probe = new PDO($env['DB_DSN'], $env['DB_USER'], $env['DB_PASSWORD'], [PDO::ATTR_TIMEOUT => 5]);
-            if ($probe->query('SHOW TABLES')->fetchColumn() !== false) {
-                throw new RuntimeException();
-            }
-            unset($probe);
-        } catch (Throwable) {
-            throw new RuntimeException('External installation checks require an empty temporary database.');
-        }
-    }
+    };
     $run([$fixture . "/bootstrap/setup-environment.php"], "environment setup");
     if (!str_contains(file_get_contents($fixture . "/.env"), 'APP_BASE_PATH="' . $fixture . '"')) {
         throw new RuntimeException("Fresh alpha base path was not filled in.");
@@ -98,6 +106,9 @@ try {
         [$root . "/tests/Support/AlphaInstallWebChecks.php", $fixture],
         "registration and first administrator access",
     );
+    if (!hash_equals($key, file_get_contents($fixture . '/.enc.key'))) {
+        throw new RuntimeException('The installation workflow replaced its existing encryption key.');
+    }
     echo "Fresh alpha installation, registration and initial administrator access passed.\n";
 } finally {
     $entries = new RecursiveIteratorIterator(
@@ -112,4 +123,5 @@ try {
         }
     }
     rmdir($fixture);
+    umask($mask);
 }

@@ -23,7 +23,7 @@ final class CreateSisAccountEntryReports extends Migration
                 $t->integer('amount_minor')->size('big')->notNull();
                 $t->integer('effect_minor')->size('big')->notNull();
                 $t->string('currency', 3)->notNull();
-                $t->boolean('reversed')->notNull();
+                $t->integer('reversed')->size('tiny')->notNull();
                 $t->string('recorded_at', 19)->notNull();
                 $t->integer('posted_position')->notNull();
                 $t->string('reversed_at', 19);

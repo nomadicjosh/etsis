@@ -13,7 +13,7 @@ final class CreateSisCourseSubjects extends Migration
             $t->string("id", 26)->primary()->notNull();
             $t->string("code", 40)->unique("subject_code_uq")->notNull();
             $t->string("title", 191)->notNull();
-            $t->boolean("active")->notNull()->defaultValue(true);
+            $t->integer("active")->size('tiny')->notNull()->defaultValue(1);
         });
         $this->schema()->create("sis_course_subjects", static function (CreateTable $t): void {
             $t->string("id", 26)->primary()->notNull();

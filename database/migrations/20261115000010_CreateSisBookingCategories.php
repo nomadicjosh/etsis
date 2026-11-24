@@ -20,7 +20,7 @@ final class CreateSisBookingCategories extends Migration
             $t->string('code', 80)->notNull();
             $t->string('name', 191)->notNull();
             $t->string('tone', 6)->notNull();
-            $t->boolean('active')->notNull()->defaultValue(1);
+            $t->integer('active')->size('tiny')->notNull()->defaultValue(1);
             $t->integer('version')->notNull()->defaultValue(0);
             $t->unique(['code'], 'sbc_code_uq');
         });

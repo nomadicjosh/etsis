@@ -12,7 +12,7 @@ final class CreateSisOfferingTemplateTables extends Migration
         $this->schema()->create("sis_offering_templates", static function (CreateTable $table): void {
             $table->string("id", 26)->primary()->notNull();
             $table->string("name", 120)->notNull();
-            $table->boolean("active")->notNull();
+            $table->integer("active")->size('tiny')->notNull();
             $table->integer("version")->notNull();
             $table->integer("section_count")->notNull();
             $table->string("created_by", 36)->notNull();

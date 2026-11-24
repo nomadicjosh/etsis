@@ -6,6 +6,12 @@ The legacy system is the feature inventory, not a requirement to reproduce its s
 
 “Working” below describes a workflow available in the current code. “Partial” means useful pieces work but the broader recommendation still needs implementation. “Proposed” is a design recommendation, not completed functionality.
 
+## Completed: fresh PostgreSQL/SQLite setup and initial access
+
+The [fresh-install bundle](fresh-install-qualification.md) completes three narrow release gaps: all 208 native migration entries with repeat/key preservation; real public registration, canonical identity and first-super/private workspace access; and owned/nonempty-target guards with bounded private cleanup. It corrects incompatible native boolean/default definitions, PostgreSQL column-alter syntax and explicit user-key projection/query behavior. The configured application database and recorded history remain unchanged.
+
+Validation: the three-case installation suite passes on the selected PostgreSQL 18.7 server and isolated SQLite (11.116 seconds / 18 MiB parent / 15 assertions). It exercises genuine providers/routes, CSRF rejection, ignored privilege input, one linked person/account, bootstrap reuse denial, encrypted-cookie sign-in, private responses, numeric subject updates and authenticated profile history. Adjacent batches pass 182 distinct SQLite/unit cases / 3,431 assertions, with compiler overlap counted once. Other engines, full workflow/browser/accessibility acceptance, institutional upgrades and full restore remain open.
+
 ## Completed: selected PostgreSQL registration and finance recovery
 
 The [native qualification bundle](native-workflow-qualification.md) completes three narrow release items across final-seat/duplicate registration, whole-batch recovery, waitlist completion/deleted notifications, early-drop reversal and source-payment refunds. The ten workflows pass on PostgreSQL 18.7; a separate eleventh case verifies the installed composite stream-position index and unchanged facts after rejection. The shared fixture uses copied native DDL, enforced foreign keys and fresh fictional seeds, with no application records copied or mutated. The application role receives no database-creation grant.

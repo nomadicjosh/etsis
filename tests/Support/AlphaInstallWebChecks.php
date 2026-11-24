@@ -1,5 +1,7 @@
 <?php
+
 declare(strict_types=1);
+
 require dirname(__DIR__, 2) . "/vendor/autoload.php";
 $fixture = $argv[1];
 ini_set("session.save_path", $fixture . "/storage");
@@ -33,6 +35,14 @@ $request = static function (
         );
 };
 $password = bin2hex(random_bytes(32));
+$sql = $app->make(\Infrastructure\Persistence\SqlRecords::class);
+$missingCsrf = $app->router->match(
+    $request('/create/', 'POST', ['email' => 'rejected@example.invalid'])
+        ->withoutHeader('X-CSRF-Token'),
+);
+if ($missingCsrf->getStatusCode() !== 403 || $sql->rows('users', limit: 1) !== []) {
+    throw new RuntimeException('Fresh registration did not reject a missing CSRF proof before writing.');
+}
 $response = $app->router->match(
     $request("/create/", "POST", [
         "username" => "alpha_tester",
@@ -46,8 +56,13 @@ $response = $app->router->match(
 if ($response->getStatusCode() !== 302 || !str_contains($response->getHeaderLine("Location"), "/login/")) {
     throw new RuntimeException("Fresh account registration did not complete.");
 }
-$sql = $app->make(\Infrastructure\Persistence\SqlRecords::class);
 $user = $sql->one("users", ["email" => "alpha.tester@example.invalid"]);
+$userId = new \Domain\Shared\ValueObject\EntityId($user['user_id']);
+$people = $sql->rows('sis_persons', ['owner_user_id' => $userId->value], 2);
+if (count($people) !== 1 || $people[0]['given_name'] !== 'Alex' || $people[0]['family_name'] !== 'Example') {
+    throw new RuntimeException('Fresh registration did not retain one canonical person and explicit account ULID.');
+}
+$originalEvents = $sql->fetch('SELECT * FROM sis_history_events ORDER BY id', limit: 20);
 $access = $app->make(\Domain\Access\Repository\AccessRepository::class);
 if ($access->anySuper()) {
     throw new RuntimeException("Public registration granted a privileged role.");
@@ -81,5 +96,30 @@ if (!str_contains($admin->getHeaderLine("Cache-Control"), "no-store")) {
 }
 if ($tester->execute(["user_id" => $user["user_id"]], ["interactive" => false]) !== 1) {
     throw new RuntimeException("The initial administrator command remained usable after bootstrap.");
+}
+$subject = $app->router->match($request('/sis/catalog/subjects/save/', 'POST', [
+    'code' => 'TEST', 'title' => 'Fictional subject', 'active' => true,
+])->withCookieParams(['USERSESSID' => $cookie]));
+if ($subject->getStatusCode() !== 200) {
+    throw new RuntimeException('Fresh catalog flag creation failed.');
+}
+$subjectRow = json_decode((string) $subject->getBody(), true, 8, JSON_THROW_ON_ERROR);
+$subject = $app->router->match($request('/sis/catalog/subjects/save/', 'POST', [
+    'id' => $subjectRow['id'], 'code' => 'TEST', 'title' => 'Fictional subject', 'active' => false,
+    'revision' => $subjectRow['revision'],
+])->withCookieParams(['USERSESSID' => $cookie]));
+if (
+    $subject->getStatusCode() !== 200 ||
+    json_decode((string) $subject->getBody(), true, 8, JSON_THROW_ON_ERROR)['active'] !== false
+) {
+    throw new RuntimeException('Fresh catalog flag update failed.');
+}
+if ($originalEvents !== $sql->fetch('SELECT * FROM sis_history_events ORDER BY id', limit: 20)) {
+    throw new RuntimeException('Authentication or reference edits changed recorded profile history.');
+}
+$verified = $app->make(\Domain\Shared\EventSourcing\HistoricalIntegrityVerifier::class)
+    ->verify(streamLimit: 50, eventLimit: 200);
+if (!$verified->complete || $verified->events === 0 || $sql->tableExists('event_store')) {
+    throw new RuntimeException('Fresh profile history or single-journal migration did not verify.');
 }
 echo "Fictional registration and first administrator verified.\n";

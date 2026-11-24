@@ -51,7 +51,7 @@ final class CreateSisCurriculumReports extends Migration
                 foreach (
                     ["kind_recorded", "department_recorded", "parent_major_recorded"] as $field
                 ) {
-                    $t->boolean($field)->notNull();
+                    $t->integer($field)->size('tiny')->notNull();
                 }
                 foreach (["department", "school", "parent_major"] as $prefix) {
                     $t->string($prefix . "_id", 26);

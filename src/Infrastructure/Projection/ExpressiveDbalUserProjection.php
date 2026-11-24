@@ -47,7 +47,8 @@ final class ExpressiveDbalUserProjection extends BaseProjection implements UserP
             \Infrastructure\Persistence\PortableTransactions::run(db: $this->db, callback: function () use ($event) {
                 $this->db
                     ->table(tableName: 'users')
-                    ->set([
+                    ->setStructure(primaryKeyName: 'user_id')
+                    ->insert([
                         'user_id' => $event->userId()->__toString(),
                         'username' => $event->username()->__toString(),
                         'token' => $event->token()->__toString(),
@@ -58,8 +59,7 @@ final class ExpressiveDbalUserProjection extends BaseProjection implements UserP
                         'role' => 'user',
                         'password' => $event->password()->toNative(),
                         'created_on' => $event->createdOn()->format('Y-m-d H:i:s'),
-                ])
-                ->save();
+                ]);
                 // RoleWasChanged remains legacy profile metadata; access assignments have their own boundary.
                 $this->access->assignDefaultRole($event->userId()->__toString());
                 $personId = $event->payload()['person_id'] ?? null;

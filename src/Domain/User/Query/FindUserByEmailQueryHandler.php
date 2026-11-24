@@ -18,9 +18,8 @@ final readonly class FindUserByEmailQueryHandler implements QueryHandler
     {
         /** @var FindUserByEmailQuery $query */
 
-        $this->db->setStructure(primaryKeyName: 'user_id');
-
         return $this->db->table('users')
+            ->setStructure(primaryKeyName: 'user_id')
             ->where(condition: 'email = ?', parameters: $query->email->toNative())
             ->findOne();
     }

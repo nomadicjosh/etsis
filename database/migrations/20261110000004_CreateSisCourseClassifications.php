@@ -14,7 +14,7 @@ final class CreateSisCourseClassifications extends Migration
             $table->string("kind", 24)->notNull();
             $table->string("code", 40)->notNull();
             $table->string("title", 191)->notNull();
-            $table->boolean("active")->notNull()->defaultValue(true);
+            $table->integer("active")->size('tiny')->notNull()->defaultValue(1);
             $table->unique(["kind", "code"], "catalog_class_kind_code_uq");
         });
         $this->schema()->create("sis_course_classifications", static function (CreateTable $table): void {

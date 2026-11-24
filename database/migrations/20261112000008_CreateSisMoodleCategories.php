@@ -27,7 +27,7 @@ final class CreateSisMoodleCategories extends Migration
             $t->string("source", 12)->notNull();
             $t->string("reference_id", 26)->notNull();
             $t->string("external_id", 20);
-            $t->boolean("is_owned")->notNull()->defaultValue(false);
+            $t->integer("is_owned")->size('tiny')->notNull()->defaultValue(0);
             $t->integer("version")->notNull()->defaultValue(0);
             $t->integer("lease_until")->notNull()->defaultValue(0);
             $t->integer("attempts")->notNull()->defaultValue(0);

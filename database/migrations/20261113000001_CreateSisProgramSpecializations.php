@@ -15,7 +15,7 @@ final class CreateSisProgramSpecializations extends Migration
             $t->string('code', 80)->notNull();
             $t->string('title', 191)->notNull();
             $t->text('description')->size('medium');
-            $t->boolean('active')->notNull()->defaultValue(true);
+            $t->integer('active')->size('tiny')->notNull()->defaultValue(1);
             $t->integer('revision')->notNull();
             $t->unique(['program_id', 'code'], 'sps_program_code');
             $t->index(['program_id', 'id'], 'sps_program_page');
