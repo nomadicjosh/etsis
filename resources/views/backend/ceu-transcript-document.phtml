@@ -1,0 +1,89 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_html;
+
+?>
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8">
+        <meta http-equiv="Content-Security-Policy"
+            content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title><?= trans_html('Continuing education transcript') ?></title>
+        <style>
+            @page { margin: .6in; size: <?= $layout->paper === 'a4' ? 'A4' : 'letter' ?>; }
+            body { color: #172b40; background: #fff; font: 11px/1.5 "DejaVu Sans", sans-serif; margin: 0; }
+            main { max-width: 72rem; margin: 0 auto; }
+            h1 { font-size: 22px; margin-bottom: 0; }
+            .issuer { border-bottom: 2px solid #235b93; padding-bottom: 12px; }
+            .address { white-space: pre-wrap; }
+            .scroll { overflow-x: auto; }
+            .scroll:focus-visible { outline: 3px solid #235b93; outline-offset: 3px; }
+            table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+            th, td { text-align: left; padding: 8px 5px; border-bottom: 1px solid #cad7e4; vertical-align: top; }
+            th { background: #edf3f9; }
+            caption { text-align: left; font-weight: bold; }
+            dt { font-weight: bold; }
+            dd { margin-left: 0; margin-bottom: 10px; }
+            p, td, dd { overflow-wrap: anywhere; }
+        </style>
+    </head>
+    <body>
+        <main>
+            <header class="issuer">
+                <h1><?= $escape($document['issuer']['name']) ?></h1>
+                <p class="address"><?= $escape($document['issuer']['address']) ?></p>
+                <h2><?= trans_html('Continuing education transcript') ?></h2>
+                <p>
+                    <?= $escape($document['student']['name']) ?> ·
+                    <?= $escape($document['student']['institutional_id']) ?>
+                </p>
+                <?php if (isset($document['issued_at'])): ?>
+                    <p><?= trans_html('Prepared') ?>: <?= $escape($document['issued_at']) ?></p>
+                <?php endif; ?>
+                <?php if (!empty($document['preview'])): ?>
+                    <p><?= trans_html('Preview — no official document has been prepared.') ?></p>
+                <?php endif; ?>
+            </header>
+            <div class="scroll" tabindex="0" role="region" aria-label="<?= trans_html('Earned CEUs') ?>">
+                <table>
+                    <caption><?= trans_html('Recorded continuing education awards') ?></caption>
+                    <thead>
+                        <tr>
+                            <th scope="col"><?= trans_html('Term') ?></th>
+                            <th scope="col"><?= trans_html('Course') ?></th>
+                            <th scope="col"><?= trans_html('Title') ?></th>
+                            <th scope="col"><?= trans_html('Completion date') ?></th>
+                            <th scope="col"><?= trans_html('Earned CEUs') ?></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($document['credits'] as $row): ?>
+                            <tr>
+                                <td><?= $escape($row['term_code']) ?></td>
+                                <td><?= $escape($row['course_code']) ?></td>
+                                <td><?= $escape($row['course_title']) ?></td>
+                                <td><?= $escape($row['earned_ceus']['completed_on']) ?></td>
+                                <td><?= $credits($row['earned_ceus']['earned_milli']) ?></td>
+                            </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <?php if ($document['credits'] === []): ?>
+                <p><?= trans_html('No earned CEU awards are recorded for this transcript.') ?></p>
+            <?php endif; ?>
+            <dl>
+                <dt><?= trans_html('Total earned CEUs') ?></dt>
+                <dd><?= $credits($document['totals']['earned_ceu_milli']) ?></dd>
+            </dl>
+            <p><?= trans_html(
+                'This transcript records continuing education units only. CEUs are '
+                . 'separate from academic credits and GPA.',
+            ) ?></p>
+        </main>
+    </body>
+</html>

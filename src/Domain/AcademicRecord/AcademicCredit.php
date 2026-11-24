@@ -28,6 +28,8 @@ final class AcademicCredit extends EventSourcedAggregate
 {
     /** @var array<string,mixed>|null */
     private ?array $credit = null;
+    private ?array $earnedCeus = null;
+    private array $ceuDecisions = [];
     /** @var array<string,mixed>|null */
     private ?array $grade = null;
     /** @var list<array<string,mixed>> */
@@ -60,6 +62,7 @@ final class AcademicCredit extends EventSourcedAggregate
                 $event::class,
                 [
                     InstitutionalCreditWasEstablished::class,
+                    \Domain\AcademicRecord\Event\EarnedCeusWereDecided::class,
                     \Domain\AcademicRecord\Event\RegisteredCreditsWereCorrected::class,
                     FinalGradeWasDecided::class,
                     \Domain\AcademicRecord\Event\GradeChangeWasRequested::class,
@@ -582,6 +585,41 @@ final class AcademicCredit extends EventSourcedAggregate
         return $this->canReinstate() ? $this->withdrawalBase : null;
     }
     /** @param array<string,mixed> $p */
+    public function whenEarnedCeusWereDecided(\Domain\AcademicRecord\Event\EarnedCeusWereDecided $event): void
+    {
+        $p = $event->payload();
+        $this->assertNext($p);
+        $award = new \Domain\AcademicRecord\ValueObject\EarnedCeus($p['award'])->facts;
+        if (
+            $p['previous_award'] != $this->earnedCeus || $p['previous_award'] == $award ||
+            $award['section_version_id'] !== $this->sectionVersion || $this->pendingGradeChange !== null ||
+            $this->completedOn === null || $this->completedOn !== $award['completed_on'] ||
+            $this->grade === null || !in_array($this->credit['status'], ['A', 'N'], true) ||
+            ($award['earned_milli'] !== null && !$this->grade['passes']) ||
+            ($this->earnedCeus === null && $award['earned_milli'] === null) ||
+            isset($this->ceuDecisions[$p['decision_id']])
+        ) {
+            throw new CorruptHistoryException();
+        }
+        $this->earnedCeus = $award;
+        ++$this->credit['version'];
+        $this->decision = $p['decision_id'];
+        $this->ceuDecisions[$p['decision_id']] = ['intent' => $p['intent'], 'receipt' => [
+            'operation_id' => $p['decision_id'], 'first_version' => $event->playhead(),
+            'last_version' => $event->playhead(), 'event_ids' => [(string) $event->eventId()],
+        ]];
+    }
+
+    public function earnedCeus(): ?array
+    {
+        return $this->earnedCeus;
+    }
+
+    public function ceuDecision(EntityId $operation): ?array
+    {
+        return $this->ceuDecisions[$operation->value] ?? null;
+    }
+
     private function assertNext(array $p): void
     {
         if (

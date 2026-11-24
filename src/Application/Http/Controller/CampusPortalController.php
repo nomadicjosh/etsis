@@ -17,6 +17,8 @@ use Psr\Http\Message\ResponseInterface;
 use Qubus\Http\ServerRequest;
 use InvalidArgumentException;
 
+use function Codefy\Framework\Helpers\trans;
+
 final readonly class CampusPortalController
 {
     public function __construct(
@@ -283,9 +285,18 @@ final readonly class CampusPortalController
         );
     }
 
-    public function transcript(string $id): ResponseInterface
+    public function transcript(\Qubus\Http\ServerRequest $request, string $id): ResponseInterface
     {
-        return new JsonResponse(["items" => $this->service->transcript(new EntityId($id))]);
+        $purpose = $request->getQueryParams()['purpose'] ?? 'academic';
+        if (!in_array($purpose, ['academic', 'continuing_education'], true)) {
+            throw new \InvalidArgumentException(
+                trans('Choose an academic or CEU transcript.'),
+            );
+        }
+        return new JsonResponse(['items' => $this->service->transcript(
+            new EntityId($id),
+            $purpose === 'continuing_education'
+        )]);
     }
 
     public function scores(string $id, string $section): ResponseInterface

@@ -147,14 +147,33 @@ final readonly class TransferService
     }
 
     /** @return list<array<string, mixed>> */
-    public function transcript(EntityId $studentId): array
+    public function transcript(EntityId $studentId, bool $continuingEducation = false): array
     {
         $this->access->authenticatedUserId();
         $student = $this->admissions->student($studentId);
         $person = $this->admissions->person($student->personId);
         $this->access->requireOwnerOrPermission($person->ownerUserId, "sis:student:read");
 
-        return $this->repository->transcript($studentId);
+        $rows = $this->repository->transcript($studentId);
+        if ($continuingEducation) {
+            return array_values(array_map(
+                static fn (array $row): array => array_intersect_key(
+                    $row,
+                    array_flip(['course_code', 'course_title', 'term_code', 'earned_ceus'])
+                ),
+                array_filter($rows, static fn (array $row): bool => isset($row['earned_ceus']['earned_milli']) &&
+                in_array($row['status'], ['A', 'N'], true))
+            ));
+        }
+        $rows = array_values(array_filter(
+            $rows,
+            static fn (array $row): bool => empty($row['continuing_education_only'])
+        ));
+        foreach ($rows as &$row) {
+            unset($row['earned_ceus'], $row['continuing_education_only']);
+        }
+        unset($row);
+        return $rows;
     }
     /** Curated choices require transfer/student access rather than catalog-edit authority.
      * @return array<string,mixed>

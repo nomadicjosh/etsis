@@ -37,6 +37,9 @@ interface AcademicCreditRepository
     /** @param array{term_id:string,term_code:string,decision_id:string} $reference
      * @param array{term_id:string,term_code:string,decision_id:string}|null $previous */
     public function recordPostingTerm(EntityId $credit, array $reference, ?array $previous): void;
+    public function earnedCeus(EntityId $credit): ?array;
+    public function ceuRecords(EntityId $student, ?EntityId $after = null): array;
+    public function recordEarnedCeus(EntityId $credit, array $award): void;
     public function lockStudent(EntityId $student): void;
     public function lockSection(EntityId $section): void;
 }

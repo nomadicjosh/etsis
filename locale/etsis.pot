@@ -79,6 +79,7 @@ msgstr ""
 #: resources/views/backend/manager/site-labels.php:23
 #: resources/views/backend/workspace/credit-policy-labels.php:34
 #: resources/views/shared/ceu-labels.php:34
+#: resources/views/shared/ceu-labels.php:58
 msgid "Review publication"
 msgstr ""
 
@@ -720,6 +721,7 @@ msgstr ""
 
 #: resources/views/backend/workspace/credit-policy-labels.php:10
 #: resources/views/shared/ceu-labels.php:10
+#: resources/views/shared/ceu-labels.php:34
 msgid "Back to record"
 msgstr ""
 
@@ -797,6 +799,7 @@ msgstr ""
 
 #: resources/views/backend/workspace/credit-policy-labels.php:36
 #: resources/views/shared/ceu-labels.php:12
+#: resources/views/shared/ceu-labels.php:36
 msgid "Not recorded in this publication"
 msgstr ""
 
@@ -1607,6 +1610,8 @@ msgid "Section"
 msgstr ""
 
 #: resources/views/backend/workspace/waitlist-bypass-labels.php:27
+#: resources/views/shared/ceu-labels.php:9
+#: resources/views/backend/ceu-transcript-document.phtml:57
 msgid "Course"
 msgstr ""
 
@@ -3682,77 +3687,392 @@ msgid "Compare retained advisor assignments or the selected degree baseline with
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:8
+#: resources/views/shared/ceu-labels.php:32
 msgid "Course CEUs"
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:9
+#: resources/views/shared/ceu-labels.php:33
 msgid "Offered CEUs"
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:11
+#: resources/views/shared/ceu-labels.php:35
 msgid "Loading CEU settings…"
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:13
+#: resources/views/shared/ceu-labels.php:37
 msgid "No CEUs"
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:14
+#: resources/views/shared/ceu-labels.php:38
 msgid "{value} CEUs"
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:15
+#: resources/views/shared/ceu-labels.php:39
 msgid "Course declaration: {value}"
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:17
+#: resources/views/shared/ceu-labels.php:41
 msgid "No course publication is selected. The declaration above comes from the course draft. Select a course publication before publishing this offering."
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:20
+#: resources/views/shared/ceu-labels.php:44
 msgid "Use the course draft declaration"
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:21
+#: resources/views/shared/ceu-labels.php:45
 msgid "Use the retained course declaration"
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:22
+#: resources/views/shared/ceu-labels.php:46
 msgid "Declare a CEU value"
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:23
+#: resources/views/shared/ceu-labels.php:47
 msgid "CEU declaration"
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:24
+#: resources/views/shared/ceu-labels.php:48
 msgid "Continuing education units (CEUs)"
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:26
+#: resources/views/shared/ceu-labels.php:50
 msgid "Use up to three decimal places, at most 999.999. CEUs do not convert to academic credits or contact hours."
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:30
+#: resources/views/shared/ceu-labels.php:54
 msgid "Save the draft, then publish it. Offered CEUs describe the offering; they do not award earned units. Existing registrations retain their accepted publications."
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:33
+#: resources/views/shared/ceu-labels.php:57
 msgid "Save CEU draft"
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:35
+#: resources/views/shared/ceu-labels.php:59
 msgid "CEU draft saved. Review its publication before using it."
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:36
+#: resources/views/shared/ceu-labels.php:60
 msgid "Use a CEU value from 0 to 999.999 with up to three decimal places."
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:37
+#: resources/views/shared/ceu-labels.php:61
 msgid "Accepted offered CEUs"
 msgstr ""
 
 #: resources/views/shared/ceu-labels.php:38
+#: resources/views/shared/ceu-labels.php:62
 msgid "Offered CEUs are not earned units."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:8
+#: resources/views/backend/ceu-transcript-document.phtml:77
+msgid "No earned CEU awards are recorded for this transcript."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:10
+#: resources/views/backend/ceu-transcript-document.phtml:58
+msgid "Title"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:11
+#: resources/views/backend/ceu-transcript-document.phtml:56
+msgid "Term"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:12
+msgid "Back to CEU records"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:13
+msgid "Recorded by (current name)"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:14
+msgid "Staff account name unavailable"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:16
+msgid "You can review recorded CEUs. Award and correction actions require the earned-CEU permission."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:19
+msgid "Not recorded"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:20
+msgid "Earned CEU records"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:21
+msgid "No CEU-bearing attempts appear on this page."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:22
+msgid "More CEU records"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:23
+msgid "Previous CEU records"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:24
+msgid "Unofficial continuing education record"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:26
+msgid "For personal reference. Request an official CEU transcript from the records office."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:29
+msgid "View CEU record"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:30
+#: resources/views/backend/ceu-transcript-document.phtml:15
+#: resources/views/backend/ceu-transcript-document.phtml:39
+msgid "Continuing education transcript"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:31
+#: resources/views/backend/ceu-transcript-document.phtml:80
+msgid "Total earned CEUs"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:64
+#: resources/views/backend/ceu-transcript-document.phtml:51
+#: resources/views/backend/ceu-transcript-document.phtml:60
+msgid "Earned CEUs"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:65
+msgid "No earned CEU decision recorded"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:66
+msgid "No earned CEUs"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:67
+msgid "Loading earned CEU evidence…"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:69
+msgid "Record earned CEUs only after verifying institutional completion evidence. Offered CEUs are a separate publication; this decision changes neither academic credits, GPA, registration load nor charges."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:74
+msgid "This attempt needs registrar review: a retained offered CEU declaration, a posted passing grade, an actual completion date and no pending grade correction are required. Closed or unknown attempts need separate resolution."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:78
+msgid "Earned CEU decision"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:79
+msgid "Record earned CEUs"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:80
+msgid "Revoke the recorded CEU award"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:81
+msgid "Earned continuing education units (CEUs)"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:82
+msgid "Effective date of this CEU decision"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:83
+msgid "Reason and institutional completion evidence"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:85
+msgid "I verified the institutional evidence and the separate academic-credit and billing consequences."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:88
+msgid "Review earned CEUs"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:89
+msgid "Confirm CEU decision"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:90
+msgid "Change CEU decision"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:91
+msgid "Earned CEU history"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:92
+msgid "Loading earned CEU decisions…"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:93
+msgid "No earned CEU decisions appear on this history page."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:94
+msgid "Older history"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:95
+msgid "Previous history page"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:96
+msgid "Return to CEU decision"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:97
+msgid "Reload current academic evidence"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:98
+msgid "Earned CEU decision recorded. Earlier decisions remain in protected history."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:99
+msgid "Previously recorded CEUs"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:100
+msgid "Reviewed earned CEUs"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:101
+msgid "Verified actual completion"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:102
+msgid "Recorded at"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:103
+msgid "Effective at"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:105
+msgid "Use a CEU value with up to three decimal places within the accepted offered amount."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php:109
+msgid "CEUs are awarded explicitly; a passing grade or an offered value does not automatically award them."
+msgstr ""
+
+#: resources/views/backend/ceu-transcript-document.phtml:45
+msgid "Prepared"
+msgstr ""
+
+#: resources/views/backend/ceu-transcript-document.phtml:48
+msgid "Preview — no official document has been prepared."
+msgstr ""
+
+#: resources/views/backend/ceu-transcript-document.phtml:53
+msgid "Recorded continuing education awards"
+msgstr ""
+
+#: resources/views/backend/ceu-transcript-document.phtml:59
+msgid "Completion date"
+msgstr ""
+
+#: resources/views/backend/ceu-transcript-document.phtml:84
+msgid "This transcript records continuing education units only. CEUs are separate from academic credits and GPA."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/EarnedCeuService.php:144
+msgid "Review the earned CEUs again."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/EarnedCeuService.php:178
+msgid "This operation belongs to another CEU decision."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/EarnedCeuService.php:193
+msgid "The earned CEU basis changed. Review again."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/EarnedCeuService.php:294
+msgid "The academic record changed. Reload earned CEUs."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/EarnedCeuService.php:299
+msgid "Earned CEUs need a tracked completed active attempt, a published offering declaration and no pending grade correction."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/EarnedCeuService.php:308
+msgid "Use an effective date from actual completion through today."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/EarnedCeuService.php:312
+msgid "Change the recorded earned CEUs."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/EarnedCeuService.php:354
+msgid "Confirm the institutional CEU evidence and explain the decision in at most 1,000 characters."
+msgstr ""
+
+#: src/Domain/AcademicRecord/ValueObject/EarnedCeus.php:30
+msgid "Provide the complete earned CEU decision."
+msgstr ""
+
+#: src/Domain/AcademicRecord/ValueObject/EarnedCeus.php:37
+msgid "Earned CEUs cannot exceed the accepted offering declaration."
+msgstr ""
+
+#: src/Domain/AcademicRecord/ValueObject/EarnedCeus.php:47
+msgid "Use a bounded earned CEU projection."
+msgstr ""
+
+#: src/Domain/AcademicRecord/ValueObject/EarnedCeus.php:51
+msgid "Use the complete earned CEU projection."
+msgstr ""
+
+#: src/Domain/AcademicRecord/ValueObject/EarnedCeus.php:67
+msgid "Use the complete attributed CEU decision."
+msgstr ""
+
+#: src/Domain/AcademicRecord/ValueObject/EarnedCeus.php:74
+msgid "Use the complete previous CEU decision."
+msgstr ""
+
+#: src/Application/Http/Controller/SisEarnedCeuController.php:48
+msgid "Choose explicit earned CEUs or revoke a recorded award."
+msgstr ""
+
+#: src/Application/Http/Controller/SisEarnedCeuController.php:68
+msgid "Review earned CEUs again."
+msgstr ""
+
+#: src/Application/Http/Controller/CampusPortalController.php:293
+msgid "Choose an academic or CEU transcript."
+msgstr ""
+
+#: src/Infrastructure/Documents/RegisteredTranscriptLayouts.php:43
+msgid "CEU transcript · Letter"
+msgstr ""
+
+#: src/Infrastructure/Documents/RegisteredTranscriptLayouts.php:44
+msgid "CEU transcript · A4"
 msgstr ""

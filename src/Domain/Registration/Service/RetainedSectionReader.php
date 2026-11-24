@@ -20,11 +20,28 @@ final readonly class RetainedSectionReader
     {
     }
 
+    public function periods(array $references, HistoryReadBudget $budget): array
+    {
+        $definitions = $this->definitions($references, $budget);
+        foreach ($definitions as &$versions) {
+            foreach ($versions as &$definition) {
+                $definition = [
+                    'course_id' => $definition['course_id'], 'course_version_id' => $definition['course_version_id'],
+                    'term_id' => $definition['term_id'], 'starts_on' => $definition['instruction_starts_on'],
+                    'ends_on' => $definition['instruction_ends_on'],
+                ];
+            }
+            unset($definition);
+        }
+        unset($versions);
+        return $definitions;
+    }
+
     /** Resolve every requested version while verifying each frozen section stream once per invocation.
      * @param list<array{section_id:string,version_id:string}> $references
-     * @return array<string,array<string,array{course_id:string,course_version_id:string,term_id:string,starts_on:string,ends_on:string}>>
+     * @return array<string,array<string,array<string,mixed>>>
      */
-    public function periods(array $references, HistoryReadBudget $budget): array
+    public function definitions(array $references, HistoryReadBudget $budget): array
     {
         if (count($references) > 200) {
             throw new InvalidArgumentException("Resolve at most 200 retained section references.");
@@ -53,13 +70,7 @@ final readonly class RetainedSectionReader
                             throw new CorruptHistoryException();
                         }
                         $d = $published["definition"];
-                        $found[$version] = [
-                            "course_id" => $d["course_id"],
-                            "course_version_id" => $d["course_version_id"],
-                            "term_id" => $d["term_id"],
-                            "starts_on" => $d["instruction_starts_on"],
-                            "ends_on" => $d["instruction_ends_on"],
-                        ];
+                        $found[$version] = $d;
                     }
                 }
                 $cursor = $page->nextCursor;

@@ -2,7 +2,7 @@
 
 A course defines a default number of academic credits and either a fixed value or a permitted range. A course section chooses **one fixed offering value** within its selected course policy. For example, a course can allow 1–6 credits in 0.5-credit increments, defaulting to 3; one section can offer 2.5 credits and another 4.
 
-Every new student registering in that section receives its selected offering quantity. Student-selected academic credit quantities within a section remain open. Separate continuing education units (CEUs) can now be declared on courses and offerings as described below; earned CEU awards and their correction/transcript workflows remain open. Academic credits are never converted to or labelled as CEUs. Contact hours remain a separate institutional calculation.
+Every new student registering in that section receives its selected offering quantity. Student-selected academic credit quantities within a section remain open. Separate continuing education units (CEUs) can now be declared on courses and offerings as described below; earned institutional CEU decisions and separate CEU transcripts are available through the [earned-CEU workflow](earned-ceu-records.md). Broader closed/transfer CEU resolution remains open. Academic credits are never converted to or labelled as CEUs. Contact hours remain a separate institutional calculation.
 
 ## Configure and publish a course
 
@@ -40,7 +40,7 @@ Focused tests cover precision, immutable binding, unpublished choices, stale rev
 
 ## Separate continuing education units
 
-CEUs describe continuing education independently of academic credits and the institution's contact-hours calculation. There is **no automatic conversion** among these units. Declaring offered CEUs does not award earned CEUs, change attempted/completed academic credits or GPA, satisfy degree requirements, change academic-credit load, or recalculate charges. Earned CEU decisions, reasoned award corrections and CEU transcript output remain separate unfinished workflows.
+CEUs describe continuing education independently of academic credits and the institution's contact-hours calculation. There is **no automatic conversion** among these units. Declaring offered CEUs does not award earned CEUs, change attempted/completed academic credits or GPA, satisfy degree requirements, change academic-credit load, or recalculate charges. Earned institutional CEU decisions, reasoned corrections and dedicated CEU transcripts use the separate [earned-CEU workflow](earned-ceu-records.md). CEUs do not appear on undergraduate/graduate academic transcripts. Broader closed/transfer CEU resolution remains open.
 
 ### Declare course CEUs
 

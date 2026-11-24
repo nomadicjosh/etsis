@@ -48,9 +48,11 @@ final readonly class ProtectedTranscriptRenderer implements TranscriptDocumentRe
         $credits = static fn(int $value): string => number_format($value / 1000, 3, ".", "");
         ob_start();
         try {
+            $ceu = $layout->purpose === 'continuing_education';
             $transcriptDocument = Filter::getInstance()->applyFilter(
-                'transcript',
-                dirname(__DIR__, 3) . "/resources/views/backend/transcript-document.phtml"
+                $ceu ? 'ceu_transcript' : 'transcript',
+                dirname(__DIR__, 3) . '/resources/views/backend/' .
+                    ($ceu ? 'ceu-transcript-document.phtml' : 'transcript-document.phtml'),
             );
             require $transcriptDocument;
             return (string) ob_get_contents();
@@ -65,6 +67,9 @@ final readonly class ProtectedTranscriptRenderer implements TranscriptDocumentRe
         $retained = isset($document['presentation'])
         ? TranscriptLayout::fromArray($document['presentation'])
         : $this->layouts->get();
+        if (($document['purpose'] ?? 'academic') !== $retained->purpose) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
         if ($retained->describe() !== $this->layouts->get($retained->code)->describe()) {
             throw new \Domain\Shared\Exception\ConcurrentModificationException(
                 'This transcript layout changed. Review the preparation again.'

@@ -750,6 +750,10 @@ window.createWorkspaceTeaching = function (ui) {
             role: "group",
             "aria-label": "Related academic reviews",
         });
+        if (ui.can('sis:student:read')) related.append(button(ui.ceuLabels?.earned_title || 'Earned CEUs',
+            () => window.createEarnedCeus({ node, request, task, openDrawer, labels: ui.ceuLabels })
+                .open(student, sectionRow.id, choices.enrollment_id,
+                    () => recordFinalGrade(sectionRow, student, back, assignment, null, queue))));
         if (choices.can_accept_course || choices.can_correct_course)
             related.append(
                 button(

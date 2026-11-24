@@ -417,6 +417,10 @@ final readonly class HistoricalSchemaRegistry
                 'type' => 'academic_credit', 'root' => \Domain\AcademicRecord\AcademicCredit::class,
                 'fields' => \Domain\AcademicRecord\ValueObject\GradeChangeSchema::RESOLUTION,
             ],
+            \Domain\AcademicRecord\Event\EarnedCeusWereDecided::class => [
+                'type' => 'academic_credit', 'root' => \Domain\AcademicRecord\AcademicCredit::class,
+                'fields' => \Domain\AcademicRecord\ValueObject\EarnedCeus::EVENT_FIELDS,
+            ],
             \Domain\AcademicRecord\Event\RegisteredCreditsWereCorrected::class => [
                 'type' => 'academic_credit', 'root' => \Domain\AcademicRecord\AcademicCredit::class,
                 'fields' => \Domain\AcademicRecord\ValueObject\RegisteredCreditCorrection::FIELDS,

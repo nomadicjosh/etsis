@@ -453,6 +453,7 @@ final readonly class SqlCampusRepository implements CampusRepository
                     $course->value("credits_milli", "c." . $q("credits_milli")) . ')' .
                 " AS " .
                 $q("credits_milli") .
+                ', ceu.' . $q('earned_ceus') . ' AS ' . $q('earned_ceus') .
                 ', accepted.' . $q('continuing_education') . ' AS ' . $q('continuing_education') .
                 ", scb." .
                 $q("course_version_id") .
@@ -474,6 +475,8 @@ final readonly class SqlCampusRepository implements CampusRepository
                 ' LEFT JOIN ' . $q('sis_enrollment_section_versions') . ' ev ON ev.' . $q('id') . ' = e.' . $q('id') .
                 ' LEFT JOIN ' . $q('sis_section_versions') . ' accepted ON accepted.' . $q('id') .
                     ' = ev.' . $q('publication_id') .
+                ' LEFT JOIN ' . $q('sis_academic_credit_streams') . ' ceu ON ceu.' . $q('enrollment_id') .
+                    ' = e.' . $q('id') .
                 " WHERE e." .
                 $q("student_id") .
                 " = ? ORDER BY e." .
@@ -483,6 +486,11 @@ final readonly class SqlCampusRepository implements CampusRepository
             100,
         );
         foreach ($rows as &$row) {
+            $award = \Domain\AcademicRecord\ValueObject\EarnedCeus::stored($row['earned_ceus']);
+            $row['earned_ceus'] = $award === null ? null : array_intersect_key(
+                $award->facts,
+                array_flip(['earned_milli', 'completed_on'])
+            );
             $row['continuing_education'] = \Domain\Catalog\ValueObject\ContinuingEducationUnits::stored(
                 $row['continuing_education'],
             )?->describe();

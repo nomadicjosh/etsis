@@ -250,7 +250,14 @@ window.createWorkspaceTranscripts = function (ui) {
                     `${row.code} · ${row.title} · ${row.starts_on} through ${row.ends_on || "open"}`)))
                     : node("p", {}, snapshot.standing.filtered ? text('selected_standing_empty')
                         : "No standing is recorded through this date.")) : null,
-            grid(
+            snapshot.purpose === 'continuing_education' ? grid(
+                [ui.ceuLabels?.record_term || 'Term', ui.ceuLabels?.record_course || 'Course',
+                    ui.ceuLabels?.record_title || 'Title', ui.ceuLabels?.earned_completion || 'Verified actual completion',
+                    ui.ceuLabels?.earned_title || 'Earned CEUs'],
+                snapshot.credits.map(row => [row.term_code, row.course_code, row.course_title,
+                    row.earned_ceus.completed_on, window.earnedCeuText(row.earned_ceus, ui.ceuLabels)]),
+                ui.ceuLabels?.ceu_transcript || 'Continuing education transcript',
+            ) : grid(
                 ["Term", "Course", "Title", "Attempted", "Earned", "Grade", "History"],
                 snapshot.credits.map((row) => [
                     row.term_code,
@@ -288,7 +295,9 @@ window.createWorkspaceTranscripts = function (ui) {
             node(
                 "div",
                 { class: "transcript-totals" },
-                recordSummary([
+                snapshot.purpose === 'continuing_education' ? recordSummary([
+                    [ui.ceuLabels?.earned_total || 'Total earned CEUs', units(snapshot.totals.earned_ceu_milli)],
+                ]) : recordSummary([
                     ["Attempted credits", units(snapshot.totals.attempted_milli)],
                     ["Earned credits", units(snapshot.totals.completed_milli)],
                     [

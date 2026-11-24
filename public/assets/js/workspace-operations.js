@@ -301,6 +301,11 @@ window.createWorkspaceOperations = function (ui) {
                         ? node("div", { class: "d-flex flex-wrap gap-2" },
                               button("Change section", () => ui.batchRegistration().changeSection(row.id, item.section_id, back)),
                               button("Drop / withdraw", () => ui.courseDrops().review(row.id, item.section_id, back)),
+                              ...(can('sis:student:read') && (item.id || item.enrollment_id) ? [
+                                  button(ui.ceuLabels?.earned_title || 'Earned CEUs',
+                                      () => window.createEarnedCeus({ node, request, task, openDrawer, labels: ui.ceuLabels })
+                                          .open(row.id, item.section_id, item.enrollment_id || item.id, back)),
+                              ] : []),
                           )
                         : "—",
                 ]),

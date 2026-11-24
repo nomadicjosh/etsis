@@ -403,6 +403,7 @@ final readonly class TranscriptFulfillmentService
                         $payload["document"]["standing"]["through"] ?? null,
                         isset($payload["document"]["standing"]),
                         $payload['release_review']['policy']['standing_definitions'] ?? null,
+                        continuingEducation: ($payload['document']['purpose'] ?? 'academic') === 'continuing_education',
                     );
                 } catch (ValidationException $error) {
                     $verificationFailed = true;
@@ -663,6 +664,7 @@ final readonly class TranscriptFulfillmentService
             $retained["document"]["standing"]["through"] ?? null,
             isset($retained["document"]["standing"]),
             $retained['release_review']['policy']['standing_definitions'] ?? null,
+            continuingEducation: ($retained['document']['purpose'] ?? 'academic') === 'continuing_education',
         );
         $academic = $this->academicRevision($snapshot);
         if (
@@ -735,7 +737,10 @@ final readonly class TranscriptFulfillmentService
             "person_id" => $this->admissions->student(new EntityId($record["student_id"]))->personId->value,
             "delivery" => $record["delivery"],
             "recipient_revision" => hash("sha256", $record["encrypted_recipient"]),
-            "snapshot" => $this->snapshot(new EntityId($record["student_id"])),
+            "snapshot" => $this->snapshot(
+                new EntityId($record["student_id"]),
+                continuingEducation: $this->layouts->get($layoutCode)->purpose === 'continuing_education'
+            ),
             'layout' => $this->layouts->get($layoutCode)->describe(),
             'release_policy' => $this->releasePolicies->current()->describe(),
         ];
@@ -747,7 +752,11 @@ final readonly class TranscriptFulfillmentService
         ?string $standingThrough = null,
         ?bool $includeStanding = null,
         ?array $standingDefinitions = null,
+        bool $continuingEducation = false,
     ): array {
+        if ($continuingEducation) {
+            $includeStanding = false;
+        }
         $s = $this->admissions->student($student);
         $person = $this->admissions->person($s->personId);
         $rows = $this->records->creditLabels($student);
@@ -898,6 +907,8 @@ final readonly class TranscriptFulfillmentService
                 "term_label_retained" => $work["term_label_retained"],
                 "term_starts_on" => $row["term_starts_on"],
                 "attempted_milli" => $work["attempted_milli"],
+                ...!empty($work['continuing_education_only']) ? ['continuing_education_only' => true] : [],
+                ...isset($work['earned_ceus']) ? ['earned_ceus' => $work['earned_ceus']] : [],
                 "completed_milli" => $work["completed_milli"],
                 "grade_points_milli" => $work["quality_points_milli"],
                 "grade_code" => $work["status"] === "V" ? "Voided" : $work["grade"]["code"] ?? null,
@@ -913,6 +924,17 @@ final readonly class TranscriptFulfillmentService
             ];
         }
         unset($row);
+        if ($continuingEducation) {
+            $rows = array_values(array_filter($rows, static fn (array $row): bool =>
+                isset($row['earned_ceus']['earned_milli']) && in_array($row['status'], ['A', 'N'], true)));
+        } else {
+            $rows = array_values(array_filter($rows, static fn (array $row): bool =>
+                empty($row['continuing_education_only'])));
+            foreach ($rows as &$academicRow) {
+                unset($academicRow['earned_ceus'], $academicRow['continuing_education_only']);
+            }
+            unset($academicRow);
+        }
         $attempted = $earned = $points = $gpaCredits = 0;
         foreach ($rows as $row) {
             $attempted += $row["attempted_milli"];
@@ -946,12 +968,22 @@ final readonly class TranscriptFulfillmentService
                 "definition_version" => $definition["stream_version"] ?? null,
                 'cohort_history_recorded' => $primary['cohort_version'] !== null,
             ],
-            "credits" => $rows,
+            ...($continuingEducation ? ['purpose' => 'continuing_education'] : []),
+            "credits" => $continuingEducation ? array_map(static fn (array $row): array => array_intersect_key(
+                $row,
+                array_flip(['id', 'course_code', 'course_title', 'term_code', 'completed_on', 'earned_ceus',
+                'academic_version',
+                'history_recorded',
+                'earlier_history_unknown'])
+            ), $rows) : $rows,
             "academic_verification" => [
                 "status" => $verified->status->value,
                 "references_digest" => $this->revision($verified->references),
             ],
-            "totals" => [
+            "totals" => $continuingEducation ? ['earned_ceu_milli' => array_sum(array_map(
+                static fn (array $row): int => $row['earned_ceus']['earned_milli'],
+                $rows
+            ))] : [
                 "attempted_milli" => $attempted,
                 "completed_milli" => $earned,
                 "gpa_milli" => $gpaCredits === 0 ? null : intdiv($points * 1000, $gpaCredits),

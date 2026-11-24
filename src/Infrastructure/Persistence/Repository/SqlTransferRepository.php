@@ -65,7 +65,8 @@ final readonly class SqlTransferRepository implements TransferRepository
     {
         $q = $this->sql->quote(...);
         $credits = $this->sql->fetch(
-            "SELECT c.*, e." .
+            "SELECT c.*, offered." . $q('continuing_education') . ' AS ' . $q('accepted_ceu_declaration') .
+                ', ceu.' . $q('earned_ceus') . ', e.' .
                 $q("section_id") .
                 ", i." .
                 $q("institutional_id") .
@@ -129,6 +130,11 @@ final readonly class SqlTransferRepository implements TransferRepository
                 $q("id") .
                 " = c." .
                 $q("term_id") .
+                ' LEFT JOIN ' . $q('sis_enrollment_section_versions') . ' ev ON ev.' . $q('id') .
+                    ' = e.' . $q('id') . ' LEFT JOIN ' . $q('sis_section_versions') . ' offered ON offered.' .
+                    $q('id') . ' = ev.' . $q('publication_id') .
+                ' LEFT JOIN ' . $q('sis_academic_credit_streams') . ' ceu ON ceu.' . $q('id') .
+                    ' = c.' . $q('id') . ' AND c.' . $q('credit_type') . " = 'institutional'" .
                 " WHERE c." .
                 $q("student_id") .
                 " = ? ORDER BY c." .
@@ -138,6 +144,18 @@ final readonly class SqlTransferRepository implements TransferRepository
             [$student->value],
         );
         foreach ($credits as &$credit) {
+            $declared = \Domain\Catalog\ValueObject\ContinuingEducationUnits::stored(
+                $credit['accepted_ceu_declaration']
+            );
+            $credit['continuing_education_only'] = $credit['credit_type'] === 'institutional' &&
+            (int) $credit['attempted_milli'] === 0 && (int) $credit['completed_milli'] === 0 &&
+            $declared?->milli !== null;
+            unset($credit['accepted_ceu_declaration']);
+            $award = \Domain\AcademicRecord\ValueObject\EarnedCeus::stored($credit['earned_ceus']);
+            $credit['earned_ceus'] = $award === null ? null : array_intersect_key(
+                $award->facts,
+                array_flip(['earned_milli', 'completed_on'])
+            );
             $credit["grade_code"] =
             $credit["status"] === "V"
             ? "Voided"

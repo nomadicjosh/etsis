@@ -799,6 +799,16 @@ return static function (Psr7Router $router): void {
             [\Application\Http\Controller\SisRegisteredCreditController::class, $method],
         )->name('sis.registered.credits.' . $method);
     }
+    foreach (['view', 'review', 'confirm', 'history'] as $method) {
+        $router->post(
+            '/sis/students/{student}/sections/{section}/enrollments/{enrollment}/earned-ceus/' . $method . '/',
+            [\Application\Http\Controller\SisEarnedCeuController::class, $method],
+        );
+    }
+    $router->post(
+        '/sis/students/{student}/earned-ceus/records/',
+        [\Application\Http\Controller\SisEarnedCeuController::class, 'records']
+    );
     $load = \Application\Http\Controller\SisEnrollmentLoadController::class;
     foreach (
         [

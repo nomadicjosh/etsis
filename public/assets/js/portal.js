@@ -10,6 +10,7 @@
         : {};
     const ceuLabels = one('#campus-ceu-config') ? JSON.parse(one('#campus-ceu-config').textContent) : {};
     const ceuText = value => window.continuingEducationText(value, ceuLabels);
+    const earnedCeuText = value => window.earnedCeuText(value, ceuLabels);
     const notificationLabels = one('#campus-notification-config')
         ? JSON.parse(one('#campus-notification-config').textContent) : {};
     const notifications = one('#campus-notifications-open') ? window.createWorkspaceNotifications({
@@ -1893,11 +1894,12 @@
                     button('Your waitlist requests', () => waitlistUi().mine(student.id, renderService)),
                     student.enrollments.length
                         ? table(
-                              ['Course', 'Section', ceuLabels.accepted_title || 'Accepted offered CEUs', 'Status', 'Actions'],
+                              ['Course', 'Section', ceuLabels.accepted_title || 'Accepted offered CEUs', ceuLabels.earned_title || 'Earned CEUs', 'Status', 'Actions'],
                               student.enrollments.map((item) => [
                                   item.course_code,
                                   item.section_code,
                                   el('span', {}, ceuText(item.continuing_education)),
+                                  el('span', {}, earnedCeuText(item.earned_ceus)),
                                   chip(
                                       {
                                           A: 'Registered',
@@ -2190,6 +2192,18 @@
                     { class: 'campus-muted' },
                     'View an unofficial record here, or request an official transcript for registrar review.',
                 ),
+                me.students.map(student => button(ceuLabels.ceu_record || 'View CEU record', async () => {
+                    const result = await request(`/portal/api/students/${student.id}/transcript/?purpose=continuing_education`);
+                    dialog(ceuLabels.ceu_unofficial || 'Unofficial continuing education record',
+                        table([ceuLabels.record_course || 'Course', ceuLabels.record_title || 'Title', ceuLabels.earned_completion || 'Verified actual completion',
+                            ceuLabels.earned_title || 'Earned CEUs'], result.items.map(item => [item.course_code,
+                            item.course_title, item.earned_ceus.completed_on, earnedCeuText(item.earned_ceus)]),
+                        ceuLabels.ceu_transcript || 'Continuing education transcript'),
+                        ...(result.items.length ? [] : [el('p', { role: 'status' }, ceuLabels.ceu_empty
+                            || 'No earned CEU awards are recorded for this transcript.')]),
+                        el('p', { class: 'campus-muted mt-3' }, ceuLabels.ceu_record_help
+                            || 'For personal reference. Request an official CEU transcript from the records office.'));
+                })),
                 me.students.map((student) =>
                     button(
                         `View unofficial record · ${programName(student.primary_program_id)}`,

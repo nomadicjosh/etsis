@@ -17,9 +17,64 @@ final readonly class SqlAcademicCreditRepository implements AcademicCreditReposi
     public function __construct(private SqlRecords $sql)
     {
     }
+    public function ceuRecords(EntityId $student, ?EntityId $after = null): array
+    {
+        $q = $this->sql->quote(...);
+        $params = [$student->value];
+        if ($after !== null) {
+            $params[] = $after->value;
+        }
+        $rows = $this->sql->fetch('SELECT r.' . $q('id') . ', r.' . $q('enrollment_id') . ', r.' . $q('section_id') .
+            ', r.' . $q('earned_ceus') . ', c.' . $q('course_code') . ', c.' . $q('course_title') .
+            ', v.' . $q('continuing_education') . ' FROM ' . $q('sis_academic_credit_streams') . ' r JOIN ' .
+            $q('sis_academic_credits') . ' c ON c.' . $q('id') . ' = r.' . $q('id') . ' AND c.' .
+            $q('student_id') . ' = r.' . $q('student_id') . ' LEFT JOIN ' . $q('sis_enrollment_section_versions') .
+            ' e ON e.' . $q('id') . ' = r.' . $q('enrollment_id') . ' LEFT JOIN ' . $q('sis_section_versions') .
+            ' v ON v.' . $q('id') . ' = e.' . $q('publication_id') . ' WHERE r.' . $q('student_id') . ' = ?' .
+            ($after === null ? '' : ' AND r.' . $q('id') . ' < ?') . ' ORDER BY r.' . $q('id') . ' DESC', $params, 21);
+        $next = count($rows) > 20 ? $rows[19]['id'] : null;
+        $items = [];
+        foreach (array_slice($rows, 0, 20) as $row) {
+            $offered = \Domain\Catalog\ValueObject\ContinuingEducationUnits::stored($row['continuing_education']);
+            if ($offered?->milli !== null || $row['earned_ceus'] !== null) {
+                $items[] = array_intersect_key(
+                    $row,
+                    array_flip(['id', 'enrollment_id', 'section_id', 'course_code', 'course_title'])
+                );
+            }
+        }
+        return ['items' => $items, 'next_after' => $next];
+    }
+
+    public function earnedCeus(EntityId $credit): ?array
+    {
+        try {
+            $row = $this->sql->rows('sis_academic_credit_streams', ['id' => $credit->value], 1)[0] ?? null;
+            return \Domain\AcademicRecord\ValueObject\EarnedCeus::stored($row['earned_ceus'] ?? null)?->facts;
+        } catch (\Throwable) {
+            throw new CorruptHistoryException();
+        }
+    }
+
+    public function recordEarnedCeus(EntityId $credit, array $award): void
+    {
+        $facts = new \Domain\AcademicRecord\ValueObject\EarnedCeus($award)->facts;
+        if (
+            $this->sql->update('sis_academic_credit_streams', [
+            'earned_ceus' => json_encode($facts, JSON_THROW_ON_ERROR),
+            ], ['id' => $credit->value]) !== 1
+        ) {
+            throw new ConcurrentModificationException('The earned CEU projection changed.');
+        }
+    }
+
     public function mapping(EntityId $credit): ?array
     {
-        return $this->sql->rows("sis_academic_credit_streams", ["id" => $credit->value], 1)[0] ?? null;
+        $row = $this->sql->rows("sis_academic_credit_streams", ["id" => $credit->value], 1)[0] ?? null;
+        return $row === null ? null : array_intersect_key(
+            $row,
+            array_flip(["id", "enrollment_id", "student_id", "section_id"])
+        );
     }
     public function forEnrollment(EntityId $enrollment): ?array
     {

@@ -186,6 +186,7 @@ final readonly class InstitutionalCreditLedger
             "effective_on_default" => $this->clock->now()->format("Y-m-d"),
             "current_version" => $facts["version"],
             "enrollment_id" => $enrollment->value,
+            "earned_ceus" => $root->earnedCeus(),
             "completed_on" => $root->completedOn(),
             "academic_on" => $root->academicOn(),
             "can_amend" => $canAmend,
@@ -1382,6 +1383,7 @@ final readonly class InstitutionalCreditLedger
      */
     public function auditFacts(EntityId $credit, EntityId $student, ?HistoryReadBudget $budget = null): array
     {
+        $budget ??= new HistoryReadBudget();
         $facts =
         $this->records->projection($credit) ??
         throw new RecordNotFoundException("Current academic record not found.");
@@ -1390,6 +1392,8 @@ final readonly class InstitutionalCreditLedger
         }
         $root = $this->load($credit, $budget);
         return [
+            ...($this->continuingEducationOnly($root, $facts, $budget)
+                ? ['continuing_education_only' => true] : []),
             "credit" => $root->credit() ?? $facts,
             "grade" => $root->grade(),
             "history_recorded" => $root->playhead() > 0,
@@ -1397,6 +1401,7 @@ final readonly class InstitutionalCreditLedger
                 $root->playhead() === 0 || $root->provenance() === "observed_existing",
             "history_version" => $root->playhead(),
             "section_version_id" => $root->sectionVersion(),
+            "earned_ceus" => $root->earnedCeus(),
             "completed_on" => $root->completedOn(),
             "academic_on" => $root->academicOn(),
             "retained_term_code" => $root->postingTerm()["term_code"] ?? null,
@@ -1418,6 +1423,8 @@ final readonly class InstitutionalCreditLedger
             throw new CorruptHistoryException();
         }
         return [
+            ...($this->continuingEducationOnly($root, $facts, $budget)
+                ? ['continuing_education_only' => true] : []),
             "credit" => $facts,
             "grade" => $root->grade(),
             "history_recorded" => $root->playhead() > 0,
@@ -1425,6 +1432,7 @@ final readonly class InstitutionalCreditLedger
                 $root->playhead() === 0 || $root->provenance() === "observed_existing",
             "history_version" => $root->playhead(),
             "section_version_id" => $root->sectionVersion(),
+            "earned_ceus" => $root->earnedCeus(),
             "completed_on" => $root->completedOn(),
             "academic_on" => $root->academicOn(),
             "retained_term_code" => $root->postingTerm()["term_code"] ?? null,
@@ -1433,6 +1441,28 @@ final readonly class InstitutionalCreditLedger
             "registration_course_version_id" => $root->registrationCourseVersion(),
         ];
     }
+    /** Classify only from exact zero academic quantities and the accepted immutable CEU declaration. */
+    private function continuingEducationOnly(AcademicCredit $root, array $facts, HistoryReadBudget $budget): bool
+    {
+        if ($facts['attempted_milli'] !== 0 || $facts['completed_milli'] !== 0 || $root->sectionVersion() === null) {
+            return false;
+        }
+        $section = $root->section() ?? throw new CorruptHistoryException();
+        $version = $root->sectionVersion();
+        $definition = new \Domain\Registration\Service\RetainedSectionReader($this->history)->definitions(
+            [['section_id' => $section, 'version_id' => $version]],
+            $budget,
+        )[$section][$version];
+        if (
+            $definition['course_id'] !== $root->registrationCourseId() ||
+            $definition['course_version_id'] !== $root->registrationCourseVersion() ||
+            $definition['term_id'] !== $root->registrationTermId()
+        ) {
+            throw new CorruptHistoryException();
+        }
+        return isset($definition['continuing_education']['ceu_milli']);
+    }
+
     /**
      * Current load uses genuinely recorded registration quantities, not corrected award units or today's catalog.
      * Caller authorizes the student and owns its read transaction/lock.
@@ -1537,6 +1567,8 @@ final readonly class InstitutionalCreditLedger
             $root->gradeChange($p["request_id"])["reconcile_quantities"]);
             $items[] = [
                 "withdrawal_quantity_reconciled" => $reconciled,
+                ...$e instanceof \Domain\AcademicRecord\Event\EarnedCeusWereDecided
+                    ? ['earned_ceus' => $p['award'], 'previous_earned_ceus' => $p['previous_award']] : [],
                 "credit_unit_correction" => $unitCorrection,
                 ...$e instanceof FinalGradeWasDecided && $e->metaParam("coursework", null) !== null
                     ? [
@@ -1548,6 +1580,7 @@ final readonly class InstitutionalCreditLedger
                     : [],
                 "version" => $e->playhead(),
                 "action" => match (true) {
+                    $e instanceof \Domain\AcademicRecord\Event\EarnedCeusWereDecided => 'earned_ceus_decided',
                     $e instanceof InstitutionalCreditWasEstablished => $p["provenance"],
                     $e instanceof \Domain\AcademicRecord\Event\AcademicCompletionWasRecorded
                         => "completion_recorded",
@@ -1659,6 +1692,9 @@ final readonly class InstitutionalCreditLedger
             }
             $cursor = $page->nextCursor;
         } while ($cursor !== null);
+        if (!$this->same($this->records->earnedCeus($id), $root->earnedCeus())) {
+            throw new CorruptHistoryException();
+        }
         $m = $this->records->mapping($id);
         $c = $root->credit();
         if ($c === null) {

@@ -212,10 +212,10 @@ final readonly class CampusService
     }
 
     /** @return list<array<string, mixed>> */
-    public function transcript(EntityId $student): array
+    public function transcript(EntityId $student, bool $continuingEducation = false): array
     {
         $this->repository->ownedStudent($this->access->authenticatedUserId(), $student);
-        return $this->transfers->transcript($student);
+        return $this->transfers->transcript($student, $continuingEducation);
     }
 
     /** @return list<array<string, mixed>> */

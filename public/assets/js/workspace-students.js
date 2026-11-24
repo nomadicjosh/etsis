@@ -768,6 +768,9 @@ window.createWorkspaceStudents = function (ui) {
         });
         body.append(actions);
         const extra = [];
+        if (can('sis:student:read')) extra.push(button(ui.ceuLabels?.earned_records || 'Earned CEU records',
+            () => window.createEarnedCeus({ node, request, task, openDrawer, labels: ui.ceuLabels }).records(id, back)));
+
         if (can('sis:history:verify') && can('sis:audit:read') && can('sis:student:read'))
             extra.push(button('Check academic history', () => ui.historyChecks().open('student', id, back)));
 

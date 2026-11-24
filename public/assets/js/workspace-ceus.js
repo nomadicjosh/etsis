@@ -84,3 +84,10 @@ window.createWorkspaceCeus = function (ui) {
     }
     return { open };
 };
+
+window.earnedCeuText = function (value, labels = {}) {
+    if (!value) return labels.earned_unknown || 'No earned CEU decision recorded';
+    if (value.earned_milli === null) return labels.earned_none || 'No earned CEUs';
+    return (labels.quantity || '{value} CEUs').replace('{value}',
+        new Intl.NumberFormat(undefined, { maximumFractionDigits: 3 }).format(value.earned_milli / 1000));
+};

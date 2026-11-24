@@ -40,7 +40,7 @@ final class TranscriptLayoutTest extends TestCase
     public function testLayoutCatalogHasExplicitPaperChoicesAndRejectsPathsAndUnknownDefaults(): void
     {
         $catalog = new RegisteredTranscriptLayouts();
-        self::assertCount(4, $catalog->available());
+        self::assertCount(6, $catalog->available());
         self::assertSame('classic-letter', $catalog->get()->code);
         self::assertSame('modern-a4', new RegisteredTranscriptLayouts('modern-a4')->get()->code);
         foreach ($catalog->available() as $layout) {
