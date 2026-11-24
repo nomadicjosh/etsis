@@ -48,8 +48,11 @@ final readonly class SisProgramSpecializationController
     public function savePolicy(ServerRequest $request, string $id): ResponseInterface
     {
         $body = $request->getParsedBody();
-        if (!is_array($body) || !array_key_exists("maximum", $body)) {
-            throw new InvalidArgumentException("Provide the explicit maximum or null to inherit.");
+        if (
+            !is_array($body) || !array_key_exists("maximum", $body)
+            || !is_array($body['component_exclusions'] ?? null)
+        ) {
+            throw new InvalidArgumentException('Provide an explicit maximum or null, and an incompatible-pair list.');
         }
         $input = FormInput::from($request);
         $this->policies->saveProgram(
@@ -59,6 +62,7 @@ final readonly class SisProgramSpecializationController
             $input->optionalInteger("maximum"),
             $input->text("component_sharing", 24),
             $this->kindLimits($body),
+            $input->values('component_exclusions', 32),
         );
         return new JsonResponse(["status" => "saved"]);
     }

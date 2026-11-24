@@ -213,6 +213,17 @@ final readonly class ProgramDiscoveryService
             $value = $definition['classifications'][$kind] ?? null;
             $labels[$kind] = $value === null ? null : ['code' => $value['code'], 'title' => $value['title']];
         }
+        $offered = array_column($source['specializations']['offered'], null, 'id');
+        $publicChoice = static fn (string $id): array => [
+            'code' => $offered[$id]['code'], 'title' => $offered[$id]['title'],
+        ];
+        $incompatible = null;
+        if (array_key_exists('component_exclusions', $source['specializations'])) {
+            $incompatible = array_map(
+                static fn (array $pair): array => array_map($publicChoice, $pair),
+                $source['specializations']['component_exclusions']
+            );
+        }
         return ['id' => $program->value, 'code' => $definition['code'], 'title' => $definition['title'],
             'description' => $definition['description'], 'academic_year_code' => $source['academic_year_code'],
             'classifications' => $labels,
@@ -222,7 +233,8 @@ final readonly class ProgramDiscoveryService
             'components' => array_map(static fn (array $r): array => [
                 'code' => $r['code'], 'title' => $r['title'], 'kind' => $r['kind'] ?? 'specialization',
             ], $source['specializations']['offered']),
-            'selection_limits' => $source['specializations']['kind_limits'] ?? null];
+            'selection_limits' => $source['specializations']['kind_limits'] ?? null,
+            'incompatible_components' => $incompatible];
     }
 
     private function applicationAvailable(EntityId $program): bool

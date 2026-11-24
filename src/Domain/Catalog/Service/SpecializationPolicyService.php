@@ -51,6 +51,10 @@ final readonly class SpecializationPolicyService
         } catch (AccessDeniedException) {
             $manage = false;
         }
+        $offered = array_map(static fn (array $choice): array => array_intersect_key(
+            $choice,
+            array_flip(['id', 'code', 'title', 'kind'])
+        ), $this->specializations->offered($program));
         $this->authorize($actor, "sis:catalog:manage");
         return [
             "program" => [
@@ -63,6 +67,7 @@ final readonly class SpecializationPolicyService
             "effective" => $effective,
             "errors" => $errors,
             "can_manage_institution" => $manage,
+            'offered' => $offered,
         ];
     }
 
@@ -73,8 +78,10 @@ final readonly class SpecializationPolicyService
         ?int $maximum,
         string $componentSharing = ComponentCourseSharing::OneComponent->value,
         array $kindLimits = [],
+        array $componentExclusions = [],
     ): void {
         $kindLimits = new \Domain\Catalog\ValueObject\ComponentSelectionRules($kindLimits)->limits;
+        $exclusions = new \Domain\Catalog\ValueObject\ComponentExclusions($componentExclusions);
         $actor = $this->access->requirePermission("sis:catalog:manage");
         if (ComponentCourseSharing::tryFrom($componentSharing) === null) {
             throw new ValidationException([
@@ -92,6 +99,7 @@ final readonly class SpecializationPolicyService
             $maximum,
             $componentSharing,
             $kindLimits,
+            $exclusions,
             $actor,
         ): void {
             $this->policies->lockInstitution();
@@ -99,6 +107,8 @@ final readonly class SpecializationPolicyService
             $this->authorize($actor, "sis:catalog:manage");
             $old = $this->policies->get($program);
             $this->revision($revision, $old["revision"]);
+            $offered = $this->specializations->offered($program);
+            $exclusions->references($offered);
             $local = [
                 "revision" => $revision + 1,
                 "minimum" => $minimum,
@@ -106,14 +116,24 @@ final readonly class SpecializationPolicyService
                 "default_maximum" => null,
                 "component_sharing" => $componentSharing,
                 "kind_limits" => $kindLimits,
+                'component_exclusions' => $exclusions->pairs,
             ];
-            $this->resolve($this->policies->get(null), $local);
+            $institution = $this->policies->get(null);
+            $this->resolve($institution, $local);
             $this->policies->save($program, $local);
             $this->audit->record($actor, "program.specialization_policy_saved", $program);
             $this->authorize($actor, "sis:catalog:manage");
             if ($this->policies->get($program) !== $local) {
                 throw new ConcurrentModificationException(
                     "The component policy changed before saving completed.",
+                );
+            }
+            if (
+                $this->specializations->offered($program) !== $offered
+                || $this->policies->get(null) !== $institution
+            ) {
+                throw new ConcurrentModificationException(
+                    'Curriculum choices changed while saving the program policy.'
                 );
             }
         });
@@ -200,6 +220,7 @@ final readonly class SpecializationPolicyService
             "effective" => ["minimum" => $policy->minimum, "maximum" => $policy->effectiveMaximum],
             "offered" => $offered,
             "kind_limits" => $local["kind_limits"],
+            'component_exclusions' => $local['component_exclusions'],
             "component_sharing" =>
                 $local["component_sharing"] ??
                 throw new \Domain\Shared\EventSourcing\CorruptHistoryException(),

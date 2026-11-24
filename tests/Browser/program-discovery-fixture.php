@@ -30,6 +30,8 @@ if ($path === '/portal/programs/') {
             'award' => ['title' => 'Bachelor of Arts'], 'school' => ['title' => 'Arts & Sciences'],
             'field_of_study' => null, 'campus' => ['title' => 'Fictional Main Campus']],
         'additional_campuses' => [['title' => 'Fictional City Campus']],
+        'incompatible_components' => [[['code' => 'ENG', 'title' => 'English <script>literal</script>'],
+            ['code' => 'HIST', 'title' => 'History']]],
         'components' => [['kind' => 'major', 'title' => 'English'], ['kind' => 'minor', 'title' => 'History']],
         'selection_limits' => null];
     $template = 'program';

@@ -73,6 +73,19 @@ $kindLabels = ['major' => trans_html('Majors'), 'minor' => trans_html('Minors'),
                     </ul>
                 <?php endif; ?>
             <?php endforeach; ?>
+            <?php if (!empty($program['incompatible_components'])): ?>
+                <h3 class="h5"><?= trans_html('Incompatible curriculum choices'); ?></h3>
+                <p><?= trans_html('Each pair below cannot be selected together within this program.'); ?></p>
+                <ul>
+                    <?php foreach ($program['incompatible_components'] as $pair): ?>
+                        <li>
+                            <?= $this->esc($pair[0]['code'] . ' — ' . $pair[0]['title']); ?>
+                            /
+                            <?= $this->esc($pair[1]['code'] . ' — ' . $pair[1]['title']); ?>
+                        </li>
+                    <?php endforeach; ?>
+                </ul>
+            <?php endif; ?>
         </section>
     <?php endif; ?>
     <section class="campus-service-panel" aria-labelledby="program-next-heading">

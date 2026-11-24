@@ -31,7 +31,7 @@ async function fixture(page, options = {}) {
         institution = { ...institution, maximum: 3, default_maximum: 2 };
         programPolicy = { ...programPolicy, minimum: 1, maximum: 2, kind_limits: { major: { minimum: 1, maximum: 1 }, concentration: { minimum: 0, maximum: 1 } } };
     }
-    const specializationSnapshot = () => ({program_id:id(1),component_sharing:programPolicy.component_sharing,kind_limits:programPolicy.kind_limits,institution:{revision:institution.revision,maximum:institution.maximum,default_maximum:institution.default_maximum},program:{revision:programPolicy.revision,minimum:programPolicy.minimum,maximum:programPolicy.maximum},effective:{minimum:programPolicy.minimum,maximum:programPolicy.maximum??institution.default_maximum},offered:specializations.filter(s=>s.active).map(({id,code,title,description,revision,kind,department,parent_major,additional_departments})=>({id,code,title,description,revision,kind,department:department??null,parent_major:parent_major??null,additional_departments:additional_departments??[]}))});
+    const specializationSnapshot = () => ({program_id:id(1),component_sharing:programPolicy.component_sharing,component_exclusions:programPolicy.component_exclusions||[],kind_limits:programPolicy.kind_limits,institution:{revision:institution.revision,maximum:institution.maximum,default_maximum:institution.default_maximum},program:{revision:programPolicy.revision,minimum:programPolicy.minimum,maximum:programPolicy.maximum},effective:{minimum:programPolicy.minimum,maximum:programPolicy.maximum??institution.default_maximum},offered:specializations.filter(s=>s.active).map(({id,code,title,description,revision,kind,department,parent_major,additional_departments})=>({id,code,title,description,revision,kind,department:department??null,parent_major:parent_major??null,additional_departments:additional_departments??[]}))});
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -75,7 +75,7 @@ async function fixture(page, options = {}) {
                 programPolicy={...programPolicy,...data,revision:programPolicy.revision+1};result={status:'saved'};
             }else{
                 const invalid=(programPolicy.maximum??institution.default_maximum)>institution.maximum||programPolicy.minimum>(programPolicy.maximum??institution.default_maximum);
-                result={program:{id:id(1),code:definition.code,title:definition.title},institution,settings:programPolicy,effective:invalid?null:specializationSnapshot().effective,errors:invalid?[{field:'maximum',message:'Outside institutional policy.'}]:[],can_manage_institution:!options.catalogOnly};
+                result={program:{id:id(1),code:definition.code,title:definition.title},institution,settings:programPolicy,offered:specializations.filter(choice=>choice.active),effective:invalid?null:specializationSnapshot().effective,errors:invalid?[{field:'maximum',message:'Outside institutional policy.'}]:[],can_manage_institution:!options.catalogOnly};
             }
         } else if(path==='/sis/catalog/specialization-policy/') {
             if (institutionFailure) { institutionFailure = false; await route.fulfill({status:409,json:{error:'Fictional institutional save conflict. Review the boundaries again.'}}); return; }
@@ -385,7 +385,7 @@ test('institutional ceilings and program specialization limits are reviewed with
     await page.locator('summary').filter({hasText:'2024-2025 · Revision 1'}).click();
     await expect(page.getByRole('region',{name:'Published specialization choices and policy',exact:true})).toContainText('Maximum per pursuit: 2');
     expect(f.calls.find(c=>c.path==='/sis/catalog/specialization-policy/').data).toEqual({revision:0,maximum:3,default_maximum:1});
-    expect(f.calls.find(c=>c.path.endsWith('/specializations/policy/')).data).toEqual({revision:0,minimum:1,maximum:2,component_sharing:"multiple_components",kind_limits:{}});
+    expect(f.calls.find(c=>c.path.endsWith('/specializations/policy/')).data).toEqual({revision:0,minimum:1,maximum:2,component_sharing:"multiple_components",kind_limits:{},component_exclusions:[]});
     expect(f.errors).toEqual([]);
     expect(await page.evaluate(()=>localStorage.length+sessionStorage.length)).toBe(0);
 });
@@ -896,5 +896,59 @@ test('whole program owners enforce five choices, promote primary departments and
     for (const number of [1, 2, 3]) await page.getByRole('button', { name: `Remove department JOINT.${number}`, exact: true }).click();
     await page.getByRole('button', { name: 'Save program details', exact: true }).click();
     expect(f.calls.filter(c => c.path.endsWith('/details/')).at(-1).data).toMatchObject({ department_id: null, additional_department_ids: [] });
+    expect(f.errors).toEqual([]);
+});
+
+
+test('incompatible curriculum pairs retain failed drafts and appear in the reviewed program publication', async ({ page }) => {
+    const f = await fixture(page, { specializations: true, linked: true });
+    await page.getByRole('button', { name: 'Majors, minors & specializations', exact: true }).click();
+    await page.getByRole('button', { name: 'Specialization selection policy', exact: true }).click();
+    const first = page.getByLabel('First curriculum component', { exact: true });
+    const second = page.getByLabel('Incompatible with', { exact: true });
+    await first.selectOption(id(30));
+    await second.selectOption(id(30));
+    await page.getByRole('button', { name: 'Add incompatible pair', exact: true }).click();
+    await expect(page.getByText('Choose two different components and list each pair only once.', { exact: true })).toBeVisible();
+    await second.selectOption(id(31));
+    await page.getByRole('button', { name: 'Add incompatible pair', exact: true }).click();
+    await expect(first).toBeFocused();
+    await expect(page.getByRole('button', { name: /^Remove incompatible pair:/ })).toHaveCount(1);
+    await expect(page.getByRole('button', { name: 'Add incompatible pair', exact: true }).locator('i.bi')).toHaveCount(1);
+    await expect(page.getByRole('button', { name: /^Remove incompatible pair:/ }).locator('i.bi')).toHaveCount(1);
+    await first.selectOption(id(31)); await second.selectOption(id(30));
+    await page.getByRole('button', { name: 'Add incompatible pair', exact: true }).click();
+    await expect(page.getByRole('button', { name: /^Remove incompatible pair:/ })).toHaveCount(1);
+    await first.selectOption(''); await second.selectOption('');
+    await page.getByLabel('Required specializations (zero means optional)', { exact: true }).fill('3');
+    await page.getByRole('button', { name: 'Save program specialization policy', exact: true }).click();
+    await expect(page.getByText(/The required number must fit within the program maximum\./)).toBeVisible();
+    await expect(page.getByRole('button', { name: /^Remove incompatible pair:/ })).toHaveCount(1);
+    await page.setViewportSize({ width: 1440, height: 1000 });
+    await page.getByRole('group', { name: 'Incompatible curriculum choices', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
+    await page.screenshot({ path: '/tmp/etsis-component-exclusions-editor.png' });
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(scan.violations.map(item => item.id)).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('group', { name: 'Incompatible curriculum choices', exact: true }).evaluate(element => element.scrollIntoView({ block: 'start' }));
+    await page.screenshot({ path: '/tmp/etsis-component-exclusions-phone.png', fullPage: true });
+    await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+    await page.getByLabel('Required specializations (zero means optional)', { exact: true }).fill('1');
+    await page.getByRole('button', { name: 'Save program specialization policy', exact: true }).click();
+    await expect(page.getByRole('button', { name: /^Remove incompatible pair:/ })).toHaveCount(1);
+    await page.getByRole('button', { name: 'Back to specializations', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to program details', exact: true }).click();
+    await page.getByRole('button', { name: 'Publish for an academic year', exact: true }).click();
+    await page.getByLabel('Reason for program publication', { exact: true }).fill('Fictional incompatible choices approval.');
+    await page.getByRole('button', { name: 'Choose academic year', exact: true }).click();
+    await page.getByRole('button', { name: 'Use academic year 2024-2025', exact: true }).click();
+    await page.getByRole('button', { name: 'Review program publication', exact: true }).click();
+    await page.getByText('Incompatible curriculum choices (1)', { exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional specialization 0 <b>example</b> / FOCUS.01');
+    await expect(page.locator('#drawer-body b')).toHaveCount(0);
+    expect(f.calls.filter(call => call.path.endsWith('/specializations/policy/')).map(call => call.data.component_exclusions))
+        .toEqual([[[id(30), id(31)]], [[id(30), id(31)]]]);
     expect(f.errors).toEqual([]);
 });

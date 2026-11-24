@@ -4561,6 +4561,7 @@ $componentPolicy = [
     'maximum' => 1,
     'component_sharing' => 'one_component',
     'kind_limits' => [],
+    'component_exclusions' => [],
 ];
 if (
     $policyRead->getStatusCode() !== 200 ||

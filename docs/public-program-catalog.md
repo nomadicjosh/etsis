@@ -22,6 +22,8 @@ When an application form is currently available, **Apply to this program** opens
 
 After choosing an entry term, a guest's **Create your account** or **Sign in to apply** links carry only validated public program/term identities. Those selections survive account/sign-in links, failed-credential redirects and successful sign-in continuation. Already signed-in visitors retain the selected destination. Return destinations are fixed application routes: callers cannot provide an external redirect URL. Hints create no application, account, student, curriculum choice or accepted decision by themselves and grant no access.
 
+Published [incompatible curriculum pairs](program-publication.md#incompatible-curriculum-choices) appear beside the offered academic options. These public code/title labels explain combinations that cannot be selected together; the registrar still applies the student’s own retained program policy. The website version does not decide that policy.
+
 The existing person/account, owner checks, form publication, CSRF, original submission artifacts, admissions decisions and matriculation rules remain authoritative. Applying to a broad program does not automatically select one of its listed majors/minors. Those choices follow the institution's advising and curriculum-selection workflow. The entry term and admissions process determine the applicable academic curriculum; viewing a website catalog version does not assign it to a student.
 
 ## Storage and validation

@@ -1173,6 +1173,51 @@ window.createWorkspacePrograms = function (ui) {
             typeRules[kind] = { enabled, min: min.input, max: max.input };
         }
         form.append(typed);
+        const labels = window.curriculumChoiceLabels;
+        const pairs = structuredClone(data.settings.component_exclusions || []);
+        const offered = data.offered || [];
+        const incompatible = node('fieldset', { class: 'record-form-section mt-3' },
+            node('legend', {}, labels.heading), node('p', { class: 'form-text' }, labels.help));
+        const pairSelect = (id, label) => {
+            const select = node('select', { id, class: 'form-select' }, node('option', { value: '' }, labels.choose));
+            for (const choice of offered) select.append(node('option', { value: choice.id }, `${choice.code} — ${choice.title}`));
+            return { select, group: node('div', { class: 'col-12 col-md-6' },
+                node('label', { for: id, class: 'form-label' }, label), select) };
+        };
+        const first = pairSelect('component-exclusion-first', labels.first);
+        const second = pairSelect('component-exclusion-second', labels.second);
+        const pairStatus = node('p', { role: 'status', class: 'form-text mt-2' });
+        const pairList = node('div', { class: 'mt-3' });
+        const addPair = button(labels.add, () => {
+            const pair = [first.select.value, second.select.value].sort();
+            if (!pair[0] || pair[0] === pair[1] || pairs.some(saved => [...saved].sort().join(':') === pair.join(':'))) {
+                pairStatus.textContent = labels.invalid;
+                return;
+            }
+            if (pairs.length >= 32) { pairStatus.textContent = labels.limit; return; }
+            pairs.push(pair);
+            first.select.value = second.select.value = '';
+            pairStatus.textContent = '';
+            showPairs();
+            first.select.focus();
+        });
+        function showPairs() {
+            pairList.replaceChildren();
+            const descriptions = window.curriculumExclusionPairs({ offered, component_exclusions: pairs });
+            pairs.forEach((pair, index) => {
+                const remove = button(labels.remove, () => {
+                    pairs.splice(index, 1); showPairs(); first.select.focus();
+                }, 'btn-outline-danger');
+                remove.setAttribute('aria-label', `${labels.remove}: ${descriptions[index]}`);
+                pairList.append(node('div', { class: 'surface p-3 mb-2' },
+                    node('p', { class: 'mb-2' }, descriptions[index]), remove));
+            });
+            if (!pairs.length) pairList.append(node('p', { class: 'form-text' }, labels.draft_empty));
+            addPair.disabled = pairs.length >= 32;
+        }
+        incompatible.append(node('div', { class: 'row g-3 mb-3' }, first.group, second.group), addPair, pairStatus, pairList);
+        showPairs();
+        form.append(incompatible);
         const save = node(
             "button",
             { type: "submit", class: "btn btn-primary" },
@@ -1185,13 +1230,18 @@ window.createWorkspacePrograms = function (ui) {
             event.preventDefault();
             task(async () => {
                 if (!form.reportValidity()) return;
-                await request(path, "POST", {
+                const payload = {
                     revision: data.settings.revision,
                     minimum: Number(minimum.input.value),
                     maximum: inherit.checked ? null : Number(maximum.input.value),
                     component_sharing: sharing.value,
                     kind_limits: Object.fromEntries(Object.entries(typeRules).filter(([, r]) => r.enabled.checked).map(([kind, r]) => [kind, { minimum: Number(r.min.value), maximum: Number(r.max.value) }])),
-                });
+                    component_exclusions: structuredClone(pairs),
+                };
+                const controls = [...form.elements].map(control => [control, control.disabled]);
+                controls.forEach(([control]) => { control.disabled = true; });
+                try { await request(path, 'POST', payload); }
+                finally { controls.forEach(([control, disabled]) => { control.disabled = disabled; }); }
                 if (body.isConnected)
                     await specializationPolicy(
                         program,
@@ -1308,6 +1358,7 @@ window.createWorkspacePrograms = function (ui) {
             multiple_components: "A completed course may satisfy degree and specialization requirements.",
         }[snapshot.component_sharing] || "Not recorded in this earlier publication.")));
         section.append(node("p", {}, snapshot.kind_limits == null ? "Curriculum type limits were not recorded in this earlier publication." : Object.entries(snapshot.kind_limits).map(([kind, rule]) => `${kind}: ${rule.minimum}–${rule.maximum}`).join(" · ") || "No additional limits by curriculum type."));
+        section.append(window.curriculumExclusionSummary(node, snapshot));
         if (!snapshot.offered.length) {
             section.append(node("p", {}, "No specialization choices offered in this publication."));
             return section;

@@ -7,7 +7,7 @@ const { node, walk } = require("./support/elements.cjs");
 const window = {};
 vm.runInNewContext(
   readFileSync("public/assets/js/degree-progress-guide.js", "utf8"),
-  { window },
+  { window, document: { getElementById: () => null } },
   { timeout: 500 },
 );
 const review = () => ({

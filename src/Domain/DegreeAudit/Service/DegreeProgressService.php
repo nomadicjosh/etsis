@@ -206,6 +206,9 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                             $specializations["program"]["specializations"]["offered"],
                             $selected,
                         );
+                        new \Domain\Catalog\ValueObject\ComponentExclusions(
+                            $specializations['program']['specializations']['component_exclusions'] ?? []
+                        )->selection($specializations['program']['specializations']['offered'], $selected);
                     } catch (\Domain\Shared\Exception\ValidationException) {
                         return [
                             "status" => "needs_review",

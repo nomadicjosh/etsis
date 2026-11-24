@@ -3549,3 +3549,63 @@ msgstr ""
 #: src/Application/Http/Controller/ProgramDiscoveryController.php
 msgid "Program unavailable"
 msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:8
+msgid "Incompatible curriculum choices"
+msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:9
+msgid "Choose pairs that cannot be selected together within this program. The rule works in both directions. Save the policy, then publish the program to apply it to future selections under that publication. Earlier student choices keep their retained policy."
+msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:14
+msgid "First curriculum component"
+msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:15
+msgid "Incompatible with"
+msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:16
+msgid "Choose a curriculum component"
+msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:17
+msgid "Add incompatible pair"
+msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:18
+msgid "Remove incompatible pair"
+msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:19
+msgid "Choose two different components and list each pair only once."
+msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:20
+msgid "A program policy supports up to thirty-two incompatible pairs."
+msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:21
+msgid "Incompatible-choice rules were not recorded in this earlier publication."
+msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:22
+msgid "No incompatible curriculum pairs in this publication."
+msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:23
+msgid "No incompatible curriculum pairs configured in this draft."
+msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:24
+msgid "Unavailable component; remove this pair or reactivate its choice before publishing."
+msgstr ""
+
+#: resources/views/shared/curriculum-choice-labels.php:25
+msgid "Remove one choice from each incompatible pair before reviewing this selection."
+msgstr ""
+
+#: resources/views/frontend/portal/program.phtml:78
+msgid "Each pair below cannot be selected together within this program."
+msgstr ""

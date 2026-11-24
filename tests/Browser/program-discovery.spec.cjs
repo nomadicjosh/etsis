@@ -56,6 +56,8 @@ for (const theme of ['campus-harbor', 'campus-quad', 'campus-horizon']) test(`${
     await page.goto(`/portal/programs/${program}/?theme=${theme}&closed=1&guest=1`);
     await expect(page.getByRole('link', { name: 'Apply to this program', exact: true })).toHaveCount(0);
     await expect(page.locator('main')).toContainText('Applications are not currently available');
+    await expect(page.getByRole('heading', { name: 'Incompatible curriculum choices', exact: true })).toBeVisible();
+    await expect(page.locator('main')).toContainText('English <script>literal</script>');
     const navigation = page.getByRole('navigation', { name: 'Main navigation', exact: true });
     const courses = await navigation.getByRole('link', { name: 'Courses', exact: true }).boundingBox();
     const programs = await navigation.getByRole('link', { name: 'Programs', exact: true }).boundingBox();

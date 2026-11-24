@@ -1230,6 +1230,7 @@ window.createWorkspaceStudents = function (ui) {
             ),
         );
         body.append(node("p", {}, snapshot.kind_limits == null ? "Curriculum types were not required by this earlier publication." : Object.entries(snapshot.kind_limits).map(([kind, rule]) => `${kind}: ${rule.minimum}–${rule.maximum}`).join(" · ") || "No additional limits by curriculum type."));
+        body.append(window.curriculumExclusionSummary(node, snapshot));
         if (!data.can_manage) {
             body.append(
                 node(
@@ -1275,8 +1276,10 @@ window.createWorkspaceStudents = function (ui) {
             const types = Object.entries(snapshot.kind_limits || {}).map(([kind, rule]) => ({ kind, rule, count: snapshot.offered.filter(choice => selected.has(choice.id) && choice.kind === kind).length }));
             count.textContent = `${selected.size} selected. Required ${snapshot.effective.minimum}; maximum ${snapshot.effective.maximum}. Selections on other pages are preserved. ${types.map(item => `${item.kind}: ${item.count} selected (${item.rule.minimum}–${item.rule.maximum} required/allowed)`).join(" · ")}`;
             const missingMajors = snapshot.offered.filter(choice => selected.has(choice.id) && choice.parent_major && !selected.has(choice.parent_major.id));
+            const incompatible = window.curriculumExclusionPairs(snapshot, selected);
+            if (incompatible.length) count.textContent += ` ${window.curriculumChoiceLabels.conflict} ${incompatible.join('; ')}`;
             if (missingMajors.length) count.textContent += ` Select required majors for: ${missingMajors.map(choice => choice.code).join(", ")}.`;
-            review.disabled = selected.size < snapshot.effective.minimum || selected.size > snapshot.effective.maximum || missingMajors.length > 0 || types.some(item => item.count < item.rule.minimum || item.count > item.rule.maximum);
+            review.disabled = selected.size < snapshot.effective.minimum || selected.size > snapshot.effective.maximum || missingMajors.length > 0 || incompatible.length > 0 || types.some(item => item.count < item.rule.minimum || item.count > item.rule.maximum);
         };
         function show(focus = false) {
             const term = search.value.trim().toLowerCase();

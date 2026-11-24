@@ -32,6 +32,9 @@ final readonly class ProgramSpecializationSnapshot
         if ($typed) {
             $keys[] = "kind_limits";
         }
+        if (array_key_exists('component_exclusions', $data)) {
+            $keys[] = 'component_exclusions';
+        }
         self::keys($data, $keys);
         $program = new EntityId($data["program_id"]);
         self::keys($data["institution"], ["revision", "maximum", "default_maximum"]);
@@ -129,6 +132,16 @@ final readonly class ProgramSpecializationSnapshot
             $rules = new ComponentSelectionRules($data["kind_limits"]);
             $rules->publication($data["offered"], $policy->minimum, $policy->effectiveMaximum);
             $data["kind_limits"] = $rules->limits;
+        }
+        if (array_key_exists('component_exclusions', $data)) {
+            $exclusions = new ComponentExclusions($data['component_exclusions']);
+            $exclusions->publication(
+                $data['offered'],
+                $data['kind_limits'] ?? [],
+                $policy->minimum,
+                $policy->effectiveMaximum
+            );
+            $data['component_exclusions'] = $exclusions->pairs;
         }
         $this->data = self::normalize($data);
     }

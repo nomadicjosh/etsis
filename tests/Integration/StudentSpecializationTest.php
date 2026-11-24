@@ -232,6 +232,10 @@ final class StudentSpecializationTest extends TestCase
             self::assertTrue(true);
         }
         $this->bind($f, $f->publication['operation_id']);
+        $f->sis->sql->execute(
+            'DELETE FROM sis_program_catalog_ownership WHERE id = ?',
+            [$f->publication['operation_id']]
+        );
         $f->sis->sql->execute('DELETE FROM sis_program_catalog_details WHERE id = ?', [$f->publication['operation_id']]);
         $this->expectException(CorruptHistoryException::class);
         $f->service->view($f->student, $f->assignment);

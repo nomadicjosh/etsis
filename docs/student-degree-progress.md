@@ -215,6 +215,12 @@ The degree card and its local drilldown also show the program's primary and join
 
 Combined cards show **Requires major: …** from each selected component's exact retained program publication. Staff component inspection uses the same retained relationship. A linked concentration, track or specialization must be selected together with its required major under the retained overall/type limits before the joint review proceeds. Choosing or evaluating the linked component does not assign missing requirements automatically. Current reference renames or changes do not relabel earlier selections or assignments. The student's private response exposes required-major codes/titles without their internal identifiers. Explicit independent relationships remain distinct from earlier unrecorded relationships. Course allocation, sharing, credits, GPA and credential authority retain their existing rules. See [required-major setup](program-publication.md#required-major-relationships).
 
+### Incompatible curriculum choices
+
+The program's [published incompatible pairs](program-publication.md#incompatible-curriculum-choices) apply beside overall/type limits and required-major relationships. In the registrar's selection editor, both choices stay checked when a pair conflicts; the explanation identifies the pair and review remains disabled until one is removed. The server enforces the same retained rules during selection and combined progress verification. A later draft or publication cannot invalidate the student's earlier accepted combination. Earlier missing policies remain unrecorded rather than acquiring today's exclusions.
+
+The public program catalog explains code/title pairs from its separately chosen publication. It does not choose a major or determine which version applies to a student. These restrictions concern curriculum combinations, not institutional/transfer credit eligibility or allocation sharing. Existing degree requirements, exceptions, academic work and credential decisions remain independent.
+
 ## Coursework origin and completion eligibility
 
 Group cards and **Inspect group** now show the selected publication's credit-origin rule and optional inclusive completion window. The student portal displays the same policy without internal publication/record identifiers or staff reasons. Both institutional and transfer work are allowed by default. A group-specific exclusion does not remove earned credit from the independent overall total or prevent the record from meeting another eligible group.

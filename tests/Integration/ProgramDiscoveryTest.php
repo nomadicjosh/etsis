@@ -19,6 +19,43 @@ final class ProgramDiscoveryTest extends TestCase
         require_once dirname(__DIR__) . '/Support/ProgramDiscoveryFixture.php';
     }
 
+    public function testPublicProgramChoicesExplainRetainedIncompatibilitiesWithoutInternalComponentIdentities(): void
+    {
+        $f = new ProgramDiscoveryFixture();
+        $s = $f->sis;
+        $references = new \Infrastructure\Persistence\Repository\SqlProgramSpecializationRepository($s->sql);
+        $programs = new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($s->sql);
+        $choices = new \Domain\Catalog\Service\ProgramSpecializationService(
+            $references,
+            $programs,
+            $s->access,
+            $s->transactions,
+            $s->audit,
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($s->sql)
+        );
+        $first = $choices->save($s->program, null, null, 'ART', 'Art <script>literal</script>', null, true);
+        $second = $choices->save($s->program, null, null, 'MUSIC', 'Fictional music', null, true);
+        $policies = new \Domain\Catalog\Service\SpecializationPolicyService(
+            new \Infrastructure\Persistence\Repository\SqlSpecializationPolicyRepository($s->sql),
+            $references,
+            $programs,
+            $s->access,
+            $s->transactions,
+            $s->audit
+        );
+        $policies->saveProgram($s->program, 0, 0, 1, componentExclusions: [[$first['id'], $second['id']]]);
+        $catalog = $f->publish();
+        $service = $f->service();
+        $f->commit($service->review($s->program, $catalog, true, 0));
+        $display = $service->detail($s->program)['incompatible_components'];
+        self::assertContains('Art <script>literal</script>', array_column($display[0], 'title'));
+        $json = json_encode($display, JSON_THROW_ON_ERROR);
+        self::assertStringNotContainsString($first['id'], $json);
+        self::assertStringNotContainsString($second['id'], $json);
+        $policies->saveProgram($s->program, 1, 0, 1);
+        self::assertSame($display, $service->detail($s->program)['incompatible_components']);
+    }
+
     public function testAcademicPublicationAloneDoesNotPublishWebsiteContentAndExplicitChoiceStaysPinned(): void
     {
         $f = new ProgramDiscoveryFixture();

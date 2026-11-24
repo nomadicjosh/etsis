@@ -1308,7 +1308,14 @@
     .academic-timetable-weekday, .academic-timetable-spacer { display: block; }
 }
 /* Published program discovery uses the shared campus surfaces and narrow-screen reflow. */
-.campus-program-detail { display: grid; gap: 1.5rem; padding-block-end: 3rem; min-width: 0; }
+.campus-program-detail {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 1.5rem;
+    padding-block-end: 3rem;
+    min-width: 0;
+    overflow-wrap: anywhere;
+}
 .campus-program-description { white-space: pre-wrap; overflow-wrap: anywhere; }
 .campus-program-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); gap: 1rem; }
 .campus-program-facts dd { margin: .3rem 0 0; overflow-wrap: anywhere; }

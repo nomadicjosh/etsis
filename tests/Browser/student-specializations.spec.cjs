@@ -8,6 +8,7 @@ async function fixture(
         readOnly = false,
         typed = false,
         linked = false,
+        exclusions = false,
         adjustments = false,
         cohortChanged = false,
         unknown = false,
@@ -78,6 +79,7 @@ async function fixture(
             policies: { group_reuse: "one_group" },
         },
     };
+    if (exclusions) program.specializations.component_exclusions = [[offered[0].id, offered[1].id]];
     const reference = {
         requirements_name: requirements.definition.name,
         requirements_version: 1,
@@ -1007,5 +1009,29 @@ test('linked concentration keeps its choice across pages while missing required 
     await page.setViewportSize({ width: 375, height: 812 });
     expect((await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('retained incompatible choices block student selection review', async ({ page }) => {
+    const f = await fixture(page, { typed: true, exclusions: true });
+    const review = page.getByRole('button', { name: 'Review specialization selection', exact: true });
+    await page.getByLabel('CHOICE.1 — Original <b>Art</b>', { exact: true }).check();
+    await page.getByLabel('CHOICE.2 — Fictional choice 2', { exact: true }).check();
+    await expect(review).toBeDisabled();
+    await expect(page.getByText(/Remove one choice from each incompatible pair before reviewing this selection\./)).toBeVisible();
+    await page.getByText('Incompatible curriculum choices (1)', { exact: true }).click();
+    await expect(page.locator('#drawer-body b')).toHaveCount(0);
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(scan.violations.map(item => item.id)).toEqual([]);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
+    await page.getByLabel('CHOICE.2 — Fictional choice 2', { exact: true }).uncheck();
+    await expect(review).toBeEnabled();
+    await page.getByLabel('Reason for this selection change', { exact: true }).fill('Fictional compatible selection.');
+    await review.click();
+    expect(f.calls.filter(call => call.path.endsWith('/review/')).at(-1).data.specialization_ids).toEqual([f.offered[0].id]);
     expect(f.errors).toEqual([]);
 });

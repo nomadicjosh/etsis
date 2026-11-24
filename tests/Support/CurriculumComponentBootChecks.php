@@ -52,13 +52,25 @@ $postData($base . "save/", $save);
 if ($read($base . $choice["id"] . "/")["kind"] !== "major") {
     throw new RuntimeException("A component type was lost.");
 }
-$postData($base . "policy/", [
+$pairPolicy = [
     "revision" => 1,
     "minimum" => 0,
     "maximum" => 2,
     "component_sharing" => "multiple_components",
     "kind_limits" => ["major" => ["minimum" => 1, "maximum" => 1]],
-]);
+    'component_exclusions' => [[$f->choices[0]['id'], $f->choices[1]['id']]],
+];
+$missingPairs = $pairPolicy;
+unset($missingPairs['component_exclusions']);
+$postData($base . 'policy/', $missingPairs, 422);
+$postData($base . 'policy/', array_replace($pairPolicy, ['component_exclusions' => null]), 422);
+$postData($base . 'policy/', array_replace($pairPolicy, [
+    'component_exclusions' => [[$choice['id'], $choice['id']]],
+]), 422);
+$postData($base . 'policy/', $pairPolicy);
+if (count($read($base . 'policy/')['settings']['component_exclusions']) !== 1) {
+    throw new RuntimeException('The explicit incompatible-choice policy was lost.');
+}
 $programBase = "/sis/programs/" . $sis->program->value . "/publication/";
 $review = $postData($programBase . "review/", [
     "academic_year_id" => $f->year["id"],
@@ -96,6 +108,8 @@ $input = [
     "reason" => "Fictional registrar choice.",
 ];
 $postData($studentPath . "review/", $input, 422);
+$input['specialization_ids'] = [$choice['id'], $f->choices[1]['id']];
+$postData($studentPath . 'review/', $input, 422);
 $input["specialization_ids"] = [$choice["id"]];
 $review = $postData($studentPath . "review/", $input);
 $postData($studentPath . "commit/", ["review_token" => $review["review_token"]]);

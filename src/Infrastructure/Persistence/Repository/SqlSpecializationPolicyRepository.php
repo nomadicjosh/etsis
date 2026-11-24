@@ -38,6 +38,7 @@ final readonly class SqlSpecializationPolicyRepository implements Specialization
                 "default_maximum" => null,
                 "component_sharing" => ComponentCourseSharing::OneComponent->value,
                 "kind_limits" => [],
+                'component_exclusions' => [],
             ];
         }
         if ($row["program_id"] !== $program?->value) {
@@ -75,6 +76,13 @@ final readonly class SqlSpecializationPolicyRepository implements Specialization
                 $out["kind_limits"] = new \Domain\Catalog\ValueObject\ComponentSelectionRules(
                     $limits,
                 )->limits;
+                $encoded = $row['component_exclusions'];
+                if ($encoded !== null && (!is_string($encoded) || strlen($encoded) > 4096)) {
+                    throw new CorruptHistoryException();
+                }
+                $out['component_exclusions'] = new \Domain\Catalog\ValueObject\ComponentExclusions(
+                    $encoded === null ? [] : json_decode($encoded, true, 8, JSON_THROW_ON_ERROR)
+                )->pairs;
             } catch (\Throwable) {
                 throw new CorruptHistoryException();
             }
@@ -83,6 +91,12 @@ final readonly class SqlSpecializationPolicyRepository implements Specialization
     }
     public function save(?EntityId $program, array $values): void
     {
+        if (array_key_exists('component_exclusions', $values)) {
+            $values['component_exclusions'] = json_encode(
+                new \Domain\Catalog\ValueObject\ComponentExclusions($values['component_exclusions'])->pairs,
+                JSON_THROW_ON_ERROR
+            );
+        }
         if (array_key_exists("kind_limits", $values)) {
             $values["kind_limits"] = json_encode(
                 new \Domain\Catalog\ValueObject\ComponentSelectionRules($values["kind_limits"])

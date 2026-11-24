@@ -74,6 +74,26 @@ window.programOrganizationText = function (classifications) {
 window.curriculumOwnershipLabels = JSON.parse(
     document.getElementById("curriculum-ownership-labels")?.textContent || "{}",
 );
+window.curriculumChoiceLabels = JSON.parse(
+    document.getElementById('curriculum-choice-labels')?.textContent || '{}',
+);
+window.curriculumExclusionPairs = function (snapshot, selected = null) {
+    const choices = new Map((snapshot?.offered || []).map(choice => [choice.id, choice]));
+    return (snapshot?.component_exclusions || [])
+        .filter(pair => selected === null || pair.every(id => selected.has(id)))
+        .map(pair => pair.map(id => choices.has(id)
+            ? `${choices.get(id).code} — ${choices.get(id).title}`
+            : window.curriculumChoiceLabels.unavailable).join(' / '));
+};
+window.curriculumExclusionSummary = function (node, snapshot) {
+    const labels = window.curriculumChoiceLabels;
+    if (snapshot?.component_exclusions == null) return node('p', { class: 'form-text' }, labels.unknown);
+    const pairs = window.curriculumExclusionPairs(snapshot);
+    if (!pairs.length) return node('p', { class: 'form-text' }, labels.none);
+    return node('details', { class: 'surface p-3 my-3' },
+        node('summary', { class: 'fw-semibold' }, `${labels.heading} (${pairs.length})`),
+        node('ul', { class: 'mt-2 mb-0' }, ...pairs.map(pair => node('li', {}, pair))));
+};
 window.curriculumMajorText = function (choice) {
     if (!choice || !Object.hasOwn(choice, "parent_major")) return "Required-major relationship: not recorded in this publication";
     return choice.parent_major ? `Requires major: ${choice.parent_major.code} — ${choice.parent_major.title}` : "Required major: none";

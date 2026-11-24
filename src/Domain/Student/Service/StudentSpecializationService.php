@@ -776,6 +776,8 @@ final readonly class StudentSpecializationService
             ]);
         }
         new \Domain\Catalog\ValueObject\ComponentMajorRules()->selection($snapshot['offered'], $ids);
+        new \Domain\Catalog\ValueObject\ComponentExclusions($snapshot['component_exclusions'] ?? [])
+            ->selection($snapshot['offered'], $ids);
         if (array_key_exists('kind_limits', $snapshot)) {
             new ComponentSelectionRules($snapshot['kind_limits'])->selection($snapshot['offered'], $ids);
         }
@@ -794,6 +796,10 @@ final readonly class StudentSpecializationService
         $ids = $p['specialization_ids'];
         try {
             new \Domain\Catalog\ValueObject\ComponentMajorRules()->selection(array_values($offered), $ids);
+            $exclusions = new \Domain\Catalog\ValueObject\ComponentExclusions(
+                $program['specializations']['component_exclusions'] ?? []
+            );
+            $exclusions->selection(array_values($offered), $ids);
         } catch (\Domain\Shared\Exception\ValidationException) {
             throw new CorruptHistoryException();
         }
@@ -822,7 +828,8 @@ final readonly class StudentSpecializationService
             'limits' => $limits,
             'kind_limits' => $program['specializations']['kind_limits'] ?? null,
             'specializations' => array_values(array_intersect_key($offered, array_fill_keys($ids, true))),
-        ];
+        ] + (array_key_exists('component_exclusions', $program['specializations'])
+            ? ['component_exclusions' => $program['specializations']['component_exclusions']] : []);
     }
     /**
      * @param array<string,mixed> $p
