@@ -1,0 +1,51 @@
+# Copy to .ddev/docker-compose.postgres.yaml; paths are relative to .ddev.
+services:
+  postgres:
+    container_name: ddev-${DDEV_SITENAME:-etsis}-postgres
+    image: postgres:18-alpine
+    mem_limit: 256m
+    memswap_limit: 256m
+    cpus: 0.5
+    pids_limit: 64
+    restart: "no"
+    environment:
+      POSTGRES_USER: etsis_migration_admin
+      POSTGRES_DB: nomadicjosh_sis
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres-admin-password
+    ports:
+      - "127.0.0.1:${ETSIS_POSTGRES_HOST_PORT:-54329}:5432"
+    volumes:
+      - etsis-postgres-data:/var/lib/postgresql
+      - ../storage/app/database-migration/postgres-admin-password:/run/secrets/postgres-admin-password:ro
+    command:
+      - postgres
+      - -c
+      - shared_buffers=32MB
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=16MB
+      - -c
+      - max_connections=20
+      - -c
+      - max_parallel_workers=0
+      - -c
+      - log_min_messages=panic
+      - -c
+      - log_min_error_statement=panic
+    labels:
+      com.ddev.site-name: ${DDEV_SITENAME:-etsis}
+      com.ddev.approot: ${DDEV_APPROOT:-/home/joshuaparker/Server/etsis}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U etsis_migration_admin -d nomadicjosh_sis"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+volumes:
+  etsis-postgres-data:
+    external: true
+    name: ddev-${DDEV_SITENAME:-etsis}_etsis-postgres-data
+networks:
+  default:
+    name: ddev_default
+    external: true

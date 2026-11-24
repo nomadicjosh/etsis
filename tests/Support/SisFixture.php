@@ -25,6 +25,7 @@ use Infrastructure\Persistence\Repository\SqlRegistrationRepository;
 use Infrastructure\Persistence\SqlAuditTrail;
 use Infrastructure\Persistence\SqlRecords;
 use Qubus\Expressive\Connection\Pdo\Sqlite;
+use Qubus\Expressive\Connection\PdoConnection;
 use Qubus\Expressive\Migration\Adapter\DbalMigrationAdapter;
 
 final class FixtureAccess implements StudentAccess
@@ -82,7 +83,7 @@ final class FixtureClock implements Clock
 
 final class SisFixture
 {
-    public Sqlite $connection;
+    public PdoConnection $connection;
     public SqlRecords $sql;
     public DatabaseUnitOfWork $transactions;
     public FixtureAccess $access;
@@ -368,7 +369,7 @@ final class SisFixture
     }
 
     public function __construct(
-        ?Sqlite $connection = null,
+        ?PdoConnection $connection = null,
         bool $versionedGrades = true,
         bool $initialize = true,
         ?EntityId $actor = null,

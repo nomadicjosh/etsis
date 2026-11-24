@@ -173,6 +173,7 @@ return [
     */
     "commands" => [
         \Application\Console\Commands\MaintenanceCommand::class,
+        \Application\Console\Commands\ConvertPostgresCommand::class,
         \Application\Console\Commands\VerifyHistoryCommand::class,
         \Application\Console\Commands\HistoryAnchorCommand::class,
         \Application\Console\Commands\PruneLoginSessionsCommand::class,

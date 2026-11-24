@@ -26,7 +26,7 @@ use SisFixture;
 use Symfony\Component\Process\InputStream;
 use Symfony\Component\Process\Process;
 
-/** At most two short-lived children, one private fictional SQLite database and no configured application writes. */
+/** At most two short-lived children, isolated fictional storage and no configured application writes. */
 final class WorkflowRecoveryFixture
 {
     public readonly SisFixture $sis;
@@ -34,6 +34,7 @@ final class WorkflowRecoveryFixture
     private readonly string $directory;
     private readonly string $cipherKey;
     private array $workers = [];
+    private ?MysqlQualificationDatabase $native = null;
 
     public function __construct()
     {
@@ -48,11 +49,23 @@ final class WorkflowRecoveryFixture
         $config->setConfigKey('app', ['crypto_key' => $this->cipherKey]);
         $mask = umask(0077);
         try {
+            if (getenv('ETSIS_WORKFLOW_MYSQL_QUALIFICATION') === '1') {
+                require_once __DIR__ . '/MysqlQualificationDatabase.php';
+                $this->native = MysqlQualificationDatabase::acquire($this->directory);
+                $prototype = new SisFixture(cipher: new DefuseMessageCipher($config));
+                $this->native->seed($prototype);
+            }
             $this->sis = new SisFixture(
-                new Sqlite(['driver' => 'pdo_sqlite', 'dsn' => 'sqlite:' . $this->path]),
+                $this->native?->connection() ?? new Sqlite([
+                    'driver' => 'pdo_sqlite', 'dsn' => 'sqlite:' . $this->path,
+                ]),
+                initialize: $this->native === null,
+                actor: $this->native === null ? null : $prototype->access->actor,
                 cipher: new DefuseMessageCipher($config)
             );
-            $this->sis->connection->pdo->exec('PRAGMA busy_timeout = 3000');
+            if ($this->native === null) {
+                $this->sis->connection->pdo->exec('PRAGMA busy_timeout = 3000');
+            }
         } catch (\Throwable $error) {
             $this->close();
             throw $error;
@@ -142,6 +155,7 @@ final class WorkflowRecoveryFixture
         $history = EventStoreFixture::config($this->sis->connection->queryBuilder())->getConfigKey('event_history');
         $input->write(json_encode([
             'path' => $this->path,
+            'native' => $this->native?->workerSettings(),
             'history' => $history,
             'cipher_key' => $this->cipherKey,
             'actor' => $this->sis->access->actor->value,
@@ -242,7 +256,8 @@ final class WorkflowRecoveryFixture
                 unlink($path);
             }
         }
-        if (is_dir($this->directory)) {
+        $this->native?->release();
+        if (is_dir($this->directory) && count(scandir($this->directory)) === 2) {
             rmdir($this->directory);
         }
     }

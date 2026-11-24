@@ -15,7 +15,7 @@ final class MaintenanceCommandPolicyTest extends TestCase
     {
         foreach (
             ['', 'list', 'help sis:moodle:sync', 'sis:maintenance up', 'sis:history:verify --json',
-            'sis:history:anchor --action=compare',
+            'sis:history:anchor --action=compare', 'sis:database:postgres --switch',
             'migrate:status', 'migrate:up', 'migrate:rollback', 'schedule:list', 'route:list', 'sis:access:bootstrap',
             'sis:communications:send --help'] as $command
         ) {
