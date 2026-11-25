@@ -143,6 +143,7 @@ final readonly class CourseCloneService
                         $context['prerequisite_credit_origin'],
                         $context['prerequisite_requirement_credit_origins'],
                         $context['prerequisite_completion_windows'],
+                        $context['prerequisite_equivalents'],
                     )->subset($ids)
                 );
             }
@@ -249,6 +250,7 @@ final readonly class CourseCloneService
             'prerequisite_credit_origin' => $groups?->creditOrigin,
             'prerequisite_requirement_credit_origins' => $groups?->requirementCreditOrigins,
             'prerequisite_completion_windows' => $groups?->completionWindows,
+            'prerequisite_equivalents' => $groups?->equivalents,
             "corequisites" => $groups?->corequisites,
             "prerequisite_minimums" => $groups?->minimums,
             "prerequisite_grade_points_milli" => $groups?->minimumGradePointsMilli,

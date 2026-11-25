@@ -157,7 +157,9 @@ window.createWorkspaceCatalog = function (ui) {
         const overallMinimum = groups.length ? review.prerequisite_requirement_minimum : null;
         const invalidChoices = groups.some(group => group.selected.length < group.minimum) ||
             (groups.length > 0 && overallMinimum != null && groups.length < overallMinimum) ||
-            (groups.length > 0 && review.prerequisite_rule && groups.length !== review.prerequisite_groups.length);
+            (groups.length > 0 && review.prerequisite_rule && groups.length !== review.prerequisite_groups.length) ||
+            Object.entries(review.prerequisite_equivalents || {}).some(([required, alternatives]) =>
+                groups.some(group => group.selected.includes(required)) && alternatives.some(id => !prerequisites.includes(id)));
 
         body.append(
             button(
@@ -172,6 +174,13 @@ window.createWorkspaceCatalog = function (ui) {
                 "btn-link",
             ),
             node("h3", {}, `${draft.code} — ${draft.title}`),
+            ...(Object.keys(review.prerequisite_equivalents || {}).length ? [
+                node('p', { class: 'form-text' }, ui.prerequisiteOriginLabels.equivalents_clone),
+                node('ul', {}, ...Object.entries(review.prerequisite_equivalents).map(([required, alternatives]) =>
+                    node('li', { class: 'text-break' },
+                        `${review.prerequisites.find(row => row.id === required)?.code || required} · ${ui.prerequisiteOriginLabels.equivalents_title}: ` +
+                        alternatives.map(id => review.prerequisites.find(row => row.id === id)?.code || id).join('; ')))),
+            ] : []),
             node("p", {}, `${ui.ceuLabels?.course_title || "Course CEUs"}: ${window.continuingEducationText(review.source.continuing_education, ui.ceuLabels)}`),
             node(
                 "p",

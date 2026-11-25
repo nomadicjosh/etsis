@@ -4631,3 +4631,66 @@ msgstr ""
 #: resources/views/backend/workspace/history-check-labels.php:32
 msgid "Future-registration offering selection"
 msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:8
+msgid "Equivalent courses"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:9
+msgid "Equivalent courses for"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:11
+msgid ""
+"Choose courses that may replace this named prerequisite in this course "
+"publication only. These choices are one-way and do not chain through other "
+"equivalents. The same pursuit, coursework source, grade minimum and "
+"completion dates still apply. Co-requisites, earned credit and degree "
+"requirements are unchanged."
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:17
+msgid ""
+"Within one requirement, one completed course can fill only one named course "
+"slot. The same course may still satisfy separate requirements."
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:20
+msgid "Add equivalent course"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:21
+msgid "No equivalent courses selected."
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:22
+msgid "Remove equivalent"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:23
+msgid "Choose an equivalent course"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:25
+#: src/Domain/Catalog/ValueObject/PrerequisiteGroups.php:394
+msgid ""
+"Keep every equivalent of a retained prerequisite or omit that prerequisite "
+"entirely."
+msgstr ""
+
+#: src/Domain/Catalog/ValueObject/PrerequisiteGroups.php:150
+msgid "Choose distinct equivalent courses for an existing prerequisite course."
+msgstr ""
+
+#: src/Domain/Catalog/ValueObject/PrerequisiteGroups.php:156
+msgid "An equivalent must be a different course identity."
+msgstr ""
+
+#: src/Domain/Catalog/ValueObject/PrerequisiteGroups.php:172
+msgid ""
+"Use up to 100 distinct entry-requirement courses and 500 equivalent links."
+msgstr ""
+
+#: src/Application/Http/Controller/SisCoursePrerequisiteController.php:67
+msgid "Provide prerequisite equivalents or explicitly choose none."
+msgstr ""

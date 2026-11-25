@@ -982,7 +982,7 @@ h3 { font-size: .9rem; font-weight: 650; }
 .workspace-floating-menu::backdrop { background: transparent; pointer-events: none; }
 @media (min-width: 992px) { .workspace-sidebar { z-index: 1010; } }
 @media (max-width: 639px) {
-    .record-task-navigation { gap: .5rem; flex-wrap: wrap; }
+    .record-task-navigation { position: relative; gap: .5rem; flex-wrap: wrap; }
     .record-task-location { flex-basis: 100%; padding-inline-start: .15rem; }
     .record-task-navigation > .bi { display: none; }
     .record-program-card { padding-inline: .85rem; }

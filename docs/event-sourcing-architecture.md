@@ -4,6 +4,9 @@ Adopted direction, 2026-11-08. [Event-sourcing rationale](event-sourcing.md) gov
 
 ## Implementation progress
 
+[Explicit prerequisite equivalents](course-publication.md#explicit-prerequisite-equivalents) extend the existing course definition and protected enrollment evidence with a bounded one-way map. Genuine eligible actual courses are matched to named slots without duplicate counting inside a requirement, transitive inference or changes to degree/transfer awards. Per-attempt source, grade, completion and pursuit boundaries remain shared. Course publications, clones, confirmation-local comparisons and original retries preserve exact rules; final source/audit changes roll back coupled registration, academic and financial effects. Nullable draft/version columns preserve earlier absence without converting event bytes or adding a journal. Global articulation, graduated-program transfer enforcement and broader override policy remain separate work.
+
+
 [Coordinated waitlist allocation](registration-history.md#register-several-oldest-requests-together) now reuses the existing group/individual registration commands, ordinary FIFO queue events, academic/financial writers and private outcome updates. A selected group must contain every predecessor; locks and reviewed identities stay canonical while actual registrations execute in accepted queue order. The reviewed queue position and exact final advancement/current eligibility are checked atomically through the final audit. Earlier original receipts and event shapes remain unchanged; no new schema, event type or journal is added. Native contention/long-history acceptance remains separate.
 
 

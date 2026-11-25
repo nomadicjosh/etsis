@@ -128,6 +128,14 @@ final readonly class SqlCatalogWorkflowRepository implements CatalogWorkflowRepo
         if ($rawWindows !== null && !is_array($windows)) {
             throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
         }
+        $rawEquivalents = $row['equivalents_json'];
+        if ($rawEquivalents !== null && (!is_string($rawEquivalents) || strlen($rawEquivalents) > 32768)) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
+        $equivalents = $rawEquivalents === null ? null : json_decode($rawEquivalents, true, 4, JSON_THROW_ON_ERROR);
+        if ($rawEquivalents !== null && !is_array($equivalents)) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
         $groups = new PrerequisiteGroups(
             $choices,
             $minimums,
@@ -138,6 +146,7 @@ final readonly class SqlCatalogWorkflowRepository implements CatalogWorkflowRepo
             $row['prerequisite_credit_origin'],
             $origins,
             $windows,
+            $equivalents,
         );
         if ($groups->courses() !== array_column($this->prerequisites($course), 'id')) {
             throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
@@ -154,6 +163,8 @@ final readonly class SqlCatalogWorkflowRepository implements CatalogWorkflowRepo
                 'course_id' => $course->value, 'required_course_id' => $id]);
         }
         $data = ['requirement_minimum' => $groups->minimumRequirements,
+            'equivalents_json' => $groups->equivalents === null ? null :
+                json_encode($groups->equivalents, JSON_THROW_ON_ERROR),
             'completion_windows_json' => $groups->completionWindows === null ? null :
                 json_encode($groups->completionWindows, JSON_THROW_ON_ERROR),
             'requirement_origins_json' => $groups->requirementCreditOrigins === null ? null :

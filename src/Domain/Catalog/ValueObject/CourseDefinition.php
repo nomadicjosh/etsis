@@ -94,7 +94,7 @@ final readonly class CourseDefinition
         }
         $groupFields = [
             'prerequisite_group_minimums', 'prerequisite_grade_points_milli', 'corequisites', 'prerequisite_rule',
-            'prerequisite_requirement_credit_origins', 'prerequisite_completion_windows',
+            'prerequisite_requirement_credit_origins', 'prerequisite_completion_windows', 'prerequisite_equivalents',
         ];
         foreach ($groupFields as $field) {
             if (array_key_exists($field, $data)) {
@@ -153,6 +153,7 @@ final readonly class CourseDefinition
                     $data['prerequisite_credit_origin'] ?? null,
                     $data['prerequisite_requirement_credit_origins'] ?? null,
                     $data['prerequisite_completion_windows'] ?? null,
+                    $data['prerequisite_equivalents'] ?? null,
                 ) : null,
             isset($data['credit_policy']) ? CreditPolicy::fromArray($data['credit_policy']) : null,
             isset($data['continuing_education'])
@@ -188,6 +189,8 @@ final readonly class CourseDefinition
         ['prerequisite_requirement_credit_origins' => $this->prerequisiteGroups->requirementCreditOrigins]) +
         ($this->prerequisiteGroups?->completionWindows === null ? [] :
         ['prerequisite_completion_windows' => $this->prerequisiteGroups->completionWindows]) +
+        ($this->prerequisiteGroups?->equivalents === null ? [] :
+        ['prerequisite_equivalents' => $this->prerequisiteGroups->equivalents]) +
         $this->text->describe() + [
             "subject" => $this->subject?->describe(),
             "classifications" => $this->classifications->describe(),

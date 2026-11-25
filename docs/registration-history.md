@@ -499,3 +499,10 @@ Source filtering happens before choosing the supporting passing attempt. An inst
 New accepted evidence retains the source choice with the original requirement grammar and verified academic/registration/pursuit references. Earlier evidence without that choice stays byte-for-byte interpretable under its original default. Later changes do not reinterpret an accepted enrollment. A protected registrar exception keeps the source rule and honestly unmet coursework alongside its approval, without fabricating a completion.
 
 A changed source choice invalidates an unconfirmed review even when the student's work satisfies both choices. Shared confirmation-local course checks compare the source policy against protected publications and capture it in their selection fingerprint. Source changes through the final audit roll back seats, academic credit, charges and coordinator receipts together. No new event type, journal, report or background job is introduced.
+
+
+## Equivalent prerequisite coursework
+
+A selected course publication can explicitly accept another institutional course for a named prerequisite. The [catalog setup and counting rules](course-publication.md#explicit-prerequisite-equivalents) apply equally to private student registration, staff/group entry and multi-section schedules. Expand **Required courses**, **Prerequisite options** or **Prerequisite rule** to review the current course labels and retained permitted alternatives. One actual completed course fills at most one named slot within a counted requirement; separate requirements retain their existing sharing policy.
+
+Equivalent work still requires genuine passing academic evidence, receiving-pursuit eligibility and the applicable source, grade and completion-date rules. A formal transfer award remains necessary before external work is represented by its receiving course. This setting does not create academic credit, approve graduated-program reuse or confer a degree. The original accepted registration retains its actual support and selected equivalence rules; later corrections affect fresh reviews and leave the earlier decision intact.

@@ -3,6 +3,11 @@ window.createWorkspacePrerequisites = function (ui) {
     "use strict";
     const { node, request, task, openDrawer } = ui;
     const originDefaults = {
+        equivalents_title: 'Equivalent courses', equivalents_for: 'Equivalent courses for',
+        equivalents_help: 'Choose courses that may replace this named prerequisite in this course publication only. These choices are one-way and do not chain through other equivalents. The same pursuit, coursework source, grade minimum and completion dates still apply. Co-requisites, earned credit and degree requirements are unchanged.',
+        equivalents_counting: 'Within one requirement, one completed course can fill only one named course slot. The same course may still satisfy separate requirements.',
+        add_equivalent: 'Add equivalent course', no_equivalents: 'No equivalent courses selected.',
+        remove_equivalent: 'Remove equivalent', choose_equivalent: 'Choose an equivalent course',
         completion_from: 'Completed from', completion_through: 'Completed through',
         completion_window: 'Actual completion dates',
         completion_help: 'Optional inclusive dates for this requirement. Leave dates and the age limit blank for no date restriction. Unknown completion dates cannot meet a dated requirement; term and grade-recording dates are not substitutes.',
@@ -21,10 +26,15 @@ window.createWorkspacePrerequisites = function (ui) {
     };
     const originText = key => ui.prerequisiteOriginLabels?.[key] || originDefaults[key];
 
-    const button = (label, run, style = "btn-outline-primary", aria = label) => node("button", {
-        type: "button", class: `btn ${style}`, "aria-label": aria,
-        onclick: event => task(run, event.currentTarget),
-    }, label);
+    const button = (label, run, style = "btn-outline-primary", aria = label) => {
+        const icon = label === originText('equivalents_title') ? 'arrow-left-right'
+            : label === originText('add_equivalent') ? 'plus-lg'
+            : label === originText('remove_equivalent') ? 'trash3' : null;
+        return node("button", {
+            type: "button", class: `btn ${style}${icon ? ' workspace-icon-control' : ''}`, "aria-label": aria,
+            onclick: event => task(run, event.currentTarget),
+        }, ...(icon ? [node('i', { class: `bi bi-${icon}`, 'aria-hidden': 'true' }), label] : [label]));
+    };
     const pointText = value => String(value / 1000);
     function pointValue(value) {
         if (value === "") return null;
@@ -35,6 +45,8 @@ window.createWorkspacePrerequisites = function (ui) {
     const floors = value => value.grade_points_milli || value.groups.map(() => null);
     const windows = value => (value.completion_windows || value.groups.map(() => null)).map(window => window === null
         ? null : {from: window.from, ...(window.max_age_months == null ? {} : {max_age_months: window.max_age_months}), through: window.through});
+    const equivalentMap = value => Object.fromEntries(Object.entries(value.equivalents || {})
+        .filter(([, ids]) => ids.length).sort(([a], [b]) => a.localeCompare(b)).map(([id, ids]) => [id, [...ids].sort()]));
     const origins = value => value.requirement_credit_origins || value.groups.map(() => null);
     const ruleSize = rule => typeof rule === "number" ? 1 :
         1 + rule.children.reduce((total, child) => total + ruleSize(child), 0);
@@ -149,9 +161,9 @@ window.createWorkspacePrerequisites = function (ui) {
         const body = openDrawer("Course prerequisites", "ACADEMIC CATALOG");
         const saved = await request(`/sis/courses/${course}/prerequisite-groups/`);
         if (!body.isConnected) return;
-        const state = { completion_windows: windows(saved), requirement_credit_origins: [...origins(saved)], credit_origin: saved.credit_origin ?? null, rule: saved.rule ? structuredClone(saved.rule) : null, minimum_requirements: saved.minimum_requirements ?? null, groups: saved.groups.map(group => [...group]), minimums: [...saved.minimums], grade_points_milli: [...floors(saved)], corequisites: [...(saved.corequisites || [])],
+        const state = { equivalents: equivalentMap(saved), completion_windows: windows(saved), requirement_credit_origins: [...origins(saved)], credit_origin: saved.credit_origin ?? null, rule: saved.rule ? structuredClone(saved.rule) : null, minimum_requirements: saved.minimum_requirements ?? null, groups: saved.groups.map(group => [...group]), minimums: [...saved.minimums], grade_points_milli: [...floors(saved)], corequisites: [...(saved.corequisites || [])],
             labels: new Map(saved.courses.map(row => [row.id, row])) };
-        const fingerprint = value => JSON.stringify([windows(value), origins(value), value.credit_origin ?? null, value.rule ?? null, value.minimum_requirements ?? null, value.groups, value.minimums, floors(value), [...(value.corequisites || [])].sort()]);
+        const fingerprint = value => JSON.stringify([equivalentMap(value), windows(value), origins(value), value.credit_origin ?? null, value.rule ?? null, value.minimum_requirements ?? null, value.groups, value.minimums, floors(value), [...(value.corequisites || [])].sort()]);
         const describeRequirement = index => `Requirement ${index + 1} · ${state.minimums[index]} of: ` +
             state.groups[index].map(id => state.labels.get(id)?.code || "Course label unavailable").join(", ");
         const effectiveOrigin = index => originText(state.requirement_credit_origins[index] ?? state.credit_origin ?? 'either');
@@ -183,6 +195,7 @@ window.createWorkspacePrerequisites = function (ui) {
                 if (incomplete()) return;
                 const submitted = fingerprint(state);
                 const result = await request(`/sis/courses/${course}/prerequisite-groups/`, "POST", {
+                    equivalents: Object.keys(equivalentMap(state)).length ? equivalentMap(state) : null,
                     completion_windows: state.completion_windows.some(Boolean) ? structuredClone(state.completion_windows) : null,
                     credit_origin: state.groups.length ? state.credit_origin : null,
                     requirement_credit_origins: state.requirement_credit_origins.some(value => value !== null)
@@ -192,7 +205,7 @@ window.createWorkspacePrerequisites = function (ui) {
                 });
                 const laterEdits = fingerprint(state) !== submitted;
                 Object.assign(saved, result);
-                if (!laterEdits) { state.completion_windows = windows(result); state.requirement_credit_origins = [...origins(result)]; state.credit_origin = result.credit_origin ?? null; state.rule = result.rule ? structuredClone(result.rule) : null; state.minimum_requirements = result.minimum_requirements ?? null; state.groups = result.groups.map(group => [...group]); state.minimums = [...result.minimums]; state.grade_points_milli = [...floors(result)]; state.corequisites = [...(result.corequisites || [])]; }
+                if (!laterEdits) { state.equivalents = equivalentMap(result); state.completion_windows = windows(result); state.requirement_credit_origins = [...origins(result)]; state.credit_origin = result.credit_origin ?? null; state.rule = result.rule ? structuredClone(result.rule) : null; state.minimum_requirements = result.minimum_requirements ?? null; state.groups = result.groups.map(group => [...group]); state.minimums = [...result.minimums]; state.grade_points_milli = [...floors(result)]; state.corequisites = [...(result.corequisites || [])]; }
                 if (body.isConnected) render("Entry requirements saved.");
             }, "btn-primary");
             const publish = button("Review course publication", () =>
@@ -255,6 +268,8 @@ window.createWorkspacePrerequisites = function (ui) {
                 origin.disabled = state.groups.length === 0;
                 if (!state.groups.length) { state.credit_origin = null; origin.value = 'either'; }
 
+                state.equivalents = Object.fromEntries(Object.entries(state.equivalents)
+                    .filter(([id]) => state.groups.flat().includes(id)));
                 update();
                 rulePreview.replaceChildren(...(state.rule ? [ruleView(state.rule, describeRequirement)] : []));
                 cards.replaceChildren(...state.groups.map((group, index) => {
@@ -263,8 +278,11 @@ window.createWorkspacePrerequisites = function (ui) {
                         const label = state.labels.get(id), text = label ? `${label.code} · ${label.title}` : "Course label unavailable";
                         return node("li", { class: "d-flex flex-wrap align-items-center justify-content-between gap-2 border-bottom py-2" },
                             node("span", { class: "text-break" }, text),
+                            node('div', { class: 'inline-actions' },
+                            button(originText('equivalents_title'), () => showEquivalents(id), 'btn-outline-primary btn-sm',
+                                `${originText('equivalents_for')} ${label?.code || id}`),
                             button("Remove", () => { group.splice(group.indexOf(id), 1); draw(); }, "btn-outline-secondary btn-sm",
-                                `Remove ${label?.code || "course"} from requirement ${index + 1}`));
+                                `Remove ${label?.code || "course"} from requirement ${index + 1}`)));
                     }));
                     const description = node("p", { class: "form-text" }, "");
                     const describe = () => { description.textContent = state.minimums[index] > 1
@@ -375,16 +393,44 @@ window.createWorkspacePrerequisites = function (ui) {
                         }, "btn-outline-secondary")] : []))), cards, corequisiteCards, status,
                 node("div", { class: "inline-actions" }, add, save, publish, button("Reload saved choices", () => open(course), "btn-link")));
             draw();
-            async function choose(index, search = "", after = null, stack = []) {
-                const picker = openDrawer(index === null ? "Choose a co-requisite" : "Choose a prerequisite course", "COURSE CHOICES");
+            function showEquivalents(required) {
+                const detail = openDrawer(originText('equivalents_title'), 'EDIT DRAFT');
+                const label = state.labels.get(required);
+                const alternatives = state.equivalents[required] || [];
+                detail.append(node('h3', { class: 'h5 text-break' }, `${originText('equivalents_for')} ${label?.code || required}`),
+                    node('p', { class: 'form-text' }, originText('equivalents_help')),
+                    node('p', { class: 'form-text' }, originText('equivalents_counting')));
+                const list = node('ul', { class: 'list-unstyled' });
+                for (const id of alternatives) {
+                    const item = state.labels.get(id);
+                    list.append(node('li', { class: 'record-section mb-2 d-flex flex-wrap align-items-center justify-content-between gap-2' },
+                        node('span', { class: 'text-break' }, item ? `${item.code} · ${item.title}` : id),
+                        button(originText('remove_equivalent'), () => {
+                            state.equivalents[required] = alternatives.filter(value => value !== id);
+                            if (!state.equivalents[required].length) delete state.equivalents[required];
+                            showEquivalents(required);
+                        }, 'btn-outline-secondary btn-sm', `${originText('remove_equivalent')} ${item?.code || id}`)));
+                }
+                detail.append(alternatives.length ? list : node('p', { class: 'alert alert-info' }, originText('no_equivalents')),
+                    node('div', { class: 'inline-actions' },
+                        button(originText('add_equivalent'), () => choose(null, '', null, [], required)),
+                        button('Back to prerequisites', () => {
+                            const parent = render();
+                            const aria = `${originText('equivalents_for')} ${label?.code || required}`;
+                            [...parent.querySelectorAll('button')].find(item => item.getAttribute('aria-label') === aria)?.focus();
+                        }, 'btn-link')));
+            }
+            async function choose(index, search = "", after = null, stack = [], equivalentFor = null) {
+                const picker = openDrawer(equivalentFor ? originText('choose_equivalent') : index === null ? "Choose a co-requisite" : "Choose a prerequisite course", "COURSE CHOICES");
                 const data = await request("/sis/ui/data/courses/", "POST", { search, ...(after ? { after } : {}) });
                 if (!picker.isConnected) return;
                 const input = node("input", { type: "search", id: "prerequisite-course-search", class: "form-control",
                     maxlength: "80", value: search });
                 const form = node("form", { class: "mb-3" }, node("label", { for: input.id, class: "form-label" }, "Find a course"), input,
                     node("button", { type: "submit", class: "btn btn-primary mt-2" }, "Search courses"));
-                form.addEventListener("submit", event => { event.preventDefault(); task(() => choose(index, input.value)); });
-                const used = new Set(index === null ? state.corequisites : state.groups[index]), all = new Set([...state.groups.flat(), ...state.corequisites]);
+                form.addEventListener("submit", event => { event.preventDefault(); task(() => choose(index, input.value, null, [], equivalentFor)); });
+                const used = new Set(equivalentFor ? [equivalentFor, ...(state.equivalents[equivalentFor] || [])] : index === null ? state.corequisites : state.groups[index]);
+                const all = new Set([...state.groups.flat(), ...state.corequisites, ...Object.values(state.equivalents).flat()]);
                 const options = data.items.filter(row => row.id !== course && row.active && !used.has(row.id) &&
                     (all.has(row.id) || all.size < 100));
                 picker.append(form, node("p", { class: "form-text" }, "Each course appears once within this requirement. Courses used by other requirements remain available. Your unsaved choices are kept while searching."));
@@ -395,13 +441,21 @@ window.createWorkspacePrerequisites = function (ui) {
                         if (state.groups.flat().length >= 500 || (!all.has(row.id) && all.size >= 100))
                             throw new Error("Use up to 100 distinct courses and 500 total choices.");
                         state.labels.set(row.id, row);
-                        if (index === null) { state.corequisites.push(row.id); state.corequisites.sort(); } else state.groups[index].push(row.id); render();
+                        if (equivalentFor) {
+                            if (Object.values(state.equivalents).flat().length >= 500) throw new Error(originText('equivalents_counting'));
+                            (state.equivalents[equivalentFor] ||= []).push(row.id);
+                            showEquivalents(equivalentFor);
+                        } else {
+                            if (index === null) { state.corequisites.push(row.id); state.corequisites.sort(); } else state.groups[index].push(row.id);
+                            render();
+                        }
                     })));
                 picker.append(node("div", { class: "inline-actions" },
-                    ...(stack.length ? [button("Previous courses", () => choose(index, search, stack.at(-1), stack.slice(0, -1)))] : []),
-                    ...(data.next_after ? [button("More courses", () => choose(index, search, data.next_after, [...stack, after]))] : []),
-                    button("Back to prerequisites", render, "btn-link")));
+                    ...(stack.length ? [button("Previous courses", () => choose(index, search, stack.at(-1), stack.slice(0, -1), equivalentFor))] : []),
+                    ...(data.next_after ? [button("More courses", () => choose(index, search, data.next_after, [...stack, after], equivalentFor))] : []),
+                    button("Back to prerequisites", equivalentFor ? () => showEquivalents(equivalentFor) : render, "btn-link")));
             }
+            return body;
         }
         render();
     }
@@ -421,13 +475,15 @@ window.createWorkspacePrerequisites = function (ui) {
             if (!view.open || loading || loaded) return;
             loading = true;
             task(async () => {
-                const data = await request("/sis/prerequisite-labels/", "POST", { ids: [...new Set([...definition.prerequisites, ...corequisites])] });
+                const data = await request("/sis/prerequisite-labels/", "POST", { ids: [...new Set([...definition.prerequisites, ...Object.values(definition.prerequisite_equivalents || {}).flat(), ...corequisites])] });
                 if (!view.isConnected) return;
                 const labels = new Map(data.items.map(row => [row.id, `${row.code} · ${row.title}`]));
                 if (rule) view.append(ruleView(rule));
                 view.append(node("p", { class: "form-text" }, "Current catalog labels; this publication retains the course identities and choice groups."),
                     node("ol", {}, ...groups.map((group, index) => node("li", {}, minimums[index] > 1 ? `At least ${minimums[index]} of: ` : "",
-                        group.map(id => labels.get(id) || "Course label unavailable").join(minimums[index] > 1 ? "; " : " OR "),
+                        group.map(id => (labels.get(id) || "Course label unavailable") +
+                            (definition.prerequisite_equivalents?.[id]?.length
+                                ? ` (${originText('equivalents_title')}: ${definition.prerequisite_equivalents[id].map(value => labels.get(value) || value).join('; ')})` : '')).join(minimums[index] > 1 ? "; " : " OR "),
                         definition.prerequisite_requirement_credit_origins
                             ? ` · ${originText('requirement_field')}: ${originText(definition.prerequisite_requirement_credit_origins[index] ?? definition.prerequisite_credit_origin ?? 'either')}` : '',
                         definition.prerequisite_completion_windows?.[index]

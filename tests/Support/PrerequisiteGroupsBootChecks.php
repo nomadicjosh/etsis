@@ -28,7 +28,7 @@ if ($response->getStatusCode() !== 200 || ($draft['groups'] ?? null) !== []) {
 }
 $groups = [[$first->courseId->value, $alternative->courseId->value, $additional->courseId->value],
     [$alternative->courseId->value]];
-$input = ['completion_windows' => null, 'requirement_credit_origins' => null,
+$input = ['equivalents' => null, 'completion_windows' => null, 'requirement_credit_origins' => null,
     'credit_origin' => null, 'minimum_requirements' => 1,
     'groups' => $groups, 'minimums' => [2, 1],
     'grade_points_milli' => [2675, null], 'corequisites' => [$corequisite->courseId->value],
@@ -237,7 +237,7 @@ foreach (['institutional', 'transfer', 'either', null] as $origin) {
 $sis->access->staff = true;
 $windowDraft = json_decode((string) $read()->getBody(), true, flags: JSON_THROW_ON_ERROR);
 $window = ['from' => '2020-01-01', 'through' => '2025-12-31'];
-$windowInput = ['revision' => $windowDraft['revision'], 'groups' => [[$first->courseId->value]],
+$windowInput = ['equivalents' => null, 'revision' => $windowDraft['revision'], 'groups' => [[$first->courseId->value]],
     'minimums' => [1], 'grade_points_milli' => [null], 'corequisites' => [], 'minimum_requirements' => null,
     'credit_origin' => null, 'requirement_credit_origins' => null, 'rule' => null, 'completion_windows' => [$window]];
 $missingWindow = $windowInput;
@@ -284,4 +284,39 @@ if (
     || ($agePlan['definition']['prerequisite_completion_windows'] ?? null) !== [$ageWindow]
 ) {
     throw new RuntimeException('The publication review lost prerequisite recency.');
+}
+
+// Equivalent courses are an explicit whole-draft choice under the same provider/CSRF boundary.
+$equivalentDraft = json_decode((string) $read()->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$equivalentInput = array_replace($ageInput, ['revision' => $equivalentDraft['revision'],
+    'equivalents' => [$first->courseId->value => [$alternative->courseId->value]]]);
+$missingEquivalents = $equivalentInput;
+unset($missingEquivalents['equivalents']);
+if ($teachingPost($base . 'prerequisite-groups/', $missingEquivalents)->getStatusCode() !== 422) {
+    throw new RuntimeException('The API silently omitted its prerequisite-equivalence choice.');
+}
+foreach (
+    [false, [[$alternative->courseId->value]], [$first->courseId->value => []],
+    [$first->courseId->value => [$first->courseId->value]],
+    [$alternative->courseId->value => [$additional->courseId->value]]] as $invalid
+) {
+    if (
+        $teachingPost($base . 'prerequisite-groups/', array_replace($equivalentInput, ['equivalents' => $invalid]))
+        ->getStatusCode() !== 422
+    ) {
+        throw new RuntimeException('Invalid prerequisite equivalents bypassed the actual private route.');
+    }
+}
+$equivalentSaved = $teachingPost($base . 'prerequisite-groups/', $equivalentInput);
+$equivalentResult = json_decode((string) $equivalentSaved->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($equivalentSaved->getStatusCode() !== 200 || $equivalentResult['equivalents'] !== $equivalentInput['equivalents']) {
+    throw new RuntimeException('The actual provider lost explicit prerequisite equivalents.');
+}
+$equivalentReview = $teachingPost($base . 'publication/review/', ['reason' => 'Fictional equivalent course review.']);
+$equivalentPlan = json_decode((string) $equivalentReview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $equivalentReview->getStatusCode() !== 200
+    || ($equivalentPlan['definition']['prerequisite_equivalents'] ?? null) !== $equivalentInput['equivalents']
+) {
+    throw new RuntimeException('The actual course publication review lost explicit equivalents.');
 }

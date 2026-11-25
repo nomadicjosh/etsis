@@ -57,6 +57,7 @@ final readonly class PrerequisiteService
         $completed = [];
         $points = [];
         $withPoints = $groups?->minimumGradePointsMilli !== null;
+        $candidates = $groups?->candidateCourses() ?? $required;
         foreach ($inputs->items as $work) {
             // Zero-credit passing courses can satisfy a prerequisite. Current rows alone cannot prove a grade.
             if (
@@ -67,7 +68,7 @@ final readonly class PrerequisiteService
                 in_array($work['status'], ['A', 'N'], true)
             ) {
                 $course = $work['course_id'];
-                if (!in_array($course, $required, true)) {
+                if (!in_array($course, $candidates, true)) {
                     continue;
                 }
                 $ref = $references[$work['id']] ?? null;

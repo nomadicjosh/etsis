@@ -400,7 +400,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
         $workflows = new SqlCatalogWorkflowRepository($this->sql);
         $groups = $workflows->prerequisiteGroups($course);
         if ($groups !== null) {
-            $remaining = $groups->subset(array_values(array_diff($groups->courses(), [$required->value])));
+            $remaining = $groups->subset(array_values(array_diff($groups->references(), [$required->value])));
             $workflows->savePrerequisiteGroups($course, new \Domain\Catalog\ValueObject\PrerequisiteGroups(
                 $remaining->groups,
                 $remaining->minimums,
@@ -411,6 +411,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 $remaining->creditOrigin,
                 $remaining->requirementCreditOrigins,
                 $remaining->completionWindows,
+                $remaining->equivalents,
             ));
             return;
         }
@@ -448,6 +449,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 requirementCreditOrigins: $groups->requirementCreditOrigins === null ? null :
                     [...$groups->requirementCreditOrigins, null],
                 completionWindows: $groups->completionWindows === null ? null : [...$groups->completionWindows, null],
+                equivalents: $groups->equivalents,
             ));
             return;
         }

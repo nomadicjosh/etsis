@@ -6,7 +6,9 @@ window.createRegistrationSchedule = function (ui) {
         document.getElementById('workspace-config') || document.getElementById('campus-config');
     const originLabels = ui.prerequisiteOriginLabels ||
         (configElement ? JSON.parse(configElement.textContent).prerequisite_origin_labels : null) || {};
-    const originDefaults = { max_age_months: 'Maximum age before section starts (months)', recency_start: 'Published section start',
+    const originDefaults = { equivalents_title: 'Equivalent courses',
+        equivalents_counting: 'Within one requirement, one completed course can fill only one named course slot. The same course may still satisfy separate requirements.',
+        max_age_months: 'Maximum age before section starts (months)', recency_start: 'Published section start',
         recency_earliest: 'Earliest completion under age limit',
         recency_unknown: 'The published section start is unavailable. Select a published offering to assess this age limit.',
         completion_from: 'Completed from', completion_through: 'Completed through', field: 'Qualifying prerequisite coursework', either: 'Institutional or transfer',
@@ -137,6 +139,14 @@ window.createRegistrationSchedule = function (ui) {
                                 : originText('recency_unknown'))) : null,
                         group.credit_origin ? node('p', { class: 'form-text' },
                             `${originText('field')}: ${originText(group.credit_origin)}`) : null,
+                        group.equivalents?.length ? node('div', { class: 'record-section mb-2' },
+                            node('p', { class: 'form-text' }, originText('equivalents_counting')),
+                            ...group.equivalents.map(choice => node('p', { class: 'form-text text-break' },
+                                `${courses[choice.required_position]?.code || '—'} · ${originText('equivalents_title')}: ` +
+                                choice.positions.map(position => {
+                                    const item = courses[position];
+                                    return item ? `${item.code || '—'}${item.title ? ` · ${item.title}` : ''}` : '—';
+                                }).join('; ')))) : null,
                         group.positions.map(position => {
                             const course = courses[position];
                             return `${course?.code || "Course label unavailable"}${course?.title ? ` · ${course.title}` : ""}`;

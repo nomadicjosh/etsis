@@ -51,6 +51,7 @@ final readonly class CoursePrerequisiteService
         ?string $creditOrigin = null,
         ?array $requirementCreditOrigins = null,
         ?array $completionWindows = null,
+        ?array $equivalents = null,
     ): array {
         $actor = $this->authorize();
         $groups = new PrerequisiteGroups(
@@ -63,6 +64,7 @@ final readonly class CoursePrerequisiteService
             $creditOrigin,
             $requirementCreditOrigins,
             $completionWindows,
+            $equivalents,
         );
         if (in_array($course->value, $groups->references(), true)) {
             throw new ValidationException([['field' => 'groups', 'message' => 'A course cannot require itself.']]);
@@ -96,7 +98,7 @@ final readonly class CoursePrerequisiteService
             $this->audit->record($actor, 'course.prerequisite_groups_saved', $course);
             $this->authorize($actor);
             $current = $this->context($course);
-            if ($this->relationships->prerequisiteGroups($course) != $groups) {
+            if ($this->relationships->prerequisiteGroups($course) != $groups || $current['courses'] !== $labels) {
                 throw new ConcurrentModificationException('The prerequisite policy changed during saving. Reload it.');
             }
             $this->authorize($actor);
@@ -128,6 +130,7 @@ final readonly class CoursePrerequisiteService
             'credit_origin' => $groups->creditOrigin,
             'requirement_credit_origins' => $groups->requirementCreditOrigins,
             'completion_windows' => $groups->completionWindows,
+            'equivalents' => $groups->equivalents,
             'grade_points_milli' => $groups->gradeFloors(), 'corequisites' => $groups->corequisites ?? [],
             'courses' => $this->relationships->prerequisiteLabels($groups->references())];
     }

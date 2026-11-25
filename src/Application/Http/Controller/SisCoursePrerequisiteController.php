@@ -59,6 +59,14 @@ final readonly class SisCoursePrerequisiteController
                 'Provide completion windows or explicitly leave all requirements unrestricted.'
             ));
         }
+        if (
+            !array_key_exists('equivalents', $body)
+            || ($body['equivalents'] !== null && !is_array($body['equivalents']))
+        ) {
+            throw new \InvalidArgumentException(\Codefy\Framework\Helpers\trans(
+                'Provide prerequisite equivalents or explicitly choose none.'
+            ));
+        }
         return new JsonResponse($this->service->save(
             new EntityId($id),
             $f->values('groups', 100),
@@ -71,6 +79,7 @@ final readonly class SisCoursePrerequisiteController
             $body['credit_origin'],
             $body['requirement_credit_origins'],
             $body['completion_windows'],
+            $body['equivalents'],
         ));
     }
 

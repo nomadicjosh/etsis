@@ -72,6 +72,17 @@ final readonly class SqlCourseVersionProjection
                     JSON_THROW_ON_ERROR
                 );
             }
+            if ($r['equivalents_json'] !== null) {
+                if (!is_string($r['equivalents_json']) || strlen($r['equivalents_json']) > 32768) {
+                    throw new CorruptHistoryException();
+                }
+                $definition['prerequisite_equivalents'] = json_decode(
+                    $r['equivalents_json'],
+                    true,
+                    4,
+                    JSON_THROW_ON_ERROR
+                );
+            }
             if ($r['rule_json'] !== null) {
                 if (!is_string($r['rule_json']) || strlen($r['rule_json']) > 16384) {
                     throw new CorruptHistoryException();
@@ -218,6 +229,8 @@ final readonly class SqlCourseVersionProjection
             "course_id" => $definition->courseId->value,
             "schema_version" => 1,
             'prerequisite_credit_origin' => $definition->definition->prerequisiteGroups?->creditOrigin,
+            'equivalents_json' => $definition->definition->prerequisiteGroups?->equivalents === null ? null
+                : json_encode($definition->definition->prerequisiteGroups->equivalents, JSON_THROW_ON_ERROR),
             'completion_windows_json' => $definition->definition->prerequisiteGroups?->completionWindows === null
                 ? null : json_encode(
                     $definition->definition->prerequisiteGroups->completionWindows,

@@ -899,9 +899,10 @@ final readonly class RegistrationBatchService
             }
         }
         sort($required, SORT_STRING);
-        $labels = $programs === [] ? [] : $this->repository->courseLabels($required);
+        $displayCourses = $course->prerequisiteGroups?->displayCourses() ?? $required;
+        $labels = $programs === [] ? [] : $this->repository->courseLabels($displayCourses);
         $prerequisiteCourses = $programs === [] ? [] : array_map(static fn(string $id): array =>
-            $labels[$id] ?? ["code" => null, "title" => null], $required);
+            $labels[$id] ?? ["code" => null, "title" => null], $displayCourses);
         $rules =
         ($programs === [] || $reinstating !== null)
         ? [] : $this->billing->rules($section->termId, $budget, array_values($programs));

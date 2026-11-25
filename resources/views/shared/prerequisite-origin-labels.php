@@ -5,6 +5,25 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'equivalents_title' => trans_html('Equivalent courses'),
+    'equivalents_for' => trans_html('Equivalent courses for'),
+    'equivalents_help' => trans_html(
+        'Choose courses that may replace this named prerequisite in this course publication only. '
+        . 'These choices are one-way and do not chain through other equivalents. '
+        . 'The same pursuit, coursework source, grade minimum and completion dates still apply. '
+        . 'Co-requisites, earned credit and degree requirements are unchanged.'
+    ),
+    'equivalents_counting' => trans_html(
+        'Within one requirement, one completed course can fill only one named course slot. '
+        . 'The same course may still satisfy separate requirements.'
+    ),
+    'add_equivalent' => trans_html('Add equivalent course'),
+    'no_equivalents' => trans_html('No equivalent courses selected.'),
+    'remove_equivalent' => trans_html('Remove equivalent'),
+    'choose_equivalent' => trans_html('Choose an equivalent course'),
+    'equivalents_clone' => trans_html(
+        'Keep every equivalent of a retained prerequisite or omit that prerequisite entirely.'
+    ),
     'max_age_months' => trans_html('Maximum age before section starts (months)'),
     'recency_help' => trans_html(
         'Optional whole months from 1 through 1200; 60 means five years. '

@@ -49,7 +49,8 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         sort($ordered, SORT_STRING);
         $multipleOrigins = $groups?->requirementCreditOrigins !== null;
         $windows = $groups?->completionWindows !== null;
-        $maximumSupport = $windows ? 200 : count($required) * ($multipleOrigins ? 2 : 1);
+        $candidates = $groups?->candidateCourses() ?? $required;
+        $maximumSupport = $windows ? 200 : count($candidates) * ($multipleOrigins ? 2 : 1);
         if ($ordered !== $required || count($support) > $maximumSupport) {
             throw new CorruptHistoryException();
         }
@@ -109,7 +110,7 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
                     $reference['completed_on'] ?? null,
                     $completionAnchor['starts_on'] ?? null,
                 )) ||
-                !in_array($reference["course_id"], $required, true) ||
+                !in_array($reference["course_id"], $candidates, true) ||
                 isset($courses[$courseKey]) ||
                 isset($credits[$reference["credit_id"]])
             ) {
@@ -158,6 +159,7 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         if (
             $this->groups?->minimumGradePointsMilli !== null || $this->groups?->requirementCreditOrigins !== null
             || $this->groups?->completionWindows !== null
+            || $this->groups?->equivalents !== null
         ) {
             $completed = [];
             foreach (array_keys($this->groups->groups) as $index) {
@@ -178,13 +180,23 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         if ($this->groups === null) {
             return null;
         }
-        $positions = array_flip($this->required);
+        $positions = array_flip($this->groups->displayCourses());
         $counts = $this->groups->counts();
         return array_map(function (array $group, int $index) use ($positions, $counts): array {
             $completed = count($this->qualifying($index));
             return ['positions' => array_map(static fn(string $id): int => $positions[$id], $group),
                 'met' => $completed >= $counts[$index], 'required_count' => $counts[$index],
-                'completed_count' => $completed] + ($this->groups->minimumGradePointsMilli === null ? [] :
+                'completed_count' => $completed] + ($this->groups->equivalents === null ? [] : [
+                    'equivalents' => array_values(array_map(
+                        fn(string $id): array => ['required_position' => $positions[$id],
+                            'positions' => array_map(
+                                static fn(string $candidate): int => $positions[$candidate],
+                                $this->groups->equivalents[$id],
+                            )],
+                        array_values(array_filter($group, fn(string $id): bool =>
+                            isset($this->groups->equivalents[$id]))),
+                    )),
+                ]) + ($this->groups->minimumGradePointsMilli === null ? [] :
                 ['minimum_grade_points_milli' => $this->groups->minimumGradePointsMilli[$index]]) +
                 ($this->groups->requirementCreditOrigins === null ? [] :
                 ['credit_origin' => $this->groups->originForRequirement($index)]) +
@@ -328,6 +340,12 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
             }
             $keys[] = 'completion_anchor';
         }
+        if (array_key_exists('equivalents', $facts)) {
+            if (!array_key_exists('requirement_groups', $facts) || !is_array($facts['equivalents'])) {
+                throw new CorruptHistoryException();
+            }
+            $keys[] = 'equivalents';
+        }
         if (array_key_exists('requirement_rule', $facts)) {
             if (!array_key_exists('requirement_groups', $facts) || !is_array($facts['requirement_rule'])) {
                 throw new CorruptHistoryException();
@@ -359,6 +377,7 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
                         creditOrigin: $facts['credit_origin'] ?? null,
                         requirementCreditOrigins: $facts['requirement_credit_origins'] ?? null,
                         completionWindows: $facts['completion_windows'] ?? null,
+                        equivalents: $facts['equivalents'] ?? null,
                     ) : null,
                 permission: isset($facts['permission'])
                     ? new PrerequisitePermissionReference($facts['permission']) : null,
@@ -394,6 +413,7 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         ($this->groups?->requirementCreditOrigins === null ? [] :
         ['requirement_credit_origins' => $this->groups->requirementCreditOrigins]) +
         ($this->groups?->completionWindows === null ? [] : ['completion_windows' => $this->groups->completionWindows]) +
+        ($this->groups?->equivalents === null ? [] : ['equivalents' => $this->groups->equivalents]) +
         ($this->groups?->hasRecency() ? ['completion_anchor' => $this->completionAnchor] : []) +
         ($this->permission === null ? [] : ['permission' => $this->permission->data]);
     }

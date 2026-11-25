@@ -21,6 +21,8 @@ final readonly class PrerequisiteGroups
     public ?array $corequisites;
     public ?PrerequisiteRule $rule;
     public ?array $completionWindows;
+    /** @var array<string,list<string>>|null One-way, publication-scoped alternatives for named courses. */
+    public ?array $equivalents;
 
     public function __construct(
         array $groups,
@@ -32,6 +34,7 @@ final readonly class PrerequisiteGroups
         public ?string $creditOrigin = null,
         public ?array $requirementCreditOrigins = null,
         ?array $completionWindows = null,
+        ?array $equivalents = null,
     ) {
         if (
             !array_is_list($groups) || count($groups) > 100 ||
@@ -135,6 +138,43 @@ final readonly class PrerequisiteGroups
             $corequisites = $sorted;
         }
         $this->groups = $groups;
+        if ($equivalents !== null) {
+            $edges = 0;
+            foreach ($equivalents as $required => &$alternatives) {
+                if (
+                    !is_string($required) || !in_array($required, $ids, true)
+                    || !is_array($alternatives) || !array_is_list($alternatives) || $alternatives === []
+                    || count($alternatives) > 100
+                    || count(array_unique($alternatives, SORT_REGULAR)) !== count($alternatives)
+                ) {
+                    throw new InvalidArgumentException(\Codefy\Framework\Helpers\trans(
+                        'Choose distinct equivalent courses for an existing prerequisite course.'
+                    ));
+                }
+                foreach ($alternatives as $alternative) {
+                    if (!is_string($alternative) || $alternative === $required) {
+                        throw new InvalidArgumentException(\Codefy\Framework\Helpers\trans(
+                            'An equivalent must be a different course identity.'
+                        ));
+                    }
+                    new EntityId($alternative);
+                }
+                $edges += count($alternatives);
+                sort($alternatives, SORT_STRING);
+            }
+            unset($alternatives);
+            ksort($equivalents, SORT_STRING);
+            if (
+                $edges > 500 || count(array_unique([
+                ...$ids, ...($corequisites ?? []), ...array_merge([], ...array_values($equivalents)),
+                ])) > 100
+            ) {
+                throw new InvalidArgumentException(\Codefy\Framework\Helpers\trans(
+                    'Use up to 100 distinct entry-requirement courses and 500 equivalent links.'
+                ));
+            }
+        }
+        $this->equivalents = $equivalents;
         $this->corequisites = $corequisites;
         if ($rule !== null && $minimumRequirements !== null) {
             throw new InvalidArgumentException('Choose an overall count or a nested rule, not both.');
@@ -164,9 +204,35 @@ final readonly class PrerequisiteGroups
     /** @return list<string> */
     public function references(): array
     {
-        $ids = array_values(array_unique([...$this->courses(), ...($this->corequisites ?? [])]));
+        $ids = array_values(array_unique([...$this->candidateCourses(), ...($this->corequisites ?? [])]));
         sort($ids, SORT_STRING);
         return $ids;
+    }
+
+    /** @return list<string> Actual courses that can support the named prerequisites; no transitive inference. */
+    public function candidateCourses(): array
+    {
+        $ids = array_values(array_unique([
+            ...$this->courses(), ...array_merge([], ...array_values($this->equivalents ?? [])),
+        ]));
+        sort($ids, SORT_STRING);
+        return $ids;
+    }
+
+    /** Keep the original named-course positions, followed by equivalent-course labels. */
+    public function displayCourses(): array
+    {
+        return [...$this->courses(), ...array_values(array_diff($this->candidateCourses(), $this->courses()))];
+    }
+
+    private function inRequirement(int $index, string $course): bool
+    {
+        foreach ($this->groups[$index] as $required) {
+            if ($required === $course || in_array($course, $this->equivalents[$required] ?? [], true)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** @return list<int> */
@@ -206,7 +272,7 @@ final readonly class PrerequisiteGroups
     {
         foreach ($this->groups as $index => $group) {
             $policy = $this->originForRequirement($index);
-            if (in_array($course, $group, true) && ($policy === 'either' || $policy === $origin)) {
+            if ($this->inRequirement($index, $course) && ($policy === 'either' || $policy === $origin)) {
                 return true;
             }
         }
@@ -230,7 +296,7 @@ final readonly class PrerequisiteGroups
         foreach ($this->groups as $index => $group) {
             $policy = $this->originForRequirement($index);
             if (
-                in_array($course, $group, true) && ($policy === 'either' || $policy === $origin)
+                $this->inRequirement($index, $course) && ($policy === 'either' || $policy === $origin)
                 && $this->acceptsCompletion($index, $completedOn, $startsOn)
             ) {
                 return true;
@@ -256,11 +322,34 @@ final readonly class PrerequisiteGroups
     public function completedInGroup(int $index, array $completed, array $points = []): array
     {
         $floor = $this->minimumGradePointsMilli[$index] ?? null;
-        return array_values(array_filter(
-            array_intersect($this->groups[$index], $completed),
+        $available = array_values(array_filter(
+            array_intersect($this->candidateCourses(), $completed),
             static fn(string $course): bool => $floor === null ||
             (isset($points[$course]) && $points[$course] >= $floor)
         ));
+        // Maximum bipartite matching: one actual course fills at most one named slot in a requirement.
+        // Reassign an earlier match when needed; greedy assignment can reject a feasible completion.
+        $matches = [];
+        $visit = function (string $required, array &$seen) use (&$visit, &$matches, $available): bool {
+            foreach ([$required, ...($this->equivalents[$required] ?? [])] as $candidate) {
+                if (isset($seen[$candidate]) || !in_array($candidate, $available, true)) {
+                    continue;
+                }
+                $seen[$candidate] = true;
+                if (!isset($matches[$candidate]) || $visit($matches[$candidate], $seen)) {
+                    $matches[$candidate] = $required;
+                    return true;
+                }
+            }
+            return false;
+        };
+        foreach ($this->groups[$index] as $required) {
+            $seen = [];
+            $visit($required, $seen);
+        }
+        $met = array_values($matches);
+        sort($met, SORT_STRING);
+        return $met;
     }
 
     /** Preserve original minima when cloning or removing an indexed course.
@@ -295,6 +384,18 @@ final readonly class PrerequisiteGroups
                 'message' => 'Keep every nested requirement or clear all prerequisites; ' .
                     'edit the new draft to restructure it.']]);
         }
+        $equivalents = $this->equivalents === null ? null : array_intersect_key(
+            $this->equivalents,
+            array_fill_keys(array_merge([], ...$groups), true),
+        );
+        foreach ($equivalents ?? [] as $alternatives) {
+            if (array_diff($alternatives, $selected) !== []) {
+                throw new ValidationException([['field' => 'prerequisites',
+                    'message' => \Codefy\Framework\Helpers\trans(
+                        'Keep every equivalent of a retained prerequisite or omit that prerequisite entirely.'
+                    )]]);
+            }
+        }
         return new self(
             $groups,
             $this->minimums === null ? null : $minimums,
@@ -305,6 +406,7 @@ final readonly class PrerequisiteGroups
             $groups === [] ? null : $this->creditOrigin,
             $groups === [] || $this->requirementCreditOrigins === null ? null : $origins,
             $groups === [] || $this->completionWindows === null ? null : $windows,
+            $equivalents,
         );
     }
 }
