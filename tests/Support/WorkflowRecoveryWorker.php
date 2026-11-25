@@ -9,11 +9,14 @@ if (PHP_SAPI !== 'cli') {
 }
 require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
 require_once __DIR__ . '/SisFixture.php';
+\Gettext\TranslatorFunctions::register(new \Gettext\Translator());
 
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Finance\Service\AccountEntryReviewService;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Registration\ValueObject\RegistrationBatchSelection;
+use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Communications\DefuseMessageCipher;
 use Qubus\Config\Collection;
@@ -25,6 +28,13 @@ try {
     if (($input['native'] ?? null) !== null) {
         require_once __DIR__ . '/NativeQualificationDatabase.php';
         $connection = \Tests\Support\NativeQualificationDatabase::workerConnection($input['native']);
+        if ($connection->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'pgsql') {
+            if (!is_int($input['worker'] ?? null) || $input['worker'] < 0 || $input['worker'] > 100) {
+                throw new LogicException('Use a bounded private worker identity.');
+            }
+            $connection->pdo->prepare("SELECT set_config('application_name', ?, false)")
+                ->execute(['etsis_recovery_' . $input['worker']]);
+        }
     } else {
         $connection = new Sqlite(['driver' => 'pdo_sqlite', 'dsn' => 'sqlite:' . $input['path']]);
         $connection->pdo->exec('PRAGMA busy_timeout = 3000');
@@ -70,6 +80,19 @@ try {
     $command = $input['command'];
     try {
         $result = match ($input['action']) {
+            'waitlist_bypass' => $fixture->waitlistBypasses($audit)->confirm(
+                new \Domain\Registration\Waitlist\WaitlistBypass(
+                    new EntityId($command['section']),
+                    new EntityId($command['review']['student_id']),
+                    new EntityId($command['review']['person_id']),
+                    new EntityId($command['review']['entry_id']),
+                    new EntityId($command['review']['operation_id']),
+                    $command['review']['version'],
+                    $command['review']['assessment_revision'],
+                    $command['review']['reason'],
+                    $command['review']['review_token'],
+                ),
+            ),
             'correct_program' => $academic->programs($audit)->commit(
                 new EntityId($command['application']),
                 $command['token']
@@ -134,7 +157,7 @@ try {
             }
         }
         fwrite(STDOUT, json_encode(['state' => 'accepted', 'result' => $result], JSON_THROW_ON_ERROR) . "\n");
-    } catch (DomainException | \Domain\Shared\Exception\ConcurrentModificationException) {
+    } catch (DomainException | ConcurrentModificationException | ValidationException) {
         fwrite(STDOUT, "{\"state\":\"rejected\"}\n");
     }
 } catch (Throwable) {

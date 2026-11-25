@@ -19,6 +19,7 @@ use Infrastructure\Persistence\Repository\SqlClassificationRepository;
 use Infrastructure\Persistence\Repository\SqlSectionClassificationRepository;
 use Infrastructure\Persistence\Repository\SqlSectionCourseBindingRepository;
 use Infrastructure\Persistence\Repository\SqlSectionVersionRepository;
+use PDO;
 use Qubus\Config\Collection;
 use Qubus\Expressive\Connection\Pdo\Sqlite;
 use RuntimeException;
@@ -49,6 +50,23 @@ final class WorkflowRecoveryFixture
         $config->setConfigKey('app', ['crypto_key' => $this->cipherKey]);
         $mask = umask(0077);
         try {
+            foreach (['bootstrap', 'config'] as $folder) {
+                if (!mkdir($this->directory . '/' . $folder, 0700)) {
+                    throw new RuntimeException('Cannot prepare the private worker bootstrap.');
+                }
+            }
+            if (
+                file_put_contents(
+                    $this->directory . '/bootstrap/app.php',
+                    '<?php return new \\Codefy\\Framework\\Application(["basePath" => dirname(__DIR__)]);'
+                ) === false
+                || file_put_contents(
+                    $this->directory . '/config/app.php',
+                    '<?php return ["locale_domain" => "etsis"];'
+                ) === false
+            ) {
+                throw new RuntimeException('Cannot prepare the private worker configuration.');
+            }
             if (getenv('ETSIS_WORKFLOW_NATIVE_QUALIFICATION') === '1') {
                 require_once __DIR__ . '/NativeQualificationDatabase.php';
                 $this->native = NativeQualificationDatabase::acquire($this->directory);
@@ -151,6 +169,7 @@ final class WorkflowRecoveryFixture
         if (count($active) >= 2) {
             throw new RuntimeException('The isolated recovery fixture allows at most two active workers.');
         }
+        $index = count($this->workers);
         $input = new InputStream();
         $history = EventStoreFixture::config($this->sis->connection->queryBuilder())->getConfigKey('event_history');
         $input->write(json_encode([
@@ -159,17 +178,17 @@ final class WorkflowRecoveryFixture
             'history' => $history,
             'cipher_key' => $this->cipherKey,
             'actor' => $this->sis->access->actor->value,
+            'worker' => $index,
             'action' => $action,
             'command' => $command,
             'pause_at' => $pauseAt,
             'lose_reply' => $loseReply,
         ], JSON_THROW_ON_ERROR) . "\n");
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M', '-d', 'zend.exception_ignore_args=1',
-            __DIR__ . '/WorkflowRecoveryWorker.php']);
+            __DIR__ . '/WorkflowRecoveryWorker.php'], $this->directory);
         $process->setInput($input);
         $process->setTimeout(10);
         $process->start();
-        $index = count($this->workers);
         $this->workers[] = ['process' => $process, 'input' => $input];
         $this->await($index, 'ready');
         return $index;
@@ -207,6 +226,30 @@ final class WorkflowRecoveryFixture
         $process->signal(9);
         $process->wait();
         $this->workers[$worker]['input']->close();
+    }
+
+    /** Prove native SQL contention, without reading query text or another database's sessions. */
+    public function awaitLock(int $worker): void
+    {
+        if ($this->sis->connection->pdo->getAttribute(PDO::ATTR_DRIVER_NAME) !== 'pgsql') {
+            return;
+        }
+        $query = $this->sis->connection->pdo->prepare(
+            'SELECT count(*) FROM pg_stat_activity WHERE datname = current_database() '
+            . 'AND application_name = ? AND wait_event_type = ?',
+        );
+        $deadline = microtime(true) + 1;
+        do {
+            $query->execute(['etsis_recovery_' . $worker, 'Lock']);
+            if ((int) $query->fetchColumn() === 1) {
+                return;
+            }
+            if (!$this->workers[$worker]['process']->isRunning()) {
+                break;
+            }
+            usleep(10000);
+        } while (microtime(true) < $deadline);
+        throw new RuntimeException('The native competitor did not reach its bounded SQL lock wait.');
     }
 
     public function result(int $worker): array
@@ -258,6 +301,15 @@ final class WorkflowRecoveryFixture
         foreach ([$this->path, $this->path . '-journal', $this->path . '-wal', $this->path . '-shm'] as $path) {
             if (is_file($path)) {
                 unlink($path);
+            }
+        }
+        foreach (['bootstrap', 'config'] as $folder) {
+            $file = $this->directory . '/' . $folder . '/app.php';
+            if (is_file($file)) {
+                unlink($file);
+            }
+            if (is_dir(dirname($file)) && count(scandir(dirname($file))) === 2) {
+                rmdir(dirname($file));
             }
         }
         $this->native?->release();
