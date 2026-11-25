@@ -32,6 +32,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
         ["json", null, "none", "Emit machine-readable counts and a protected continuation cursor."],
         ['credit', null, 'required', 'Check one institutional or transfer academic credit and source; no cursor.'],
         ['waitlist-entry', null, 'required', 'Compare one retained waitlist request with queue history; no cursor.'],
+        ['course', null, 'required', 'Compare one course publication history and retained references; no cursor.'],
+        ['section', null, 'required', 'Compare one section publication, bindings and retained references; no cursor.'],
         ['student', null, 'required', 'Check one student’s available academic sources and projections; no cursor.'],
         ['account', null, 'required', 'Verify one financial account and its balance/posting projections; no cursor.'],
         ['person', null, 'required', 'Compare one person’s profile projections with protected history; no cursor.'],
@@ -78,15 +80,26 @@ final class VerifyHistoryCommand extends ConsoleCommand
             $requirements = $this->getOptions('requirements');
             $progress = $this->getOptions('progress-record');
             $waitlist = $this->getOptions('waitlist-entry');
+            $catalog = ['course' => $this->getOptions('course'), 'section' => $this->getOptions('section')];
             $employment = [
                 'primary-position' => $this->getOptions('primary-position'),
                 'position' => $this->getOptions('position'),
                 'time-entry' => $this->getOptions('time-entry'),
             ];
             $subjects = [$account, $student, $credit, $person, $application, $standing, $load,
-                $advisors, $requirements, $progress, $waitlist, ...array_values($employment)];
+                $advisors, $requirements, $progress, $waitlist,
+                ...array_values($employment), ...array_values($catalog)];
             if (count(array_filter($subjects, static fn(mixed $id): bool => $id !== null)) > 1) {
                 throw new InvalidArgumentException();
+            }
+            foreach ($catalog as $kind => $reference) {
+                if ($reference === null) {
+                    continue;
+                }
+                if (!is_string($reference) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
+                    throw new InvalidArgumentException();
+                }
+                return $this->catalog($kind, new EntityId($reference), $events, $json);
             }
             if ($waitlist !== null) {
                 if (!is_string($waitlist) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
@@ -159,7 +172,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
                     . 'Use one of --person=ULID, --account=ULID, --student=ULID, --credit=ULID, --application=ULID, '
                     . '--standing=PURSUIT_ULID, --load=DETERMINATION_ULID, --advisors=PURSUIT_ULID, '
                     . '--requirements=PURSUIT_ULID, --primary-position=EMPLOYEE_ULID, '
-                    . '--position=POSITION_ULID or --time-entry=ENTRY_ULID '
+                    . '--position=POSITION_ULID, --time-entry=ENTRY_ULID, '
+                    . '--course=COURSE_ULID or --section=SECTION_ULID '
                     . 'with --events and optional --json.',
                 self::INVALID,
             );
@@ -275,6 +289,30 @@ final class VerifyHistoryCommand extends ConsoleCommand
         return match ($result->status) {
             'verified' => self::SUCCESS,
             'observed_empty', 'changed', 'limited' => 3,
+            default => self::FAILURE,
+        };
+    }
+
+    private function catalog(string $kind, EntityId $id, int $events, bool $json): int
+    {
+        $verifier = $this->codefy->make(\Domain\Catalog\Repository\CatalogProjectionVerifier::class);
+        $result = $kind === 'course' ? $verifier->course($id, $events) : $verifier->section($id, $events);
+        if ($json) {
+            $this->terminalRaw(json_encode($result->describe(), JSON_THROW_ON_ERROR));
+        } else {
+            $this->terminalRaw(ucfirst($kind) . ' publication ' . $id->value . ': ' . $result->status . '.');
+            $this->terminalRaw($result->events . ' events checked. No records were changed.');
+            if ($result->issues !== []) {
+                $this->terminalRaw('Components requiring review: ' . implode(', ', $result->issues) . '.');
+            }
+            $this->terminalRaw('This compares recorded publications and bounded available references, '
+                . 'not current draft correctness, registration eligibility, every dependent academic record, '
+                . 'finances, external synchronization or archive completeness. '
+                . 'No publication or offering was changed.');
+        }
+        return match ($result->status) {
+            'verified' => self::SUCCESS,
+            'changed', 'limited', 'observed_empty' => 3,
             default => self::FAILURE,
         };
     }

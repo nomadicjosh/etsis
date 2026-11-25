@@ -17,6 +17,14 @@ The source remains the existing section editor: save changes to capacity, delive
 
 Publication takes effect on confirmation. Staff cannot backdate its decision time. The explicit instructional period may describe past or future teaching dates; those dates are not a claim that the publication decision occurred then. Dates outside the selected term are highlighted for explicit review rather than silently clipped or forbidden by an assumed institutional rule. Registration and drop deadlines still follow configured term policy.
 
+## Check retained publication history
+
+Open **Academic catalog → Sections → a section → Published section details → Check section publication history**. Catalog maintenance, history-verification and audit-read duties are all required. **Run history check** compares recorded course definitions/binding, section publications and offering-selection history with retained references under one 200-event browser allowance.
+
+**Back to record** rereads the same publication page, restores keyboard focus and retains unfinished instructional dates, publication reason and Moodle-creation choice. The check does not publish these entries, select/amend an offering, contact Moodle, inspect a roster or change registrations/charges. Unpublished and unselected states remain distinct; later drafts/publications do not rewrite earlier references.
+
+Previous results are restricted observations, not approvals or continuing guarantees. Access loss clears results/receipts; late responses cannot reopen a closed view. See [selected catalog verification](event-history-foundation.md#selected-course-and-section-publication-checks) for operator modes, limits and preserved personal-receipt routing.
+
 ## Instructional methods and campuses
 
 In **Academic catalog → Curriculum**, use **Instructional methods** and **Campuses & sites** to create your institution's definitions. A method describes the teaching format, such as lecture, seminar or laboratory. Delivery mode still separately means in person, online or hybrid. A campus/site is optional and does not reserve or require a room. No institution-specific definitions are seeded.

@@ -2,7 +2,7 @@
 
 declare(strict_types=1);
 
-use Infrastructure\Persistence\Migration\NullableRoomReferences;
+use Infrastructure\Persistence\Migration\NullableUlidReferences;
 use Qubus\Expressive\Migration\Adapter\ConnectionAwareMigrationAdapter;
 use Qubus\Expressive\Migration\Migration;
 
@@ -14,8 +14,9 @@ final class CreateSisRoomFreeMeetings extends Migration
         if (!$adapter instanceof ConnectionAwareMigrationAdapter) {
             throw new LogicException('A connection-aware migration adapter is required.');
         }
-        NullableRoomReferences::apply(
+        NullableUlidReferences::apply(
             $adapter->connection(),
+            'room_id',
             ['sis_bookings', 'sis_booking_slots'],
             ['sis_booking_replacements']
         );

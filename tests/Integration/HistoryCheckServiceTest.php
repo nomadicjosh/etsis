@@ -26,6 +26,82 @@ use PHPUnit\Framework\TestCase;
 
 final class HistoryCheckServiceTest extends TestCase
 {
+    public function testCatalogReceiptsUseNoInventedPersonAndRequireEveryCatalogSupportDuty(): void
+    {
+        require_once dirname(__DIR__) . '/Support/CatalogVerificationFixture.php';
+        $f = new \Tests\Support\CatalogVerificationFixture();
+        $s = $f->sis;
+        $s->access->actor = $s->user();
+        $s->access->staff = false;
+        $permissions = ['sis:history:verify', 'sis:audit:read', 'sis:catalog:manage'];
+        $subjects = [[HistoryCheckSubject::Course, $f->course], [HistoryCheckSubject::Section, $f->section]];
+        foreach ($subjects as [$kind, $id]) {
+            foreach ($permissions as $missing) {
+                $s->access->grants = array_values(array_diff($permissions, [$missing]));
+                $this->rejects(fn() => $this->service($s)->run($kind, $id), AccessDeniedException::class);
+                $this->rejects(fn() => $this->service($s)->history($kind, $id), AccessDeniedException::class);
+            }
+            $s->access->grants = $permissions;
+            $before = \EventStoreFixture::historyDigest($s->sql);
+            $result = $this->service($s)->run($kind, $id);
+            self::assertSame('verified', $result['result']['status']);
+            self::assertSame([$result['receipt']], $this->service($s)->history($kind, $id)['items']);
+            self::assertSame($before, \EventStoreFixture::historyDigest($s->sql));
+        }
+        foreach ($s->sql->rows('sis_history_checks') as $row) {
+            self::assertNull($row['person_id']);
+            self::assertNull($row['owner_user_id']);
+            self::assertNull($row['student_id']);
+        }
+        self::assertCount(2, $s->sql->rows('sis_history_checks'));
+    }
+
+    public function testCatalogFinalAuditFailureAuthorityAndSectionRoutingDriftRollBackReceipts(): void
+    {
+        require_once dirname(__DIR__) . '/Support/CatalogVerificationFixture.php';
+        foreach (['audit', 'authority', 'course', 'term'] as $scenario) {
+            $f = new \Tests\Support\CatalogVerificationFixture();
+            $s = $f->sis;
+            $other = $s->section();
+            $before = $f->facts();
+            $s->access->staff = false;
+            $s->access->grants = ['sis:history:verify', 'sis:audit:read', 'sis:catalog:manage'];
+            $audit = $this->createStub(AuditTrail::class);
+            $audit->method('record')->willReturnCallback(function () use ($scenario, $f, $s, $other): void {
+                if ($scenario === 'audit') {
+                    throw new \RuntimeException('Fictional required audit failure.');
+                }
+                if ($scenario === 'authority') {
+                    $s->access->grants = [];
+                }
+                if ($scenario === 'course') {
+                    $s->sql->update(
+                        'sis_sections',
+                        ['course_id' => $other->courseId->value],
+                        ['id' => $f->section->value]
+                    );
+                }
+                if ($scenario === 'term') {
+                    $next = EntityId::generate();
+                    $s->sql->insert('sis_terms', [
+                        'id' => $next->value, 'code' => 'FICT-NEXT', 'starts_on' => '2027-01-01',
+                        'ends_on' => '2027-05-01', 'add_drop_ends_on' => '2027-01-15']);
+                    $s->sql->update('sis_sections', ['term_id' => $next->value], ['id' => $f->section->value]);
+                }
+            });
+            $exception = match ($scenario) {
+                'authority' => AccessDeniedException::class,
+                'audit' => \RuntimeException::class,
+                default => ConcurrentModificationException::class,
+            };
+            $this->rejects(
+                fn() => $this->service($s, audit: $audit)->run(HistoryCheckSubject::Section, $f->section),
+                $exception
+            );
+            self::assertSame($before, $f->facts());
+        }
+    }
+
     public function testWaitlistChecksRetainOnlyScopedSupportMetadataAndNeverReplayNotices(): void
     {
         require_once dirname(__DIR__) . '/Support/WaitlistVerificationFixture.php';
@@ -327,6 +403,7 @@ final class HistoryCheckServiceTest extends TestCase
         ?\Domain\Admissions\Repository\ApplicationProjectionVerifier $applications = null,
         ?\Domain\Student\Repository\StudentDecisionProjectionVerifier $decisions = null,
         ?\Domain\HumanResources\Repository\EmploymentProjectionVerifier $employment = null,
+        ?\Domain\Catalog\Repository\CatalogProjectionVerifier $catalog = null,
     ): HistoryCheckService {
         $s = $c instanceof CampusFixture ? $c->sis : $c;
         $cipher = $c instanceof CampusFixture ? $c->cipher : $s->dropCipher;
@@ -387,6 +464,14 @@ final class HistoryCheckServiceTest extends TestCase
                 $s->waitlistLedger(),
             ),
             new \Infrastructure\Persistence\Waitlist\SqlWaitlistRepository($s->sql, $s->dropCipher),
+            $catalog ?? new \Infrastructure\Projection\SqlCatalogProjectionVerifier(
+                $s->sql,
+                \EventStoreFixture::history($s->connection->queryBuilder()),
+                new \Infrastructure\Persistence\Repository\SqlCourseVersionProjection($s->sql),
+                new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($s->sql),
+                new \Infrastructure\Persistence\Repository\SqlSectionCourseBindingRepository($s->sql)
+            ),
+            new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($s->sql),
         );
     }
 

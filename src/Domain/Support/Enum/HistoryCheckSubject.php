@@ -10,6 +10,8 @@ enum HistoryCheckSubject: string
     case Student = "student";
     case Credit = "credit";
     case Waitlist = 'waitlist';
+    case Course = 'course';
+    case Section = 'section';
     case Account = "account";
     case Application = "application";
     case Standing = "standing";
@@ -27,6 +29,7 @@ enum HistoryCheckSubject: string
             self::Person => ["sis:person:manage"],
             self::Student, self::Credit => ["sis:student:read"],
             self::Waitlist => ['sis:student:read', 'sis:registration:waitlist', 'sis:registration:manage'],
+            self::Course, self::Section => ['sis:catalog:manage'],
             self::Account => ["sis:student:read", "sis:finance:read"],
             self::Application => ["sis:admissions:manage"],
             self::Standing => ["sis:student:read", "sis:standing:manage"],
@@ -45,6 +48,8 @@ enum HistoryCheckSubject: string
             self::Student => "student_academic_inputs",
             self::Credit => "academic_credit",
             self::Waitlist => 'waitlist_entry',
+            self::Course => 'course_publication',
+            self::Section => 'section_publication',
             self::Account => "financial_account",
             self::Application => "admissions_application",
             self::Standing => "student_standing",

@@ -5,6 +5,31 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'catalog_course' => trans_html('Course publications'),
+    'catalog_section' => trans_html('Section publications'),
+    'check_course' => trans_html('Check course publication history'),
+    'check_section' => trans_html('Check section publication history'),
+    'catalog_count' => trans_html('Retained publications checked'),
+    'catalog_help' => trans_html(
+        'Compare recorded course or section publications and bounded retained references using a 200-event allowance. '
+        . 'Section checks also verify the retained course binding and offering-selection history. '
+        . 'This does not validate current drafts, student eligibility, every dependent academic record, '
+        . 'finances, external synchronization or archive completeness. Nothing is published, selected or repaired.'
+    ),
+    'catalog_empty' => trans_html('No publication observed'),
+    'catalog_empty_help' => trans_html(
+        'No publication was found for this record. Earlier catalog history remains unknown.'
+    ),
+    'catalog_limit_help' => trans_html(
+        'A longer publication history may need a bounded operator check. '
+        . 'More than 200 cached references or an oversized inventory needs an offline review; '
+        . 'raising the event allowance alone does not remove those bounds.'
+    ),
+    'catalog_identity' => trans_html('Catalog record routing'),
+    'catalog_publication' => trans_html('Retained publication and reference projection'),
+    'course_reference' => trans_html('Retained course definitions'),
+    'course_binding' => trans_html('Section course binding'),
+    'offering_selection' => trans_html('Future-registration offering selection'),
     'waitlist' => trans_html('Waitlist request'),
     'waitlist_components' => trans_html('Retained request, queue projection and protected history'),
     'waitlist_count' => trans_html('Retained requests checked'),

@@ -59,6 +59,7 @@ try {
                 'check-workload-policy',
                 'check-grade-certification',
                 'check-support-history',
+                'check-catalog-projections',
                 'check-maintenance',
                 'check-profile-requests',
                 'check-portal',
@@ -453,6 +454,9 @@ try {
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-waitlist-projections') {
             require __DIR__ . '/WaitlistProjectionBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-catalog-projections') {
+            require __DIR__ . '/CatalogProjectionBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-student-decision-projections') {
             require __DIR__ . '/StudentDecisionProjectionBootChecks.php';

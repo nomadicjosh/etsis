@@ -14,6 +14,14 @@ A new **publication revision** is still a separate historical fact. Changing a t
 
 Publication is separate from course activation, offering activation, registration and billing. The first publication records a decision made now; it does not infer an earlier academic approval from an existing row.
 
+## Check retained publication history
+
+Open **Academic catalog → Courses → a course → Published definitions → Check course publication history**. This action requires catalog maintenance, history-verification and audit-read duties together. Choose **Run history check** to compare recorded publications and available retained references under the fixed browser allowance. The result and previous minimal receipts use the existing private support drawer.
+
+**Back to record** rereads the originating publication page under current access, preserves its unfinished publication reason and restores focus to the check action. Going to a check does not publish the draft. Access loss clears results, and detached responses cannot restore a closed check. Keyboard and enlarged-phone layouts use shared Bootstrap controls/icons; private work stays out of browser storage.
+
+This checks retained definitions, not today's editable values, student eligibility or every dependent academic record. No publication is inferred for a draft-only course. See [selected catalog verification](event-history-foundation.md#selected-course-and-section-publication-checks) for operator selectors, limits and result meanings.
+
 ## Optional course numbers
 
 A full course code remains the catalog identifier, such as `MATH.101`. The optional **Course number** stores a separate display value, such as `101` or `001A`, when an institution needs that part independently. It is text, accepts up to 32 printable characters, preserves leading zeros/suffixes/case, and may be blank. Numbers need not be unique across subjects or courses. No value is parsed from a course code or used as a database identity, credit quantity or degree rule.

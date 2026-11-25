@@ -4575,3 +4575,59 @@ msgstr ""
 #: src/Domain/Admissions/Service/AdmissionChangeRequestService.php:324
 msgid "Application follow-up not found."
 msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:8
+msgid "Course publications"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:9
+msgid "Section publications"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:10
+msgid "Check course publication history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:11
+msgid "Check section publication history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:12
+msgid "Retained publications checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:14
+msgid "Compare recorded course or section publications and bounded retained references using a 200-event allowance. Section checks also verify the retained course binding and offering-selection history. This does not validate current drafts, student eligibility, every dependent academic record, finances, external synchronization or archive completeness. Nothing is published, selected or repaired."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:19
+msgid "No publication observed"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:21
+msgid "No publication was found for this record. Earlier catalog history remains unknown."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:24
+msgid "A longer publication history may need a bounded operator check. More than 200 cached references or an oversized inventory needs an offline review; raising the event allowance alone does not remove those bounds."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:28
+msgid "Catalog record routing"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:29
+msgid "Retained publication and reference projection"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:30
+msgid "Retained course definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:31
+msgid "Section course binding"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:32
+msgid "Future-registration offering selection"
+msgstr ""

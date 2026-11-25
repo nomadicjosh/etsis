@@ -152,6 +152,31 @@ Staff open **Academic catalog → Sections → a section → Section waitlist �
 
 **Back to record** rereads the originating queue page with its existing Previous/Next navigation. Access loss clears results; detached responses cannot reopen an old check. No request, proof or result enters browser storage. Closed requests remain available to the operator selector; the ordinary section queue still lists active requests only. This slice adds no schema, permission, report or separate event store. Populated fictional SQLite checks, actual-provider console/HTTP qualification and browser accessibility cover this workflow; populated native-server, long-lived queue, independent security and institutional retention/restore acceptance remain separate.
 
+### Selected course and section publication checks
+
+Trusted deployment operators can select **one** read-only mode:
+
+```sh
+/usr/local/bin/php84 codex sis:history:verify --course=COURSE_ULID --events=500 --json
+/usr/local/bin/php84 codex sis:history:verify --section=SECTION_ULID --events=500 --json
+```
+
+Use the course/section identity, **not a publication-version identity**. These modes are exclusive with every other selected mode, global stream limits and continuation cursors. The event allowance is 1–2,000; browser checks fix it at 200. Invalid selectors/limits fail before storage/provider resolution. The command remains a normal `ConsoleCommand` with untranslated console strings.
+
+Course checks replay the protected publication chain through existing aggregate/definition validators and compare all available cached versions, including retained subject/classification and prerequisite/credit/CEU facts. A publication need not have a cache row until another workflow retains it. This does not inventory every dependent section or academic record.
+
+Section checks share one allowance across course publications, the original course-binding decision, section publications and offering-selection/amendment history. They compare retained references, source fingerprints and current section/course/term routing. A later course draft/publication does not replace the bound course, and later section publications do not silently replace the selected offering. Unselected offerings can verify; unpublished records remain an explicit empty observation with earlier history unknown.
+
+Reads run outside an enclosing transaction/snapshot, acquire no write locks and invoke no projectors. Before/after comparisons cover routing, raw reference rows/retained labels and protected heads. One request shares a four-MiB protected replay budget and five-second cooperative limit. Reference inventories separately cap each relation at 200 rows and the captured inventory at four MiB. Larger inventories need offline review even with a larger event allowance. Driver/operator timeouts remain necessary for blocked SQL.
+
+Results contain only the selected reference, fixed scope/status/issue codes, events checked and a publication count on success. Missing/damaged/unavailable evidence is unverified; changed boundaries and exhausted limits are incomplete observations without a partial publication count. Exit codes are 0 verified, 3 empty/changed/limited, 1 unverified/unavailable and 2 invalid input. Reasons, descriptions, fees, teaching identities, raw envelopes and rosters are omitted.
+
+This does **not** validate today's draft, certify eligibility or every dependent academic record, verify finance/external synchronization, repair data, publish definitions, switch offerings or establish archive/restore completeness. Independent checkpoint and recovery acceptance stays separate.
+
+Staff launch the existing support drawer from [course](course-publication.md#check-retained-publication-history) or [section](section-publication.md#check-retained-publication-history) publications. Every request requires `sis:catalog:manage`, `sis:history:verify` and `sis:audit:read` together. Only a minimal existing support receipt and required audit are written after observation, with final actor/permission and section/course/term routing checks. Receipts describe their recorded observation, not a continuing guarantee.
+
+Catalog receipts intentionally have null person/owner/student routing. Personal checks still require their canonical person. The portable migration makes only the existing receipt person reference nullable, preserving rows/indexes and refusing destructive rollback. SQLite reuses the bounded nullable-ULID conversion, preserving original schema objects/values; room-reference migrations use the same current helper. No new receipt table, permission/grant, event type, report, journal or worker is added.
+
 ### Full protected journal checks
 
 Deployment operators can check protected event chains with the existing console runner:

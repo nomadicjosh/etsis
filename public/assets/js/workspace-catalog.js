@@ -27,6 +27,17 @@ window.createWorkspaceCatalog = function (ui) {
         );
     const submit = (label) => node("button", { type: "submit", class: "btn btn-primary" }, label);
     const reference = (id) => node("p", {}, "Reference: ", node("code", {}, id));
+    function historyCheck(body, kind, id, reopen) {
+        if (!ui.historyChecks || !['sis:catalog:manage', 'sis:history:verify', 'sis:audit:read'].every(key => ui.can?.(key))) return;
+        const trigger = button(ui.historyCheckLabels[kind === 'course' ? 'check_course' : 'check_section'], () =>
+            ui.historyChecks().open(kind, id, async () => {
+                const returned = await reopen();
+                returned?.querySelector('[data-catalog-history]')?.focus();
+            }));
+        trigger.dataset.catalogHistory = kind;
+        trigger.prepend(node('i', { class: 'bi bi-shield-check me-2', 'aria-hidden': 'true' }));
+        body.append(node('div', { class: 'inline-actions' }, trigger));
+    }
     async function enrollmentReview(scope = { state: "below", search: "", include_inactive: false }, after = null, stack = []) {
         const body = openDrawer("Section enrollment targets", "REVIEW OFFERINGS");
         const view = node("div");
@@ -1117,6 +1128,7 @@ window.createWorkspaceCatalog = function (ui) {
         );
         if (!pendingView.isConnected) return;
         const body = openDrawer("Published course definitions", "ACADEMIC CATALOG");
+        historyCheck(body, 'course', course, () => publications(course, cursor, stack, returnTo, draft, returnLabel));
         body.append(
             node(
                 "p",
@@ -1195,6 +1207,7 @@ window.createWorkspaceCatalog = function (ui) {
                 ),
             );
         if (returnTo) body.append(button(returnLabel, returnTo));
+        return body;
     }
     function reviewDefinition(course, reviewed, returnTo = null, draft = { reason: reviewed.reason }, returnLabel = "Back to offering definitions") {
         const body = openDrawer("Review course publication", "REVIEW → PUBLISH");
@@ -1492,6 +1505,7 @@ window.createWorkspaceCatalog = function (ui) {
         let currentDraft = draft;
         if (!pendingView.isConnected) return;
         const body = openDrawer("Published section details", "ACADEMIC CATALOG");
+        historyCheck(body, 'section', section, () => sectionPublications(section, cursor, stack, currentDraft, back));
         if (back) body.append(button("Back to section", back, "btn-link"));
         body.append(node("p", {}, `Section: ${setup.section.code}`));
         if (setup.moodle?.linked) body.append(node("p", { role: "status" }, "This section is linked to Moodle. The background worker manages participant access."));
@@ -1781,6 +1795,7 @@ window.createWorkspaceCatalog = function (ui) {
                     sectionPublications(section, page.next_cursor, [...stack, cursor], currentDraft, back),
                 ),
             );
+        return body;
     }
     async function offeringSelectionHistory(section, back, cursor = null, stack = []) {
         const pendingView = openDrawer("Offering selection history", "ACADEMIC CATALOG");
