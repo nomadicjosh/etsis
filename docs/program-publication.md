@@ -169,6 +169,14 @@ Ordinary draft views, student assignment lists and reports use indexed read mode
 
 **Published program details** shows curated definitions, academic years, revisions and accepted/recorded times in frozen 20-entry pages. It omits actors, protected reasons and raw envelopes. Earlier prepared transcript documents, academic records and financial postings are unchanged.
 
+## Check retained publication history
+
+Open **Academic catalog → Programs → a program → Program details & publications → Published program details**, then select **Check program publication history**. This action requires `sis:catalog:manage`, `sis:history:verify` and `sis:audit:read` together. Catalog editing alone does not grant support access.
+
+Run the check deliberately. It compares recorded publications with retained cohort details, organizational/location snapshots, offered specialization choices and the current publication for each academic year. A newer year does not supersede an older year's own current catalog. Unpublished records report no publication observed, with earlier history unknown. Missing evidence, changed boundaries and limits require review rather than partial certification.
+
+The drawer shows fixed outcomes/counts and private support references, without publication definitions or reasons. **Back to record** returns to the same publication page and restores focus. This check publishes or repairs nothing and does not establish student eligibility, degree completion or every dependent source's integrity. See [operator commands, bounds and qualification](event-history-foundation.md#selected-program-and-curriculum-publication-checks).
+
 ## Security and storage
 
 `ProgramDefinitionWasPublished` uses the existing protected journal, with program-owned streams, expected positions and predecessor checks. There is one current `ProgramDefinition` and `ProgramClassifications`, with no numbered wrappers or parallel journal. Award/academic-level labels do not grant permissions, award a credential or infer a grading scale.

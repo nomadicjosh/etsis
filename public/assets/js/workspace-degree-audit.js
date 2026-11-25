@@ -2655,6 +2655,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
             result = await post(`${base}versions/`, cursor ? { cursor } : {});
         if (!pendingView.isConnected) return;
         const body = screen("Published requirement versions");
+        if (ui.historyChecks && ['sis:catalog:manage', 'sis:history:verify', 'sis:audit:read'].every(key => ui.can(key))) {
+            body.append(actions(ui.historyChecks().publicationAction(kind === 'group' ? 'group' : 'curriculum', id,
+                () => history(kind, id, program, back, cursor, stack), close)));
+        }
         body.append(
             node(
                 "p",

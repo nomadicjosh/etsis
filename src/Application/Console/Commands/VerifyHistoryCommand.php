@@ -37,6 +37,9 @@ final class VerifyHistoryCommand extends ConsoleCommand
         ['waitlist-entry', null, 'required', 'Compare one retained waitlist request with queue history; no cursor.'],
         ['course', null, 'required', 'Compare one course publication history and retained references; no cursor.'],
         ['section', null, 'required', 'Compare one section publication, bindings and retained references; no cursor.'],
+        ['program', null, 'required', 'Compare one program publication history and cohort projections; no cursor.'],
+        ['course-group', null, 'required', 'Compare one reusable group publication history and pointer; no cursor.'],
+        ['curriculum', null, 'required', 'Compare one degree/component publication and pointer; no cursor.'],
         ['student', null, 'required', 'Check one student’s available academic sources and projections; no cursor.'],
         ['account', null, 'required', 'Verify one financial account and its balance/posting projections; no cursor.'],
         ['person', null, 'required', 'Compare one person’s profile projections with protected history; no cursor.'],
@@ -83,7 +86,9 @@ final class VerifyHistoryCommand extends ConsoleCommand
             $requirements = $this->getOptions('requirements');
             $progress = $this->getOptions('progress-record');
             $waitlist = $this->getOptions('waitlist-entry');
-            $catalog = ['course' => $this->getOptions('course'), 'section' => $this->getOptions('section')];
+            $catalog = ['course' => $this->getOptions('course'), 'section' => $this->getOptions('section'),
+                'program' => $this->getOptions('program'), 'group' => $this->getOptions('course-group'),
+                'curriculum' => $this->getOptions('curriculum')];
             $employment = [
                 'primary-position' => $this->getOptions('primary-position'),
                 'position' => $this->getOptions('position'),
@@ -331,7 +336,11 @@ final class VerifyHistoryCommand extends ConsoleCommand
     private function catalog(string $kind, EntityId $id, int $events, bool $json): int
     {
         $verifier = $this->codefy->make(\Domain\Catalog\Repository\CatalogProjectionVerifier::class);
-        $result = $kind === 'course' ? $verifier->course($id, $events) : $verifier->section($id, $events);
+        $result = match ($kind) {
+            'course' => $verifier->course($id, $events),
+            'section' => $verifier->section($id, $events),
+            default => $verifier->curriculum($kind, $id, $events),
+        };
         if ($json) {
             $this->terminalRaw(json_encode($result->describe(), JSON_THROW_ON_ERROR));
         } else {

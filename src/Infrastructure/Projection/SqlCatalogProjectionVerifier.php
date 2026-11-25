@@ -54,6 +54,16 @@ final readonly class SqlCatalogProjectionVerifier implements CatalogProjectionVe
         return $this->verify('section', $section, $eventLimit);
     }
 
+    public function curriculum(string $kind, EntityId $id, int $eventLimit = 500): CatalogProjectionCheck
+    {
+        return new SqlCurriculumProjectionVerifier($this->sql, $this->history)->verify($kind, $id, $eventLimit);
+    }
+
+    public function curriculumContext(string $kind, EntityId $id): array
+    {
+        return new SqlCurriculumProjectionVerifier($this->sql, $this->history)->context($kind, $id);
+    }
+
     private function verify(string $kind, EntityId $id, int $limit): CatalogProjectionCheck
     {
         if ($limit < 1 || $limit > 2000) {

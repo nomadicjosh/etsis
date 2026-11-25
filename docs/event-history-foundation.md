@@ -177,6 +177,30 @@ Staff launch the existing support drawer from [course](course-publication.md#che
 
 Catalog receipts intentionally have null person/owner/student routing. Personal checks still require their canonical person. The portable migration makes only the existing receipt person reference nullable, preserving rows/indexes and refusing destructive rollback. SQLite reuses the bounded nullable-ULID conversion, preserving original schema objects/values; room-reference migrations use the same current helper. No new receipt table, permission/grant, event type, report, journal or worker is added.
 
+### Selected program and curriculum publication checks
+
+Trusted operators can select one catalog record with the existing read-only command:
+
+```sh
+/usr/local/bin/php84 codex sis:history:verify --program=PROGRAM_ULID --events=500 --json
+/usr/local/bin/php84 codex sis:history:verify --course-group=GROUP_ULID --events=500 --json
+/usr/local/bin/php84 codex sis:history:verify --curriculum=REQUIREMENTS_DRAFT_ULID --events=500 --json
+```
+
+Supply the program, reusable group or degree/specialization requirements **draft identity**, rather than a publication-version identity. `--curriculum` checks a published requirements definition; the existing `--requirements` selector checks a student's assigned requirements under a pursuit. All selectors are mutually exclusive and reject cursors or an explicit `--streams` option before resolving storage.
+
+Program checks replay genuine publications in sequence and compare each retained cohort definition, classification/ownership/location snapshot and offered-specialization context with the ordinary protected reader's projection. The latest publication for each academic year must match that year's current catalog pointer. An earlier year can remain current within its own year. Missing, damaged or orphan claimed publications require review; earlier published catalog rows without supporting events are never adopted as verified history.
+
+Reusable-group checks verify the publication chain and the current version, retained name and position. Degree and specialization requirements checks verify their publication chain, program/year/component routing and current version/position. They distinguish degree and component draft identities and reject ambiguous or changed routing. Current working names, JSON drafts and reference-library label changes do not reinterpret retained publications.
+
+These checks cover each selected stream and **its own projections**. They do not recursively certify referenced course/group/grading streams, evaluate a student, confer a degree, validate today's draft, establish archive completeness or repair records. Separate selected-source checks and degree-progress review remain necessary for those purposes. No publication, academic record or journal event is written.
+
+The existing bounds apply: 1–2,000 replay events, four MiB of protected replay and five cooperative seconds; at most 200 rows in each program projection inventory and four MiB in the captured boundary. Browser checks use 200 events. Verification refuses an enclosing transaction, compares source heads and relevant projections before/after replay, and returns no successful publication count on damage, drift or a limit. SQL/operator deadlines are still required. Exit codes remain 0 verified, 3 empty/changed/limited, 1 unverified/unavailable and 2 invalid input. Outputs contain references, fixed statuses/issues and counts, with no definitions or private reasons.
+
+Staff open **Check program publication history** under [published program details](program-publication.md#check-retained-publication-history), or **Check course group publication history / Check requirements publication history** under [published requirement versions](degree-audit-builder.md#check-retained-publication-history). Catalog, history-verification and audit duties are all required on every request. The shared support drawer retains its minimized receipt/audit workflow; final permission/routing or required-audit failure rolls back the receipt. Publication records and authorization context are locked for that final receipt transaction, while verification remains outside it. **Back to record** restores the publication page and focus; a requirements dialog closes before opening the support drawer.
+
+No schema, permission/grant, report, event type, parallel journal, repair queue or worker is added. PostgreSQL qualification for this bundle covers server-enforced read-only checks of existing draft-only records, plus the unchanged global protected-history check. Populated publication/damage/receipt qualification uses fictional SQLite records; native populated replay and contention remain separate acceptance work.
+
 ### Selected graduate policy and approval checks
 
 Trusted operators can select the institution's policy root or one program pursuit's graduate-course approval root:

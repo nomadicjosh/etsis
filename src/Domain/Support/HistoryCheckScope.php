@@ -21,7 +21,39 @@ final readonly class HistoryCheckScope
         public ?EntityId $section = null,
         public ?EntityId $course = null,
         public ?EntityId $term = null,
+        public array $curriculumContext = [],
     ) {
+        if (
+            in_array($kind, [HistoryCheckSubject::Program, HistoryCheckSubject::CourseGroup,
+            HistoryCheckSubject::Curriculum], true)
+        ) {
+            if (
+                $person !== null || $owner !== null || $student !== null || $pursuit !== null || $employee !== null
+                || $section !== null || $course !== null || $term !== null
+                || ($curriculumContext['id'] ?? null) !== $subject->value
+            ) {
+                throw new \InvalidArgumentException('Use current non-personal curriculum routing.');
+            }
+            $fields = $kind === HistoryCheckSubject::Curriculum
+            ? ['id', 'program_id', 'academic_year_id', ...(
+                    array_key_exists('specialization_id', $curriculumContext) ? ['specialization_id'] : []
+                )] : ['id'];
+            if (
+                count($curriculumContext) !== count($fields)
+                || array_diff(array_keys($curriculumContext), $fields) !== []
+            ) {
+                throw new \InvalidArgumentException('Use only canonical curriculum routing identities.');
+            }
+            foreach ($curriculumContext as $reference) {
+                if (!is_string($reference) || new EntityId($reference)->value !== $reference) {
+                    throw new \InvalidArgumentException('Use canonical curriculum identities.');
+                }
+            }
+            return;
+        }
+        if ($curriculumContext !== []) {
+            throw new \InvalidArgumentException('Curriculum routing requires a selected curriculum subject.');
+        }
         if ($kind === HistoryCheckSubject::GraduatePolicy) {
             if (
                 $subject->value !== \Domain\Registration\GraduateRegistrationPolicy::ID

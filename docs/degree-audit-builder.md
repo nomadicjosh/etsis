@@ -404,6 +404,14 @@ Save, preview, publication review, immutable versions and temporary student test
 [Staff/student explanations and recorded reviews](student-degree-progress.md#requirement-card-credit-origins) show these card rules without exposing raw grammar or supporting record identities. Final graduation eligibility and broader institutional residency policy remain separate roadmap work.
 
 
+## Check retained publication history
+
+In **Course group library**, open a group's **Version history** and select **Check course group publication history**. In a program's **Degree audit requirements** or a specialization's requirements, open **Published requirements** and select **Check requirements publication history**. All actions require catalog management, history verification and audit permissions together; they are unavailable to ordinary students and advisors.
+
+The support drawer checks the selected group's or requirements definition's protected publication sequence and current pointer. Requirements checks also verify their program, academic year and optional specialization routing. Current unsaved drafts and today's library labels do not rewrite retained definitions. The builder dialog closes before the drawer opens; **Back to record** restores the publication page and focuses the original action. Existing back navigation continues to return to the requirement draft or library.
+
+An empty observation means no publication was recorded, with earlier history unknown. Damage, changed boundaries and limits produce explicit incomplete results without a partial successful count. The check creates only the existing minimized support observation and audit; it changes no publications or student facts. It does not recursively certify referenced courses/groups/grading, run a degree audit or authorize graduation. See [operator selectors, bounds and qualification](event-history-foundation.md#selected-program-and-curriculum-publication-checks). The operator's `--curriculum` selector names a requirements draft; `--requirements` continues to name a student's pursuit selection.
+
 ## Different grade minima within a group
 
 Each requirement card has **Requirement N minimum grade points (optional)**. It sets the minimum retained grade points for each course contributing to that card. It works with **All of these**, **Choose a number**, **Take credits** and **Eligible course pool**, including saved-rule cards. The group-wide minimum, credit origin, actual-completion dates, sending-institution restrictions and other eligibility rules still apply. A lower card minimum cannot weaken the group minimum.

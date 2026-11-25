@@ -28,6 +28,19 @@ return [
     ),
     'catalog_course' => trans_html('Course publications'),
     'catalog_section' => trans_html('Section publications'),
+    'catalog_program' => trans_html('Program publications'),
+    'catalog_group' => trans_html('Reusable course group publications'),
+    'catalog_curriculum' => trans_html('Degree and specialization requirements publications'),
+    'check_program' => trans_html('Check program publication history'),
+    'check_group' => trans_html('Check course group publication history'),
+    'check_curriculum' => trans_html('Check requirements publication history'),
+    'catalog_curriculum_help' => trans_html(
+        'Compare this publication stream with its own retained projections and current pointers using a '
+        . '200-event allowance. Program checks include recorded cohort definitions and specialization choices. '
+        . 'Group and requirements checks verify publication order, routing and current references. '
+        . 'This does not evaluate dependent course or grading streams, student work, graduation eligibility, '
+        . 'current drafts or archive completeness. Nothing is published or repaired.'
+    ),
     'check_course' => trans_html('Check course publication history'),
     'check_section' => trans_html('Check section publication history'),
     'catalog_count' => trans_html('Retained publications checked'),

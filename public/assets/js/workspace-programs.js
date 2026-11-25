@@ -1423,6 +1423,10 @@ window.createWorkspacePrograms = function (ui) {
         const data = await request(`/sis/programs/${id}/publication/page/`, "POST", cursor ? { cursor } : {});
         if (!pendingView.isConnected) return;
         const body = openDrawer("Published program details", "RETAINED ACADEMIC DEFINITIONS");
+        if (ui.historyChecks && ['sis:catalog:manage', 'sis:history:verify', 'sis:audit:read'].every(key => ui.can?.(key))) {
+            body.append(node('div', { class: 'inline-actions' }, ui.historyChecks().publicationAction(
+                'program', id, () => history(id, back, cursor, stack))));
+        }
         body.append(
             node(
                 "p",

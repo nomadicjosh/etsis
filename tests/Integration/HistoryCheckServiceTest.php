@@ -26,6 +26,89 @@ use PHPUnit\Framework\TestCase;
 
 final class HistoryCheckServiceTest extends TestCase
 {
+    public function testCurriculumSupportUsesIndependentDutiesAndMinimalNonPersonalReceipts(): void
+    {
+        require_once dirname(__DIR__) . '/Support/ReusableGroupFixture.php';
+        require_once dirname(__DIR__) . '/Support/ProgramPublicationFixture.php';
+        $f = new \ReusableGroupFixture();
+        $f->saveDegree();
+        $f->publishDegree();
+        $s = $f->sis;
+        $p = new \ProgramPublicationFixture($s);
+        $p->service->publish($s->program, $p->service->review(
+            $s->program,
+            $f->year,
+            'Fictional program publication.'
+        )['review_token']);
+        $s->access->staff = false;
+        $permissions = ['sis:history:verify', 'sis:audit:read', 'sis:catalog:manage'];
+        $before = \EventStoreFixture::historyDigest($s->sql);
+        foreach (
+            [[HistoryCheckSubject::Program, $s->program], [HistoryCheckSubject::CourseGroup, $f->group],
+            [HistoryCheckSubject::Curriculum, $f->degree]] as [$kind, $id]
+        ) {
+            foreach ($permissions as $missing) {
+                $s->access->grants = array_values(array_diff($permissions, [$missing]));
+                $this->rejects(fn() => $this->service($s)->run($kind, $id), AccessDeniedException::class);
+                $this->rejects(fn() => $this->service($s)->history($kind, $id), AccessDeniedException::class);
+            }
+            $s->access->grants = $permissions;
+            $result = $this->service($s)->run($kind, $id);
+            self::assertSame('verified', $result['result']['status']);
+            self::assertSame([$result['receipt']], $this->service($s)->history($kind, $id)['items']);
+            self::assertStringNotContainsString('Fictional', json_encode($result));
+        }
+        self::assertSame($before, \EventStoreFixture::historyDigest($s->sql));
+        foreach ($s->sql->rows('sis_history_checks') as $row) {
+            self::assertNull($row['person_id']);
+            self::assertNull($row['owner_user_id']);
+            self::assertNull($row['student_id']);
+        }
+    }
+
+    public function testCurriculumReceiptAuditAuthorityAndRoutingFailuresRollBack(): void
+    {
+        require_once dirname(__DIR__) . '/Support/ReusableGroupFixture.php';
+        foreach (['audit', 'authority', 'routing'] as $scenario) {
+            $f = new \ReusableGroupFixture();
+            $f->saveDegree();
+            $f->publishDegree();
+            $s = $f->sis;
+            $s->access->staff = false;
+            $s->access->grants = ['sis:history:verify', 'sis:audit:read', 'sis:catalog:manage'];
+            $before = $s->sql->one('sis_degree_audit_templates', ['id' => $f->degree->value]);
+            $audit = $this->createStub(AuditTrail::class);
+            $audit->method('record')->willReturnCallback(function () use ($scenario, $s, $f): void {
+                if ($scenario === 'audit') {
+                    throw new \RuntimeException('Fictional audit failure.');
+                }
+                if ($scenario === 'authority') {
+                    $s->access->grants = [];
+                }
+                if ($scenario === 'routing') {
+                    $s->sql->insert('sis_programs', ['id' => ($next = EntityId::generate())->value,
+                        'code' => 'FICT-NEXT', 'title' => 'Fictional other program']);
+                    $s->sql->update(
+                        'sis_degree_audit_templates',
+                        ['program_id' => $next->value],
+                        ['id' => $f->degree->value]
+                    );
+                }
+            });
+            $expected = match ($scenario) {
+                'authority' => AccessDeniedException::class,
+                'routing' => ConcurrentModificationException::class,
+                default => \RuntimeException::class,
+            };
+            $this->rejects(fn() => $this->service($s, audit: $audit)->run(
+                HistoryCheckSubject::Curriculum,
+                $f->degree
+            ), $expected);
+            self::assertSame([], $s->sql->rows('sis_history_checks'));
+            self::assertSame($before, $s->sql->one('sis_degree_audit_templates', ['id' => $f->degree->value]));
+        }
+    }
+
     public function testCatalogReceiptsUseNoInventedPersonAndRequireEveryCatalogSupportDuty(): void
     {
         require_once dirname(__DIR__) . '/Support/CatalogVerificationFixture.php';
@@ -511,6 +594,8 @@ final class HistoryCheckServiceTest extends TestCase
             ),
             new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($s->sql),
             $s->graduateVerifier(),
+            new \Infrastructure\Persistence\Repository\SqlCourseGroupRepository($s->sql),
+            new \Infrastructure\Persistence\Repository\SqlRequirementsRepository($s->sql),
         );
     }
 

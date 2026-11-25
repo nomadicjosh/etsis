@@ -61,6 +61,8 @@ final readonly class HistoryCheckService
         private \Domain\Catalog\Repository\CatalogProjectionVerifier $catalogHistory,
         private \Domain\Catalog\Repository\CatalogRevisionRepository $catalog,
         private \Domain\Registration\Repository\GraduateHistoryVerifier $graduateHistory,
+        private \Domain\DegreeAudit\Repository\CourseGroupRepository $courseGroups,
+        private \Domain\DegreeAudit\Repository\RequirementsRepository $curricula,
     ) {
     }
 
@@ -73,6 +75,19 @@ final readonly class HistoryCheckService
             if ($this->access->requirePermission($permission)->value !== $actor->value) {
                 throw new AccessDeniedException();
             }
+        }
+        if (
+            in_array($kind, [HistoryCheckSubject::Program, HistoryCheckSubject::CourseGroup,
+            HistoryCheckSubject::Curriculum], true)
+        ) {
+            if ($actor->value !== $this->access->authenticatedUserId()->value) {
+                throw new AccessDeniedException();
+            }
+            return new HistoryCheckScope(
+                $kind,
+                $id,
+                curriculumContext: $this->catalogHistory->curriculumContext($kind->value, $id)
+            );
         }
         if ($kind === HistoryCheckSubject::GraduatePolicy) {
             if ($actor->value !== $this->access->authenticatedUserId()->value) {
@@ -178,6 +193,7 @@ final readonly class HistoryCheckService
             || $scope->section?->value !== $current->section?->value
             || $scope->course?->value !== $current->course?->value
             || $scope->term?->value !== $current->term?->value
+            || $scope->curriculumContext !== $current->curriculumContext
         ) {
             throw new ConcurrentModificationException(
                 "Record routing changed. Reopen the record before checking its history.",
@@ -238,6 +254,9 @@ final readonly class HistoryCheckService
                     ->course($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Section => $this->catalogHistory
                     ->section($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
+                HistoryCheckSubject::Program, HistoryCheckSubject::CourseGroup, HistoryCheckSubject::Curriculum
+                => $this->catalogHistory->curriculum($scope->kind->value, $scope->subject,
+                        HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Waitlist => $this->waitlistHistory
                     ->verify($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Credit => $this->academics
@@ -297,6 +316,19 @@ final readonly class HistoryCheckService
     private function lock(HistoryCheckScope $scope): void
     {
         $this->roles->lock();
+        if ($scope->kind === HistoryCheckSubject::Program) {
+            $this->catalog->lock('programs', $scope->subject);
+        }
+        if ($scope->kind === HistoryCheckSubject::CourseGroup) {
+            $this->courseGroups->lock($scope->subject);
+        }
+        if ($scope->kind === HistoryCheckSubject::Curriculum) {
+            $this->curricula->lockContext(
+                new EntityId($scope->curriculumContext['program_id']),
+                new EntityId($scope->curriculumContext['academic_year_id'])
+            );
+            $this->curricula->lock($scope->subject);
+        }
         if ($scope->person !== null) {
             $this->people->lock($scope->person);
         }

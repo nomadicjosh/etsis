@@ -543,6 +543,46 @@ async function attachGroup(page) {
     await page.getByRole("checkbox", { name: /Version 1 · General education/ }).check();
     await page.getByRole("button", { name: "Add checked blocks", exact: true }).click();
 }
+
+for (const kind of ['group', 'curriculum']) test(`curriculum support ${kind} closes the builder and restores its publication page`, async ({ page }) => {
+    const f = await fixture(page, { existing: true, published: true });
+    const calls = [];
+    await page.route('**/sis/history-checks/**', async route => {
+        const path = new URL(route.request().url()).pathname;
+        calls.push(path);
+        await route.fulfill({ json: path.endsWith('/history/') ? { items: [], next_after: null } : {
+            result: { status: 'verified', events_checked: 1, records_checked: 1, issues: [], records_changed: false },
+            receipt: { reference: id(50), status: 'verified', events_checked: 1, checked_at: '2026-11-25T12:00:00Z' },
+        } });
+    });
+    if (kind === 'group') {
+        await workspaceTool(page, 'Course group library');
+        await page.getByRole('button', { name: 'Version history', exact: true }).first().click();
+    } else {
+        await openDegree(page, true);
+        await page.getByRole('button', { name: 'Back to requirement drafts', exact: true }).click();
+        await page.getByRole('button', { name: 'Published requirements', exact: true }).click();
+    }
+    const label = kind === 'group' ? 'Check course group publication history' : 'Check requirements publication history';
+    const trigger = page.getByRole('button', { name: label, exact: true });
+    await expect(trigger.locator('.bi')).toHaveCount(1);
+    await trigger.click();
+    await expect(page.locator('.degree-audit-studio')).toHaveCount(0);
+    await page.setViewportSize({ width: 320, height: 850 });
+    await page.addStyleTag({ content: 'html { font-size: 32px; }' });
+    await page.getByRole('button', { name: 'Run history check', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('region', { name: 'Current check result' })).toContainText('Retained publications checked: 1');
+    expect(await page.locator('#drawer-body').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    expect((await new AxeBuilder({ page }).include('#record-drawer').analyze()).violations).toEqual([]);
+    if (kind === 'curriculum') await page.screenshot({ path: '/tmp/etsis-curriculum-history-phone.png' });
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Published requirement versions', exact: true })).toBeVisible();
+    await expect(trigger).toBeFocused();
+    expect(calls.some(path => path.includes(`/history-checks/${kind}/`) && path.endsWith('/run/'))).toBe(true);
+    expect(f.calls.some(call => /\/(save|publish|review|assign)\/$/.test(call.path))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
 test("independent course group uses cards, checkboxes, requirement types and reviewed publication", async ({
     page,
 }) => {

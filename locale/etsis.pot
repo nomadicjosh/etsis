@@ -5364,3 +5364,24 @@ msgstr ""
 
 msgid "Each custom label needs at least one condition."
 msgstr ""
+
+msgid "Program publications"
+msgstr ""
+
+msgid "Reusable course group publications"
+msgstr ""
+
+msgid "Degree and specialization requirements publications"
+msgstr ""
+
+msgid "Check program publication history"
+msgstr ""
+
+msgid "Check course group publication history"
+msgstr ""
+
+msgid "Check requirements publication history"
+msgstr ""
+
+msgid "Compare this publication stream with its own retained projections and current pointers using a 200-event allowance. Program checks include recorded cohort definitions and specialization choices. Group and requirements checks verify publication order, routing and current references. This does not evaluate dependent course or grading streams, student work, graduation eligibility, current drafts or archive completeness. Nothing is published or repaired."
+msgstr ""

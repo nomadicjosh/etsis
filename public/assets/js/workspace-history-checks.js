@@ -47,7 +47,9 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
     const graduateKinds = ['gradpolicy', 'graduate'];
     const employmentKinds = ['primary', 'position', 'time'];
     kinds.course = text('catalog_course'); kinds.section = text('catalog_section');
-    const catalogKinds = ['course', 'section'];
+    for (const kind of ['program', 'group', 'curriculum']) kinds[kind] = text(`catalog_${kind}`);
+    const catalogKinds = ['course', 'section', 'program', 'group', 'curriculum'];
+    const curriculumKinds = ['program', 'group', 'curriculum'];
     const statuses = {
         verified: ['Verified within this check', 'The selected recorded sources matched their projections at the observed point.'],
         history_gaps: ['Earlier history is incomplete', 'Available evidence matched, but earlier observations or unrecorded components prevent a complete-history conclusion.'],
@@ -134,7 +136,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         controls.append(run, button('Refresh previous checks', () => load()));
         if (back) controls.append(node('button', { type: 'button', class: 'btn btn-link', onclick: event => task(back, event.currentTarget) }, 'Back to record'));
         body.append(node('h3', { class: 'h5' }, kinds[kind]),
-            node('p', {}, text(graduateKinds.includes(kind) ? 'graduate_help' : catalogKinds.includes(kind) ? 'catalog_help' : employmentKinds.includes(kind) ? 'hr_help' :
+            node('p', {}, text(graduateKinds.includes(kind) ? 'graduate_help' : curriculumKinds.includes(kind) ? 'catalog_curriculum_help' : catalogKinds.includes(kind) ? 'catalog_help' : employmentKinds.includes(kind) ? 'hr_help' :
                 kind === 'waitlist' ? 'waitlist_help' : kind === 'credit' ? 'credit_help' : kind === 'progress' ? 'progress_help' : ['advisors', 'requirements'].includes(kind) ? 'curriculum_help' : 'check_help')),
             node('p', { class: 'form-text' }, text(employmentKinds.includes(kind) ? 'hr_history_help' : 'history_help')),
             controls, status, result, history, node('div', { class: 'd-flex gap-2 flex-wrap' }, previous, older));
@@ -152,5 +154,19 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         work(load);
         return body;
     }
-    return { open };
+    function publicationAction(kind, id, reopen, beforeOpen = null) {
+        const trigger = node('button', { type: 'button', class: 'btn btn-outline-primary',
+            'data-publication-check': kind, onclick: event => task(async () => {
+                beforeOpen?.();
+                await open(kind, id, async () => {
+                    await reopen();
+                    document.querySelector(`[data-publication-check="${kind}"]`)?.focus();
+                });
+            }, event.currentTarget) }, text(`check_${kind}`));
+        if (!trigger.querySelector('.bi')) trigger.prepend(node('i', {
+            class: 'bi bi-shield-check me-2', 'aria-hidden': 'true',
+        }));
+        return trigger;
+    }
+    return { open, publicationAction };
 };

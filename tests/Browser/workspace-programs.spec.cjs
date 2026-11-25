@@ -2,6 +2,45 @@ const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const id = number => `01K000000000000000000000${String(number).padStart(2, '0')}`;
 
+test('program publication support returns to the retained program page with focus', async ({ page }) => {
+    const f = await fixture(page);
+    const checks = [];
+    await page.route('**/sis/history-checks/**', async route => {
+        const path = new URL(route.request().url()).pathname;
+        checks.push({ path, csrf: route.request().headers()['x-csrf-token'] });
+        await route.fulfill({ json: path.endsWith('/history/') ? { items: [], next_after: null } : {
+            result: { status: 'verified', events_checked: 1, records_checked: 1, issues: [], records_changed: false },
+            receipt: { reference: id(50), status: 'verified', events_checked: 1, checked_at: '2026-11-25T12:00:00Z' },
+        } });
+    });
+    await page.getByRole('button', { name: 'Published program details', exact: true }).click();
+    const trigger = page.getByRole('button', { name: 'Check program publication history', exact: true });
+    await expect(trigger.locator('.bi')).toHaveCount(1);
+    await trigger.click();
+    await expect(page.locator('#drawer-body')).toContainText('Program checks include recorded cohort definitions');
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Current check result' })).toContainText('Retained publications checked: 1');
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(trigger).toBeFocused();
+    expect(checks.find(call => call.path.endsWith('/run/')).csrf).toBe('fictional-test-token');
+    expect(checks.every(call => call.path.includes(`/program/${id(1)}/`))).toBe(true);
+    expect(f.calls.some(call => /\/(save|commit|review)\/$/.test(call.path))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('program publication support stays hidden from catalog-only staff', async ({ page }) => {
+    const f = await fixture(page);
+    await page.goto('/admin/catalog-only-fixture/');
+    await page.locator('.workspace-nav-link[data-workspace="courses"]').click();
+    await page.getByRole('link', { name: 'Programs', exact: true }).click();
+    await page.getByRole('button', { name: 'Computer Science', exact: true }).click();
+    await page.getByRole('button', { name: 'Program details & publications', exact: true }).click();
+    await page.getByRole('button', { name: 'Published program details', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Check program publication history', exact: true })).toHaveCount(0);
+    expect(f.calls.some(call => call.path.includes('/history-checks/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
 async function fixture(page, options = {}) {
     const calls = [], errors = [], publications = [];
     let definition = { code: 'BSCS', title: 'Computer Science', description: options.description || null, classifications: { department: null, academic_level: null, award: null, school: null, field_of_study: null, campus: null, additional_campuses: [], department_school: null, additional_departments: [] } };

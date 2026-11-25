@@ -19,7 +19,7 @@ final readonly class CatalogProjectionCheck
         public array $issues = [],
     ) {
         if (
-            !in_array($kind, ['course', 'section'], true)
+            !in_array($kind, ['course', 'section', 'program', 'group', 'curriculum'], true)
             || !in_array($status, ['verified', 'observed_empty', 'unverified', 'changed', 'limited'], true)
             || $events < 0 || $events > 2000
             || ($status === 'verified' ? $publications === null || $publications < 1 || $publications > $events

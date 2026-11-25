@@ -60,6 +60,7 @@ try {
                 'check-grade-certification',
                 'check-support-history',
                 'check-catalog-projections',
+                'check-curriculum-projections',
                 'check-maintenance',
                 'check-profile-requests',
                 'check-portal',
@@ -470,6 +471,9 @@ try {
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-account-recovery') {
             require __DIR__ . '/AccountRecoveryBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-curriculum-projections') {
+            require __DIR__ . '/CurriculumProjectionBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-catalog-projections') {
             require __DIR__ . '/CatalogProjectionBootChecks.php';
