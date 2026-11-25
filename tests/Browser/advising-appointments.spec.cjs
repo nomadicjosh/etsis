@@ -1,15 +1,20 @@
 'use strict';
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
-const { recordAction } = require('./support/workspace-actions.cjs');
+const { recordAction, workspaceTool } = require('./support/workspace-actions.cjs');
 const id = n => String(n).padStart(26, '0');
 const student = id(1), person = id(2), pursuit = id(3), program = id(4), term = id(5), host = id(6);
 const time = (start = '2026-08-11T10:00', end = '2026-08-11T10:30') => ({ start, end, timezone: 'America/Los_Angeles', starts_at: start + ':00Z', ends_at: end + ':00Z' });
 const original = () => ({ id: id(10), status: 'scheduled', version: 0, time: time(), message: 'Fictional <b>meeting</b> instructions.',
     host_name: 'Fictional Advisor', can_act: true, can_reschedule: true, cancel_only: false, new_operation: id(20),
     changes: [{ action: 'schedule', time: time(), message: 'Fictional <b>meeting</b> instructions.', at: '2026-08-10T17:00:00Z' }] });
+const availabilityWindow = () => ({ id: id(90), status: 'open', version: 0,
+    time: time('2026-08-11T13:00', '2026-08-11T15:00'), slot_minutes: 30, message: 'Fictional office <b>meeting</b> instructions.',
+    created_at: '2026-08-10T17:00:00Z', closed_at: null, close_reason: null });
 async function fixture(page, channel = 'staff', options = {}) {
     const calls = [], errors = [];
+    let windows = options.availabilitySeed ? [availabilityWindow()] : [], bookingRejected = options.staleBooking, closeRejected = options.staleClosure;
+    const booked = new Map();
     let items = options.seed ? [original()] : channel === 'staff' ? [] : [original()], stale = options.stale, deny = false, sequence = 30;
     page.on('pageerror', e => errors.push(e.message));
     await page.route(channel === 'staff' ? '**/sis/**' : '**/portal/api/**', async route => {
@@ -24,6 +29,39 @@ async function fixture(page, channel = 'staff', options = {}) {
         else if (path.endsWith('/programs/') || path.endsWith('/degree-programs/')) result = { items: [{ id: pursuit, program_id: program, program_code: 'BS.CS', program_title: 'Computing', term_code: '26/FA', status: 'active', is_primary: true }], next_after: null };
         else if (path === '/portal/api/me/') result = { students: channel === 'owner' ? [{ id: student, primary_program_id: program }] : [] };
         else if (path === '/portal/api/advising/') result = { items: [{ student_id: student, pursuit_id: pursuit, name: 'Alex Example', institutional_id: 'S-FICTIONAL', program: { code: 'BS.CS', title: 'Computing' }, entry_term: { code: '26/FA' } }], next_after: null };
+        else if (path === '/portal/api/advising-availability/context/') result = { can_manage: channel === 'advisor' };
+        else if (path === '/sis/advising-availability/candidates/') result = { items: [{ id: host, given_name: 'Fictional', family_name: 'Advisor' }], next_after: null };
+        else if (path.includes('/advising-availability/')) {
+            if (deny) return route.fulfill({ status: 403, json: { error: 'Fictional availability access ended.' } });
+            if (path.endsWith('/list/')) result = { items: windows.filter(w => data.finished ? w.status === 'closed' : w.status === 'open'),
+                next_after: null, host_name: 'Fictional Advisor', can_create: true, new_id: id(sequence++), timezone: 'America/Los_Angeles' };
+            else if (path.endsWith('/create/')) {
+                const w = { ...availabilityWindow(), id: data.window_id, time: time(data.start, data.end), slot_minutes: data.slot_minutes, message: data.message };
+                windows.push(w); result = { id: w.id, version: 0, status: 'open' };
+            } else if (path.endsWith('/close/')) {
+                if (closeRejected) { closeRejected = false; return route.fulfill({ status: 409, json: { error: 'Fictional availability changed. Refresh it.' } }); }
+                const w = windows.find(w => w.id === data.window_id); w.status = 'closed'; w.version = 1; w.close_reason = data.message;
+                result = { id: w.id, version: 1, status: 'closed' };
+            }
+        }
+        else if (path.endsWith('/appointments/available-times/')) {
+            if (deny) return route.fulfill({ status: 403, json: { error: 'Fictional booking access ended.' } });
+            result = { hosts: [{ id: host, name: 'Fictional Advisor' }], today: '2026-08-10', timezone: 'America/Los_Angeles', new_id: id(sequence++), windows: [], slots: [] };
+            if (data.window_id) {
+                result.window = windows.find(w => w.id === data.window_id);
+                result.slots = ['13:00', '13:30', '14:00', '14:30'].map((hour, i) => time('2026-08-11T' + hour, '2026-08-11T' + ['13:30','14:00','14:30','15:00'][i]));
+            } else if (data.date) result.windows = windows.filter(w => w.status === 'open');
+        }
+        else if (path.endsWith('/appointments/book/')) {
+            if (bookingRejected) { bookingRejected = false; return route.fulfill({ status: 409, json: { error: 'Fictional available times changed. Review the source.' } }); }
+            if (booked.has(data.appointment_id)) result = booked.get(data.appointment_id);
+            else {
+                const w = windows.find(w => w.id === data.window_id);
+                const item = { ...original(), id: data.appointment_id, time: time(data.start, '2026-08-11T13:30'), message: w.message };
+                item.changes[0] = { ...item.changes[0], time: item.time, message: item.message }; items.push(item);
+                result = { id: item.id, status: 'scheduled', version: 0 }; booked.set(item.id, result);
+            }
+        }
         else if (path.endsWith('/standing/')) result = { items: [], as_of: '2026-08-10' };
         else if (path.endsWith('/progress/')) return route.fulfill({ status: 409, json: { error: 'Fictional degree review unavailable.' } });
         else if (path === '/portal/api/timetable/context/') {
@@ -48,7 +86,7 @@ async function fixture(page, channel = 'staff', options = {}) {
             if (deny) return route.fulfill({ status: 403, json: { error: 'Fictional access ended.' } });
             result = { items: items.filter(i => data.appointment_id ? i.id === data.appointment_id : data.finished ? i.status !== 'scheduled' : i.status === 'scheduled').map(i => ({ ...i,
                 can_reschedule: i.status === 'scheduled' && channel !== 'owner', can_act: i.status === 'scheduled', can_correct: channel === 'staff' && ['held', 'no_show'].includes(i.status), cancel_only: channel === 'owner', new_operation: id(sequence++) })),
-                next_after: null, new_id: id(sequence++), can_schedule: !data.appointment_id && channel !== 'owner',
+                next_after: null, new_id: id(sequence++), can_schedule: !data.appointment_id && channel !== 'owner', can_book: !data.appointment_id && channel === 'owner',
                 hosts: channel === 'owner' ? [] : [{ advisor_person_id: host, name: 'Fictional Advisor', starts_on: '2026-01-01', ends_on: null }], timezone: 'America/Los_Angeles' };
         } else if (path.endsWith('/appointments/schedule/')) {
             if (options.invalid) { options.invalid = false; return route.fulfill({ status: 422, json: { error: 'Please correct the highlighted fields.', errors: [{ field: 'message', message: 'Fictional details need clarification.' }] } }); }
@@ -320,5 +358,122 @@ test('a delayed calendar period cannot replace the student record after Back to 
     release(); await accepted;
     await expect(page.getByRole('region', { name: 'Student programs', exact: true })).toBeVisible();
     await expect(page.getByRole('heading', { name: 'Appointment calendar', exact: true })).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('office offers availability and preserves a stale closure draft through refresh', async ({ page }) => {
+    const f = await fixture(page, 'staff', { staleClosure: true });
+    await page.goto('/admin/'); await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await workspaceTool(page, 'Advisor availability');
+    await page.getByRole('button', { name: 'Manage availability', exact: true }).click();
+    await page.getByRole('button', { name: 'Add availability', exact: true }).click();
+    await page.getByLabel('Availability starts at', { exact: true }).fill('2026-08-11T13:00');
+    await page.getByLabel('Availability ends at', { exact: true }).fill('2026-08-11T15:00');
+    await page.getByLabel('Meeting instructions visible to students', { exact: true }).fill('Fictional office <b>meeting</b> instructions.');
+    await page.getByRole('button', { name: 'Save availability', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Availability saved.');
+    await page.getByText('Close availability', { exact: true }).click();
+    await page.getByLabel('Reason for closing availability', { exact: true }).fill('Fictional office closure.');
+    await page.getByRole('button', { name: 'Confirm closure', exact: true }).click();
+    await page.getByRole('button', { name: 'Refresh availability', exact: true }).click();
+    await expect(page.getByLabel('Reason for closing availability', { exact: true })).toHaveValue('Fictional office closure.');
+    await page.getByRole('button', { name: 'Confirm closure', exact: true }).click();
+    await page.getByRole('button', { name: 'Finished availability', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional office closure.');
+    await expect(page.locator('#drawer-body b')).toHaveCount(0);
+    await page.getByRole('button', { name: 'Back to advisor search', exact: true }).click();
+    await expect(page.getByLabel('Find an advisor', { exact: true })).toBeVisible();
+    expect(f.errors).toEqual([]);
+});
+
+test('office availability access loss clears drafts and keeps the return to advisor search', async ({ page }) => {
+    const f = await fixture(page, 'staff', { availabilitySeed: true });
+    await page.goto('/admin/'); await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await workspaceTool(page, 'Advisor availability');
+    await page.getByRole('button', { name: 'Manage availability', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional office <b>meeting</b> instructions.');
+    await page.getByRole('button', { name: 'Add availability', exact: true }).click();
+    await page.getByLabel('Meeting instructions visible to students', { exact: true }).fill('Fictional private draft.');
+    f.deny();
+    await page.getByRole('button', { name: 'Refresh availability', exact: true }).click();
+    await expect(page.locator('#drawer-body')).not.toContainText('Fictional office <b>meeting</b> instructions.');
+    await expect(page.getByLabel('Meeting instructions visible to students', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Back to advisor search', exact: true }).click();
+    await expect(page.getByLabel('Find an advisor', { exact: true })).toBeVisible();
+    expect(f.errors).toEqual([]);
+});
+
+test('advisor manages personal availability within the campus theme', async ({ page }) => {
+    const f = await fixture(page, 'advisor');
+    await page.goto('/portal/student/advising/');
+    await page.getByRole('button', { name: 'Manage my availability', exact: true }).click();
+    await page.getByRole('button', { name: 'Add availability', exact: true }).click();
+    await page.getByLabel('Availability starts at', { exact: true }).fill('2026-08-11T13:00');
+    await page.getByLabel('Availability ends at', { exact: true }).fill('2026-08-11T15:00');
+    await page.getByLabel('Meeting instructions visible to students', { exact: true }).fill('Fictional personal office instructions.');
+    await accessible(page);
+    await page.getByRole('button', { name: 'Save availability', exact: true }).click();
+    await expect(page.locator('#campus-service-content')).toContainText('Availability saved.');
+    expect(f.calls.some(c => c.path === '/portal/api/advising-availability/create/')).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+async function chooseOfferedTime(page) {
+    await page.getByRole('button', { name: 'Book an available time', exact: true }).click();
+    await page.getByLabel('Availability date', { exact: true }).fill('2026-08-11');
+    await page.getByRole('button', { name: 'Find availability', exact: true }).click();
+    await page.getByRole('button', { name: 'View available times', exact: true }).click();
+    await page.getByRole('button', { name: /Choose this time.*13:00/ }).click();
+}
+
+test('student books an offered time with exact retry identity and returns to the confirmed appointment', async ({ page }) => {
+    const f = await fixture(page, 'owner', { availabilitySeed: true, staleBooking: true });
+    await openPortal(page, 'owner'); await chooseOfferedTime(page);
+    await accessible(page);
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    const save = page.getByRole('button', { name: 'Confirm booking', exact: true });
+    await save.scrollIntoViewIfNeeded(); await save.focus(); await expect(save).toBeFocused();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: '/tmp/etsis-self-booking-phone.png', fullPage: true });
+    await save.press('Space');
+    await expect(page.locator('#campus-service-content')).toContainText('Fictional available times changed.');
+    await save.click();
+    await expect(page.locator('#campus-service-content')).toContainText('Your appointment is booked.');
+    const requests = f.calls.filter(c => c.path.endsWith('/appointments/book/'));
+    expect(requests[0].data).toEqual(requests[1].data);
+    expect(requests.every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    await page.getByRole('button', { name: 'Back to appointments', exact: true }).click();
+    await expect(page.locator('#campus-service-content')).toContainText('2026-08-11 13:00');
+    expect(f.errors).toEqual([]);
+});
+
+test('booking access loss clears private instructions and preserves Back to appointments', async ({ page }) => {
+    const f = await fixture(page, 'owner', { availabilitySeed: true });
+    await openPortal(page, 'owner');
+    await page.getByRole('button', { name: 'Book an available time', exact: true }).click();
+    await page.getByLabel('Availability date', { exact: true }).fill('2026-08-11');
+    await page.getByRole('button', { name: 'Find availability', exact: true }).click();
+    f.deny();
+    await page.getByRole('button', { name: 'View available times', exact: true }).click();
+    await expect(page.locator('#campus-service-content')).not.toContainText('Fictional office <b>meeting</b> instructions.');
+    await expect(page.getByRole('button', { name: 'Back to appointments', exact: true })).toBeVisible();
+    expect(f.errors).toEqual([]);
+});
+
+test('a changed booking date discards a delayed offered-slot response', async ({ page }) => {
+    const f = await fixture(page, 'owner', { availabilitySeed: true });
+    await openPortal(page, 'owner');
+    await page.getByRole('button', { name: 'Book an available time', exact: true }).click();
+    await page.getByLabel('Availability date', { exact: true }).fill('2026-08-11');
+    await page.getByRole('button', { name: 'Find availability', exact: true }).click();
+    let release, began;
+    const gate = new Promise(resolve => { release = resolve; });
+    const started = new Promise(resolve => { began = resolve; });
+    await page.route('**/appointments/available-times/', async route => { began(); await gate; await route.fallback(); });
+    await page.getByRole('button', { name: 'View available times', exact: true }).click(); await started;
+    await page.getByLabel('Availability date', { exact: true }).fill('2026-08-12');
+    const response = page.waitForResponse(r => r.url().includes('/available-times/')); release(); await response;
+    await expect(page.getByRole('button', { name: /Choose this time/ })).toHaveCount(0);
+    await expect(page.getByLabel('Availability date', { exact: true })).toHaveValue('2026-08-12');
     expect(f.errors).toEqual([]);
 });

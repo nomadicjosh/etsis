@@ -140,6 +140,17 @@
             previous.hidden = more.hidden = add.hidden = true;
             if (onBack) controls.append(button(t.back_calendar, onBack, 'arrow-left'));
             controls.append(refresh, ...(selectedAppointment ? [] : [switcher, previous, more]), ...(owner ? [] : [add]));
+            if (owner && !selectedAppointment) {
+                const labels = JSON.parse(document.getElementById('advising-availability-labels').textContent);
+                const book = button(labels.book, async () => {
+                    controls.hidden = true; editor.replaceChildren(); creation = null; content.replaceChildren(); availability.hidden = true;
+                    await window.createAdvisingAvailability({ node, request, labels }).book(content, endpoint, {
+                        back: () => work(async () => { controls.hidden = false; await load(); }),
+                    });
+                }, 'calendar2-plus', true);
+                book.hidden = true; book.dataset.ownerBooking = '';
+                controls.append(book);
+            }
             if (!selectedAppointment) controls.append(button(t.calendar, async () => {
                 controls.hidden = true; editor.replaceChildren(); creation = null; content.replaceChildren();
                 availability.hidden = true;
@@ -156,6 +167,8 @@
                 if (!container.isConnected || current !== generation) return;
                 hosts = data.hosts; zone = data.timezone; createId ||= data.new_id;
                 add.hidden = owner || !data.can_schedule;
+                const booking = controls.querySelector('[data-owner-booking]');
+                if (booking) booking.hidden = !data.can_book;
                 availability.hidden = owner || Boolean(selectedAppointment) || data.can_schedule;
                 if (!data.can_schedule) { editor.replaceChildren(); creation = null; drafts.delete('create'); if (activeDraft === 'create') activeDraft = null; }
                 next = data.next_after; more.hidden = !next; previous.hidden = !stack.length;

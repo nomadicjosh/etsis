@@ -852,6 +852,11 @@ return static function (Psr7Router $router): void {
         ])
             ->name('sis.standing.' . $method);
     }
+    $availability = \Application\Http\Controller\AdvisingAvailabilityController::class;
+    $router->map(['POST'], '/sis/advising-availability/candidates/', [$availability, 'candidates'])
+        ->name('advising.availability.candidates');
+    $router->map(['POST'], '/sis/advising-availability/{host}/{action}/', [$availability, 'staff'])
+        ->name('advising.availability.staff');
     $appointments = \Application\Http\Controller\AdvisingAppointmentController::class;
     $router->map(['POST'], '/sis/students/{student}/programs/{pursuit}/appointments/calendar/', [
         $appointments, 'staffCalendar',

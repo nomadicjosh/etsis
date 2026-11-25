@@ -9,7 +9,10 @@ use Domain\Access\Repository\AccessRepository;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Advising\AdvisingAppointment;
 use Domain\Advising\AppointmentTime;
+use Domain\Advising\AdvisingAvailability;
+use Domain\Advising\AvailabilityBooking;
 use Domain\Advising\Repository\AdvisingAppointmentRepository;
+use Domain\Advising\Repository\AdvisingAvailabilityRepository;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Scheduling\CalendarPeriod;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
@@ -44,6 +47,7 @@ final readonly class AdvisingAppointmentService
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private Clock $clock,
+        private AdvisingAvailabilityRepository $availability,
     ) {
     }
 
@@ -181,6 +185,7 @@ final readonly class AdvisingAppointmentService
             }
             return ['items' => $views, 'next_after' => count($rows) > 10 ? end($items)->facts()['id'] : null,
                 'new_id' => EntityId::generate()->value,
+                'can_book' => $channel === 'owner' && $selected === null && $context['current'],
                 'can_schedule' => $selected === null && $hosts !== [] && $context['owner'] !== null,
                 'hosts' => array_map(static fn(array $h): array => array_intersect_key($h, array_flip([
                     'advisor_person_id', 'name', 'starts_on', 'ends_on',
@@ -198,6 +203,225 @@ final readonly class AdvisingAppointmentService
         } catch (AccessDeniedException) {
             return false;
         }
+    }
+
+    private function bookable(AdvisingAvailability $window, array $hosts): void
+    {
+        $d = $window->facts();
+        $date = substr($d['time']['start'], 0, 10);
+        $matches = array_filter($hosts, static fn(array $h): bool =>
+            $h['advisor_person_id'] === $d['host_person_id'] && $h['user_id'] === $d['host_user_id']
+                && $h['starts_on'] <= $date && ($h['ends_on'] === null || $h['ends_on'] >= $date));
+        if ($matches === [] || $d['time']['timezone'] !== $this->clock->now()->getTimezone()->getName()) {
+            throw new AccessDeniedException(trans(
+                'This advisor availability is no longer available for your program.'
+            ));
+        }
+        if ($d['status'] !== 'open') {
+            throw new ConcurrentModificationException(trans('Availability closed. Choose another window.'));
+        }
+    }
+
+    /** Owner-only, with no appointment-management duty or other students' schedule details. */
+    public function bookingChoices(
+        EntityId $student,
+        EntityId $pursuit,
+        ?EntityId $host = null,
+        ?string $date = null,
+        ?EntityId $windowId = null
+    ): array {
+        $actor = $this->authorize($student, $pursuit, 'owner');
+        return $this->transactions->run(function () use ($student, $pursuit, $actor, $host, $date, $windowId): array {
+            $context = $this->context($student, $pursuit);
+            if (!$context['current']) {
+                throw new AccessDeniedException(trans('Self-booking requires the current primary active program.'));
+            }
+            $hosts = $this->advisors->appointmentHosts($student, $pursuit, 'owner');
+            $result = ['hosts' => array_values(array_reduce($hosts, static function (array $all, array $h): array {
+                $all[$h['advisor_person_id']] = ['id' => $h['advisor_person_id'], 'name' => $h['name']];
+                return $all;
+            }, [])), 'today' => $this->clock->now()->format('Y-m-d'),
+                'timezone' => $this->clock->now()->getTimezone()->getName(), 'new_id' => EntityId::generate()->value,
+                'windows' => [], 'slots' => []];
+            $read = null;
+            $source = [];
+            if ($windowId !== null) {
+                $window = $this->availability->find($windowId) ?? throw new RecordNotFoundException(trans(
+                    'Availability not found.'
+                ));
+                $this->bookable($window, $hosts);
+                $source = $window->facts();
+                $read = function () use ($window, $student): array {
+                    $slots = [];
+                    foreach ($window->slots() as $slot) {
+                        if (
+                            $slot->startsAt > $this->now() && !$this->records->conflict(
+                                $student,
+                                new EntityId($window->facts()['host_person_id']),
+                                new EntityId($window->facts()['id']),
+                                $slot
+                            )
+                        ) {
+                            $slots[] = $slot->facts();
+                        }
+                    }
+                    return $slots;
+                };
+                $result['window'] = array_intersect_key($window->view(), array_flip(['id', 'time',
+                    'slot_minutes', 'message', 'version']));
+                $result['slots'] = $read();
+            } elseif ($host !== null && $date !== null) {
+                if (!in_array($host->value, array_column($hosts, 'advisor_person_id'), true)) {
+                    throw new AccessDeniedException();
+                }
+                $period = new CalendarPeriod($date, $this->clock->now()->getTimezone(), 'week');
+                $day = array_values(array_filter(
+                    $period->dayIntervals(),
+                    static fn($d): bool => $d->startsAt->format('Y-m-d') === $date
+                ))[0];
+                $utc = new DateTimeZone('UTC');
+                $read = fn(): array => $this->availability->on(
+                    $host,
+                    $day->startsAt->setTimezone($utc)->format('Y-m-d\TH:i:s\Z'),
+                    $day->endsAt->setTimezone($utc)->format('Y-m-d\TH:i:s\Z')
+                );
+                $windows = $read();
+                if (count($windows) > 20) {
+                    throw new ValidationException([['field' => 'date',
+                        'message' => trans('Ask the advising office to consolidate availability on this date.')]]);
+                }
+                $source = array_map(static fn(AdvisingAvailability $w): array => $w->facts(), $windows);
+                foreach ($windows as $window) {
+                    try {
+                        $this->bookable($window, $hosts);
+                    } catch (AccessDeniedException) {
+                        continue;
+                    }
+                    if ($window->facts()['time']['ends_at'] > $this->now()) {
+                        $result['windows'][] = array_intersect_key($window->view(), array_flip(['id', 'time',
+                            'slot_minutes', 'message', 'version']));
+                    }
+                }
+            } elseif ($host !== null || $date !== null) {
+                throw new ValidationException([['field' => 'date',
+                    'message' => trans('Choose an advisor and date together.')]]);
+            }
+            $this->audit->record($actor, 'advising.available_times_read', $student);
+            if ($windowId !== null) {
+                if ($this->availability->find($windowId)?->facts() !== $source || $read() !== $result['slots']) {
+                    throw new ConcurrentModificationException(trans(
+                        'Available times changed. Refresh before booking.'
+                    ));
+                }
+            } elseif (
+                $read !== null && $source !== array_map(
+                    static fn(AdvisingAvailability $w): array => $w->facts(),
+                    $read()
+                )
+            ) {
+                throw new ConcurrentModificationException(trans('Availability changed. Choose the date again.'));
+            }
+            $this->finish($student, $pursuit, 'owner', $actor, $context);
+            if ($hosts !== $this->advisors->appointmentHosts($student, $pursuit, 'owner')) {
+                throw new ConcurrentModificationException(trans('Advisor assignments changed. Refresh appointments.'));
+            }
+            return $result;
+        });
+    }
+
+    public function book(
+        EntityId $student,
+        EntityId $pursuit,
+        EntityId $id,
+        EntityId $windowId,
+        int $windowVersion,
+        string $start
+    ): array {
+        $actor = $this->authorize($student, $pursuit, 'owner');
+        return $this->transactions->run(function () use (
+            $student,
+            $pursuit,
+            $id,
+            $windowId,
+            $windowVersion,
+            $start,
+            $actor
+): array {
+            $old = $this->records->find($student, $pursuit, $id);
+            $window = $old === null ? ($this->availability->find($windowId)
+                ?? throw new RecordNotFoundException(trans('Availability not found.'))) : null;
+            $host = new EntityId($old?->facts()['host_person_id'] ?? $window->facts()['host_person_id']);
+            $this->lock($student, $host);
+            $this->authorize($student, $pursuit, 'owner', $actor);
+            $context = $this->context($student, $pursuit);
+            $old = $this->records->find($student, $pursuit, $id);
+            if ($old !== null) {
+                $facts = $old->facts();
+                if (
+                    $facts['owner_user_id'] !== $actor->value || !isset($facts['booking'])
+                    || $facts['booking']['window_id'] !== $windowId->value || $windowVersion !== 0
+                ) {
+                    throw new AccessDeniedException();
+                }
+                $booking = new AvailabilityBooking($facts['booking']);
+                $time = $booking->slot($start) ?? throw new ConcurrentModificationException(trans(
+                    'Choose one of the offered times.'
+                ));
+                $result = $old->retry($id, $actor, $old->intent(
+                    'schedule',
+                    -1,
+                    $time,
+                    $facts['actions'][0]['message']
+                ));
+            } else {
+                $window = $this->availability->find($windowId) ?? throw new RecordNotFoundException(trans(
+                    'Availability not found.'
+                ));
+                $hosts = $this->advisors->appointmentHosts($student, $pursuit, 'owner');
+                $this->bookable($window, $hosts);
+                $source = $window->facts();
+                if ($windowVersion !== $source['version'] || $host->value !== $source['host_person_id']) {
+                    throw new ConcurrentModificationException(trans('Availability changed. Refresh before booking.'));
+                }
+                $booking = AvailabilityBooking::from($window);
+                $time = $booking->slot($start) ?? throw new ConcurrentModificationException(trans(
+                    'Choose one of the offered times.'
+                ));
+                $hosts = $this->eligible($student, $pursuit, 'owner', $context, $host, $time, $id);
+                if ($this->records->activeCount($student, $pursuit) >= 20) {
+                    throw new ConcurrentModificationException(trans(
+                        'Resolve existing appointments before booking another (20 active maximum per program).'
+                    ));
+                }
+                $item = AdvisingAppointment::create(
+                    $id,
+                    $student,
+                    $pursuit,
+                    $actor,
+                    $host,
+                    new EntityId($source['host_user_id']),
+                    $actor,
+                    $time,
+                    $source['message'],
+                    $this->now(),
+                    $booking
+                );
+                $this->records->save($item, null);
+                $this->audit->record($actor, 'advising.appointment_self_booked', $id);
+                $this->verify($item);
+                if (
+                    $this->availability->find($windowId)?->facts() !== $source
+                    || $hosts !== $this->eligible($student, $pursuit, 'owner', $context, $host, $time, $id)
+                ) {
+                    throw new ConcurrentModificationException(trans(
+                        'Availability changed before booking completed. Refresh it.'
+                    ));
+                }
+                $result = $item->retry($id, $actor, $item->intent('schedule', -1, $time, $source['message']));
+            }
+            $this->finish($student, $pursuit, 'owner', $actor, $context);
+            return $result;
+        });
     }
 
     /** Minimized chronological calendar; global reads are strictly the signed-in student's own appointments. */

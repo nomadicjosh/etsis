@@ -33,13 +33,15 @@ final class AdvisingAppointment implements JsonSerializable
         AppointmentTime $time,
         #[\SensitiveParameter] string $message,
         string $at,
+        ?AvailabilityBooking $booking = null,
     ): self {
+        $booking?->verify($host, $hostUser, $time);
         $item = new self(['purpose' => 'advising.appointment', 'id' => $id->value,
             'student_id' => $student->value, 'pursuit_id' => $pursuit->value,
             'owner_user_id' => $owner->value, 'host_person_id' => $host->value,
             'host_user_id' => $hostUser->value, 'status' => 'scheduled', 'version' => -1,
             'time' => $time->facts(), 'message' => '', 'created_at' => $at, 'updated_at' => $at,
-            'actions' => []]);
+            'actions' => [], ...$booking === null ? [] : ['booking' => $booking->facts()]]);
         $item->apply($id, $actor, 'schedule', -1, $time, $message, $at);
         return $item;
     }
@@ -66,7 +68,8 @@ final class AdvisingAppointment implements JsonSerializable
         return hash('sha256', json_encode(
             [$this->data['id'], $this->data['student_id'],
             $this->data['pursuit_id'], $this->data['owner_user_id'], $this->data['host_person_id'],
-            $this->data['host_user_id'], $action, $version, $time?->facts(), self::message($message)],
+            $this->data['host_user_id'], $action, $version, $time?->facts(), self::message($message),
+                ...isset($this->data['booking']) ? [['booking' => $this->data['booking']]] : []],
             JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         ));
     }
@@ -182,7 +185,8 @@ final class AdvisingAppointment implements JsonSerializable
                 new EntityId($first['actor_id']),
                 $time($first['time']),
                 $first['message'],
-                $first['at']
+                $first['at'],
+                isset($data['booking']) ? new AvailabilityBooking($data['booking']) : null,
             );
             foreach (array_slice($data['actions'], 1) as $entry) {
                 $item->apply(

@@ -97,11 +97,11 @@ final readonly class SqlAdvisorRepository implements AdvisorRepository
         " = 'faculty'))";
     }
 
-    private function candidatesFrom(): string
+    private function candidatesFrom(bool $includeUnlinked = false): string
     {
         $q = $this->sql->quote(...);
         return $q("sis_persons") .
-        " p JOIN " .
+        ($includeUnlinked ? " p LEFT JOIN " : " p JOIN ") .
         $q("users") .
         " u ON u." .
         $q("user_id") .
@@ -126,9 +126,14 @@ final readonly class SqlAdvisorRepository implements AdvisorRepository
         ) !== [];
     }
 
-    public function candidates(string $search, ?EntityId $after = null): array
+    public function candidates(string $search, ?EntityId $after = null, bool $includeAvailabilityHosts = false): array
     {
         $q = $this->sql->quote(...);
+        $eligible = $this->eligible();
+        if ($includeAvailabilityHosts) {
+            $eligible = '(' . $eligible . ' OR EXISTS (SELECT a.' . $q('id') . ' FROM '
+            . $q('sis_advising_availability') . ' a WHERE a.' . $q('host_person_id') . ' = p.' . $q('id') . '))';
+        }
         $like = "%" . str_replace(["!", "%", "_"], ["!!", "!%", "!_"], mb_strtolower($search)) . "%";
         $parameters = [$like, $like];
         if ($after !== null) {
@@ -142,9 +147,9 @@ final readonly class SqlAdvisorRepository implements AdvisorRepository
                 ", p." .
                 $q("family_name") .
                 " FROM " .
-                $this->candidatesFrom() .
+                $this->candidatesFrom($includeAvailabilityHosts) .
                 " WHERE " .
-                $this->eligible() .
+                $eligible .
                 " AND (LOWER(p." .
                 $q("given_name") .
                 ") LIKE ? ESCAPE '!' OR LOWER(p." .

@@ -173,6 +173,9 @@ return static function (Psr7Router $router): void {
         $standing, 'advisor',
     ])
         ->name('portal.standing.advisor');
+    $availability = \Application\Http\Controller\AdvisingAvailabilityController::class;
+    $router->map(['POST'], '/portal/api/advising-availability/{action}/', [$availability, 'mine'])
+        ->name('advising.availability.mine');
     $appointments = \Application\Http\Controller\AdvisingAppointmentController::class;
     $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/appointments/calendar/', [
         $appointments, 'ownerCalendar',
@@ -180,6 +183,11 @@ return static function (Psr7Router $router): void {
     $router->map(['POST'], '/portal/api/advising/students/{student}/programs/{pursuit}/appointments/calendar/', [
         $appointments, 'advisorCalendar',
     ])->name('advisor.appointments.calendar');
+    foreach (['bookingChoices' => 'available-times', 'book' => 'book'] as $method => $suffix) {
+        $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/appointments/' . $suffix . '/', [
+            $appointments, $method,
+        ])->name('owner.appointments.' . $method);
+    }
     $router->map(['POST'], '/portal/api/advising-appointments/calendar/', [
         $appointments, 'myCalendar',
     ])->name('owner.appointments.my_calendar');

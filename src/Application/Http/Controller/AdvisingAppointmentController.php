@@ -78,6 +78,34 @@ final readonly class AdvisingAppointmentController
         ));
     }
 
+    public function bookingChoices(
+        #[\SensitiveParameter] ServerRequest $r,
+        string $student,
+        string $pursuit,
+    ): ResponseInterface {
+        $f = FormInput::from($r);
+        return new JsonResponse($this->service->bookingChoices(
+            new \Domain\Shared\ValueObject\EntityId($student),
+            new \Domain\Shared\ValueObject\EntityId($pursuit),
+            $f->optionalId('host_person_id'),
+            $f->optionalText('date', 10),
+            $f->optionalId('window_id')
+        ));
+    }
+
+    public function book(#[\SensitiveParameter] ServerRequest $r, string $student, string $pursuit): ResponseInterface
+    {
+        $f = FormInput::from($r);
+        return new JsonResponse($this->service->book(
+            new \Domain\Shared\ValueObject\EntityId($student),
+            new \Domain\Shared\ValueObject\EntityId($pursuit),
+            $f->id('appointment_id'),
+            $f->id('window_id'),
+            $f->integer('window_version'),
+            $f->text('start', 16)
+        ));
+    }
+
     public function staffSchedule(
         #[\SensitiveParameter] ServerRequest $r,
         string $student,

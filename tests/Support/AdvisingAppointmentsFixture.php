@@ -77,7 +77,8 @@ final class AdvisingAppointmentsFixture
             new SqlAccessRepository($s->sql),
             $s->transactions,
             $audit ?? $s->audit,
-            $s->clock
+            $s->clock,
+            new \Infrastructure\Persistence\Repository\SqlAdvisingAvailabilityRepository($s->sql, $s->dropCipher)
         );
     }
 

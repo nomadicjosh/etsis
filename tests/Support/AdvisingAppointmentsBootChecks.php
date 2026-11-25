@@ -95,3 +95,58 @@ foreach ([$appointmentBase . 'calendar/', '/portal/api/advising-appointments/cal
 if ($appointmentHistory !== $sis->sql->rows('sis_history_events')) {
     throw new RuntimeException('An attendance correction fabricated an authoritative academic event.');
 }
+
+// Availability and self-booking use real private routes and canonical owner/host identities.
+$availabilityBase = '/sis/advising-availability/' . $advisingPerson->id->value . '/';
+$availabilityPage = $checkInPost($availabilityBase . 'list/', []);
+$availabilityCommand = ['window_id' => $availabilityPage['new_id'], 'start' => $appointmentDay . 'T13:00',
+    'end' => $appointmentDay . 'T15:00', 'timezone' => $availabilityPage['timezone'], 'slot_minutes' => 30,
+    'message' => 'Fictional office instructions.'];
+$checkInPost($availabilityBase . 'create/', $availabilityCommand);
+$checkInPost($availabilityBase . 'create/', $availabilityCommand);
+$sis->access->actor = $sis->admissions->person($advisingStudent->personId)->ownerUserId;
+$bookingChoices = $checkInPost(
+    $appointmentOwnerBase . 'available-times/',
+    ['window_id' => $availabilityCommand['window_id']]
+);
+if (count($bookingChoices['slots']) !== 4 || str_contains(json_encode($bookingChoices), 'host_user_id')) {
+    throw new RuntimeException('Private offered times leaked an account or lost their original boundaries.');
+}
+$bookCommand = ['appointment_id' => $bookingChoices['new_id'], 'window_id' => $availabilityCommand['window_id'],
+    'window_version' => 0, 'start' => $bookingChoices['slots'][0]['start']];
+$bookResult = $checkInPost($appointmentOwnerBase . 'book/', $bookCommand);
+if (
+    $teachingPost($appointmentOwnerBase . 'book/', array_diff_key(
+        $bookCommand,
+        ['window_version' => true]
+    ))->getStatusCode() !== 422
+) {
+    throw new RuntimeException('Self-booking accepted an omitted expected availability version.');
+}
+$sis->access->actor = $advisingActor;
+$checkInPost($availabilityBase . 'close/', ['window_id' => $availabilityCommand['window_id'], 'version' => 0,
+    'message' => 'Fictional office closure.']);
+$sis->access->actor = $sis->admissions->person($advisingStudent->personId)->ownerUserId;
+$retriedBook = $checkInPost($appointmentOwnerBase . 'book/', $bookCommand);
+$selectedBooking = $checkInPost($appointmentOwnerBase . 'list/', ['appointment_id' => $bookResult['id']]);
+if (
+    $bookResult !== $retriedBook || $selectedBooking['items'][0]['status'] !== 'scheduled'
+    || $selectedBooking['items'][0]['message'] !== 'Fictional office instructions.'
+) {
+    throw new RuntimeException('Closing availability rewrote an accepted booking or its original receipt.');
+}
+foreach (
+    [$appointmentOwnerBase . 'available-times/', $appointmentOwnerBase . 'book/',
+    '/portal/api/advising-availability/context/', $availabilityBase . 'create/'] as $path
+) {
+    $probe = $get->withMethod('POST')->withUri(new \Laminas\Diactoros\Uri(
+        'https://campus.example.invalid' . $path
+    ))->withoutHeader('X-CSRF-Token')->withParsedBody([]);
+    if ($app->router->match($probe)->getStatusCode() !== 403) {
+        throw new RuntimeException('Availability or booking bypassed framework CSRF.');
+    }
+}
+$sis->access->actor = $advisingActor;
+if ($appointmentHistory !== $sis->sql->rows('sis_history_events')) {
+    throw new RuntimeException('Availability or self-booking fabricated academic history.');
+}

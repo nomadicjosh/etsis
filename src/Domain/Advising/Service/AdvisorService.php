@@ -266,8 +266,12 @@ final readonly class AdvisorService implements AdvisorProgressAccess
     /** Internal scheduling source: verified assignments and current canonical account links. */
     public function appointmentHosts(EntityId $student, EntityId $pursuit, string $channel): array
     {
-        $actor = $this->access->requirePermission('sis:advising:appointments:manage');
-        if ($channel === 'staff') {
+        $actor = $channel === 'owner' ? $this->owner($student)
+        : $this->access->requirePermission('sis:advising:appointments:manage');
+        if ($channel === 'owner') {
+            [$s, $p] = $this->scope($student, $pursuit);
+            $this->current($s, $p);
+        } elseif ($channel === 'staff') {
             $this->access->requirePermission('sis:student:read');
         } elseif ($channel === 'advisor') {
             $this->requireAdvisor($student, $pursuit);

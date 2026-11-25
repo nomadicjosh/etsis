@@ -103,6 +103,11 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
             JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR,
         ) ?></script>
         <script defer src="/assets/js/advising-appointment-calendar.js"></script>
+        <script id="advising-availability-labels" type="application/json"><?= json_encode(
+            require dirname(__DIR__, 5) . '/resources/views/shared/advising-availability-labels.php',
+            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR,
+        ) ?></script>
+        <script defer src="/assets/js/advising-availability.js"></script>
         <script defer src="/assets/js/advising-appointments.js"></script>
         <script defer src="/assets/js/advising-checkins.js"></script>
         <script id="enrollment-load-labels" type="application/json"><?= json_encode(

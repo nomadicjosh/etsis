@@ -1143,6 +1143,20 @@
         openDrawer: title => { const body = el('div'); dialog(title, body); return body; } });
 
     async function advising(container) {
+        const availabilityLabels = JSON.parse(document.getElementById('advising-availability-labels').textContent);
+        const availabilityHost = el('section', { class: 'mb-4' });
+        const capability = await request('/portal/api/advising-availability/context/', 'POST', {}).catch(() => ({ can_manage: false }));
+        if (pageLeaving) return;
+        if (capability.can_manage) {
+            const openAvailability = button(availabilityLabels.mine, () => {
+                if (!availabilityHost.isConnected) return;
+                openAvailability.remove();
+                window.createAdvisingAvailability({ node: el, request, labels: availabilityLabels })
+                    .manage(availabilityHost, '/portal/api/advising-availability/', { portal: true });
+            }, true);
+            container.append(openAvailability, availabilityHost);
+        }
+
         if (me.students.length) container.append(el("p", {}, "Your academic advisors are shown with each program's degree progress."),
             el("a", { href: "/portal/student/progress/", class: "campus-button secondary" }, "My program and advisors"));
         container.append(el("h2", {}, "My advisees"), el("p", { class: "campus-muted" },

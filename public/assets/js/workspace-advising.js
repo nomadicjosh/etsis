@@ -143,5 +143,28 @@ window.createWorkspaceAdvising = function (ui) {
         window.createAdvisingAppointments({ node, request, labels }).mount(host,
             `/sis/students/${student}/programs/${pursuit}/appointments/`);
     }
-    return { open, checkins, appointments };
+    async function availability(search = '', after = null, stack = []) {
+        const t = JSON.parse(document.getElementById('advising-availability-labels').textContent);
+        const body = openDrawer(t.title);
+        const data = await request('/sis/advising-availability/candidates/', 'POST', { search, after });
+        if (!body.isConnected) return;
+        const input = node('input', { id: 'availability-search', type: 'search', maxlength: '80', class: 'form-control', value: search });
+        const form = node('form', { class: 'mb-3' }, node('label', { for: input.id, class: 'form-label' }, t.find), input,
+            node('button', { type: 'submit', class: 'btn btn-primary mt-2' }, t.search));
+        form.addEventListener('submit', event => { event.preventDefault(); task(() => availability(input.value)); });
+        body.append(form);
+        for (const person of data.items) body.append(node('article', { class: 'surface bg-white p-3 mb-3' },
+            node('h3', { class: 'h6' }, `${person.given_name} ${person.family_name}`), button(t.choose, () => {
+                const host = openDrawer(t.title);
+                const section = node('section'); host.append(section);
+                return window.createAdvisingAvailability({ node, request, labels: t }).manage(section,
+                    `/sis/advising-availability/${person.id}/`, { back: () => availability(search, after, stack) });
+            })));
+        if (!data.items.length) body.append(node('p', { role: 'status' }, t.no_hosts));
+        body.append(node('div', { class: 'inline-actions' },
+            ...(stack.length ? [button(t.previous_advisors, () => availability(search, stack.at(-1), stack.slice(0, -1)))] : []),
+            ...(data.next_after ? [button(t.more_advisors, () => availability(search, data.next_after, [...stack, after]))] : [])));
+    }
+    return { open, checkins, appointments, availability };
+
 };

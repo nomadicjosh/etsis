@@ -585,6 +585,9 @@
             tool('Grade corrections', () => teachingStudio.gradeChanges(), 'Review requested grade corrections', 'clipboard-check'));
         if (section === 'students' && can('sis:load:policy')) tools.append(
             tool('Load policy', () => enrollmentLoad.policy(), 'Configure enrollment load policies', 'sliders'));
+        if (section === 'students' && can('sis:student:read') && can('sis:advising:appointments:manage')) tools.append(
+            tool(JSON.parse(document.getElementById('advising-availability-labels').textContent).title,
+                () => advisingStudio.availability(), '', 'calendar2-week'));
         if (section === 'students' && can('sis:standing:configure')) tools.append(
             tool('Standing definitions', () => standingStudio.definitions(), 'Configure academic standing definitions', 'list-check'));
         if (section === 'students' && can('sis:gradebook:manage') && can('sis:gradebook:calculation-policy:publish')) tools.append(
