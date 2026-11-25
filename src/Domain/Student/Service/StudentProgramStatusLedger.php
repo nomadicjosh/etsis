@@ -210,6 +210,8 @@ final readonly class StudentProgramStatusLedger
             "catalog" => $loaded["catalog"],
             "stream_version" => $root->playhead(),
             "history_recorded" => $root->cohortVersion() !== null,
+            'source_recorded' => $root->cohortVersion() !== null
+                || ($root->assignmentSource()['cohort'] ?? null) !== null,
             "earlier_history_unknown" => $root->cohortEarlierUnknown($loaded["binding"]["version"] ?? -1),
         ];
     }

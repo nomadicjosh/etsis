@@ -70,6 +70,15 @@ final readonly class HistoricalSchemaRegistry
                 'root' => \Domain\Registration\Waitlist\SectionWaitlist::class,
                 'fields' => \Domain\Registration\Waitlist\SectionWaitlist::PLACE_FIELDS,
             ],
+            \Domain\Registration\Event\GraduateRegistrationPolicyWasPublished::class => [
+                'type' => 'graduate_registration_policy',
+                'root' => \Domain\Registration\GraduateRegistrationPolicy::class,
+                'fields' => \Domain\Registration\GraduateRegistrationPolicy::FIELDS,
+            ],
+            \Domain\Registration\Event\GraduateCourseApprovalWasRecorded::class => [
+                'type' => 'graduate_course_approvals', 'root' => \Domain\Registration\GraduateCourseApprovals::class,
+                'fields' => \Domain\Registration\GraduateCourseApprovals::FIELDS,
+            ],
             \Domain\Gradebook\Event\GradeComparisonPolicyWasPublished::class => [
                 'type' => 'grade_comparison_policy',
                 'root' => \Domain\Gradebook\GradeComparisonPolicy::class,
@@ -673,6 +682,18 @@ final readonly class HistoricalSchemaRegistry
                     $definition['fields'][] = 'priority_bypass';
                 }
             }
+            if ($class === \Domain\Registration\Event\GraduateRegistrationPolicyWasPublished::class) {
+                \Domain\Registration\GraduateRegistrationPolicy::validate($payload);
+                if ((string) $stream->aggregateId !== \Domain\Registration\GraduateRegistrationPolicy::ID) {
+                    throw new CorruptHistoryException();
+                }
+            }
+            if ($class === \Domain\Registration\Event\GraduateCourseApprovalWasRecorded::class) {
+                \Domain\Registration\GraduateCourseApprovals::validate($payload);
+                if ((string) $stream->aggregateId !== $payload['scope']['pursuit_id']) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\Gradebook\Event\GradeComparisonPolicyWasPublished::class) {
                 \Domain\Gradebook\GradeComparisonPolicy::validate($payload);
                 if ((string) $stream->aggregateId !== \Domain\Gradebook\GradeComparisonPolicy::ID) {
@@ -1115,6 +1136,8 @@ final readonly class HistoricalSchemaRegistry
                     \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class,
                     \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class,
                     \Domain\Registration\Waitlist\WaitlistPlaceWasChanged::class,
+                    \Domain\Registration\Event\GraduateRegistrationPolicyWasPublished::class,
+                    \Domain\Registration\Event\GraduateCourseApprovalWasRecorded::class,
                     \Domain\Gradebook\Event\GradeComparisonPolicyWasPublished::class,
                     \Domain\HumanResources\Event\TimeApprovalPolicyWasPublished::class,
                     \Domain\HumanResources\Event\TimeEntryWasDecided::class,
@@ -1496,6 +1519,28 @@ final readonly class HistoricalSchemaRegistry
                     \Domain\Registration\ValueObject\ReinstatementEventSchema::evidence($value, $payload);
                     continue;
                 }
+                if ($name === 'graduate_course_evidence') {
+                    if (
+                        !is_array($value) || !in_array($class, [
+                        \Domain\Registration\Event\EnrollmentWasEstablished::class,
+                        \Domain\Registration\Event\EnrollmentWasReinstated::class], true)
+                        || ($class === \Domain\Registration\Event\EnrollmentWasEstablished::class
+                            && $payload['provenance'] !== 'registered')
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $evidence = new \Domain\Registration\ValueObject\GraduateEnrollmentEvidence($value);
+                    if ($class === \Domain\Registration\Event\EnrollmentWasEstablished::class) {
+                        $evidence->routing(
+                            $payload['enrollment']['student_id'],
+                            $payload['enrollment']['section_id'],
+                            $payload['source']['course_version_id'],
+                            $metadata['section_version_id'] ?? null,
+                            $metadata['prerequisite_evidence']['assignment_id'] ?? ''
+                        );
+                    }
+                    continue;
+                }
                 if ($name === 'corequisite_evidence') {
                     if (
                         $class !== \Domain\Registration\Event\EnrollmentWasEstablished::class ||
@@ -1745,6 +1790,8 @@ final readonly class HistoricalSchemaRegistry
     {
         $type = match ($id->aggregateClassName()) {
             \Domain\Registration\Waitlist\SectionWaitlist::class => 'section_waitlist',
+            \Domain\Registration\GraduateRegistrationPolicy::class => 'graduate_registration_policy',
+            \Domain\Registration\GraduateCourseApprovals::class => 'graduate_course_approvals',
             \Domain\Gradebook\GradeComparisonPolicy::class => 'grade_comparison_policy',
             \Domain\HumanResources\TimeApprovalPolicy::class => 'timesheet_policy',
             \Domain\HumanResources\TimeDecision::class => 'timesheet_decision',
@@ -1802,6 +1849,8 @@ final readonly class HistoricalSchemaRegistry
     {
         $aggregateId = match ($type) {
             'section_waitlist' => new \Domain\Registration\Waitlist\WaitlistId($id),
+            'graduate_registration_policy' => new \Domain\Registration\ValueObject\GraduateRegistrationPolicyId($id),
+            'graduate_course_approvals' => new \Domain\Registration\ValueObject\GraduateCourseApprovalsId($id),
             'grade_comparison_policy' => new \Domain\Gradebook\ValueObject\GradeComparisonPolicyId($id),
             'timesheet_policy' => new \Domain\HumanResources\ValueObject\TimeApprovalPolicyId($id),
             'timesheet_decision' => new \Domain\HumanResources\ValueObject\TimeDecisionId($id),

@@ -1125,6 +1125,10 @@
         }) })(host, `/portal/api/${advisor ? "advising/" : ""}students/${student}/programs/${pursuit}/load/`);
     }
 
+    const graduateRegistration = window.createGraduateRegistration?.({ node: el, request, task,
+        labels: config.graduate_registration_labels, prefix: '/portal/api',
+        openDrawer: title => { const body = el('div'); dialog(title, body); return body; } });
+
     async function advising(container) {
         if (me.students.length) container.append(el("p", {}, "Your academic advisors are shown with each program's degree progress."),
             el("a", { href: "/portal/student/progress/", class: "campus-button secondary" }, "My program and advisors"));
@@ -1154,6 +1158,9 @@
                 if (responses[0].status === "rejected") throw responses[0].reason;
                 renderPortalProgress(result, responses[0].value, () => show(student, pursuit));
                 enrollmentLoadAction(result, student, pursuit, true);
+                if (graduateRegistration) result.append(button(config.graduate_registration_labels.open_approvals,
+                    () => graduateRegistration.choose(student, pursuit, async () => {
+                        window.bootstrap.Modal.getInstance(one('#campus-dialog'))?.hide(); await show(student, pursuit); })));
             } catch (error) {
                 if (!result.isConnected || current !== generation) return;
                 standing.replaceChildren();
@@ -2145,6 +2152,9 @@
             reviewedStudent = selected;
             reviewed = result;
             schedulePanel.replaceChildren(presenter.registration(result, amount));
+            if (graduateRegistration && result.students[0]?.readiness?.some(check => check.code.startsWith('graduate_')))
+                schedulePanel.append(button(config.graduate_registration_labels.open_approvals,
+                    () => graduateRegistration.open(selected, course.id, () => confirmRegistration(course, selected), result.students[0].assignment_id)));
             confirmation.disabled = !presenter.canConfirm(result);
         }
         student.addEventListener('change', () => task(checkSchedule));

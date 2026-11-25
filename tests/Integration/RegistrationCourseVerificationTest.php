@@ -68,7 +68,8 @@ final class RegistrationCourseVerificationTest extends TestCase
                 $history,
                 $s->access,
                 $s->clock,
-                new SqlSectionVersionRepository($s->sql)
+                new SqlSectionVersionRepository($s->sql),
+                $s->graduateEvidence(),
             ),
             $s->activityLedger(),
             $s->primaryProgramLedger(),
@@ -78,6 +79,7 @@ final class RegistrationCourseVerificationTest extends TestCase
             $s->corequisites(),
             $s->windowPolicies(),
             $s->waitlistGuard($audit),
+            $s->graduateGate(),
         );
     }
 

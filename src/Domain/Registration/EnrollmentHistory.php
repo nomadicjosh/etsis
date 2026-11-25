@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\Registration;
 
+use Domain\Registration\ValueObject\GraduateEnrollmentEvidence;
 use Codefy\Domain\Aggregate\EventSourcedAggregate;
 use Codefy\Domain\EventSourcing\DomainEvent;
 use Domain\Registration\Event\EnrollmentWasEstablished;
@@ -110,6 +111,16 @@ final class EnrollmentHistory extends EventSourcedAggregate
             if ($p["provenance"] !== "registered") {
                 throw new CorruptHistoryException();
             }
+        }
+        if (isset($metadata['graduate_course_evidence'])) {
+            $graduate = new GraduateEnrollmentEvidence($metadata['graduate_course_evidence']);
+            $graduate->routing(
+                $p['enrollment']['student_id'],
+                $p['enrollment']['section_id'],
+                $p['source']['course_version_id'],
+                $metadata['section_version_id'] ?? null,
+                $metadata['prerequisite_evidence']['assignment_id'] ?? ''
+            );
         }
         $evidence = $metadata["prerequisite_evidence"] ?? null;
         if (array_key_exists("prerequisite_evidence", $metadata)) {

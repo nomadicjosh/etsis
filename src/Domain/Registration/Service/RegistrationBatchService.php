@@ -910,7 +910,8 @@ final readonly class RegistrationBatchService
             $student = $records[$id->value];
             $person = $this->admissions->person($student->personId);
             $enrollment = $existing[$id->value];
-            $assignment = $enrollment === null ? $this->pursuits->activePursuit($id) : null;
+            $pursuit = $enrollment === null ? $this->pursuits->activeSelection($id) : null;
+            $assignment = $pursuit?->id;
             $decision =
             $assignment === null
             ? null
@@ -959,6 +960,8 @@ final readonly class RegistrationBatchService
             ];
             $now = $this->clock->now();
             $restriction = $this->repository->blockingRestriction($student->personId, $now, $byStaff);
+            $graduate = $enrollment === null
+            ? $this->registration->graduateAssessment($pursuit, $section, $course, $budget) : null;
             $readiness = $enrollment === null ? new \Domain\Registration\RegistrationPolicy()->checks(
                 $student,
                 $restriction === null ? [] : [$restriction],
@@ -970,6 +973,23 @@ final readonly class RegistrationBatchService
                 $window->courseLimit,
                 $decision?->isMet() ?? true,
             ) : [];
+            if ($enrollment === null) {
+                array_push($readiness, ...$graduate['checks']);
+                $readiness[] = $section->programPolicy->check($pursuit->programId);
+                if ($section->programPolicy->programIds !== [] && $selectedOffering === null) {
+                    $readiness[] = [
+                        'code' => 'program_publication',
+                        'label' => \Codefy\Framework\Helpers\trans('Published program eligibility'),
+                        'status' => 'blocked',
+                        'message' => \Codefy\Framework\Helpers\trans(
+                            'Publish and select the eligible program policy before registration.',
+                        ),
+                        'next_step' => \Codefy\Framework\Helpers\trans(
+                            'Ask the registrar to review the section offering.',
+                        ),
+                    ];
+                }
+            }
             $waitlist = $waitlistStatuses[$id->value];
             if ($enrollment === null && $waitlist['waiting_count'] > 0) {
                 $readiness[] = [
@@ -1013,6 +1033,7 @@ final readonly class RegistrationBatchService
             }
             if ($reinstating !== null) {
                 $evidence = [
+                    'graduate_evidence' => $graduate['evidence'],
                     'prerequisites' => $decision,
                     'corequisites' => $corequisite,
                     'schedule' => $schedule,
@@ -1042,6 +1063,8 @@ final readonly class RegistrationBatchService
                 "institutional_id" => $person->institutionalId->value,
                 "active" => $student->active,
                 "assignment_id" => $assignment?->value,
+                'program_id' => $pursuit?->programId->value,
+                'graduate_revision' => $graduate === null ? null : GraduateRegistrationGate::revision($graduate),
                 "schedule" =>
                     $schedule === null
                         ? ["status" => "not_rechecked", "blocked" => false]

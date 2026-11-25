@@ -31,10 +31,10 @@ final class OfferingCreditFixture
     public SectionCourseBindingService $bindings;
     private SqlHistoricalEventStore $history;
 
-    public function __construct()
+    public function __construct(?SisFixture $sis = null)
     {
         require_once __DIR__ . '/SisFixture.php';
-        $this->sis = $s = new SisFixture();
+        $this->sis = $s = $sis ?? new SisFixture();
         $this->section = $s->section(fee: 0);
         $catalog = new SqlCatalogRevisionRepository($s->sql);
         $this->editor = new CatalogEditor($catalog, $s->registration, $s->access, $s->transactions, $s->audit);
@@ -71,7 +71,8 @@ final class OfferingCreditFixture
             $s->clock,
             new SqlSectionVersionRepository($s->sql),
             new SqlSectionClassificationRepository($s->sql, new SqlClassificationRepository($s->sql)),
-            $s->sectionContactHours()
+            $s->sectionContactHours(),
+            new \Infrastructure\Persistence\Repository\SqlSectionProgramPolicyRepository($s->sql),
         );
     }
 

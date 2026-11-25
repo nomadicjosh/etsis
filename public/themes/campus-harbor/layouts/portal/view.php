@@ -108,6 +108,7 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
         <script defer src="/assets/js/campus-rich-text.js"></script>
         <script defer src="/assets/js/section-waitlist.js"></script>
         <script defer src="/assets/js/workspace-ceus.js"></script>
+        <script defer src="/assets/js/graduate-registration.js"></script>
         <script defer src="/assets/js/portal.js"></script>
     </head>
     <body class="campus-site">

@@ -51,6 +51,7 @@ final readonly class SectionPublicationService
         private SectionVersionRepository $versions,
         private SectionClassificationRepository $classifications,
         private SectionContactHoursService $contactHours,
+        private \Domain\Registration\Repository\SectionProgramPolicyRepository $programPolicies,
     ) {
     }
 
@@ -370,7 +371,8 @@ final readonly class SectionPublicationService
             $this->authorize($actor);
             if (
                 $r["expires_at"] <= $this->clock->now()->getTimestamp() ||
-                $this->contactHours->snapshot($section) !== $r["definition"]["contact_hours"]
+                $this->contactHours->snapshot($section) !== $r["definition"]["contact_hours"] ||
+                $this->programPolicies->current($section)->programIds !== $r["definition"]["eligible_program_ids"]
             ) {
                 throw new ConcurrentModificationException(
                     "Contact time or its policy changed. Review the offering again."
@@ -456,6 +458,10 @@ final readonly class SectionPublicationService
                             || array_key_exists("credits_milli", $selected->definition->data),
                         recordContinuingEducation: $selected === null
                             || array_key_exists("continuing_education", $selected->definition->data),
+                        recordPrograms: $selected === null || array_key_exists(
+                            "eligible_program_ids",
+                            $selected->definition->data,
+                        ),
                     );
             if (
                 $course !== null &&
@@ -575,6 +581,7 @@ final readonly class SectionPublicationService
                         array_key_exists("contact_hours", $d),
                         recordCredits: array_key_exists("credits_milli", $d),
                         recordContinuingEducation: array_key_exists("continuing_education", $d),
+                        recordPrograms: array_key_exists("eligible_program_ids", $d),
                     ),
                 ) !== $this->fingerprint($d) ||
                 !$this->matchingClassifications($definition, $row)
@@ -752,6 +759,9 @@ final readonly class SectionPublicationService
     private function assertOfferingValues(EntityId $section, PublishedSectionDefinition $definition): void
     {
         $data = $definition->definition->data;
+        if (($data['eligible_program_ids'] ?? []) !== $this->programPolicies->current($section)->programIds) {
+            throw new ConcurrentModificationException('Eligible programs changed. Review the offering again.');
+        }
         $row = $this->catalog->get('sections', $section);
         $course = $this->bindings->bound($section);
         if ($course === null) {
@@ -866,6 +876,7 @@ final readonly class SectionPublicationService
                         array_key_exists("contact_hours", $d),
                         recordCredits: array_key_exists("credits_milli", $d),
                         recordContinuingEducation: array_key_exists("continuing_education", $d),
+                        recordPrograms: array_key_exists("eligible_program_ids", $d),
                     ),
                 ) !== $this->fingerprint($d) ||
                 !$this->matchingClassifications($definition, $row)
@@ -964,6 +975,8 @@ final readonly class SectionPublicationService
             new EntityId((string) $row["course_id"]),
         );
         $this->catalog->lock("terms", new EntityId((string) $row["term_id"]));
+        $this->programPolicies->lockReferences($section);
+        $row['eligible_program_ids'] = $this->programPolicies->current($section)->programIds;
         $this->classifications->lockReferences($section);
         $row["classifications"] = $this->classifications
             ->current($section)
@@ -1124,6 +1137,7 @@ final readonly class SectionPublicationService
         array $retainedContact = [],
         bool $recordCredits = true,
         bool $recordContinuingEducation = true,
+        bool $recordPrograms = true,
     ): array {
         $data = [
             "course_id" => $row["course_id"],
@@ -1175,6 +1189,15 @@ final readonly class SectionPublicationService
             $data['contact_hours'] = array_key_exists('contact_hours', $retainedContact)
             ? $retainedContact['contact_hours']
             : $this->contactHours->snapshot(new EntityId($row['id']));
+        }
+        $programs = $row['eligible_program_ids']
+        ?? $this->programPolicies->current(new EntityId($row['id']))->programIds;
+        if ($recordPrograms) {
+            $data['eligible_program_ids'] = $programs;
+        } elseif ($programs !== []) {
+            throw new ConcurrentModificationException(
+                \Codefy\Framework\Helpers\trans('Publish the eligible programs before selecting this offering.'),
+            );
         }
         return new SectionDefinitionV1($data)->data;
     }

@@ -52,13 +52,19 @@ final readonly class WorkPursuitService
      */
     public function activePursuit(EntityId $student, ?EntityId $assignment = null): EntityId
     {
+        return $this->activeSelection($student, $assignment)->id;
+    }
+
+    /** One verified selection supplies both pursuit and actual program, including explicitly selected active pursuits. */
+    public function activeSelection(EntityId $student, ?EntityId $assignment = null): \Domain\Student\StudentProgram
+    {
         $assignment ??= new EntityId($this->primary->current($this->admissions->student($student))['assignment_id']);
         $record = $this->students->assignment($assignment);
         $this->statuses->verify($record);
         if ($record->studentId->value !== $student->value || $record->status !== 'active') {
             self::invalid('Choose an active program pursuit belonging to this student.');
         }
-        return $assignment;
+        return $record;
     }
 
     /** Internal filter, under the authorized student lock and caller's shared replay allowance. */

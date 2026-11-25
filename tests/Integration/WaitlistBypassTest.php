@@ -331,7 +331,8 @@ final class WaitlistBypassTest extends TestCase
             $f->schedules(),
             $f->corequisites(),
             $f->windowPolicies(),
-            $f->waitlistGuard($audit)
+            $f->waitlistGuard($audit),
+            $f->graduateGate(),
         );
         try {
             $f->waitlistBypasses()->confirm($this->input($section, $r));

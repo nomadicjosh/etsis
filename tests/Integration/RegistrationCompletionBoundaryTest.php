@@ -67,6 +67,7 @@ final class RegistrationCompletionBoundaryTest extends TestCase
             $s->corequisites(),
             $s->windowPolicies(),
             $s->waitlistGuard($audit),
+            $s->graduateGate(),
         );
     }
 

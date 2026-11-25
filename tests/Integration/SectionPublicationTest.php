@@ -107,6 +107,7 @@ final class SectionPublicationTest extends TestCase
                 new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
             ),
             $f->sectionContactHours(),
+            new \Infrastructure\Persistence\Repository\SqlSectionProgramPolicyRepository($f->sql),
         );
     }
 
@@ -606,6 +607,7 @@ final class SectionPublicationTest extends TestCase
                 new \Infrastructure\Persistence\Repository\SqlClassificationRepository($this->f->sql),
             ),
             $this->f->sectionContactHours(),
+            new \Infrastructure\Persistence\Repository\SqlSectionProgramPolicyRepository($this->f->sql),
         );
         $this->expectException(AccessDeniedException::class);
         try {
@@ -769,6 +771,7 @@ final class SectionPublicationTest extends TestCase
                 new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
             ),
             $f->sectionContactHours(),
+            new \Infrastructure\Persistence\Repository\SqlSectionProgramPolicyRepository($f->sql),
         );
         $before = $f->sql->rows('sis_history_events');
         $setup = $service->setup($this->section->id);
@@ -822,8 +825,10 @@ final class SectionPublicationTest extends TestCase
         $this->f->sql->update('sis_sections', ['web_registration' => 0], ['id' => $this->section->id->value]);
         $before = $this->f->sql->rows('sis_history_events');
         // Completed decisions remain retrievable without applying today's setting retroactively.
-        self::assertSame($accepted->id->value,
-            $this->f->service->register($student->id, $this->section->id, true)->id->value);
+        self::assertSame(
+            $accepted->id->value,
+            $this->f->service->register($student->id, $this->section->id, true)->id->value
+        );
         $other = $this->f->student();
         try {
             $this->f->service->register($other->id, $this->section->id, true);
@@ -843,8 +848,11 @@ final class SectionPublicationTest extends TestCase
         $publication = $this->review();
         $new = $this->service->publish($this->section->id, $publication['review_token']);
         $amendments = $this->amendments();
-        $review = $amendments->review($this->section->id, new EntityId($new['operation_id']),
-            'Fictional change to staff registration only.');
+        $review = $amendments->review(
+            $this->section->id,
+            new EntityId($new['operation_id']),
+            'Fictional change to staff registration only.'
+        );
         $amendments->commit($this->section->id, $review['review_token']);
         $student = $this->f->student();
         $actor = $this->f->access->actor;
@@ -878,7 +886,9 @@ final class SectionPublicationTest extends TestCase
         $before = $f->sql->rows('sis_history_events');
         $this->catalog->save('sections', $this->section->id, ['minimum_enrollment' => 10]);
         $reviewer = new \Domain\Registration\Service\SectionEnrollmentReviewService(
-            new \Infrastructure\Persistence\Repository\SqlSectionEnrollmentReviewRepository($f->sql), $f->access);
+            new \Infrastructure\Persistence\Repository\SqlSectionEnrollmentReviewRepository($f->sql),
+            $f->access
+        );
         $row = $reviewer->page()['items'][0];
         self::assertSame(12, $row['published_minimum']);
         self::assertSame(10, $row['minimum_enrollment']);
@@ -893,8 +903,11 @@ final class SectionPublicationTest extends TestCase
         $publication = $this->review();
         $next = $this->service->publish($this->section->id, $publication['review_token']);
         $amendments = $this->amendments();
-        $review = $amendments->review($this->section->id, new EntityId($next['operation_id']),
-            'Fictional future offering target.');
+        $review = $amendments->review(
+            $this->section->id,
+            new EntityId($next['operation_id']),
+            'Fictional future offering target.'
+        );
         $amendments->commit($this->section->id, $review['review_token']);
         $later = $f->service->register($nextStudent->id, $this->section->id, true);
         self::assertSame($first['operation_id'], $versions->enrollmentVersion($accepted->id)->value);
@@ -906,10 +919,13 @@ final class SectionPublicationTest extends TestCase
             ['field' => 'accepted_minimum_enrollment', 'label' => 'Accepted target', 'aggregate' => 'none'],
         ], 'joins' => [], 'filters' => null, 'having' => null, 'sort' => []];
         $rows = new \Infrastructure\Reporting\SqlRelationalReportSource($f->sql)->execute(
-            new \Domain\Reporting\ValueObject\ReportQuery($report,
-                \Infrastructure\Reporting\AcademicReportSchema::datasets()['credits']), 0);
+            new \Domain\Reporting\ValueObject\ReportQuery(
+                $report,
+                \Infrastructure\Reporting\AcademicReportSchema::datasets()['credits']
+            ),
+            0
+        );
         self::assertEquals([$student->id->value => 12, $nextStudent->id->value => 10], array_column($rows, 'c1', 'c0'));
-
     }
 
     public function testEarlierPublishedTargetsStayAbsentWhenRetainedAndReread(): void
@@ -918,8 +934,12 @@ final class SectionPublicationTest extends TestCase
         $data = $review['definition'];
         unset($data['minimum_enrollment']);
         $versions = new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->f->sql);
-        $reference = new \Domain\Registration\ValueObject\PublishedSectionDefinition($this->section->id,
-            EntityId::generate(), 1, new SectionDefinitionV1($data));
+        $reference = new \Domain\Registration\ValueObject\PublishedSectionDefinition(
+            $this->section->id,
+            EntityId::generate(),
+            1,
+            new SectionDefinitionV1($data)
+        );
         $versions->retain($reference);
         $this->catalog->save('sections', $this->section->id, ['minimum_enrollment' => 12]);
         self::assertArrayNotHasKey('minimum_enrollment', $versions->find($reference->publication)->definition->data);

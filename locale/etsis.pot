@@ -4798,3 +4798,455 @@ msgstr ""
 #: src/Application/Http/Controller/AdvisingUpdatesController.php:26
 msgid "Choose whether to include read advising updates."
 msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationBatchService.php:982
+msgid "Published program eligibility"
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationBatchService.php:985
+#: src/Domain/Registration/Service/RegistrationService.php:463
+msgid "Publish and select the eligible program policy before registration."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationBatchService.php:988
+msgid "Ask the registrar to review the section offering."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationService.php:328
+msgid "The selected program pursuit changed during registration."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationService.php:344
+msgid "Graduate-course eligibility changed during registration. Review again."
+msgstr ""
+
+#: src/Domain/Registration/Service/SectionPublicationService.php:1199
+msgid "Publish the eligible programs before selecting this offering."
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:8
+msgid "Eligible programs"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:9
+msgid "SECTION REGISTRATION"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:10
+msgid "Loading section program eligibility…"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:13
+msgid "An empty list allows every program. Otherwise, new registrations must belong to one of these programs. Save the draft, then publish and select the offering before it can govern registration."
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:15
+msgid "All programs"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:16
+msgid "Selected programs"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:18
+msgid "Program names describe the current catalog. Published rules retain the selected program identities."
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:20
+msgid "Find a program"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:22
+msgid "No programs match this search."
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:23
+msgid "Previous programs"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:25
+msgid "Remove program"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:26
+msgid "Choose at most twenty programs."
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:27
+msgid "Save eligible programs"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:28
+msgid "Program eligibility draft saved. Publish and select the offering to apply it."
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:29
+msgid "Review offering publication"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:31
+msgid "Reload saved policy"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:33
+msgid "Your choices remain in this drawer. Reload the saved policy before replacing a changed revision."
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:35
+msgid "Program eligibility was not recorded in this publication."
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:36
+msgid "Restricted to the selected programs"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:38
+msgid "The eligible-program draft is still saving. Wait for completion, then reload this policy."
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:40
+msgid "Program eligibility is no longer available to this account."
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:8
+msgid "Undergraduate access to graduate courses"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:9
+msgid "REGISTRATION POLICY"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:12
+msgid "At registration, an undergraduate must meet the current pursuit GPA minimum and receive both assigned-advisor approval and a separate registrar override. Neither approval waives academic minimums. Later GPA changes do not remove earned credit."
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:14
+msgid "Require graduate-course eligibility and approvals"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:15
+msgid "Undergraduate academic level"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:16
+msgid "Graduate academic level"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:19
+msgid "Levels come from published course and assigned program definitions. Program names do not determine academic level."
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:21
+msgid "Find academic levels"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:22
+msgid "Choose a level"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:23
+msgid "More academic levels"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:24
+msgid "Find levels"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:25
+msgid "Minimum current undergraduate pursuit GPA"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:28
+msgid "The default is 2.000. Registration uses verified institutional cumulative GPA for the current pursuit. An undefined GPA requires registrar review."
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:30
+msgid "Minimum grade points in every completed graduate course"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:33
+msgid "Optional. Leave blank to omit this additional rule. Every completed institutional graduate course in this pursuit must meet the minimum for further graduate enrollment. No earlier graduate course is required for the first enrollment."
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:35
+msgid "Reason for this decision"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:36
+msgid "Review policy"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:37
+msgid "Publish policy"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:38
+msgid "Review graduate-course policy"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:39
+msgid "Graduate-course registration policy published."
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:40
+msgid "Loading graduate-course eligibility…"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:42
+msgid "Back to policy"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:43
+msgid "Reload current policy"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:44
+msgid "Disabled"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:45
+msgid "Required"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:46
+msgid "No additional grade minimum"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:47
+msgid "This information is no longer available to this account."
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:48
+msgid "A decision is still being saved. Wait for completion, then refresh this record."
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:49
+msgid "Graduate-course approvals"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:52
+msgid "Review academic eligibility first. The assigned advisor approves the course, then the registrar records the override. A changed policy, assigned advisor, course, offering or program cohort requires fresh approvals."
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:54
+msgid "Approve as assigned advisor"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:55
+msgid "Revoke advisor approval"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:56
+msgid "Authorize registrar override"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:57
+msgid "Revoke registrar override"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:58
+msgid "Review decision"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:59
+msgid "Confirm decision"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:60
+msgid "Review graduate-course decision"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:61
+msgid "Graduate-course decision recorded. Refresh registration eligibility to continue."
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:62
+msgid "Refresh eligibility"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:63
+msgid "This registration does not require undergraduate graduate-course approval."
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:64
+msgid "Find sections"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:65
+msgid "More sections"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:66
+msgid "No sections match this search."
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:67
+msgid "Choose a graduate course section"
+msgstr ""
+
+#: resources/views/shared/graduate-registration-labels.php:68
+msgid "Review graduate-course approvals"
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateAcademicContext.php:66
+msgid "Publish an academic level for this course before checking graduate-course eligibility."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateAcademicContext.php:77
+msgid "Assign a published program cohort before checking graduate-course eligibility."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateAcademicContext.php:89
+msgid "Publish an academic level for the student’s assigned program cohort."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateAcademicContext.php:97
+msgid "Select a published section offering before requesting graduate-course approval."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateAcademicContext.php:105
+msgid "Verified current-pursuit academic work and retained calculation policies are required."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateAcademicContext.php:116
+msgid "The current undergraduate pursuit GPA must meet the institutional minimum at registration."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateAcademicContext.php:163
+#: src/Domain/Registration/Service/GraduateAcademicContext.php:177
+msgid "A completed course needs a verified academic level before continued graduate enrollment."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateAcademicContext.php:194
+msgid "Every completed graduate course in this pursuit must meet the grade minimum."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateCourseApprovalService.php:212
+#: src/Domain/Registration/Service/GraduateCourseApprovalService.php:229
+msgid "Graduate-course eligibility changed. Review this decision again."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateCourseApprovalService.php:281
+msgid "The graduate-course approvals changed. Reload the record."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateCourseApprovalService.php:289
+msgid "There is no current decision to revoke."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateCourseApprovalService.php:303
+msgid "This registration does not require an undergraduate graduate-course approval."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateCourseApprovalService.php:313
+msgid "Current advisor approval is required before the registrar override."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationGate.php:43
+#: src/Domain/Registration/Service/GraduateRegistrationGate.php:67
+msgid "Graduate-course academic eligibility"
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationGate.php:70
+msgid "The current pursuit meets the registration-time GPA and completed graduate-course grade policy."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationGate.php:75
+msgid "Advisor approval"
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationGate.php:78
+msgid "Current advisor approval is recorded."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationGate.php:79
+msgid "Ask an assigned advisor to approve this graduate course."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationGate.php:83
+msgid "Registrar override"
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationGate.php:86
+msgid "The separate registrar override is recorded."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationGate.php:87
+msgid "The registrar must authorize an override after advisor approval."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationPolicyService.php:66
+msgid "The graduate-course registration policy changed or its source disagrees. Refresh it."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationPolicyService.php:88
+msgid "The graduate-course registration policy changed. Reload it."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationPolicyService.php:144
+msgid "The graduate-course registration policy source changed. Refresh it."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationPolicyService.php:183
+msgid "The policy publication history reached its bounded review allowance."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationPolicyService.php:191
+msgid "The graduate-course registration policy changed. Review again."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationPolicyService.php:264
+msgid "Use at most eighty search characters."
+msgstr ""
+
+#: src/Domain/Registration/Service/GraduateRegistrationPolicyService.php:290
+msgid "Choose active academic levels; existing retired selections may remain."
+msgstr ""
+
+#: src/Domain/Registration/Service/SectionProgramPolicyService.php:64
+msgid "Use a search of at most 80 characters."
+msgstr ""
+
+#: src/Domain/Registration/Service/SectionProgramPolicyService.php:95
+msgid "Choose up to twenty distinct programs and reload a valid saved revision."
+msgstr ""
+
+#: src/Domain/Registration/Service/SectionProgramPolicyService.php:109
+msgid "The eligible programs changed. Reload the saved policy."
+msgstr ""
+
+#: src/Domain/Registration/Service/SectionProgramPolicyService.php:120
+msgid "The section program policy changed while saving."
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/GraduateRegistrationRules.php:56
+msgid "Choose distinct undergraduate and graduate levels and valid GPA and grade-point minimums."
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/GraduateRegistrationRules.php:76
+msgid "Enter a valid reason of up to 1000 characters."
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/SectionProgramPolicy.php:43
+msgid "Eligible program"
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/SectionProgramPolicy.php:46
+msgid "Check passed."
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/SectionProgramPolicy.php:48
+msgid "The selected program pursuit is not eligible for this section."
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/SectionProgramPolicy.php:53
+msgid "Ask the registrar about sections available to this program pursuit."
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlGraduateApprovalState.php:44
+msgid "Graduate-course approvals changed. Review again."
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlGraduateRegistrationPolicyState.php:45
+msgid "The institutional graduate-course registration policy changed. Review again."
+msgstr ""

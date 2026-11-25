@@ -50,6 +50,9 @@ final readonly class WorkspaceService
         "equivalencies" => "sis:transfer:manage",
     ];
     public const array PERMISSIONS = [
+        'sis:registration:graduate-policy:publish',
+        'sis:registration:graduate-advisor-approve',
+        'sis:registration:graduate-override',
         'sis:portal:publish',
         'sis:registration:prerequisite-exception',
         'sis:load:policy',

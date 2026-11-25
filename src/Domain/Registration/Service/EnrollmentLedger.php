@@ -23,6 +23,7 @@ use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\ValueObject\EntityId;
+use Domain\Registration\ValueObject\GraduateEnrollmentEvidence;
 
 /** Internal ledger: registration/drop services own current authorization and student/person/section locks. */
 final readonly class EnrollmentLedger
@@ -33,6 +34,7 @@ final readonly class EnrollmentLedger
         private StudentAccess $access,
         private Clock $clock,
         private \Domain\Registration\Repository\SectionVersionRepository $versions,
+        private GraduateEvidenceReader $graduate,
     ) {
     }
     /** @param array<string,mixed> $eligibility */
@@ -49,6 +51,7 @@ final readonly class EnrollmentLedger
         ?RegistrationCourseRead $courseRead = null,
         ?\Domain\Registration\ValueObject\CoRequisiteDecision $corequisites = null,
         ?\Domain\Registration\RegistrationWindow $window = null,
+        ?array $graduateEvidence = null,
     ): void {
         $this->actor($actor);
         if (
@@ -85,6 +88,18 @@ final readonly class EnrollmentLedger
             "prerequisite_evidence" => $prerequisites->retained(),
             "schedule_evidence" => $schedule->facts,
         ];
+        if ($graduateEvidence !== null) {
+            $proof = new GraduateEnrollmentEvidence($graduateEvidence);
+            $proof->routing(
+                $enrollment->studentId->value,
+                $section->id->value,
+                $course->publicationVersionId?->value,
+                $selected?->publication->value,
+                $prerequisites->assignment->value
+            );
+            $this->graduate->verify($proof, $budget ?? new HistoryReadBudget());
+            $metadata['graduate_course_evidence'] = $graduateEvidence;
+        }
         $required = $course->prerequisiteGroups?->corequisites ?? [];
         if (
             $required !== ($corequisites?->facts['required'] ?? []) ||
@@ -344,6 +359,9 @@ final readonly class EnrollmentLedger
         if ($root->sectionVersion() !== null) {
             $metadata["section_version_id"] = $root->sectionVersion();
         }
+        if (($evidence['graduate_evidence'] ?? null) !== null) {
+            $metadata['graduate_course_evidence'] = $evidence['graduate_evidence'];
+        }
         if ($evidence["corequisites"] !== null) {
             $metadata["corequisite_evidence"] = $evidence["corequisites"]->retained();
         }
@@ -484,6 +502,11 @@ final readonly class EnrollmentLedger
             $page = $budget->page($this->history, $this->stream($id), $cursor);
             foreach ($page->events as $stored) {
                 $root->acceptHistorical($stored->event, $stored->context);
+                $graduate = $stored->event->metadata()['graduate_course_evidence']
+                ?? $stored->event->metadata()['reinstatement_evidence']['graduate_course_evidence'] ?? null;
+                if ($graduate !== null) {
+                    $this->graduate->verify(new GraduateEnrollmentEvidence($graduate), $budget);
+                }
             }
             $cursor = $page->nextCursor;
         } while ($cursor !== null);

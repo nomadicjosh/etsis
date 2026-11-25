@@ -166,6 +166,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             isset($classes["reporting_group_id"]) ? new EntityId($classes["reporting_group_id"]) : null,
             $r['offering_credits_milli'] === null ? null : (int) $r['offering_credits_milli'],
             \Domain\Registration\ValueObject\OfferingCeuChoice::stored($r['continuing_education']),
+            new SqlSectionProgramPolicyRepository($this->sql)->current($id),
         );
     }
 

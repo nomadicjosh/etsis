@@ -105,8 +105,7 @@ final class SisFixture
         EntityId $term,
         int $version,
         \Domain\Registration\ValueObject\DropWindows $windows,
-    ): array
-    {
+    ): array {
         $review = $this->dropPolicies->review(
             $term,
             $version,
@@ -171,6 +170,7 @@ final class SisFixture
             $this->corequisites(),
             $this->windowPolicies(),
             $this->waitlistGuard($audit),
+            $this->graduateGate(),
         );
     }
 
@@ -233,7 +233,9 @@ final class SisFixture
     {
         return $this->fixtureBuilding ??= new \Domain\Scheduling\Service\BuildingService(
             new \Infrastructure\Persistence\Repository\SqlBuildingRepository($this->sql),
-            $this->access, $this->transactions, $this->audit
+            $this->access,
+            $this->transactions,
+            $this->audit
         )->create('FIXTURE', 'Fictional campus building');
     }
 
@@ -242,7 +244,10 @@ final class SisFixture
         return new \Domain\Scheduling\Service\RoomService(
             new \Infrastructure\Persistence\Repository\SqlRoomRepository($this->sql),
             new \Infrastructure\Persistence\Repository\SqlBookingRepository($this->sql),
-            $this->access, $this->transactions, $this->audit, $this->clock,
+            $this->access,
+            $this->transactions,
+            $this->audit,
+            $this->clock,
             new \Infrastructure\Persistence\Repository\SqlBuildingRepository($this->sql)
         )->create($code, 'Fictional room', $this->building(), $capacity);
     }
@@ -305,15 +310,15 @@ final class SisFixture
             $this->primaryPositionLedger(),
             $this->positionLedger(),
             new \Domain\HumanResources\Service\TimeDecisionLedger(
-                EventStoreFixture::history($this->connection->queryBuilder()), $this->clock,
+                EventStoreFixture::history($this->connection->queryBuilder()),
+                $this->clock,
             ),
         );
     }
 
     public function studentDecisionVerifier(
         ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null,
-    ): \Infrastructure\Projection\SqlStudentDecisionProjectionVerifier
-    {
+    ): \Infrastructure\Projection\SqlStudentDecisionProjectionVerifier {
         $history ??= \EventStoreFixture::history($this->connection->queryBuilder());
         return new \Infrastructure\Projection\SqlStudentDecisionProjectionVerifier(
             $this->sql,
@@ -414,8 +419,11 @@ final class SisFixture
         $this->access = new FixtureAccess($actor ?? $this->user());
         if ($initialize) {
             // Earlier workflow fixtures deliberately exercise institutions without mandatory offer acceptance.
-            $this->sql->update('sis_admission_policy', ['require_acceptance' => 0],
-                ['id' => \Domain\Admissions\Repository\AdmissionPolicyRepository::ID]);
+            $this->sql->update(
+                'sis_admission_policy',
+                ['require_acceptance' => 0],
+                ['id' => \Domain\Admissions\Repository\AdmissionPolicyRepository::ID]
+            );
         }
         $this->clock = new FixtureClock();
         if ($initialize) {
@@ -429,7 +437,7 @@ final class SisFixture
             ], true);
         } else {
             $office = $this->sql->rows('sis_offices', ['code' => 'REG'], 1)[0]
-                ?? throw new RuntimeException('The shared fictional registrar office is missing.');
+            ?? throw new RuntimeException('The shared fictional registrar office is missing.');
             $this->office = new EntityId($office['id']);
         }
         $this->audit = new SqlAuditTrail($this->sql);
@@ -522,7 +530,9 @@ final class SisFixture
             $this->sql,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
             new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
-                $this->sql, $this->transactions, $this->clock,
+                $this->sql,
+                $this->transactions,
+                $this->clock,
                 new \Infrastructure\EventSourcing\ProtectedEventCodec(
                     EventStoreFixture::config($this->connection->queryBuilder())
                 ),
@@ -570,15 +580,22 @@ final class SisFixture
     {
         return new \Domain\Registration\Service\RegistrationWindowService(
             new \Infrastructure\Persistence\Repository\SqlRegistrationWindowRepository($this->sql),
-            EventStoreFixture::history($this->connection->queryBuilder()), $this->access, $this->transactions,
-            $this->audit, $this->clock, $this->dropCipher,
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->access,
+            $this->transactions,
+            $this->audit,
+            $this->clock,
+            $this->dropCipher,
         );
     }
     public function corequisites(): \Domain\Registration\Service\CoRequisiteService
     {
         return new \Domain\Registration\Service\CoRequisiteService(
             new \Infrastructure\Persistence\Repository\SqlCoRequisiteRepository($this->sql),
-            $this->inputVerifier(), $this->workPursuits(), $this->enrollmentLedger(), $this->registration,
+            $this->inputVerifier(),
+            $this->workPursuits(),
+            $this->enrollmentLedger(),
+            $this->registration,
         );
     }
     public function enrollmentLedger(): \Domain\Registration\Service\EnrollmentLedger
@@ -598,8 +615,139 @@ final class SisFixture
             $this->access,
             $this->clock,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
+            $this->graduateEvidence(),
         );
     }
+    public function graduatePolicies(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\Registration\Service\GraduateRegistrationPolicyService
+    {
+        return new \Domain\Registration\Service\GraduateRegistrationPolicyService(
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->clock,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+            new \Infrastructure\Persistence\Repository\SqlGraduateRegistrationPolicyState($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($this->sql),
+        );
+    }
+
+    public function graduateApprovalsLedger(): \Domain\Registration\Service\GraduateApprovalLedger
+    {
+        return new \Domain\Registration\Service\GraduateApprovalLedger(
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            new \Infrastructure\Persistence\Repository\SqlGraduateApprovalState($this->sql)
+        );
+    }
+
+    public function graduateEvidence(): \Domain\Registration\Service\GraduateEvidenceReader
+    {
+        $history = EventStoreFixture::history($this->connection->queryBuilder());
+        return new \Domain\Registration\Service\GraduateEvidenceReader(
+            $this->graduatePolicies(),
+            $this->graduateApprovalsLedger(),
+            new \Domain\Catalog\Service\PublishedCourseReader($history),
+            new \Domain\Catalog\Service\PublishedProgramReader(
+                $history,
+                new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql)
+            ),
+            new \Domain\DegreeAudit\Service\PublishedRequirementsReader($history)
+        );
+    }
+
+    public function advisors(): \Domain\Advising\Service\AdvisorService
+    {
+        return new \Domain\Advising\Service\AdvisorService(
+            new \Infrastructure\Persistence\Repository\SqlAdvisorRepository($this->sql),
+            $this->admissions,
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository(
+                $this->sql,
+                $this->admissions,
+                new \Infrastructure\Identity\RandomInstitutionalIdGenerator()
+            ),
+            $this->programStatusLedger(),
+            $this->primaryProgramLedger(),
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->access,
+            $this->transactions,
+            $this->audit,
+            $this->clock,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock)
+        );
+    }
+
+    public function requirementsReader(): \Domain\DegreeAudit\Service\StudentRequirementsService
+    {
+        $history = EventStoreFixture::history($this->connection->queryBuilder());
+        return new \Domain\DegreeAudit\Service\StudentRequirementsService(
+            new \Infrastructure\Persistence\Repository\SqlStudentRequirementsRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->admissions,
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlRequirementsRepository($this->sql),
+            new \Domain\DegreeAudit\Service\PublishedRequirementsReader($history),
+            $history,
+            $this->access,
+            $this->transactions,
+            $this->audit,
+            $this->dropCipher,
+            $this->clock,
+            $this->programStatusLedger(),
+            $this->advisors()
+        );
+    }
+
+    public function graduateAcademic(): \Domain\Registration\Service\GraduateAcademicContext
+    {
+        $history = EventStoreFixture::history($this->connection->queryBuilder());
+        $requirements = $this->requirementsReader();
+        return new \Domain\Registration\Service\GraduateAcademicContext(
+            $this->graduatePolicies(),
+            new \Domain\Catalog\Service\PublishedCourseReader($history),
+            new \Domain\Catalog\Service\PublishedProgramReader(
+                $history,
+                new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql)
+            ),
+            $this->programStatusLedger(),
+            $this->academicInputs($requirements),
+            $requirements,
+            new \Domain\DegreeAudit\Service\GradingRepublicationVerifier(new \Domain\Gradebook\Service\RetainedGradingReader($history)),
+            new \Domain\DegreeAudit\Service\RetainedAttemptReader(new \Domain\Registration\Service\RetainedSectionReader($history)),
+            new \Domain\DegreeAudit\Service\AcademicPolicyEvaluator(),
+            new \Domain\Advising\Service\AdvisorHistoryReader(new \Infrastructure\Persistence\Repository\SqlAdvisorRepository($this->sql), $history),
+            $this->clock,
+            $this->admissions
+        );
+    }
+
+    public function graduateGate(): \Domain\Registration\Service\GraduateRegistrationGate
+    {
+        return new \Domain\Registration\Service\GraduateRegistrationGate($this->graduateAcademic(), $this->graduateApprovalsLedger());
+    }
+
+    public function graduateApprovals(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\Registration\Service\GraduateCourseApprovalService
+    {
+        return new \Domain\Registration\Service\GraduateCourseApprovalService(
+            $this->graduateAcademic(),
+            $this->graduateGate(),
+            $this->graduateApprovalsLedger(),
+            new \Infrastructure\Persistence\Repository\SqlGraduateApprovalState($this->sql),
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->registration,
+            $this->admissions,
+            $this->workPursuits(),
+            $this->advisors(),
+            $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->clock,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock)
+        );
+    }
+
     public function gradeCertifications(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Gradebook\Repository\GradeCertificationRoster $roster = null,
@@ -687,19 +835,31 @@ final class SisFixture
         return new \Domain\AcademicRecord\Service\WorkPursuitLedger(
             new \Infrastructure\Persistence\Repository\SqlWorkPursuitRepository($this->sql),
             new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
-                $this->sql, $this->transactions, $this->clock,
+                $this->sql,
+                $this->transactions,
+                $this->clock,
                 new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
                 new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
-            ), $this->transactions, $this->access, $this->clock,
+            ),
+            $this->transactions,
+            $this->access,
+            $this->clock,
         );
     }
     public function workPursuits(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\AcademicRecord\Service\WorkPursuitService
     {
         return new \Domain\AcademicRecord\Service\WorkPursuitService(
-            $this->workPursuitLedger(), $this->inputVerifier(),
+            $this->workPursuitLedger(),
+            $this->inputVerifier(),
             new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
-            $this->admissions, $this->primaryProgramLedger(), $this->programStatusLedger(),
-            $this->access, $this->transactions, $this->dropCipher, $this->clock, $audit ?? $this->audit,
+            $this->admissions,
+            $this->primaryProgramLedger(),
+            $this->programStatusLedger(),
+            $this->access,
+            $this->transactions,
+            $this->dropCipher,
+            $this->clock,
+            $audit ?? $this->audit,
         );
     }
     /** Explicit registrar attribution for fictional older current records; no grade or award history is invented. */
@@ -717,7 +877,8 @@ final class SisFixture
         $plans = new \Infrastructure\Persistence\Repository\SqlSectionMeetingPlanRepository($this->sql, $sections);
         return new \Domain\Registration\Service\RegistrationScheduleService(
             new \Infrastructure\Persistence\Repository\SqlRegistrationScheduleRepository($this->sql),
-            new \Domain\Registration\Service\PublishedSectionMeetingPlanReader($plans, $history));
+            new \Domain\Registration\Service\PublishedSectionMeetingPlanReader($plans, $history)
+        );
     }
 
     public function prerequisitePermissionLedger(): \Domain\Registration\Service\PrerequisitePermissionLedger
@@ -779,7 +940,9 @@ final class SisFixture
     {
         return new \Domain\DegreeAudit\Service\AcademicInputVerifier(
             new \Infrastructure\Persistence\Repository\SqlAcademicInputRepository($this->sql),
-            $this->academicCredits(), $this->transferCredits(), $this->enrollmentLedger(),
+            $this->academicCredits(),
+            $this->transferCredits(),
+            $this->enrollmentLedger(),
         );
     }
     public function academicInputs(
@@ -788,7 +951,9 @@ final class SisFixture
         return new \Domain\DegreeAudit\Service\AcademicInputService(
             $this->inputVerifier(),
             new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
-            $requirements, $this->transactions, $this->workPursuits(),
+            $requirements,
+            $this->transactions,
+            $this->workPursuits(),
         );
     }
     public function academicDates(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\AcademicRecord\Service\AcademicDetailsService
@@ -797,11 +962,17 @@ final class SisFixture
             $this->academicCredits(),
             new \Infrastructure\Persistence\Repository\SqlAcademicCreditRepository($this->sql),
             new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
-                $this->sql, $this->transactions, $this->clock,
+                $this->sql,
+                $this->transactions,
+                $this->clock,
                 new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
                 new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
             ),
-            $this->transactions, $this->access, $this->dropCipher, $this->clock, $audit ?? $this->audit,
+            $this->transactions,
+            $this->access,
+            $this->dropCipher,
+            $this->clock,
+            $audit ?? $this->audit,
         );
     }
     public function academicCourses(
@@ -960,10 +1131,16 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
             $this->programStatusLedger(),
             new \Domain\Catalog\Service\PublishedProgramReader(
-                $history, new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql),
+                $history,
+                new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql),
             ),
             new \Infrastructure\Persistence\Repository\SqlStudentSpecializationRepository($this->sql),
-            $history, $this->access, $this->transactions, $this->audit, $this->dropCipher, $this->clock,
+            $history,
+            $this->access,
+            $this->transactions,
+            $this->audit,
+            $this->dropCipher,
+            $this->clock,
             new \Infrastructure\Persistence\Repository\SqlRequirementsRepository($this->sql),
             new \Domain\DegreeAudit\Service\PublishedRequirementsReader($history),
             $advisors,
@@ -1019,7 +1196,9 @@ final class SisFixture
             new \Domain\Catalog\Service\PublishedCourseReader($history),
             $this->workPursuitLedger(),
             new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
-            $this->primaryProgramLedger(), $this->admissions, $this->programStatusLedger(),
+            $this->primaryProgramLedger(),
+            $this->admissions,
+            $this->programStatusLedger(),
         );
     }
     public function coursePublications(): \Domain\Catalog\Service\CoursePublicationService
@@ -1143,7 +1322,10 @@ final class SisFixture
         return new \Domain\Student\Service\StudentCatalogService(
             new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository($this->sql),
             new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
-            $this->access, $this->transactions, $audit ?? $this->audit, $this->dropCipher,
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
             $this->programStatusLedger(),
             new \Domain\Catalog\Service\PublishedProgramReader(
                 EventStoreFixture::history($this->connection->queryBuilder()),
@@ -1396,7 +1578,9 @@ final class SisFixture
     public function officeScope(): \Domain\Office\Service\OfficeScope
     {
         return new \Domain\Office\Service\OfficeScope(
-            new \Infrastructure\Persistence\Repository\SqlOfficeRepository($this->sql), $this->access, $this->clock
+            new \Infrastructure\Persistence\Repository\SqlOfficeRepository($this->sql),
+            $this->access,
+            $this->clock
         );
     }
     public function imports(
@@ -1407,7 +1591,11 @@ final class SisFixture
             new \Infrastructure\Import\LeagueCatalogCsvMapper(),
             $repository ?? new \Infrastructure\Persistence\Repository\SqlCatalogImportRepository($this->sql),
             new \Infrastructure\Persistence\Repository\SqlCatalogWorkflowRepository($this->sql),
-            $this->access, $this->transactions, $audit ?? $this->audit, $this->dropCipher, $this->clock,
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+            $this->clock,
         );
     }
     public function restrictions(
@@ -1415,8 +1603,14 @@ final class SisFixture
     ): \Domain\Student\Service\RestrictionService {
         return new \Domain\Student\Service\RestrictionService(
             new \Infrastructure\Persistence\Repository\SqlRestrictionRepository($this->sql),
-            $this->admissions, $this->access, $this->transactions, $audit ?? $this->audit,
-            $this->dropCipher, $this->clock, $this->restrictionLedger(), $this->officeScope(),
+            $this->admissions,
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->dropCipher,
+            $this->clock,
+            $this->restrictionLedger(),
+            $this->officeScope(),
             new \Infrastructure\Persistence\Repository\SqlOfficeRepository($this->sql),
         );
     }
@@ -1427,10 +1621,14 @@ final class SisFixture
     ): \Domain\HumanResources\Service\PositionService {
         $repository = $rows ?? new \Infrastructure\Persistence\Repository\SqlPositionRepository($this->sql, $this->dropCipher);
         return new \Domain\HumanResources\Service\PositionService(
-            $this->timesheetService(), $repository,
+            $this->timesheetService(),
+            $repository,
             new \Infrastructure\Persistence\Repository\SqlHrLibraryRepository($this->sql),
-            $this->access, $this->clock, new \Infrastructure\Persistence\SqlActorDirectory($this->sql),
-            $this->employmentDatesLedger(), $this->positionLedger($audit, $repository, $history)
+            $this->access,
+            $this->clock,
+            new \Infrastructure\Persistence\SqlActorDirectory($this->sql),
+            $this->employmentDatesLedger(),
+            $this->positionLedger($audit, $repository, $history)
         );
     }
     public function positionLedger(
@@ -1440,11 +1638,17 @@ final class SisFixture
     ): \Domain\HumanResources\Service\PositionLedger {
         return new \Domain\HumanResources\Service\PositionLedger(
             $rows ?? new \Infrastructure\Persistence\Repository\SqlPositionRepository($this->sql, $this->dropCipher),
-            $history ?? new \Infrastructure\EventSourcing\SqlHistoricalEventStore($this->sql, $this->transactions,
-                $this->clock, new \Infrastructure\EventSourcing\ProtectedEventCodec(
-                    EventStoreFixture::config($this->connection->queryBuilder())),
-                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()),
-            $audit ?? $this->audit, $this->clock
+            $history ?? new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+                $this->sql,
+                $this->transactions,
+                $this->clock,
+                new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                    EventStoreFixture::config($this->connection->queryBuilder())
+                ),
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+            ),
+            $audit ?? $this->audit,
+            $this->clock
         );
     }
     public function primaryPositionLedger(
@@ -1476,17 +1680,25 @@ final class SisFixture
     {
         return new \Domain\HumanResources\Service\EmploymentDatesLedger(
             new \Infrastructure\Persistence\Repository\SqlEmploymentDatesRepository($this->sql, $this->dropCipher),
-            new \Infrastructure\EventSourcing\SqlHistoricalEventStore($this->sql, $this->transactions, $this->clock,
+            new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+                $this->sql,
+                $this->transactions,
+                $this->clock,
                 new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
-                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()),
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+            ),
             $this->clock
         );
     }
     public function employmentDates(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\HumanResources\Service\EmploymentDatesService
     {
         return new \Domain\HumanResources\Service\EmploymentDatesService(
-            $this->timesheetService(), $this->employmentDatesLedger(), $this->positions(),
-            $this->access, $audit ?? $this->audit, $this->clock
+            $this->timesheetService(),
+            $this->employmentDatesLedger(),
+            $this->positions(),
+            $this->access,
+            $audit ?? $this->audit,
+            $this->clock
         );
     }
     public function hrLibrary(
@@ -1527,7 +1739,8 @@ final class SisFixture
                 $this->primaryPositionLedger(),
             ),
             new \Domain\HumanResources\Service\TimeDecisionLedger(
-                EventStoreFixture::history($this->connection->queryBuilder()), $this->clock,
+                EventStoreFixture::history($this->connection->queryBuilder()),
+                $this->clock,
             ),
             $this->primaryPositionLedger(),
         );
@@ -1539,17 +1752,22 @@ final class SisFixture
             new \Infrastructure\HumanResources\WorkloadContactPolicyReader($this->timeApprovalPolicies()),
             $this->registration,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
-            EventStoreFixture::history($this->connection->queryBuilder()), $this->access,
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->access,
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
-            $this->transactions, $this->audit,
+            $this->transactions,
+            $this->audit,
         );
     }
     public function timeApprovalPolicies(): \Domain\HumanResources\Service\TimeApprovalPolicyService
     {
         return new \Domain\HumanResources\Service\TimeApprovalPolicyService(
-            EventStoreFixture::history($this->connection->queryBuilder()), $this->access,
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->access,
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
-            $this->transactions, $this->audit, $this->clock,
+            $this->transactions,
+            $this->audit,
+            $this->clock,
             new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
             new \Infrastructure\Persistence\Repository\SqlTimePolicyState($this->sql),
         );
@@ -1557,7 +1775,9 @@ final class SisFixture
     public function profileLedger(): \Domain\Person\Service\ProfileLedger
     {
         return new \Domain\Person\Service\ProfileLedger(new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
-            $this->sql, $this->transactions, $this->clock,
+            $this->sql,
+            $this->transactions,
+            $this->clock,
             new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
             new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
         ), $this->clock);
@@ -1566,20 +1786,46 @@ final class SisFixture
     {
         $columns = array_column($this->connection->pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC), 'name');
         foreach (['username', 'token', 'middle_name', 'password', 'created_on'] as $column) {
-            if (!in_array($column, $columns, true)) { $this->connection->pdo->exec('ALTER TABLE users ADD COLUMN ' . $column . ' VARCHAR(191)'); }
+            if (!in_array($column, $columns, true)) {
+                $this->connection->pdo->exec('ALTER TABLE users ADD COLUMN ' . $column . ' VARCHAR(191)');
+            }
         }
         $db = $this->connection->queryBuilder();
-        $links = new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository($this->sql, $this->admissions,
-            new \Infrastructure\Identity\RandomInstitutionalIdGenerator());
-        $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore($this->sql, $this->transactions, $this->clock,
+        $links = new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository(
+            $this->sql,
+            $this->admissions,
+            new \Infrastructure\Identity\RandomInstitutionalIdGenerator()
+        );
+        $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+            $this->sql,
+            $this->transactions,
+            $this->clock,
             new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($db)),
-            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry());
-        $users = new \Infrastructure\Persistence\Repository\EventSourcedUserRepository(EventStoreFixture::framework($db),
-            new \Infrastructure\Projection\ExpressiveDbalUserProjection($db,
-                new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql), $links), $db, $history);
-        return new \Domain\Person\Service\PersonRegistrationService($this->admissions, $links, $users, $this->profileLedger(),
-            new \Infrastructure\Persistence\Repository\SqlAccountSetupRepository($this->sql), $this->access,
-            $this->transactions, $this->audit, $this->clock, $this->dropCipher, 'https://fictional.example.invalid');
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+        );
+        $users = new \Infrastructure\Persistence\Repository\EventSourcedUserRepository(
+            EventStoreFixture::framework($db),
+            new \Infrastructure\Projection\ExpressiveDbalUserProjection(
+                $db,
+                new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+                $links
+            ),
+            $db,
+            $history
+        );
+        return new \Domain\Person\Service\PersonRegistrationService(
+            $this->admissions,
+            $links,
+            $users,
+            $this->profileLedger(),
+            new \Infrastructure\Persistence\Repository\SqlAccountSetupRepository($this->sql),
+            $this->access,
+            $this->transactions,
+            $this->audit,
+            $this->clock,
+            $this->dropCipher,
+            'https://fictional.example.invalid'
+        );
     }
     public function programEntryContext(
         ?\Domain\Catalog\Service\CatalogEnrollment $initializer = null,
@@ -1590,7 +1836,9 @@ final class SisFixture
             $initializer ?? $this->catalogEnrollment(),
             new \Domain\Catalog\Service\PublishedProgramReader(
                 new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
-                    $this->sql, $this->transactions, $this->clock,
+                    $this->sql,
+                    $this->transactions,
+                    $this->clock,
                     new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
                     new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
                 ),
@@ -1715,7 +1963,8 @@ final class SisFixture
                 policy: $this->admissionPolicy(),
                 ledger: $this->decisionLedger(),
                 admissions: $repository ?? $this->admissions,
-                clock: $this->clock, entryTerms: $this->entryTerms(),
+                clock: $this->clock,
+                entryTerms: $this->entryTerms(),
                 requests: $this->withdrawalRepository()
             ),
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
@@ -1748,8 +1997,13 @@ final class SisFixture
     /** Explicit older current-state fixture; no historical creation is invented. */
     public function legacyPerson(EntityId $owner, string $given, string $family): \Domain\Person\Person
     {
-        $p = new \Domain\Person\Person(EntityId::generate(), $owner, $given, $family,
-            new \Domain\Person\ValueObject\InstitutionalId('T-' . bin2hex(random_bytes(6))));
+        $p = new \Domain\Person\Person(
+            EntityId::generate(),
+            $owner,
+            $given,
+            $family,
+            new \Domain\Person\ValueObject\InstitutionalId('T-' . bin2hex(random_bytes(6)))
+        );
         $this->admissions->addPerson($p);
         return $p;
     }
@@ -1951,7 +2205,11 @@ final class SisFixture
             $source,
             $capture ?? new \Infrastructure\Reporting\SqlReportCaptureSource($this->connection->queryBuilder(), $source),
             new \Infrastructure\Persistence\Repository\SqlReportLifecycleRepository($this->sql),
-            $this->access, $this->transactions, $audit ?? $this->audit, $cipher ?? $this->dropCipher, $this->clock
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $cipher ?? $this->dropCipher,
+            $this->clock
         );
     }
 

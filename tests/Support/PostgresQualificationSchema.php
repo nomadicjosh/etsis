@@ -20,8 +20,6 @@ final readonly class PostgresQualificationSchema
         $dependencies = array_fill_keys($tables, []);
         $this->target->beginTransaction();
         try {
-            $this->target->exec("CREATE COLLATION public.etsis_unicode_ci " .
-                "(provider=icu, locale='und-u-ks-level1', deterministic=false)");
             foreach ($tables as $table) {
                 $this->quote($table);
                 if ($table !== 'users' && !preg_match('/^sis_[a-z0-9_]+$/D', $table)) {
@@ -131,10 +129,7 @@ final readonly class PostgresQualificationSchema
         }
         $ddl = $this->quote($column['attname']) . ' ' . $column['type'];
         if ($column['collname'] !== null && $column['collname'] !== 'default') {
-            if ($column['collname'] !== 'etsis_unicode_ci') {
-                throw new LogicException('Review an unsupported installed column collation.');
-            }
-            $ddl .= ' COLLATE public.etsis_unicode_ci';
+            throw new LogicException('Native qualification requires ordinary default column collations.');
         }
         if ($column['default_value'] !== null) {
             $ddl .= ' DEFAULT ' . $column['default_value'];

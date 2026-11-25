@@ -201,6 +201,15 @@ final readonly class FormInput
         return $result;
     }
 
+    /** An omitted selection must never silently clear an existing policy. */
+    public function requiredValues(string $key, int $maximum = 500): array
+    {
+        if (!array_key_exists($key, $this->data)) {
+            throw new InvalidArgumentException('An explicit list is required.');
+        }
+        return $this->values($key, $maximum);
+    }
+
     /** @return list<mixed> */
     public function values(string $key, int $maximum = 500): array
     {

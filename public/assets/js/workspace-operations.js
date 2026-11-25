@@ -290,6 +290,8 @@ window.createWorkspaceOperations = function (ui) {
                 ),
                 button("Plan registration", () => ui.batchRegistration().plan(row.id, back, row)),
             );
+        if (ui.graduate && (can('sis:registration:graduate-advisor-approve') || can('sis:registration:graduate-override')))
+            actions.append(button(ui.graduateLabels.open_approvals, () => ui.graduate().choose(row.id, null, back)));
         actions.append(button("Drop selected courses", () => ui.courseDrops().plan(row.id, back)));
         await paged(actions, "enrollments", row.id, (rows) =>
             scrollTable(
@@ -2339,6 +2341,8 @@ window.createWorkspaceOperations = function (ui) {
                         button(ui.reportingLabels?.section_setup || "Section classifications", () => ui.classifications().section(row.id)),
                         button(ui.ceuLabels?.section_title || "Offered CEUs", () => ui.catalog().ceus("sections", row, () => openRecord(sectionName, row))),
                         button(ui.creditLabels?.section_title || "Offering credits", () => ui.catalog().credits("sections", row, () => openRecord(sectionName, row))),
+                        ...(ui.programEligibilityLabels ? [button(ui.programEligibilityLabels.title,
+                            () => ui.catalog().eligiblePrograms(row.id, () => openRecord(sectionName, row)))] : []),
                         button("Contact hours", () => ui.catalog().contactHours(row, () => openRecord(sectionName, row))),
                         button("Published section details", () => ui.catalog().sectionPublications(row.id, null, [], null,
                             () => openRecord(sectionName, row, origin))),

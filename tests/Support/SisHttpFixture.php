@@ -121,9 +121,10 @@ $teachingPost = static function (
             ]),
         );
     $request->getBody()->rewind();
-    if ($app->router->match($request)->getStatusCode() !== 403) {
+    $missingCsrfStatus = $app->router->match($request)->getStatusCode();
+    if ($missingCsrfStatus !== 403) {
         throw new RuntimeException(
-            "A workspace mutation bypassed framework CSRF.",
+            "A workspace mutation expected CSRF rejection; received HTTP " . $missingCsrfStatus . ".",
         );
     }
     $request->getBody()->rewind();

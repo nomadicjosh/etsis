@@ -2,6 +2,8 @@
 window.createWorkspaceCatalog = function (ui) {
     "use strict";
     const { node, request, task, buildForm, formData, openDrawer, table, money } = ui;
+    const programEligibility = window.createSectionProgramEligibility?.({ node, request, task, openDrawer,
+        labels: ui.programEligibilityLabels, publish: (id, back) => sectionPublications(id, null, [], null, back) });
     const prerequisiteOriginText = key => ui.prerequisiteOriginLabels?.[key] ||
         { either: 'Institutional or transfer', institutional: 'Institutional work only', transfer: 'Transfer work only' }[key];
     const button = (label, callback, style = "btn-outline-primary") =>
@@ -1477,6 +1479,10 @@ window.createWorkspaceCatalog = function (ui) {
                 : `${(definition.contact_hours.weekly_contact_milli / 1000).toFixed(3)} (${definition.contact_hours.weekly_instruction_minutes} instructional min/week ÷ ${definition.contact_hours.unit_minutes}; rounding ${definition.contact_hours.rounding}; ${definition.contact_hours.policy_version ? `policy ${definition.contact_hours.policy_version}` : "50-minute default"})`],
             ["Section fee", money(definition.fee_minor, definition.currency)],
         ];
+        if (ui.programEligibilityLabels) fields.push([ui.programEligibilityLabels.title,
+            definition.eligible_program_ids === undefined ? ui.programEligibilityLabels.not_recorded :
+                !definition.eligible_program_ids.length ? ui.programEligibilityLabels.all :
+                    `${ui.programEligibilityLabels.restricted} (${definition.eligible_program_ids.length})`]);
         if (facultyLabel !== null) fields.push(["Faculty", facultyLabel]);
         for (const [key, label] of [["instructional_method", "Instructional method"], ["campus", "Campus/site"], ["reporting_group", ui.reportingLabels?.group || "Reporting group"]]) {
             const value = classifications?.[key];
@@ -2083,5 +2089,5 @@ window.createWorkspaceCatalog = function (ui) {
         }).open(kind, row.id, back, () => kind === 'courses' ? publications(row.id, null, [], back, undefined, ui.creditLabels?.back || 'Back to record')
             : sectionPublications(row.id, null, [], null, back));
     }
-    return { ceus, credits, contactHours, enrollmentReview, subjects, courseSubject, clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
+    return { eligiblePrograms: (id, back) => programEligibility.open(id, back), ceus, credits, contactHours, enrollmentReview, subjects, courseSubject, clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
 };

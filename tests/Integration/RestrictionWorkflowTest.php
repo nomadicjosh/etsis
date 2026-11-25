@@ -351,6 +351,7 @@ final class RestrictionWorkflowTest extends TestCase
             $f->corequisites(),
             $f->windowPolicies(),
             $f->waitlistGuard(),
+            $f->graduateGate(),
         );
         try {
             $service->register($student->id, $section->id, true);

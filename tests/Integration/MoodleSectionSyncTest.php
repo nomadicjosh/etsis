@@ -119,6 +119,7 @@ final class MoodleSectionSyncTest extends TestCase
                 new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
             ),
             $f->sectionContactHours(),
+            new \Infrastructure\Persistence\Repository\SqlSectionProgramPolicyRepository($f->sql),
         );
     }
 
@@ -143,7 +144,9 @@ final class MoodleSectionSyncTest extends TestCase
         $policy = new class ($f->access->actor) implements \Domain\Lms\Service\MoodleSectionSyncPolicy {
             public bool $on = true;
             public int $before = 14;
-            public function __construct(private EntityId $id) {}
+            public function __construct(private EntityId $id)
+            {
+            }
             public function enabled(): bool
             {
                 return $this->on;
@@ -186,7 +189,9 @@ final class MoodleSectionSyncTest extends TestCase
             public array $members = [];
             public ?Closure $duringCall = null;
             public bool $fail = false;
-            public function __construct(private SisFixture $f) {}
+            public function __construct(private SisFixture $f)
+            {
+            }
             public array $categories = [];
             public array $categoryIds = [];
             public ?Closure $duringCategory = null;
@@ -270,7 +275,9 @@ final class MoodleSectionSyncTest extends TestCase
         {
             public bool $automatic = false;
             public bool $courses = true;
-            public function __construct(private EntityId $id) {}
+            public function __construct(private EntityId $id)
+            {
+            }
             public function automaticAccountsEnabled(): bool
             {
                 return $this->automatic;
@@ -300,7 +307,9 @@ final class MoodleSectionSyncTest extends TestCase
         };
         $accountRemote = new class ($f) implements \Domain\Lms\Service\MoodleAccountProvisioner {
             public array $created = [];
-            public function __construct(private SisFixture $f) {}
+            public function __construct(private SisFixture $f)
+            {
+            }
             public function policy(
                 \Domain\Lms\ValueObject\MoodleBinding $binding,
             ): \Domain\Lms\ValueObject\MoodleAccountPolicy {

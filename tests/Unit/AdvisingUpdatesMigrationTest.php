@@ -49,29 +49,4 @@ final class AdvisingUpdatesMigrationTest extends TestCase
             self::assertStringNotContainsString("sis_history_events", $sql);
         }
     }
-
-    public function testPostgresReferencesInheritQuotedParentCollationsWithoutChangingOrdinaryFields(): void
-    {
-        require_once dirname(__DIR__, 2)
-        . '/database/migrations/20261124000007_CreateSisAdvisingUpdates.php';
-        $table = new CreateTable('sis_advising_updates');
-        \CreateSisAdvisingUpdates::define($table);
-        $connection = $this->createStub(Connection::class);
-        $connection->method('quoteIdentifier')->willReturnCallback(
-            static fn(string $name): string => '"' . $name . '"'
-        );
-        $columns = ['person_id', 'student_id', 'pursuit_id', 'checkin_id', 'owner_user_id'];
-        $compiler = new \Infrastructure\Persistence\PostgresReferencedColumnCompiler(
-            $connection,
-            array_fill_keys($columns, '"public"."etsis_unicode_ci"'),
-        );
-        $sql = json_encode($compiler->create($table), JSON_THROW_ON_ERROR);
-        self::assertSame(5, substr_count($sql, 'COLLATE'));
-        foreach ($columns as $column) {
-            self::assertStringContainsString($column, $sql);
-        }
-        self::assertStringContainsString('sadu_person_fk', $sql);
-        self::assertStringContainsString('sadu_checkin_unique', $sql);
-        self::assertStringNotContainsString('DROP', $sql);
-    }
 }

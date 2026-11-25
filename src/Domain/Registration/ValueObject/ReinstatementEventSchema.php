@@ -97,6 +97,7 @@ final class ReinstatementEventSchema
         $allowed = [
             ...$required,
             "corequisite_evidence",
+            "graduate_course_evidence",
             "registration_window",
             "section_version_id",
         ];
@@ -118,6 +119,9 @@ final class ReinstatementEventSchema
                     !== ($value['section_version_id'] ?? null))
         ) {
             throw new InvalidArgumentException("Retain met reinstatement requirements.");
+        }
+        if (isset($value['graduate_course_evidence'])) {
+            new GraduateEnrollmentEvidence($value['graduate_course_evidence']);
         }
         if (isset($value["corequisite_evidence"])) {
             CoRequisiteDecision::fromRetained($value["corequisite_evidence"]);

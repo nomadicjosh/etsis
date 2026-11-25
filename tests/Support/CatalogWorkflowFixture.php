@@ -92,6 +92,7 @@ final class CatalogWorkflowFixture
                 new \Infrastructure\Persistence\Repository\SqlClassificationRepository($f->sql),
             ),
             $f->sectionContactHours(),
+            new \Infrastructure\Persistence\Repository\SqlSectionProgramPolicyRepository($f->sql),
         );
     }
 

@@ -146,7 +146,8 @@ final class WorkflowRecoveryFixture
             $s->clock,
             new SqlSectionVersionRepository($s->sql),
             new SqlSectionClassificationRepository($s->sql, new SqlClassificationRepository($s->sql)),
-            $s->sectionContactHours()
+            $s->sectionContactHours(),
+            new \Infrastructure\Persistence\Repository\SqlSectionProgramPolicyRepository($s->sql),
         );
         $review = $publisher->review($section->id, '2026-08-01', '2026-12-20', 'Fictional retained offering.');
         $publication = $publisher->publish($section->id, $review['review_token']);

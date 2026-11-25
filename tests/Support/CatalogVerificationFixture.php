@@ -102,7 +102,8 @@ final class CatalogVerificationFixture
                 $s->sql,
                 new \Infrastructure\Persistence\Repository\SqlClassificationRepository($s->sql)
             ),
-            $s->sectionContactHours()
+            $s->sectionContactHours(),
+            new \Infrastructure\Persistence\Repository\SqlSectionProgramPolicyRepository($s->sql),
         );
     }
 

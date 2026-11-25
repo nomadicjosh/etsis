@@ -208,6 +208,17 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 $row,
                 array_flip(SectionDefinitionV1::FIELDS),
             );
+            if ($row['eligible_program_ids'] !== null) {
+                if (!is_string($row['eligible_program_ids']) || strlen($row['eligible_program_ids']) > 1024) {
+                    throw new CorruptHistoryException();
+                }
+                $facts['eligible_program_ids'] = json_decode(
+                    $row['eligible_program_ids'],
+                    true,
+                    4,
+                    JSON_THROW_ON_ERROR,
+                );
+            }
             if ($row['web_registration'] !== null) {
                 $value = $this->integer($row['web_registration']);
                 if (!in_array($value, [0, 1], true)) {
@@ -274,9 +285,12 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 "schema_version" =>
                     $definition->classifications === null ? 1 : 2,
             ] + array_diff_key($definition->definition->data, [
-                'web_registration' => true, 'contact_hours' => true, 'continuing_education' => true,
+                'web_registration' => true, 'contact_hours' => true,
+            'continuing_education' => true, 'eligible_program_ids' => true,
             ]) +
-                ['continuing_education' => array_key_exists('continuing_education', $definition->definition->data)
+                ['eligible_program_ids' => array_key_exists('eligible_program_ids', $definition->definition->data)
+                    ? json_encode($definition->definition->data['eligible_program_ids'], JSON_THROW_ON_ERROR) : null,
+                'continuing_education' => array_key_exists('continuing_education', $definition->definition->data)
                     ? json_encode($definition->definition->data['continuing_education'], JSON_THROW_ON_ERROR) : null,
                 'web_registration' => array_key_exists('web_registration', $definition->definition->data) ?
                     (int) $definition->definition->data['web_registration'] : null,

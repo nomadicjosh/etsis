@@ -15,6 +15,12 @@ final class SisServiceProvider extends CodefyServiceProvider
     public function register(): void
     {
         $bindings = [
+            \Domain\Registration\Repository\GraduateApprovalState::class =>
+                \Infrastructure\Persistence\Repository\SqlGraduateApprovalState::class,
+            \Domain\Registration\Repository\GraduateRegistrationPolicyState::class =>
+                \Infrastructure\Persistence\Repository\SqlGraduateRegistrationPolicyState::class,
+            \Domain\Registration\Repository\SectionProgramPolicyRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlSectionProgramPolicyRepository::class,
             \Domain\Finance\Repository\AccountProjectionRecovery::class =>
                 \Infrastructure\Projection\SqlAccountProjectionRecovery::class,
             \Domain\Finance\Repository\AccountProjectionStageStorage::class =>

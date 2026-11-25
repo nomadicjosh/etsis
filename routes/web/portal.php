@@ -16,6 +16,13 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $graduateApproval = \Application\Http\Controller\SisGraduateApprovalController::class;
+    $router->post('/portal/api/students/{student}/graduate-courses/{section}/current/', [$graduateApproval, 'view'])
+        ->name('portal.graduate.current');
+    $router->post('/portal/api/students/{student}/graduate-courses/{section}/review/', [$graduateApproval, 'review'])
+        ->name('portal.graduate.review');
+    $router->post('/portal/api/students/{student}/graduate-courses/{section}/confirm/', [$graduateApproval, 'confirm'])
+        ->name('portal.graduate.confirm');
     $advisingUpdates = \Application\Http\Controller\AdvisingUpdatesController::class;
     $router->get('/portal/api/advising-updates/', [$advisingUpdates, 'page']);
     $router->post('/portal/api/advising-updates/{id}/read/', [$advisingUpdates, 'read']);

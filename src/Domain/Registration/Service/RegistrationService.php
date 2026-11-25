@@ -45,6 +45,7 @@ final readonly class RegistrationService
         private CoRequisiteService $corequisites,
         private RegistrationWindowService $windows,
         private \Domain\Registration\Waitlist\WaitlistSeatGuard $waitlists,
+        private GraduateRegistrationGate $graduate,
     ) {
     }
 
@@ -150,10 +151,9 @@ final readonly class RegistrationService
             ) {
                 throw new DomainException("The section is inactive or full.");
             }
-            $assignment = $this->pursuits->activePursuit(
-                $studentId,
-                $assignment,
-            );
+            $selection = $this->pursuits->activeSelection($studentId, $assignment);
+            $assignment = $selection->id;
+            $this->requireProgram($section, $selection->programId);
             $required =
                 $course->publishedPrerequisites ??
                 $this->repository->requiredCourses($course->id);
@@ -163,6 +163,8 @@ final readonly class RegistrationService
             );
             $courseRead->selection($sectionId, $course, $required);
             $budget ??= new \Domain\Shared\EventSourcing\HistoryReadBudget();
+            $graduate = $this->graduate->assess($selection, $section, $course, $budget, $courseRead);
+            $graduateEvidence = $this->graduate->requireMet($graduate);
             $prerequisites = $this->prerequisites->evaluate(
                 $studentId,
                 $assignment,
@@ -252,6 +254,7 @@ final readonly class RegistrationService
                 $courseRead,
                 $corequisites,
                 $window,
+                $graduateEvidence,
             );
             $this->credits->open(
                 $enrollment,
@@ -317,6 +320,30 @@ final readonly class RegistrationService
                         "Co-requisite support changed. Review registration again.",
                     );
                 }
+            }
+            if ($section->programPolicy->programIds !== []) {
+                $freshPursuit = $this->pursuits->activeSelection($studentId, $assignment);
+                if ($freshPursuit->programId->value !== $selection->programId->value) {
+                    throw new ConcurrentModificationException(
+                        \Codefy\Framework\Helpers\trans('The selected program pursuit changed during registration.'),
+                    );
+                }
+                $this->requireProgram($this->repository->section($sectionId), $freshPursuit->programId);
+            }
+            $freshGraduate = $this->graduate->assess(
+                $this->pursuits->activeSelection($studentId, $assignment),
+                $this->repository->section($sectionId),
+                $this->repository->courseForSection($this->repository->section($sectionId)),
+                $budget,
+                $courseRead,
+            );
+            $this->graduate->requireMet($freshGraduate);
+            if (GraduateRegistrationGate::revision($freshGraduate) !== GraduateRegistrationGate::revision($graduate)) {
+                throw new ConcurrentModificationException(
+                    \Codefy\Framework\Helpers\trans(
+                        'Graduate-course eligibility changed during registration. Review again.',
+                    ),
+                );
             }
             $freshWindow = $this->windows->checked($section->termId, $this->repository->window($section->termId));
             if ($freshWindow->fingerprint() !== $window->fingerprint()) {
@@ -416,7 +443,33 @@ final readonly class RegistrationService
         return $this->enrollments->selectedOffering($section);
     }
 
-    /** Internal coordinator check. Caller owns current authorization and the section/course locks. */
+    /** Shared private assessment used by individual, group, schedule and reinstatement coordinators. */
+    public function graduateAssessment(
+        \Domain\Student\StudentProgram $pursuit,
+        \Domain\Registration\Section $section,
+        \Domain\Catalog\Course $course,
+        \Domain\Shared\EventSourcing\HistoryReadBudget $budget
+    ): array {
+        return $this->graduate->assess($pursuit, $section, $course, $budget);
+    }
+
+    private function requireProgram(\Domain\Registration\Section $section, EntityId $program): void
+    {
+        $check = $section->programPolicy->check($program);
+        if ($section->programPolicy->programIds !== [] && $section->publicationVersionId === null) {
+            throw new \Domain\Shared\Exception\ValidationException([
+                ['field' => 'program_eligibility',
+                    'message' => \Codefy\Framework\Helpers\trans(
+                        'Publish and select the eligible program policy before registration.',
+                    )],
+            ]);
+        }
+        if ($check['status'] === 'blocked') {
+            throw new \Domain\Shared\Exception\ValidationException([['field' => 'program_eligibility',
+                'message' => $check['message']]]);
+        }
+    }
+
     public function verifyCourseSelection(
         EntityId $sectionId,
         \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
@@ -464,7 +517,10 @@ final readonly class RegistrationService
         $this->verifyCourseSelection($sectionId, $budget, $courseRead ?? new RegistrationCourseRead());
         $this->enrollments->verifyExisting($enrollment, $section);
         $this->credits->verifyOpenEnrollment($enrollment, $budget);
-        $assignment = $this->pursuits->activePursuit($studentId);
+        $selection = $this->pursuits->activeSelection($studentId);
+        $assignment = $selection->id;
+        $this->requireProgram($section, $selection->programId);
+        $this->graduate->requireMet($this->graduate->assess($selection, $section, $course, $budget));
         $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
         $prerequisites = $this->prerequisites->evaluate(
             $studentId,

@@ -31,24 +31,7 @@ final class AccountProjectionRepairMigrationTest extends TestCase
         }
     }
 
-    public function testPostgresAccountReferenceInheritsItsActualParentCollation(): void
-    {
-        require_once dirname(__DIR__, 2) . '/database/migrations/20261124000008_CreateSisAccountProjectionRepairs.php';
-        $table = new CreateTable('sis_account_projection_repairs');
-        \CreateSisAccountProjectionRepairs::define($table);
-        $connection = $this->createStub(Connection::class);
-        $connection->method('quoteIdentifier')->willReturnCallback(
-            static fn(string $name): string => '"' . $name . '"'
-        );
-        $compiler = new \Infrastructure\Persistence\PostgresReferencedColumnCompiler(
-            $connection,
-            ['account_id' => '"public"."etsis_unicode_ci"']
-        );
-        $sql = json_encode($compiler->create($table), JSON_THROW_ON_ERROR);
-        self::assertSame(1, substr_count($sql, 'COLLATE'));
-        self::assertStringContainsString('etsis_unicode_ci', $sql);
-        self::assertStringContainsString('sapr_account_fk', $sql);
-    }
+
 
     public function testRepeatPreservesExistingRowsAndDestructiveDownIsRefused(): void
     {

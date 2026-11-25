@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\Registration;
 
+use Domain\Registration\ValueObject\SectionProgramPolicy;
 use Domain\Finance\ValueObject\Money;
 use Domain\Registration\Enum\DeliveryMode;
 use Domain\Shared\ValueObject\EntityId;
@@ -30,6 +31,7 @@ final readonly class Section
         public ?EntityId $reportingGroupId = null,
         public ?int $offeringCreditsMilli = null,
         public OfferingCeuChoice $continuingEducation = new OfferingCeuChoice(),
+        public SectionProgramPolicy $programPolicy = new SectionProgramPolicy(),
     ) {
         if ($offeringCreditsMilli !== null && ($offeringCreditsMilli < 0 || $offeringCreditsMilli > 999999)) {
             throw new InvalidArgumentException('Use nonnegative academic-credit thousandths.');

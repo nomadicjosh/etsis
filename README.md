@@ -8,6 +8,8 @@ The application is in active alpha. Breaking changes and necessary database migr
 
 ## Install and setup for alpha testing
 
+PostgreSQL is recommended for new installations. Choose the database family at installation and plan to keep it for that installation's lifetime. Existing supported database choices remain supported; an engine conversion is an exceptional, separately qualified operation, because differences in collations, types and constraints can affect data and later upgrades.
+
 Developers are welcome to try etSIS and help improve it. Use a separate local installation with fictional data: alpha code and schemas can change between updates. The walkthrough below uses the included DDEV configuration, which provides PHP 8.4, MariaDB and Node.js 24. Install Git, DDEV and a supported container provider before starting.
 
 >   You will need to follow this along with the [CodefyPHP docs](https://codefyphp.com/docs/getting-started/installation/) as well for an installation with or without DDEV.
@@ -46,9 +48,9 @@ COOKIE_SAMESITE=lax
 
 ### PostgreSQL installations
 
-A separate PostgreSQL 18.7 installation is also qualified for fresh migrations, registration and initial administrator access. Provision an empty database and a role that owns its installation schema, enable PDO PostgreSQL in the selected PHP runtime, and configure the private `.env` with `DB_CONNECTION=pgsql` and a `pgsql:host=HOST;port=PORT;dbname=DATABASE` DSN. Supply that database's own user/password; keep the examples private and replace every placeholder. Continue with the same commands below.
+PostgreSQL is the recommended database for a new installation. PostgreSQL 18.7 is qualified for fresh migrations, registration and initial administrator access. Provision an empty database and a role that owns its installation schema, enable PDO PostgreSQL in the selected PHP runtime, and configure the private `.env` with `DB_CONNECTION=pgsql`, `DB_COLLATION=default` and a `pgsql:host=HOST;port=PORT;dbname=DATABASE` DSN. Supply that database's own user/password; keep the examples private and replace every placeholder. Continue with the same commands below.
 
-See [fresh-install qualification](docs/fresh-install-qualification.md) for the exact checks and limits, and [PostgreSQL conversion](docs/postgresql-conversion.md) when preserving an existing MariaDB installation. The current development sidecar and MariaDB rollback source are separate from a new empty installation. Broader engine/workflow, institutional upgrade and full restore acceptance remain open.
+See [fresh-install qualification](docs/fresh-install-qualification.md) for the exact checks and limits, and the [historical PostgreSQL conversion notes](docs/postgresql-conversion.md) for this development database. A supported existing MariaDB installation should normally remain on MariaDB. The current development sidecar and MariaDB rollback source are separate from a new empty installation. Broader engine/workflow, institutional upgrade and full restore acceptance remain open.
 
 ### 3. Create the encryption key, database tables and frontend assets
 
@@ -145,6 +147,8 @@ Security, student privacy and historical academic integrity lead continued devel
 [Institutional credit history](docs/academic-credit-history.md) now connects registration, reviewed final grades, reasoned registrar corrections and early/late drops in the shared journal. Credits retain known grading-policy references; older facts are explicitly observed without invented prior authors or dates. [Transfer award history](docs/transfer-credit-history.md) now preserves reviewed source facts, effective-dated corrections and void/reinstatement grading policy in that same journal.
 
 [Registrar prerequisite exceptions](docs/registration-history.md#registrar-prerequisite-exceptions) connect reviewed, expiring pursuit/section approvals to shared student/staff registration and retained history, without awarding prerequisite credit or bypassing other eligibility rules.
+
+[Undergraduate access to graduate courses](docs/graduate-course-registration.md) connects an institution-selected registration-time GPA minimum (default 2.000), assigned-advisor approval, a separate registrar override and an optional minimum in every completed graduate course for continued enrollment. [Section eligible-program lists](docs/section-publication.md#eligible-programs-for-a-section) govern new registration through published offering rules. Earlier accepted enrollment and earned credit remain preserved.
 
 [Registration policies](docs/registration-history.md#publish-registration-windows-and-course-limits) now connect reviewed term windows/course limits, published section self-registration settings and the exact policies accepted with new enrollments. Staff maintain them from the term drawer; later changes preserve earlier decisions and charges.
 

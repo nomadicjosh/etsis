@@ -84,6 +84,7 @@ try {
                 'check-program-discovery',
                 'check-prerequisite-permissions',
                 'check-advising',
+                'check-graduate-registration',
                 'check-moodle-resolution',
                 'check-course-rules',
                 'check-prerequisite-groups',
@@ -355,6 +356,14 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/HistoryCheckBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-graduate-registration') {
+            $kernel->bootstrap();
+            require __DIR__ . '/GraduateRegistrationFixture.php';
+            $graduateFixture = new \Tests\Support\GraduateRegistrationFixture();
+            $httpSis = $graduateFixture->sis;
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/GraduateRegistrationBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-advising') {
             $kernel->bootstrap();

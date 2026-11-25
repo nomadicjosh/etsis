@@ -65,6 +65,16 @@ final class RegistrationCourseRead
         }
     }
 
+    public function definition(
+        Course $course,
+        PublishedCourseReader $reader,
+        HistoryReadBudget $budget,
+    ): ?CourseDefinition {
+        $this->verify($course, $reader, $budget);
+        return $course->publicationVersionId === null ? null
+        : $this->publications[$course->id->value . ':' . $course->publicationVersionId->value];
+    }
+
     /** Capture/compare one section's assessed course policy, including earlier unbound draft rules.
      * @param list<string> $required */
     public function selection(EntityId $section, Course $course, array $required): void

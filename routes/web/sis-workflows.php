@@ -1034,6 +1034,10 @@ return static function (Psr7Router $router): void {
     $router->post('/sis/bookings/{id}/public-event/review/', [$campusEvents, 'review']);
     $router->post('/sis/bookings/{id}/public-event/publish/', [$campusEvents, 'publish']);
     $router->post('/sis/bookings/{id}/public-event/withdraw/', [$campusEvents, 'withdraw']);
+    $programEligibility = \Application\Http\Controller\SectionProgramPolicyController::class;
+    $router->post('/sis/sections/{id}/eligible-programs/current/', [$programEligibility, 'current']);
+    $router->post('/sis/sections/{id}/eligible-programs/choices/', [$programEligibility, 'choices']);
+    $router->post('/sis/sections/{id}/eligible-programs/save/', [$programEligibility, 'save']);
     $sectionPublications = \Application\Http\Controller\SisSectionPublicationController::class;
     $meetingPlans = \Application\Http\Controller\SisSectionMeetingPlanController::class;
     $router->post('/sis/sections/{id}/meeting-plan/setup/', [$meetingPlans, 'setup']);
@@ -1266,6 +1270,15 @@ return static function (Psr7Router $router): void {
         \Application\Http\Controller\SisSectionContactController::class, 'save',
     ])
         ->name('sis.section.contact-hours.save');
+    $graduatePolicy = \Application\Http\Controller\SisGraduatePolicyController::class;
+    $router->get('/sis/graduate-registration-policy/', [$graduatePolicy, 'view']);
+    $router->post('/sis/graduate-registration-policy/levels/', [$graduatePolicy, 'levels']);
+    $router->post('/sis/graduate-registration-policy/review/', [$graduatePolicy, 'review']);
+    $router->post('/sis/graduate-registration-policy/publish/', [$graduatePolicy, 'publish']);
+    $graduateApproval = \Application\Http\Controller\SisGraduateApprovalController::class;
+    $router->post('/sis/students/{student}/graduate-courses/{section}/current/', [$graduateApproval, 'view']);
+    $router->post('/sis/students/{student}/graduate-courses/{section}/review/', [$graduateApproval, 'review']);
+    $router->post('/sis/students/{student}/graduate-courses/{section}/confirm/', [$graduateApproval, 'confirm']);
     $router->get('/sis/grade-comparison-policy/', [
         \Application\Http\Controller\SisGradeComparisonPolicyController::class, 'view',
     ])

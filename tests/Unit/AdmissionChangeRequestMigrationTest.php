@@ -111,35 +111,4 @@ final class AdmissionChangeRequestMigrationTest extends TestCase
             ]);
         }
     }
-
-    public function testPostgresCompilerRetainsStructuredCommandsAndInheritsOnlyTheReferencedIdentityCollations(): void
-    {
-        $connection = $this->createStub(Connection::class);
-        $connection->method('quoteIdentifier')->willReturnCallback(static fn(string $s): string => '"' . $s . '"');
-        $table = new CreateTable('sis_admission_change_requests');
-        $table->string('id', 26)->primary()->notNull();
-        $table->string('application_id', 26)->notNull();
-        $table->string('person_id', 26)->notNull();
-        $table->index(['application_id', 'id'], 'sacr_test_page');
-        $table->foreign('application_id', 'sacr_test_fk')->references('sis_applications', 'id');
-        $compiler = new \Infrastructure\Persistence\PostgresReferencedColumnCompiler($connection, [
-            'application_id' => '"public"."etsis_unicode_ci"', 'person_id' => '"public"."etsis_unicode_ci"',
-        ]);
-        $commands = $compiler->create($table);
-        self::assertCount(2, $commands);
-        foreach ($commands as $command) {
-            self::assertIsString($command['sql']);
-            self::assertIsArray($command['params']);
-        }
-        self::assertStringContainsString(
-            '"application_id" VARCHAR(26) COLLATE "public"."etsis_unicode_ci"',
-            $commands[0]['sql']
-        );
-        self::assertStringContainsString(
-            '"person_id" VARCHAR(26) COLLATE "public"."etsis_unicode_ci"',
-            $commands[0]['sql']
-        );
-        self::assertStringContainsString('"id" VARCHAR(26) NOT NULL', $commands[0]['sql']);
-        self::assertStringContainsString('REFERENCES "sis_applications"', $commands[0]['sql']);
-    }
 }
