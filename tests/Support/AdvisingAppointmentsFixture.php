@@ -24,10 +24,10 @@ final class AdvisingAppointmentsFixture
     public EntityId $advisor;
     public SqlAdvisingAppointmentRepository $records;
 
-    public function __construct()
+    public function __construct(?SisFixture $sis = null)
     {
         require_once __DIR__ . '/SisFixture.php';
-        $this->sis = $s = new SisFixture();
+        $this->sis = $s = $sis ?? new SisFixture();
         $this->staff = $s->access->actor;
         $this->owner = $s->user();
         $this->student = $s->student($this->owner)->id;

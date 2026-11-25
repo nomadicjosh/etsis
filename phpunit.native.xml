@@ -11,6 +11,7 @@
             <file>tests/Integration/AcademicAdmissionsRecoveryTest.php</file>
             <file>tests/Integration/CoordinatedWaitlistRecoveryTest.php</file>
             <file>tests/Integration/GraduateWorkflowRecoveryTest.php</file>
+            <file>tests/Integration/AdvisingWorkflowRecoveryTest.php</file>
         </testsuite>
     </testsuites>
 </phpunit>

@@ -49,7 +49,7 @@ try {
         actor: new EntityId($input['actor']),
         cipher: new DefuseMessageCipher($config)
     );
-    $fixture->clock->time = new DateTimeImmutable($input['now']);
+    $fixture->clock->time = new DateTimeImmutable($input['now'])->setTimezone(new DateTimeZone($input['timezone']));
     $graduateTransactions = new class (
         $fixture->transactions,
         $input['pause_at'] ?? null,
@@ -102,11 +102,16 @@ try {
     fwrite(STDOUT, "running\n");
     require_once __DIR__ . '/AcademicRecoveryServices.php';
     require_once __DIR__ . '/GraduateRecoveryServices.php';
+    require_once __DIR__ . '/AdvisingRecoveryServices.php';
     $academic = new \Tests\Support\AcademicRecoveryServices($fixture);
     $graduate = new \Tests\Support\GraduateRecoveryServices($fixture);
+    $advising = new \Tests\Support\AdvisingRecoveryServices($fixture);
     $command = $input['command'];
     try {
         $result = match ($input['action']) {
+            'advising_schedule', 'advising_act', 'advising_book', 'advising_window_create',
+            'advising_window_close', 'advising_series_create', 'advising_series_close' =>
+            $advising->run($input['action'], $command, $audit),
             'publish_graduate_policy' => $graduate->publish($command, $audit, $graduateTransactions),
             'confirm_graduate_approval' => $graduate->approve($command, $audit, $graduateTransactions),
             'waitlist_bypass' => $fixture->waitlistBypasses($audit)->confirm(
@@ -189,8 +194,18 @@ try {
     } catch (DomainException | ConcurrentModificationException | ValidationException) {
         fwrite(STDOUT, "{\"state\":\"rejected\"}\n");
     }
-} catch (Throwable) {
+} catch (Throwable $error) {
     // Never put provider exceptions, keys, reasons, tokens or command payloads in test output.
-    fwrite(STDOUT, "{\"state\":\"unexpected_failure\"}\n");
+    $failure = match (true) {
+        $error instanceof JsonException => match ($error->getCode()) {
+            JSON_ERROR_DEPTH => 'invalid_frame_depth',
+            JSON_ERROR_UTF8, JSON_ERROR_UTF16 => 'invalid_frame_encoding',
+            default => 'invalid_frame_syntax',
+        },
+        $error instanceof TypeError => 'invalid_type',
+        $error instanceof PDOException => 'database_failure',
+        default => 'unexpected_failure',
+    };
+    fwrite(STDOUT, json_encode(['state' => 'unexpected_failure', 'failure' => $failure], JSON_THROW_ON_ERROR) . "\n");
     exit(2);
 }

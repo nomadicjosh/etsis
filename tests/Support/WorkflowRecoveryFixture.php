@@ -180,12 +180,13 @@ final class WorkflowRecoveryFixture
             'cipher_key' => $this->cipherKey,
             'actor' => $this->sis->access->actor->value,
             'now' => $this->sis->clock->now()->format(DATE_ATOM),
+            'timezone' => $this->sis->clock->now()->getTimezone()->getName(),
             'worker' => $index,
             'action' => $action,
             'command' => $command,
             'pause_at' => $pauseAt,
             'lose_reply' => $loseReply,
-        ], JSON_THROW_ON_ERROR) . "\n");
+        ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . "\n");
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M', '-d', 'zend.exception_ignore_args=1',
             __DIR__ . '/WorkflowRecoveryWorker.php'], $this->directory);
         $process->setInput($input);
@@ -216,7 +217,15 @@ final class WorkflowRecoveryFixture
             }
             usleep(1000);
         } while (microtime(true) < $deadline);
-        throw new RuntimeException('The fictional recovery worker did not reach its bounded protocol phase.');
+        $failure = '';
+        foreach (['invalid_frame_depth', 'invalid_frame_encoding', 'invalid_frame_syntax'] as $code) {
+            if (str_contains($process->getOutput(), '"failure":"' . $code . '"')) {
+                $failure = ' Private worker protocol: ' . $code . '.';
+            }
+        }
+        throw new RuntimeException(
+            'The fictional recovery worker did not reach its bounded protocol phase.' . $failure
+        );
     }
 
     public function kill(int $worker): void
@@ -283,7 +292,9 @@ final class WorkflowRecoveryFixture
             'sis_applications', 'sis_application_intake', 'sis_application_revisions', 'sis_admission_updates',
             'sis_form_submissions', 'sis_grade_change_requests', 'sis_transfer_awards',
             'sis_transfer_award_changes', 'sis_transfer_credit_streams',
-            'sis_graduate_registration_policy_state', 'sis_graduate_course_approvals', 'sis_audit'] as $table
+            'sis_graduate_registration_policy_state', 'sis_graduate_course_approvals',
+            'sis_student_advisors', 'sis_advising_appointments', 'sis_advising_availability',
+            'sis_advising_availability_series', 'sis_advising_checkins', 'sis_advising_updates', 'sis_audit'] as $table
         ) {
             $rows = $this->sis->sql->rows($table);
             $encoded = array_map(static fn (array $row): string => json_encode($row, JSON_THROW_ON_ERROR), $rows);

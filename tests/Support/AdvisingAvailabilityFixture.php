@@ -17,10 +17,10 @@ final class AdvisingAvailabilityFixture
 {
     public AdvisingAppointmentsFixture $appointments;
     public SqlAdvisingAvailabilityRepository $records;
-    public function __construct()
+    public function __construct(?\SisFixture $sis = null)
     {
         require_once __DIR__ . '/AdvisingAppointmentsFixture.php';
-        $this->appointments = $f = new AdvisingAppointmentsFixture();
+        $this->appointments = $f = new AdvisingAppointmentsFixture($sis);
         $this->records = new SqlAdvisingAvailabilityRepository($f->sis->sql, $f->sis->dropCipher);
     }
     public function service(?AuditTrail $audit = null): AdvisingAvailabilityService

@@ -347,11 +347,12 @@ final readonly class AdvisingAppointmentService
             $start,
             $actor
 ): array {
+            $this->lockStudent($student);
             $old = $this->records->find($student, $pursuit, $id);
             $window = $old === null ? ($this->availability->find($windowId)
                 ?? throw new RecordNotFoundException(trans('Availability not found.'))) : null;
             $host = new EntityId($old?->facts()['host_person_id'] ?? $window->facts()['host_person_id']);
-            $this->lock($student, $host);
+            $this->lockParticipants($student, $host);
             $this->authorize($student, $pursuit, 'owner', $actor);
             $context = $this->context($student, $pursuit);
             $old = $this->records->find($student, $pursuit, $id);
@@ -630,10 +631,11 @@ final readonly class AdvisingAppointmentService
             $actor,
             $correction,
         ): array {
+            $this->lockStudent($student);
             $old = $this->records->find($student, $pursuit, $id)
                 ?? throw new RecordNotFoundException(trans('Advising appointment not found.'));
             $host = new EntityId($old->facts()['host_person_id']);
-            $this->lock($student, $host);
+            $this->lockParticipants($student, $host);
             $this->authorize($student, $pursuit, $channel, $actor);
             if ($correction && !$this->canCorrect($channel, $actor)) {
                 throw new AccessDeniedException();
@@ -720,8 +722,18 @@ final readonly class AdvisingAppointmentService
 
     private function lock(EntityId $student, EntityId $host): void
     {
+        $this->lockStudent($student);
+        $this->lockParticipants($student, $host);
+    }
+
+    private function lockStudent(EntityId $student): void
+    {
         $this->roles->lock();
         $this->students->lock($student);
+    }
+
+    private function lockParticipants(EntityId $student, EntityId $host): void
+    {
         $ids = array_unique([$this->admissions->student($student)->personId->value, $host->value]);
         sort($ids, SORT_STRING);
         foreach ($ids as $id) {
