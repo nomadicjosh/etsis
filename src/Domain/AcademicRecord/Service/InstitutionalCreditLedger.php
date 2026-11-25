@@ -1574,7 +1574,7 @@ final readonly class InstitutionalCreditLedger
                     ? [
                         "coursework_summary" => array_intersect_key(
                             new CourseworkGradeEvidence($e->metaParam("coursework"))->summary(),
-                            array_flip(["score_display", "mode", "grading_display", "grade_policy"]),
+                            array_flip(["score_display", "mode", "grading_display", "grade_policy", 'category_rules']),
                         ),
                     ]
                     : [],

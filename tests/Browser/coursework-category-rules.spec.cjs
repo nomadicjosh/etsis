@@ -1,0 +1,96 @@
+const { test, expect } = require('@playwright/test');
+const AxeBuilder = require('@axe-core/playwright').default;
+const id = number => String(number).padStart(26, '0');
+
+async function fixture(page, { reject = false, many = false } = {}) {
+    const calls = [], errors = [], section = id(1);
+    const assignments = [{ id: id(2), title: 'Fictional exam', possible_hundredths: 10000 },
+        { id: id(3), title: 'Fictional quiz', possible_hundredths: 1000 },
+        { id: id(4), title: 'Fictional bonus', possible_hundredths: 0, bonus_hundredths: 1000 }];
+    if (many) for (let n = 5; n < 60; ++n) assignments.push({ id: id(n), title: `Fictional task ${n}`, possible_hundredths: 1000 });
+    let saved = { mode: 'category', weights: {}, categories: [{ title: 'Coursework', weight_hundredths: 10000,
+        assignments: assignments.slice(0, 3).map(a => a.id), drop_lowest: 1 }], revision: 'a'.repeat(64),
+        assignments, grade_policy: { rounding: 'none', decimal_places: null, cap_at_hundred: false },
+        can_manage_grade_policy: false };
+    page.on('pageerror', error => errors.push(error.message));
+    await page.route('**/sis/**', async route => {
+        const path = new URL(route.request().url()).pathname, raw = route.request().postData();
+        const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
+        let result = { items: [], next_after: null };
+        if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+        else if (path === '/sis/ui/data/teaching/') result = { items: [{ id: section, code: 'ART.101.A',
+            course_code: 'ART.101', course_title: 'Fictional studio', term_code: '26/FA', capacity: 10 }], next_after: null };
+        else if (path.includes('/context/roster/')) result = { items: [], next_after: null, can_grade: true };
+        else if (path.endsWith('/gradebook/calculation/')) {
+            if (data) {
+                calls.push({ data, csrf: route.request().headers()['x-csrf-token'] });
+                if (reject) { reject = false; await route.fulfill({ status: 409,
+                    json: { error: 'Fictional setup conflict. Review the draft.' } }); return; }
+                saved = { ...saved, ...data, revision: 'b'.repeat(64) };
+            }
+            result = saved;
+        }
+        await route.fulfill({ json: result });
+    });
+    await page.goto('/admin/');
+    await page.locator('.workspace-nav-link[data-workspace="teaching"]').click();
+    await page.getByRole('button', { name: 'ART.101.A', exact: true }).click();
+    await page.getByRole('button', { name: 'Gradebook setup', exact: true }).click();
+    return { calls, errors };
+}
+
+test('category rules survive search, paging, a rejected save and reopening', async ({ page }) => {
+    const f = await fixture(page, { reject: true, many: true });
+    const cap = page.getByLabel('Cap category average at 100%: Coursework', { exact: true });
+    const protect = page.getByLabel('Protect from automatic drops: Fictional exam', { exact: true });
+    await cap.check(); await protect.check();
+    await expect(page.getByLabel('Protect from automatic drops: Fictional bonus', { exact: true })).toBeDisabled();
+    await page.locator('#drawer-body').getByRole('button', { name: 'Next', exact: true }).click();
+    await page.locator('#drawer-body').getByRole('button', { name: 'Previous', exact: true }).click();
+    await expect(protect).toBeChecked();
+    await page.getByLabel('Find assignments', { exact: true }).fill('quiz');
+    await page.getByLabel('Find assignments', { exact: true }).fill('');
+    await expect(protect).toBeChecked();
+    await page.getByRole('button', { name: 'Save setup', exact: true }).click();
+    await expect(cap).toBeChecked(); await expect(protect).toBeChecked();
+    await page.getByRole('button', { name: 'Save setup', exact: true }).click();
+    expect(f.calls).toHaveLength(2);
+    expect(f.calls[0].data).toEqual(f.calls[1].data);
+    expect(f.calls[1].csrf).toBe('fictional-test-token');
+    expect(f.calls[1].data.categories[0]).toMatchObject({ cap_at_hundred: true, protected_assignments: [id(2)] });
+    await expect(page.getByRole('button', { name: 'Gradebook setup', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Gradebook setup', exact: true }).click();
+    await expect(cap).toBeChecked(); await expect(protect).toBeChecked();
+    expect(f.errors).toEqual([]);
+});
+
+test('changing a category clears protection and leaves bonus-only protection unavailable', async ({ page }) => {
+    const f = await fixture(page);
+    const protect = page.getByLabel('Protect from automatic drops: Fictional exam', { exact: true });
+    await protect.check();
+    await page.locator(`#gradebook-category-${id(2)}`).selectOption('');
+    await expect(protect).not.toBeChecked(); await expect(protect).toBeDisabled();
+    await expect(page.locator('#drawer-body')).toContainText('Automatic-drop protection was cleared');
+    await page.locator(`#gradebook-category-${id(2)}`).selectOption({ label: 'Coursework' });
+    await expect(protect).toBeEnabled(); await expect(protect).not.toBeChecked();
+    await page.getByRole('button', { name: 'Save setup', exact: true }).click();
+    expect(f.calls[0].data.categories[0]).not.toHaveProperty('protected_assignments');
+    expect(f.calls[0].data.categories[0]).not.toHaveProperty('cap_at_hundred');
+    expect(f.errors).toEqual([]);
+});
+
+test('category controls support keyboard and enlarged phone reflow', async ({ page }) => {
+    const f = await fixture(page);
+    await page.setViewportSize({ width: 320, height: 1000 });
+    await page.addStyleTag({ content: 'html { font-size: 32px; }' });
+    const cap = page.getByLabel('Cap category average at 100%: Coursework', { exact: true });
+    await cap.focus(); await page.keyboard.press('Space'); await expect(cap).toBeChecked();
+    const protect = page.getByLabel('Protect from automatic drops: Fictional exam', { exact: true });
+    await protect.focus(); await page.keyboard.press('Space'); await expect(protect).toBeChecked();
+    expect(await page.locator('#drawer-body').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    expect((await new AxeBuilder({ page }).include('#record-drawer').analyze()).violations).toEqual([]);
+    await cap.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/etsis-category-rules-phone.png' });
+    expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('Fictional exam');
+    expect(f.errors).toEqual([]);
+});

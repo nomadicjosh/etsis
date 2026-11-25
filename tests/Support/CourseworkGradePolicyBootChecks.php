@@ -56,6 +56,34 @@ if (
 ) {
     throw new RuntimeException("Faculty could not preserve policy while saving working setup.");
 }
+$workingAssignment = new \Domain\Gradebook\Assignment(
+    \Domain\Shared\ValueObject\EntityId::generate(),
+    $section->id,
+    'Fictional category exam',
+    10000,
+    new \DateTimeImmutable('2026-09-01'),
+);
+$sis->gradebook()->addAssignment($workingAssignment);
+$body['mode'] = 'category';
+$body['categories'] = [['title' => 'Fictional exams', 'weight_hundredths' => 10000,
+    'assignments' => [$workingAssignment->id->value], 'drop_lowest' => 1,
+    'protected_assignments' => [$workingAssignment->id->value], 'cap_at_hundred' => true]];
+$body['revision'] = $readPolicySetup()['revision'];
+$categoryResponse = $teachingPost($path, $body);
+$categorySaved = json_decode((string) $categoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($categoryResponse->getStatusCode() !== 200 || $categorySaved['categories'] !== $body['categories']) {
+    throw new RuntimeException('Faculty category rules failed the ordinary setup boundary.');
+}
+$invalidCategories = $body;
+$invalidCategories['revision'] = $categorySaved['revision'];
+$invalidCategories['categories'][0]['cap_at_hundred'] = 'true';
+if (
+    $teachingPost($path, $invalidCategories)->getStatusCode() !== 422
+    || $readPolicySetup()['categories'] !== $body['categories']
+    || $before !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Malformed category rules changed setup or academic history.');
+}
 $sis->access->actor = $sis->user();
 $sis->access->grants = ["sis:gradebook:calculation-policy"];
 if ($teachingPost($path, $body)->getStatusCode() !== 403) {

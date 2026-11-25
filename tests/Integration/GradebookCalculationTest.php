@@ -19,6 +19,70 @@ use SisFixture;
 
 final class GradebookCalculationTest extends TestCase
 {
+    public function testCategoryRulesPersistAndGiveTheOwnerTheSameFeedbackWithoutChangingRecordedFacts(): void
+    {
+        [$f, $service, $student, $section, $a, $b] = $this->fixture();
+        $bonus = new Assignment(
+            EntityId::generate(),
+            $section->id,
+            'Fictional optional bonus',
+            0,
+            $a->dueOn,
+            1000
+        );
+        $service->addAssignment($bonus);
+        $service->score($a->id, $student->id, 500, 0);
+        $service->score($b->id, $student->id, 9000, 0);
+        $service->score($bonus->id, $student->id, 1000, 0);
+        $tables = ['sis_scores', 'sis_academic_credits', 'sis_enrollments', 'sis_history_events',
+            'sis_history_operations'];
+        $before = array_map($f->sql->rows(...), $tables);
+        $categories = [['title' => 'Fictional course work', 'weight_hundredths' => 10000,
+            'assignments' => [$a->id->value, $b->id->value, $bonus->id->value], 'drop_lowest' => 1,
+            'protected_assignments' => [$a->id->value], 'cap_at_hundred' => true]];
+        $setup = $service->calculationSetup($section->id);
+        $saved = $service->saveCalculation($section->id, 'category', [], $setup['revision'], $categories);
+        self::assertSame($categories, $saved['categories']);
+        $overview = $service->scoreOverview($student->id, $section->id);
+        self::assertSame(10000, $overview['summary']['percent_hundredths']);
+        self::assertSame(15000, $overview['summary']['categories'][0]['raw_percent_hundredths']);
+        self::assertSame([$b->id->value], array_column($overview['summary']['dropped_assignments'], 'assignment_id'));
+        $items = array_column($overview['items'], null, 'assignment_id');
+        self::assertTrue($items[$a->id->value]['drop_protected']);
+        self::assertFalse($items[$bonus->id->value]['drop_protected']);
+        $f->access->actor = $f->admissions->person($student->personId)->ownerUserId;
+        $f->access->staff = false;
+        $f->access->grants = [];
+        self::assertSame($overview, $service->scoreOverview($student->id, $section->id));
+        self::assertSame($before, array_map($f->sql->rows(...), $tables));
+        $f->access->actor = $f->user();
+        $this->expectException(AccessDeniedException::class);
+        $service->scoreOverview($student->id, $section->id);
+    }
+
+    public function testProtectedAssignmentMustBeUnprotectedBeforeConversionToBonusOnly(): void
+    {
+        [$f, $service, , $section, $a] = $this->fixture();
+        $setup = $service->calculationSetup($section->id);
+        $categories = [['title' => 'Fictional exams', 'weight_hundredths' => 10000,
+            'assignments' => [$a->id->value], 'protected_assignments' => [$a->id->value]]];
+        $service->saveCalculation($section->id, 'category', [], $setup['revision'], $categories);
+        $assignment = $service->assignment($a->id);
+        $before = $f->sql->rows('sis_assignments');
+        try {
+            $service->editAssignment($a->id, $a->title, 0, $a->dueOn, $assignment['revision'], 1000);
+            self::fail('Protected regular work became bonus-only work.');
+        } catch (ValidationException $e) {
+            self::assertStringContainsString('automatic-drop protection', $e->errors[0]['message']);
+        }
+        self::assertSame($before, $f->sql->rows('sis_assignments'));
+        unset($categories[0]['protected_assignments']);
+        $setup = $service->calculationSetup($section->id);
+        $service->saveCalculation($section->id, 'category', [], $setup['revision'], $categories);
+        $service->editAssignment($a->id, $a->title, 0, $a->dueOn, $assignment['revision'], 1000);
+        self::assertSame(0, $service->assignment($a->id)['possible_hundredths']);
+    }
+
     private function fixture(): array
     {
         require_once dirname(__DIR__) . "/Support/SisFixture.php";

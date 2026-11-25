@@ -45,7 +45,8 @@ final readonly class GradebookService
     }
 
     /** @param array<string, int> $weights
-     * @param list<array{title:string, weight_hundredths:int, assignments:list<string>, drop_lowest?:int}> $categories
+     * @param list<array{title:string, weight_hundredths:int, assignments:list<string>, drop_lowest?:int,
+     * protected_assignments?:list<string>, cap_at_hundred?:bool}> $categories
      * @return array<string, mixed>
      */
     public function saveCalculation(
@@ -295,6 +296,9 @@ final readonly class GradebookService
             $changed = new Assignment($id, $current->sectionId, $title, $possible, $due, $bonus);
             if (($possible === 0) !== ($current->possibleHundredths === 0)) {
                 $settings = $this->repository->calculation($current->sectionId);
+                if ($possible === 0) {
+                    $this->requireUnprotectedBonus($id, $settings);
+                }
                 if ($settings["mode"] === "weighted" && ($settings["weights"][$id->value] ?? 0) > 0) {
                     throw new ValidationException([
                         [
@@ -317,7 +321,25 @@ final readonly class GradebookService
             $this->repository->saveAssignment($changed);
             $this->audit->record($actor, "assignment.updated", $id);
             $this->sameFaculty($current->sectionId, $actor);
+            if ($possible === 0) {
+                $this->requireUnprotectedBonus($id, $this->repository->calculation($current->sectionId));
+            }
         });
+    }
+
+    private function requireUnprotectedBonus(EntityId $id, array $settings): void
+    {
+        foreach ($settings['categories'] as $category) {
+            if (in_array($id->value, $category['protected_assignments'] ?? [], true)) {
+                throw new ValidationException([[
+                    'field' => 'possible_hundredths',
+                    'message' => \Codefy\Framework\Helpers\trans(
+                        'Remove automatic-drop protection in Gradebook setup before changing '
+                        . 'this assignment to bonus-only work.'
+                    ),
+                ]]);
+            }
+        }
     }
 
     private function assignmentRevision(Assignment $assignment): string

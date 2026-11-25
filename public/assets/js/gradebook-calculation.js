@@ -2,6 +2,7 @@
 window.createGradebookCalculation = function (ui) {
     "use strict";
     const { node } = ui;
+    const t = key => ui.labels[key];
     const percent = (value) => `${(Number(value) / 100).toFixed(2)}%`;
     function policyText(policy, context = null) {
         if (!policy) return "Final-grade comparison policy was not recorded with this decision.";
@@ -21,9 +22,12 @@ window.createGradebookCalculation = function (ui) {
         return `Final-grade comparison: ${policy.cap_at_hundred ? "cap at 100% first; " : "no 100% cap; "}${policy.rounding === "none" ? "exact percentage, without rounding" : `${labels[policy.rounding]} to ${policy.decimal_places} decimal places`}. Running averages retain the original percentage. Official grades require separate confirmation.${origin}`;
     }
     function comparisonText(summary) {
-        return summary.grading_display == null
+        const score = summary.grading_display == null
             ? summary.score_display
             : `${summary.score_display} raw · ${summary.grading_display} for grade comparison`;
+        const rules = summary.category_rules;
+        return rules ? `${score} · ${t('summary').replace('{caps}', rules.capped_categories)
+            .replace('{protected}', rules.protected_assignments)}` : score;
     }
     function policyEditor(setup) {
         const policy = setup.grade_policy;
@@ -169,17 +173,18 @@ window.createGradebookCalculation = function (ui) {
                       : percent(score.weight_hundredths);
         if (score.possible_hundredths === 0) label = `Bonus only · ${label}`;
         if (score.excused) label = `Excused · ${label}`;
+        if (score.drop_protected) label += ` · ${t('protected')}`;
         if (score.bonus_hundredths > 0)
             label += ` · Bonus limit +${score.bonus_hundredths / 100} points`;
         if (score.earned_hundredths > score.possible_hundredths)
             label += ` · ${(score.earned_hundredths - score.possible_hundredths) / 100} bonus points recorded`;
         return label;
     }
-    function panel(summary) {
+    function panel(summary, headingLevel = 4) {
         return node(
             "section",
             { class: "alert alert-light border", "aria-label": "Gradebook average" },
-            node("h4", { class: "h6" }, "Gradebook average"),
+            node(headingLevel === 3 ? 'h3' : 'h4', { class: "h6" }, "Gradebook average"),
             node(
                 "p",
                 { class: "mb-1 fw-semibold" },
@@ -198,7 +203,9 @@ window.createGradebookCalculation = function (ui) {
                 ? node(
                       "p",
                       { class: "small" },
-                      `${Number(summary.bonus_earned_hundredths || 0) / 100} bonus points in counted work. Possible points remain the denominator, so this running average can exceed 100%. Official grades are recorded separately.`,
+                      summary.categories?.some(category => category.cap_at_hundred)
+                          ? t('bonus_caps')
+                          : `${Number(summary.bonus_earned_hundredths || 0) / 100} bonus points in counted work. Possible points remain the denominator, so this running average can exceed 100%. Official grades are recorded separately.`,
                   )
                 : null,
             summary.bonus_only
@@ -241,7 +248,7 @@ window.createGradebookCalculation = function (ui) {
                                   node(
                                       "div",
                                       { class: "border rounded p-2 bg-body text-body h-100" },
-                                      node("h5", { class: "h6 mb-1 text-break" }, category.title),
+                                      node(headingLevel === 3 ? 'h4' : 'h5', { class: "h6 mb-1 text-break" }, category.title),
                                       node(
                                           "p",
                                           { class: "mb-1 fw-semibold small" },
@@ -280,6 +287,12 @@ window.createGradebookCalculation = function (ui) {
                                                 `Drop up to ${category.drop_lowest} lowest graded ${category.drop_lowest === 1 ? "score" : "scores"} · ${category.dropped || 0} currently dropped. At least one graded score stays included.`,
                                             )
                                           : null,
+                                      category.cap_at_hundred ? node('p', { class: 'small mb-0 mt-1' },
+                                          t(category.capped ? 'cap_used' : 'cap_ready'),
+                                          category.raw_percent_hundredths == null ? ''
+                                              : ` ${t('raw_average')}: ${percent(category.raw_percent_hundredths)}.`) : null,
+                                      category.protected_assignments ? node('p', { class: 'small mb-0 mt-1' },
+                                          `${t('protected_count')}: ${category.protected_assignments}.`) : null,
                                       category.excused
                                           ? node(
                                                 "p",
@@ -419,12 +432,28 @@ window.createGradebookCalculation = function (ui) {
                     select.value = members.get(a.id) || "";
                     select.disabled = !enabled;
                     select.addEventListener("change", () => {
+                        let cleared = false;
+                        for (const category of categories) cleared = category.protected.delete(a.id) || cleared;
                         members.set(a.id, select.value);
+                        protect.checked = false;
+                        protect.disabled = !enabled || !select.value || a.possible_hundredths === 0;
+                        if (cleared) announcement.textContent = t('protection_cleared');
+                        changed();
+                    });
+                    const category = categories.find(value => value.key === members.get(a.id));
+                    const protect = node('input', { id: `${id}-protect`, type: 'checkbox', class: 'form-check-input',
+                        checked: category?.protected.has(a.id) || false,
+                        disabled: !enabled || !category || a.possible_hundredths === 0,
+                        'aria-label': `${t('protect')}: ${a.title}`, 'aria-describedby': 'gradebook-protection-help' });
+                    protect.addEventListener('change', () => {
+                        const chosen = categories.find(value => value.key === members.get(a.id));
+                        if (!enabled || !chosen || a.possible_hundredths === 0) return;
+                        protect.checked ? chosen.protected.add(a.id) : chosen.protected.delete(a.id);
                         changed();
                     });
                     return node(
                         "div",
-                        { class: "row align-items-center g-2 border-bottom pb-2" },
+                        { class: "row align-items-center g-2 border rounded p-3 bg-white m-0" },
                         node(
                             "div",
                             { class: "col-md-7" },
@@ -435,6 +464,8 @@ window.createGradebookCalculation = function (ui) {
                             ),
                         ),
                         node("div", { class: "col-md-5" }, select),
+                        node('div', { class: 'col-12' }, node('div', { class: 'form-check' }, protect,
+                            node('label', { for: protect.id, class: 'form-check-label' }, t('protect')))),
                     );
                 }),
             );
@@ -508,9 +539,14 @@ window.createGradebookCalculation = function (ui) {
                 },
                 "Remove",
             );
+            const cap = node('input', { id: `${key}-cap`, type: 'checkbox', class: 'form-check-input',
+                checked: value.cap_at_hundred ?? false, 'aria-describedby': `${key}-cap-help`,
+                'aria-label': `${t('cap')}: ${value.title || t('rules')}` });
+            const capLabel = node('label', { for: cap.id, class: 'form-check-label' }, t('cap'));
+            cap.addEventListener('change', changed);
             const row = node(
                 "div",
-                { class: "border rounded p-3" },
+                { class: "border rounded p-3 bg-white" },
                 node(
                     "div",
                     { class: "row g-2 align-items-end" },
@@ -535,13 +571,17 @@ window.createGradebookCalculation = function (ui) {
                     ),
                     node("div", { class: "col-md-2" }, remove),
                 ),
+                node('div', { class: 'form-check mt-3' }, cap, capLabel),
+                node('p', { id: `${key}-cap-help`, class: 'form-text mb-0' }, t('cap_help')),
             );
-            const entry = { key, title, weight, drop, dropError, remove, row };
+            const entry = { key, title, weight, drop, dropError, remove, row, cap,
+                protected: new Set(value.protected_assignments || []) };
             categories.push(entry);
             value.assignments.forEach((id) => {
                 if (members.has(id)) members.set(id, key);
             });
             title.addEventListener("input", () => {
+                cap.setAttribute('aria-label', `${t('cap')}: ${title.value.trim() || t('rules')}`);
                 remove.setAttribute(
                     "aria-label",
                     `Remove category ${title.value.trim() || "new category"}`,
@@ -590,6 +630,7 @@ window.createGradebookCalculation = function (ui) {
                 "Use up to 20 categories with weights totaling 100%. Choose a category for each included assignment. New or unassigned work is excluded. Within a category, regular assignments contribute by possible points. Place bonus-only work with regular assignments; its earned points add no denominator or required coverage.",
             ),
             rows,
+            node('p', { id: 'gradebook-protection-help', class: 'form-text' }, t('protect_help')),
             node(
                 "p",
                 { id: "gradebook-drop-help", class: "form-text" },
@@ -611,6 +652,8 @@ window.createGradebookCalculation = function (ui) {
                 assignments: assignments
                     .filter((a) => members.get(a.id) === c.key)
                     .map((a) => a.id),
+                ...(c.cap.checked ? { cap_at_hundred: true } : {}),
+                ...(c.protected.size ? { protected_assignments: [...c.protected].sort() } : {}),
             }));
         }
         function setEnabled(value) {

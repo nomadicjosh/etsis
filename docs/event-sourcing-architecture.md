@@ -143,6 +143,13 @@ Billing-rule lookup now uses reconstructible fields in its existing metadata tab
 
 ## Persistence boundaries
 
+[Category drop protection and category caps](academic-credit-history.md#protect-assignments-and-cap-category-averages)
+extend the current working calculation JSON. Setup remains authorized, revisioned and audited CRUD. Accepted
+coursework-based grades retain the exact optional rules and original scores in their existing protected evidence;
+later rule edits invalidate pending reviews and do not recalculate earlier awards. Curated history exposes only
+rule counts, without assignment references. Earlier absent rules keep their original meaning. No event type,
+schema conversion, parallel journal or historical backfill is introduced.
+
 | Context | Target source of truth | Read/edit boundary |
 | --- | --- | --- |
 | Student finance, journal and billing decisions | Event-sourced monetary/rule decisions and explicit reversals | Statements and accounting projections remain reconstructible; a replay never posts another charge or refund. |

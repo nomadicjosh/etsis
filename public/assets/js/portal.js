@@ -1819,7 +1819,7 @@
                                     ) return;
                                     dialog(
                                         `${item.course_code} — assignment scores`,
-                                        window.createGradebookCalculation({ node: el }).panel(scores.summary),
+                                        window.createGradebookCalculation({ node: el, labels: config.coursework_category_labels }).panel(scores.summary, 3),
                                         scores.items.length
                                             ? table(
                                                   [
@@ -1839,7 +1839,7 @@
                                                       score.possible_hundredths === 0 ? 'Bonus only' : Number(
                                                           score.possible_hundredths,
                                                       ) / 100,
-                                                      window.createGradebookCalculation({ node: el }).assignmentLabel(score),
+                                                      window.createGradebookCalculation({ node: el, labels: config.coursework_category_labels }).assignmentLabel(score),
                                                   ]),
                                                   'Your assignment scores',
                                               )

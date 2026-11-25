@@ -182,6 +182,11 @@ final readonly class CourseworkGradeEvidence implements JsonSerializable
     public function summary(): array
     {
         $score = BigRational::of($this->facts["exact_percent"]);
+        $caps = $protected = 0;
+        foreach ($this->facts['categories'] as $category) {
+            $caps += ($category['cap_at_hundred'] ?? false) ? 1 : 0;
+            $protected += count($category['protected_assignments'] ?? []);
+        }
         return [
             "score_display" => self::formatPercent($score),
             ...array_key_exists("grade_policy", $this->facts)
@@ -203,6 +208,9 @@ final readonly class CourseworkGradeEvidence implements JsonSerializable
             "assignment_count" => count($this->facts["scores"]),
             "revision" => $this->revision(),
             "grade_id" => $this->facts["grade_id"],
+            ...($caps > 0 || $protected > 0) ? [
+                'category_rules' => ['capped_categories' => $caps, 'protected_assignments' => $protected],
+            ] : [],
         ];
     }
 

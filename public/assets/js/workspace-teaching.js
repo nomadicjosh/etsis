@@ -15,6 +15,7 @@ window.createWorkspaceTeaching = function (ui) {
         flow,
         recordSummary,
     } = ui;
+    const calculationUi = () => window.createGradebookCalculation({ node, labels: ui.categoryRuleLabels });
     const status = (value) =>
         ({
             A: "Staff registered",
@@ -432,9 +433,8 @@ window.createWorkspaceTeaching = function (ui) {
                 ),
             );
         }
-        const policyEditor = window.createGradebookCalculation({ node }).policyEditor(setup);
-        const categoryEditor = window
-            .createGradebookCalculation({ node })
+        const policyEditor = calculationUi().policyEditor(setup);
+        const categoryEditor = calculationUi()
             .editor(setup.assignments, setup.categories || [], update);
         const form = node(
             "form",
@@ -924,8 +924,8 @@ window.createWorkspaceTeaching = function (ui) {
                 "p",
                 { role: "status", "aria-live": "polite", class: "mb-2" },
                 suggestion.available
-                    ? `${window.createGradebookCalculation({ node }).comparisonText(suggestion)} → ${suggestion.grade_code}`
-                    : `${suggestion.score_display ? `${window.createGradebookCalculation({ node }).comparisonText(suggestion)} · ` : ""}${suggestion.message}`,
+                    ? `${calculationUi().comparisonText(suggestion)} → ${suggestion.grade_code}`
+                    : `${suggestion.score_display ? `${calculationUi().comparisonText(suggestion)} · ` : ""}${suggestion.message}`,
             );
             const card = node(
                 "section",
@@ -938,12 +938,12 @@ window.createWorkspaceTeaching = function (ui) {
                     node(
                         "p",
                         { class: "small" },
-                        window.createGradebookCalculation({ node }).policyText(suggestion.grade_policy, suggestion.grade_policy_context) + " Uses this record’s retained grading ranges. Approximate displays are shortened to six decimals.",
+                        calculationUi().policyText(suggestion.grade_policy, suggestion.grade_policy_context) + " Uses this record’s retained grading ranges. Approximate displays are shortened to six decimals.",
                     ),
                     button("Use suggested grade", () => {
                         form.elements.grade_id.value = suggestion.grade_id;
                         courseworkRevision = suggestion.revision;
-                        message.textContent = `Selected ${suggestion.grade_code} from ${window.createGradebookCalculation({ node }).comparisonText(suggestion)}. Review before confirming; the accepted calculation will be retained.`;
+                        message.textContent = `Selected ${suggestion.grade_code} from ${calculationUi().comparisonText(suggestion)}. Review before confirming; the accepted calculation will be retained.`;
                     }),
                     button(
                         "Choose manually",
@@ -1026,7 +1026,7 @@ window.createWorkspaceTeaching = function (ui) {
                             ? node(
                                   "p",
                                   { class: "alert alert-info" },
-                                  `Using the reviewed coursework calculation: ${window.createGradebookCalculation({ node }).comparisonText(review.coursework_summary)}. ${window.createGradebookCalculation({ node }).policyText(review.coursework_summary.grade_policy, review.coursework_summary.grade_policy_context)} Its inputs will be retained with the grade decision; later score edits will not change this official grade.`,
+                                  `Using the reviewed coursework calculation: ${calculationUi().comparisonText(review.coursework_summary)}. ${calculationUi().policyText(review.coursework_summary.grade_policy, review.coursework_summary.grade_policy_context)} Its inputs will be retained with the grade decision; later score edits will not change this official grade.`,
                               )
                             : null,
                         review.withdrawal_grade_correction
@@ -1808,7 +1808,7 @@ window.createWorkspaceTeaching = function (ui) {
                                   ["course_accepted", "course_corrected"].includes(item.action)
                                       ? `${item.course_code} · ${item.course_title}`
                                       : item.grade_code
-                                        ? `${item.grade_code}${item.coursework_summary ? ` · Coursework ${window.createGradebookCalculation({ node }).comparisonText(item.coursework_summary)} · ${window.createGradebookCalculation({ node }).policyText(item.coursework_summary.grade_policy, item.coursework_summary.grade_policy_context)}` : ""}`
+                                        ? `${item.grade_code}${item.coursework_summary ? ` · Coursework ${calculationUi().comparisonText(item.coursework_summary)} · ${calculationUi().policyText(item.coursework_summary.grade_policy, item.coursework_summary.grade_policy_context)}` : ""}`
                                         : "—",
                                   item.action === "posting_term_corrected"
                                       ? `${item.previous_posting_term_code || "Earlier label unknown"} → ${item.posting_term_code}`
@@ -1935,7 +1935,7 @@ window.createWorkspaceTeaching = function (ui) {
                 `/sis/sections/${sectionRow.id}/students/${student.student_id}/gradebook-summary/`,
             );
             if (!body.isConnected) return;
-            scores.append(window.createGradebookCalculation({ node }).panel(summary));
+            scores.append(calculationUi().panel(summary));
         } catch (error) {
             if (!body.isConnected) return;
             if (error.status === 403 || error.status === 401) throw error;
@@ -1959,8 +1959,8 @@ window.createWorkspaceTeaching = function (ui) {
                           ["Assignment", "Earned / possible", "Calculation", "Action"],
                           page.items.map((item) => [
                               item.title,
-                              window.createGradebookCalculation({ node }).scoreLabel(item),
-                              window.createGradebookCalculation({ node }).assignmentLabel(item),
+                              calculationUi().scoreLabel(item),
+                              calculationUi().assignmentLabel(item),
                               button("Enter score", async () => {
                                   const form = await flow(
                                       "Save score",

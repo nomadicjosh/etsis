@@ -6,6 +6,28 @@ const program = id(1), term = id(2), person = id(3), student = id(4), section = 
 const course = { id: section, term_id: term, course_code: 'MATH.101', course_number: '001A', title: 'Algebra', section_code: 'MATH.101.01', term_code: '26/FA', credits_milli: 3000, capacity: 25, enrolled: 8, fee_minor: 15000, currency: 'USD', web_registration: 1 };
 const transcript = [{ course_code: 'MATH.101', course_title: 'Algebra', completed_milli: 3000, attempted_milli: 3000, grade_points_milli: 12000, grade_code: 'A', counts_gpa: true }];
 
+test('student coursework explains protected assignments and the category cap', async ({ page }) => {
+    await mockServices(page);
+    await page.route('**/portal/api/students/*/sections/*/scores/', route => route.fulfill({ json: {
+        summary: { mode: 'category', percent_hundredths: 10000, coverage_hundredths: 10000,
+            pending: 0, excused: 0, excluded: 0, dropped: 0, bonus_enabled: true,
+            categories: [{ title: 'Fictional coursework', percent_hundredths: 10000, raw_percent_hundredths: 15000,
+                cap_at_hundred: true, capped: true, protected_assignments: 1, weight_hundredths: 10000,
+                assignments: 1, graded: 1, coverage_hundredths: 10000 }] },
+        items: [{ title: 'Fictional exam', earned_hundredths: 1500, possible_hundredths: 1000,
+            bonus_hundredths: 500, category_title: 'Fictional coursework', category_weight_hundredths: 10000,
+            drop_protected: true }],
+    } }));
+    await page.goto('/portal/student/grades/');
+    await page.getByRole('button', { name: 'MATH.101 · MATH.101.01: assignment scores', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Category average capped at 100% before weighting.');
+    await expect(dialog).toContainText('Uncapped category average: 150.00%.');
+    await expect(dialog).toContainText('Protected from automatic drops');
+    await expect(dialog).toContainText('Recorded bonus points are shown before category caps.');
+    expect((await new AxeBuilder({ page }).include('#campus-dialog').analyze()).violations).toEqual([]);
+});
+
 async function accessible(page) {
     const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(scan.violations.map(item => ({ id: item.id, nodes: item.nodes.map(node => ({ target: node.target, summary: node.failureSummary })) }))).toEqual([]);

@@ -9,6 +9,8 @@ use Brick\Math\RoundingMode;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 
+use function Codefy\Framework\Helpers\trans;
+
 /** Shared coursework calculation; official grades require a separate, explicit academic decision. */
 final readonly class GradebookCalculation
 {
@@ -21,7 +23,8 @@ final readonly class GradebookCalculation
     private array $bonusByAssignment;
 
     /** @param array<string, int> $weights Hundredths of a percent, keyed by assignment ULID.
-     * @param list<array{title:string, weight_hundredths:int, assignments:list<string>, drop_lowest?:int}> $categories
+     * @param list<array{title:string, weight_hundredths:int, assignments:list<string>, drop_lowest?:int,
+     * protected_assignments?:list<string>, cap_at_hundred?:bool}> $categories
      * @param list<string> $bonusAssignments Derived from the selected assignments, never client settings.
      */
     public function __construct(
@@ -75,6 +78,8 @@ final readonly class GradebookCalculation
                     "weight_hundredths",
                     "assignments",
                     "drop_lowest",
+                    'protected_assignments',
+                    'cap_at_hundred',
                 ]) !== [] ||
                 !is_string($category["title"] ?? null) ||
                 !is_int($category["weight_hundredths"] ?? null) ||
@@ -127,6 +132,31 @@ final readonly class GradebookCalculation
                 }
                 $members[$id] = $index;
             }
+            if (array_key_exists('cap_at_hundred', $category) && !is_bool($category['cap_at_hundred'])) {
+                self::invalid(trans('Choose whether to cap this category at 100%.'), 'categories');
+            }
+            $protected = array_key_exists('protected_assignments', $category) ? $category['protected_assignments'] : [];
+            if (
+                !is_array($protected) || !array_is_list($protected) || count($protected) > self::LIMIT
+            ) {
+                self::invalid(
+                    trans('Choose distinct regular assignments from this category to protect.'),
+                    'categories',
+                );
+            }
+            $seenProtected = [];
+            foreach ($protected as $id) {
+                if (
+                    !is_string($id) || !in_array($id, $category['assignments'], true)
+                    || isset($seenProtected[$id]) || isset($this->bonusByAssignment[$id])
+                ) {
+                    self::invalid(
+                        trans('Choose distinct regular assignments from this category to protect.'),
+                        'categories',
+                    );
+                }
+                $seenProtected[$id] = true;
+            }
         }
         if ($mode === "category" && $categoryTotal !== 10000) {
             self::invalid("Category weights must total 100%.", "categories");
@@ -152,6 +182,9 @@ final readonly class GradebookCalculation
             "category_title" => $category["title"] ?? null,
             "category_weight_hundredths" => $category["weight_hundredths"] ?? null,
             "category_drop_lowest" => $category === null ? null : $category["drop_lowest"] ?? 0,
+            ...isset($category['protected_assignments']) ? [
+                'drop_protected' => in_array($id, $category['protected_assignments'], true),
+            ] : [],
             "bonus_only" => isset($this->bonusByAssignment[$id]),
             "excluded" =>
                 $this->mode === "category"
@@ -197,6 +230,16 @@ final readonly class GradebookCalculation
                 "The weighted assignment list changed. Review the gradebook setup.",
                 $this->mode === "category" ? "categories" : "weights",
             );
+        }
+        foreach ($this->categories as $category) {
+            foreach ($category['protected_assignments'] ?? [] as $id) {
+                if ($seen[$id]['possible_hundredths'] === 0) {
+                    self::invalid(
+                        trans('Remove automatic-drop protection before changing an assignment to bonus-only work.'),
+                        'categories',
+                    );
+                }
+            }
         }
         if ($this->mode === "weighted") {
             $actualBonus = array_keys(array_filter(
@@ -374,6 +417,7 @@ final readonly class GradebookCalculation
             }
             $fullyExcused = ($regularAssignments > 0 && $regularExcused === $regularAssignments) ||
             ($category["assignments"] !== [] && $excused === count($category["assignments"]));
+            $countedEarned = ($category['cap_at_hundred'] ?? false) ? min($earned, $gradedPossible) : $earned;
             if ($weight > 0) {
                 $excusedTotal += $excused;
                 $bonusOnlyTotal += $bonusOnly;
@@ -392,8 +436,8 @@ final readonly class GradebookCalculation
                 if ($gradedPossible > 0) {
                     $activeWeight += $weight;
                     $contribution = $includeExact
-                    ? $contribution->plus(BigRational::ofFraction($weight * $earned, $gradedPossible))
-                    : $contribution + $weight * ($earned / $gradedPossible);
+                    ? $contribution->plus(BigRational::ofFraction($weight * $countedEarned, $gradedPossible))
+                    : $contribution + $weight * ($countedEarned / $gradedPossible);
                 } elseif (!$fullyExcused) {
                     ++$awaiting;
                 }
@@ -402,7 +446,16 @@ final readonly class GradebookCalculation
             $items[] = [
                 "title" => $category["title"],
                 "weight_hundredths" => $weight,
-                ...self::percentage($gradedPossible === 0 ? null : $earned / $gradedPossible),
+                ...self::percentage($gradedPossible === 0 ? null : $countedEarned / $gradedPossible),
+                ...array_key_exists('cap_at_hundred', $category) ? [
+                    'cap_at_hundred' => $category['cap_at_hundred'],
+                    'raw_percent_hundredths' => $gradedPossible === 0
+                        ? null : (int) round($earned / $gradedPossible * 10000),
+                    'capped' => $category['cap_at_hundred'] && $gradedPossible > 0 && $earned > $gradedPossible,
+                ] : [],
+                ...isset($category['protected_assignments']) ? [
+                    'protected_assignments' => count($category['protected_assignments']),
+                ] : [],
                 "coverage_hundredths" =>
                     $possible === 0 ? 0 : (int) round(($gradedPossible / $possible) * 10000),
                 "assignments" => count($category["assignments"]),
@@ -452,6 +505,8 @@ final readonly class GradebookCalculation
             return [];
         }
         $graded = [];
+        $regularCount = 0;
+        $protected = array_fill_keys($category['protected_assignments'] ?? [], true);
         foreach ($category["assignments"] as $id) {
             $score = $scores[$id];
             if (
@@ -459,7 +514,10 @@ final readonly class GradebookCalculation
                 $score["earned_hundredths"] !== null &&
                 !($score["excused"] ?? false)
             ) {
-                $graded[] = self::scoreSummary($score, $id);
+                ++$regularCount;
+                if (!isset($protected[$id])) {
+                    $graded[] = self::scoreSummary($score, $id);
+                }
             }
         }
         usort(
@@ -469,7 +527,7 @@ final readonly class GradebookCalculation
             $b["possible_hundredths"] <=> $a["possible_hundredths"] ?:
             strcmp($a["assignment_id"], $b["assignment_id"]),
         );
-        return array_slice($graded, 0, min($count, max(0, count($graded) - 1)));
+        return array_slice($graded, 0, min($count, max(0, $regularCount - 1)));
     }
 
     /** Exact grade-boundary comparisons use the fraction; only display percentages are rounded.

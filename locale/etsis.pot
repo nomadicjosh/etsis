@@ -5385,3 +5385,54 @@ msgstr ""
 
 msgid "Compare this publication stream with its own retained projections and current pointers using a 200-event allowance. Program checks include recorded cohort definitions and specialization choices. Group and requirements checks verify publication order, routing and current references. This does not evaluate dependent course or grading streams, student work, graduation eligibility, current drafts or archive completeness. Nothing is published or repaired."
 msgstr ""
+
+msgid "Cap category average at 100%"
+msgstr ""
+
+msgid "Apply this cap after drops, excusals and bonus points, before the category weight. Recorded points and other categories remain unchanged."
+msgstr ""
+
+msgid "Protected from automatic drops"
+msgstr ""
+
+msgid "Protect from automatic drops"
+msgstr ""
+
+msgid "Protect regular assignments that must stay included, such as a final exam. Assign a category first. Bonus-only work cannot be protected because it is never automatically dropped."
+msgstr ""
+
+msgid "Automatic-drop protection was cleared when this assignment changed categories."
+msgstr ""
+
+msgid "Category calculation rules"
+msgstr ""
+
+msgid "Category average capped at 100% before weighting."
+msgstr ""
+
+msgid "Category average is limited to 100% before weighting."
+msgstr ""
+
+msgid "Uncapped category average"
+msgstr ""
+
+msgid "Recorded bonus points are shown before category caps. Each category rule determines how those points contribute to the running average."
+msgstr ""
+
+msgid "Assignments protected from automatic drops"
+msgstr ""
+
+msgid "Category caps at 100%: {caps}. Assignments protected from automatic drops: {protected}."
+msgstr ""
+
+msgid "Choose whether to cap this category at 100%."
+msgstr ""
+
+msgid "Choose distinct regular assignments from this category to protect."
+msgstr ""
+
+msgid "Remove automatic-drop protection before changing an assignment to bonus-only work."
+msgstr ""
+
+msgid "Remove automatic-drop protection in Gradebook setup before changing this assignment to bonus-only work."
+msgstr ""

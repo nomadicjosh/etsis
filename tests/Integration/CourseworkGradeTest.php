@@ -21,6 +21,122 @@ use SisFixture;
 
 final class CourseworkGradeTest extends TestCase
 {
+    private function categoryFixture(): array
+    {
+        $fixture = [$f, $book, $student, $section, $a] = $this->fixture();
+        $b = new Assignment(EntityId::generate(), $section->id, 'Fictional second exam', 10000, $a->dueOn);
+        $bonus = new Assignment(EntityId::generate(), $section->id, 'Fictional bonus', 0, $a->dueOn, 10000);
+        $book->addAssignment($b);
+        $book->addAssignment($bonus);
+        $book->score($b->id, $student->id, 10000, 0);
+        $book->score($bonus->id, $student->id, 10000, 0);
+        $categories = [['title' => 'Fictional exams', 'weight_hundredths' => 10000,
+            'assignments' => [$a->id->value, $b->id->value, $bonus->id->value], 'drop_lowest' => 1,
+            'protected_assignments' => [$a->id->value], 'cap_at_hundred' => true]];
+        $book->saveCalculation(
+            $section->id,
+            'category',
+            [],
+            $book->calculationSetup($section->id)['revision'],
+            $categories
+        );
+        return $fixture;
+    }
+
+    public function testAcceptedCategoryRulesAreRetainedAndRecalculateAfterLaterWorkingChanges(): void
+    {
+        $fixture = [$f, $book, $student, $section] = $this->categoryFixture();
+        $finance = $f->financialEvents();
+        $review = $this->review($fixture);
+        self::assertSame('A', $review['grade']['code']);
+        self::assertSame(
+            ['capped_categories' => 1, 'protected_assignments' => 1],
+            $review['coursework_summary']['category_rules']
+        );
+        $receipt = $book->commitFinalGrade($student->id, $section->id, $review['review_token']);
+        $credit = new EntityId($f->sql->rows('sis_academic_credits')[0]['id']);
+        $evidence = $this->evidence($f, $credit);
+        $facts = $evidence->facts;
+        $evidence->verifyCalculation();
+        self::assertSame('100', $facts['exact_percent']);
+        self::assertTrue($facts['categories'][0]['cap_at_hundred']);
+        self::assertCount(1, $facts['categories'][0]['protected_assignments']);
+        $book->saveCalculation($section->id, 'points', [], $book->calculationSetup($section->id)['revision']);
+        $f->clock->time = $f->clock->time->modify('+1 day');
+        self::assertSame($receipt, $book->commitFinalGrade($student->id, $section->id, $review['review_token']));
+        self::assertSame($facts, $this->evidence($f, $credit)->facts);
+        $this->evidence($f, $credit)->verifyCalculation();
+        self::assertSame($finance, $f->financialEvents());
+        $history = $book->gradeHistory($student->id, $section->id);
+        $decisions = array_values(array_filter($history['items'], static fn(array $r): bool =>
+            $r['action'] === 'grade_decided'));
+        self::assertSame(
+            $review['coursework_summary']['category_rules'],
+            $decisions[0]['coursework_summary']['category_rules']
+        );
+    }
+
+    public function testChangingProtectionRequiresFreshReviewEvenWhenTheSuggestedLetterStaysTheSame(): void
+    {
+        $fixture = [$f, $book, $student, $section] = $this->categoryFixture();
+        $review = $this->review($fixture);
+        $setup = $book->calculationSetup($section->id);
+        $categories = $setup['categories'];
+        unset($categories[0]['protected_assignments']);
+        $book->saveCalculation($section->id, 'category', [], $setup['revision'], $categories);
+        self::assertSame('A', $book->gradeChoices($student->id, $section->id)['coursework']['grade_code']);
+        $before = EventStoreFixture::historyDigest($f->sql);
+        try {
+            $book->commitFinalGrade($student->id, $section->id, $review['review_token']);
+            self::fail('An old category-policy review was accepted.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, EventStoreFixture::historyDigest($f->sql));
+        }
+    }
+
+    public function testRemovingCategoryCapInvalidatesTheOldReviewAndDoesNotPostTheUncappedResult(): void
+    {
+        $fixture = [$f, $book, $student, $section] = $this->categoryFixture();
+        $review = $this->review($fixture);
+        $setup = $book->calculationSetup($section->id);
+        $categories = $setup['categories'];
+        unset($categories[0]['cap_at_hundred']);
+        $book->saveCalculation($section->id, 'category', [], $setup['revision'], $categories);
+        self::assertFalse($book->gradeChoices($student->id, $section->id)['coursework']['available']);
+        $before = EventStoreFixture::historyDigest($f->sql);
+        try {
+            $book->commitFinalGrade($student->id, $section->id, $review['review_token']);
+            self::fail('An earlier capped result was accepted after the cap was removed.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, EventStoreFixture::historyDigest($f->sql));
+        }
+    }
+
+    public function testCategoryRuleDriftDuringRequiredGradeAuditRollsBackTheWholeDecision(): void
+    {
+        $fixture = [$f, $book, $student, $section] = $this->categoryFixture();
+        $review = $this->review($fixture);
+        $tables = ['sis_academic_credits', 'sis_history_events', 'sis_history_operations',
+            'sis_gradebook_calculations'];
+        $before = array_map($f->sql->rows(...), $tables);
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method('record')->willReturnCallback(function () use ($f, $book, $section): void {
+            $categories = $book->calculationSetup($section->id)['categories'];
+            unset($categories[0]['protected_assignments']);
+            $f->sql->update(
+                'sis_gradebook_calculations',
+                ['categories' => json_encode($categories, JSON_THROW_ON_ERROR)],
+                ['id' => $section->id->value]
+            );
+        });
+        try {
+            $f->academicCredits($audit)->commit($student->id, $section->id, $review['review_token']);
+            self::fail('Category changes during required audit escaped final validation.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, array_map($f->sql->rows(...), $tables));
+        }
+    }
+
     private function scale(): array
     {
         return [
