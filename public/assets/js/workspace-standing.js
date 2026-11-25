@@ -2,6 +2,7 @@
 window.createWorkspaceStanding = function (ui) {
     "use strict";
     const { node, request, task, openDrawer, can } = ui;
+    const proposals = window.createStandingProposals({ ...ui, labels: ui.proposalLabels });
     const button = (label, run, style = "btn-outline-primary") => node("button", {
         type: "button", class: `btn ${style}`, onclick: event => task(run, event.currentTarget),
     }, label);
@@ -28,6 +29,7 @@ window.createWorkspaceStanding = function (ui) {
             choose ? button("Use standing", () => choose(item)) : button("Edit definition", () => editDefinition(item, again))));
         if (!page.items.length) body.append(node("p", { role: "status" }, "No standing definitions match. An authorized administrator can add your institution's definitions."));
         body.append(node("div", { class: "inline-actions" },
+            !choose && can("sis:standing:configure") ? button(proposals.t("policy"), () => proposals.policy(again)) : null,
             !choose && can("sis:standing:configure") ? button("Add definition", () => editDefinition(null, again), "btn-primary") : null,
             ...(stack.length ? [button("Previous definitions", () => definitions(back, choose, search, stack.at(-1), stack.slice(0, -1)))] : []),
             ...(page.next_after ? [button("More definitions", () => definitions(back, choose, search, page.next_after, [...stack, after]))] : []),
@@ -59,10 +61,26 @@ window.createWorkspaceStanding = function (ui) {
         const saved = await request(base);
         if (!loading.isConnected) return;
         let rows = saved.rows.map(row => ({ ...row })), reason = "", historicalEvidence = false;
+        let proposal = null, proposalInfo = null, notice = '';
+        const clearProposal = () => { proposal = null; proposalInfo = null; notice = proposals.t('manual'); };
+        async function propose() {
+            const previous = document.getElementById('standing-reason');
+            const result = await request(base + 'propose/', 'POST', {});
+            if (!previous?.isConnected) return;
+            const old = proposal ? rows.find(row => row.id === proposal.period_id) : null;
+            if (proposal) rows = rows.filter(row => row.id !== proposal.period_id);
+            rows.push({ id: result.proposal.period_id, definition_id: result.standing.definition_id,
+                code: result.standing.code, title: result.standing.title,
+                starts_on: old?.starts_on || result.as_of, ends_on: old?.ends_on || null, policy_reference: old?.policy_reference || null });
+            proposal = result.proposal; proposalInfo = result; notice = ''; render();
+        }
         async function choose(existing = null) {
             await definitions(render, async value => {
                 const chosen = { definition_id: value.id, code: value.code, title: value.title };
-                if (existing) Object.assign(existing, chosen);
+                if (existing) {
+                    if (proposal?.period_id === existing.id) clearProposal();
+                    Object.assign(existing, chosen);
+                }
                 else {
                     const chooser = document.getElementById("standing-search");
                     const generated = await request("/sis/ui/operation-id/");
@@ -75,6 +93,10 @@ window.createWorkspaceStanding = function (ui) {
         function render() {
             const body = openDrawer("Academic standing", "EDIT → REVIEW → CONFIRM");
             const form = node("form"), cards = node("div");
+            if (notice) cards.append(node("p", { role: "status", class: "alert alert-info" }, notice));
+            if (proposalInfo) cards.append(proposals.summary(proposalInfo),
+                node("div", { class: "inline-actions mb-3" },
+                    button(proposals.t("clear"), () => { clearProposal(); render(); }, "btn-sm btn-outline-secondary")));
             const review = node("button", { type: "submit", class: "btn btn-primary" }, "Review changes");
             const update = () => { review.disabled = !saved.editable || JSON.stringify(facts(rows)) === JSON.stringify(facts(saved.rows)); };
             for (const row of rows) {
@@ -90,7 +112,9 @@ window.createWorkspaceStanding = function (ui) {
                 cards.append(node("details", { class: "surface border p-3 mb-3", open: !saved.rows.some(old => old.id === row.id) }, summary,
                     field("Effective from", start), field("Effective through", end), field("Policy reference (optional)", policy),
                     saved.editable ? node("div", { class: "inline-actions" }, button("Change standing", () => choose(row), "btn-sm btn-outline-primary"),
-                        button("Remove period", () => { rows = rows.filter(item => item !== row); render(); }, "btn-sm btn-outline-danger")) : null));
+                        button("Remove period", () => {
+                            if (proposal?.period_id === row.id) clearProposal();
+                            rows = rows.filter(item => item !== row); render(); }, "btn-sm btn-outline-danger")) : null));
             }
             if (!rows.length) cards.append(node("p", { role: "status" }, "No academic standing has been recorded for this pursuit."));
             const narrative = node("textarea", { id: "standing-reason", class: "form-control", rows: "3", required: true, maxlength: "10000", disabled: !saved.editable });
@@ -103,17 +127,19 @@ window.createWorkspaceStanding = function (ui) {
                 saved.historical_correction ? node("div", { class: "form-check mb-3" }, evidence,
                     node("label", { for: evidence.id, class: "form-check-label" }, "I verified institutional evidence for this historical correction")) : null,
                 node("div", { class: "inline-actions" },
-                saved.editable && rows.length < 50 ? button("Add period", () => choose()) : null, review,
+                saved.editable && rows.length < 50 ? button("Add period", () => choose()) : null,
+                saved.editable && !saved.historical_correction && (rows.length < 50 || proposal)
+                    ? button(proposals.t("calculate"), propose) : null, review,
                 button("Degree progress", () => ui.degreeAudit().studentProgress(student, pursuit, render, "Back to academic standing")),
                 can("sis:standing:configure") ? button("Definitions", () => definitions(render)) : null,
                 can("sis:audit:read") ? button("Standing history", () => history()) : null,
                 back ? button("Back to programs", back, "btn-link") : null));
             form.addEventListener("submit", event => { event.preventDefault(); task(async () => {
                 if (!form.reportValidity()) return;
-                const draft = JSON.stringify([facts(rows), reason, historicalEvidence]);
-                const result = await request(base + "review/", "POST", { rows: facts(rows), revision: saved.revision, reason, historical_evidence: historicalEvidence });
+                const draft = JSON.stringify([facts(rows), reason, historicalEvidence, proposal]);
+                const result = await request(base + "review/", "POST", { rows: facts(rows), revision: saved.revision, reason, historical_evidence: historicalEvidence, proposal });
                 if (!body.isConnected) return;
-                if (draft !== JSON.stringify([facts(rows), reason, historicalEvidence])) {
+                if (draft !== JSON.stringify([facts(rows), reason, historicalEvidence, proposal])) {
                     body.prepend(node("p", { class: "alert alert-info", role: "status" }, "Your draft changed. Review the current draft again.")); return;
                 }
                 confirm(result);
@@ -128,12 +154,13 @@ window.createWorkspaceStanding = function (ui) {
             describe(row), row.policy_reference ? ` · ${row.policy_reference}` : ""))) : node("p", {}, "No recorded standing periods.");
         function confirm(data) {
             const body = openDrawer("Review academic standing", "CONFIRM");
+            if (data.proposal && proposalInfo) body.append(proposals.summary(proposalInfo));
             body.append(node("h3", { class: "h5" }, "Before"), list(data.before), node("h3", { class: "h5" }, "After"), list(data.after),
                 node("p", { class: "text-break" }, data.reason),
                 data.historical_evidence ? node("p", { class: "alert alert-info" }, "Historical correction: institutional evidence confirmed. The pursuit remains closed and earlier decisions stay retained.") : null, node("p", { class: "form-text" }, "Students and current assigned advisors see the accepted label and dates. Staff reasons and policy references remain private."),
                 node("div", { class: "inline-actions" }, button("Confirm changes", async () => {
                     await request(base + "commit/", "POST", { rows: data.rows, revision: data.revision, reason: data.reason,
-                        operation_id: data.operation_id, review_token: data.review_token, historical_evidence: data.historical_evidence === true });
+                        operation_id: data.operation_id, review_token: data.review_token, historical_evidence: data.historical_evidence === true, proposal: data.proposal || null });
                     if (body.isConnected) await open(student, pursuit, back);
                 }, "btn-primary"), button("Keep editing", render, "btn-link")));
         }
@@ -142,7 +169,8 @@ window.createWorkspaceStanding = function (ui) {
             const page = await request(base + "history/", "POST", { ...(cursor ? { cursor } : {}) });
             if (!body.isConnected) return;
             for (const item of page.items) body.append(node("article", { class: "surface p-3 mb-3" },
-                node("h3", { class: "h6" }, `${item.kind === "historical_correction" ? "Historical correction" : "Decision"} ${item.version} · ${item.recorded_at}`), list(item.rows), node("p", { class: "text-break" }, item.reason)));
+                node("h3", { class: "h6" }, `${item.kind === "historical_correction" ? "Historical correction" : "Decision"} ${item.version} · ${item.recorded_at}`), list(item.rows), item.proposal ? proposals.summary(item.proposal, true) : null,
+                node("p", { class: "text-break" }, item.reason)));
             if (!page.items.length) body.append(node("p", {}, "No standing decisions have been recorded."));
             body.append(node("div", { class: "inline-actions" },
                 ...(stack.length ? [button("Previous history", () => history(stack.at(-1), stack.slice(0, -1)))] : []),

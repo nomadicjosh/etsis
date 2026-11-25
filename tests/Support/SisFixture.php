@@ -293,11 +293,44 @@ final class SisFixture
         );
     }
 
+    public function standingPolicies(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Student\Service\StandingProposalPolicyService {
+        return new \Domain\Student\Service\StandingProposalPolicyService(
+            EventStoreFixture::history($this->connection->queryBuilder()), $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions, $audit ?? $this->audit, $this->clock,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+            new \Infrastructure\Persistence\Repository\SqlStandingProposalPolicyState($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlStudentStandingRepository($this->sql),
+        );
+    }
+
+    public function standingProposals(): \Domain\Student\Service\StandingProposalService
+    {
+        $history = EventStoreFixture::history($this->connection->queryBuilder());
+        $requirements = $this->requirementsReader();
+        return new \Domain\Student\Service\StandingProposalService(
+            $this->standingPolicies(), $this->academicInputs($requirements), $requirements,
+            new \Domain\DegreeAudit\Service\GradingRepublicationVerifier(
+                new \Domain\Gradebook\Service\RetainedGradingReader($history)
+            ),
+            new \Domain\DegreeAudit\Service\RetainedAttemptReader(
+                new \Domain\Registration\Service\RetainedSectionReader($history)
+            ),
+            new \Domain\DegreeAudit\Service\AcademicPolicyEvaluator(),
+            new \Infrastructure\Persistence\Repository\SqlStudentStandingRepository($this->sql), $this->clock,
+            $this->programStatusLedger(),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+        );
+    }
+
     public function standingLedger(): \Domain\Student\Service\StudentStandingLedger
     {
         return new \Domain\Student\Service\StudentStandingLedger(
             new \Infrastructure\Persistence\Repository\SqlStudentStandingRepository($this->sql),
             EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->standingPolicies(),
         );
     }
 
@@ -325,6 +358,7 @@ final class SisFixture
             new \Domain\Student\Service\StudentStandingLedger(
                 new \Infrastructure\Persistence\Repository\SqlStudentStandingRepository($this->sql),
                 $history,
+                $this->standingPolicies(),
             ),
             new \Domain\Student\Service\LoadDeterminationLedger(
                 new \Infrastructure\Persistence\Repository\SqlLoadDeterminationRepository($this->sql),
@@ -370,6 +404,7 @@ final class SisFixture
             new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
             $advisors,
             $this->standingLedger(),
+            $this->standingProposals(),
         );
     }
 

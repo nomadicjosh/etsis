@@ -92,7 +92,11 @@ if (
     !is_string($review["review_token"] ?? null) ||
     ($review['snapshot']['standing']['periods'] ?? null) !== [] ||
     ($review['snapshot']['standing']['through'] ?? null) !== $sis->clock->now()->format('Y-m-d') ||
-    ($review['layout']['code'] ?? null) !== 'classic-letter' || count($review['layouts'] ?? []) !== 4
+    ($review['layout']['code'] ?? null) !== 'classic-letter' ||
+    array_diff(
+        ['classic-letter', 'classic-a4', 'modern-letter', 'modern-a4', 'ceu-letter', 'ceu-a4'],
+        array_column($review['layouts'] ?? [], 'code'),
+    ) !== []
 ) {
     throw new RuntimeException(
         "The actual transcript provider failed to issue a private preparation review.",

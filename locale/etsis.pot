@@ -5509,3 +5509,227 @@ msgstr ""
 #: src/Domain/Registration/Service/SectionPublicationService.php:1226
 msgid "Assign a campus to this section before publishing its program campus rule."
 msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:8
+msgid "Standing proposal policy"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:9
+msgid "Institution setup"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:10
+msgid "Publish GPA floors for proposed standing. The highest floor met by the current pursuit institutional GPA applies. Staff must review and confirm each period; this does not change registration or student activity."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:15
+msgid "Enable institutional GPA standing proposals"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:16
+msgid "Minimum institutional GPA credits"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:17
+msgid "Count GPA credits after retained repeat rules. Undefined GPA never means zero GPA. This is a current cumulative assessment, not a term or backdated GPA calculation."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:21
+msgid "GPA floor"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:22
+msgid "GPA band"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:23
+msgid "Choose standing definition"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:24
+msgid "Choose an active institutional definition. Published labels remain retained; later label changes require policy review."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:28
+msgid "Add GPA band"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:29
+msgid "Remove GPA band"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:30
+msgid "No GPA bands configured. Add a zero floor before enabling proposals."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:31
+msgid "Review proposal policy"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:32
+msgid "Review standing proposal policy"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:33
+msgid "Publish proposal policy"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:34
+msgid "Standing proposal policy published."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:35
+msgid "Reason for policy publication"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:38
+msgid "Published policy version"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:39
+msgid "Proposals disabled"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:40
+msgid "Proposals enabled"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:42
+msgid "Search definitions"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:45
+msgid "No active standing definitions match."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:46
+msgid "The request could not be completed. Your draft remains available."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:47
+msgid "Standing policy access is no longer available to this account."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:48
+msgid "Propose from current GPA"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:49
+msgid "Current institutional GPA proposal"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:50
+msgid "Institutional GPA"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:51
+msgid "GPA credits"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:52
+msgid "Calculated using current records on"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:53
+msgid "Complete the effective dates and review the new period. Grades, requirements or policy changes require a fresh proposal. Current GPA does not reconstruct standing eligibility on an earlier date."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:58
+msgid "This period now uses manual standing review; its GPA proposal evidence was removed."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:59
+msgid "Use manual review instead"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:60
+msgid "Accepted GPA proposal evidence"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:61
+msgid "No standing proposal policy has been published. Proposals are unavailable."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:62
+msgid "Refresh policy version"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:63
+msgid "Refresh preserves your draft. Review the latest published rules before confirming a replacement."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:67
+msgid "Currently published"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:68
+msgid "Proposed policy"
+msgstr ""
+
+#: src/Application/Http/Controller/SisStudentStandingController.php:130
+msgid "Use a valid standing proposal."
+msgstr ""
+
+#: src/Application/Http/Controller/StandingProposalPolicyController.php:51
+msgid "Provide institutional standing proposal rules."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalPolicyService.php:56
+msgid "The standing proposal policy changed or its source disagrees. Refresh it."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalPolicyService.php:78
+msgid "The standing proposal policy changed. Reload it."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalPolicyService.php:131
+msgid "The standing proposal policy source changed. Refresh it."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalPolicyService.php:178
+msgid "The standing proposal policy changed. Review again."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalPolicyService.php:269
+msgid "Choose current active standing definitions before publishing GPA bands."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:47
+msgid "Publish an enabled standing proposal policy before calculating a proposal."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:53
+msgid "Select retained requirements and verify this pursuit’s academic work before proposing standing."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:62
+msgid "A verified institutional GPA is required; undefined GPA does not mean zero GPA."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:65
+msgid "This pursuit has not reached the policy’s minimum GPA credits."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:73
+msgid "The proposed standing definition changed or was retired. Review the published GPA policy."
+msgstr ""
+
+#: src/Domain/Student/Service/StudentStandingService.php:321
+msgid "The standing proposal source changed. Calculate and review it again."
+msgstr ""
+
+#: src/Domain/Student/Service/StudentStandingService.php:388
+msgid "Calculate a fresh standing proposal before reviewing."
+msgstr ""
+
+#: src/Domain/Student/Service/StudentStandingService.php:395
+msgid "A current GPA proposal must be recorded as a new standing period."
+msgstr ""
+
+#: src/Domain/Student/ValueObject/StandingProposalRules.php:45
+msgid "Use up to twenty increasing GPA floors from 0.000 to 10.000, starting at zero when enabled, with complete standing labels and nonnegative minimum GPA credits."
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlStandingProposalPolicyState.php:45
+msgid "The institutional standing proposal policy changed. Review again."
+msgstr ""

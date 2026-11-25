@@ -28,7 +28,7 @@ final class StudentDecisionProjectionVerificationTest extends TestCase
         $s = $f->sis;
         return new SqlStudentDecisionProjectionVerifier(
             $s->sql,
-            new StudentStandingLedger(new SqlStudentStandingRepository($s->sql), $history),
+            new StudentStandingLedger(new SqlStudentStandingRepository($s->sql), $history, $s->standingPolicies()),
             new LoadDeterminationLedger(new SqlLoadDeterminationRepository($s->sql), $history),
             new \Domain\Advising\Service\AdvisorHistoryReader(
                 new \Infrastructure\Persistence\Repository\SqlAdvisorRepository($s->sql),

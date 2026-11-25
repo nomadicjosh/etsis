@@ -62,6 +62,7 @@ try {
                 'check-catalog-projections',
                 'check-curriculum-projections',
                 'check-program-campus',
+                'check-standing-proposals',
                 'check-maintenance',
                 'check-profile-requests',
                 'check-portal',
@@ -472,6 +473,9 @@ try {
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-account-recovery') {
             require __DIR__ . '/AccountRecoveryBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-standing-proposals') {
+            require __DIR__ . '/StandingProposalBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-program-campus') {
             require __DIR__ . '/ProgramCampusBootChecks.php';

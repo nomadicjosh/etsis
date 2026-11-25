@@ -49,6 +49,7 @@ final readonly class StudentStandingService
         private ReviewProof $proofs,
         private AdvisorProgressAccess $advisors,
         private StudentStandingLedger $ledger,
+        private StandingProposalService $proposals,
     ) {
     }
 
@@ -139,6 +140,7 @@ final readonly class StudentStandingService
         string $revision,
         #[\SensitiveParameter] string $reason,
         bool $historicalEvidence = false,
+        #[\SensitiveParameter] ?array $proposal = null,
     ): array {
         $actor = $this->staff();
         $next = $this->validateRows($rows);
@@ -151,6 +153,7 @@ final readonly class StudentStandingService
             $reason,
             $actor,
             $historicalEvidence,
+            $proposal,
         ): array {
             $this->students->lock($student);
             [$s, $p] = $this->scope($student, $pursuit);
@@ -158,13 +161,29 @@ final readonly class StudentStandingService
             $root = $this->ledger->load($student, $pursuit);
             $this->unchanged($revision, $s, $p, $root);
             $this->eligible($root->rows(), $next->rows);
+            $this->proposalEvidence(
+                $student,
+                $pursuit,
+                $next,
+                $root->rows(),
+                $proposal,
+                new HistoryReadBudget(maximumBytes: 4_194_304, maximumMilliseconds: 5000)
+            );
             if ($root->rows() === $next->rows) {
                 throw new ValidationException([
                     ["field" => "rows", "message" => "Change a standing or its dates before reviewing."],
                 ]);
             }
             $operation = EntityId::generate();
-            $intent = $this->intent($student, $pursuit, $next, $revision, trim($reason), $historicalEvidence);
+            $intent = $this->intent(
+                $student,
+                $pursuit,
+                $next,
+                $revision,
+                trim($reason),
+                $historicalEvidence,
+                $proposal
+            );
             $this->staff($actor);
             return [
                 "operation_id" => $operation->value,
@@ -174,6 +193,7 @@ final readonly class StudentStandingService
                 "after" => $next->rows,
                 "reason" => trim($reason),
                 "historical_evidence" => $historicalEvidence,
+                ...$proposal === null ? [] : ["proposal" => $proposal],
                 "review_token" => $this->proofs->issue(
                     "standing",
                     "registrar",
@@ -195,11 +215,12 @@ final readonly class StudentStandingService
         #[\SensitiveParameter] string $reason,
         #[\SensitiveParameter] string $token,
         bool $historicalEvidence = false,
+        #[\SensitiveParameter] ?array $proposal = null,
     ): array {
         $actor = $this->staff();
         $next = $this->validateRows($rows);
         $this->reason($reason);
-        $intent = $this->intent($student, $pursuit, $next, $revision, trim($reason), $historicalEvidence);
+        $intent = $this->intent($student, $pursuit, $next, $revision, trim($reason), $historicalEvidence, $proposal);
         return $this->transactions->run(function () use (
             $student,
             $pursuit,
@@ -211,6 +232,7 @@ final readonly class StudentStandingService
             $actor,
             $intent,
             $historicalEvidence,
+            $proposal,
         ): array {
             $this->students->lock($student);
             [$s, $p] = $this->scope($student, $pursuit);
@@ -238,6 +260,15 @@ final readonly class StudentStandingService
                 $this->records->lockDefinition(new EntityId($id));
             }
             $this->eligible($root->rows(), $next->rows);
+            $proposalBudget = new HistoryReadBudget(maximumBytes: 4_194_304, maximumMilliseconds: 5000);
+            $proposalEvidence = $this->proposalEvidence(
+                $student,
+                $pursuit,
+                $next,
+                $root->rows(),
+                $proposal,
+                $proposalBudget
+            );
             if ($root->rows() === $next->rows) {
                 throw new ConcurrentModificationException(
                     "Review a changed standing list before confirming.",
@@ -259,7 +290,8 @@ final readonly class StudentStandingService
                         "rows" => $next->rows,
                         "intent" => $intent,
                     ] + ($p->status === "closed" ? ["historical_evidence" => true] : []),
-                    ["__aggregate_type" => "student_standing"],
+                    ["__aggregate_type" => "student_standing"]
+                        + ($proposalEvidence === null ? [] : ["standing_proposal_evidence" => $proposalEvidence]),
                 )
                 ->withPlayhead($root->playhead() + 1);
             $this->history->append(
@@ -281,6 +313,22 @@ final readonly class StudentStandingService
             $this->unchanged($revision, $s, $p, $root);
             $this->proofs->validate($token, "standing", "registrar", $pursuit, $actor, $operation, $intent);
             $this->eligible($root->rows(), $next->rows);
+            $freshProposal = $this->proposalEvidence(
+                $student,
+                $pursuit,
+                $next,
+                $root->rows(),
+                $proposal,
+                $proposalBudget
+            );
+            if (
+                \Domain\Student\ValueObject\StandingProposalRules::hash([$freshProposal])
+                !== \Domain\Student\ValueObject\StandingProposalRules::hash([$proposalEvidence])
+            ) {
+                throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans_html(
+                    'The standing proposal source changed. Calculate and review it again.'
+                ));
+            }
             $verified = $this->ledger->latest($student, $pursuit);
             if ($verified === null || $verified->event->payload()["operation_id"] !== $operation->value) {
                 throw new CorruptHistoryException();
@@ -288,6 +336,95 @@ final readonly class StudentStandingService
             $root->accept($verified);
             return $root->receipt($operation, $actor, $intent) ?? throw new CorruptHistoryException();
         });
+    }
+
+    public function propose(EntityId $student, EntityId $pursuit): array
+    {
+        $actor = $this->staff();
+        return $this->transactions->run(function () use ($student, $pursuit, $actor): array {
+            $this->students->lock($student);
+            [$s, $p] = $this->scope($student, $pursuit);
+            $this->current($s, $p);
+            $period = EntityId::generate();
+            $evidence = $this->proposals->calculate(
+                $student,
+                $pursuit,
+                $period,
+                new HistoryReadBudget(maximumBytes: 4_194_304, maximumMilliseconds: 5000)
+            );
+            $proof = new \Domain\Student\ValueObject\StandingProposalEvidence($evidence);
+            $revision = \Domain\Student\ValueObject\StandingProposalRules::hash($evidence);
+            $gpa = new \Domain\DegreeAudit\ValueObject\GpaTotals(
+                $evidence['quality_points_milli'],
+                $evidence['gpa_credits_milli']
+            );
+            $this->staff($actor);
+            return ['standing' => $proof->band(), 'gpa_milli' => $gpa->milli(),
+                'gpa_credits_milli' => $gpa->creditsMilli, 'as_of' => $evidence['as_of'],
+                'policy_publication_id' => $evidence['policy_publication_id'],
+                'policy_version' => $evidence['policy_version'],
+                'proposal' => ['period_id' => $period->value, 'revision' => $revision,
+                    'token' => $this->proofs->issue(
+                        'standing-proposal',
+                        'registrar',
+                        $pursuit,
+                        $actor,
+                        $period,
+                        $revision
+                    )]];
+        });
+    }
+
+    private function proposalEvidence(
+        EntityId $student,
+        EntityId $pursuit,
+        StandingPeriods $next,
+        array $before,
+        #[\SensitiveParameter] ?array $proposal,
+        HistoryReadBudget $budget,
+    ): ?array {
+        if ($proposal === null) {
+            return null;
+        }
+        if (
+            count($proposal) !== 3 || array_diff(array_keys($proposal), ['period_id', 'revision', 'token']) !== []
+            || !is_string($proposal['period_id'] ?? null) || !is_string($proposal['revision'] ?? null)
+            || preg_match('/^[a-f0-9]{64}$/D', $proposal['revision']) !== 1 || !is_string($proposal['token'] ?? null)
+        ) {
+            throw new ValidationException([['field' => 'proposal',
+                'message' => \Codefy\Framework\Helpers\trans_html(
+                    'Calculate a fresh standing proposal before reviewing.'
+                )]]);
+        }
+        [$s, $p] = $this->scope($student, $pursuit);
+        $this->current($s, $p);
+        if (in_array($proposal['period_id'], array_column($before, 'id'), true)) {
+            throw new ValidationException([['field' => 'proposal', 'message' => \Codefy\Framework\Helpers\trans_html(
+                'A current GPA proposal must be recorded as a new standing period.'
+            )]]);
+        }
+        $period = new EntityId($proposal['period_id']);
+        $evidence = $this->proposals->calculate($student, $pursuit, $period, $budget);
+        if (!hash_equals($proposal['revision'], \Domain\Student\ValueObject\StandingProposalRules::hash($evidence))) {
+            throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans_html(
+                'The standing proposal source changed. Calculate and review it again.'
+            ));
+        }
+        new \Domain\Student\ValueObject\StandingProposalEvidence($evidence)->routing(
+            $student->value,
+            $pursuit->value,
+            $next->rows
+        );
+        $this->proofs->validate(
+            $proposal['token'],
+            'standing-proposal',
+            'registrar',
+            $pursuit,
+            $this->staff(),
+            $period,
+            $proposal['revision']
+        );
+        return $evidence;
     }
 
     /** Minimal owner/advisor presentation; staff narratives and policy references stay private. */
@@ -325,6 +462,7 @@ final readonly class StudentStandingService
         $this->scope($student, $pursuit);
         $page = $this->history->page($this->stream($pursuit), $cursor, 20);
         $items = [];
+        $proposalBudget = new HistoryReadBudget(maximumBytes: 4_194_304, maximumMilliseconds: 5000);
         foreach ($page->events as $stored) {
             StudentStanding::validate(
                 $data = $stored->event->payload(),
@@ -342,6 +480,8 @@ final readonly class StudentStandingService
                 "recorded_at" => $stored->recordedAt->format(DATE_ATOM),
                 "reason" => $stored->context->reason,
                 "rows" => $data["rows"],
+                ...($proof = StudentStanding::proposalEvidence($stored->event)) === null ? []
+                    : ["proposal" => $this->proposals->summary($proof, $proposalBudget)],
             ];
         }
         $this->staff($actor);
@@ -564,6 +704,7 @@ final readonly class StudentStandingService
         string $revision,
         #[\SensitiveParameter] string $reason,
         bool $historicalEvidence,
+        #[\SensitiveParameter] ?array $proposal = null,
     ): string {
         return hash(
             "sha256",
@@ -575,6 +716,7 @@ final readonly class StudentStandingService
                     $next->rows,
                     $reason,
                     ...$historicalEvidence ? ["historical_evidence_confirmed"] : [],
+                    ...$proposal === null ? [] : [\Domain\Student\ValueObject\StandingProposalRules::hash($proposal)],
                 ],
                 JSON_THROW_ON_ERROR,
             ),

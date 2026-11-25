@@ -22,6 +22,7 @@ final readonly class StudentStandingLedger implements TranscriptStandingSource
     public function __construct(
         private StudentStandingRepository $records,
         private HistoricalEventStore $history,
+        private StandingProposalPolicyService $policies,
     ) {
     }
 
@@ -69,6 +70,10 @@ final readonly class StudentStandingLedger implements TranscriptStandingSource
             ) {
                 throw new CorruptHistoryException();
             }
+            $proof = StudentStanding::proposalEvidence($latest->event);
+            if ($proof !== null) {
+                $this->policies->verifyEvidence($proof, new HistoryReadBudget());
+            }
             $expected = new StandingPeriods($data["rows"])->rows;
         }
         if ($expected !== $this->records->rows($student, $pursuit)) {
@@ -92,6 +97,10 @@ final readonly class StudentStandingLedger implements TranscriptStandingSource
                     throw new CorruptHistoryException();
                 }
                 $root->accept($stored);
+                $proof = StudentStanding::proposalEvidence($stored->event);
+                if ($proof !== null) {
+                    $this->policies->verifyEvidence($proof, $budget);
+                }
             }
             $cursor = $page->nextCursor;
         } while ($cursor !== null);

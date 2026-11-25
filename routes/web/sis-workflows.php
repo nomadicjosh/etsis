@@ -830,6 +830,11 @@ return static function (Psr7Router $router): void {
     $router->map(['POST'], '/sis/students/{student}/programs/{pursuit}/load/review/', [
         $load, 'staffLoad',
     ])->name('staff.load.review');
+    $standingPolicy = \Application\Http\Controller\StandingProposalPolicyController::class;
+    foreach (['view' => '', 'review' => 'review/', 'publish' => 'publish/'] as $method => $suffix) {
+        $router->post('/sis/academic-standing/proposal-policy/' . $suffix, [$standingPolicy, $method])
+            ->name('sis.standing.proposal-policy.' . $method);
+    }
     $standing = \Application\Http\Controller\SisStudentStandingController::class;
     foreach (['definitions', 'choices', 'save'] as $method) {
         $router->map(['POST'], '/sis/academic-standing/' . $method . '/', [$standing, $method])
@@ -837,7 +842,7 @@ return static function (Psr7Router $router): void {
     }
     foreach (
         ['view' => ['', 'GET'], 'review' => ['review/', 'POST'], 'commit' => ['commit/', 'POST'],
-        'timeline' => ['history/', 'POST']] as $method => [$suffix, $verb]
+        'propose' => ['propose/', 'POST'], 'timeline' => ['history/', 'POST']] as $method => [$suffix, $verb]
     ) {
         $router->map([$verb], '/sis/students/{student}/programs/{pursuit}/standing/' . $suffix, [
             $standing, $method,

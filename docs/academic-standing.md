@@ -86,4 +86,41 @@ The follow-up permission-only migration `20261120000009_CreateSisStandingCorrect
 
 ## Remaining policy work
 
-This completes reviewed manual standing, historical corrections, setup, private display, optional transcript annotations with definition selection, and existing reporting. Automated proposals based on institutional standing rules, their versioned GPA/load thresholds, dated load/classification determinations, additional annotation presentation policies and graduation decisions remain separate work. [Enrollment-load bands and working reviews](enrollment-load.md) are implemented independently; they do not make standing or official census decisions. Standing itself does not change student activity, account access, registration holds, grades, earned credits, enrollment, charges or graduation. Institutions should not rely on this label alone for automated financial-aid, immigration or other eligibility decisions.
+This completes reviewed manual standing, historical corrections, setup, private display, optional transcript annotations with definition selection, and existing reporting. Reviewed GPA proposals are implemented below. Program/level-specific policy sets, term-only or backdated GPA assessments, load/classification-based proposals, additional annotation presentation policies and graduation decisions remain separate work. [Enrollment-load bands and working reviews](enrollment-load.md) are implemented independently; they do not make standing or official census decisions. Standing itself does not change student activity, account access, registration holds, grades, earned credits, enrollment, charges or graduation. Institutions should not rely on this label alone for automated financial-aid, immigration or other eligibility decisions.
+
+
+## Reviewed GPA standing proposals
+
+The institution can publish cumulative-GPA bands that suggest a standing for a new period. A proposal does not assign standing automatically. An authorized registrar chooses the effective dates, reviews the complete before/after periods, and confirms the determination. The existing manual workflow remains available independently.
+
+### Publish institutional GPA bands
+
+Open **Students → Standing definitions → Standing proposal policy**. Configuration requires `sis:standing:configure` and `sis:student:read`; ordinary standing management does not grant policy configuration. Existing permissions are reused and no role/user grants are added.
+
+1. Create the institution's standing definitions first, then add up to twenty GPA bands and choose an active definition for each.
+2. Enter increasing GPA floors between **0.000 and 10.000**. An enabled policy must start at **0.000**. The highest floor met applies, inclusively. For example, floors 0.000 / Academic review and 2.000 / Good standing would place exactly 2.000 in Good standing. These are examples, not seeded definitions or policy.
+3. Optionally require a minimum number of **institutional GPA credits**. These are credits used in the verified GPA after retained repeat rules, rather than all registered or earned credits. Undefined GPA never becomes zero GPA.
+4. Enable proposals, enter a reason, review the current and proposed policy, then publish. Before the first publication the screen explicitly says that no proposal policy is published; the technical version-zero state is not an institutional decision.
+5. If another administrator publishes first, refresh the policy version and review the latest rules before replacing them. Refresh, definition search, paging and failed saves preserve the draft, including unfinished numeric inputs. Access denial clears the private policy controls. Nothing is stored in browser storage.
+
+One institution-wide policy applies to supported current primary pursuits. Separate program/level-specific policy sets remain future work. Policy publications retain the chosen definition identities and labels. Retiring or renaming a definition never relabels earlier policies or student decisions. If the currently proposed definition changes or retires, fresh proposals require policy review; disabling the policy remains possible without discarding its retained labels.
+
+### Propose, review and confirm a new period
+
+Open **Students → a student → Academic standing**, then choose **Propose from current GPA**. This requires the existing standing-management and student-read duties and a verified current primary, active program pursuit. Closed-pursuit corrections retain their separate manual evidence workflow.
+
+The calculation uses that pursuit's selected retained requirements, grading publications, repeat-GPA rules and verified academic work. It evaluates **institutional cumulative GPA**, excluding transfer work even when an overall-GPA policy includes transfers. Failing GPA-bearing work can produce a verified zero GPA. Missing requirements, undefined GPA, incompatible grading, unverifiable history, insufficient GPA credits or replay limits cannot produce a successful partial proposal. A proposal read writes no standing or academic decision.
+
+The new period initially uses the calculation's current date. Complete its inclusive dates and retain or shorten earlier periods as appropriate; periods still cannot overlap. This is a calculation from **current recorded work**, not a reconstruction of GPA at an earlier effective date or a term/census calculation. Effective dates remain the institution's reviewed determination.
+
+The editor shows only the proposed label, GPA, GPA credits, calculation date and published policy version. Degree-progress navigation preserves the draft, reason and proposal. **Use manual review instead**, changing the proposed standing, or removing its period clears the proposal evidence from the draft and announces that change. Manual review does not claim a verified GPA proposal. Recalculating replaces the pending proposed period while keeping its entered dates and optional reference.
+
+Review and confirmation recheck the actual source, not merely the resulting standing label. Another completed course with the same GPA, a new publication with identical bands, a cohort/requirements change, an expired review or a retired definition requires a fresh proposal/review. Final required-audit, source, permission and expiry failures roll back the decision, period projections and receipt together. Original accepted retries return their original result after later grade, policy or definition changes.
+
+### Retained evidence and privacy
+
+A confirmed proposal retains its exact institutional-policy publication, rules, requirement publication reference, source fingerprints/positions, institutional GPA totals and compact frozen calculation inputs in protected metadata on the existing standing decision. The frozen grading/repeat settings and attempts reproduce the accepted GPA independently of later working records. Genuine policy replay verifies that the retained bands belong to the named publication. Identity routing binds the evidence to the exact student, pursuit and new period. Existing manual events remain unchanged and do not acquire inferred proposal evidence.
+
+**Standing history** displays only the accepted GPA, GPA credits, calculation date and policy version alongside the retained period. The compact attempts, source positions and internal hashes remain protected. Student/advisor standing reads, transcript annotations and the existing standing report continue to expose their established period fields; this adds no report, automated registration hold, activity change, grade, credit, charge or graduation decision.
+
+Calculations share a bounded replay allowance, with a four-MiB/five-cooperative-second read budget and a separate one-MiB retained-evidence limit. At most five hundred frozen attempts are supported. The additive portable migration `20261125000003` creates only a zero-version policy counter; publications and accepted proposal evidence remain in the single protected journal. Native PostgreSQL DDL/preservation is qualified separately from the populated fictional SQLite workflows and bounded browser checks.

@@ -68,6 +68,7 @@ final readonly class SisStudentStandingController
                 $f->text("revision", 64),
                 $f->bodyText("reason"),
                 $f->boolean("historical_evidence"),
+                $this->proposal($request),
             ),
         );
     }
@@ -88,6 +89,7 @@ final readonly class SisStudentStandingController
                 $f->bodyText("reason"),
                 $f->bodyText("review_token"),
                 $f->boolean("historical_evidence"),
+                $this->proposal($request),
             ),
         );
     }
@@ -113,6 +115,21 @@ final readonly class SisStudentStandingController
                 FormInput::from($request)->optionalText("cursor", 8192),
             ),
         );
+    }
+
+    public function propose(string $student, string $pursuit): ResponseInterface
+    {
+        return new JsonResponse($this->service->propose(new EntityId($student), new EntityId($pursuit)));
+    }
+
+    private function proposal(#[\SensitiveParameter] ServerRequest $request): ?array
+    {
+        $body = $request->getParsedBody();
+        $proposal = $body['proposal'] ?? null;
+        if ($proposal !== null && !is_array($proposal)) {
+            throw new \InvalidArgumentException(\Codefy\Framework\Helpers\trans_html('Use a valid standing proposal.'));
+        }
+        return $proposal;
     }
 
     private function input(#[\SensitiveParameter] ServerRequest $request): FormInput

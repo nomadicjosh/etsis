@@ -92,12 +92,30 @@ final class StudentStanding extends EventSourcedAggregate
             ],
         ];
     }
+    public static function proposalEvidence(
+        \Codefy\Domain\EventSourcing\AggregateChanged $event,
+    ): ?\Domain\Student\ValueObject\StandingProposalEvidence {
+        if (!array_key_exists('standing_proposal_evidence', $event->metadata())) {
+            return null;
+        }
+        $data = $event->metadata()['standing_proposal_evidence'];
+        if (!($event instanceof StudentStandingWasRecorded) || !is_array($data)) {
+            throw new CorruptHistoryException();
+        }
+        $proof = new \Domain\Student\ValueObject\StandingProposalEvidence($data);
+        $p = $event->payload();
+        $proof->routing($p['student_id'], $p['pursuit_id'], $p['rows']);
+        return $proof;
+    }
+
     public function whenStudentStandingWasRecorded(StudentStandingWasRecorded $event): void
     {
+        self::proposalEvidence($event);
         $this->applyPeriods($event->payload(), false);
     }
     public function whenStudentStandingWasCorrected(StudentStandingWasCorrected $event): void
     {
+        self::proposalEvidence($event);
         $this->applyPeriods($event->payload(), true);
     }
     private function applyPeriods(#[\SensitiveParameter] array $p, bool $correction): void

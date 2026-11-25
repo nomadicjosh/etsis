@@ -17,6 +17,8 @@ final class SisServiceProvider extends CodefyServiceProvider
         $bindings = [
             \Domain\Registration\Repository\GraduateApprovalState::class =>
                 \Infrastructure\Persistence\Repository\SqlGraduateApprovalState::class,
+            \Domain\Student\Repository\StandingProposalPolicyState::class =>
+                \Infrastructure\Persistence\Repository\SqlStandingProposalPolicyState::class,
             \Domain\Registration\Repository\GraduateRegistrationPolicyState::class =>
                 \Infrastructure\Persistence\Repository\SqlGraduateRegistrationPolicyState::class,
             \Domain\Registration\Repository\SectionProgramPolicyRepository::class =>

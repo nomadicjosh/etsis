@@ -70,6 +70,10 @@ final readonly class HistoricalSchemaRegistry
                 'root' => \Domain\Registration\Waitlist\SectionWaitlist::class,
                 'fields' => \Domain\Registration\Waitlist\SectionWaitlist::PLACE_FIELDS,
             ],
+            \Domain\Student\Event\StandingProposalPolicyWasPublished::class => [
+                'type' => 'standing_proposal_policy', 'root' => \Domain\Student\StandingProposalPolicy::class,
+                'fields' => \Domain\Student\StandingProposalPolicy::FIELDS,
+            ],
             \Domain\Registration\Event\GraduateRegistrationPolicyWasPublished::class => [
                 'type' => 'graduate_registration_policy',
                 'root' => \Domain\Registration\GraduateRegistrationPolicy::class,
@@ -682,6 +686,12 @@ final readonly class HistoricalSchemaRegistry
                     $definition['fields'][] = 'priority_bypass';
                 }
             }
+            if ($class === \Domain\Student\Event\StandingProposalPolicyWasPublished::class) {
+                \Domain\Student\StandingProposalPolicy::validate($payload);
+                if ((string) $stream->aggregateId !== \Domain\Student\StandingProposalPolicy::ID) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\Registration\Event\GraduateRegistrationPolicyWasPublished::class) {
                 \Domain\Registration\GraduateRegistrationPolicy::validate($payload);
                 if ((string) $stream->aggregateId !== \Domain\Registration\GraduateRegistrationPolicy::ID) {
@@ -1136,6 +1146,7 @@ final readonly class HistoricalSchemaRegistry
                     \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class,
                     \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class,
                     \Domain\Registration\Waitlist\WaitlistPlaceWasChanged::class,
+                    \Domain\Student\Event\StandingProposalPolicyWasPublished::class,
                     \Domain\Registration\Event\GraduateRegistrationPolicyWasPublished::class,
                     \Domain\Registration\Event\GraduateCourseApprovalWasRecorded::class,
                     \Domain\Gradebook\Event\GradeComparisonPolicyWasPublished::class,
@@ -1228,6 +1239,17 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'standing_proposal_evidence') {
+                    if ($class !== \Domain\Student\Event\StudentStandingWasRecorded::class || !is_array($value)) {
+                        throw new CorruptHistoryException();
+                    }
+                    new \Domain\Student\ValueObject\StandingProposalEvidence($value)->routing(
+                        $payload['student_id'],
+                        $payload['pursuit_id'],
+                        $payload['rows']
+                    );
+                    continue;
+                }
                 if ($name === 'registered_credits_intent') {
                     if (
                         $class !== \Domain\AcademicRecord\Event\RegisteredCreditsWereCorrected::class ||
@@ -1806,6 +1828,7 @@ final readonly class HistoricalSchemaRegistry
     {
         $type = match ($id->aggregateClassName()) {
             \Domain\Registration\Waitlist\SectionWaitlist::class => 'section_waitlist',
+            \Domain\Student\StandingProposalPolicy::class => 'standing_proposal_policy',
             \Domain\Registration\GraduateRegistrationPolicy::class => 'graduate_registration_policy',
             \Domain\Registration\GraduateCourseApprovals::class => 'graduate_course_approvals',
             \Domain\Gradebook\GradeComparisonPolicy::class => 'grade_comparison_policy',
@@ -1865,6 +1888,7 @@ final readonly class HistoricalSchemaRegistry
     {
         $aggregateId = match ($type) {
             'section_waitlist' => new \Domain\Registration\Waitlist\WaitlistId($id),
+            'standing_proposal_policy' => new \Domain\Student\ValueObject\StandingProposalPolicyId($id),
             'graduate_registration_policy' => new \Domain\Registration\ValueObject\GraduateRegistrationPolicyId($id),
             'graduate_course_approvals' => new \Domain\Registration\ValueObject\GraduateCourseApprovalsId($id),
             'grade_comparison_policy' => new \Domain\Gradebook\ValueObject\GradeComparisonPolicyId($id),
