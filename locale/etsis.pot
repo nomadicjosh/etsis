@@ -6017,3 +6017,237 @@ msgstr ""
 #: src/Domain/Student/ValueObject/StandingProposalRules.php:26
 msgid "Choose cumulative or selected-term institutional GPA for each rule set."
 msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:8
+msgid "Advising appointments"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:9
+msgid "Arrange a time with an assigned advisor. All appointment details and reasons are visible to the student. Recording attendance does not record a completed check-in or change academic eligibility."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:12
+msgid "Schedule an appointment"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:13
+msgid "Save appointment"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:14
+msgid "Refresh appointments"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:15
+msgid "Scheduled appointments"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:16
+msgid "Finished appointments"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:17
+msgid "Previous appointments"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:18
+msgid "More appointments"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:19
+msgid "No appointments on this page."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:20
+msgid "Assigned advisor"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:21
+msgid "Starts at"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:22
+msgid "Ends at"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:23
+msgid "Institution timezone"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:24
+msgid "Appointment details or reason visible to the student"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:25
+msgid "Use a future, same-day time of 5–240 minutes within 366 days. Include meeting instructions in the details. Only overlapping advising appointments are checked; review other commitments separately."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:28
+msgid "Appointment changes"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:29
+msgid "Reschedule appointment"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:30
+msgid "Cancel appointment"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:31
+msgid "Record as held"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:32
+msgid "Record no-show"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:33
+msgid "Save appointment change"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:34
+msgid "Keep appointment unchanged"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:36
+msgid "Appointment saved. Review the scheduled details below."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:37
+msgid "Appointment change saved."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:38
+msgid "Unable to save. Your draft remains here. Refresh and review the current appointment before trying again."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:40
+msgid "Appointment access is unavailable. Reopen the program after your access is restored."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:41
+msgid "Only cancellation is available here. Contact the advising office for further changes."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:42
+msgid "After ten time changes, cancel and schedule a replacement if needed."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:43
+#: resources/views/shared/advising-appointment-labels.php:45
+msgid "Scheduled"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:43
+#: resources/views/shared/advising-appointment-labels.php:46
+msgid "Cancelled"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:44
+msgid "Held"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:44
+msgid "No-show"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:45
+msgid "Rescheduled"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:46
+msgid "Recorded as held"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:46
+msgid "Recorded no-show"
+msgstr ""
+
+#: src/Domain/Advising/AdvisingAppointment.php:54
+msgid "Enter appointment details or a reason of 1–1,000 characters. All wording is visible to the student."
+msgstr ""
+
+#: src/Domain/Advising/AdvisingAppointment.php:82
+msgid "This appointment action was already accepted with different details."
+msgstr ""
+
+#: src/Domain/Advising/AdvisingAppointment.php:115
+msgid "The appointment changed or this action is unavailable. Refresh and review its current state."
+msgstr ""
+
+#: src/Domain/Advising/AppointmentTime.php:27
+msgid "Use the institution timezone supplied by the appointment form."
+msgstr ""
+
+#: src/Domain/Advising/AppointmentTime.php:35
+msgid "Choose a same-day advising appointment lasting 5–240 minutes."
+msgstr ""
+
+#: src/Domain/Advising/AppointmentTime.php:48
+msgid "Choose a future appointment within the next 366 days."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:52
+msgid "Student program not found."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:103
+msgid "Student context changed. Refresh appointments."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:154
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:317
+msgid "Advisor account changed. Refresh appointments."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:159
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:234
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:312
+msgid "Advisor assignments changed. Refresh appointments."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:213
+msgid "Resolve existing appointments before scheduling another (20 active maximum per program)."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:272
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:277
+msgid "Advising appointment not found."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:292
+msgid "Contact the advising office to change a past appointment."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:337
+msgid "Use the current primary program and institution timezone."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:346
+msgid "The advisor must be assigned on that date, and neither participant may have an overlapping advising appointment."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:375
+msgid "The appointment changed before completion. Refresh appointments."
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlAdvisingAppointmentRepository.php:129
+msgid "Use shorter appointment details."
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlAdvisingAppointmentRepository.php:136
+msgid "This appointment reference was already used."
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlAdvisingAppointmentRepository.php:146
+msgid "The appointment changed. Refresh appointments."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:20
+msgid "Scheduling needs an active primary program and an eligible assigned advisor."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:9
+msgid "Student program"
+msgstr ""

@@ -173,6 +173,22 @@ return static function (Psr7Router $router): void {
         $standing, 'advisor',
     ])
         ->name('portal.standing.advisor');
+    $appointments = \Application\Http\Controller\AdvisingAppointmentController::class;
+    $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/appointments/list/', [
+        $appointments, 'ownerList',
+    ])->name('owner.appointments.list');
+    $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/appointments/act/', [
+        $appointments, 'ownerAct',
+    ])->name('owner.appointments.act');
+    $router->map(['POST'], '/portal/api/advising/students/{student}/programs/{pursuit}/appointments/list/', [
+        $appointments, 'advisorList',
+    ])->name('advisor.appointments.list');
+    $router->map(['POST'], '/portal/api/advising/students/{student}/programs/{pursuit}/appointments/schedule/', [
+        $appointments, 'advisorSchedule',
+    ])->name('advisor.appointments.schedule');
+    $router->map(['POST'], '/portal/api/advising/students/{student}/programs/{pursuit}/appointments/act/', [
+        $appointments, 'advisorAct',
+    ])->name('advisor.appointments.act');
     $checkins = \Application\Http\Controller\AdvisingCheckInController::class;
     $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/checkins/list/', [
         $checkins, 'ownerList',

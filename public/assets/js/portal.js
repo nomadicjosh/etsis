@@ -1106,6 +1106,19 @@
         return details;
     }
 
+    function appointmentAction(container, student, pursuit, advisor = false) {
+        const labels = JSON.parse(document.getElementById('advising-appointment-labels').textContent);
+        const host = el('div');
+        const open = button(labels.title, () => {
+            if (!container.isConnected) return;
+            open.remove();
+            window.createAdvisingAppointments({ node: el, request, labels }).mount(host,
+                `/portal/api/${advisor ? 'advising/' : ''}students/${student}/programs/${pursuit}/appointments/`,
+                { owner: !advisor, portal: true });
+        }, true);
+        container.append(open, host);
+    }
+
     function checkInAction(container, student, pursuit, advisor = false) {
         const host = el("div");
         const open = button("Advising check-ins", () => {
@@ -1147,6 +1160,7 @@
             standing.replaceChildren();
             checkins.replaceChildren();
             checkInAction(checkins, student, pursuit, true);
+            appointmentAction(checkins, student, pursuit, true);
             result.replaceChildren(el("p", { role: "status" }, "Reviewing recorded degree progress…"));
             try {
                 const responses = await Promise.allSettled([
@@ -1244,6 +1258,7 @@
             const current = ++generation;
             checkins.replaceChildren();
             checkInAction(checkins, student, pursuit);
+            appointmentAction(checkins, student, pursuit);
             advisors.replaceChildren(); standing.replaceChildren();
             result.replaceChildren(el("p", { role: "status" }, "Reviewing your recorded work…"));
             try {

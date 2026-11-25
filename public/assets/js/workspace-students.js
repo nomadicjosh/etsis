@@ -999,6 +999,9 @@ window.createWorkspaceStudents = function (ui) {
                               if (can('sis:student:read') && can('sis:standing:manage') && can('sis:history:verify') && can('sis:audit:read'))
                                   extra.push(button(ui.historyCheckLabels?.check_standing || 'Check standing history',
                                       () => ui.historyChecks().open('standing', item.id, back)));
+                              if (can("sis:student:read") && can("sis:advising:appointments:manage")) extra.push(button(
+                                  JSON.parse(document.getElementById('advising-appointment-labels').textContent).title,
+                                  () => ui.advising().appointments(id, item.id, back)));
                               if (can("sis:student:read") && can("sis:advising:checkin")) extra.push(button("Advising check-ins", () => ui.advising().checkins(id, item.id, back)));
                               if (can("sis:advising:manage")) extra.push(button("Academic advisors", () => ui.advising().open(id, item.id, back)));
                               if (can("sis:student:read"))

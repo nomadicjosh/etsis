@@ -120,3 +120,5 @@ $sis->access->actor = $advisingActor;
 $sis->access->staff = true;
 
 require __DIR__ . '/AdvisingCheckInBootChecks.php';
+
+require __DIR__ . '/AdvisingAppointmentsBootChecks.php';

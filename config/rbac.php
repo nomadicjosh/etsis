@@ -9,7 +9,9 @@ return [
             "description" => "Run bounded selected-record history checks and read their support receipts.",
         ],
         "sis:portal:publish" => ["description" => "Approve, schedule, return and archive campus content."],
-        "sis:registration:prerequisite-exception" => ["description" => "Approve and revoke pursuit-scoped prerequisite exceptions."],
+        "sis:registration:prerequisite-exception" => [
+            "description" => "Approve and revoke pursuit-scoped prerequisite exceptions.",
+        ],
         "sis:load:policy" => ["description" => "Publish institutional and program enrollment-load policies."],
         "sis:load:determine" => [
             "description" => "Record current enrollment-load determinations from verified registrations.",
@@ -17,6 +19,9 @@ return [
         "sis:standing:correct" => ["description" => "Correct recorded academic standing on closed pursuits."],
         "sis:standing:configure" => ["description" => "Maintain institutional academic standing labels."],
         "sis:standing:manage" => ["description" => "Review dated student academic standing decisions."],
+        "sis:advising:appointments:manage" => [
+            "description" => "Schedule advising appointments and record attendance outcomes.",
+        ],
         "sis:advising:checkin" => ["description" => "Record advising check-ins and manage student follow-up."],
         "sis:advising:manage" => ["description" => "Review dated student advisor assignments."],
         "sis:academic:course:amend" => [

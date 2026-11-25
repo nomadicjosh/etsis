@@ -263,6 +263,38 @@ final readonly class AdvisorService implements AdvisorProgressAccess
         return $actor;
     }
 
+    /** Internal scheduling source: verified assignments and current canonical account links. */
+    public function appointmentHosts(EntityId $student, EntityId $pursuit, string $channel): array
+    {
+        $actor = $this->access->requirePermission('sis:advising:appointments:manage');
+        if ($channel === 'staff') {
+            $this->access->requirePermission('sis:student:read');
+        } elseif ($channel === 'advisor') {
+            $this->requireAdvisor($student, $pursuit);
+        } else {
+            throw new AccessDeniedException();
+        }
+        $latest = $this->latest($student, $pursuit);
+        $rows = $latest === null ? [] : new AdvisorAssignments($latest->event->payload()['rows'])->rows;
+        $hosts = [];
+        foreach ($this->labels($rows) as $row) {
+            $person = $this->admissions->person(new EntityId($row['advisor_person_id']));
+            if (
+                !$this->records->candidate($person->id) || $person->ownerUserId === null
+                || ($channel === 'advisor' && $person->ownerUserId->value !== $actor->value)
+                || ($row['ends_on'] !== null && $row['ends_on'] < $this->clock->now()->format('Y-m-d'))
+                || $row['starts_on'] > $this->clock->now()->modify('+366 days')->format('Y-m-d')
+            ) {
+                continue;
+            }
+            $hosts[] = $row + ['user_id' => $person->ownerUserId->value];
+        }
+        if ($actor->value !== $this->access->authenticatedUserId()->value) {
+            throw new AccessDeniedException();
+        }
+        return $hosts;
+    }
+
     public function mine(string $search = "", ?EntityId $after = null): array
     {
         $actor = $this->access->authenticatedUserId();

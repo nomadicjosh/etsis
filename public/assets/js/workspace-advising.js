@@ -134,5 +134,14 @@ window.createWorkspaceAdvising = function (ui) {
         window.createAdvisingCheckIns({ node, request }).mount(body,
             `/sis/students/${student}/programs/${pursuit}/checkins/`);
     }
-    return { open, checkins };
+    function appointments(student, pursuit, back) {
+        const labels = JSON.parse(document.getElementById('advising-appointment-labels').textContent);
+        const body = openDrawer(labels.title, labels.context);
+        if (back) body.append(button(labels.back, back, "btn-link"));
+        const host = node('section');
+        body.append(host);
+        window.createAdvisingAppointments({ node, request, labels }).mount(host,
+            `/sis/students/${student}/programs/${pursuit}/appointments/`);
+    }
+    return { open, checkins, appointments };
 };
