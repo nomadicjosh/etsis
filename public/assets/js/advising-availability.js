@@ -5,7 +5,12 @@
     window.advisingBookingPolicySummary = (node, t, policy, title = t.policy) => policy
         ? node('aside', { class: 'border rounded bg-white p-3 mb-3 text-break' }, node('h4', { class: 'h6' }, title),
             node('dl', { class: 'mb-0' }, ...[['maximum_active', 'policy_maximum'], ['notice_minutes', 'policy_notice'], ['horizon_days', 'policy_horizon']]
-                .flatMap(([key, label]) => [node('dt', { class: 'form-text' }, t[label]), node('dd', {}, String(policy.rules[key]))])))
+                .flatMap(([key, label]) => [node('dt', { class: 'form-text' }, t[label]), node('dd', {}, String(policy.rules[key]))]),
+                ...[['student_class_mode', t.policy_classes], ['advisor_teaching_mode', t.policy_teaching]]
+                    .flatMap(([key, label]) => title === t.policy || policy.rules[key] ? [node('dt', { class: 'form-text' }, label),
+                        node('dd', {}, policy.rules[key] === 'block' ? t.class_block : t.class_allow)] : [])),
+            ...(title === t.policy && [policy.rules.student_class_mode, policy.rules.advisor_teaching_mode].includes('block')
+                ? [node('p', { class: 'form-text mb-0' }, t.class_help)] : []))
         : node('div');
     window.createAdvisingAvailability = ({ node, request, labels: t }) => {
         const setup = (container, portal) => {

@@ -110,7 +110,8 @@ try {
     try {
         $result = match ($input['action']) {
             'advising_schedule', 'advising_act', 'advising_book', 'advising_window_create',
-            'advising_window_close', 'advising_series_create', 'advising_series_close' =>
+            'advising_window_close', 'advising_series_create', 'advising_series_close',
+            'advising_policy_save', 'advising_class_publish' =>
             $advising->run($input['action'], $command, $audit),
             'publish_graduate_policy' => $graduate->publish($command, $audit, $graduateTransactions),
             'confirm_graduate_approval' => $graduate->approve($command, $audit, $graduateTransactions),

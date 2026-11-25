@@ -12,14 +12,20 @@ const availabilityWindow = () => ({ id: id(90), status: 'open', version: 0,
     time: time('2026-08-11T13:00', '2026-08-11T15:00'), slot_minutes: 30, message: 'Fictional office <b>meeting</b> instructions.',
     created_at: '2026-08-10T17:00:00Z', closed_at: null, close_reason: null });
 const defaultRules = () => ({ maximum_active: 20, notice_minutes: 0, horizon_days: 366 });
+const submittedRules = data => Object.fromEntries([...Object.keys(defaultRules()), 'student_class_mode', 'advisor_teaching_mode']
+    .filter(k => Object.hasOwn(data, k)).map(k => [k, data[k]]));
 async function fixture(page, channel = 'staff', options = {}) {
     const calls = [], errors = [];
     let windows = options.availabilitySeed ? [availabilityWindow()] : [], bookingRejected = options.staleBooking, closeRejected = options.staleClosure;
     const booked = new Map(), series = new Map();
+    const blockedClassStarts = new Set();
     let seriesRejected = options.staleSeries, seriesCloseRejected = options.staleSeriesClose;
     let items = options.seed ? [original()] : channel === 'staff' ? [] : [original()], stale = options.stale, deny = false, sequence = 30;
     const policies = [], policyReceipts = new Map(); let lostPolicyReply = options.lostPolicyReply;
-    const policy = () => ({ publication_id: policies.at(-1)?.id || null, revision: policies.length, rules: policies.at(-1)?.rules || defaultRules() });
+    const seedRevision = options.classMode || options.teachingMode ? 1 : 0;
+    const policy = () => ({ publication_id: policies.at(-1)?.id || (seedRevision ? id(800) : null), revision: policies.length + seedRevision,
+        rules: policies.at(-1)?.rules || { ...defaultRules(), ...(options.classMode ? { student_class_mode: options.classMode } : {}),
+            ...(options.teachingMode ? { advisor_teaching_mode: options.teachingMode } : {}) } });
     if (options.policy) items.forEach(i => { i.changes[0].booking_policy = policy(); });
     page.on('pageerror', e => errors.push(e.message));
     await page.route(channel === 'staff' ? '**/sis/**' : '**/portal/api/**', async route => {
@@ -43,10 +49,10 @@ async function fixture(page, channel = 'staff', options = {}) {
                 const rows = [...policies].reverse().filter(p => data.before == null || p.revision < data.before);
                 result = { items: rows.slice(0, 10), next_before: rows.length > 10 ? rows[9].revision : null };
             } else if (path.endsWith('/review/')) result = { id: id(sequence++), version: data.version, before: policy(),
-                rules: Object.fromEntries(Object.keys(defaultRules()).map(k => [k, data[k]])), reason: data.reason, review_token: 'fictional-policy-proof' };
+                rules: submittedRules(data), reason: data.reason, review_token: 'fictional-policy-proof' };
             else if (path.endsWith('/save/')) {
                 if (!policyReceipts.has(data.id)) {
-                    policies.push({ id: data.id, revision: policies.length + 1, rules: Object.fromEntries(Object.keys(defaultRules()).map(k => [k, data[k]])), reason: data.reason, at: '2026-08-10T17:00:00Z' });
+                    policies.push({ id: data.id, revision: policies.length + 1, rules: submittedRules(data), reason: data.reason, at: '2026-08-10T17:00:00Z' });
                     policyReceipts.set(data.id, { id: data.id, revision: policies.length });
                 }
                 if (lostPolicyReply) { lostPolicyReply = false; return route.fulfill({ status: 503, json: { error: 'Fictional lost policy reply. Retry the same confirmation.' } }); }
@@ -103,14 +109,19 @@ async function fixture(page, channel = 'staff', options = {}) {
             if (data.window_id) {
                 result.window = windows.find(w => w.id === data.window_id);
                 result.slots = ['13:00', '13:30', '14:00', '14:30'].map((hour, i) => time('2026-08-11T' + hour, '2026-08-11T' + ['13:30','14:00','14:30','15:00'][i]));
+                result.slots = result.slots.filter(slot => !blockedClassStarts.has(slot.start));
             } else if (data.date) result.windows = windows.filter(w => w.status === 'open');
         }
         else if (path.endsWith('/appointments/book/')) {
+            if (options.bookingClassConflict) { options.bookingClassConflict = false; blockedClassStarts.add(data.start);
+                return route.fulfill({ status: 422, json: { error: 'Please correct the highlighted fields.', errors: [{ field: 'start',
+                    message: 'This advising time overlaps a published class for a participant. Choose another time.' }] } }); }
             if (bookingRejected) { bookingRejected = false; return route.fulfill({ status: 409, json: { error: 'Fictional available times changed. Review the source.' } }); }
             if (booked.has(data.appointment_id)) result = booked.get(data.appointment_id);
             else {
                 const w = windows.find(w => w.id === data.window_id);
-                const item = { ...original(), id: data.appointment_id, time: time(data.start, '2026-08-11T13:30'), message: w.message };
+                const end = new Date(Date.parse(data.start + 'Z') + 30 * 60000).toISOString().slice(0, 16);
+                const item = { ...original(), id: data.appointment_id, time: time(data.start, end), message: w.message };
                 item.changes[0] = { ...item.changes[0], time: item.time, message: item.message }; items.push(item);
                 result = { id: item.id, status: 'scheduled', version: 0 }; booked.set(item.id, result);
             }
@@ -143,9 +154,13 @@ async function fixture(page, channel = 'staff', options = {}) {
                 hosts: channel === 'owner' ? [] : [{ advisor_person_id: host, name: 'Fictional Advisor', starts_on: '2026-01-01', ends_on: null }], timezone: 'America/Los_Angeles' };
             if (options.policy) { result.booking_policy = policy(); result.capacity_reached = Boolean(options.capacity); if (options.capacity) { result.can_schedule = false; result.can_book = false; } }
         } else if (path.endsWith('/appointments/schedule/')) {
+            if (options.classConflict) { options.classConflict = false; return route.fulfill({ status: 422,
+                json: { error: 'Please correct the highlighted fields.', errors: [{ field: 'start',
+                    message: 'This advising time overlaps a published class for a participant. Choose another time.' }] } }); }
             if (options.invalid) { options.invalid = false; return route.fulfill({ status: 422, json: { error: 'Please correct the highlighted fields.', errors: [{ field: 'message', message: 'Fictional details need clarification.' }] } }); }
             const item = { ...original(), id: data.appointment_id, time: time(data.start, data.end), message: data.message };
             item.changes[0] = { ...item.changes[0], time: item.time, message: item.message }; items.push(item);
+            if (options.policy) item.changes[0].booking_policy = policy();
             result = { id: item.id, version: 0, status: 'scheduled' };
         } else if (path.endsWith('/appointments/act/')) {
             if (stale) { stale = false; return route.fulfill({ status: 409, json: { error: 'Fictional appointment changed. Refresh appointments.' } }); }
@@ -275,6 +290,60 @@ test('booking policy capacity refresh removes offered choices while preserving t
     await expect(page.getByRole('button', { name: 'View available times', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Back to appointments', exact: true }).click();
     expect(f.calls.some(c => c.path.endsWith('/book/'))).toBe(false); expect(f.errors).toEqual([]);
+});
+
+test('participant class policy reviews both controls and preserves chosen rules through history', async ({ page }) => {
+    const f = await fixture(page); await openPolicy(page);
+    await page.getByLabel('Published student class overlaps', { exact: true }).selectOption('block');
+    await page.getByLabel('Published advisor teaching overlaps', { exact: true }).selectOption('block');
+    await page.getByLabel('Reason for this policy change', { exact: true }).fill('Fictional participant calendar policy.');
+    await page.getByRole('button', { name: 'Booking policy history', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to booking policy', exact: true }).click();
+    await expect(page.getByLabel('Published student class overlaps', { exact: true })).toHaveValue('block');
+    await expect(page.getByLabel('Published advisor teaching overlaps', { exact: true })).toHaveValue('block');
+    await accessible(page);
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    const review = page.getByRole('button', { name: 'Review booking policy', exact: true });
+    await review.scrollIntoViewIfNeeded(); await review.focus(); await page.keyboard.press('Enter');
+    await expect(page.locator('#drawer-body')).toContainText('Block overlaps');
+    await page.getByRole('button', { name: 'Confirm policy change', exact: true }).click();
+    await expect(page.getByLabel('Published advisor teaching overlaps', { exact: true })).toHaveValue('block');
+    const request = f.calls.find(c => c.path.endsWith('/advising-booking-policy/save/'));
+    expect(request.data.student_class_mode).toBe('block'); expect(request.data.advisor_teaching_mode).toBe('block');
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: '/tmp/etsis-booking-calendar-policy-phone.png', fullPage: true });
+    expect(f.errors).toEqual([]);
+});
+
+test('participant class conflict keeps the office appointment draft and allows an explicit new time', async ({ page }) => {
+    const f = await fixture(page, 'staff', { policy: true, classMode: 'block', teachingMode: 'block', classConflict: true });
+    await openStaff(page); await create(page);
+    await expect(page.locator('#drawer-body')).toContainText('overlaps a published class for a participant');
+    await expect(page.getByLabel('Starts at', { exact: true })).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.getByLabel('Appointment details or reason visible to the student', { exact: true })).toHaveValue('Fictional <b>meeting</b> instructions.');
+    await page.getByLabel('Starts at', { exact: true }).fill('2026-08-11T11:00');
+    await page.getByLabel('Ends at', { exact: true }).fill('2026-08-11T11:30');
+    await page.getByRole('button', { name: 'Save appointment', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Appointment saved.');
+    await page.locator('summary').filter({ hasText: 'Appointment changes' }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Booking limits used for this change');
+    await accessible(page); expect(f.errors).toEqual([]);
+});
+
+test('participant class booking conflict refreshes choices without reusing a changed confirmation', async ({ page }) => {
+    const f = await fixture(page, 'owner', { policy: true, classMode: 'block', teachingMode: 'block',
+        availabilitySeed: true, bookingClassConflict: true });
+    await openPortal(page, 'owner'); await chooseOfferedTime(page);
+    await page.getByRole('button', { name: 'Confirm booking', exact: true }).click();
+    await expect(page.locator('#campus-service-content')).toContainText('overlaps a published class for a participant');
+    await page.getByRole('button', { name: 'Keep choosing', exact: true }).click();
+    await expect(page.getByRole('button', { name: /Choose this time.*13:00/ })).toHaveCount(0);
+    await page.getByRole('button', { name: /Choose this time.*13:30/ }).click();
+    await page.getByRole('button', { name: 'Confirm booking', exact: true }).click();
+    await expect(page.locator('#campus-service-content')).toContainText('Your appointment is booked.');
+    const requests = f.calls.filter(c => c.path.endsWith('/appointments/book/'));
+    expect(requests[0].data.appointment_id).not.toBe(requests[1].data.appointment_id);
+    expect(f.errors).toEqual([]);
 });
 
 test('staff schedules, reschedules and reviews original changes with professional phone controls', async ({ page }) => {

@@ -49,6 +49,8 @@ final readonly class AdvisingAppointmentService
         private Clock $clock,
         private AdvisingAvailabilityRepository $availability,
         private BookingPolicyService $policies,
+        private StudentClassCalendarService $classes,
+        private AdvisorTeachingCalendarService $teaching,
     ) {
     }
 
@@ -258,6 +260,8 @@ final readonly class AdvisingAppointmentService
                 'windows' => [], 'slots' => []];
             $result['booking_policy'] = $policy->facts();
             $result['capacity_reached'] = $capacity;
+            $calendar = null;
+            $teaching = null;
             $read = null;
             $source = [];
             if ($windowId !== null) {
@@ -266,14 +270,30 @@ final readonly class AdvisingAppointmentService
                 ));
                 $this->bookable($window, $hosts);
                 $source = $window->facts();
-                $read = function () use ($window, $student, $policy, $capacity): array {
+                $range = new AppointmentTime(
+                    $source['time']['start'],
+                    $source['time']['end'],
+                    $source['time']['timezone']
+                );
+                $calendar = $policy->blocksStudentClasses() && !$capacity ? $this->classes->read(
+                    $student,
+                    $range
+                ) : null;
+                $teaching = $policy->blocksAdvisorTeaching() && !$capacity ? $this->teaching->read(
+                    new EntityId($source['host_person_id']),
+                    new EntityId($source['host_user_id']),
+                    $range
+                ) : null;
+                $read = function () use ($window, $student, $policy, $capacity, $calendar, $teaching): array {
                     $slots = [];
                     if ($capacity) {
                         return $slots;
                     }
                     foreach ($window->slots() as $slot) {
                         if (
-                            $policy->permits($slot, $this->clock->now()) && !$this->records->conflict(
+                            $policy->permits($slot, $this->clock->now())
+                            && ($calendar?->permits($slot) ?? true) && ($teaching?->permits($slot) ?? true)
+                            && !$this->records->conflict(
                                 $student,
                                 new EntityId($window->facts()['host_person_id']),
                                 new EntityId($window->facts()['id']),
@@ -341,6 +361,16 @@ final readonly class AdvisingAppointmentService
             }
             $this->finish($student, $pursuit, 'owner', $actor, $context);
             $this->policies->assertCurrent($policy);
+            if ($calendar !== null) {
+                $this->classes->assertCurrent($student, $calendar);
+            }
+            if ($teaching !== null) {
+                $this->teaching->assertCurrent(
+                    new EntityId($source['host_person_id']),
+                    new EntityId($source['host_user_id']),
+                    $teaching
+                );
+            }
             if ($capacity !== ($this->records->activeCount($student, $pursuit) >= $policy->rules['maximum_active'])) {
                 throw new ConcurrentModificationException(trans(
                     'Active appointments changed. Refresh available times.'
@@ -371,7 +401,7 @@ final readonly class AdvisingAppointmentService
             $start,
             $actor
 ): array {
-            $this->lockStudent($student);
+            $this->lockStudent($student, true);
             $old = $this->records->find($student, $pursuit, $id);
             $window = $old === null ? ($this->availability->find($windowId)
                 ?? throw new RecordNotFoundException(trans('Availability not found.'))) : null;
@@ -416,6 +446,14 @@ final readonly class AdvisingAppointmentService
                 $hosts = $this->eligible($student, $pursuit, 'owner', $context, $host, $time, $id);
                 $policy = $this->policies->snapshot();
                 $policy->requireTime($time, $this->clock->now());
+                $calendar = $policy->blocksStudentClasses() ? $this->classes->read($student, $time) : null;
+                $calendar?->requireTime($time);
+                $teaching = $policy->blocksAdvisorTeaching() ? $this->teaching->read(
+                    $host,
+                    new EntityId($source['host_user_id']),
+                    $time
+                ) : null;
+                $teaching?->requireTime($time);
                 if ($this->records->activeCount($student, $pursuit) >= $policy->rules['maximum_active']) {
                     throw new ConcurrentModificationException(trans(
                         'Resolve existing appointments before booking another under the institution '
@@ -440,6 +478,12 @@ final readonly class AdvisingAppointmentService
                 $this->audit->record($actor, 'advising.appointment_self_booked', $id);
                 $this->verify($item);
                 $this->policies->assertCurrent($policy);
+                if ($calendar !== null) {
+                    $this->classes->assertCurrent($student, $calendar);
+                }
+                if ($teaching !== null) {
+                    $this->teaching->assertCurrent($host, new EntityId($source['host_user_id']), $teaching);
+                }
                 $policy->requireTime($time, $this->clock->now());
                 $this->assertCapacity($student, $pursuit, $policy);
                 if (
@@ -600,13 +644,17 @@ final readonly class AdvisingAppointmentService
                 $hosts = $this->eligible($student, $pursuit, $channel, $context, $host, $time);
                 $policy = $this->policies->snapshot();
                 $policy->requireTime($time, $this->clock->now());
+                $calendar = $policy->blocksStudentClasses() ? $this->classes->read($student, $time) : null;
+                $calendar?->requireTime($time);
+                $hostUser = $this->admissions->person($host)->ownerUserId ?? throw new AccessDeniedException();
+                $teaching = $policy->blocksAdvisorTeaching() ? $this->teaching->read($host, $hostUser, $time) : null;
+                $teaching?->requireTime($time);
                 if ($this->records->activeCount($student, $pursuit) >= $policy->rules['maximum_active']) {
                     throw new ConcurrentModificationException(trans(
                         'Resolve existing appointments before scheduling another under the institution '
                         . 'active-appointment limit.'
                     ));
                 }
-                $hostUser = $this->admissions->person($host)->ownerUserId ?? throw new AccessDeniedException();
                 $item = AdvisingAppointment::create(
                     $id,
                     $student,
@@ -624,6 +672,12 @@ final readonly class AdvisingAppointmentService
                 $this->audit->record($actor, 'advising.appointment_scheduled', $id);
                 $this->verify($item);
                 $this->policies->assertCurrent($policy);
+                if ($calendar !== null) {
+                    $this->classes->assertCurrent($student, $calendar);
+                }
+                if ($teaching !== null) {
+                    $this->teaching->assertCurrent($host, $hostUser, $teaching);
+                }
                 $policy->requireTime($time, $this->clock->now());
                 $this->assertCapacity($student, $pursuit, $policy);
                 if ($hosts !== $this->eligible($student, $pursuit, $channel, $context, $host, $time, $id)) {
@@ -670,7 +724,7 @@ final readonly class AdvisingAppointmentService
             $actor,
             $correction,
         ): array {
-            $this->lockStudent($student);
+            $this->lockStudent($student, $time !== null);
             $old = $this->records->find($student, $pursuit, $id)
                 ?? throw new RecordNotFoundException(trans('Advising appointment not found.'));
             $host = new EntityId($old->facts()['host_person_id']);
@@ -701,11 +755,23 @@ final readonly class AdvisingAppointmentService
                 }
                 $hosts = $time === null ? null
                     : $this->eligible($student, $pursuit, $channel, $context, $host, $time, $id);
+                $calendar = $time !== null && $policy?->blocksStudentClasses()
+                    ? $this->classes->read($student, $time) : null;
+                $calendar?->requireTime($time);
+                $teaching = $time !== null && $policy?->blocksAdvisorTeaching()
+                    ? $this->teaching->read($host, new EntityId($facts['host_user_id']), $time) : null;
+                $teaching?->requireTime($time);
                 $policy?->requireTime($time, $this->clock->now());
                 $result = $item->apply($operation, $actor, $action, $version, $time, $message, $this->now(), $policy);
                 $this->records->save($item, $version);
                 $this->audit->record($actor, 'advising.appointment_' . $action, $id);
                 $this->verify($item);
+                if ($calendar !== null) {
+                    $this->classes->assertCurrent($student, $calendar);
+                }
+                if ($teaching !== null) {
+                    $this->teaching->assertCurrent($host, new EntityId($facts['host_user_id']), $teaching);
+                }
                 if ($policy !== null) {
                     $this->policies->assertCurrent($policy);
                     $policy->requireTime($time, $this->clock->now());
@@ -780,14 +846,17 @@ final readonly class AdvisingAppointmentService
 
     private function lock(EntityId $student, EntityId $host): void
     {
-        $this->lockStudent($student);
+        $this->lockStudent($student, true);
         $this->lockParticipants($student, $host);
     }
 
-    private function lockStudent(EntityId $student): void
+    private function lockStudent(EntityId $student, bool $newTime = false): void
     {
         $this->roles->lock();
         $this->students->lock($student);
+        if ($newTime) {
+            $this->classes->lock();
+        }
     }
 
     private function lockParticipants(EntityId $student, EntityId $host): void

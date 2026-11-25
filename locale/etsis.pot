@@ -7020,3 +7020,86 @@ msgstr ""
 #: src/Infrastructure/Persistence/Repository/SqlBookingPolicyRepository.php:90
 msgid "Booking policy changed. Refresh and review the current rules."
 msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:13
+#: resources/views/shared/advising-availability-labels.php:12
+#: resources/views/shared/advising-booking-policy-labels.php:16
+msgid "Published student class overlaps"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:14
+#: resources/views/shared/advising-availability-labels.php:13
+#: resources/views/shared/advising-booking-policy-labels.php:17
+msgid "Published advisor teaching overlaps"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:15
+#: resources/views/shared/advising-availability-labels.php:14
+#: resources/views/shared/advising-booking-policy-labels.php:18
+msgid "Allow overlaps"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:16
+#: resources/views/shared/advising-availability-labels.php:15
+#: resources/views/shared/advising-booking-policy-labels.php:19
+msgid "Block overlaps"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:18
+#: resources/views/shared/advising-availability-labels.php:17
+msgid ""
+"The enabled checks use published meetings only. Changes after confirmation "
+"do not automatically change this appointment."
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:21
+msgid ""
+"When blocked, new advising times must avoid published meetings for the "
+"student’s active classes. Classes without a published schedule cannot be "
+"checked. Existing appointments remain unchanged."
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:25
+msgid ""
+"When blocked, new advising times must avoid the advisor’s published teaching "
+"meetings. Existing appointments remain unchanged."
+msgstr ""
+
+#: src/Domain/Advising/BookingPolicySnapshot.php:53
+msgid "Choose whether published student class overlaps are allowed or blocked."
+msgstr ""
+
+#: src/Domain/Advising/BookingPolicySnapshot.php:60
+msgid ""
+"Choose whether published advisor teaching overlaps are allowed or blocked."
+msgstr ""
+
+#: src/Domain/Advising/ClassCalendar.php:48
+msgid ""
+"This advising time overlaps a published class for a participant. Choose "
+"another time."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisorTeachingCalendarService.php:86
+msgid ""
+"The advisor teaching schedule changed. Refresh available times before "
+"confirming."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisorTeachingCalendarService.php:94
+msgid ""
+"This advisor teaching schedule exceeds the bounded appointment check. Ask "
+"the records office to review it; no partial check was used."
+msgstr ""
+
+#: src/Domain/Advising/Service/StudentClassCalendarService.php:91
+msgid ""
+"The student class schedule changed. Refresh available times before "
+"confirming."
+msgstr ""
+
+#: src/Domain/Advising/Service/StudentClassCalendarService.php:99
+msgid ""
+"This student class schedule exceeds the bounded appointment check. Ask the "
+"records office to review it; no partial check was used."
+msgstr ""

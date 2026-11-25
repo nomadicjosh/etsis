@@ -24,7 +24,7 @@ final class RegistrationScheduleFixture
     }
     /** A fictional confirmed plan uses the real protected journal.
      * Publisher checks have separate integration coverage. */
-    public function publish(Section $section, array $times): EntityId
+    public function publish(Section $section, array $times, ?EntityId $offering = null): EntityId
     {
         $f = $this->sis;
         $history = EventStoreFixture::history($f->connection->queryBuilder());
@@ -44,7 +44,7 @@ final class RegistrationScheduleFixture
                 static fn(array $time): array => [
                     "booking_id" => EntityId::generate()->value,
                     "occurrence_id" => EntityId::generate()->value,
-                    "offering_publication_id" => EntityId::generate()->value,
+                    "offering_publication_id" => ($offering ?? EntityId::generate())->value,
                     "room_id" => null,
                     "starts_at" => $time[0],
                     "ends_at" => $time[1],

@@ -21,7 +21,9 @@ final readonly class BookingPolicySnapshot
     {
         if (
             $revision < 0 || $revision > 1000000 || ($publication === null) !== ($revision === 0)
-            || count($rules) !== 3 || array_diff(array_keys(self::DEFAULTS), array_keys($rules)) !== []
+            || array_diff(array_keys(self::DEFAULTS), array_keys($rules)) !== []
+            || array_diff(array_keys($rules), [...array_keys(self::DEFAULTS), 'student_class_mode',
+                'advisor_teaching_mode']) !== []
         ) {
             throw new ValidationException([['field' => 'rules',
                 'message' => trans('Review complete appointment booking rules.')]]);
@@ -37,7 +39,27 @@ final readonly class BookingPolicySnapshot
             throw new ValidationException([['field' => 'notice_minutes',
                 'message' => trans('Minimum advance notice must be shorter than the booking horizon.')]]);
         }
-        $this->rules = array_replace(self::DEFAULTS, $rules);
+        $normalized = array_replace(self::DEFAULTS, array_intersect_key($rules, self::DEFAULTS));
+        foreach (['student_class_mode', 'advisor_teaching_mode'] as $key) {
+            if (array_key_exists($key, $rules)) {
+                $normalized[$key] = $rules[$key];
+            }
+        }
+        if (
+            array_key_exists('student_class_mode', $rules)
+            && !in_array($rules['student_class_mode'], ['allow', 'block'], true)
+        ) {
+            throw new ValidationException([['field' => 'student_class_mode',
+                'message' => trans('Choose whether published student class overlaps are allowed or blocked.')]]);
+        }
+        if (
+            array_key_exists('advisor_teaching_mode', $rules)
+            && !in_array($rules['advisor_teaching_mode'], ['allow', 'block'], true)
+        ) {
+            throw new ValidationException([['field' => 'advisor_teaching_mode',
+                'message' => trans('Choose whether published advisor teaching overlaps are allowed or blocked.')]]);
+        }
+        $this->rules = $normalized;
         if ($publication === null && $this->rules !== self::DEFAULTS) {
             throw new ValidationException([['field' => 'rules',
                 'message' => trans('Unconfigured booking rules must use the documented defaults.')]]);
@@ -64,6 +86,16 @@ final readonly class BookingPolicySnapshot
     public function facts(): array
     {
         return ['publication_id' => $this->publication?->value, 'revision' => $this->revision, 'rules' => $this->rules];
+    }
+
+    public function blocksStudentClasses(): bool
+    {
+        return ($this->rules['student_class_mode'] ?? 'allow') === 'block';
+    }
+
+    public function blocksAdvisorTeaching(): bool
+    {
+        return ($this->rules['advisor_teaching_mode'] ?? 'allow') === 'block';
     }
 
     public function permits(AppointmentTime $time, DateTimeImmutable $now): bool

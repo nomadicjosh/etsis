@@ -34,7 +34,11 @@ final readonly class BookingPolicyController
 
     private function rules(FormInput $f): array
     {
+        $classes = $f->optionalText('student_class_mode', 10);
+        $teaching = $f->optionalText('advisor_teaching_mode', 10);
         return ['maximum_active' => $f->integer('maximum_active'), 'notice_minutes' => $f->integer('notice_minutes'),
-            'horizon_days' => $f->integer('horizon_days')];
+            'horizon_days' => $f->integer('horizon_days'),
+            ...$classes === null ? [] : ['student_class_mode' => $classes],
+            ...$teaching === null ? [] : ['advisor_teaching_mode' => $teaching]];
     }
 }

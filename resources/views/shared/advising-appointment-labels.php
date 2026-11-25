@@ -10,6 +10,14 @@ return [
     'policy_maximum' => trans_html('Maximum active appointments per program pursuit'),
     'policy_notice' => trans_html('Minimum advance notice in minutes'),
     'policy_horizon' => trans_html('Booking horizon in calendar days'),
+    'policy_classes' => trans_html('Published student class overlaps'),
+    'policy_teaching' => trans_html('Published advisor teaching overlaps'),
+    'class_allow' => trans_html('Allow overlaps'),
+    'class_block' => trans_html('Block overlaps'),
+    'class_help' => trans_html(
+        'The enabled checks use published meetings only. '
+        . 'Changes after confirmation do not automatically change this appointment.'
+    ),
     'capacity_reached' => trans_html(
         'The active-appointment limit has been reached. Resolve existing appointments or contact the advising office.'
     ),

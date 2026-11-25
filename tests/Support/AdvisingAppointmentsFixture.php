@@ -80,6 +80,8 @@ final class AdvisingAppointmentsFixture
             $s->clock,
             new \Infrastructure\Persistence\Repository\SqlAdvisingAvailabilityRepository($s->sql, $s->dropCipher),
             $this->policies(),
+            $this->calendar(),
+            $this->teaching(),
         );
     }
 
@@ -94,6 +96,39 @@ final class AdvisingAppointmentsFixture
             $audit ?? $s->audit,
             $s->clock,
             new \Domain\Shared\Service\ReviewProof($s->dropCipher, $s->clock),
+        );
+    }
+
+    public function calendar(
+        ?\Domain\Advising\Repository\AdvisingClassScheduleRepository $records = null
+    ): \Domain\Advising\Service\StudentClassCalendarService {
+        $s = $this->sis;
+        return new \Domain\Advising\Service\StudentClassCalendarService(
+            $records ?? new \Infrastructure\Persistence\Repository\SqlAdvisingClassScheduleRepository($s->sql),
+            new \Domain\Registration\Service\PublishedSectionMeetingPlanReader(
+                new \Infrastructure\Persistence\Repository\SqlSectionMeetingPlanRepository(
+                    $s->sql,
+                    $s->bookingSections()
+                ),
+                \EventStoreFixture::history($s->connection->queryBuilder())
+            ),
+            new \Infrastructure\Persistence\Repository\SqlRegistrationScheduleRepository($s->sql)
+        );
+    }
+
+    public function teaching(): \Domain\Advising\Service\AdvisorTeachingCalendarService
+    {
+        $s = $this->sis;
+        return new \Domain\Advising\Service\AdvisorTeachingCalendarService(
+            new \Infrastructure\Persistence\Repository\SqlAdvisingClassScheduleRepository($s->sql),
+            new \Domain\Registration\Service\PublishedSectionMeetingPlanReader(
+                new \Infrastructure\Persistence\Repository\SqlSectionMeetingPlanRepository(
+                    $s->sql,
+                    $s->bookingSections()
+                ),
+                \EventStoreFixture::history($s->connection->queryBuilder())
+            ),
+            \EventStoreFixture::history($s->connection->queryBuilder())
         );
     }
 

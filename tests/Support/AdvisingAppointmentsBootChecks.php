@@ -235,3 +235,47 @@ foreach (['view', 'review', 'save', 'history'] as $action) {
 if ($appointmentHistory !== $sis->sql->rows('sis_history_events')) {
     throw new RuntimeException('Booking policy configuration fabricated academic history.');
 }
+
+// Genuine class publication/registration feeds the same owner and office booking checks.
+require_once __DIR__ . '/RegistrationScheduleFixture.php';
+$classSection = $sis->section(fee: 0);
+$sis->service->register($advisingStudent->id, $classSection->id, true);
+$classStart = new \DateTimeImmutable($appointmentDay . 'T14:00', $sis->clock->now()->getTimezone());
+new \Tests\Support\RegistrationScheduleFixture($sis)->publish($classSection, [[
+    $classStart->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z'),
+    $classStart->modify('+30 minutes')->setTimezone(new \DateTimeZone('UTC'))->format('Y-m-d\TH:i:s\Z'),
+]]);
+$classRules = $policyView['current']['rules'] + ['student_class_mode' => 'block', 'version' => 1,
+    'reason' => 'Fictional published-class booking rule.'];
+$classReview = $checkInPost($policyBase . 'review/', $classRules);
+$classCommand = $classRules + array_intersect_key($classReview, array_flip(['id', 'review_token']));
+$checkInPost($policyBase . 'save/', $classCommand);
+if ($checkInPost($policyBase . 'save/', $policyCommand) !== $policyResult) {
+    throw new RuntimeException('The earlier absent-class policy receipt changed after a new class rule.');
+}
+$classWindowPage = $checkInPost($availabilityBase . 'list/', []);
+$classWindow = $availabilityCommand;
+$classWindow['window_id'] = $classWindowPage['new_id'];
+$classWindow['start'] = $appointmentDay . 'T14:00';
+$classWindow['end'] = $appointmentDay . 'T15:00';
+$checkInPost($availabilityBase . 'create/', $classWindow);
+$classHistory = $sis->sql->rows('sis_history_events');
+$sis->access->actor = $sis->admissions->person($advisingStudent->personId)->ownerUserId;
+$freeClasses = $checkInPost($appointmentOwnerBase . 'available-times/', ['window_id' => $classWindow['window_id']]);
+if (
+    count($freeClasses['slots']) !== 1 || $freeClasses['slots'][0]['start'] !== $appointmentDay . 'T14:30'
+    || str_contains(json_encode($freeClasses), $classSection->code)
+) {
+    throw new RuntimeException('Published-class slot filtering or minimized owner response failed.');
+}
+$blockedClass = $teachingPost($appointmentOwnerBase . 'book/', ['appointment_id' => $freeClasses['new_id'],
+    'window_id' => $classWindow['window_id'], 'window_version' => 0, 'start' => $appointmentDay . 'T14:00']);
+if ($blockedClass->getStatusCode() !== 422) {
+    throw new RuntimeException('A direct owner confirmation bypassed the published-class rule.');
+}
+$checkInPost($appointmentOwnerBase . 'book/', ['appointment_id' => $freeClasses['new_id'],
+    'window_id' => $classWindow['window_id'], 'window_version' => 0, 'start' => $appointmentDay . 'T14:30']);
+if ($classHistory !== $sis->sql->rows('sis_history_events')) {
+    throw new RuntimeException('A class-aware advising booking rewrote academic history.');
+}
+$sis->access->actor = $advisingActor;

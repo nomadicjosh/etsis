@@ -53,6 +53,28 @@ final readonly class AdvisingRecoveryServices
                 $s->clock,
                 new ReviewProof($s->dropCipher, $s->clock),
             ),
+            new \Domain\Advising\Service\StudentClassCalendarService(
+                new \Infrastructure\Persistence\Repository\SqlAdvisingClassScheduleRepository($s->sql),
+                new \Domain\Registration\Service\PublishedSectionMeetingPlanReader(
+                    new \Infrastructure\Persistence\Repository\SqlSectionMeetingPlanRepository(
+                        $s->sql,
+                        $s->bookingSections()
+                    ),
+                    \EventStoreFixture::history($s->connection->queryBuilder())
+                ),
+                new \Infrastructure\Persistence\Repository\SqlRegistrationScheduleRepository($s->sql)
+            ),
+            new \Domain\Advising\Service\AdvisorTeachingCalendarService(
+                new \Infrastructure\Persistence\Repository\SqlAdvisingClassScheduleRepository($s->sql),
+                new \Domain\Registration\Service\PublishedSectionMeetingPlanReader(
+                    new \Infrastructure\Persistence\Repository\SqlSectionMeetingPlanRepository(
+                        $s->sql,
+                        $s->bookingSections()
+                    ),
+                    \EventStoreFixture::history($s->connection->queryBuilder())
+                ),
+                \EventStoreFixture::history($s->connection->queryBuilder())
+            ),
         );
     }
 
@@ -74,10 +96,54 @@ final readonly class AdvisingRecoveryServices
         );
     }
 
+    public function policies(?AuditTrail $audit = null): \Domain\Advising\Service\BookingPolicyService
+    {
+        $s = $this->sis;
+        return new \Domain\Advising\Service\BookingPolicyService(
+            new \Infrastructure\Persistence\Repository\SqlBookingPolicyRepository($s->sql, $s->dropCipher),
+            $s->access,
+            new SqlAccessRepository($s->sql),
+            $s->transactions,
+            $audit ?? $s->audit,
+            $s->clock,
+            new ReviewProof($s->dropCipher, $s->clock)
+        );
+    }
+
+    public function meetingPlans(?AuditTrail $audit = null): \Domain\Registration\Service\SectionMeetingPlanService
+    {
+        $s = $this->sis;
+        $history = \EventStoreFixture::history($s->connection->queryBuilder());
+        $plans = new \Infrastructure\Persistence\Repository\SqlSectionMeetingPlanRepository(
+            $s->sql,
+            $s->bookingSections()
+        );
+        $reader = new \Domain\Registration\Service\PublishedSectionMeetingPlanReader($plans, $history);
+        return new \Domain\Registration\Service\SectionMeetingPlanService(
+            $plans,
+            $history,
+            $s->access,
+            $s->transactions,
+            $audit ?? $s->audit,
+            $s->dropCipher,
+            $s->clock,
+            $reader,
+            new \Domain\Registration\Service\FacultyScheduleService(
+                new \Infrastructure\Persistence\Repository\SqlFacultyScheduleRepository($s->sql),
+                new \Infrastructure\Persistence\Repository\SqlRegistrationScheduleRepository($s->sql),
+                $history,
+                $reader
+            )
+        );
+    }
+
     public function run(string $action, #[\SensitiveParameter] array $command, ?AuditTrail $audit = null): array
     {
         $c = $command;
         return match ($action) {
+            'advising_policy_save' => $this->policies($audit)->save(new EntityId($c['id']), $c['rules'],
+                $c['version'], $c['reason'], $c['review_token']),
+            'advising_class_publish' => $this->meetingPlans($audit)->publish(new EntityId($c['section']), $c['token']),
             'advising_schedule' => $this->appointments($audit)->schedule(
                 new EntityId($c['student']),
                 new EntityId($c['pursuit']), $c['channel'], new EntityId($c['id']),

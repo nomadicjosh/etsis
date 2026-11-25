@@ -19,7 +19,11 @@
                     : (error.fields || []).map(f => f.message).join(' ') || error.message || t.failure;
                 for (const f of error.fields || []) {
                     const field = typeof f.field === 'string' ? root.querySelector(`[name="${CSS.escape(f.field)}"]`) : null;
-                    if (field) { field.setAttribute('aria-invalid', 'true'); field.setAttribute('aria-describedby', target.id); }
+                    if (field) {
+                        field.setAttribute('aria-invalid', 'true');
+                        const ids = (field.getAttribute('aria-describedby') || '').split(' ').filter(Boolean);
+                        field.setAttribute('aria-describedby', [...new Set([...ids, target.id])].join(' '));
+                    }
                 }
                 target.focus();
             } finally { busy = false; body?.querySelectorAll('button').forEach(b => { b.disabled = false; }); }
@@ -27,8 +31,11 @@
         const button = (label, run, icon = 'arrow-right', primary = false) => node('button', {
             type: 'button', class: `btn ${primary ? 'btn-primary' : 'btn-outline-primary'}`, onclick: () => work(run)
         }, node('i', { class: `bi bi-${icon} me-2`, 'aria-hidden': 'true' }), label);
-        const rules = data => node('dl', { class: 'mb-0' }, ...['maximum_active', 'notice_minutes', 'horizon_days'].flatMap(key => [
-            node('dt', { class: 'fw-semibold text-break' }, t[key]), node('dd', { class: 'mb-3' }, String(data[key]))]));
+        const rules = (data, effective = false) => node('dl', { class: 'mb-0' }, ...['maximum_active', 'notice_minutes', 'horizon_days'].flatMap(key => [
+            node('dt', { class: 'fw-semibold text-break' }, t[key]), node('dd', { class: 'mb-3' }, String(data[key]))]),
+            ...['student_class_mode', 'advisor_teaching_mode'].flatMap(key => effective || data[key]
+                ? [node('dt', { class: 'fw-semibold text-break' }, t[key]),
+                    node('dd', { class: 'mb-3' }, data[key] === 'block' ? t.class_block : t.class_allow)] : []));
         const actions = (...children) => node('div', { class: 'd-flex flex-wrap gap-2 mb-3' }, ...children);
         const valid = (root, ticket) => root.isConnected && body === root && ticket === epoch;
         const heading = title => node('h3', { class: 'h5', tabindex: '-1' }, title);
@@ -49,12 +56,26 @@
                 input.value = values[key]; inputs[key] = input;
                 form.append(node('div', { class: 'mb-3' }, node('label', { for: id, class: 'form-label' }, t[key]), input));
             }
+            for (const [key, help] of [['student_class_mode', t.class_help], ['advisor_teaching_mode', t.teaching_help]]) {
+                const classId = `booking-policy-class-${++sequence}`, helpId = `${classId}-help`;
+                const select = node('select', { id: classId, name: key, class: 'form-select',
+                    'aria-describedby': helpId, 'data-policy-help': helpId },
+                    node('option', { value: 'allow' }, t.class_allow), node('option', { value: 'block' }, t.class_block));
+                select.value = values[key] || 'allow'; inputs[key] = select;
+                form.append(node('div', { class: 'mb-3' }, node('label', { for: classId, class: 'form-label' }, t[key]),
+                    select, node('p', { id: helpId, class: 'form-text' }, help)));
+            }
             const id = `booking-policy-reason-${++sequence}`;
             const reason = node('textarea', { id, name: 'reason', rows: '3', maxlength: '1000', required: true, class: 'form-control' }); reason.value = draft?.reason || '';
             form.append(node('div', { class: 'mb-3' }, node('label', { for: id, class: 'form-label' }, t.reason), reason),
                 node('button', { type: 'submit', class: 'btn btn-primary' }, t.review));
-            const capture = () => ({ rules: Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, Number(input.value)])), reason: reason.value });
-            form.addEventListener('input', event => { event.target.removeAttribute('aria-invalid'); event.target.removeAttribute('aria-describedby'); draft = capture(); epoch++; });
+            const capture = () => ({ rules: Object.fromEntries(Object.entries(inputs).map(([key, input]) => [key, input.tagName === 'SELECT' ? input.value : Number(input.value)])), reason: reason.value });
+            form.addEventListener('input', event => {
+                event.target.removeAttribute('aria-invalid');
+                if (event.target.dataset.policyHelp) event.target.setAttribute('aria-describedby', event.target.dataset.policyHelp);
+                else event.target.removeAttribute('aria-describedby');
+                draft = capture(); epoch++;
+            });
             form.addEventListener('submit', event => { event.preventDefault(); work(async () => {
                 if (!form.reportValidity()) return;
                 draft = capture(); const submitted = JSON.stringify(draft), ticket = ++epoch;
@@ -75,7 +96,7 @@
             epoch++;
             const columns = node('div', { class: 'row g-3 mb-3' });
             for (const [title, values] of [[t.before, review.before.rules], [t.after, review.rules]]) columns.append(node('section', { class: 'col-12 col-lg-6' },
-                node('div', { class: 'border rounded bg-white p-3 h-100' }, node('h4', { class: 'h6' }, title), rules(values))));
+                node('div', { class: 'border rounded bg-white p-3 h-100' }, node('h4', { class: 'h6' }, title), rules(values, true))));
             body.replaceChildren(heading(t.review), status(), columns,
                 node('p', { class: 'border rounded bg-white p-3 text-break', style: 'white-space:pre-wrap' }, review.reason), actions(
                     button(t.confirm, async () => {

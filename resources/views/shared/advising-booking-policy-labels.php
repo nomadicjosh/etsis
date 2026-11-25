@@ -13,6 +13,18 @@ return [
     'maximum_active' => trans_html('Maximum active appointments per program pursuit'),
     'notice_minutes' => trans_html('Minimum advance notice in minutes'),
     'horizon_days' => trans_html('Booking horizon in calendar days'),
+    'student_class_mode' => trans_html('Published student class overlaps'),
+    'advisor_teaching_mode' => trans_html('Published advisor teaching overlaps'),
+    'class_allow' => trans_html('Allow overlaps'),
+    'class_block' => trans_html('Block overlaps'),
+    'class_help' => trans_html(
+        'When blocked, new advising times must avoid published meetings for the student’s active classes. '
+        . 'Classes without a published schedule cannot be checked. Existing appointments remain unchanged.'
+    ),
+    'teaching_help' => trans_html(
+        'When blocked, new advising times must avoid the advisor’s published teaching meetings. '
+        . 'Existing appointments remain unchanged.'
+    ),
     'ranges' => trans_html(
         'Use 1–20 active appointments, 0–43,200 notice minutes and a 1–366-day horizon. '
         . 'Notice must be shorter than the horizon.'
