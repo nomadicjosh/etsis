@@ -42,6 +42,7 @@ final readonly class SectionProgramPolicyController
                 new EntityId($id),
                 $f->requiredValues("program_ids", 20),
                 $f->text("revision", 64),
+                $f->boolean('require_program_campus'),
             ),
         );
     }

@@ -43,6 +43,24 @@ final readonly class RetainedSectionReader
      */
     public function definitions(array $references, HistoryReadBudget $budget): array
     {
+        $result = $this->publications($references, $budget);
+        foreach ($result as &$versions) {
+            foreach ($versions as &$definition) {
+                $definition = $definition->definition->data;
+            }
+            unset($definition);
+        }
+        unset($versions);
+        return $result;
+    }
+
+    /**
+     * Exact protected publications, including their original classification snapshots.
+     * @param list<array{section_id:string,version_id:string}> $references
+     * @return array<string,array<string,\Domain\Registration\ValueObject\PublishedSectionDefinition>>
+     */
+    public function publications(array $references, HistoryReadBudget $budget): array
+    {
         if (count($references) > 200) {
             throw new InvalidArgumentException("Resolve at most 200 retained section references.");
         }
@@ -69,8 +87,16 @@ final readonly class RetainedSectionReader
                         if (isset($found[$version])) {
                             throw new CorruptHistoryException();
                         }
-                        $d = $published["definition"];
-                        $found[$version] = $d;
+                        $found[$version] = new \Domain\Registration\ValueObject\PublishedSectionDefinition(
+                            new EntityId($section),
+                            new EntityId($version),
+                            $root->playhead(),
+                            new \Domain\Registration\ValueObject\SectionDefinitionV1($published['definition']),
+                            isset($published['classifications'])
+                                ? \Domain\Registration\ValueObject\SectionClassifications::fromArray(
+                                    $published['classifications']
+                                ) : null,
+                        );
                     }
                 }
                 $cursor = $page->nextCursor;

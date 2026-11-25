@@ -35,6 +35,7 @@ final readonly class EnrollmentLedger
         private Clock $clock,
         private \Domain\Registration\Repository\SectionVersionRepository $versions,
         private GraduateEvidenceReader $graduate,
+        private ProgramCampusEligibility $campuses,
     ) {
     }
     /** @param array<string,mixed> $eligibility */
@@ -52,6 +53,7 @@ final readonly class EnrollmentLedger
         ?\Domain\Registration\ValueObject\CoRequisiteDecision $corequisites = null,
         ?\Domain\Registration\RegistrationWindow $window = null,
         ?array $graduateEvidence = null,
+        ?array $campusEvidence = null,
     ): void {
         $this->actor($actor);
         if (
@@ -88,6 +90,20 @@ final readonly class EnrollmentLedger
             "prerequisite_evidence" => $prerequisites->retained(),
             "schedule_evidence" => $schedule->facts,
         ];
+        if ($campusEvidence !== null) {
+            $proof = new \Domain\Registration\ValueObject\ProgramCampusEvidence($campusEvidence);
+            $proof->routing(
+                $enrollment->studentId->value,
+                $section->id->value,
+                $selected?->publication->value,
+                $prerequisites->assignment->value
+            );
+            $this->campuses->verify($proof, $budget ?? new HistoryReadBudget());
+            $metadata['program_campus_evidence'] = $campusEvidence;
+        }
+        if ($section->programPolicy->requireCampus && $campusEvidence === null) {
+            throw new CorruptHistoryException();
+        }
         if ($graduateEvidence !== null) {
             $proof = new GraduateEnrollmentEvidence($graduateEvidence);
             $proof->routing(
@@ -167,9 +183,18 @@ final readonly class EnrollmentLedger
         Enrollment $enrollment,
         Section $section,
         ?HistoryReadBudget $budget = null,
-    ): void {
-        $this->load($enrollment->id, $budget);
+    ): EnrollmentHistory {
+        $root = $this->load($enrollment->id, $budget);
         $this->head($section);
+        return $root;
+    }
+
+    public function assessCampus(
+        \Domain\Student\StudentProgram $pursuit,
+        Section $section,
+        HistoryReadBudget $budget
+    ): array {
+        return $this->campuses->assess($pursuit, $section, $budget);
     }
     /** @param array<string,mixed> $outcome */
     public function close(
@@ -356,6 +381,20 @@ final readonly class EnrollmentLedger
             "prerequisite_evidence" => $evidence["prerequisites"]->retained(),
             "schedule_evidence" => $evidence["schedule"]->facts,
         ];
+        if (($evidence['campus_evidence'] ?? null) !== null) {
+            $proof = new \Domain\Registration\ValueObject\ProgramCampusEvidence($evidence['campus_evidence']);
+            $proof->routing(
+                $enrollment->studentId->value,
+                $section->id->value,
+                $root->sectionVersion(),
+                $evidence['prerequisites']->assignment->value
+            );
+            $this->campuses->verify($proof, $budget);
+            $metadata['program_campus_evidence'] = $proof->data;
+        }
+        if ($section->programPolicy->requireCampus && !isset($metadata['program_campus_evidence'])) {
+            throw new CorruptHistoryException();
+        }
         if ($root->sectionVersion() !== null) {
             $metadata["section_version_id"] = $root->sectionVersion();
         }
@@ -506,6 +545,14 @@ final readonly class EnrollmentLedger
                 ?? $stored->event->metadata()['reinstatement_evidence']['graduate_course_evidence'] ?? null;
                 if ($graduate !== null) {
                     $this->graduate->verify(new GraduateEnrollmentEvidence($graduate), $budget);
+                }
+                $campus = $stored->event->metadata()['program_campus_evidence']
+                ?? $stored->event->metadata()['reinstatement_evidence']['program_campus_evidence'] ?? null;
+                if ($campus !== null) {
+                    $this->campuses->verify(
+                        new \Domain\Registration\ValueObject\ProgramCampusEvidence($campus),
+                        $budget,
+                    );
                 }
             }
             $cursor = $page->nextCursor;

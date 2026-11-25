@@ -14,6 +14,16 @@ return [
     ),
     "all" => trans("All programs"),
     "selected" => trans("Selected programs"),
+    'campus_rule' => trans('Require program cohort to include the section campus'),
+    'campus_help' => trans(
+        'The section campus must be a primary or additional campus in the student’s assigned published program cohort. '
+        . 'An empty program list still applies this campus rule when selected. Assign a section campus, '
+        . 'then publish and select the offering to apply the rule.'
+    ),
+    'campus_heading' => trans('Program campus eligibility'),
+    'campus_enabled' => trans('Section campus must be included in the assigned program cohort.'),
+    'campus_disabled' => trans('No program campus restriction.'),
+    'campus_unknown' => trans('Program campus eligibility was not recorded in this publication.'),
     "current_labels" => trans(
         "Program names describe the current catalog. Published rules retain the selected program identities.",
     ),

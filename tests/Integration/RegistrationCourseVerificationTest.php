@@ -70,6 +70,7 @@ final class RegistrationCourseVerificationTest extends TestCase
                 $s->clock,
                 new SqlSectionVersionRepository($s->sql),
                 $s->graduateEvidence(),
+                $s->programCampusGate(),
             ),
             $s->activityLedger(),
             $s->primaryProgramLedger(),

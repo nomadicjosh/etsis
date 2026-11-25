@@ -56,6 +56,9 @@ final class SectionPublication extends EventSourcedAggregate
         : \Domain\Registration\ValueObject\SectionClassifications::fromArray(
             $classes,
         );
+        if (($p['definition']['require_program_campus'] ?? false) && $this->classifications?->campus === null) {
+            throw new CorruptHistoryException();
+        }
         $this->versionId = $p["version_id"];
         $this->definition = $p["definition"];
     }

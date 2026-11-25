@@ -306,3 +306,8 @@ Later policy edits or publications do not rewrite an earlier student's choices. 
 These rules concern combinations of majors, minors and other curriculum components. They do not exclude academic credits, prohibit transfer credit, change course sharing or alter degree minimums. Reviewed exceptions, applicant declarations, broader location eligibility and credential decisions retain their separate workflows.
 
 Apply **`20261123000013_AddSisComponentExclusions`** through the normal migration runner before using this policy. It adds one nullable text column to the existing operational policy table. It grants no permission, changes no recorded publication or selection and creates no new journal. Draft setup retains existing catalog authority, revisions, source rechecks and atomic audit; publications and student decisions retain their existing protected streams.
+
+
+## Program offering sites and section registration
+
+Publishing a program campus or additional offering site does not automatically restrict registration. A section can explicitly enable [the program cohort campus rule](section-publication.md#require-the-assigned-program-cohort-to-include-the-section-campus), then publish and select that offering. When enabled, its campus must appear in the student's actual assigned published program cohort. A newer program publication or current draft does not replace that assignment. A known primary or additional-campus match qualifies; incomplete earlier location evidence without a positive match requires registrar review. The rule describes program offering eligibility and does not determine the student's personal attendance campus.

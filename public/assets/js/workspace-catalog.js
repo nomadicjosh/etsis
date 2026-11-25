@@ -1483,6 +1483,9 @@ window.createWorkspaceCatalog = function (ui) {
             definition.eligible_program_ids === undefined ? ui.programEligibilityLabels.not_recorded :
                 !definition.eligible_program_ids.length ? ui.programEligibilityLabels.all :
                     `${ui.programEligibilityLabels.restricted} (${definition.eligible_program_ids.length})`]);
+        if (ui.programEligibilityLabels) fields.push([ui.programEligibilityLabels.campus_heading,
+            definition.require_program_campus === undefined ? ui.programEligibilityLabels.campus_unknown
+                : ui.programEligibilityLabels[definition.require_program_campus ? 'campus_enabled' : 'campus_disabled']]);
         if (facultyLabel !== null) fields.push(["Faculty", facultyLabel]);
         for (const [key, label] of [["instructional_method", "Instructional method"], ["campus", "Campus/site"], ["reporting_group", ui.reportingLabels?.group || "Reporting group"]]) {
             const value = classifications?.[key];

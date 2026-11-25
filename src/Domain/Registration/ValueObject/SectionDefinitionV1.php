@@ -32,9 +32,10 @@ final readonly class SectionDefinitionV1
     public function __construct(public array $data)
     {
         if (
-            count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 6 ||
+            count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 7 ||
             array_diff(array_keys($data), [...self::FIELDS, 'web_registration', 'minimum_enrollment',
-                'contact_hours', 'credits_milli', 'continuing_education', 'eligible_program_ids']) !== [] ||
+                'contact_hours', 'credits_milli', 'continuing_education', 'eligible_program_ids',
+                'require_program_campus']) !== [] ||
             array_diff(self::FIELDS, array_keys($data)) !== [] ||
             (array_key_exists('web_registration', $data) && !is_bool($data['web_registration']))
         ) {
@@ -47,6 +48,9 @@ final readonly class SectionDefinitionV1
                 throw new InvalidArgumentException('Use the complete section program eligibility policy.');
             }
             new SectionProgramPolicy($data['eligible_program_ids']);
+        }
+        if (array_key_exists('require_program_campus', $data) && !is_bool($data['require_program_campus'])) {
+            throw new InvalidArgumentException('Retain an explicit program campus eligibility choice.');
         }
         if (
             array_key_exists('credits_milli', $data) && (!is_int($data['credits_milli'])

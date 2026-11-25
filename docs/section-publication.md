@@ -313,10 +313,30 @@ The additive nullable projection leaves earlier retained definitions unchanged. 
 
 ## Eligible programs for a section
 
-Open **Academic catalog → Sections → a section → Eligible programs**. Search the paged program list and select up to twenty eligible programs. An explicit empty list allows all programs. Save the working draft, then **publish and select the offering** (or review an offering amendment when the section already has student records). Saving a draft alone does not change an accepted registration or authorize unpublished rules for new registration.
+Open **Academic catalog → Sections → a section → Eligible programs**. Search the paged program list and select up to twenty eligible programs. An explicit empty list allows all programs; the separate campus rule below can still apply. Save the working draft, then **publish and select the offering** (or review an offering amendment when the section already has student records). Saving a draft alone does not change an accepted registration or authorize unpublished rules for new registration.
 
 Eligibility compares the student's verified active receiving **program pursuit** with the retained program identities. It does not infer the program from its code, use an unrelated pursuit, or assume that choosing a major changes the program. A broad `ARTS.UG` program can therefore be eligible regardless of which permitted major its student selects. Graduate-course approvals remain a separate institutional rule; they do not override this list.
 
 The drawer retains selections in page memory across searches and ordinary navigation, uses a saved revision to prevent stale replacement, supports deliberate clearing, and offers **Back to record**. Labels describe the current program catalog; the published policy preserves program identities. Earlier section publications without this field continue to say that program eligibility was not recorded; their original events and projections are not rewritten into an invented historical rule.
 
 Student, staff, group and schedule registration share the same eligibility check. A changed draft requires a matching new selected publication before it can govern a new registration. Original accepted receipts and previously retained academic facts keep their original result.
+
+
+## Require the assigned program cohort to include the section campus
+
+In **Sections → a section → Eligible programs**, enable **Require program cohort to include the section campus** when that offering should be available only at a campus included in a student's assigned published program cohort. The setting starts off. It works independently of the eligible-program list: an empty program list allows any program that satisfies the enabled campus rule and the other registration checks.
+
+1. Assign the section's campus in **Section classifications**.
+2. Save the campus rule in **Eligible programs**.
+3. Review, publish and select the offering, or complete its reviewed amendment. A required rule cannot be published without a section campus. A draft that differs from the selected offering requires a matching publication before new registration.
+4. Assign the student's verified published program cohort through the ordinary program/cohort workflow. The program publication must include the section campus as its primary campus or an additional offering site.
+
+For example, an assigned `ARTS.UG` cohort published with Main as its primary campus and East as an additional site satisfies the rule for either Main or East sections. A later draft or a newer program publication containing West does not make that student eligible at West. The student must be deliberately moved to the appropriate published cohort. Changing a major alone does not change this program-level rule.
+
+The comparison uses retained campus identities, so renaming a campus does not change membership. It does not assign the student's personal attendance location, require a room, or infer a campus from a program code. Graduate-course approvals and waitlist priority do not waive this rule.
+
+A verified positive match in either retained location field qualifies. If no match exists and the earlier cohort lacks historical location information, registration is blocked with a review message; missing facts are not treated as a complete empty list. A missing or unverifiable assigned cohort likewise requires review. With the rule off, these campus checks add no restriction. Earlier section publications continue to show that their campus eligibility choice was not recorded.
+
+Staff and owner registration reviews display the same concise readiness result. Individual, group, schedule, section-change and waitlist registration use the shared gate. A changed cohort, even another publication with the same campus, invalidates a pending confirmation. Accepted decisions retain exact program-cohort, section-publication and campus references in protected enrollment evidence. Later drafts, cohort assignments and reference edits do not reinterpret an accepted enrollment or its original retry. Supported late-withdrawal reinstatement is a fresh eligibility decision: it retains the freshly reviewed cohort while preserving the original attempt, offering and billing lineage.
+
+The drawer preserves an unsaved checkbox in page memory through searches and failed saves; saving requires its current revision and catalog authority. No private draft or evidence is stored in browser storage. This workflow adds no report or automatic institution-wide location policy.

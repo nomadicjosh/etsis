@@ -616,6 +616,19 @@ final class SisFixture
             $this->clock,
             new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
             $this->graduateEvidence(),
+            $this->programCampusGate(),
+        );
+    }
+    public function programCampusGate(): \Domain\Registration\Service\ProgramCampusEligibility
+    {
+        $history = EventStoreFixture::history($this->connection->queryBuilder());
+        return new \Domain\Registration\Service\ProgramCampusEligibility(
+            $this->programStatusLedger(),
+            new \Domain\Catalog\Service\PublishedProgramReader(
+                $history,
+                new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql),
+            ),
+            new \Domain\Registration\Service\RetainedSectionReader($history),
         );
     }
     public function graduatePolicies(

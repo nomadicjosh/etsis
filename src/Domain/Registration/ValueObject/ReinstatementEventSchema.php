@@ -98,6 +98,7 @@ final class ReinstatementEventSchema
             ...$required,
             "corequisite_evidence",
             "graduate_course_evidence",
+            'program_campus_evidence',
             "registration_window",
             "section_version_id",
         ];
@@ -122,6 +123,12 @@ final class ReinstatementEventSchema
         }
         if (isset($value['graduate_course_evidence'])) {
             new GraduateEnrollmentEvidence($value['graduate_course_evidence']);
+        }
+        if (array_key_exists('program_campus_evidence', $value)) {
+            if (!is_array($value['program_campus_evidence'])) {
+                throw new InvalidArgumentException('Retain complete program campus evidence.');
+            }
+            new ProgramCampusEvidence($value['program_campus_evidence']);
         }
         if (isset($value["corequisite_evidence"])) {
             CoRequisiteDecision::fromRetained($value["corequisite_evidence"]);

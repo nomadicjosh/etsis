@@ -32,6 +32,7 @@ final class EnrollmentHistory extends EventSourcedAggregate
     private array $registrationWindow = ["status" => "not_recorded"];
     private ?string $withdrawalStatus = null;
     private array $reinstatements = [];
+    private ?\Domain\Registration\ValueObject\ProgramCampusEvidence $campus = null;
     public function acceptHistorical(
         #[\SensitiveParameter] DomainEvent $event,
         ?\Domain\Shared\EventSourcing\EventContext $context = null,
@@ -105,6 +106,14 @@ final class EnrollmentHistory extends EventSourcedAggregate
     }
     private function eligibilityEvidence(array $metadata, array $p): void
     {
+        $this->campus = isset($metadata['program_campus_evidence'])
+        ? new \Domain\Registration\ValueObject\ProgramCampusEvidence($metadata['program_campus_evidence']) : null;
+        $this->campus?->routing(
+            $p['enrollment']['student_id'],
+            $p['enrollment']['section_id'],
+            $metadata['section_version_id'] ?? null,
+            $metadata['prerequisite_evidence']['assignment_id'] ?? ''
+        );
         $this->sectionVersion = $metadata["section_version_id"] ?? null;
         if ($this->sectionVersion !== null) {
             new \Domain\Shared\ValueObject\EntityId($this->sectionVersion);
@@ -404,5 +413,10 @@ final class EnrollmentHistory extends EventSourcedAggregate
     public function sectionVersion(): ?string
     {
         return $this->sectionVersion;
+    }
+
+    public function campusEvidence(): ?\Domain\Registration\ValueObject\ProgramCampusEvidence
+    {
+        return $this->campus;
     }
 }

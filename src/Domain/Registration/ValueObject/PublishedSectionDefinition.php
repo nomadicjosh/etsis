@@ -45,9 +45,9 @@ final readonly class PublishedSectionDefinition
     }
 
     public function matchesClassifications(
-        ?EntityId $method,
-        ?EntityId $campus,
-        ?EntityId $reportingGroup,
+        ?EntityId $method = null,
+        ?EntityId $campus = null,
+        ?EntityId $reportingGroup = null,
     ): bool {
         return $method?->value ===
         $this->classifications?->instructionalMethod?->id->value &&
@@ -61,6 +61,7 @@ final readonly class PublishedSectionDefinition
     ): bool {
         $d = $this->definition->data;
         return ($d['eligible_program_ids'] ?? []) === $section->programPolicy->programIds &&
+        ($d['require_program_campus'] ?? false) === $section->programPolicy->requireCampus &&
         $this->section->value === $section->id->value &&
         $d["course_id"] === $section->courseId->value &&
         $d["term_id"] === $section->termId->value &&

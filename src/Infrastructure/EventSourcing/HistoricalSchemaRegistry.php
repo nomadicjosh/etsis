@@ -1519,6 +1519,22 @@ final readonly class HistoricalSchemaRegistry
                     \Domain\Registration\ValueObject\ReinstatementEventSchema::evidence($value, $payload);
                     continue;
                 }
+                if ($name === 'program_campus_evidence') {
+                    if (
+                        !is_array($value) || $class !== \Domain\Registration\Event\EnrollmentWasEstablished::class
+                        || $payload['provenance'] !== 'registered'
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $proof = new \Domain\Registration\ValueObject\ProgramCampusEvidence($value);
+                    $proof->routing(
+                        $payload['enrollment']['student_id'],
+                        $payload['enrollment']['section_id'],
+                        $metadata['section_version_id'] ?? null,
+                        $metadata['prerequisite_evidence']['assignment_id'] ?? ''
+                    );
+                    continue;
+                }
                 if ($name === 'graduate_course_evidence') {
                     if (
                         !is_array($value) || !in_array($class, [

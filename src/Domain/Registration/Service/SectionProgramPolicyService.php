@@ -48,6 +48,7 @@ final readonly class SectionProgramPolicyService
             return [
                 "section_code" => $row["code"],
                 "program_ids" => $policy->programIds,
+                'require_program_campus' => $policy->requireCampus,
                 "programs" => $programs,
                 "revision" => self::revision($policy),
             ];
@@ -74,7 +75,7 @@ final readonly class SectionProgramPolicyService
         ];
     }
 
-    public function save(EntityId $section, array $ids, string $revision): array
+    public function save(EntityId $section, array $ids, string $revision, bool $requireCampus = false): array
     {
         $actor = $this->authorize();
         try {
@@ -83,7 +84,7 @@ final readonly class SectionProgramPolicyService
             }
             $ids = array_map(static fn($id): string => new EntityId($id)->value, $ids);
             sort($ids, SORT_STRING);
-            $policy = new SectionProgramPolicy($ids);
+            $policy = new SectionProgramPolicy($ids, $requireCampus);
             if (preg_match('/^[a-f0-9]{64}$/D', $revision) !== 1) {
                 throw new \InvalidArgumentException();
             }
@@ -115,12 +116,14 @@ final readonly class SectionProgramPolicyService
             $this->audit->record($actor, "section.program_eligibility_saved", $section);
             $this->authorize($actor);
             $this->validReferences($policy);
-            if ($this->policies->current($section)->programIds !== $policy->programIds) {
+            $saved = $this->policies->current($section);
+            if ($saved->programIds !== $policy->programIds || $saved->requireCampus !== $policy->requireCampus) {
                 throw new ConcurrentModificationException(
                     \Codefy\Framework\Helpers\trans("The section program policy changed while saving."),
                 );
             }
-            return ["program_ids" => $policy->programIds, "revision" => self::revision($policy)];
+            return ["program_ids" => $policy->programIds, 'require_program_campus' => $policy->requireCampus,
+                "revision" => self::revision($policy)];
         });
     }
 
@@ -133,6 +136,6 @@ final readonly class SectionProgramPolicyService
 
     private static function revision(SectionProgramPolicy $policy): string
     {
-        return hash("sha256", json_encode($policy->programIds, JSON_THROW_ON_ERROR));
+        return hash("sha256", json_encode([$policy->programIds, $policy->requireCampus], JSON_THROW_ON_ERROR));
     }
 }

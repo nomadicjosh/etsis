@@ -9,7 +9,7 @@ async function fixture(page) {
     const programs = [{ id: id(11), code: 'ARTS.UG', title: 'Fictional <Arts>' },
         { id: id(12), code: 'SCI.UG', title: 'Fictional sciences' }];
     const levels = [{ id: id(21), code: 'UG', title: 'Undergraduate' }, { id: id(22), code: 'GR', title: 'Graduate' }];
-    const state = { saved: [], revision: 'a'.repeat(64), failure: 0, deny: false, requests: [], errors: [] };
+    const state = { saved: [], campus: false, revision: 'a'.repeat(64), failure: 0, deny: false, requests: [], errors: [] };
     page.on('pageerror', error => state.errors.push(error.message));
     await page.route('**/sis/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -32,13 +32,14 @@ async function fixture(page) {
         else if (path.startsWith('/sis/ui/data/')) result = { items: path.includes('/sections/') ? [section] : path.includes('/students/') ? [{ id: id(30), given_name: 'Fictional', family_name: 'Student', institutional_id: 'S-FICTIONAL', active: 1 }] : [], next_after: null };
         else if (path.endsWith('/eligible-programs/current/')) {
             if (state.deny) return route.fulfill({ status: 403, json: { error: 'Access denied.' } });
-            result = { section_code: section.code, program_ids: state.saved, programs: programs.filter(p => state.saved.includes(p.id)), revision: state.revision };
+            result = { section_code: section.code, program_ids: state.saved, require_program_campus: state.campus, programs: programs.filter(p => state.saved.includes(p.id)), revision: state.revision };
         } else if (path.endsWith('/eligible-programs/choices/')) result = { items: programs, next_after: null };
         else if (path.endsWith('/eligible-programs/save/')) {
             if (state.failure) return route.fulfill({ status: state.failure, json: { error: 'The policy changed.' } });
             state.saved = data.program_ids;
+            state.campus = data.require_program_campus;
             state.revision = 'b'.repeat(64);
-            result = { program_ids: state.saved, revision: state.revision };
+            result = { program_ids: state.saved, require_program_campus: state.campus, revision: state.revision };
         } else if (path === '/sis/graduate-registration-policy/' && state.policyDenied) return route.fulfill({ status: 403, json: { error: 'Access denied.' } });
         else if (path === '/sis/graduate-registration-policy/') result = { policy_reference: '01K00000000000000000000G31', publication_id: null, version: 0,
             rules: { enabled: false, undergraduate_level_id: null, graduate_level_id: null,
@@ -95,10 +96,12 @@ test('section policy preserves stale choices and clears private controls after d
     const state = await fixture(page);
     await sectionPolicy(page);
     await page.getByLabel('ARTS.UG — Fictional <Arts>', { exact: true }).check();
+    await page.getByLabel('Require program cohort to include the section campus', { exact: true }).check();
     state.failure = 409;
     await page.getByRole('button', { name: 'Save eligible programs', exact: true }).click();
     await expect(page.getByRole('alert').filter({ hasText: 'Your choices remain' })).toBeVisible();
     await expect(page.getByLabel('ARTS.UG — Fictional <Arts>', { exact: true })).toBeChecked();
+    await expect(page.getByLabel('Require program cohort to include the section campus', { exact: true })).toBeChecked();
     state.deny = true;
     await page.getByRole('button', { name: 'Reload saved policy', exact: true }).click();
     await expect(page.getByText('Program eligibility is no longer available to this account.')).toBeVisible();
@@ -137,6 +140,10 @@ test('section policy reflows with keyboard access at 320px and 200% zoom', async
     await fixture(page);
     await page.setViewportSize({ width: 320, height: 900 });
     await sectionPolicy(page);
+    await page.getByLabel('Require program cohort to include the section campus', { exact: true }).focus();
+    await page.keyboard.press('Space');
+    await expect(page.getByLabel('Require program cohort to include the section campus', { exact: true })).toBeChecked();
+    await page.screenshot({ path: '/tmp/etsis-section-campus-phone.png' });
     await page.getByLabel('ARTS.UG — Fictional <Arts>', { exact: true }).focus();
     await page.keyboard.press('Space');
     await expect(page.getByLabel('ARTS.UG — Fictional <Arts>', { exact: true })).toBeChecked();
@@ -256,5 +263,27 @@ test('lost approval access clears the private draft on return from support', asy
     await page.getByRole('button', { name: 'Back to record', exact: true }).click();
     await expect(page.getByText('This information is no longer available to this account.', { exact: true })).toBeVisible();
     await expect(page.getByLabel('Reason for this decision', { exact: true })).toHaveCount(0);
+    expect(state.errors).toEqual([]);
+});
+
+
+test('campus rule saves independently of program selection and reopens with one action icon', async ({ page }) => {
+    const state = await fixture(page);
+    await sectionPolicy(page);
+    const rule = page.getByLabel('Require program cohort to include the section campus', { exact: true });
+    await expect(rule).not.toBeChecked();
+    await rule.check();
+    const save = page.getByRole('button', { name: 'Save eligible programs', exact: true });
+    await expect(save.locator('.bi')).toHaveCount(1);
+    await save.click();
+    await expect.poll(() => state.campus).toBe(true);
+    expect(state.saved).toEqual([]);
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await page.getByRole('button', { name: 'Eligible programs', exact: true }).click();
+    await expect(rule).toBeChecked();
+    await rule.uncheck();
+    await save.click();
+    await expect.poll(() => state.campus).toBe(false);
+    expect(state.saved).toEqual([]);
     expect(state.errors).toEqual([]);
 });

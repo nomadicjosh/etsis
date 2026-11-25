@@ -165,6 +165,9 @@ final readonly class RegistrationService
             $budget ??= new \Domain\Shared\EventSourcing\HistoryReadBudget();
             $graduate = $this->graduate->assess($selection, $section, $course, $budget, $courseRead);
             $graduateEvidence = $this->graduate->requireMet($graduate);
+            $campusEvidence = ProgramCampusEligibility::requireMet(
+                $this->campusAssessment($selection, $section, $budget)
+            );
             $prerequisites = $this->prerequisites->evaluate(
                 $studentId,
                 $assignment,
@@ -255,6 +258,7 @@ final readonly class RegistrationService
                 $corequisites,
                 $window,
                 $graduateEvidence,
+                $campusEvidence,
             );
             $this->credits->open(
                 $enrollment,
@@ -321,14 +325,34 @@ final readonly class RegistrationService
                     );
                 }
             }
-            if ($section->programPolicy->programIds !== []) {
+            $freshSection = $this->repository->section($sectionId);
+            if (
+                $freshSection->programPolicy->programIds !== $section->programPolicy->programIds
+                || $freshSection->programPolicy->requireCampus !== $section->programPolicy->requireCampus
+            ) {
+                throw new ConcurrentModificationException(
+                    \Codefy\Framework\Helpers\trans('The section program policy changed during registration.')
+                );
+            }
+            if ($section->programPolicy->programIds !== [] || $section->programPolicy->requireCampus) {
                 $freshPursuit = $this->pursuits->activeSelection($studentId, $assignment);
                 if ($freshPursuit->programId->value !== $selection->programId->value) {
                     throw new ConcurrentModificationException(
-                        \Codefy\Framework\Helpers\trans('The selected program pursuit changed during registration.'),
+                        \Codefy\Framework\Helpers\trans('The selected program pursuit changed during registration.')
                     );
                 }
-                $this->requireProgram($this->repository->section($sectionId), $freshPursuit->programId);
+                $this->requireProgram($freshSection, $freshPursuit->programId);
+                if (
+                    ProgramCampusEligibility::requireMet($this->campusAssessment(
+                        $freshPursuit,
+                        $freshSection,
+                        $budget
+                    )) !== $campusEvidence
+                ) {
+                    throw new ConcurrentModificationException(
+                        \Codefy\Framework\Helpers\trans('Program campus evidence changed. Review registration again.')
+                    );
+                }
             }
             $freshGraduate = $this->graduate->assess(
                 $this->pursuits->activeSelection($studentId, $assignment),
@@ -453,6 +477,14 @@ final readonly class RegistrationService
         return $this->graduate->assess($pursuit, $section, $course, $budget);
     }
 
+    public function campusAssessment(
+        \Domain\Student\StudentProgram $pursuit,
+        Section $section,
+        \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
+    ): array {
+        return $this->enrollments->assessCampus($pursuit, $section, $budget);
+    }
+
     private function requireProgram(\Domain\Registration\Section $section, EntityId $program): void
     {
         $check = $section->programPolicy->check($program);
@@ -515,11 +547,21 @@ final readonly class RegistrationService
             );
         }
         $this->verifyCourseSelection($sectionId, $budget, $courseRead ?? new RegistrationCourseRead());
-        $this->enrollments->verifyExisting($enrollment, $section);
+        $accepted = $this->enrollments->verifyExisting($enrollment, $section, $budget);
         $this->credits->verifyOpenEnrollment($enrollment, $budget);
-        $selection = $this->pursuits->activeSelection($studentId);
+        $campusProof = $accepted->campusEvidence();
+        $selection = $this->pursuits->activeSelection($studentId, $campusProof === null
+            ? null : new EntityId($campusProof->data['pursuit_id']));
         $assignment = $selection->id;
         $this->requireProgram($section, $selection->programId);
+        if (
+            ProgramCampusEligibility::requireMet($this->campusAssessment($selection, $section, $budget))
+            !== $campusProof?->data
+        ) {
+            throw new ConcurrentModificationException(
+                \Codefy\Framework\Helpers\trans('Program campus evidence changed. Review registration again.')
+            );
+        }
         $this->graduate->requireMet($this->graduate->assess($selection, $section, $course, $budget));
         $required = $course->publishedPrerequisites ?? $this->repository->requiredCourses($course->id);
         $prerequisites = $this->prerequisites->evaluate(

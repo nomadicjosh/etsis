@@ -2,7 +2,7 @@ const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 const id = (n) => String(n).padStart(26, "0");
 
-async function fixture(page, { bound = true, paged = false, unavailable = false, amendment = false, aiEnabled = true, aiFailure = false, moodle = false } = {}) {
+async function fixture(page, { bound = true, paged = false, unavailable = false, amendment = false, aiEnabled = true, aiFailure = false, moodle = false, campusRule = undefined } = {}) {
   const section = id(1),
     course = id(2),
     term = id(3),
@@ -41,6 +41,7 @@ async function fixture(page, { bound = true, paged = false, unavailable = false,
     instruction_starts_on: "2026-08-24",
     instruction_ends_on: "2026-12-18",
   };
+  if (campusRule !== undefined) definition.require_program_campus = campusRule;
   const calls = [],
     errors = [];
   let latest = null;
@@ -453,3 +454,16 @@ test('Moodle course creation is an explicit retained publication option and conf
   expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
   expect(f.errors).toEqual([]);
 });
+
+
+for (const [campusRule, message] of [
+  [undefined, 'Program campus eligibility was not recorded in this publication.'],
+  [false, 'No program campus restriction.'],
+  [true, 'Section campus must be included in the assigned program cohort.'],
+]) {
+  test(`retained campus rule is explicit: ${message}`, async ({ page }) => {
+    const f = await fixture(page, { amendment: true, campusRule });
+    await expect(page.locator('#drawer-body')).toContainText(message);
+    expect(f.errors).toEqual([]);
+  });
+}

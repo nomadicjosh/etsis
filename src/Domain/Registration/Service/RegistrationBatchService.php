@@ -962,6 +962,8 @@ final readonly class RegistrationBatchService
             $restriction = $this->repository->blockingRestriction($student->personId, $now, $byStaff);
             $graduate = $enrollment === null
             ? $this->registration->graduateAssessment($pursuit, $section, $course, $budget) : null;
+            $campus = $enrollment === null
+            ? $this->registration->campusAssessment($pursuit, $section, $budget) : null;
             $readiness = $enrollment === null ? new \Domain\Registration\RegistrationPolicy()->checks(
                 $student,
                 $restriction === null ? [] : [$restriction],
@@ -974,7 +976,7 @@ final readonly class RegistrationBatchService
                 $decision?->isMet() ?? true,
             ) : [];
             if ($enrollment === null) {
-                array_push($readiness, ...$graduate['checks']);
+                array_push($readiness, ...$graduate['checks'], ...$campus['checks']);
                 $readiness[] = $section->programPolicy->check($pursuit->programId);
                 if ($section->programPolicy->programIds !== [] && $selectedOffering === null) {
                     $readiness[] = [
@@ -1034,6 +1036,7 @@ final readonly class RegistrationBatchService
             if ($reinstating !== null) {
                 $evidence = [
                     'graduate_evidence' => $graduate['evidence'],
+                    'campus_evidence' => $campus['evidence'],
                     'prerequisites' => $decision,
                     'corequisites' => $corequisite,
                     'schedule' => $schedule,
@@ -1065,6 +1068,8 @@ final readonly class RegistrationBatchService
                 "assignment_id" => $assignment?->value,
                 'program_id' => $pursuit?->programId->value,
                 'graduate_revision' => $graduate === null ? null : GraduateRegistrationGate::revision($graduate),
+                'program_campus_revision' => $campus === null ? null
+                    : hash('sha256', json_encode($campus, JSON_THROW_ON_ERROR)),
                 "schedule" =>
                     $schedule === null
                         ? ["status" => "not_rechecked", "blocked" => false]

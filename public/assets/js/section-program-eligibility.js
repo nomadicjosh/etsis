@@ -33,6 +33,7 @@ window.createSectionProgramEligibility = function (ui) {
         let draft = reset ? null : existing;
         if (!draft) {
             draft = { selected: new Map(saved.programs.map(program => [program.id, program])), revision: saved.revision,
+                requireCampus: saved.require_program_campus ?? false,
                 search: "", after: null, stack: [] };
             drafts.set(section, draft);
         }
@@ -40,6 +41,17 @@ window.createSectionProgramEligibility = function (ui) {
         const status = node("p", { role: "status", class: "form-text" });
         const error = node("p", { role: "alert", class: "text-danger" });
         const selected = node("section", { class: "record-section bg-white border rounded p-3 mb-3", "aria-label": t("selected") });
+        const campus = node('input', { id: 'section-program-campus', type: 'checkbox', class: 'form-check-input',
+            checked: draft.requireCampus, 'aria-describedby': 'section-program-campus-help' });
+        campus.addEventListener('change', () => {
+            if (busy) { campus.checked = draft.requireCampus; return; }
+            draft.requireCampus = campus.checked;
+        });
+        const campusRule = node('section', { class: 'record-section bg-white border rounded p-3 mb-3',
+            'aria-label': t('campus_heading') }, node('h3', { class: 'h6' }, t('campus_heading')),
+            node('div', { class: 'form-check' }, campus,
+                node('label', { for: campus.id, class: 'form-check-label' }, t('campus_rule'))),
+            node('p', { id: 'section-program-campus-help', class: 'form-text mb-0' }, t('campus_help')));
         const results = node("section", { class: "record-section bg-white border rounded p-3 mb-3", "aria-label": t("search") });
         const search = node("input", { id: "section-program-search", type: "search", class: "form-control", maxLength: 80,
             value: draft.search });
@@ -52,6 +64,7 @@ window.createSectionProgramEligibility = function (ui) {
             if (![401, 403].includes(failure.status)) return false;
             drafts.delete(section);
             draft.selected.clear();
+            draft.requireCampus = false;
             query++;
             if (body.isConnected) body.replaceChildren(node("p", { role: "alert" }, t("denied")));
             return true;
@@ -128,6 +141,7 @@ window.createSectionProgramEligibility = function (ui) {
             try {
                 const result = await request(`/sis/sections/${section}/eligible-programs/save/`, "POST", {
                     program_ids: ids, revision: draft.revision,
+                    require_program_campus: draft.requireCampus,
                 });
                 draft.revision = result.revision;
                 if (!body.isConnected) return;
@@ -142,7 +156,7 @@ window.createSectionProgramEligibility = function (ui) {
             }
         }, "btn-primary", "check2");
         body.append(node("p", { class: "fw-semibold" }, saved.section_code), node("p", {}, t("help")),
-            selected, form, results, error, status, node("div", { class: "inline-actions" }, save,
+            campusRule, selected, form, results, error, status, node("div", { class: "inline-actions" }, save,
                 button("reload", () => open(section, back, true), "btn-outline-secondary", "arrow-clockwise"),
                 button("publish", () => ui.publish(section, () => open(section, back)), "btn-outline-primary", "journal-check"),
                 ...(back ? [button("back", back, "btn-link", "arrow-left")] : [])));

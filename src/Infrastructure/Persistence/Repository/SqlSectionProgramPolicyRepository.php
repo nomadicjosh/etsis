@@ -32,7 +32,13 @@ final readonly class SqlSectionProgramPolicyRepository implements SectionProgram
             21,
         );
         try {
-            return new SectionProgramPolicy(array_column($rows, "program_id"));
+            $policy = $this->sql->rows('sis_section_program_policies', ['id' => $section->value], 1)[0] ?? null;
+            $required = $policy === null ? false : match ($policy['require_program_campus']) {
+                0, '0' => false,
+                1, '1' => true,
+                default => throw new CorruptHistoryException(),
+            };
+            return new SectionProgramPolicy(array_column($rows, "program_id"), $required);
         } catch (\Throwable) {
             throw new CorruptHistoryException();
         }
@@ -86,6 +92,12 @@ final readonly class SqlSectionProgramPolicyRepository implements SectionProgram
 
     public function assign(EntityId $section, SectionProgramPolicy $policy): void
     {
+        $values = ['require_program_campus' => (int) $policy->requireCampus];
+        if ($this->sql->rows('sis_section_program_policies', ['id' => $section->value], 1) === []) {
+            $this->sql->insert('sis_section_program_policies', ['id' => $section->value] + $values);
+        } else {
+            $this->sql->update('sis_section_program_policies', $values, ['id' => $section->value]);
+        }
         $old = $this->current($section)->programIds;
         $q = $this->sql->quote(...);
         foreach (array_diff($old, $policy->programIds) as $id) {

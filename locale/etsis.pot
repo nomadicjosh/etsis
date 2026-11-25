@@ -5436,3 +5436,76 @@ msgstr ""
 
 msgid "Remove automatic-drop protection in Gradebook setup before changing this assignment to bonus-only work."
 msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:17
+msgid "Require program cohort to include the section campus"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:19
+msgid "The section campus must be a primary or additional campus in the student’s assigned published program cohort. An empty program list still applies this campus rule when selected. Assign a section campus, then publish and select the offering to apply the rule."
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:23
+msgid "Program campus eligibility"
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:24
+msgid "Section campus must be included in the assigned program cohort."
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:25
+msgid "No program campus restriction."
+msgstr ""
+
+#: resources/views/backend/workspace/section-program-labels.php:26
+msgid "Program campus eligibility was not recorded in this publication."
+msgstr ""
+
+#: src/Domain/Registration/Service/ProgramCampusEligibility.php:35
+msgid "Publish and select this section with a campus and its program campus rule."
+msgstr ""
+
+#: src/Domain/Registration/Service/ProgramCampusEligibility.php:45
+msgid "Publish and select the current program campus rule and section campus."
+msgstr ""
+
+#: src/Domain/Registration/Service/ProgramCampusEligibility.php:50
+msgid "Assign a verified published program cohort before checking campus eligibility."
+msgstr ""
+
+#: src/Domain/Registration/Service/ProgramCampusEligibility.php:64
+msgid "This section campus is not included in the assigned program cohort."
+msgstr ""
+
+#: src/Domain/Registration/Service/ProgramCampusEligibility.php:66
+msgid "The assigned program cohort has incomplete retained campus information."
+msgstr ""
+
+#: src/Domain/Registration/Service/ProgramCampusEligibility.php:79
+msgid "Program campus eligibility needs verified publication and cohort records."
+msgstr ""
+
+#: src/Domain/Registration/Service/ProgramCampusEligibility.php:124
+msgid "Program cohort campus"
+msgstr ""
+
+#: src/Domain/Registration/Service/ProgramCampusEligibility.php:127
+msgid "Ask the registrar to review the assigned program cohort and section offering."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationService.php:331
+msgid "The section program policy changed during registration."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationService.php:350
+#: src/Domain/Registration/Service/RegistrationService.php:560
+msgid "Program campus evidence changed. Review registration again."
+msgstr ""
+
+#: src/Domain/Registration/Service/SectionPublicationService.php:1219
+msgid "Publish the program campus rule before selecting this offering."
+msgstr ""
+
+#: src/Domain/Registration/Service/SectionPublicationService.php:1226
+msgid "Assign a campus to this section before publishing its program campus rule."
+msgstr ""

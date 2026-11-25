@@ -208,17 +208,6 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 $row,
                 array_flip(SectionDefinitionV1::FIELDS),
             );
-            if ($row['eligible_program_ids'] !== null) {
-                if (!is_string($row['eligible_program_ids']) || strlen($row['eligible_program_ids']) > 1024) {
-                    throw new CorruptHistoryException();
-                }
-                $facts['eligible_program_ids'] = json_decode(
-                    $row['eligible_program_ids'],
-                    true,
-                    4,
-                    JSON_THROW_ON_ERROR,
-                );
-            }
             if ($row['web_registration'] !== null) {
                 $value = $this->integer($row['web_registration']);
                 if (!in_array($value, [0, 1], true)) {
@@ -241,6 +230,24 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                     throw new CorruptHistoryException();
                 }
                 $facts['contact_hours'] = json_decode($row['contact_hours'], true, 8, JSON_THROW_ON_ERROR);
+            }
+            if ($row['eligible_program_ids'] !== null) {
+                if (!is_string($row['eligible_program_ids']) || strlen($row['eligible_program_ids']) > 1024) {
+                    throw new CorruptHistoryException();
+                }
+                $facts['eligible_program_ids'] = json_decode(
+                    $row['eligible_program_ids'],
+                    true,
+                    4,
+                    JSON_THROW_ON_ERROR,
+                );
+            }
+            if ($row['require_program_campus'] !== null) {
+                $facts['require_program_campus'] = match ($row['require_program_campus']) {
+                    0, '0' => false,
+                    1, '1' => true,
+                    default => throw new CorruptHistoryException(),
+                };
             }
             $facts["capacity"] = $this->integer($facts["capacity"]);
             $facts["fee_minor"] = $this->integer($facts["fee_minor"]);
@@ -286,9 +293,11 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                     $definition->classifications === null ? 1 : 2,
             ] + array_diff_key($definition->definition->data, [
                 'web_registration' => true, 'contact_hours' => true,
-            'continuing_education' => true, 'eligible_program_ids' => true,
+            'continuing_education' => true, 'eligible_program_ids' => true, 'require_program_campus' => true,
             ]) +
-                ['eligible_program_ids' => array_key_exists('eligible_program_ids', $definition->definition->data)
+                ['require_program_campus' => array_key_exists('require_program_campus', $definition->definition->data)
+                    ? (int) $definition->definition->data['require_program_campus'] : null,
+                'eligible_program_ids' => array_key_exists('eligible_program_ids', $definition->definition->data)
                     ? json_encode($definition->definition->data['eligible_program_ids'], JSON_THROW_ON_ERROR) : null,
                 'continuing_education' => array_key_exists('continuing_education', $definition->definition->data)
                     ? json_encode($definition->definition->data['continuing_education'], JSON_THROW_ON_ERROR) : null,
