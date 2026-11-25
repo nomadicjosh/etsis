@@ -65,9 +65,37 @@ try {
         exit(2);
     }
     fwrite(STDOUT, "running\n");
+    require_once __DIR__ . '/AcademicRecoveryServices.php';
+    $academic = new \Tests\Support\AcademicRecoveryServices($fixture);
     $command = $input['command'];
     try {
         $result = match ($input['action']) {
+            'correct_program' => $academic->programs($audit)->commit(
+                new EntityId($command['application']),
+                $command['token']
+            ),
+            'admit' => $fixture->decisionService($audit)->commit(
+                new EntityId($command['application']),
+                $command['token']
+            ),
+            'matriculate' => $fixture->matriculationService($audit)->commit(
+                new EntityId($command['application']),
+                $command['token']
+            ),
+            'resolve_grade' => $fixture->academicCredits($audit)->resolveGradeChange(
+                new EntityId($command['request']),
+                $command['token']
+            ),
+            'correct_transfer' => $academic->transfers($audit)->confirm(
+                new EntityId($command['student']),
+                new EntityId($command['award']),
+                new EntityId($command['review']['operation_id']),
+                new \Domain\Transfer\ValueObject\AwardChange(
+                    $command['change']['kind'], $command['change']['credits'],
+                    $command['change']['grade'], $command['change']['reason']
+                ),
+                $command['review']['revision'], $command['review']['review_token']
+            ),
             'register' => ['id' => $fixture->courseRegistrationService($audit)->register(
                 new EntityId($command['student']),
                 new EntityId($command['section']), true
@@ -106,7 +134,7 @@ try {
             }
         }
         fwrite(STDOUT, json_encode(['state' => 'accepted', 'result' => $result], JSON_THROW_ON_ERROR) . "\n");
-    } catch (DomainException) {
+    } catch (DomainException | \Domain\Shared\Exception\ConcurrentModificationException) {
         fwrite(STDOUT, "{\"state\":\"rejected\"}\n");
     }
 } catch (Throwable) {

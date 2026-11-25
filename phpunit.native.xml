@@ -8,6 +8,7 @@
         <testsuite name="Isolated native workflow qualification">
             <file>tests/Integration/RegistrationConcurrencyTest.php</file>
             <file>tests/Integration/WorkflowRecoveryTest.php</file>
+            <file>tests/Integration/AcademicAdmissionsRecoveryTest.php</file>
         </testsuite>
     </testsuites>
 </phpunit>

@@ -234,7 +234,10 @@ final class WorkflowRecoveryFixture
             'sis_work_pursuit_scopes', 'sis_student_activity', 'sis_primary_program_streams',
             'sis_persons', 'sis_students', 'sis_student_programs', 'sis_account_entries', 'sis_account_entry_heads',
             'sis_student_accounts', 'sis_account_balances', 'sis_course_drop_receipts', 'sis_waitlist_state',
-            'sis_waitlist_entries', 'sis_registration_updates', 'sis_registration_batches', 'sis_audit'] as $table
+            'sis_waitlist_entries', 'sis_registration_updates', 'sis_registration_batches',
+            'sis_applications', 'sis_application_intake', 'sis_application_revisions', 'sis_admission_updates',
+            'sis_form_submissions', 'sis_grade_change_requests', 'sis_transfer_awards',
+            'sis_transfer_award_changes', 'sis_transfer_credit_streams', 'sis_audit'] as $table
         ) {
             $rows = $this->sis->sql->rows($table);
             $encoded = array_map(static fn (array $row): string => json_encode($row, JSON_THROW_ON_ERROR), $rows);

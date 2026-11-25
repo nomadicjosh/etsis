@@ -1,6 +1,6 @@
-# Registration and finance recovery qualification
+# Workflow recovery qualification
 
-Implemented November 24, 2026. The focused recovery suite exercises real registration, publication, academic, waitlist, billing, drop and recorded-refund services across separate PHP processes. It terminates a worker with a POSIX kill signal before commit or after commit but before its reply. The default tests use disposable fictional SQLite databases. The same ten recovery/contention cases now also pass in the [isolated native MariaDB runner](native-workflow-qualification.md), which copies installed schema definitions and seeds only fictional rows. Neither mode uses configured application records as fixtures.
+Implemented November 24, 2026. The focused recovery suite exercises real registration, publication, academic, waitlist, billing, drop and recorded-refund services across separate PHP processes. It terminates a worker with a POSIX kill signal before commit or after commit but before its reply. The default tests use disposable fictional SQLite databases. The original ten recovery/contention cases passed on isolated MariaDB; the [native PostgreSQL runner](native-workflow-qualification.md) now qualifies twenty selected cases, including admissions, matriculation, academic approvals and transfer recovery. It copies installed schema definitions and seeds only fictional rows. Neither mode uses configured application records as fixtures.
 
 The separate [independent journal checkpoint workflow](history-checkpoint-recovery.md) now detects an older valid restored journal inventory and qualifies mixed event-key recovery. It supplements these process-loss checks; full database, projection and encrypted-artifact backup/restore acceptance remains open.
 
@@ -17,6 +17,14 @@ The separate [independent journal checkpoint workflow](history-checkpoint-recove
 | Competing full-refund confirmations overlap and the first process is terminated. | One accepted refund consumes the source payment once; the interrupted competing proof cannot spend it again. |
 
 Published-course and selected-offering cases use genuine protected publications and their normal selection services. The comparisons include protected journal, stream/operation receipts, enrollment/credit/pursuit references, student/activity projections, account-entry/balance projections, waitlist notices and audit metadata. Private fixture comparisons use counts and fingerprints. These checks supplement the existing ordinary final-seat, authorization, stale-review, pricing and transaction-rollback tests.
+
+## Admissions, academic approvals and transfer recovery
+
+The connected [native workflow guide](native-workflow-qualification.md#admissions-and-academic-recovery) describes nine additional cases in `AcademicAdmissionsRecoveryTest`. Direct application program corrections, acceptance and matriculation each roll back fully after a staged process is terminated, preserve the canonical person/original submission and retain their exact accepted receipts after later decisions. Duplicate concurrent matriculation returns one student/pursuit.
+
+Initial final grades remain unchanged while an independent correction request is pending. Approval of a grade or combined academic-unit correction survives process loss without partial request/credit/history updates. Competing officers cannot apply one correction twice; termination of the first allows the second to proceed. Grade/unit corrections preserve original registered quantities, accepted offering references and financial facts. Transfer amendments preserve their accepted course/grade/unit facts; an original retry after a subsequent void cannot restore the earlier award.
+
+These cases use the existing worker/private pipes, ordinary services and fingerprint comparisons. Expected stale-version conflicts have a fixed rejected protocol result; corrupt/storage/unexpected failures still fail the worker. This does not change application behavior, issue a credential, repair projections, send messages or perform external cash movement.
 
 ## Registration, payment, early drop and refund
 
@@ -43,7 +51,9 @@ XDEBUG_MODE=off timeout 35s nice -n 19 "$ETSIS_TEST_PHP" -d memory_limit=128M \
     vendor/bin/phpunit tests/Integration/WorkflowRecoveryTest.php
 ```
 
-The eight cases use at most two active child workers, each capped at 96 MiB and ten seconds. Protocol waits stop after four seconds and SQLite busy waits after three. The parent uses a private directory with mode `0700` and creates the database with a restrictive umask. Fictional protection keys and review proofs pass through private stdin, never command arguments, jobs or logs. Workers emit fixed protocol phases and minimized fictional results; provider exceptions remain out of their output. Teardown stops remaining children and removes database/journal/WAL artifacts. No scheduled worker, application command, report, schema change or external service is added.
+The original eight recovery cases and the nine admissions/academic cases use at most two active child workers, each capped at 96 MiB and ten seconds. Protocol waits stop after four seconds and SQLite busy waits after three. The parent uses a private directory with mode `0700` and creates the database with a restrictive umask. Fictional protection keys and review proofs pass through private stdin, never command arguments, jobs or logs. Workers emit fixed protocol phases and minimized fictional results; provider exceptions remain out of their output. Teardown stops remaining children and removes database/journal/WAL artifacts. No scheduled worker, application command, report, schema change or external service is added.
+
+Run `tests/Integration/AcademicAdmissionsRecoveryTest.php` with the same interpreter and bounds for the nine admissions/academic scenarios. The native configuration also includes the three registration/stream-position contention cases.
 
 The 25-student check exercises the current synchronous selection limit. Larger populations, long histories, other native engines/versions, fresh migration installation, host/power failure, backup restoration and institution-led acceptance remain open. The selected MariaDB and PostgreSQL results, the shared native runner and exact remaining limits are described in the [native qualification guide](native-workflow-qualification.md). Process termination is not a substitute for those checks.
 
