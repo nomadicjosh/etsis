@@ -54,9 +54,15 @@
                 const previous = button(t.previous, async () => { after = stack.pop(); await load(); }, 'arrow-left');
                 const more = button(t.more, async () => { stack.push(after); after = current.next_after; await load(); });
                 const add = button(t.add, () => { if (!creation) create(); creation.hidden = false; creation.querySelector('input').focus(); }, 'calendar2-plus', true);
+                const recurring = button(t.recurring, () => {
+                    controls.classList.add('d-none'); editor.hidden = true;
+                    return window.mountAdvisingRecurringAvailability({ root: output, owner: root, node, request, labels: t,
+                        button, field, work, status, endpoint, timezone: current.timezone, submitClass: portal ? 'campus-button' : 'btn-primary',
+                        back: async () => { controls.classList.remove('d-none'); editor.hidden = false; await load(); recurring.focus(); } });
+                }, 'calendar2-week');
                 const returnControl = back ? button(t.back_advisors, back, 'arrow-left') : null;
                 if (returnControl) returnControl.dataset.availabilityReturn = '';
-                controls.append(...(returnControl ? [returnControl] : []), refresh, switcher, previous, more, add);
+                controls.append(...(returnControl ? [returnControl] : []), refresh, switcher, previous, more, add, recurring);
                 root.prepend(node('h3', { class: 'h5' }, t.title), node('p', { class: 'form-text' }, t.intro), controls, editor);
                 function create() {
                     createId ||= current.new_id;
@@ -84,7 +90,7 @@
                     const card = node('article', { class: 'border rounded bg-white p-3 mb-3 text-break' },
                         node('h4', { class: 'h6' }, `${item.time.start.replace('T', ' ')} – ${item.time.end.slice(11)}`),
                         node('p', { class: 'form-text' }, `${item.time.timezone} · ${t.minutes}: ${item.slot_minutes}`),
-                        node('p', {}, t.status[item.status]), node('p', { style: 'white-space:pre-wrap;overflow-wrap:anywhere' }, item.message));
+                        node('p', {}, item.status === 'open' && item.expired ? t.expired : t.status[item.status]), node('p', { style: 'white-space:pre-wrap;overflow-wrap:anywhere' }, item.message));
                     if (item.close_reason) card.append(node('p', { style: 'white-space:pre-wrap;overflow-wrap:anywhere' }, item.close_reason));
                     if (item.status === 'open') {
                         const form = node('form');

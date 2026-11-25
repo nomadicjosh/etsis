@@ -3,7 +3,6 @@
 declare(strict_types=1);
 
 // phpcs:disable Generic.WhiteSpace.ScopeIndent -- Follow the enclosing HTML indentation in this mixed template.
-
 use Codefy\Framework\Proxy\Codefy;
 use Vihzhuo\Core\ThemeContext;
 
@@ -107,6 +106,7 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
             require dirname(__DIR__, 5) . '/resources/views/shared/advising-availability-labels.php',
             JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR,
         ) ?></script>
+        <script defer src="/assets/js/advising-recurring-availability.js"></script>
         <script defer src="/assets/js/advising-availability.js"></script>
         <script defer src="/assets/js/advising-appointments.js"></script>
         <script defer src="/assets/js/advising-checkins.js"></script>

@@ -43,7 +43,6 @@ if ($app->router->match($appointmentCsrf)->getStatusCode() !== 403) {
 }
 $sis->access->actor = $advisingActor;
 $sis->access->staff = true;
-
 // Calendar summaries omit conversation text; owner and correction routes keep their separate duties.
 $appointmentCalendar = $checkInPost($appointmentBase . 'calendar/', ['date' => $appointmentDay,
     'include_cancelled' => true]);
@@ -95,7 +94,6 @@ foreach ([$appointmentBase . 'calendar/', '/portal/api/advising-appointments/cal
 if ($appointmentHistory !== $sis->sql->rows('sis_history_events')) {
     throw new RuntimeException('An attendance correction fabricated an authoritative academic event.');
 }
-
 // Availability and self-booking use real private routes and canonical owner/host identities.
 $availabilityBase = '/sis/advising-availability/' . $advisingPerson->id->value . '/';
 $availabilityPage = $checkInPost($availabilityBase . 'list/', []);
@@ -149,4 +147,50 @@ foreach (
 $sis->access->actor = $advisingActor;
 if ($appointmentHistory !== $sis->sql->rows('sis_history_events')) {
     throw new RuntimeException('Availability or self-booking fabricated academic history.');
+}
+// A reviewed finite recurrence uses the same protected transport and accepts no owner management authority.
+$recurringFrom = $sis->clock->now()->modify('+2 days');
+$recurringInput = ['from' => $recurringFrom->format('Y-m-d'), 'through' => $recurringFrom->modify(
+    '+14 days'
+)->format('Y-m-d'),
+    'start_time' => '16:00', 'end_time' => '17:00', 'weekdays' => [(int) $recurringFrom->format('N')],
+    'interval_weeks' => 1, 'excluded_dates' => [], 'timezone' => $availabilityPage['timezone'],
+    'slot_minutes' => 30, 'message' => 'Fictional recurring office instructions.'];
+$recurringReview = $checkInPost($availabilityBase . 'review-series/', $recurringInput);
+$recurringCommand = $recurringInput + array_intersect_key($recurringReview, array_flip(['series_id',
+    'window_ids', 'revision', 'review_token']));
+$recurringCreated = $checkInPost($availabilityBase . 'create-series/', $recurringCommand);
+$recurringView = $checkInPost($availabilityBase . 'series-view/', ['series_id' => $recurringCreated['id']]);
+if (count($recurringView['windows']) !== 3 || str_contains(json_encode($recurringView), 'host_user_id')) {
+    throw new RuntimeException('Recurring availability providers failed to return the exact private dated offers.');
+}
+$sis->access->actor = $sis->admissions->person($advisingStudent->personId)->ownerUserId;
+if (
+    $teachingPost('/portal/api/advising-availability/series-view/', ['series_id' =>
+    $recurringCreated['id']])->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Owner identity inherited advisor availability management.');
+}
+$sis->access->actor = $advisingActor;
+$recurringCloseReview = $checkInPost($availabilityBase . 'review-series-close/', ['series_id' =>
+    $recurringCreated['id'], 'message' => 'Fictional recurring closure.']);
+$recurringClose = array_intersect_key($recurringCloseReview, array_flip(['series_id', 'version',
+    'window_ids', 'revision', 'review_token']));
+$recurringClose['message'] = $recurringCloseReview['reason'];
+$checkInPost($availabilityBase . 'close-series/', $recurringClose);
+$recurringRetry = $checkInPost($availabilityBase . 'create-series/', $recurringCommand);
+if ($recurringCreated !== $recurringRetry || $appointmentHistory !== $sis->sql->rows('sis_history_events')) {
+    throw new RuntimeException('Recurring offer retry changed its original result or academic history.');
+}
+foreach (
+    ['series-list', 'series-view', 'review-series', 'create-series', 'review-series-close',
+    'close-series'] as $action
+) {
+    $probe = $get->withMethod('POST')->withUri(new \Laminas\Diactoros\Uri(
+        'https://campus.example.invalid' . $availabilityBase . $action . '/'
+    ))
+        ->withoutHeader('X-CSRF-Token')->withParsedBody([]);
+    if ($app->router->match($probe)->getStatusCode() !== 403) {
+        throw new RuntimeException('A recurring availability route bypassed framework CSRF.');
+    }
 }

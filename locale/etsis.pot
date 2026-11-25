@@ -6637,3 +6637,180 @@ msgstr ""
 #: src/Infrastructure/Persistence/Repository/SqlAdvisingAvailabilityRepository.php:131
 msgid "This availability reference was already used."
 msgstr ""
+
+msgid "Expired availability"
+msgstr ""
+
+msgid "Recurring availability"
+msgstr ""
+
+msgid ""
+"Offer a finite weekly pattern as explicit dated windows. Review every window "
+"before confirming."
+msgstr ""
+
+msgid "Add recurring availability"
+msgstr ""
+
+msgid "Refresh recurring offers"
+msgstr ""
+
+msgid "Back to availability"
+msgstr ""
+
+msgid "Back to recurring offers"
+msgstr ""
+
+msgid "View recurring offer"
+msgstr ""
+
+msgid "Dated windows"
+msgstr ""
+
+msgid "No recurring offers on this page."
+msgstr ""
+
+msgid ""
+"Choose inclusive dates and weekdays. Repeats count from the Monday of the "
+"first selected week. Offer at most twenty windows together; each uses the "
+"same instructions and equal appointment slots."
+msgstr ""
+
+msgid "First pattern date"
+msgstr ""
+
+msgid "Last pattern date"
+msgstr ""
+
+msgid "Daily availability starts at"
+msgstr ""
+
+msgid "Daily availability ends at"
+msgstr ""
+
+msgid "Availability weekdays"
+msgstr ""
+
+msgid "Repeat every number of weeks"
+msgstr ""
+
+msgid "Skipped availability dates"
+msgstr ""
+
+msgid ""
+"Optional: one ISO date per line, such as 2026-12-25. Each date must be a "
+"selected occurrence within the pattern."
+msgstr ""
+
+msgid "Monday"
+msgstr ""
+
+msgid "Tuesday"
+msgstr ""
+
+msgid "Wednesday"
+msgstr ""
+
+msgid "Thursday"
+msgstr ""
+
+msgid "Friday"
+msgstr ""
+
+msgid "Saturday"
+msgstr ""
+
+msgid "Sunday"
+msgstr ""
+
+msgid "Review dated windows"
+msgstr ""
+
+msgid ""
+"Your draft changed while the review loaded. Review the current draft again."
+msgstr ""
+
+msgid ""
+"All listed windows are offered together. Conflicts, limits and current "
+"access are checked again at confirmation. This does not book any "
+"appointments."
+msgstr ""
+
+msgid "Confirm recurring offer"
+msgstr ""
+
+msgid "Recurring availability offered."
+msgstr ""
+
+msgid "Review remaining-window closure"
+msgstr ""
+
+msgid "Close listed windows"
+msgstr ""
+
+msgid ""
+"No open unexpired windows remain for series closure. Earlier individual "
+"closures and expired windows retain their records."
+msgstr ""
+
+msgid "Offered"
+msgstr ""
+
+msgid "Remaining windows closed"
+msgstr ""
+
+msgid "Review distinct dated windows before offering them."
+msgstr ""
+
+msgid "This recurring availability action was accepted with different details."
+msgstr ""
+
+msgid "Recurring availability changed. Review the remaining windows again."
+msgstr ""
+
+msgid "Review a complete availability pattern."
+msgstr ""
+
+msgid "Use the supplied date and time fields."
+msgstr ""
+
+msgid "Choose valid weekdays, frequency and skipped dates."
+msgstr ""
+
+msgid "Offer at most twenty dated windows together. Shorten the pattern."
+msgstr ""
+
+msgid "Recurring availability not found."
+msgstr ""
+
+msgid "Recurring availability changed before completion. Review it again."
+msgstr ""
+
+msgid "The institution timezone changed. Review the pattern again."
+msgstr ""
+
+msgid "Use at most 100 upcoming availability windows per advisor."
+msgstr ""
+
+msgid ""
+"A recurring window conflicts or exceeds the daily limit. Review the pattern "
+"again."
+msgstr ""
+
+msgid "The recurring offer changed after review. Review it again."
+msgstr ""
+
+msgid "Remaining availability changed after review. Review closure again."
+msgstr ""
+
+msgid "A listed window expired. Review remaining-window closure again."
+msgstr ""
+
+msgid "Use a shorter recurring availability definition."
+msgstr ""
+
+msgid "This recurring offer reference was already used."
+msgstr ""
+
+msgid "Recurring availability changed. Review it again."
+msgstr ""

@@ -14,7 +14,8 @@ const availabilityWindow = () => ({ id: id(90), status: 'open', version: 0,
 async function fixture(page, channel = 'staff', options = {}) {
     const calls = [], errors = [];
     let windows = options.availabilitySeed ? [availabilityWindow()] : [], bookingRejected = options.staleBooking, closeRejected = options.staleClosure;
-    const booked = new Map();
+    const booked = new Map(), series = new Map();
+    let seriesRejected = options.staleSeries, seriesCloseRejected = options.staleSeriesClose;
     let items = options.seed ? [original()] : channel === 'staff' ? [] : [original()], stale = options.stale, deny = false, sequence = 30;
     page.on('pageerror', e => errors.push(e.message));
     await page.route(channel === 'staff' ? '**/sis/**' : '**/portal/api/**', async route => {
@@ -33,7 +34,37 @@ async function fixture(page, channel = 'staff', options = {}) {
         else if (path === '/sis/advising-availability/candidates/') result = { items: [{ id: host, given_name: 'Fictional', family_name: 'Advisor' }], next_after: null };
         else if (path.includes('/advising-availability/')) {
             if (deny) return route.fulfill({ status: 403, json: { error: 'Fictional availability access ended.' } });
-            if (path.endsWith('/list/')) result = { items: windows.filter(w => data.finished ? w.status === 'closed' : w.status === 'open'),
+            if (path.endsWith('/series-list/')) result = { items: [...series.values()].map(s => ({ id: s.id, from: s.pattern.from, through: s.pattern.through, count: s.windows.length, status: s.status })), next_after: null, can_create: true };
+            else if (path.endsWith('/review-series/')) {
+                const pattern = Object.fromEntries(['from', 'through', 'start_time', 'end_time', 'weekdays', 'interval_weeks', 'excluded_dates', 'timezone'].map(key => [key, data[key]]));
+                const slots = ['2026-08-11', '2026-08-18', '2026-08-25'].filter(date => !data.excluded_dates.includes(date))
+                    .map(date => ({ id: id(sequence++), time: time(date + 'T' + data.start_time, date + 'T' + data.end_time) }));
+                result = { pattern, series_id: id(sequence++), window_ids: slots.map(w => w.id), windows: slots,
+                    slot_minutes: data.slot_minutes, message: data.message, revision: 'fictional-revision', review_token: 'fictional-review-token' };
+            } else if (path.endsWith('/create-series/')) {
+                if (seriesRejected) { seriesRejected = false; return route.fulfill({ status: 409, json: { error: 'Fictional recurring offer changed. Review it again.' } }); }
+                if (!series.has(data.series_id)) {
+                    const dates = ['2026-08-11', '2026-08-18', '2026-08-25'].filter(date => !data.excluded_dates.includes(date));
+                    const members = data.window_ids.map((value, i) => ({ ...availabilityWindow(), id: value, series_id: data.series_id,
+                        time: time(dates[i] + 'T' + data.start_time, dates[i] + 'T' + data.end_time), message: data.message, slot_minutes: data.slot_minutes }));
+                    windows.push(...members);
+                    series.set(data.series_id, { id: data.series_id, pattern: Object.fromEntries(['from', 'through', 'start_time', 'end_time', 'weekdays', 'interval_weeks', 'excluded_dates', 'timezone'].map(key => [key, data[key]])),
+                        message: data.message, slot_minutes: data.slot_minutes, windows: members, version: 0, status: 'open' });
+                }
+                result = { id: data.series_id, version: 0, status: 'open', window_ids: data.window_ids };
+            } else if (path.endsWith('/series-view/')) {
+                const s = series.get(data.series_id);
+                result = { series: s, windows: s.windows, remaining_ids: s.status === 'open' ? s.windows.filter(w => w.status === 'open').map(w => w.id) : [] };
+            } else if (path.endsWith('/review-series-close/')) {
+                const s = series.get(data.series_id), remaining = s.windows.filter(w => w.status === 'open');
+                result = { series_id: s.id, version: s.version, window_ids: remaining.map(w => w.id), reason: data.message,
+                    windows: remaining, revision: 'fictional-close-revision', review_token: 'fictional-close-token' };
+            } else if (path.endsWith('/close-series/')) {
+                if (seriesCloseRejected) { seriesCloseRejected = false; return route.fulfill({ status: 409, json: { error: 'Fictional remaining windows changed.' } }); }
+                const s = series.get(data.series_id);
+                for (const w of s.windows.filter(w => data.window_ids.includes(w.id))) { w.status = 'closed'; w.version = 1; w.close_reason = data.message; }
+                s.status = 'closed'; s.version = 1; result = { id: s.id, version: 1, status: 'closed', window_ids: data.window_ids };
+            } else if (path.endsWith('/list/')) result = { items: windows.filter(w => data.finished ? w.status === 'closed' : w.status === 'open'),
                 next_after: null, host_name: 'Fictional Advisor', can_create: true, new_id: id(sequence++), timezone: 'America/Los_Angeles' };
             else if (path.endsWith('/create/')) {
                 const w = { ...availabilityWindow(), id: data.window_id, time: time(data.start, data.end), slot_minutes: data.slot_minutes, message: data.message };
@@ -415,6 +446,101 @@ test('advisor manages personal availability within the campus theme', async ({ p
     await page.getByRole('button', { name: 'Save availability', exact: true }).click();
     await expect(page.locator('#campus-service-content')).toContainText('Availability saved.');
     expect(f.calls.some(c => c.path === '/portal/api/advising-availability/create/')).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+async function recurringDraft(page, channel = 'staff') {
+    if (channel === 'staff') {
+        await page.goto('/admin/'); await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+        await workspaceTool(page, 'Advisor availability');
+        await page.getByRole('button', { name: 'Manage availability', exact: true }).click();
+    } else {
+        await page.goto('/portal/student/advising/');
+        await page.getByRole('button', { name: 'Manage my availability', exact: true }).click();
+    }
+    await page.getByRole('button', { name: 'Recurring availability', exact: true }).click();
+    await page.getByRole('button', { name: 'Add recurring availability', exact: true }).click();
+    await page.getByLabel('First pattern date', { exact: true }).fill('2026-08-11');
+    await page.getByLabel('Last pattern date', { exact: true }).fill('2026-08-25');
+    await page.getByLabel('Tuesday', { exact: true }).check();
+    await page.getByLabel('Meeting instructions visible to students', { exact: true }).fill('Fictional recurring <b>instructions</b>.');
+}
+
+test('office reviews recurring windows, keeps the draft and retries the exact confirmed offer', async ({ page }) => {
+    const f = await fixture(page, 'staff', { staleSeries: true });
+    await recurringDraft(page);
+    await page.getByLabel('Skipped availability dates', { exact: true }).fill('2026-08-18');
+    await page.getByRole('button', { name: 'Review dated windows', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Confirm recurring offer', exact: true })).toBeVisible();
+    await expect(page.locator('#drawer-body .list-group-item')).toHaveCount(2);
+    await page.getByRole('button', { name: 'Keep editing', exact: true }).click();
+    await expect(page.getByLabel('Skipped availability dates', { exact: true })).toHaveValue('2026-08-18');
+    await expect(page.getByLabel('Tuesday', { exact: true })).toBeChecked();
+    await page.getByRole('button', { name: 'Review dated windows', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm recurring offer', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional recurring offer changed.');
+    await page.getByRole('button', { name: 'Confirm recurring offer', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Recurring availability offered.');
+    const commands = f.calls.filter(c => c.path.endsWith('/create-series/'));
+    expect(commands).toHaveLength(2); expect(commands[0].data).toEqual(commands[1].data);
+    expect(commands.every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    await page.getByRole('button', { name: 'Back to recurring offers', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'View recurring offer', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Back to availability', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Add availability', exact: true })).toBeVisible();
+    expect(f.errors).toEqual([]);
+});
+
+test('advisor reviews and closes remaining windows with branded keyboard and phone controls', async ({ page }) => {
+    const f = await fixture(page, 'advisor', { staleSeriesClose: true });
+    await recurringDraft(page, 'advisor');
+    await accessible(page);
+    await page.getByRole('button', { name: 'Review dated windows', exact: true }).click();
+    await expect(page.locator('#campus-service-content b')).toHaveCount(0);
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: '/tmp/etsis-recurring-availability-phone.png', fullPage: true });
+    await page.getByRole('button', { name: 'Confirm recurring offer', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.locator('#campus-service-content')).toContainText('Recurring availability offered.');
+    await page.getByLabel('Reason for closing availability', { exact: true }).fill('Fictional remaining closure.');
+    await page.getByRole('button', { name: 'Review remaining-window closure', exact: true }).click();
+    await page.getByRole('button', { name: 'Close listed windows', exact: true }).click();
+    await expect(page.locator('#campus-service-content')).toContainText('Fictional remaining windows changed.');
+    await page.getByRole('button', { name: 'Keep editing', exact: true }).click();
+    await expect(page.getByLabel('Reason for closing availability', { exact: true })).toHaveValue('Fictional remaining closure.');
+    await page.getByRole('button', { name: 'Review remaining-window closure', exact: true }).click();
+    await page.getByRole('button', { name: 'Close listed windows', exact: true }).click();
+    await expect(page.locator('#campus-service-content')).toContainText('Existing appointments remain unchanged.');
+    await expect(page.getByRole('button', { name: 'Review remaining-window closure', exact: true })).toHaveCount(0);
+    await accessible(page); expect(f.errors).toEqual([]);
+});
+
+test('a changed pattern draft rejects its delayed review', async ({ page }) => {
+    const f = await fixture(page, 'staff');
+    await recurringDraft(page);
+    let release, began;
+    const gate = new Promise(resolve => { release = resolve; }), started = new Promise(resolve => { began = resolve; });
+    await page.route('**/review-series/', async route => { began(); await gate; await route.fallback(); });
+    await page.getByRole('button', { name: 'Review dated windows', exact: true }).click(); await started;
+    await page.getByLabel('Meeting instructions visible to students', { exact: true }).fill('Fictional changed draft.');
+    release();
+    await expect(page.locator('#drawer-body')).toContainText('Your draft changed while the review loaded.');
+    await expect(page.getByRole('button', { name: 'Confirm recurring offer', exact: true })).toHaveCount(0);
+    expect(f.calls.some(c => c.path.endsWith('/create-series/'))).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+test('recurring availability access loss removes draft and review details', async ({ page }) => {
+    const f = await fixture(page, 'staff');
+    await recurringDraft(page);
+    await page.getByRole('button', { name: 'Review dated windows', exact: true }).click();
+    f.deny();
+    await page.getByRole('button', { name: 'Confirm recurring offer', exact: true }).click();
+    await expect(page.locator('#drawer-body')).not.toContainText('Fictional recurring <b>instructions</b>.');
+    await expect(page.getByRole('button', { name: 'Confirm recurring offer', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Back to advisor search', exact: true }).click();
+    await expect(page.getByLabel('Find an advisor', { exact: true })).toBeVisible();
     expect(f.errors).toEqual([]);
 });
 

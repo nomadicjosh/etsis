@@ -21,7 +21,6 @@ final class AdvisingAvailability implements JsonSerializable
     private function __construct(#[\SensitiveParameter] private array $data)
     {
     }
-
     public static function create(
         EntityId $id,
         EntityId $host,
@@ -31,6 +30,7 @@ final class AdvisingAvailability implements JsonSerializable
         int $minutes,
         #[\SensitiveParameter] string $message,
         string $at,
+        ?EntityId $series = null,
     ): self {
         self::times($time, $minutes);
         $time->requireFuture(new DateTimeImmutable($at));
@@ -40,19 +40,24 @@ final class AdvisingAvailability implements JsonSerializable
             'time' => $time->facts(), 'slot_minutes' => $minutes, 'message' => $message,
             'version' => 0, 'status' => 'open', 'created_at' => $at, 'closed_at' => null,
             'close_reason' => null, 'receipts' => []]);
+        if ($series !== null) {
+            $item->data['series_id'] = $series->value;
+        }
         $item->receipt('create', $actor, $item->creationIntent($time, $minutes, $message));
         return $item;
     }
-
     public function creationIntent(AppointmentTime $time, int $minutes, #[\SensitiveParameter] string $message): string
     {
+        $intent = [$this->data['id'], $this->data['host_person_id'],
+            $this->data['host_user_id'], $time->facts(), $minutes, AdvisingAppointment::message($message)];
+        if (isset($this->data['series_id'])) {
+            $intent[] = $this->data['series_id'];
+        }
         return hash('sha256', json_encode(
-            [$this->data['id'], $this->data['host_person_id'],
-            $this->data['host_user_id'], $time->facts(), $minutes, AdvisingAppointment::message($message)],
+            $intent,
             JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         ));
     }
-
     public function retry(string $action, EntityId $actor, string $intent): ?array
     {
         $receipt = $this->data['receipts'][$action] ?? null;
@@ -66,7 +71,6 @@ final class AdvisingAvailability implements JsonSerializable
         }
         return $receipt['result'];
     }
-
     public function close(EntityId $actor, int $version, #[\SensitiveParameter] string $reason, string $at): array
     {
         $reason = AdvisingAppointment::message($reason);
@@ -83,14 +87,12 @@ final class AdvisingAvailability implements JsonSerializable
         $this->data['close_reason'] = $reason;
         return $this->receipt('close', $actor, $intent);
     }
-
     private function receipt(string $action, EntityId $actor, string $intent): array
     {
         $result = ['id' => $this->data['id'], 'version' => $this->data['version'], 'status' => $this->data['status']];
         $this->data['receipts'][$action] = ['actor_id' => $actor->value, 'intent' => $intent, 'result' => $result];
         return $result;
     }
-
     /** @return list<AppointmentTime> */
     public static function times(AppointmentTime $time, int $minutes): array
     {
@@ -117,26 +119,23 @@ final class AdvisingAvailability implements JsonSerializable
         }
         return $slots;
     }
-
     /** @return list<AppointmentTime> */
     public function slots(): array
     {
         $t = $this->data['time'];
         return self::times(new AppointmentTime($t['start'], $t['end'], $t['timezone']), $this->data['slot_minutes']);
     }
-
     public function facts(): array
     {
         return $this->data;
     }
-
     public function view(): array
     {
         return array_intersect_key($this->data, array_flip([
-            'id', 'time', 'slot_minutes', 'message', 'version', 'status', 'created_at', 'closed_at', 'close_reason',
+            'id', 'time', 'slot_minutes', 'message', 'version', 'status', 'created_at', 'closed_at',
+                'close_reason', 'series_id',
         ]));
     }
-
     public static function restore(#[\SensitiveParameter] array $data): self
     {
         try {
@@ -164,7 +163,8 @@ final class AdvisingAvailability implements JsonSerializable
                 new AppointmentTime($t['start'], $t['end'], $t['timezone']),
                 $data['slot_minutes'],
                 $data['message'],
-                $data['created_at']
+                $data['created_at'],
+                isset($data['series_id']) ? new EntityId($data['series_id']) : null,
             );
             if ($data['closed_at'] !== null) {
                 $item->close(
@@ -182,12 +182,10 @@ final class AdvisingAvailability implements JsonSerializable
             throw new CorruptHistoryException();
         }
     }
-
     public function jsonSerialize(): array
     {
         return $this->__debugInfo();
     }
-
     public function __debugInfo(): array
     {
         return ['advising_availability' => '[private working record]'];

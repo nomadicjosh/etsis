@@ -213,6 +213,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlStudentStandingRepository::class,
             \Domain\Advising\Repository\AdvisingAvailabilityRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlAdvisingAvailabilityRepository::class,
+            \Domain\Advising\Repository\AdvisingAvailabilitySeriesRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlAdvisingAvailabilitySeriesRepository::class,
             \Domain\Advising\Repository\AdvisingAppointmentRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlAdvisingAppointmentRepository::class,
             \Domain\Advising\Repository\AdvisingCheckInRepository::class =>
@@ -368,7 +370,6 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlNavigationRepository::class,
             \Domain\Portal\Repository\PortalRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlPortalRepository::class,
-
             \Domain\DegreeAudit\Repository\AcademicInputRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlAcademicInputRepository::class,
             \Domain\DegreeAudit\Repository\AcademicWorkRepository::class =>

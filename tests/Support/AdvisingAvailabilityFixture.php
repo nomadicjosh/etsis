@@ -17,14 +17,12 @@ final class AdvisingAvailabilityFixture
 {
     public AdvisingAppointmentsFixture $appointments;
     public SqlAdvisingAvailabilityRepository $records;
-
     public function __construct()
     {
         require_once __DIR__ . '/AdvisingAppointmentsFixture.php';
         $this->appointments = $f = new AdvisingAppointmentsFixture();
         $this->records = new SqlAdvisingAvailabilityRepository($f->sis->sql, $f->sis->dropCipher);
     }
-
     public function service(?AuditTrail $audit = null): AdvisingAvailabilityService
     {
         $s = $this->appointments->sis;
@@ -37,10 +35,11 @@ final class AdvisingAvailabilityFixture
             new SqlAccessRepository($s->sql),
             $s->transactions,
             $audit ?? $s->audit,
-            $s->clock
+            $s->clock,
+            new \Infrastructure\Persistence\Repository\SqlAdvisingAvailabilitySeriesRepository($s->sql, $s->dropCipher),
+            new \Domain\Shared\Service\ReviewProof($s->dropCipher, $s->clock),
         );
     }
-
     public function offer(?EntityId $id = null, string $channel = 'staff', string $date = '2026-08-11'): array
     {
         $f = $this->appointments;

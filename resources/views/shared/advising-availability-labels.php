@@ -58,5 +58,43 @@ return [
         'Advising availability access is unavailable. Reopen the program after your access is restored.'
     ),
     'timezone' => trans_html('Institution timezone'),
+    'expired' => trans_html('Expired availability'),
+    'recurring' => trans_html('Recurring availability'),
+    'recurring_intro' => trans_html(
+        'Offer a finite weekly pattern as explicit dated windows. Review every window before confirming.'
+    ),
+    'add_recurring' => trans_html('Add recurring availability'),
+    'refresh_recurring' => trans_html('Refresh recurring offers'),
+    'back_availability' => trans_html('Back to availability'),
+    'back_recurring' => trans_html('Back to recurring offers'),
+    'view_recurring' => trans_html('View recurring offer'),
+    'window_count' => trans_html('Dated windows'),
+    'no_recurring' => trans_html('No recurring offers on this page.'),
+    'pattern_help' => trans_html('Choose inclusive dates and weekdays. Repeats count from the Monday of the first '
+        . 'selected week. Offer at most twenty windows together; each uses the same '
+        . 'instructions and equal appointment slots.'),
+    'from' => trans_html('First pattern date'),
+    'through' => trans_html('Last pattern date'),
+    'start_time' => trans_html('Daily availability starts at'),
+    'end_time' => trans_html('Daily availability ends at'),
+    'choose_days' => trans_html('Availability weekdays'),
+    'every_weeks' => trans_html('Repeat every number of weeks'),
+    'excluded_dates' => trans_html('Skipped availability dates'),
+    'excluded_help' => trans_html('Optional: one ISO date per line, such as 2026-12-25. Each date must be a selected '
+        . 'occurrence within the pattern.'),
+    'weekdays' => [trans_html('Monday'), trans_html('Tuesday'), trans_html('Wednesday'), trans_html('Thursday'),
+        trans_html('Friday'), trans_html('Saturday'), trans_html('Sunday')],
+    'review_pattern' => trans_html('Review dated windows'),
+    'draft_changed' => trans_html('Your draft changed while the review loaded. Review the current draft again.'),
+    'confirm_help' => trans_html('All listed windows are offered together. Conflicts, limits and current access are '
+        . 'checked again at confirmation. This does not book any appointments.'),
+    'confirm_offer' => trans_html('Confirm recurring offer'),
+    'keep_editing' => trans_html('Keep editing'),
+    'recurring_saved' => trans_html('Recurring availability offered.'),
+    'review_remaining' => trans_html('Review remaining-window closure'),
+    'confirm_remaining' => trans_html('Close listed windows'),
+    'no_remaining' => trans_html('No open unexpired windows remain for series closure. Earlier individual closures '
+        . 'and expired windows retain their records.'),
+    'series_status' => ['open' => trans_html('Offered'), 'closed' => trans_html('Remaining windows closed')],
     'status' => ['open' => trans_html('Open for booking'), 'closed' => trans_html('Closed to new bookings')],
 ];
