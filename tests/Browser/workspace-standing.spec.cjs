@@ -47,6 +47,7 @@ for (const historical of [false, true]) test(`registrar ${historical ? 'corrects
     await page.getByRole('button', { name: 'Save definition', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText(title);
     await page.getByRole('button', { name: 'Close record', exact: true }).click();
+    await expect(page.locator('#record-drawer')).not.toBeVisible();
     await page.locator('#directory-search').fill('Alex');
     await page.locator('#directory-search').press('Enter');
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();

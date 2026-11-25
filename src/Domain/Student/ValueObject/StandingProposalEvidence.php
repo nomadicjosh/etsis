@@ -22,7 +22,9 @@ final readonly class StandingProposalEvidence implements \JsonSerializable
     {
         try {
             if (
-                count($data) !== count(self::FIELDS) || array_diff(array_keys($data), self::FIELDS) !== []
+                count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 1
+                || array_diff(array_keys($data), [...self::FIELDS, 'scope']) !== []
+                || array_diff(self::FIELDS, array_keys($data)) !== []
                 || strlen(json_encode($data, JSON_THROW_ON_ERROR)) > 1_048_576
                 || !is_int($data['policy_version']) || $data['policy_version'] < 1 || $data['policy_version'] > 2000
                 || !is_array($data['attempts']) || !array_is_list($data['attempts']) || count($data['attempts']) > 500
@@ -43,7 +45,7 @@ final readonly class StandingProposalEvidence implements \JsonSerializable
                 }
             }
             StandingPeriods::date($data['as_of']);
-            $rules = new StandingProposalRules($data['rules']);
+            $rules = $this->effectiveRules();
             if (
                 !is_array($data['calculation']) || count($data['calculation']) !== 3
                 || array_diff(
@@ -116,7 +118,31 @@ final readonly class StandingProposalEvidence implements \JsonSerializable
             $this->data['quality_points_milli'],
             $this->data['gpa_credits_milli']
         );
-        return new StandingProposalRules($this->data['rules'])->band($gpa->milli());
+        return $this->effectiveRules()->band($gpa->milli());
+    }
+
+    private function effectiveRules(): StandingProposalRules
+    {
+        $rules = new StandingProposalRules($this->data['rules']);
+        if (!array_key_exists('scope', $this->data)) {
+            if (array_key_exists('overrides', $rules->facts)) {
+                throw new CorruptHistoryException();
+            }
+            return $rules;
+        }
+        $scope = new StandingProposalScope($this->data['scope']);
+        return new StandingProposalRules($rules->selection($scope)['rules']);
+    }
+
+    public function scopeSummary(): ?array
+    {
+        if (!array_key_exists('scope', $this->data)) {
+            return null;
+        }
+        $scope = new StandingProposalScope($this->data['scope']);
+        $selection = new StandingProposalRules($this->data['rules'])->selection($scope);
+        return ['kind' => $selection['kind'], ...$selection['target'] === null ? []
+            : array_intersect_key($selection['target'], array_flip(['code', 'title']))];
     }
 
     public function routing(string $student, string $pursuit, #[\SensitiveParameter] array $rows): void

@@ -359,7 +359,7 @@ final readonly class StudentStandingService
                 $evidence['gpa_credits_milli']
             );
             $this->staff($actor);
-            return ['standing' => $proof->band(), 'gpa_milli' => $gpa->milli(),
+            return ['standing' => $proof->band(), 'scope' => $proof->scopeSummary(), 'gpa_milli' => $gpa->milli(),
                 'gpa_credits_milli' => $gpa->creditsMilli, 'as_of' => $evidence['as_of'],
                 'policy_publication_id' => $evidence['policy_publication_id'],
                 'policy_version' => $evidence['policy_version'],

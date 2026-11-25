@@ -303,6 +303,12 @@ final class SisFixture
             new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
             new \Infrastructure\Persistence\Repository\SqlStandingProposalPolicyState($this->sql),
             new \Infrastructure\Persistence\Repository\SqlStudentStandingRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlStandingPolicyTargetRepository($this->sql),
+            new \Domain\Catalog\Service\PublishedProgramReader(
+                EventStoreFixture::history($this->connection->queryBuilder()),
+                new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql)
+            ),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
         );
     }
 
@@ -322,6 +328,8 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlStudentStandingRepository($this->sql), $this->clock,
             $this->programStatusLedger(),
             new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            new \Domain\Catalog\Service\PublishedProgramReader($history,
+                new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql)),
         );
     }
 

@@ -831,7 +831,9 @@ return static function (Psr7Router $router): void {
         $load, 'staffLoad',
     ])->name('staff.load.review');
     $standingPolicy = \Application\Http\Controller\StandingProposalPolicyController::class;
-    foreach (['view' => '', 'review' => 'review/', 'publish' => 'publish/'] as $method => $suffix) {
+    foreach (
+        ['view' => '', 'review' => 'review/', 'publish' => 'publish/', 'targets' => 'targets/'] as $method => $suffix
+    ) {
         $router->post('/sis/academic-standing/proposal-policy/' . $suffix, [$standingPolicy, $method])
             ->name('sis.standing.proposal-policy.' . $method);
     }

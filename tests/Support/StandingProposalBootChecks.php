@@ -3,9 +3,12 @@
 declare(strict_types=1);
 
 // Actual providers and private routes, using fictional SQLite records only.
-require_once __DIR__ . '/StandingProposalFixture.php';
-$standingFixture = new \Tests\Support\StandingProposalFixture();
-$standingFixture->work();
+require_once __DIR__ . '/StandingScopeFixture.php';
+$standingScopeFixture = new \Tests\Support\StandingScopeFixture();
+$standingScopeFixture->publish([
+    $standingScopeFixture->override('academic_level', $standingScopeFixture->undergraduate),
+]);
+$standingFixture = $standingScopeFixture->base;
 $httpSis = $standingFixture->sis;
 $kernel->bootstrap();
 require __DIR__ . '/SisHttpFixture.php';
@@ -26,8 +29,19 @@ $sis->access->staff = false;
 foreach ([['sis:standing:configure'], ['sis:student:read'], ['sis:standing:manage', 'sis:student:read']] as $grants) {
     $sis->access->grants = $grants;
     $standingPost($policyBase, [], 403);
+    $standingPost($policyBase . 'targets/', ['kind' => 'program'], 403);
 }
 $sis->access->grants = ['sis:standing:configure', 'sis:student:read'];
+$levels = $standingPost($policyBase . 'targets/', ['kind' => 'academic_level', 'search' => 'UG']);
+$programs = $standingPost($policyBase . 'targets/', ['kind' => 'program']);
+if (
+    ($levels['items'][0]['id'] ?? null) !== $standingScopeFixture->undergraduate->value
+    || !in_array($sis->program->value, array_column($programs['items'], 'id'), true)
+) {
+    throw new RuntimeException('Scoped targets required unrelated catalog authority or lost their type.');
+}
+$standingPost($policyBase . 'targets/', ['kind' => 'department'], 422);
+$standingPost($policyBase . 'targets/', ['kind' => 'academic_level', 'after' => 'invalid'], 422);
 $current = $standingPost($policyBase, []);
 $review = $standingPost($policyBase . 'review/', ['rules' => $current['rules'], 'version' => $current['version'],
     'reason' => 'Fictional configured policy HTTP review.']);
@@ -37,7 +51,10 @@ $sis->access->grants = ['sis:standing:manage', 'sis:student:read', 'sis:audit:re
 $before = $f->facts();
 $proposal = $standingPost($base . 'propose/', []);
 if (
-    $proposal['gpa_milli'] !== 2000 || $proposal['standing']['code'] !== 'GOOD'
+    $proposal['gpa_milli'] !== 2000 || $proposal['standing']['code'] !== 'REVIEW'
+    || ($proposal['scope']['kind'] ?? null) !== 'academic_level' || ($proposal['scope']['code'] ?? null) !== 'UG'
+    || str_contains(json_encode($proposal), 'level_source')
+    || str_contains(json_encode($proposal), 'program_version_id')
     || str_contains(json_encode($proposal), 'source_positions') || str_contains(json_encode($proposal), 'attempts')
     || $f->facts() !== $before
 ) {
@@ -55,6 +72,8 @@ if ($standingPost($base . 'commit/', $review) !== $saved) {
 $history = $standingPost($base . 'history/', []);
 if (
     ($history['items'][0]['proposal']['gpa_milli'] ?? null) !== 2000
+    || ($history['items'][0]['proposal']['scope']['code'] ?? null) !== 'UG'
+    || str_contains(json_encode($history), 'level_source') || str_contains(json_encode($history), 'program_version_id')
     || str_contains(json_encode($history), 'source_positions') || str_contains(json_encode($history), 'attempts')
 ) {
     throw new RuntimeException('Staff history lost the minimized GPA evidence boundary.');

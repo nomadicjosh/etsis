@@ -159,7 +159,8 @@ final class ProgramClassificationTest extends TestCase
         $current = new ProgramClassifications();
         self::assertTrue($current->schoolAndFieldRecorded);
         self::assertSame(
-            $earlier + ['school' => null, 'field_of_study' => null, 'campus' => null, 'additional_campuses' => []],
+            $earlier + ['school' => null, 'field_of_study' => null, 'campus' => null, 'additional_campuses' => [],
+                'department_school' => null, 'additional_departments' => []],
             $current->describe(),
         );
         foreach (

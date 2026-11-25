@@ -36,6 +36,9 @@ final readonly class StandingProposalPolicyService
         private ReviewProof $proofs,
         private \Domain\Student\Repository\StandingProposalPolicyState $state,
         private \Domain\Student\Repository\StudentStandingRepository $definitions,
+        private \Domain\Student\Repository\StandingPolicyTargetRepository $targets,
+        private \Domain\Catalog\Service\PublishedProgramReader $programs,
+        private \Domain\Student\Repository\StudentRecordRepository $students,
     ) {
     }
     public function view(): array
@@ -73,6 +76,7 @@ final readonly class StandingProposalPolicyService
         $reason = StandingProposalRules::reason($reason);
         $current = $this->current();
         $this->validateDefinitions($rules->facts);
+        $this->validateTargets($rules->facts, $current["rules"]);
         if ($current["version"] !== $version) {
             throw new ConcurrentModificationException(
                 \Codefy\Framework\Helpers\trans_html(
@@ -119,11 +123,6 @@ final readonly class StandingProposalPolicyService
             $intent,
         ): array {
             $this->roles->lock();
-            $ids = array_column($rules->facts['bands'], 'definition_id');
-            sort($ids, SORT_STRING);
-            foreach (array_unique($ids) as $id) {
-                $this->definitions->lockDefinition(new EntityId($id));
-            }
             $counter = $this->state->current();
             $root = $this->restore($this->budget());
             if ($root->playhead() !== $counter) {
@@ -180,6 +179,21 @@ final readonly class StandingProposalPolicyService
                     ),
                 );
             }
+            $scopes = $rules->facts['overrides'] ?? [];
+            $order = ['program' => 0, 'academic_level' => 1];
+            usort($scopes, static fn(array $a, array $b): int =>
+                ($order[$a['kind']] <=> $order[$b['kind']]) ?: strcmp($a['target']['id'], $b['target']['id']));
+            foreach ($scopes as $scope) {
+                $this->targets->lock($scope['kind'], new EntityId($scope['target']['id']));
+            }
+            $ids = array_column($rules->facts['bands'], 'definition_id');
+            foreach ($scopes as $scope) {
+                array_push($ids, ...array_column($scope['rules']['bands'], 'definition_id'));
+            }
+            sort($ids, SORT_STRING);
+            foreach (array_unique($ids) as $id) {
+                $this->definitions->lockDefinition(new EntityId($id));
+            }
             $this->audit->record($actor, "standing.proposal_policy_published", $operation);
             $this->authorize($actor);
             $this->proofs->validate(
@@ -192,6 +206,9 @@ final readonly class StandingProposalPolicyService
                 $revision,
             );
             $this->validateDefinitions($rules->facts);
+            $records = $root->records();
+            $previous = $records === [] ? StandingProposalRules::DEFAULT : $records[array_key_last($records)]['rules'];
+            $this->validateTargets($rules->facts, $previous);
             $event = StandingProposalPolicyWasPublished::occur(
                 new StandingProposalPolicyId(StandingProposalPolicy::ID),
                 [
@@ -255,20 +272,137 @@ final readonly class StandingProposalPolicyService
         ) {
             throw new CorruptHistoryException();
         }
+        if (isset($proof->data['scope'])) {
+            $this->verifyPursuitScope($proof, $budget);
+        }
+        $source = $proof->data['scope']['level_source'] ?? null;
+        if ($source !== null) {
+            $program = $this->programs->version(
+                new EntityId($proof->data['scope']['program_id']),
+                new EntityId($source['academic_year_id']),
+                new EntityId($source['program_version_id']),
+                $budget
+            );
+            if (
+                $program === null || !array_key_exists('academic_level', $program['definition']['classifications'])
+                || StandingProposalRules::hash([$program['definition']['classifications']['academic_level']])
+                    !== StandingProposalRules::hash([$source['academic_level']])
+            ) {
+                throw new CorruptHistoryException();
+            }
+        }
+    }
+
+    /** Authenticate the captured pursuit position without replacing it with today's cohort assignment. */
+    private function verifyPursuitScope(
+        #[\SensitiveParameter] \Domain\Student\ValueObject\StandingProposalEvidence $proof,
+        HistoryReadBudget $budget,
+    ): void {
+        $scope = $proof->data['scope'];
+        if ($scope['pursuit_version'] === 0) {
+            // Verify the immutable pursuit/program identity without inventing its earlier journal or cohort.
+            $pursuit = $this->students->assignment(new EntityId($proof->data['pursuit_id']));
+            if (
+                $pursuit->studentId->value !== $proof->data['student_id']
+                || $pursuit->programId->value !== $scope['program_id']
+            ) {
+                throw new CorruptHistoryException();
+            }
+            return;
+        }
+        $stream = new StreamReference(new \Domain\Student\ValueObject\StudentProgramStatusId(
+            $proof->data['pursuit_id']
+        ), 'student_program_status');
+        $root = \Domain\Student\StudentProgramStatus::root($stream->aggregateId);
+        $found = false;
+        $cursor = null;
+        do {
+            $page = $budget->page($this->history, $stream, $cursor);
+            foreach ($page->events as $stored) {
+                $root->acceptHistorical($stored->event);
+                if ($root->playhead() !== $scope['pursuit_version']) {
+                    continue;
+                }
+                $facts = $root->facts();
+                if (
+                    $facts === null || $facts['student_id'] !== $proof->data['student_id']
+                    || $facts['program_id'] !== $scope['program_id'] || $facts['status'] !== 'active'
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                if ($scope['level_source'] !== null) {
+                    $cohort = $root->cohort() ?? ($root->assignmentSource()['cohort'] ?? null);
+                    if (
+                        ($cohort['catalog_id'] ?? null) !== $scope['level_source']['program_version_id']
+                        || ($cohort['year_id'] ?? null) !== $scope['level_source']['academic_year_id']
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                }
+                $found = true;
+            }
+            $cursor = $page->nextCursor;
+        } while ($cursor !== null);
+        if (!$found) {
+            throw new CorruptHistoryException();
+        }
+    }
+
+    public function targets(string $kind, string $search = '', ?EntityId $after = null): array
+    {
+        $actor = $this->authorize();
+        if (
+            !in_array($kind, ['program', 'academic_level'], true) || !mb_check_encoding($search, 'UTF-8')
+            || mb_strlen($search) > 80 || preg_match('/[\x00-\x1F\x7F]/', $search)
+        ) {
+            throw new \Domain\Shared\Exception\ValidationException([['field' => 'search',
+                'message' => \Codefy\Framework\Helpers\trans_html(
+                    'Choose program or academic level and use a search of at most eighty characters.'
+                )]]);
+        }
+        $rows = $this->targets->page($kind, trim($search), $after);
+        $this->authorize($actor);
+        return ['items' => array_slice($rows, 0, 20), 'next_after' => count($rows) > 20 ? $rows[19]['id'] : null];
+    }
+
+    private function validateTargets(array $rules, array $previous): void
+    {
+        foreach ($rules['overrides'] ?? [] as $scope) {
+            $row = $this->targets->get($scope['kind'], new EntityId($scope['target']['id']));
+            $old = array_find($previous['overrides'] ?? [], static fn(array $r): bool =>
+                $r['kind'] === $scope['kind'] && $r['target']['id'] === $scope['target']['id']);
+            $retainedDisabled = !$scope['rules']['enabled'] && $old !== null
+            && StandingProposalRules::hash($old['target']) === StandingProposalRules::hash($scope['target']);
+            if ($retainedDisabled) {
+                continue;
+            }
+            if (
+                ($scope['rules']['enabled'] && !$row['active']) || $row['code'] !== $scope['target']['code']
+                || $row['title'] !== $scope['target']['title']
+            ) {
+                throw new \Domain\Shared\Exception\ValidationException([['field' => 'overrides',
+                    'message' => \Codefy\Framework\Helpers\trans_html(
+                        'Choose current active policy targets; an existing retired target may be disabled or removed.'
+                    )]]);
+            }
+        }
     }
 
     private function validateDefinitions(array $rules): void
     {
-        if (!$rules['enabled']) {
-            return;
-        }
-        foreach ($rules['bands'] as $band) {
-            $row = $this->definitions->definition(new EntityId($band['definition_id']));
-            if (!$row['active'] || $row['code'] !== $band['code'] || $row['title'] !== $band['title']) {
-                throw new \Domain\Shared\Exception\ValidationException([['field' => 'bands',
-                    'message' => \Codefy\Framework\Helpers\trans_html(
-                        'Choose current active standing definitions before publishing GPA bands.'
-                    )]]);
+        $sets = [$rules, ...array_column($rules['overrides'] ?? [], 'rules')];
+        foreach ($sets as $set) {
+            if (!$set['enabled']) {
+                continue;
+            }
+            foreach ($set['bands'] as $band) {
+                $row = $this->definitions->definition(new EntityId($band['definition_id']));
+                if (!$row['active'] || $row['code'] !== $band['code'] || $row['title'] !== $band['title']) {
+                    throw new \Domain\Shared\Exception\ValidationException([['field' => 'bands',
+                        'message' => \Codefy\Framework\Helpers\trans_html(
+                            'Choose current active standing definitions before publishing GPA bands.'
+                        )]]);
+                }
             }
         }
     }

@@ -40,6 +40,16 @@ final readonly class StandingProposalPolicyController
             ),
         );
     }
+    public function targets(#[\SensitiveParameter] ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->targets(
+            $f->text('kind', 40),
+            $f->optionalText('search', 80) ?? '',
+            $f->optionalId('after')
+        ));
+    }
+
     private function rules(#[\SensitiveParameter] ServerRequest $request): array
     {
         $data = $request->getParsedBody();

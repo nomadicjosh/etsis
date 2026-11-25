@@ -5733,3 +5733,132 @@ msgstr ""
 #: src/Infrastructure/Persistence/Repository/SqlStandingProposalPolicyState.php:45
 msgid "The institutional standing proposal policy changed. Review again."
 msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:15
+msgid "Enable default institutional GPA proposals"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:69
+msgid "Institutional default"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:70
+msgid "Program policy"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:71
+msgid "Academic-level policy"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:72
+msgid "Program and academic-level overrides"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:74
+msgid "Program policy applies first, then the assigned published cohort academic level, then the institutional default. A disabled applicable override stops proposals for that scope; it does not fall through."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:78
+msgid "Each override has its own GPA bands, minimum GPA credits and enabled choice. Overrides can enable specific programs or levels while the institutional default is disabled. Dates and staff confirmation remain required."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:82
+msgid "Enable GPA proposals for this override"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:83
+msgid "Edit standing policy override"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:84
+msgid "Remove policy override"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:85
+msgid "Add program policy"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:86
+msgid "Add academic-level policy"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:87
+msgid "Choose a program for standing policy"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:88
+msgid "Choose an academic level for standing policy"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:89
+msgid "Find a program or academic level"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:90
+msgid "Use this policy target"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:91
+msgid "Back to proposal policy"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:92
+msgid "Applied standing policy"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:93
+msgid "Policy scope was not recorded in this earlier decision."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:94
+msgid "Complete the GPA values in the default and each override before reviewing."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:95
+msgid "No active policy targets match on this page."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:96
+msgid "More policy targets"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:97
+msgid "Previous policy targets"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:98
+msgid "Search policy targets"
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalPolicyService.php:360
+msgid "Choose program or academic level and use a search of at most eighty characters."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalPolicyService.php:385
+msgid "Choose current active policy targets; an existing retired target may be disabled or removed."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:57
+#: src/Domain/Student/ValueObject/StandingProposalRules.php:131
+msgid "Assign a verified published program cohort before applying academic-level standing rules."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:68
+msgid "The assigned program cohort needs verified academic-level information."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:80
+msgid "Standing proposals are disabled by the policy that applies to this pursuit."
+msgstr ""
+
+#: src/Domain/Student/ValueObject/StandingProposalRules.php:90
+msgid "Choose at most twenty distinct program or academic-level targets. Each override needs complete target labels and one GPA rule set, without nested overrides."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:89
+msgid "Re-select policy target"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:90
+msgid "This target already has an override. Edit that override or choose a different target."
+msgstr ""
