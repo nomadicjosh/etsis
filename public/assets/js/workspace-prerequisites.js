@@ -3,6 +3,11 @@ window.createWorkspacePrerequisites = function (ui) {
     "use strict";
     const { node, request, task, openDrawer } = ui;
     const originDefaults = {
+        completion_from: 'Completed from', completion_through: 'Completed through',
+        completion_window: 'Actual completion dates',
+        completion_help: 'Optional inclusive dates for this requirement. Leave both blank for no date restriction. Unknown completion dates cannot meet a dated requirement; term and grade-recording dates are not substitutes.',
+        invalid_completion_window: 'Check the completion dates; from must not be after through.',
+
         field: 'Qualifying prerequisite coursework', either: 'Institutional or transfer',
         institutional: 'Institutional work only', transfer: 'Transfer work only',
         help: 'Default for requirements without a coursework-source override. Co-requisites use their separate policy.',
@@ -25,6 +30,7 @@ window.createWorkspacePrerequisites = function (ui) {
         return Number(whole || "0") * 1000 + Number(fraction.padEnd(3, "0"));
     }
     const floors = value => value.grade_points_milli || value.groups.map(() => null);
+    const windows = value => value.completion_windows ? structuredClone(value.completion_windows) : value.groups.map(() => null);
     const origins = value => value.requirement_credit_origins || value.groups.map(() => null);
     const ruleSize = rule => typeof rule === "number" ? 1 :
         1 + rule.children.reduce((total, child) => total + ruleSize(child), 0);
@@ -139,13 +145,16 @@ window.createWorkspacePrerequisites = function (ui) {
         const body = openDrawer("Course prerequisites", "ACADEMIC CATALOG");
         const saved = await request(`/sis/courses/${course}/prerequisite-groups/`);
         if (!body.isConnected) return;
-        const state = { requirement_credit_origins: [...origins(saved)], credit_origin: saved.credit_origin ?? null, rule: saved.rule ? structuredClone(saved.rule) : null, minimum_requirements: saved.minimum_requirements ?? null, groups: saved.groups.map(group => [...group]), minimums: [...saved.minimums], grade_points_milli: [...floors(saved)], corequisites: [...(saved.corequisites || [])],
+        const state = { completion_windows: windows(saved), requirement_credit_origins: [...origins(saved)], credit_origin: saved.credit_origin ?? null, rule: saved.rule ? structuredClone(saved.rule) : null, minimum_requirements: saved.minimum_requirements ?? null, groups: saved.groups.map(group => [...group]), minimums: [...saved.minimums], grade_points_milli: [...floors(saved)], corequisites: [...(saved.corequisites || [])],
             labels: new Map(saved.courses.map(row => [row.id, row])) };
-        const fingerprint = value => JSON.stringify([origins(value), value.credit_origin ?? null, value.rule ?? null, value.minimum_requirements ?? null, value.groups, value.minimums, floors(value), [...(value.corequisites || [])].sort()]);
+        const fingerprint = value => JSON.stringify([windows(value), origins(value), value.credit_origin ?? null, value.rule ?? null, value.minimum_requirements ?? null, value.groups, value.minimums, floors(value), [...(value.corequisites || [])].sort()]);
         const describeRequirement = index => `Requirement ${index + 1} · ${state.minimums[index]} of: ` +
             state.groups[index].map(id => state.labels.get(id)?.code || "Course label unavailable").join(", ");
         const effectiveOrigin = index => originText(state.requirement_credit_origins[index] ?? state.credit_origin ?? 'either');
-        const incomplete = () => (state.minimum_requirements !== null &&
+        let dateControls = [];
+        const invalidWindow = () => dateControls.some(control => control.validity?.valid === false) ||
+            state.completion_windows.some(window => window?.from && window?.through && window.from > window.through);
+        const incomplete = () => invalidWindow() || (state.minimum_requirements !== null &&
             (!Number.isInteger(state.minimum_requirements) || state.minimum_requirements < 1 ||
                 state.minimum_requirements > state.groups.length)) || state.groups.some((group, index) => !group.length ||
             !Number.isInteger(state.minimums[index]) || state.minimums[index] < 1 || state.minimums[index] > group.length ||
@@ -170,6 +179,7 @@ window.createWorkspacePrerequisites = function (ui) {
                 if (incomplete()) return;
                 const submitted = fingerprint(state);
                 const result = await request(`/sis/courses/${course}/prerequisite-groups/`, "POST", {
+                    completion_windows: state.completion_windows.some(Boolean) ? structuredClone(state.completion_windows) : null,
                     credit_origin: state.groups.length ? state.credit_origin : null,
                     requirement_credit_origins: state.requirement_credit_origins.some(value => value !== null)
                         ? [...state.requirement_credit_origins] : null,
@@ -178,7 +188,7 @@ window.createWorkspacePrerequisites = function (ui) {
                 });
                 const laterEdits = fingerprint(state) !== submitted;
                 Object.assign(saved, result);
-                if (!laterEdits) { state.requirement_credit_origins = [...origins(result)]; state.credit_origin = result.credit_origin ?? null; state.rule = result.rule ? structuredClone(result.rule) : null; state.minimum_requirements = result.minimum_requirements ?? null; state.groups = result.groups.map(group => [...group]); state.minimums = [...result.minimums]; state.grade_points_milli = [...floors(result)]; state.corequisites = [...(result.corequisites || [])]; }
+                if (!laterEdits) { state.completion_windows = windows(result); state.requirement_credit_origins = [...origins(result)]; state.credit_origin = result.credit_origin ?? null; state.rule = result.rule ? structuredClone(result.rule) : null; state.minimum_requirements = result.minimum_requirements ?? null; state.groups = result.groups.map(group => [...group]); state.minimums = [...result.minimums]; state.grade_points_milli = [...floors(result)]; state.corequisites = [...(result.corequisites || [])]; }
                 if (body.isConnected) render("Entry requirements saved.");
             }, "btn-primary");
             const publish = button("Review course publication", () =>
@@ -191,7 +201,7 @@ window.createWorkspacePrerequisites = function (ui) {
                     if (all) state.rule.minimum = state.rule.children.length;
                 }
                 state.groups.push([]); state.minimums.push(1); state.grade_points_milli.push(null);
-                state.requirement_credit_origins.push(null); draw();
+                state.completion_windows.push(null); state.requirement_credit_origins.push(null); draw();
                 cards.lastElementChild?.querySelector("h3")?.focus();
             });
             const alternative = node("input", { type: "checkbox", id: "prerequisite-alternatives", class: "form-check-input",
@@ -225,17 +235,18 @@ window.createWorkspacePrerequisites = function (ui) {
                 save.disabled = !changed || incomplete();
                 publish.disabled = changed || incomplete();
                 add.disabled = state.groups.length >= 100 || total >= 500 || (state.rule && ruleSize(state.rule) >= 199);
-                status.textContent = incomplete() ? "Check the overall requirement count, each course count and optional grade-point minimum before saving."
+                status.textContent = invalidWindow() ? originText('invalid_completion_window') : incomplete() ? "Check the overall requirement count, each course count and optional grade-point minimum before saving."
                     : changed ? "Save your choices before reviewing publication." : notice || "Saved choices are ready for publication review.";
             }
             function removeRequirement(index) {
                 if (state.rule) throw new Error("Use Simple rule before removing a requirement from a nested rule.");
                 state.groups.splice(index, 1); state.minimums.splice(index, 1); state.grade_points_milli.splice(index, 1);
-                state.requirement_credit_origins.splice(index, 1);
+                state.completion_windows.splice(index, 1); state.requirement_credit_origins.splice(index, 1);
                 if (!state.groups.length) state.minimum_requirements = null;
                 draw();
             }
             function draw() {
+                dateControls = [];
                 sourcePreviews.length = 0;
                 origin.disabled = state.groups.length === 0;
                 if (!state.groups.length) { state.credit_origin = null; origin.value = 'either'; }
@@ -277,6 +288,27 @@ window.createWorkspacePrerequisites = function (ui) {
                     const sourceStatus = node('p', { id: `prerequisite-origin-effective-${index}`,
                         class: 'form-text', role: 'status' }, `${originText('effective')}: ${effectiveOrigin(index)}`);
                     sourcePreviews.push({ element: sourceStatus, index });
+                    const completionFields = node('fieldset', { class: 'record-section mb-3' },
+                        node('legend', { class: 'h6' }, originText('completion_window')));
+                    const completionInputs = {};
+                    for (const [key, label] of [['from', 'completion_from'], ['through', 'completion_through']]) {
+                        const input = node('input', { type: 'date', class: 'form-control prerequisite-completion-date',
+                            id: `prerequisite-completion-${index}-${key}`, min: '0001-01-01', max: '9999-12-31',
+                            value: state.completion_windows[index]?.[key] || '',
+                            'aria-describedby': `prerequisite-completion-help-${index}` });
+                        completionInputs[key] = input; dateControls.push(input);
+                        input.addEventListener('input', () => {
+                            const from = completionInputs.from.value || null, through = completionInputs.through.value || null;
+                            state.completion_windows[index] = from || through ? {from, through} : null;
+                            for (const control of Object.values(completionInputs)) control.setCustomValidity(
+                                from && through && from > through ? originText('invalid_completion_window') : '');
+                            update();
+                        });
+                        completionFields.append(node('div', { class: 'mb-2' },
+                            node('label', { for: input.id, class: 'form-label' }, originText(label)), input));
+                    }
+                    completionFields.append(node('p', { class: 'form-text mb-0',
+                        id: `prerequisite-completion-help-${index}` }, originText('completion_help')));
                     return node("section", { class: "surface border p-3 mb-3", "aria-label": `Requirement ${index + 1}` }, heading,
                         description, group.length > 1 || state.minimums[index] > 1 ? node("div", { class: "mb-3", style: "max-width: 14rem" },
                             node("label", { for: count.id, class: "form-label" }, "Courses required"), count) : null,
@@ -287,7 +319,7 @@ window.createWorkspacePrerequisites = function (ui) {
                             node("label", { for: floor.id, class: "form-label" }, "Minimum grade points"), floor,
                             node("p", { id: `prerequisite-grade-help-${index}`, class: "form-text" },
                                 "Optional. Leave blank for any passing grade. Use grade points from the grading definitions, not a percentage or GPA total. Applies to each course counted in this requirement.")),
-                        list, node("div", { class: "inline-actions" },
+                        completionFields, list, node("div", { class: "inline-actions" },
                             button("Add course", () => choose(index), "btn-outline-primary", `Add course to requirement ${index + 1}`),
                             button("Remove requirement", () => removeRequirement(index), "btn-outline-danger btn-sm",
                                 `Remove requirement ${index + 1}`)));
@@ -384,6 +416,8 @@ window.createWorkspacePrerequisites = function (ui) {
                         group.map(id => labels.get(id) || "Course label unavailable").join(minimums[index] > 1 ? "; " : " OR "),
                         definition.prerequisite_requirement_credit_origins
                             ? ` · ${originText('requirement_field')}: ${originText(definition.prerequisite_requirement_credit_origins[index] ?? definition.prerequisite_credit_origin ?? 'either')}` : '',
+                        definition.prerequisite_completion_windows?.[index]
+                            ? ` · ${originText('completion_from')}: ${definition.prerequisite_completion_windows[index].from || '—'}; ${originText('completion_through')}: ${definition.prerequisite_completion_windows[index].through || '—'}` : '',
                         definition.prerequisite_grade_points_milli?.[index] != null
                             ? ` · Minimum ${pointText(definition.prerequisite_grade_points_milli[index])} grade points per counted course` : ""))));
                 if (corequisites.length) view.append(node("h4", { class: "h6 mt-3" }, "Co-requisites — all required"),

@@ -410,6 +410,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 $remaining->rule?->definition,
                 $remaining->creditOrigin,
                 $remaining->requirementCreditOrigins,
+                $remaining->completionWindows,
             ));
             return;
         }
@@ -446,6 +447,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 creditOrigin: $groups->creditOrigin,
                 requirementCreditOrigins: $groups->requirementCreditOrigins === null ? null :
                     [...$groups->requirementCreditOrigins, null],
+                completionWindows: $groups->completionWindows === null ? null : [...$groups->completionWindows, null],
             ));
             return;
         }

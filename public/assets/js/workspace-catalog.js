@@ -141,6 +141,7 @@ window.createWorkspaceCatalog = function (ui) {
         const groups = (review.prerequisite_groups || []).map((group, index) => ({
             selected: group.filter(id => prerequisites.includes(id)), minimum: review.prerequisite_minimums?.[index] || 1, grade: review.prerequisite_grade_points_milli?.[index] ?? null,
             origin: review.prerequisite_requirement_credit_origins?.[index] ?? review.prerequisite_credit_origin ?? 'either',
+            completionWindow: review.prerequisite_completion_windows?.[index] || null,
         })).filter(group => group.selected.length);
         const overallMinimum = groups.length ? review.prerequisite_requirement_minimum : null;
         const invalidChoices = groups.some(group => group.selected.length < group.minimum) ||
@@ -178,7 +179,8 @@ window.createWorkspaceCatalog = function (ui) {
                     group.selected.map(id => review.prerequisites.find(row => row.id === id)?.code || "Course")
                         .join(group.minimum > 1 ? "; " : " OR ") +
                     (group.grade === null ? "" : ` · Minimum ${group.grade / 1000} grade points per counted course`) +
-                    (review.prerequisite_requirement_credit_origins ? ` · ${prerequisiteOriginText(group.origin)}` : '')).join(overallMinimum == null ? " AND " : "; ") +
+                    (review.prerequisite_requirement_credit_origins ? ` · ${prerequisiteOriginText(group.origin)}` : '') +
+                    (group.completionWindow ? ` · ${ui.prerequisiteOriginLabels.completion_from}: ${group.completionWindow.from || '—'}; ${ui.prerequisiteOriginLabels.completion_through}: ${group.completionWindow.through || '—'}` : '')).join(overallMinimum == null ? " AND " : "; ") +
                     (review.prerequisite_rule ? ". Keep every nested requirement or clear all prerequisites; restructure the cloned draft afterwards." : ". Unselected groups are omitted from the cloned draft.")) : null,
             groups.length && review.prerequisite_rule ? ui.prerequisites().ruleView(review.prerequisite_rule) : null,
             review.corequisites?.some(id => prerequisites.includes(id)) ? node("p", { class: "form-text" },

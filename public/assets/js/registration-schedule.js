@@ -6,7 +6,7 @@ window.createRegistrationSchedule = function (ui) {
         document.getElementById('workspace-config') || document.getElementById('campus-config');
     const originLabels = ui.prerequisiteOriginLabels ||
         (configElement ? JSON.parse(configElement.textContent).prerequisite_origin_labels : null) || {};
-    const originDefaults = { field: 'Qualifying prerequisite coursework', either: 'Institutional or transfer',
+    const originDefaults = { completion_from: 'Completed from', completion_through: 'Completed through', field: 'Qualifying prerequisite coursework', either: 'Institutional or transfer',
         institutional: 'Institutional work only', transfer: 'Transfer work only',
         scope: 'This rule does not change earned credits or decide which work counts toward a degree.' };
     const originText = key => originLabels[key] || originDefaults[key];
@@ -125,6 +125,8 @@ window.createRegistrationSchedule = function (ui) {
                         node("strong", {}, group.met ? "Met: " : nested || value.group_policy?.required_count < value.group_policy?.total_count ? "Not met: " : "Needs attention: "),
                         (group.required_count || 1) > 1 ? `At least ${group.required_count} distinct courses required · ${group.completed_count} verified: ` : "",
                         group.minimum_grade_points_milli != null ? `Minimum ${group.minimum_grade_points_milli / 1000} grade points per counted course · ${group.completed_count} verified: ` : "",
+                        group.completion_window ? node('p', { class: 'form-text' },
+                            `${originText('completion_from')}: ${group.completion_window.from || '—'} · ${originText('completion_through')}: ${group.completion_window.through || '—'}`) : null,
                         group.credit_origin ? node('p', { class: 'form-text' },
                             `${originText('field')}: ${originText(group.credit_origin)}`) : null,
                         group.positions.map(position => {

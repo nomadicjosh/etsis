@@ -30,6 +30,7 @@ final readonly class PrerequisiteGroups
         ?array $rule = null,
         public ?string $creditOrigin = null,
         public ?array $requirementCreditOrigins = null,
+        public ?array $completionWindows = null,
     ) {
         if (
             !array_is_list($groups) || count($groups) > 100 ||
@@ -60,6 +61,23 @@ final readonly class PrerequisiteGroups
         foreach ($requirementCreditOrigins ?? [] as $origin) {
             if ($origin !== null && !in_array($origin, ['either', 'institutional', 'transfer'], true)) {
                 throw new InvalidArgumentException('Choose inherited, institutional, transfer or either coursework.');
+            }
+        }
+        if ($completionWindows !== null) {
+            if ($groups === [] || !array_is_list($completionWindows) || count($completionWindows) !== count($groups)) {
+                throw new InvalidArgumentException(
+                    \Codefy\Framework\Helpers\trans('Provide one optional completion window per requirement.')
+                );
+            }
+            foreach ($completionWindows as $window) {
+                if ($window !== null) {
+                    if (!is_array($window)) {
+                        throw new InvalidArgumentException(
+                            \Codefy\Framework\Helpers\trans('Provide a completion window or leave it unrestricted.')
+                        );
+                    }
+                    new PrerequisiteCompletionWindow($window);
+                }
             }
         }
         foreach ($groups as $index => &$group) {
@@ -189,6 +207,28 @@ final readonly class PrerequisiteGroups
         return false;
     }
 
+    public function acceptsCompletion(int $index, ?string $completedOn): bool
+    {
+        $window = $this->completionWindows[$index] ?? null;
+        return $window === null || ($completedOn !== null
+            && ($window['from'] === null || $completedOn >= $window['from'])
+            && ($window['through'] === null || $completedOn <= $window['through']));
+    }
+
+    public function acceptsWork(string $course, string $origin, ?string $completedOn): bool
+    {
+        foreach ($this->groups as $index => $group) {
+            $policy = $this->originForRequirement($index);
+            if (
+                in_array($course, $group, true) && ($policy === 'either' || $policy === $origin)
+                && $this->acceptsCompletion($index, $completedOn)
+            ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     public function requiredRequirements(): int
     {
         return $this->minimumRequirements ?? count($this->groups);
@@ -217,7 +257,7 @@ final readonly class PrerequisiteGroups
      * @param list<string> $selected */
     public function subset(array $selected): self
     {
-        $groups = $minimums = $floors = $origins = [];
+        $groups = $minimums = $floors = $origins = $windows = [];
         $counts = $this->counts();
         foreach ($this->groups as $index => $group) {
             $remaining = array_values(array_intersect($group, $selected));
@@ -234,6 +274,7 @@ final readonly class PrerequisiteGroups
             $minimums[] = $counts[$index];
             $floors[] = $this->minimumGradePointsMilli[$index] ?? null;
             $origins[] = $this->requirementCreditOrigins[$index] ?? null;
+            $windows[] = $this->completionWindows[$index] ?? null;
         }
         if ($groups !== [] && $this->minimumRequirements !== null && count($groups) < $this->minimumRequirements) {
             throw new ValidationException([['field' => 'prerequisites',
@@ -253,6 +294,7 @@ final readonly class PrerequisiteGroups
             $groups === [] ? null : $this->rule?->definition,
             $groups === [] ? null : $this->creditOrigin,
             $groups === [] || $this->requirementCreditOrigins === null ? null : $origins,
+            $groups === [] || $this->completionWindows === null ? null : $windows,
         );
     }
 }

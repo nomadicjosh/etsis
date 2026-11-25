@@ -28,7 +28,8 @@ if ($response->getStatusCode() !== 200 || ($draft['groups'] ?? null) !== []) {
 }
 $groups = [[$first->courseId->value, $alternative->courseId->value, $additional->courseId->value],
     [$alternative->courseId->value]];
-$input = ['requirement_credit_origins' => null, 'credit_origin' => null, 'minimum_requirements' => 1,
+$input = ['completion_windows' => null, 'requirement_credit_origins' => null,
+    'credit_origin' => null, 'minimum_requirements' => 1,
     'groups' => $groups, 'minimums' => [2, 1],
     'grade_points_milli' => [2675, null], 'corequisites' => [$corequisite->courseId->value],
     'revision' => $draft['revision']];
@@ -62,7 +63,7 @@ foreach (['invalid', [], ['transfer'], ['either', false], ['bad', null], ['row' 
     if (
         $teachingPost($base . 'prerequisite-groups/', array_replace(
             $input,
-            ['requirement_credit_origins' => $invalid]
+            ['completion_windows' => null, 'requirement_credit_origins' => $invalid]
         ))->getStatusCode() !== 422
     ) {
         throw new RuntimeException('Malformed per-requirement sources bypassed the actual private route.');
@@ -230,4 +231,35 @@ foreach (['institutional', 'transfer', 'either', null] as $origin) {
     ) {
         throw new RuntimeException('The course publication review lost its prerequisite origin.');
     }
+}
+
+// Completion policy is explicit, revisioned and validated through the actual private save route.
+$sis->access->staff = true;
+$windowDraft = json_decode((string) $read()->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$window = ['from' => '2020-01-01', 'through' => '2025-12-31'];
+$windowInput = ['revision' => $windowDraft['revision'], 'groups' => [[$first->courseId->value]],
+    'minimums' => [1], 'grade_points_milli' => [null], 'corequisites' => [], 'minimum_requirements' => null,
+    'credit_origin' => null, 'requirement_credit_origins' => null, 'rule' => null, 'completion_windows' => [$window]];
+$missingWindow = $windowInput;
+unset($missingWindow['completion_windows']);
+if ($teachingPost($base . 'prerequisite-groups/', $missingWindow)->getStatusCode() !== 422) {
+    throw new RuntimeException('The prerequisite API accepted an omitted completion policy.');
+}
+foreach (
+    [false, [], [$window, null], [['from' => '2025-02-30', 'through' => null]],
+    [['from' => '2026-01-01', 'through' => '2025-01-01']]] as $invalid
+) {
+    if (
+        $teachingPost($base . 'prerequisite-groups/', array_replace(
+            $windowInput,
+            ['completion_windows' => $invalid]
+        ))->getStatusCode() !== 422
+    ) {
+        throw new RuntimeException('Malformed completion windows bypassed private input validation.');
+    }
+}
+$windowSaved = $teachingPost($base . 'prerequisite-groups/', $windowInput);
+$windowResult = json_decode((string) $windowSaved->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($windowSaved->getStatusCode() !== 200 || $windowResult['completion_windows'] !== [$window]) {
+    throw new RuntimeException('The actual prerequisite API lost completion boundaries.');
 }

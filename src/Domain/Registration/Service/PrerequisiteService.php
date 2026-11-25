@@ -61,10 +61,12 @@ final readonly class PrerequisiteService
                 if ($ref === null) {
                     throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
                 }
-                if ($groups !== null && !$groups->acceptsOrigin($course, $ref['origin'])) {
+                if ($groups !== null && !$groups->acceptsWork($course, $ref['origin'], $work['completed_on'])) {
                     continue;
                 }
-                $key = $groups?->requirementCreditOrigins === null ? $course : $course . ':' . $ref['origin'];
+                $key = $groups?->completionWindows !== null
+                ? $course . ':' . $ref['origin'] . ':' . ($work['completed_on'] ?? '')
+                : ($groups?->requirementCreditOrigins === null ? $course : $course . ':' . $ref['origin']);
                 $gradePoints = $work['grade']['points_milli'];
                 if (
                     (isset($completed[$key]) &&
@@ -80,7 +82,8 @@ final readonly class PrerequisiteService
                     'academic_version' => $ref['academic_version'],
                     'registration_version' => $ref['registration_version'],
                     'pursuit_version' => $ref['pursuit_version']] +
-                ($withPoints ? ['grade_points_milli' => $gradePoints] : []);
+                ($withPoints ? ['grade_points_milli' => $gradePoints] : []) +
+                ($groups?->completionWindows === null ? [] : ['completed_on' => $work['completed_on']]);
             }
         }
         ksort($completed, SORT_STRING);

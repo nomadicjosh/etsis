@@ -51,6 +51,14 @@ final readonly class SisCoursePrerequisiteController
         ) {
             throw new \InvalidArgumentException('Provide requirement coursework sources or explicitly inherit all.');
         }
+        if (
+            !array_key_exists('completion_windows', $body)
+            || ($body['completion_windows'] !== null && !is_array($body['completion_windows']))
+        ) {
+            throw new \InvalidArgumentException(\Codefy\Framework\Helpers\trans(
+                'Provide completion windows or explicitly leave all requirements unrestricted.'
+            ));
+        }
         return new JsonResponse($this->service->save(
             new EntityId($id),
             $f->values('groups', 100),
@@ -62,6 +70,7 @@ final readonly class SisCoursePrerequisiteController
             $body['rule'] ?? null,
             $body['credit_origin'],
             $body['requirement_credit_origins'],
+            $body['completion_windows'],
         ));
     }
 

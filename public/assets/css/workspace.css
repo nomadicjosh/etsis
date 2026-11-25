@@ -1275,3 +1275,8 @@ h3 { font-size: .9rem; font-weight: 650; }
     flex: 1 1 14rem;
     min-width: 0;
 }
+
+/* Leave room for the native calendar control when prerequisite dates use enlarged text. */
+.prerequisite-completion-date {
+    padding-inline: 0.375rem;
+}

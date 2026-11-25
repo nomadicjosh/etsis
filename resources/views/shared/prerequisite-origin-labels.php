@@ -5,6 +5,16 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'completion_from' => trans_html('Completed from'),
+    'completion_through' => trans_html('Completed through'),
+    'completion_window' => trans_html('Actual completion dates'),
+    'completion_help' => trans_html(
+        'Optional inclusive dates for this requirement. Leave both blank for no date restriction. '
+        . 'Unknown completion dates cannot meet a dated requirement; '
+        . 'term and grade-recording dates are not substitutes.'
+    ),
+    'invalid_completion_window' => trans_html('Check the completion dates; from must not be after through.'),
+
     'field' => trans_html('Qualifying prerequisite coursework'),
     'either' => trans_html('Institutional or transfer'),
     'institutional' => trans_html('Institutional work only'),

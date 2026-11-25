@@ -4170,3 +4170,47 @@ msgstr ""
 #: src/Infrastructure/Persistence/Repository/SqlHistoryCheckRepository.php:44
 msgid "Academic source routing not found."
 msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:8
+msgid "Completed from"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:9
+msgid "Completed through"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:10
+msgid "Actual completion dates"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:11
+msgid "Optional inclusive dates for this requirement. Leave both blank for no date restriction. Unknown completion dates cannot meet a dated requirement; term and grade-recording dates are not substitutes."
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:16
+msgid "Check the completion dates; from must not be after through."
+msgstr ""
+
+#: src/Domain/Catalog/ValueObject/PrerequisiteCompletionWindow.php:22
+msgid "Provide a completion date boundary or clear the window."
+msgstr ""
+
+#: src/Domain/Catalog/ValueObject/PrerequisiteCompletionWindow.php:26
+msgid "Use valid completion dates in YYYY-MM-DD format."
+msgstr ""
+
+#: src/Domain/Catalog/ValueObject/PrerequisiteCompletionWindow.php:33
+msgid "Completion from must not be after completion through."
+msgstr ""
+
+#: src/Domain/Catalog/ValueObject/PrerequisiteGroups.php:69
+msgid "Provide one optional completion window per requirement."
+msgstr ""
+
+#: src/Domain/Catalog/ValueObject/PrerequisiteGroups.php:76
+msgid "Provide a completion window or leave it unrestricted."
+msgstr ""
+
+#: src/Application/Http/Controller/SisCoursePrerequisiteController.php:58
+msgid "Provide completion windows or explicitly leave all requirements unrestricted."
+msgstr ""

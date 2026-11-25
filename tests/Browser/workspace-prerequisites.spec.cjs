@@ -11,11 +11,11 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
         { id: id(4), code: 'ENG.101', title: 'Academic writing', active: true },
         { id: id(5), code: 'CHEM.101L', title: 'Fictional laboratory', active: true },
     ];
-    let minimumRequirements = null, creditOrigin = null, requirementOrigins = null;
+    let minimumRequirements = null, creditOrigin = null, requirementOrigins = null, completionWindows = null;
     let gradePoints = [], minimums = [], groups = [], corequisites = [], revision = 'a'.repeat(64), stale = true;
     const calls = [], errors = [];
     page.on('pageerror', error => errors.push(error.message));
-    const definition = () => ({ ...(requirementOrigins ? { prerequisite_requirement_credit_origins: requirementOrigins } : {}), ...(creditOrigin ? { prerequisite_credit_origin: creditOrigin } : {}), code: target.code, title: target.title, credits_milli: 3000,
+    const definition = () => ({ ...(completionWindows ? { prerequisite_completion_windows: completionWindows } : {}), ...(requirementOrigins ? { prerequisite_requirement_credit_origins: requirementOrigins } : {}), ...(creditOrigin ? { prerequisite_credit_origin: creditOrigin } : {}), code: target.code, title: target.title, credits_milli: 3000,
         prerequisites: [...new Set(groups.flat())].sort(), prerequisite_group_minimums: minimums, prerequisite_grade_points_milli: gradePoints, prerequisite_groups: groups.map(group => [...group]), corequisites: [...corequisites],
         ...(minimumRequirements == null ? {} : { prerequisite_requirement_minimum: minimumRequirements }),
         transcript_title: null, description: null, subject: null,
@@ -32,11 +32,11 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
         else if (path.endsWith('/prerequisite-groups/')) {
             if (data && stale) { stale = false; return route.fulfill({ status: 409, json: { error: 'Reload the prerequisite editor before saving your changes.' } }); }
             if (data) {
-                requirementOrigins = data.requirement_credit_origins ?? null; creditOrigin = data.credit_origin ?? null; minimumRequirements = data.minimum_requirements ?? null; corequisites = [...data.corequisites]; groups = data.groups.map(group => [...group].sort()); minimums = [...data.minimums]; gradePoints = [...data.grade_points_milli]; revision = 'b'.repeat(64);
+                completionWindows = data.completion_windows; requirementOrigins = data.requirement_credit_origins ?? null; creditOrigin = data.credit_origin ?? null; minimumRequirements = data.minimum_requirements ?? null; corequisites = [...data.corequisites]; groups = data.groups.map(group => [...group].sort()); minimums = [...data.minimums]; gradePoints = [...data.grade_points_milli]; revision = 'b'.repeat(64);
                 await page.getByRole('button', { name: 'Add requirement', exact: true }).click();
                 if (pathways) await page.getByRole('region', { name: 'Requirement 2', exact: true }).getByLabel('Coursework source for this requirement', { exact: true }).selectOption('institutional');
             }
-            result = { course: target, requirement_credit_origins: requirementOrigins, credit_origin: creditOrigin, minimum_requirements: minimumRequirements, groups, minimums, grade_points_milli: gradePoints, corequisites, courses: choices.filter(row => [...groups.flat(), ...corequisites].includes(row.id)), revision };
+            result = { completion_windows: completionWindows, course: target, requirement_credit_origins: requirementOrigins, credit_origin: creditOrigin, minimum_requirements: minimumRequirements, groups, minimums, grade_points_milli: gradePoints, corequisites, courses: choices.filter(row => [...groups.flat(), ...corequisites].includes(row.id)), revision };
         } else if (path === '/sis/prerequisite-labels/') result = { items: choices.filter(row => data.ids.includes(row.id)) };
         else if (path.endsWith('/publication/page/')) result = { items: [], next_cursor: null };
         else if (path.endsWith('/publication/review/')) result = { expected_version: 0, definition: definition(),
@@ -81,6 +81,11 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
     await expect(page.getByRole('button', { name: 'Choose MATH.101', exact: true })).toBeVisible();
     await page.getByRole('button', { name: counted ? 'Choose MATH.110' : 'Choose ENG.101', exact: true }).click();
     if (counted) await page.getByRole('region', { name: 'Requirement 2', exact: true }).getByLabel('Minimum grade points', { exact: true }).fill('0');
+    const completion = page.getByRole('region', {name: 'Requirement 1', exact: true});
+    await completion.getByLabel('Completed from', {exact: true}).fill('2025-01-01');
+    await completion.getByLabel('Completed through', {exact: true}).fill('2024-12-31');
+    await expect(page.getByRole('button', {name: 'Save requirements', exact: true})).toBeDisabled();
+    await completion.getByLabel('Completed through', {exact: true}).fill('2025-12-31');
     await page.getByLabel('Qualifying prerequisite coursework', { exact: true }).selectOption(counted ? 'transfer' : 'institutional');
     await expect(page.getByRole('region', { name: 'Requirement 1', exact: true }))
         .toContainText(`Effective coursework source: ${counted ? 'Transfer work only' : 'Institutional work only'}`);
@@ -111,12 +116,14 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
         expect(enlarged.violations.map(item => item.id)).toEqual([]);
         expect(await page.locator('#drawer-body').evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
         await page.getByRole('region', { name: 'Requirement 1', exact: true }).getByLabel('Coursework source for this requirement', { exact: true }).scrollIntoViewIfNeeded();
-        await page.screenshot({ path: '/tmp/etsis-prerequisite-requirement-phone.png' });
+        await page.getByRole('region', {name: 'Requirement 1', exact: true}).getByLabel('Completed from', {exact: true}).scrollIntoViewIfNeeded();
+        await page.screenshot({ path: '/tmp/etsis-prerequisite-completion-window-phone.png' });
         await page.evaluate(() => { document.documentElement.style.fontSize = ''; });
         await page.setViewportSize({ width: 375, height: 812 });
     }
     await page.getByRole('button', { name: 'Save requirements', exact: true }).click();
     await expect(page.getByLabel('Qualifying prerequisite coursework', { exact: true })).toHaveValue(counted ? 'transfer' : 'institutional');
+    await expect(page.getByRole('region', {name: 'Requirement 1', exact: true}).getByLabel('Completed from', {exact: true})).toHaveValue('2025-01-01');
     await expect(page.getByRole('region', { name: 'Requirement 1', exact: true }).getByLabel('Coursework source for this requirement', { exact: true })).toHaveValue(counted ? 'institutional' : 'transfer');
     await expect(page.getByRole('region', { name: 'Requirement 1', exact: true })).toContainText('MATH.110');
     await expect(page.getByRole('region', { name: 'Requirement 2', exact: true })).toContainText(counted ? 'MATH.110' : 'ENG.101');
@@ -135,6 +142,7 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
     await page.getByLabel('Reason for publication', { exact: true }).fill('Fictional reviewed prerequisite choices');
     await page.getByRole('button', { name: 'Review current definition', exact: true }).click();
     await page.getByText(pathways ? 'Meet 1 of 2 prerequisite requirements' : counted ? 'Meet the course counts in 2 requirements' : 'Complete one course from each of 2 requirements', { exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Completed from: 2025-01-01');
     await expect(page.locator('#drawer-body')).toContainText(counted ? 'At least 2 of: MATH.101 · Algebra <b>fictional</b>; MATH.110 · Foundations; ENG.101 · Academic writing' : 'MATH.101 · Algebra <b>fictional</b> OR MATH.110 · Foundations');
     await expect(page.locator('#drawer-body')).toContainText('ENG.101 · Academic writing');
     if (counted) await expect(page.locator('#drawer-body')).toContainText('Minimum 2.675 grade points per counted course');
@@ -149,6 +157,7 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
     expect(minimumRequirements).toBe(pathways ? 1 : null);
     expect(minimums).toEqual(counted ? [2, 1] : [1, 1]);
     expect(corequisites).toEqual([id(5)]);
+    expect(completionWindows).toEqual([{from: '2025-01-01', through: '2025-12-31'}, null]);
     expect(requirementOrigins).toEqual([counted ? 'institutional' : 'transfer', 'either']);
     expect(gradePoints).toEqual(counted ? [2675, 0] : [null, null]);
     const saves = calls.filter(call => call.path.endsWith('/prerequisite-groups/') && call.data);
