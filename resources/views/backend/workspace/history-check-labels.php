@@ -5,6 +5,15 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'waitlist' => trans_html('Waitlist request'),
+    'waitlist_components' => trans_html('Retained request, queue projection and protected history'),
+    'waitlist_count' => trans_html('Retained requests checked'),
+    'check_waitlist' => trans_html('Check waitlist request history'),
+    'waitlist_help' => trans_html(
+        'Compare this request with protected queue history using a 200-event allowance. '
+        . 'This check allocates no seat and does not verify registration eligibility, academic or financial records, '
+        . 'notifications or archive completeness.'
+    ),
     'academic_credit' => trans_html('Selected academic record'),
     'credit_count' => trans_html('Academic sources checked'),
     'check_credit' => trans_html('Check selected academic history'),

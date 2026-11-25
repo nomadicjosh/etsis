@@ -397,6 +397,14 @@ Execution is deliberately bounded: one hundred active places per section, two th
 
 Staff API roots are `/sis/sections/{id}/waitlist/` and its `policy/` resource; mutations use `review/` and `confirm/`, and student-specific staff context uses `context/`. Owner reads use `/portal/api/waitlists/{student}/` and `sections/{id}/`, with reviewed mutations beneath the latter. Selected-request review requires explicit `entry_id` (null for joining, the exact active request for withdrawal/removal). Every owner route checks the canonical person/account link, even for privileged users. Browser mutations retain framework CSRF; responses are private/no-store with debug collection suppressed.
 
+### Check a waitlist request's history
+
+Authorized support staff can choose **Check waitlist request history** beside a request in **Section waitlist**, then deliberately choose **Run history check**. The shared drawer compares the retained request with protected queue history and its current projection. It displays a minimized result and restricted previous check receipts. It changes no request, seat, enrollment, charge or personal notification. A prior receipt describes that observation, not a guarantee about the current queue.
+
+This action requires all of `sis:history:verify`, `sis:audit:read`, `sis:student:read`, `sis:registration:waitlist` and `sis:registration:manage`; queue access alone grants no support authority. Browser work uses a fixed 200-event allowance. A changed, limited or unverified result needs a separate authorized review. **Back to record** rereads the originating queue page; losing access clears private results and pending responses cannot reopen the check. Nothing is saved in browser storage.
+
+The [operator's selected request check](event-history-foundation.md#selected-waitlist-request-checks) also handles retained cancelled, removed and registered requests through the same protected reader. The check does not certify academic/financial consequences, registration eligibility, notification delivery, complete archives or restore readiness. No new report, grant, business journal or schema is added.
+
 ### Register several oldest requests together
 
 Open **Academic catalog → Sections → a section → Section waitlist**. On the first queue page, staff with both queue/student-read access and registration authority see **Register oldest waiting requests** when seats are available. Enter **Number of oldest requests**, then choose **Review oldest requests together**. This launcher selects consecutive requests from the start of that displayed queue, up to twenty requests and the available seats. It does not select an entire queue automatically, reserve seats or skip a blocked student.

@@ -376,6 +376,7 @@ window.createSectionWaitlist = function (ui) {
                 action("Review removal", () =>
                     remove(body, section, item, () => staff(section, back)),
                 ),
+                historyAction(item, () => staff(section, back, after, previous)),
             ),
         ]);
         render(body,
@@ -420,6 +421,14 @@ window.createSectionWaitlist = function (ui) {
                 : null,
             back ? action("Back to section", back) : null,
         );
+    }
+    function historyAction(item, back) {
+        if (!ui.historyChecks || !['sis:history:verify', 'sis:audit:read', 'sis:student:read',
+            'sis:registration:waitlist', 'sis:registration:manage'].every(permission => ui.can?.(permission))) return null;
+        const control = action(ui.historyCheckLabels?.check_waitlist || 'Check waitlist request history',
+            () => ui.historyChecks().open('waitlist', item.entry_id, back));
+        control.prepend(node('i', { class: 'bi bi-shield-check', 'aria-hidden': 'true' }));
+        return control;
     }
     function allocation(section, data, back) {
         const count = node('input', { type: 'number', id: 'waitlist-allocation-count', class: 'form-control',

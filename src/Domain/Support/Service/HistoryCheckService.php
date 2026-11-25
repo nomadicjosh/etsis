@@ -56,6 +56,8 @@ final readonly class HistoryCheckService
         private EmploymentProjectionVerifier $employmentHistory,
         private TimeRepository $employees,
         private \Domain\DegreeAudit\Repository\DegreeProgressRecordRepository $progressRecords,
+        private \Domain\Registration\Waitlist\WaitlistProjectionVerifier $waitlistHistory,
+        private \Domain\Registration\Waitlist\WaitlistRepository $waitlists,
     ) {
     }
 
@@ -72,6 +74,10 @@ final readonly class HistoryCheckService
         $employee = in_array($kind, [
             HistoryCheckSubject::PrimaryPosition, HistoryCheckSubject::Position, HistoryCheckSubject::TimeEntry,
         ], true) ? $this->receipts->employmentSubject($kind, $id) : null;
+        $waiting = $kind === HistoryCheckSubject::Waitlist
+        ? ($this->waitlists->entry($id) ?? throw new RecordNotFoundException(
+            trans('Waitlist request not found.')
+        )) : null;
         $load = $kind === HistoryCheckSubject::Load
         ? ($this->loads->find($id) ?? throw new RecordNotFoundException("Load determination not found."))
         : null;
@@ -92,6 +98,7 @@ final readonly class HistoryCheckService
             HistoryCheckSubject::Application => null,
             HistoryCheckSubject::Student => $id,
             HistoryCheckSubject::Credit => $this->receipts->creditStudent($id),
+            HistoryCheckSubject::Waitlist => new EntityId($waiting['student_id']),
             HistoryCheckSubject::Standing, HistoryCheckSubject::Advisors, HistoryCheckSubject::Requirements =>
             $this->students->assignment($id)->studentId,
             HistoryCheckSubject::Load => new EntityId($load["student_id"]),
@@ -110,6 +117,7 @@ final readonly class HistoryCheckService
                     : ($student === null ? $id : $this->admissions->student($student)->personId)),
         );
         if (
+            ($waiting !== null && $waiting['person_id'] !== $person->id->value) ||
             $actor->value !== $this->access->authenticatedUserId()->value ||
             ($person->ownerUserId !== null &&
                 $this->roles->isSuper($person->ownerUserId->value) &&
@@ -119,7 +127,16 @@ final readonly class HistoryCheckService
                 "This history check requires current support authority.",
             );
         }
-        return new HistoryCheckScope($kind, $id, $person->id, $person->ownerUserId, $student, $pursuit, $employee);
+        return new HistoryCheckScope(
+            $kind,
+            $id,
+            $person->id,
+            $person->ownerUserId,
+            $student,
+            $pursuit,
+            $employee,
+            $waiting === null ? null : new EntityId($waiting['section_id']),
+        );
     }
 
     private function recheck(HistoryCheckScope $scope, EntityId $actor): void
@@ -129,6 +146,7 @@ final readonly class HistoryCheckService
             $scope->criteria() !== $current->criteria()
             || $scope->pursuit?->value !== $current->pursuit?->value
             || $scope->employee?->value !== $current->employee?->value
+            || $scope->section?->value !== $current->section?->value
         ) {
             throw new ConcurrentModificationException(
                 "Record routing changed. Reopen the record before checking its history.",
@@ -181,6 +199,8 @@ final readonly class HistoryCheckService
                 HistoryCheckSubject::Person => $this->persons
                     ->verify($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)
                     ->describe(),
+                HistoryCheckSubject::Waitlist => $this->waitlistHistory
+                    ->verify($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Credit => $this->academics
                     ->credit($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Student => $this->academics

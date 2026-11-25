@@ -445,6 +445,9 @@ try {
         } elseif (($argv[1] ?? '') === 'check-employment-projections') {
             require __DIR__ . '/EmploymentProjectionBootChecks.php';
             $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-waitlist-projections') {
+            require __DIR__ . '/WaitlistProjectionBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-student-decision-projections') {
             require __DIR__ . '/StudentDecisionProjectionBootChecks.php';
             $status = 0;

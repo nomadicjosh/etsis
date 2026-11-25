@@ -18,6 +18,7 @@ final readonly class HistoryCheckScope
         public ?EntityId $student,
         public ?EntityId $pursuit = null,
         public ?EntityId $employee = null,
+        public ?EntityId $section = null,
     ) {
     }
 

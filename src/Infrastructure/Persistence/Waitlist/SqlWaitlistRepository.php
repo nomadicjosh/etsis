@@ -16,6 +16,11 @@ final readonly class SqlWaitlistRepository implements WaitlistRepository
     public function __construct(private SqlRecords $sql, private MessageCipher $cipher)
     {
     }
+    public function entry(EntityId $entry): ?array
+    {
+        $row = $this->sql->one('sis_waitlist_entries', ['id' => $entry->value]);
+        return $row === null ? null : $this->row($row);
+    }
     public function current(EntityId $section): ?array
     {
         $row = $this->sql->current("sis_waitlist_state", $section->value, "section_id");

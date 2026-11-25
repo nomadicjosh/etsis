@@ -30,6 +30,9 @@ require_once __DIR__ . '/EmploymentHistoryFixture.php';
 $supportEmployment = new \Tests\Support\EmploymentHistoryFixture($sis);
 require_once __DIR__ . '/TransferAwardFixture.php';
 $supportTransfer = new \TransferAwardFixture($sis, $sis->dropCipher, $supportStudent->id);
+require_once __DIR__ . '/WaitlistVerificationFixture.php';
+$supportWaitlist = new \Tests\Support\WaitlistVerificationFixture($sis);
+$waitlistFacts = $supportWaitlist->facts();
 $employmentFacts = $supportEmployment->facts();
 $supportEvents = array_map($sis->sql->rows(...), [
     "sis_history_events",
@@ -62,6 +65,7 @@ $supportRead = static function (string $path, array $data) use ($teachingPost): 
     return json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
 };
 $supportCases = [
+    'waitlist' => $supportWaitlist->entry->value,
     "person" => $supportStudent->personId->value,
     "student" => $supportStudent->id->value,
     "credit" => $supportTransfer->credit->value,
@@ -90,7 +94,7 @@ foreach ($supportCases as $kind => $id) {
         !isset($checked["receipt"]["reference"]) ||
         (in_array(
             $kind,
-            ['credit', 'account', 'application', 'standing', 'load', 'primary', 'position', 'time'],
+            ['waitlist', 'credit', 'account', 'application', 'standing', 'load', 'primary', 'position', 'time'],
             true
         ) &&
             ($checked["result"]["status"] ?? null) !== "verified")
@@ -128,6 +132,21 @@ foreach (
         throw new RuntimeException('Support checking bypassed the independent student-decision duty.');
     }
 }
+foreach (
+    ['sis:history:verify', 'sis:audit:read', 'sis:student:read',
+    'sis:registration:waitlist', 'sis:registration:manage'] as $missing
+) {
+    $sis->access->grants = array_values(array_diff(['sis:history:verify', 'sis:audit:read', 'sis:student:read',
+        'sis:registration:waitlist', 'sis:registration:manage'], [$missing]));
+    foreach (['run', 'history'] as $method) {
+        if (
+            $teachingPost($supportBase . 'waitlist/' . $supportCases['waitlist'] . '/' . $method . '/', [])
+            ->getStatusCode() !== 403
+        ) {
+            throw new RuntimeException('Waitlist support bypassed an independent required duty.');
+        }
+    }
+}
 foreach (['primary', 'position', 'time'] as $kind) {
     foreach (
         [['sis:history:verify', 'sis:audit:read'], ['sis:hr:manage', 'sis:audit:read'],
@@ -153,6 +172,7 @@ if (
         $supportBase . "unknown/" . $supportStudent->id->value . "/run/",
         [],
     )->getStatusCode() !== 422 ||
+    $waitlistFacts !== $supportWaitlist->facts() ||
     $employmentFacts !== $supportEmployment->facts() || $supportEvents !==
         array_map($sis->sql->rows(...), [
             "sis_history_events",

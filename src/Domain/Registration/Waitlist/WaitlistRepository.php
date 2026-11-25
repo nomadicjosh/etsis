@@ -8,6 +8,8 @@ use Domain\Shared\ValueObject\EntityId;
 
 interface WaitlistRepository
 {
+    /** Indexed retained routing, including completed or removed requests. No event replay. */
+    public function entry(EntityId $entry): ?array;
     /** Caller holds the section lock before consequential reads/writes. */
     public function current(EntityId $section): ?array;
     public function active(EntityId $section): array;

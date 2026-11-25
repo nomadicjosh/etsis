@@ -2,6 +2,10 @@
 'use strict';
 window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels = {} }) => {
     const fallbackLabels = {
+        waitlist: 'Waitlist request',
+        waitlist_components: 'Retained request, queue projection and protected history',
+        waitlist_count: 'Retained requests checked',
+        waitlist_help: 'Compare this request with protected queue history using a 200-event allowance. This check allocates no seat and does not verify registration eligibility, academic or financial records, notifications or archive completeness.',
         academic_credit: 'Selected academic record',
         credit_count: 'Academic sources checked',
         credit_help: 'Compare this institutional or transfer credit with its available protected source, registration and projections. This uses a 200-event allowance and makes no correction. Earlier gaps, pursuit attribution, equivalence, finances and full archive completeness need separate review.',
@@ -38,7 +42,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         history_help: "Previous results describe their recorded observation, not a continuing guarantee about the current record. No event payloads, application answers, private profile values, financial amounts or credentials are displayed.",
     };
     const text = key => labels[key] || fallbackLabels[key];
-    const kinds = { credit: text('academic_credit'), progress: text('recorded_progress'), advisors: text('advisor_assignments'), requirements: text('degree_selection'), person: 'Person profile', student: 'Student academic records', account: 'Student account', application: text('application'), standing: text('program_standing'), load: text('retained_load'), primary: text('primary_position'), position: text('position'), time: text('time_entry') };
+    const kinds = { waitlist: text('waitlist'), credit: text('academic_credit'), progress: text('recorded_progress'), advisors: text('advisor_assignments'), requirements: text('degree_selection'), person: 'Person profile', student: 'Student academic records', account: 'Student account', application: text('application'), standing: text('program_standing'), load: text('retained_load'), primary: text('primary_position'), position: text('position'), time: text('time_entry') };
     const employmentKinds = ['primary', 'position', 'time'];
     const statuses = {
         verified: ['Verified within this check', 'The selected recorded sources matched their projections at the observed point.'],
@@ -48,7 +52,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         changed: ['Records changed during the check', 'This is an incomplete observation. Review the record and deliberately run a new check.'],
         limited: ['Check limit reached', 'This is an incomplete observation. Ask a trusted operator for a larger bounded command-line review.'],
     };
-    const issues = { journal: 'Protected history', identity: 'Person identity', account_link: 'Account link', contact: 'Contact projection',
+    const issues = { waitlist_entry: text('waitlist_components'), journal: 'Protected history', identity: 'Person identity', account_link: 'Account link', contact: 'Contact projection',
         addresses: 'Address projection', emergency_contacts: 'Emergency-contact projection', education: 'Education projection',
         unavailable: 'Verification source unavailable', student_identity: 'Student identity', academic_sources: 'Academic sources',
         account_identity: 'Account identity', balance: 'Balance projection', postings: 'Posting projection',
@@ -102,7 +106,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
                 node('p', { class: 'text-break' }, `Support reference: ${receipt.reference}`),
                 node('p', {}, `Observed ${receipt.checked_at} · ${check.events_checked} events checked (maximum ${data.event_limit}).`));
             if (check.records_checked != null) result.append(node('p', {},
-                `${text(employmentKinds.includes(kind) ? 'hr_count' : kind === 'credit' ? 'credit_count' : kind === 'standing' ? 'standing_count' : kind === 'advisors' ? 'advisor_count' : kind === 'requirements' ? 'requirement_count' : kind === 'progress' ? 'progress_count' : 'load_count')}: ${check.records_checked}.`));
+                `${text(employmentKinds.includes(kind) ? 'hr_count' : kind === 'waitlist' ? 'waitlist_count' : kind === 'credit' ? 'credit_count' : kind === 'standing' ? 'standing_count' : kind === 'advisors' ? 'advisor_count' : kind === 'requirements' ? 'requirement_count' : kind === 'progress' ? 'progress_count' : 'load_count')}: ${check.records_checked}.`));
             if (check.position != null) result.append(node('p', {}, `Observed stream position: ${check.position}.`));
             if (check.current_records != null) result.append(node('p', {}, `Current academic records checked: ${check.current_records}.`));
             if (check.expected_postings != null) result.append(node('p', {}, `Expected postings checked: ${check.expected_postings}.`));
@@ -120,7 +124,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         if (back) controls.append(node('button', { type: 'button', class: 'btn btn-link', onclick: event => task(back, event.currentTarget) }, 'Back to record'));
         body.append(node('h3', { class: 'h5' }, kinds[kind]),
             node('p', {}, text(employmentKinds.includes(kind) ? 'hr_help' :
-                kind === 'credit' ? 'credit_help' : kind === 'progress' ? 'progress_help' : ['advisors', 'requirements'].includes(kind) ? 'curriculum_help' : 'check_help')),
+                kind === 'waitlist' ? 'waitlist_help' : kind === 'credit' ? 'credit_help' : kind === 'progress' ? 'progress_help' : ['advisors', 'requirements'].includes(kind) ? 'curriculum_help' : 'check_help')),
             node('p', { class: 'form-text' }, text(employmentKinds.includes(kind) ? 'hr_history_help' : 'history_help')),
             controls, status, result, history, node('div', { class: 'd-flex gap-2 flex-wrap' }, previous, older));
         async function load() {

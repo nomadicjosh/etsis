@@ -134,6 +134,24 @@ Staff open **Students → Degree requirements → Recorded progress reviews → 
 
 The originating requirements modal closes before the support drawer opens. **Back to record** returns directly to the selected saved review, rereads it under current access and focuses its summary; it does not run a fresh progress calculation. Late/denied responses cannot restore a prior result, and lost source-read access leaves no stale saved summary. Owners, advisors and student-read permission alone do not acquire support authority. No proof, snapshot or check result enters browser storage. No migration, new permission/grant, report or separate event store is needed.
 
+### Selected waitlist request checks
+
+Trusted operators can check one retained request with the existing command:
+
+```sh
+ddev codex sis:history:verify --waitlist-entry=REQUEST_ULID --events=500 --json
+```
+
+Use the retained request's ULID, not a student, enrollment or section ID. This selector is exclusive: do not combine it with another selected subject, `--streams` or `--cursor`. The default allowance is 500 events; `--events` accepts 1–2,000. Invalid input is rejected before resolving storage. The command remains a `ConsoleCommand` with plain untranslated console strings. Exit 0 means verified; 3 means changed or limited; 1 means missing/unverified/unavailable; 2 means invalid input.
+
+`WaitlistProjectionVerifier` checks an active, cancelled, removed or registered request through the ordinary `WaitlistLedger`. The ledger authenticates the section's queue history, accepted policy/FIFO/bypass decisions and active projection. The selected discovery row, including a closed outcome, must exactly match its retained entry; current canonical student/person routing and section existence must agree. Before/after selected rows, current queue state, active places, routing and protected head are compared outside a snapshot transaction. An enclosing transaction or parallel legacy event table cannot produce a verified result. There is one replay allowance of the requested event count, four MiB and five cooperative seconds. Exact multi-page allowances work; excessive histories fail without partial success. These checks write no events, business facts, audit rows, receipts or notifications.
+
+Output contains only status, the selected request reference, event count, observed section-stream position, one compared record on success and fixed issue codes. It contains no student/person identity, queue rank, outcome, private reason, enrollment reference or event payload. Missing/damaged evidence is unverified; concurrent boundary changes are changed; an exhausted allowance is limited. No request history is inferred from current registration, and a registered request can remain valid after an early drop removes its current enrollment. Registration/academic/financial integrity, disposable notices, every retry receipt, archive completeness and restore readiness have separate checks and acceptance requirements.
+
+Staff open **Academic catalog → Sections → a section → Section waitlist → Check waitlist request history** beside a request. All five duties are required: `sis:history:verify`, `sis:audit:read`, `sis:student:read`, `sis:registration:waitlist` and `sis:registration:manage`. Current canonical-person and super-owner safeguards apply to checks and previous receipts. Browser checks use the fixed 200-event allowance and existing private/no-store CSRF-protected routes. Only a minimal existing support receipt and required audit are saved atomically after verification; final current actor, person/student and selected section/request routing are rechecked. This does not grant access or allocate seats.
+
+**Back to record** rereads the originating queue page with its existing Previous/Next navigation. Access loss clears results; detached responses cannot reopen an old check. No request, proof or result enters browser storage. Closed requests remain available to the operator selector; the ordinary section queue still lists active requests only. This slice adds no schema, permission, report or separate event store. Populated fictional SQLite checks, actual-provider console/HTTP qualification and browser accessibility cover this workflow; populated native-server, long-lived queue, independent security and institutional retention/restore acceptance remain separate.
+
 ### Full protected journal checks
 
 Deployment operators can check protected event chains with the existing console runner:

@@ -31,6 +31,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
         ["cursor", null, "required", "Protected continuation from an earlier verification batch."],
         ["json", null, "none", "Emit machine-readable counts and a protected continuation cursor."],
         ['credit', null, 'required', 'Check one institutional or transfer academic credit and source; no cursor.'],
+        ['waitlist-entry', null, 'required', 'Compare one retained waitlist request with queue history; no cursor.'],
         ['student', null, 'required', 'Check one student’s available academic sources and projections; no cursor.'],
         ['account', null, 'required', 'Verify one financial account and its balance/posting projections; no cursor.'],
         ['person', null, 'required', 'Compare one person’s profile projections with protected history; no cursor.'],
@@ -76,15 +77,22 @@ final class VerifyHistoryCommand extends ConsoleCommand
             $advisors = $this->getOptions('advisors');
             $requirements = $this->getOptions('requirements');
             $progress = $this->getOptions('progress-record');
+            $waitlist = $this->getOptions('waitlist-entry');
             $employment = [
                 'primary-position' => $this->getOptions('primary-position'),
                 'position' => $this->getOptions('position'),
                 'time-entry' => $this->getOptions('time-entry'),
             ];
             $subjects = [$account, $student, $credit, $person, $application, $standing, $load,
-                $advisors, $requirements, $progress, ...array_values($employment)];
+                $advisors, $requirements, $progress, $waitlist, ...array_values($employment)];
             if (count(array_filter($subjects, static fn(mixed $id): bool => $id !== null)) > 1) {
                 throw new InvalidArgumentException();
+            }
+            if ($waitlist !== null) {
+                if (!is_string($waitlist) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
+                    throw new InvalidArgumentException();
+                }
+                return $this->waitlist(new EntityId($waitlist), $events, $json);
             }
             foreach ($employment as $kind => $reference) {
                 if ($reference === null) {
@@ -267,6 +275,29 @@ final class VerifyHistoryCommand extends ConsoleCommand
         return match ($result->status) {
             'verified' => self::SUCCESS,
             'observed_empty', 'changed', 'limited' => 3,
+            default => self::FAILURE,
+        };
+    }
+
+    private function waitlist(EntityId $entry, int $events, bool $json): int
+    {
+        $result = $this->codefy->make(\Domain\Registration\Waitlist\WaitlistProjectionVerifier::class)
+            ->verify($entry, $events);
+        if ($json) {
+            $this->terminalRaw(json_encode($result->describe(), JSON_THROW_ON_ERROR));
+        } else {
+            $this->terminalRaw('Waitlist request ' . $entry->value . ': ' . $result->status . '.');
+            $this->terminalRaw($result->events . ' events checked. No records were changed.');
+            if ($result->issues !== []) {
+                $this->terminalRaw('Components requiring review: ' . implode(', ', $result->issues) . '.');
+            }
+            $this->terminalRaw('This compares one retained request and its queue projection, '
+                . 'not registration eligibility, academic or financial records, notifications, '
+                . 'every retry receipt or archive completeness. No seat was allocated.');
+        }
+        return match ($result->status) {
+            'verified' => self::SUCCESS,
+            'changed', 'limited' => 3,
             default => self::FAILURE,
         };
     }

@@ -25,9 +25,9 @@ async function accessible(page) {
         true,
     );
 }
-async function staffFixture(page) {
+async function staffFixture(page, options = {}) {
     const calls = [],
-        errors = [];
+        errors = [], waitlistPages = [], receipts = [];
     let policy = defaults(),
         version = 0;
     page.on("pageerror", (e) => errors.push(e.message));
@@ -37,7 +37,19 @@ async function staffFixture(page) {
         const data = raw ? JSON.parse(new URLSearchParams(raw).get("_workspace_json")) : null;
         if (data) calls.push({ path, data, csrf: route.request().headers()["x-csrf-token"] });
         let result = {};
-        if (path === "/sis/ui/metrics/")
+        if (path.includes('/history-checks/waitlist/')) {
+            if (path.endsWith('/run/')) {
+                if (options.delay) await options.delay();
+                const status = options.outcome || 'verified';
+                const receipt = { reference: operation, status, events_checked: 2,
+                    checked_at: '2026-08-10T17:00:00Z' };
+                receipts.push(receipt);
+                result = { result: { status, events_checked: 2, position: 2,
+                    records_checked: status === 'verified' ? 1 : null,
+                    issues: status === 'unverified' ? ['waitlist_entry'] : [] }, receipt, event_limit: 200 };
+            } else result = { items: receipts, next_after: null };
+        }
+        else if (path === "/sis/ui/metrics/")
             result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path.startsWith("/sis/ui/data/"))
             result = {
@@ -64,7 +76,8 @@ async function staffFixture(page) {
             policy = data.policy;
             version++;
             result = { status: "recorded" };
-        } else if (path.endsWith("/waitlist/"))
+        } else if (path.endsWith("/waitlist/")) {
+            waitlistPages.push(new URL(route.request().url()).searchParams.get('after'));
             result = {
                 section_code: "HIST 101.A",
                 policy,
@@ -82,7 +95,7 @@ async function staffFixture(page) {
                 ],
                 next_after: 2,
             };
-        else if (path.endsWith("/waitlist/review/"))
+        } else if (path.endsWith("/waitlist/review/"))
             result = {
                 operation_id: operation,
                 action: data.action,
@@ -94,11 +107,11 @@ async function staffFixture(page) {
         else if (path.endsWith("/waitlist/confirm/")) result = { status: "recorded" };
         await route.fulfill({ json: result, headers: { "Cache-Control": "private, no-store" } });
     });
-    await page.goto("/admin/");
+    await page.goto(options.path || "/admin/");
     await page.locator('.workspace-nav-link[data-workspace="courses"]').click();
     await page.getByRole("link", { name: "Sections", exact: true }).click();
     await page.getByRole("button", { name: "HIST 101.A", exact: true }).click();
-    return { calls, errors };
+    return { calls, errors, waitlistPages };
 }
 test("each section has an explicit disabled default and a reviewed policy with a preserved edit draft", async ({
     page,
@@ -452,4 +465,71 @@ test('a delayed group review cannot replace the queue after returning to the rec
     await expect(page.getByRole('button', {name: 'Review selected group', exact: true})).toHaveCount(0);
     await expect(page.getByRole('region', {name: 'Reviewed registration group', exact: true})).toHaveCount(0);
     expect(f.errors).toEqual([]);
+});
+
+
+test('selected waitlist support check preserves the queue page and is private and accessible', async ({ page }) => {
+    const { calls, errors, waitlistPages } = await staffFixture(page);
+    await page.getByRole('button', { name: 'Section waitlist', exact: true }).click();
+    await page.getByRole('button', { name: 'Next waitlist page', exact: true }).click();
+    await page.getByRole('button', { name: 'Check waitlist request history', exact: true }).click();
+    expect(calls.some(c => c.path.includes('/history-checks/') && c.path.endsWith('/run/'))).toBe(false);
+    const run = page.getByRole('button', { name: 'Run history check', exact: true });
+    await run.focus(); await page.keyboard.press('Enter');
+    const result = page.getByRole('region', { name: 'Current check result', exact: true });
+    await expect(result).toContainText('Retained requests checked: 1');
+    await expect(result).toContainText('maximum 200');
+    await expect(result).not.toContainText('Alex');
+    await expect(page.getByRole('region', { name: 'Previous history checks', exact: true })).toContainText(operation);
+    await page.setViewportSize({ width: 320, height: 812 });
+    await accessible(page);
+    await page.locator('#record-drawer').evaluate(el => { el.style.fontSize = '200%'; });
+    await accessible(page);
+    await page.screenshot({ path: '/tmp/etsis-waitlist-support-phone.png', fullPage: true });
+    expect(calls.filter(c => c.path.includes('/history-checks/')).every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.locator('#drawer-title')).toHaveText('Section waitlist');
+    expect(waitlistPages.at(-1)).toBe('2');
+    expect(errors).toEqual([]);
+});
+
+test('waitlist support access loss clears results and queue-only staff have no support action', async ({ page }) => {
+    const { errors } = await staffFixture(page, { outcome: 'unverified' });
+    await page.getByRole('button', { name: 'Section waitlist', exact: true }).click();
+    await page.getByRole('button', { name: 'Check waitlist request history', exact: true }).click();
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+    const result = page.getByRole('region', { name: 'Current check result', exact: true });
+    await expect(result).toContainText('Retained request, queue projection and protected history');
+    await expect(result).not.toContainText('Retained requests checked:');
+    await page.route('**/sis/history-checks/**', route => route.fulfill({ status: 403, json: { error: 'Current support authority is required.' } }));
+    await page.getByRole('button', { name: 'Refresh previous checks', exact: true }).click();
+    await expect(result).toBeEmpty();
+    await expect(page.getByRole('region', { name: 'Previous history checks', exact: true })).toBeEmpty();
+    await page.unroute('**/sis/history-checks/**');
+    await page.goto('/admin/waitlist-office-fixture/');
+    await page.locator('.workspace-nav-link[data-workspace="courses"]').click();
+    await page.getByRole('link', { name: 'Sections', exact: true }).click();
+    await page.getByRole('button', { name: 'HIST 101.A', exact: true }).click();
+    await page.getByRole('button', { name: 'Section waitlist', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Review removal', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Check waitlist request history', exact: true })).toHaveCount(0);
+    expect(errors).toEqual([]);
+});
+
+test('returning from a pending waitlist check discards its detached response', async ({ page }) => {
+    let signal, release;
+    const started = new Promise(resolve => { signal = resolve; });
+    const pending = new Promise(resolve => { release = resolve; });
+    const { errors } = await staffFixture(page, { delay: async () => { signal(); await pending; } });
+    await page.getByRole('button', { name: 'Section waitlist', exact: true }).click();
+    await page.getByRole('button', { name: 'Check waitlist request history', exact: true }).click();
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+    await started;
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    const reply = page.waitForResponse(response => response.url().includes('/history-checks/') && response.url().endsWith('/run/'));
+    release(); await reply;
+    await expect(page.locator('#drawer-title')).toHaveText('Section waitlist');
+    await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toHaveCount(0);
+    expect(errors).toEqual([]);
 });

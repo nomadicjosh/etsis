@@ -4294,3 +4294,27 @@ msgstr ""
 #: src/Domain/Registration/Service/RegistrationBatchService.php:976
 msgid "Every earlier waiting request is selected in this group and will register first."
 msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Waitlist request"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Retained request, queue projection and protected history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Retained requests checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Check waitlist request history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php
+msgid "Compare this request with protected queue history using a 200-event allowance. This check allocates no seat and does not verify registration eligibility, academic or financial records, notifications or archive completeness."
+msgstr ""
+
+#: src/Domain/Support/Service/HistoryCheckService.php
+msgid "Waitlist request not found."
+msgstr ""

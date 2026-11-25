@@ -26,6 +26,106 @@ use PHPUnit\Framework\TestCase;
 
 final class HistoryCheckServiceTest extends TestCase
 {
+    public function testWaitlistChecksRetainOnlyScopedSupportMetadataAndNeverReplayNotices(): void
+    {
+        require_once dirname(__DIR__) . '/Support/WaitlistVerificationFixture.php';
+        $f = new \Tests\Support\WaitlistVerificationFixture();
+        $f->close('removed');
+        $s = $f->sis;
+        $before = $f->facts();
+        $service = $this->service($s);
+        $result = $service->run(HistoryCheckSubject::Waitlist, $f->entry);
+        self::assertSame('verified', $result['result']['status']);
+        self::assertSame(1, $result['result']['records_checked']);
+        self::assertSame(200, $result['event_limit']);
+        self::assertSame([$result['receipt']], $service->history(HistoryCheckSubject::Waitlist, $f->entry)['items']);
+        self::assertSame([], $service->history(HistoryCheckSubject::Student, $f->student)['items']);
+        self::assertSame('waitlist', $s->sql->rows('sis_history_checks')[0]['subject_type']);
+        foreach (['Fictional', 'reason', 'student_id', 'person_id', 'rank', 'enrollment_id'] as $private) {
+            self::assertStringNotContainsString($private, json_encode($result));
+        }
+        self::assertSame($before, $f->facts());
+    }
+
+    public function testWaitlistSupportRequiresEverySourceDutyAndProtectsSuperOwners(): void
+    {
+        require_once dirname(__DIR__) . '/Support/WaitlistVerificationFixture.php';
+        $f = new \Tests\Support\WaitlistVerificationFixture();
+        $s = $f->sis;
+        $s->access->staff = false;
+        $duties = ['sis:history:verify', 'sis:audit:read', ...HistoryCheckSubject::Waitlist->permissions()];
+        $service = $this->service($s);
+        foreach ($duties as $missing) {
+            $s->access->grants = array_values(array_diff($duties, [$missing]));
+            $this->rejects(
+                fn () => $service->run(HistoryCheckSubject::Waitlist, $f->entry),
+                AccessDeniedException::class,
+            );
+            $this->rejects(
+                fn () => $service->history(HistoryCheckSubject::Waitlist, $f->entry),
+                AccessDeniedException::class,
+            );
+        }
+        $s->access->grants = $duties;
+        $owner = $s->admissions->person($s->admissions->student($f->student)->personId)->ownerUserId;
+        $roles = new SqlAccessRepository($s->sql);
+        $roles->assign(\Domain\Access\Enum\GrantKind::UserRole, $owner, $roles->roleNamed('super')->id, true);
+        $this->rejects(
+            fn () => $service->run(HistoryCheckSubject::Waitlist, $f->entry),
+            AccessDeniedException::class,
+        );
+        $this->rejects(
+            fn () => $service->history(HistoryCheckSubject::Waitlist, $f->entry),
+            AccessDeniedException::class,
+        );
+        self::assertSame([], $s->sql->rows('sis_history_checks'));
+    }
+
+    public function testWaitlistReceiptAndAuditRollBackWhenAuthorityOrRoutingChanges(): void
+    {
+        require_once dirname(__DIR__) . '/Support/WaitlistVerificationFixture.php';
+        foreach (['audit', 'authority', 'section', 'person'] as $failure) {
+            $f = new \Tests\Support\WaitlistVerificationFixture();
+            $s = $f->sis;
+            $otherSection = $s->section()->id;
+            $otherPerson = $s->legacyPerson($s->user(), 'Other', 'Fictional')->id;
+            $before = $f->facts();
+            $audit = $this->createStub(AuditTrail::class);
+            $audit->method('record')->willReturnCallback(function () use (
+                $failure,
+                $f,
+                $s,
+                $otherSection,
+                $otherPerson,
+            ): void {
+                if ($failure === 'audit') {
+                    throw new \RuntimeException('PRIVATE unavailable required audit');
+                }
+                if ($failure === 'authority') {
+                    $s->access->staff = false;
+                } else {
+                    $s->sql->update(
+                        'sis_waitlist_entries',
+                        $failure === 'section'
+                            ? ['section_id' => $otherSection->value] : ['person_id' => $otherPerson->value],
+                        ['id' => $f->entry->value]
+                    );
+                }
+            });
+            $expected = match ($failure) {
+                'audit' => \RuntimeException::class,
+                'section' => ConcurrentModificationException::class,
+                default => AccessDeniedException::class,
+            };
+            $this->rejects(
+                fn () => $this->service($s, audit: $audit)->run(HistoryCheckSubject::Waitlist, $f->entry),
+                $expected,
+            );
+            self::assertSame([], $s->sql->rows('sis_history_checks'));
+            self::assertSame($before, $f->facts());
+        }
+    }
+
     public function testSelectedCreditChecksKeepAcademicFactsPrivateAndUseExistingReceipts(): void
     {
         require_once dirname(__DIR__) . '/Support/TransferAwardFixture.php';
@@ -281,6 +381,12 @@ final class HistoryCheckServiceTest extends TestCase
             $employment ?? $s->employmentVerifier(),
             new \Infrastructure\Persistence\Repository\SqlTimeRepository($s->sql, $s->dropCipher),
             new \Infrastructure\Persistence\Repository\SqlDegreeProgressRecordRepository($s->sql),
+            new \Infrastructure\Projection\SqlWaitlistProjectionVerifier(
+                $s->sql,
+                new \Infrastructure\Persistence\Waitlist\SqlWaitlistRepository($s->sql, $s->dropCipher),
+                $s->waitlistLedger(),
+            ),
+            new \Infrastructure\Persistence\Waitlist\SqlWaitlistRepository($s->sql, $s->dropCipher),
         );
     }
 
