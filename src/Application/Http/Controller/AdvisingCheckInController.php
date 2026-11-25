@@ -113,6 +113,7 @@ final readonly class AdvisingCheckInController
                     $channel,
                     $f->boolean("finished"),
                     $f->optionalId("after"),
+                    $f->optionalId('checkin_id'),
                 ),
                 "record" => $this->service->record(
                     $s,

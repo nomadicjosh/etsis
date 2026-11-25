@@ -58,6 +58,40 @@ $checkInOwner = $sis->admissions->person($advisingStudent->personId)->ownerUserI
 $sis->access->actor = $checkInOwner;
 $sis->access->staff = false;
 $checkInOwnerPage = $checkInPost($checkInStudentBase . "list/", []);
+$readAdvisingUpdates = static function (string $query = '') use ($app, $get): array {
+    $response = $app->router->match($get->withUri(new \Laminas\Diactoros\Uri(
+        'https://campus.example.invalid/portal/api/advising-updates/' . $query
+    )));
+    if (
+        $response->getStatusCode() !== 200 || $response->hasHeader('phpdebugbar-id')
+        || !str_contains($response->getHeaderLine('Cache-Control'), 'private, no-store')
+    ) {
+        throw new RuntimeException('Advising updates lost their actual private provider boundary.');
+    }
+    return json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+};
+$advisingNotices = $readAdvisingUpdates();
+$advisingNotice = $advisingNotices['items'][0] ?? [];
+if (
+    count($advisingNotices['items']) !== 1 || ($advisingNotice['revision'] ?? null) !== 0
+    || str_contains(json_encode($advisingNotices), 'Fictional')
+    || str_contains(json_encode($advisingNotices), 'private_note')
+) {
+    throw new RuntimeException('Advising notices exposed conversation text or lost a genuine new check-in.');
+}
+$advisingNoticePath = '/portal/api/advising-updates/' . $advisingNotice['id'];
+$advisingNoticeCsrf = $get->withMethod('POST')->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid' . $advisingNoticePath . '/read/'
+))->withoutHeader('X-CSRF-Token')->withParsedBody(['revision' => 0]);
+if ($app->router->match($advisingNoticeCsrf)->getStatusCode() !== 403) {
+    throw new RuntimeException('Advising notice actions bypassed framework CSRF.');
+}
+$checkInPost($advisingNoticePath . '/read/', ['revision' => 0]);
+$checkInPost($advisingNoticePath . '/delete/', ['revision' => 0]);
+$checkInPost($advisingNoticePath . '/delete/', ['revision' => 0]);
+if ($readAdvisingUpdates()['items'] !== []) {
+    throw new RuntimeException('Deleted advising notifications persisted.');
+}
 if (
     isset($checkInOwnerPage["items"][0]["private_note"]) ||
     !str_contains(json_encode($checkInOwnerPage), "student-visible")
@@ -96,6 +130,16 @@ $checkInPost($checkInAdvisorBase . "act/", [
 $sis->access->actor = $checkInOwner;
 $sis->access->grants = [];
 $checkInFinished = $checkInPost($checkInStudentBase . "list/", ["finished" => true]);
+$selectedCheckIn = $checkInPost($checkInStudentBase . 'list/', ['checkin_id' => $checkInCreated['id']]);
+$resolutionNotice = $readAdvisingUpdates()['items'][0] ?? [];
+if (
+    ($resolutionNotice['status'] ?? null) !== 'closed' || ($resolutionNotice['revision'] ?? null) !== 2
+    || ($selectedCheckIn['items'][0]['id'] ?? null) !== $checkInCreated['id']
+    || count($selectedCheckIn['items']) !== 1 || isset($selectedCheckIn['items'][0]['private_note'])
+    || $selectedCheckIn['can_record']
+) {
+    throw new RuntimeException('A resolution notice lost the exact private finished-check-in handoff.');
+}
 if (
     ($checkInFinished["items"][0]["status"] ?? null) !== "closed" ||
     $checkInEvents !== $sis->sql->rows("sis_history_events")

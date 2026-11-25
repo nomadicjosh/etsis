@@ -5,6 +5,32 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'advising_updates' => trans_html('Advising updates'),
+    'advising_loading' => trans_html('Loading advising updates…'),
+    'advising_help' => trans_html(
+        'New and resolved advising follow-up appears here. Open a check-in to review it or delete the notice '
+        . 'when it is no longer needed.'
+    ),
+    'advising_empty' => trans_html('There are no matching advising updates.'),
+    'advising_include' => trans_html('Show read updates'),
+    'advising_refresh' => trans_html('Refresh advising updates'),
+    'advising_pages' => trans_html('Advising update pages'),
+    'advising_previous' => trans_html('Previous updates'),
+    'advising_more' => trans_html('More updates'),
+    'advising_open' => trans_html('New advising follow-up'),
+    'advising_closed' => trans_html('Advising follow-up closed'),
+    'advising_cancelled' => trans_html('Advising follow-up cancelled'),
+    'advising_mark' => trans_html('Mark as read'),
+    'advising_delete' => trans_html('Delete update'),
+    'advising_loaded' => trans_html('Advising updates loaded. Program labels are current.'),
+    'advising_failed' => trans_html('Advising updates could not load. Use Refresh to try again.'),
+    'advising_denied' => trans_html('Advising updates are unavailable for this account.'),
+    'advising_changed' => trans_html('This update changed or is unavailable. Refresh the list.'),
+    'advising_new' => trans_html('New advising updates are available.'),
+    'advising_link' => trans_html('View check-in'),
+    'advising_back' => trans_html('Back to advising updates'),
+    'advising_marked' => trans_html('Advising update marked as read.'),
+    'advising_deleted' => trans_html('Advising update deleted.'),
     'registration_updates' => trans_html('Registration updates'),
     'registration_loading' => trans_html('Loading registration updates…'),
     'registration_help' => trans_html(

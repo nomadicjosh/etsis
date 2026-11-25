@@ -71,6 +71,10 @@ final class AdvisingCheckInTest extends TestCase
             $s->transactions,
             $audit ?? $s->audit,
             $s->clock,
+            new \Domain\Advising\Service\AdvisingCheckInNotifications(
+                new \Infrastructure\Persistence\Repository\SqlAdvisingUpdatesRepository($s->sql),
+                $s->admissions,
+            ),
         );
     }
 

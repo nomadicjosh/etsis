@@ -4,7 +4,7 @@
     let sequence = 0;
     const statuses = { open: 'Awaiting student response', responded: 'Ready for advisor review', closed: 'Closed', cancelled: 'Cancelled' };
     window.createAdvisingCheckIns = ({ node, request }) => ({
-        mount(container, endpoint, { owner = false, portal = false } = {}) {
+        mount(container, endpoint, { owner = false, portal = false, selectedCheckIn = null, onDenied = null } = {}) {
             const identity = `checkins-${++sequence}`;
             const controls = node('div', { class: 'd-flex gap-2 flex-wrap mb-3' });
             const status = node('p', { role: 'status', 'aria-live': 'polite', class: 'form-text text-break', tabindex: '-1' });
@@ -29,6 +29,7 @@
                     if ([401, 403].includes(error.status)) {
                         content.replaceChildren(); editor.replaceChildren(); drafts.clear();
                         createButton?.remove(); createButton = null; createForm = null; createId = null;
+                        onDenied?.(error);
                     }
                     const fields = Array.isArray(error.fields) ? error.fields : [];
                     const messages = fields.map(field => field.message).filter(message => typeof message === 'string');
@@ -47,7 +48,7 @@
             }
             const refresh = button('Refresh check-ins', () => load());
             const switcher = button('Finished check-ins', async () => {
-                finished = !finished; after = null; stack = [];
+                finished = !finished; selectedCheckIn = null; after = null; stack = [];
                 switcher.textContent = finished ? 'Active check-ins' : 'Finished check-ins';
                 await load();
             });
@@ -151,7 +152,7 @@
             }
             async function load() {
                 const current = ++generation;
-                const data = await request(endpoint + 'list/', 'POST', { finished, after });
+                const data = await request(endpoint + 'list/', 'POST', { finished, after, ...(selectedCheckIn ? {checkin_id: selectedCheckIn} : {}) });
                 if (!container.isConnected || current !== generation) return;
                 for (const control of buttons) if (!control.isConnected) buttons.delete(control);
                 create(data);

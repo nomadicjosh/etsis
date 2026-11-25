@@ -4,6 +4,9 @@ Adopted direction, 2026-11-08. [Event-sourcing rationale](event-sourcing.md) gov
 
 ## Implementation progress
 
+[Private advising updates](academic-advising.md#private-advising-updates) are disposable account-pinned working references, created/replaced only beside genuine accepted check-in actions in the same transaction as encrypted conversations and required audit. Source receipts, final routing/authority and expected versions remain verified; accepted retries and reads never recreate deleted notifications. The one latest notice contains no conversation body, note or historical archive, and ordinary student-update reads disclose only minimized current labels and fixed action metadata. No event type, authoritative stream or journal changes; new nullable/retained academic facts are not inferred. The shared bell opens the exact owner-verified current/finished check-in independently of degree-progress availability. Institution-led retention and external/due-date delivery remain separate work.
+
+
 [Explicit prerequisite equivalents](course-publication.md#explicit-prerequisite-equivalents) extend the existing course definition and protected enrollment evidence with a bounded one-way map. Genuine eligible actual courses are matched to named slots without duplicate counting inside a requirement, transitive inference or changes to degree/transfer awards. Per-attempt source, grade, completion and pursuit boundaries remain shared. Course publications, clones, confirmation-local comparisons and original retries preserve exact rules; final source/audit changes roll back coupled registration, academic and financial effects. Nullable draft/version columns preserve earlier absence without converting event bytes or adding a journal. Global articulation, graduated-program transfer enforcement and broader override policy remain separate work.
 
 

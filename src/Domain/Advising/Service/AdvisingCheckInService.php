@@ -24,7 +24,7 @@ use Domain\Student\Repository\StudentRecordRepository;
 use Domain\Student\Service\StudentPrimaryProgramLedger;
 use Domain\Student\Service\StudentProgramStatusLedger;
 
-/** Private operational follow-up. No academic, appointment or messaging side effects. */
+/** Private operational follow-up with disposable owner notices; no academic or appointment decisions. */
 final readonly class AdvisingCheckInService
 {
     public function __construct(
@@ -40,6 +40,7 @@ final readonly class AdvisingCheckInService
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private Clock $clock,
+        private AdvisingCheckInNotifications $notifications,
     ) {
     }
 
@@ -109,6 +110,7 @@ final readonly class AdvisingCheckInService
         string $channel,
         bool $finished = false,
         ?EntityId $after = null,
+        ?EntityId $selected = null,
     ): array {
         $actor = $this->authorize($student, $pursuit, $channel);
         return $this->transactions->run(function () use (
@@ -118,18 +120,26 @@ final readonly class AdvisingCheckInService
             $channel,
             $finished,
             $after,
+            $selected,
         ): array {
             $current = $this->scope($student, $pursuit);
             $owner = $this->owner($student);
-            $rows = $this->records->page(
+            $rows = $selected === null ? $this->records->page(
                 $student,
                 $pursuit,
                 $channel === "owner" ? $actor : null,
                 $finished,
                 $after,
-            );
+            ) : [$this->records->find($student, $pursuit, $selected)
+                ?? throw new RecordNotFoundException(\Codefy\Framework\Helpers\trans('Advising check-in not found.'))];
+            if ($selected !== null && $channel === 'owner' && $rows[0]->facts()['owner_user_id'] !== $actor->value) {
+                throw new AccessDeniedException();
+            }
             $items = array_slice($rows, 0, 10);
             $this->audit->record($actor, "advising.checkins_read", $student);
+            if ($selected !== null) {
+                $this->verifyStored($rows[0]);
+            }
             $this->authorize($student, $pursuit, $channel, $actor);
             if (
                 $owner?->value !== $this->owner($student)?->value ||
@@ -149,7 +159,7 @@ final readonly class AdvisingCheckInService
                 ),
                 "next_after" => count($rows) > 10 ? end($items)->facts()["id"] : null,
                 "new_id" => EntityId::generate()->value,
-                "can_record" => $channel !== "owner" && $current && $owner !== null,
+                "can_record" => $selected === null && $channel !== "owner" && $current && $owner !== null,
                 "today" => $this->clock->now()->format("Y-m-d"),
             ];
         });
@@ -216,7 +226,10 @@ final readonly class AdvisingCheckInService
                     );
                 }
                 $this->records->save($candidate, null);
+                $notification = $this->notifications->record($candidate, $actor, 'record');
                 $this->audit->record($actor, "advising.checkin_recorded", $id);
+                $this->verifyStored($candidate);
+                $this->notifications->verify($candidate, $notification);
                 $result = $candidate->retry("record", $actor, $intent);
             }
             $this->authorize($student, $pursuit, $channel, $actor);
@@ -277,7 +290,10 @@ final readonly class AdvisingCheckInService
             if (($result = $item->retry($action, $actor, $intent)) === null) {
                 $result = $item->change($action, $actor, $version, $message, $this->now());
                 $this->records->save($item, $version);
+                $notification = $this->notifications->record($item, $actor, $action);
                 $this->audit->record($actor, "advising.checkin_" . $action, $id);
+                $this->verifyStored($item);
+                $this->notifications->verify($item, $notification);
             }
             $this->authorize($student, $pursuit, $channel, $actor);
             if ($owner?->value !== $this->owner($student)?->value) {
@@ -292,5 +308,21 @@ final readonly class AdvisingCheckInService
     private function now(): string
     {
         return $this->clock->now()->setTimezone(new DateTimeZone("UTC"))->format("Y-m-d\TH:i:s\Z");
+    }
+
+    private function verifyStored(AdvisingCheckIn $item): void
+    {
+        $facts = $item->facts();
+        if (
+            $this->records->find(
+                new EntityId($facts['student_id']),
+                new EntityId($facts['pursuit_id']),
+                new EntityId($facts['id'])
+            )?->facts() !== $facts
+        ) {
+            throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+                'The advising check-in changed before completion. Refresh check-ins.'
+            ));
+        }
     }
 }

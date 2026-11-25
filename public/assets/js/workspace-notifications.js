@@ -27,7 +27,7 @@ window.createWorkspaceNotifications = function (ui) {
     const history = [], visible = new Map();
     let dialog = null, list = null, empty = null, audio = null, sequence = 0, lastSound = -Infinity;
     let disposed = false;
-    let announcements = null, registrationUpdates = null;
+    let announcements = null, registrationUpdates = null, advisingUpdates = null;
     let activeSound = null, pendingSound = null, decodedSound = null, soundGeneration = 0;
     const icons = { success: 'check-circle', info: 'info-circle', warning: 'exclamation-triangle' };
     const titles = { success: 'Completed', info: 'Update', warning: 'Needs attention' };
@@ -201,6 +201,7 @@ window.createWorkspaceNotifications = function (ui) {
         if (!dialog) return;
         announcements?.destroy(); announcements = null;
         registrationUpdates?.destroy(); registrationUpdates = null;
+        advisingUpdates?.destroy(); advisingUpdates = null;
         const previous = dialog;
         dialog = list = empty = null;
         previous.close(); previous.remove();
@@ -294,7 +295,7 @@ window.createWorkspaceNotifications = function (ui) {
                 }
             });
             currentDialog.querySelector('.workspace-notification-dialog-body').prepend(section);
-            if (window.createRegistrationUpdates) {
+            if (window.createStudentUpdates) {
                 const updatesBody = node('div', { class: 'campus-announcements-body' });
                 const updatesSection = node('details', { class: 'campus-announcements' },
                     node('summary', {}, glyph('person-check'), text('registration_updates', 'Registration updates')), updatesBody);
@@ -302,11 +303,23 @@ window.createWorkspaceNotifications = function (ui) {
                     if (dialog !== currentDialog) return;
                     registrationUpdates?.destroy(); registrationUpdates = null;
                     if (updatesSection.open) {
-                        registrationUpdates = window.createRegistrationUpdates({ node, request, labels, notify });
+                        registrationUpdates = window.createStudentUpdates({ node, request, labels, notify });
                         registrationUpdates.mount(updatesBody);
                     }
                 });
                 currentDialog.querySelector('.workspace-notification-dialog-body').prepend(updatesSection);
+                const advisingBody = node('div', { class: 'campus-announcements-body' });
+                const advisingSection = node('details', { class: 'campus-announcements' },
+                    node('summary', {}, glyph('chat-left-text'), text('advising_updates', 'Advising updates')), advisingBody);
+                advisingSection.addEventListener('toggle', () => {
+                    if (dialog !== currentDialog) return;
+                    advisingUpdates?.destroy(); advisingUpdates = null;
+                    if (advisingSection.open) {
+                        advisingUpdates = window.createStudentUpdates({ node, request, labels, notify, kind: 'advising' });
+                        advisingUpdates.mount(advisingBody);
+                    }
+                });
+                currentDialog.querySelector('.workspace-notification-dialog-body').prepend(advisingSection);
             }
 
         }

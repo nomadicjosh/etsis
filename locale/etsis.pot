@@ -4694,3 +4694,107 @@ msgstr ""
 #: src/Application/Http/Controller/SisCoursePrerequisiteController.php:67
 msgid "Provide prerequisite equivalents or explicitly choose none."
 msgstr ""
+
+#: resources/views/shared/notification-labels.php:8
+msgid "Advising updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:9
+msgid "Loading advising updates…"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:11
+msgid ""
+"New and resolved advising follow-up appears here. Open a check-in to review "
+"it or delete the notice when it is no longer needed."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:14
+msgid "There are no matching advising updates."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:16
+msgid "Refresh advising updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:17
+msgid "Advising update pages"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:20
+msgid "New advising follow-up"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:21
+msgid "Advising follow-up closed"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:22
+msgid "Advising follow-up cancelled"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:25
+msgid "Advising updates loaded. Program labels are current."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:26
+msgid "Advising updates could not load. Use Refresh to try again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:27
+msgid "Advising updates are unavailable for this account."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:29
+msgid "New advising updates are available."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:30
+msgid "View check-in"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:31
+msgid "Back to advising updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:32
+msgid "Advising update marked as read."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:33
+msgid "Advising update deleted."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingCheckInNotifications.php:57
+msgid "The advising notification changed before completion. Refresh check-ins."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingCheckInService.php:134
+msgid "Advising check-in not found."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingCheckInService.php:324
+msgid "The advising check-in changed before completion. Refresh check-ins."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingUpdatesService.php:78
+msgid "Use the complete advising update cursor."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingUpdatesService.php:83
+msgid "Use a valid advising update cursor."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingUpdatesService.php:101
+#: src/Domain/Advising/Service/AdvisingUpdatesService.php:156
+msgid "Advising updates changed. Refresh the list."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingUpdatesService.php:123
+#: src/Domain/Advising/Service/AdvisingUpdatesService.php:138
+msgid "Reload the current advising update."
+msgstr ""
+
+#: src/Application/Http/Controller/AdvisingUpdatesController.php:26
+msgid "Choose whether to include read advising updates."
+msgstr ""
