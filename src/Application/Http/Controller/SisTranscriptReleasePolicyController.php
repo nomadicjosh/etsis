@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Application\Http\Controller;
 
+use Domain\Transcript\ValueObject\TranscriptStandingPresentation;
 use Application\Http\FormInput;
 use Domain\Transcript\Service\TranscriptReleasePolicyService;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -41,9 +42,12 @@ final readonly class SisTranscriptReleasePolicyController
         if (
             !is_array($body) || !array_key_exists("checks", $body)
             || !array_key_exists('standing_definitions', $body)
+            || !is_array($body['standing_presentation'] ?? null)
         ) {
             throw new \InvalidArgumentException(
-                'Supply release checks and an explicit standing selection.',
+                \Codefy\Framework\Helpers\trans_html(
+                    'Supply release checks, an explicit standing selection and its presentation choices.'
+                ),
             );
         }
         $input = FormInput::from($request);
@@ -53,6 +57,7 @@ final readonly class SisTranscriptReleasePolicyController
                 $input->values("checks", 12),
                 $input->requiredBoolean("include_standing"),
                 $body['standing_definitions'] === null ? null : $input->values('standing_definitions', 25),
+                TranscriptStandingPresentation::fromArray($body['standing_presentation']),
             ),
         );
     }

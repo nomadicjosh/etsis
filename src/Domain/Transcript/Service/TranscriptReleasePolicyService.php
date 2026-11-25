@@ -14,6 +14,7 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Repository\StudentStandingRepository;
 use Domain\Transcript\Repository\TranscriptReleasePolicyRepository;
 use Domain\Transcript\ValueObject\TranscriptReleasePolicy;
+use Domain\Transcript\ValueObject\TranscriptStandingPresentation;
 
 final readonly class TranscriptReleasePolicyService
 {
@@ -48,10 +49,21 @@ final readonly class TranscriptReleasePolicyService
 
     /** @param array<mixed> $checks
      * @return array<string,mixed> */
-    public function save(int $revision, array $checks, bool $includeStanding, ?array $standingDefinitions): array
-    {
+    public function save(
+        int $revision,
+        array $checks,
+        bool $includeStanding,
+        ?array $standingDefinitions,
+        TranscriptStandingPresentation $standingPresentation,
+    ): array {
         $actor = $this->authorize(write: true);
-        $next = new TranscriptReleasePolicy($revision + 1, $checks, $includeStanding, $standingDefinitions);
+        $next = new TranscriptReleasePolicy(
+            $revision + 1,
+            $checks,
+            $includeStanding,
+            $standingDefinitions,
+            $standingPresentation
+        );
         return $this->transactions->run(function () use ($revision, $next, $actor): array {
             $this->permissions->lock();
             $this->records->lock();
@@ -65,6 +77,7 @@ final readonly class TranscriptReleasePolicyService
             if (
                 $current->checks === $next->checks && $current->includeStanding === $next->includeStanding
                 && $current->standingDefinitions === $next->standingDefinitions
+                && $current->standingPresentation->describe() === $next->standingPresentation->describe()
             ) {
                 $this->authorize($actor, true);
                 return $current->describe();

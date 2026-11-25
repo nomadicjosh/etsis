@@ -72,6 +72,25 @@ Each preparation retains its exact selection with the existing protected release
 
 The selection extends the existing encrypted, revisioned configuration and artifact evidence, with current permissions, ordered reference locks and atomic required audit. Earlier settings/evidence without a selection field retain their actual previous all-definitions behavior when standing was enabled; they are not rewritten. New setup API commands explicitly provide `standing_definitions`: `null` for all, or one to twenty-five distinct definition ULIDs. Omission and an empty selected list are rejected, rather than silently broadening the content choice. The private reference lookup adds no report, student access grant, schema conversion or historical standing event.
 
+### Choose periods and effective-date presentation
+
+After enabling **Include recorded academic standing** in **Transcripts → Transcript setup**, choose **Standing periods to include**:
+
+- **All recorded periods through preparation** includes selected periods whose start is on or before preparation day, including earlier ended periods. This is the default and preserves the previous behavior.
+- **Only standing effective at preparation** includes a selected period only when its inclusive start/end contains preparation day. A period ending on that day still applies. This does not print the last expired period or infer good standing when the date falls in a gap.
+
+**Print standing effective dates** is enabled by default. Clearing it prints retained codes/names without each period's start/end. The document's preparation cutoff remains visible; this is a presentation choice, not a change to standing records or staff access. Definition selection and period selection apply together: an effective but unselected definition is omitted, without substituting an older selected period. Empty current selections say **No selected academic standing is included for this date**. Without a definition filter, an empty effective period says **No standing is recorded for this date**.
+
+Both controls retain their draft through definition search/paging, failed saves and temporary disabling of standing. They remain editable during a pending save; later edits stay visibly unsaved and the next save uses the accepted revision. Loss of setup authority clears private controls. No choices are kept in browser storage.
+
+### Preserve presentation on originals and later corrections
+
+A preparation review binds the complete policy, period/date choices, actual standing source and cutoff. A source or setup change requires another review even if the printed result would be unchanged. The protected PDF, accessible HTML, private preview and preparation evidence retain the accepted choices. Subsequent setup edits and later calendar days cannot reinterpret that original. Delivery uses the original cutoff and presentation, together with the current separate delivery-check setup.
+
+A correction that changes an included label, number/order of printed periods, or effective membership at the original cutoff requires fresh preparation before delivery. A date-only correction requires it when dates were printed. When dates were omitted and the same periods remain effective/selected in the same printed order, the existing original can remain current. Changes to expired periods omitted by effective-only mode do not change that original. These rules never alter or erase a standing decision; original artifacts/receipts stay retained, and required audit/source failures roll back coupled writes.
+
+Current settings and new preparation confirmations explicitly retain `standing_presentation` with `periods` (`through_cutoff` or `effective_at_cutoff`) and Boolean `show_dates`. New setup API commands must include both typed choices, even with standing disabled. Earlier encrypted setup packets and document confirmations without this field retain their actual original all-periods/date-visible behavior without being rewritten. Older standing snapshots remain in their original shape and their existing fingerprints remain verifiable. No migration, grant, report or additional event stream is needed.
+
 ## Historical and security boundary
 
 `StudentStandingWasRecorded` decisions use one `StudentStanding` aggregate per pursuit in the existing `student_standing` stream type. The same authoritative `sis_history_events` journal protects actor, reason, confirmation time, correlation, exact dated periods, accepted definition identity/labels, prior operation and before-state fingerprint. Effective periods are explicit event facts; the event context records the confirmation time. Unknown earlier standing remains unknown. Migration creates no historical decisions.
@@ -86,7 +105,7 @@ The follow-up permission-only migration `20261120000009_CreateSisStandingCorrect
 
 ## Remaining policy work
 
-This completes reviewed manual standing, historical corrections, setup, private display, optional transcript annotations with definition selection, and existing reporting. Reviewed GPA proposals are implemented below. Program/academic-level policies are supported below. Term-only or backdated GPA assessments, load/classification-based proposals, additional annotation presentation policies and graduation decisions remain separate work. [Enrollment-load bands and working reviews](enrollment-load.md) are implemented independently; they do not make standing or official census decisions. Standing itself does not change student activity, account access, registration holds, grades, earned credits, enrollment, charges or graduation. Institutions should not rely on this label alone for automated financial-aid, immigration or other eligibility decisions.
+This completes reviewed manual standing, historical corrections, setup, private display, optional transcript annotations with definition selection, and existing reporting. Reviewed GPA proposals are implemented below. Program/academic-level policies are supported below. Term-only or backdated GPA assessments, load/classification-based proposals and graduation decisions remain separate work. Transcript period selection and date presentation are supported below. [Enrollment-load bands and working reviews](enrollment-load.md) are implemented independently; they do not make standing or official census decisions. Standing itself does not change student activity, account access, registration holds, grades, earned credits, enrollment, charges or graduation. Institutions should not rely on this label alone for automated financial-aid, immigration or other eligibility decisions.
 
 
 ## Reviewed GPA standing proposals

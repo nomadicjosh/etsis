@@ -5862,3 +5862,62 @@ msgstr ""
 #: resources/views/backend/workspace/standing-proposal-labels.php:90
 msgid "This target already has an override. Edit that override or choose a different target."
 msgstr ""
+
+#: resources/views/backend/transcript-document.phtml:116
+#: resources/views/backend/workspace/transcript-standing-labels.php:98
+msgid "Only the recorded standing effective at the preparation cutoff is included."
+msgstr ""
+
+#: resources/views/backend/transcript-document.phtml:125
+#: resources/views/backend/workspace/transcript-standing-labels.php:113
+msgid "No selected academic standing is included for this date."
+msgstr ""
+
+#: resources/views/backend/transcript-document.phtml:127
+#: resources/views/backend/workspace/transcript-standing-labels.php:110
+msgid "No standing is recorded for this date."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:82
+msgid "Standing periods to include"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:85
+msgid "All recorded periods through preparation"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:88
+msgid "Only standing effective at preparation"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:91
+msgid "Print standing effective dates"
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:94
+msgid "These choices apply at the preparation cutoff. Existing originals keep their choices. Hidden effective dates do not hide the preparation cutoff or change standing records."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:101
+msgid "Recorded standing periods through the preparation cutoff are included."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:104
+msgid "Standing effective dates are printed."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:107
+msgid "Standing effective dates are omitted from this document."
+msgstr ""
+
+#: resources/views/backend/workspace/transcript-standing-labels.php:116
+msgid "Off by default. Choose standing definitions, periods and whether to print effective dates. New preparations retain these choices under the selected primary pursuit. Staff reasons and policy references stay private."
+msgstr ""
+
+#: src/Application/Http/Controller/SisTranscriptReleasePolicyController.php:49
+msgid "Supply release checks, an explicit standing selection and its presentation choices."
+msgstr ""
+
+#: src/Domain/Transcript/ValueObject/TranscriptStandingPresentation.php:51
+msgid "Choose all periods through preparation or only the effective standing, and an explicit date display choice."
+msgstr ""

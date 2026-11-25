@@ -15,6 +15,7 @@ use Domain\Transcript\Service\TranscriptDocumentRenderer;
 use Domain\Transcript\Service\TranscriptReleasePolicyService;
 use Domain\Transcript\ValueObject\TranscriptReleaseConfirmation;
 use Domain\Transcript\ValueObject\TranscriptReleasePolicy;
+use Domain\Transcript\ValueObject\TranscriptStandingPresentation;
 use Infrastructure\Persistence\Repository\SqlAccessRepository;
 use Infrastructure\Persistence\Repository\SqlTranscriptReleasePolicyRepository;
 use PHPUnit\Framework\TestCase;
@@ -80,18 +81,42 @@ final class TranscriptReleasePolicyTest extends TestCase
         $first = $s->standingService()->saveDefinition(null, 'GOOD', 'Fictional good', true, null);
         $second = $s->standingService()->saveDefinition(null, 'REVIEW', 'Fictional review', false, null);
         $setup = $this->policyService($t);
-        $saved = $setup->save(0, [], true, [$second['id'], $first['id']]);
+        $saved = $setup->save(
+            0,
+            [],
+            true,
+            [$second['id'], $first['id']],
+            new TranscriptStandingPresentation()
+        );
         $ids = [$first['id'], $second['id']];
         sort($ids, SORT_STRING);
         self::assertSame($ids, $saved['standing_definitions']);
         self::assertCount(2, $setup->current()['standing_choices']);
-        self::assertSame($saved, $setup->save(1, [], true, array_reverse($ids)));
+        self::assertSame($saved, $setup->save(
+            1,
+            [],
+            true,
+            array_reverse($ids),
+            new TranscriptStandingPresentation()
+        ));
         $stored = $s->sql->rows('sis_transcript_policy')[0];
         self::assertStringNotContainsString($first['id'], $stored['encrypted_definition']);
         self::assertSame(1, $stored['revision']);
-        $disabled = $setup->save(1, [], false, $ids);
+        $disabled = $setup->save(
+            1,
+            [],
+            false,
+            $ids,
+            new TranscriptStandingPresentation()
+        );
         self::assertSame($ids, $disabled['standing_definitions']);
-        $all = $setup->save(2, [], true, null);
+        $all = $setup->save(
+            2,
+            [],
+            true,
+            null,
+            new TranscriptStandingPresentation()
+        );
         self::assertNull($all['standing_definitions']);
         $policyRow = $s->sql->rows('sis_transcript_policy')[0];
         $packet = json_decode($t->campus->cipher->open($policyRow['encrypted_definition']), true);
@@ -112,14 +137,26 @@ final class TranscriptReleasePolicyTest extends TestCase
         $cases = [[], [$id, $id], [['id' => $id]], ['fictional-invalid-id'], array_fill(0, 26, $id)];
         foreach ($cases as $ids) {
             try {
-                $this->policyService($t)->save(0, [], true, $ids);
+                $this->policyService($t)->save(
+                    0,
+                    [],
+                    true,
+                    $ids,
+                    new TranscriptStandingPresentation()
+                );
                 self::fail('Malformed annotation selection was accepted.');
             } catch (\Domain\Shared\Exception\ValidationException) {
                 self::assertSame(0, $this->repository($t)->current()->revision);
             }
         }
         try {
-            $this->policyService($t)->save(0, [], true, [EntityId::generate()->value]);
+            $this->policyService($t)->save(
+                0,
+                [],
+                true,
+                [EntityId::generate()->value],
+                new TranscriptStandingPresentation()
+            );
             self::fail('Unknown standing identity was accepted.');
         } catch (\Domain\Shared\Exception\RecordNotFoundException) {
             self::assertSame(0, $this->repository($t)->current()->revision);
@@ -161,7 +198,13 @@ final class TranscriptReleasePolicyTest extends TestCase
             $t->sis->sql->execute('DELETE FROM sis_standing_definitions WHERE id = ?', [$definition['id']]);
         });
         try {
-            $this->policyService($t, $audit)->save(0, [], true, [$definition['id']]);
+            $this->policyService($t, $audit)->save(
+                0,
+                [],
+                true,
+                [$definition['id']],
+                new TranscriptStandingPresentation()
+            );
             self::fail('The final reference check was bypassed.');
         } catch (\Domain\Shared\Exception\RecordNotFoundException) {
             self::assertSame($before, array_map($t->sis->sql->rows(...), $tables));
@@ -187,29 +230,60 @@ final class TranscriptReleasePolicyTest extends TestCase
         $setup = $this->policyService($t);
         self::assertSame([
             'revision' => 0, 'checks' => [], 'include_standing' => false, 'standing_definitions' => null,
+            'standing_presentation' => ['periods' => 'through_cutoff', 'show_dates' => true],
         ], $setup->current());
         $history = $t->sis->sql->rows('sis_history_events');
         $check = $this->check();
-        $policy = $setup->save(0, [$check], false, null);
+        $policy = $setup->save(
+            0,
+            [$check],
+            false,
+            null,
+            new TranscriptStandingPresentation()
+        );
         self::assertSame(1, $policy['revision']);
         $row = $t->sis->sql->one('sis_transcript_policy', ['id' => TranscriptReleasePolicyRepository::POLICY_ID]);
         self::assertStringNotContainsString($check['label'], $row['encrypted_definition']);
         self::assertSame($policy, $setup->current());
         self::assertSame($history, $t->sis->sql->rows('sis_history_events'));
-        self::assertSame($policy, $setup->save(1, [$check], false, null)); // No-op does not make a spurious revision.
+        self::assertSame($policy, $setup->save(
+            1,
+            [$check],
+            false,
+            null,
+            new TranscriptStandingPresentation()
+        ));
         $t->sis->access->staff = false;
         $t->sis->access->grants = ['sis:transcript:manage', 'sis:student:read'];
         self::assertSame($policy, $setup->current());
         try {
-            $setup->save(1, [], false, null);
+            $setup->save(
+                1,
+                [],
+                false,
+                null,
+                new TranscriptStandingPresentation()
+            );
             self::fail('Document operators changed institutional policy without its independent permission.');
         } catch (AccessDeniedException) {
             self::assertSame($policy, $setup->current());
         }
         $t->sis->access->grants[] = 'sis:transcript:policy';
-        self::assertSame(2, $setup->save(1, [], false, null)['revision']);
+        self::assertSame(2, $setup->save(
+            1,
+            [],
+            false,
+            null,
+            new TranscriptStandingPresentation()
+        )['revision']);
         $this->expectException(ConcurrentModificationException::class);
-        $setup->save(1, [$check], false, null);
+        $setup->save(
+            1,
+            [$check],
+            false,
+            null,
+            new TranscriptStandingPresentation()
+        );
     }
 
     public function testChecksRejectDuplicateIdsUnknownStagesControlsAndExtraFields(): void
@@ -251,9 +325,15 @@ final class TranscriptReleasePolicyTest extends TestCase
         $t = new TranscriptFixture();
         $request = $t->request();
         $setup = $this->policyService($t);
-        $policy = $setup->save(0, [$this->check('preparation', 'Review release authorization'),
+        $policy = $setup->save(
+            0,
+            [$this->check('preparation', 'Review release authorization'),
             $this->check('delivery', 'Verify recipient identity'),
-            $this->check('both', 'Check institutional instructions')], false, null);
+            $this->check('both', 'Check institutional instructions')],
+            false,
+            null,
+            new TranscriptStandingPresentation()
+        );
         $service = $t->service(renderer: $this->renderer());
         $review = $service->review($request);
         self::assertArrayNotHasKey('release_policy', $review['snapshot']);
@@ -282,7 +362,13 @@ final class TranscriptReleasePolicyTest extends TestCase
             ['Review release authorization', 'Check institutional instructions'],
             array_column($view['preparation_release']['checks'], 'label')
         );
-        $next = $setup->save(1, [$this->check('delivery', 'Follow revised delivery procedure')], false, null);
+        $next = $setup->save(
+            1,
+            [$this->check('delivery', 'Follow revised delivery procedure')],
+            false,
+            null,
+            new TranscriptStandingPresentation()
+        );
         self::assertSame($saved, $service->prepare($request, $op, $review['revision'], true, '', release: $prep));
         self::assertFalse($service->view($request, $op)['academic_changed']);
         self::assertSame($bytes, $service->pdf($request, $op));
@@ -321,7 +407,13 @@ final class TranscriptReleasePolicyTest extends TestCase
             $delivery['review_token'],
             $confirmation
         );
-        $setup->save(2, [], false, null);
+        $setup->save(
+            2,
+            [],
+            false,
+            null,
+            new TranscriptStandingPresentation()
+        );
         self::assertSame($result, $service->deliver(
             $request,
             $op,
@@ -356,7 +448,13 @@ final class TranscriptReleasePolicyTest extends TestCase
         $request = $t->request();
         $setup = $this->policyService($t);
         $renderer = $this->renderer(function () use ($setup): string {
-            $setup->save(0, [$this->check('preparation')], false, null);
+            $setup->save(
+                0,
+                [$this->check('preparation')],
+                false,
+                null,
+                new TranscriptStandingPresentation()
+            );
             return '%PDF-1.4 Fictional transcript';
         });
         $service = $t->service(renderer: $renderer);
@@ -415,7 +513,13 @@ final class TranscriptReleasePolicyTest extends TestCase
     {
         $t = new TranscriptFixture();
         $check = $this->check();
-        $policy = $this->policyService($t)->save(0, [$check], false, null);
+        $policy = $this->policyService($t)->save(
+            0,
+            [$check],
+            false,
+            null,
+            new TranscriptStandingPresentation()
+        );
         $vo = new TranscriptReleasePolicy($policy['revision'], $policy['checks']);
         $at = $t->sis->clock->now()->format(DATE_ATOM);
         $evidence = $vo->evidence(
@@ -460,7 +564,13 @@ final class TranscriptReleasePolicyTest extends TestCase
             'Fictional receipt',
             $confirmed
         );
-        $this->policyService($t)->save(0, [$this->check('delivery')], false, null);
+        $this->policyService($t)->save(
+            0,
+            [$this->check('delivery')],
+            false,
+            null,
+            new TranscriptStandingPresentation()
+        );
         try {
             $service->deliver(
                 $request,
@@ -519,7 +629,13 @@ final class TranscriptReleasePolicyTest extends TestCase
                 ['id' => $id->value]
             );
         }
-        $this->policyService($t)->save(0, [$this->check()], false, null);
+        $this->policyService($t)->save(
+            0,
+            [$this->check()],
+            false,
+            null,
+            new TranscriptStandingPresentation()
+        );
         $view = $service->view($request, $document);
         self::assertNull($view['preparation_release']);
         self::assertNull($view['delivery_release']);
@@ -545,7 +661,13 @@ final class TranscriptReleasePolicyTest extends TestCase
             $t->sis->access->grants = ['sis:transcript:manage', 'sis:student:read'];
         });
         try {
-            $this->policyService($t, $audit)->save(0, [$this->check()], false, null);
+            $this->policyService($t, $audit)->save(
+                0,
+                [$this->check()],
+                false,
+                null,
+                new TranscriptStandingPresentation()
+            );
             self::fail('Policy setup committed after its authority was lost.');
         } catch (AccessDeniedException) {
             self::assertSame(0, $this->repository($t)->current()->revision);

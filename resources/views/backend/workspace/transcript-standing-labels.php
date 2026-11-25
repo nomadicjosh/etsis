@@ -78,4 +78,43 @@ return [
     'selected_standing_empty' => trans_html(
         'No selected academic standing is included through this date.',
     ),
+    'periods' => trans_html(
+        'Standing periods to include'
+    ),
+    'periods_all' => trans_html(
+        'All recorded periods through preparation'
+    ),
+    'periods_current' => trans_html(
+        'Only standing effective at preparation'
+    ),
+    'show_dates' => trans_html(
+        'Print standing effective dates'
+    ),
+    'presentation_help' => trans_html(
+        'These choices apply at the preparation cutoff. Existing originals keep their choices. Hidden ' .
+        'effective dates do not hide the preparation cutoff or change standing records.'
+    ),
+    'current_hint' => trans_html(
+        'Only the recorded standing effective at the preparation cutoff is included.'
+    ),
+    'all_hint' => trans_html(
+        'Recorded standing periods through the preparation cutoff are included.'
+    ),
+    'dates_shown' => trans_html(
+        'Standing effective dates are printed.'
+    ),
+    'dates_hidden' => trans_html(
+        'Standing effective dates are omitted from this document.'
+    ),
+    'current_empty' => trans_html(
+        'No standing is recorded for this date.'
+    ),
+    'current_selected_empty' => trans_html(
+        'No selected academic standing is included for this date.'
+    ),
+    'content_help' => trans_html(
+        'Off by default. Choose standing definitions, periods and whether to print effective dates. ' .
+        'New preparations retain these choices under the selected primary pursuit. Staff reasons ' .
+        'and policy references stay private.'
+    ),
 ];

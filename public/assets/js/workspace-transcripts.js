@@ -97,6 +97,9 @@ window.createWorkspaceTranscripts = function (ui) {
             node("p", { class: "form-text" }, evidence.include_standing ? "Academic standing selected in this institutional setup." : "Academic standing not selected in this institutional setup."),
             evidence.include_standing && evidence.standing_definitions ? node('p', { class: 'form-text' },
                 text('setup_selection_hint')) : null,
+            evidence.include_standing ? node('p', { class: 'form-text' },
+                text(evidence.standing_presentation?.periods === 'effective_at_cutoff' ? 'current_hint' : 'all_hint'),
+                ' ', text(evidence.standing_presentation?.show_dates === false ? 'dates_hidden' : 'dates_shown')) : null,
             evidence.checks.length ? node("ul", {}, ...evidence.checks.map((check) =>
                 node("li", {}, node("strong", {}, check.label), check.details ? ` — ${check.details}` : "")))
                 : node("p", {}, "No additional institutional checks applied."));
@@ -107,6 +110,23 @@ window.createWorkspaceTranscripts = function (ui) {
         if (!body.isConnected) return;
         const standing = node("input", { id: "transcript-standing", type: "checkbox", class: "form-check-input",
             checked: saved.include_standing === true });
+        const periods = node('select', { id: 'transcript-standing-periods', class: 'form-select',
+            'aria-describedby': 'transcript-standing-periods-help' },
+            node('option', { value: 'through_cutoff' }, text('periods_all')),
+            node('option', { value: 'effective_at_cutoff' }, text('periods_current')));
+        periods.value = saved.standing_presentation?.periods || 'through_cutoff';
+        const dates = node('input', { id: 'transcript-standing-dates', type: 'checkbox', class: 'form-check-input',
+            checked: saved.standing_presentation?.show_dates !== false });
+        const periodDescription = node('p', { id: 'transcript-standing-periods-help', class: 'form-text' });
+        const explainPeriod = () => { periodDescription.textContent = text(periods.value === 'effective_at_cutoff'
+            ? 'current_hint' : 'all_hint'); };
+        periods.addEventListener('change', explainPeriod);
+        explainPeriod();
+        const presentationArea = node('div', { class: 'record-section bg-white border rounded p-3 mb-3' },
+            node('label', { for: periods.id, class: 'form-label' }, text('periods')), periods, periodDescription,
+            node('div', { class: 'form-check mt-3' }, dates,
+                node('label', { for: dates.id, class: 'form-check-label' }, text('show_dates'))),
+            node('p', { class: 'form-text mb-0' }, text('presentation_help')));
         const list = node("div");
         let rows = [], adding = false, saving = false, notice = '';
         const status = node("p", { class: "form-text", role: "status" });
@@ -116,7 +136,8 @@ window.createWorkspaceTranscripts = function (ui) {
             changed: () => update(), denied });
         const draft = () => ({ checks: rows.map(row => ({ id: row.id, label: row.label.value.trim(),
             details: row.details.value.trim(), stage: row.stage.value })), include_standing: standing.checked,
-            standing_definitions: selection.valid() ? selection.value() : null });
+            standing_definitions: selection.valid() ? selection.value() : null,
+            standing_presentation: { periods: periods.value, show_dates: dates.checked } });
         function denied() {
             if (body.isConnected) body.replaceChildren(node('p', { role: 'alert', class: 'form-text' },
                 text('setup_unavailable')));
@@ -185,14 +206,15 @@ window.createWorkspaceTranscripts = function (ui) {
         body.append(node("h3", { class: "h5" }, "Transcript content"),
             node("div", { class: "form-check mb-3" }, standing, node("label", { for: standing.id, class: "form-check-label" },
                 "Include recorded academic standing")),
-            node("p", { class: "form-text" }, "Off by default. When enabled, new transcripts include retained standing labels and dates under the selected primary pursuit, through preparation day. Staff reasons and policy references stay private. Issued originals do not change."),
-            selectionArea, node("h3", { class: "h5" }, "Release checks"), node("p", {}, "Set the confirmations your office requires before preparation, delivery, or both. " +
+            node("p", { class: "form-text" }, text('content_help')),
+            presentationArea, selectionArea, node("h3", { class: "h5" }, "Release checks"), node("p", {}, "Set the confirmations your office requires before preparation, delivery, or both. " +
             "These are staff checks; they do not automatically block transcripts based on balances or registration holds."),
             node("p", { class: "form-text" }, "Changes apply to new confirmations. Earlier documents and confirmations retain their original checks. " +
                 "If setup changes while you edit, reload it before saving again."), status, list,
             node("div", { class: "inline-actions" }, add, save, button("Reload setup", policy, "btn-link")));
         saved.checks.forEach((check) => append(check));
-        standing.addEventListener('change', () => selection.refresh());
+        standing.addEventListener('change', () => { presentationArea.hidden = !standing.checked; selection.refresh(); });
+        presentationArea.hidden = !standing.checked;
         selection.refresh();
         update();
     }
@@ -246,10 +268,15 @@ window.createWorkspaceTranscripts = function (ui) {
                 snapshot.standing.filtered ? node('p', { class: 'form-text' },
                     text('document_selection_hint')) : null,
                 node("p", { class: "form-text" }, `Selected primary pursuit · Recorded periods through ${snapshot.standing.through}. Earlier unrecorded standing is not inferred.`),
+                node('p', { class: 'form-text' },
+                    text(snapshot.standing.presentation?.periods === 'effective_at_cutoff' ? 'current_hint' : 'all_hint')),
                 snapshot.standing.periods.length ? node("ul", {}, ...snapshot.standing.periods.map(row => node("li", { class: "text-break" },
-                    `${row.code} · ${row.title} · ${row.starts_on} through ${row.ends_on || "open"}`)))
-                    : node("p", {}, snapshot.standing.filtered ? text('selected_standing_empty')
-                        : "No standing is recorded through this date.")) : null,
+                    `${row.code} · ${row.title}${snapshot.standing.presentation?.show_dates === false
+                        ? '' : ` · ${row.starts_on} through ${row.ends_on || "open"}`}`)))
+                    : node("p", {}, snapshot.standing.presentation?.periods === 'effective_at_cutoff'
+                        ? text(snapshot.standing.filtered ? 'current_selected_empty' : 'current_empty')
+                        : snapshot.standing.filtered ? text('selected_standing_empty')
+                            : "No standing is recorded through this date.")) : null,
             snapshot.purpose === 'continuing_education' ? grid(
                 [ui.ceuLabels?.record_term || 'Term', ui.ceuLabels?.record_course || 'Course',
                     ui.ceuLabels?.record_title || 'Title', ui.ceuLabels?.earned_completion || 'Verified actual completion',

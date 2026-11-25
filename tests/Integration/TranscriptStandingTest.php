@@ -10,6 +10,7 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Transcript\Service\TranscriptDocumentRenderer;
 use Domain\Transcript\Service\TranscriptReleasePolicyService;
 use Domain\Transcript\Service\TranscriptStandingSource;
+use Domain\Transcript\ValueObject\TranscriptStandingPresentation;
 use Infrastructure\Persistence\Repository\SqlStudentRecordRepository;
 use Infrastructure\Persistence\Repository\SqlTranscriptReleasePolicyRepository;
 use PHPUnit\Framework\TestCase;
@@ -34,7 +35,13 @@ final class TranscriptStandingTest extends TestCase
             new \Infrastructure\Persistence\Repository\SqlStudentStandingRepository($t->sis->sql),
         );
         $current = $repo->current();
-        $service->save($current->revision, $current->checks, $enabled, $definitions);
+        $service->save(
+            $current->revision,
+            $current->checks,
+            $enabled,
+            $definitions,
+            new TranscriptStandingPresentation()
+        );
     }
 
     private function fixture(): array

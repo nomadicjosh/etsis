@@ -10,8 +10,8 @@ async function accessible(page) {
     ).toEqual([]);
 }
 
-for (const academicCheck of ["verified", "history_gaps", "unavailable"])
-    test(`transcript fulfillment retains documents with ${academicCheck} current history`, async ({
+for (const [academicCheck, dates] of [["verified", true], ["history_gaps", true], ["unavailable", true], ["verified", false]])
+    test(`transcript fulfillment retains documents with ${academicCheck} current history and ${dates ? "dated" : "label-only"} standing`, async ({
         page,
     }) => {
         const request = id(1),
@@ -36,7 +36,7 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
             identity_verification: { earlier_history_unknown: academicCheck === "history_gaps" },
             program_verification: { status: "closed", labels_retained: true, definition_recorded: true },
             academic_verification: { status: academicCheck === "history_gaps" ? "history_gaps" : "verified" },
-            standing: { through: "2026-08-10", periods: [{ code: "GOOD", title: "Retained <b>Standing</b>", starts_on: "2026-08-01", ends_on: null }] },
+            standing: { through: "2026-08-10", ...(dates ? {} : { presentation: { periods: "effective_at_cutoff", show_dates: false } }), periods: [{ code: "GOOD", title: "Retained <b>Standing</b>", starts_on: "2026-08-01", ends_on: null }] },
             credits: [
                 {
                     history_recorded: true,
@@ -149,6 +149,10 @@ for (const academicCheck of ["verified", "history_gaps", "unavailable"])
         await expect(page.getByRole("button", { name: "Prepare transcript", exact: true })).toBeDisabled();
         await expect(page.getByText("GPA", { exact: true }).locator("..").locator("dd")).toHaveText("4.000");
         await expect(page.getByRole("region", { name: "Transcript academic standing", exact: true })).toContainText("Retained <b>Standing</b>");
+        if (!dates) {
+            await expect(page.getByRole('region', { name: 'Transcript academic standing', exact: true })).not.toContainText('2026-08-01');
+            await expect(page.getByRole('region', { name: 'Transcript academic standing', exact: true })).toContainText('effective at the preparation cutoff');
+        }
         await expect(page.locator("#drawer-body b")).toHaveCount(0);
         await expect(page.locator("#drawer-body script")).toHaveCount(0);
         expect(calls.some((call) => call.path.endsWith("/prepare/"))).toBe(false);

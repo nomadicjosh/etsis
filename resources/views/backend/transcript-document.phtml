@@ -109,11 +109,24 @@ use function Codefy\Framework\Helpers\trans_html;
                         <?= $escape($document['standing']['through']) ?>.
                         Earlier unrecorded standing is not inferred.
                     </p>
+                    <?php $currentStanding = ($document['standing']['presentation']['periods'] ?? 'through_cutoff')
+                        === 'effective_at_cutoff'; ?>
+                    <?php if ($currentStanding): ?>
+                        <p>
+                            <?= trans_html('Only the recorded standing effective at the preparation cutoff is included.') ?>
+                        </p>
+                    <?php endif; ?>
                     <?php if (!empty($document['standing']['filtered'])): ?>
                         <p><?= trans_html('This document includes institution-selected standing definitions.') ?></p>
                     <?php endif; ?>
                     <?php if ($document['standing']['periods'] === []): ?>
-                        <?php if (!empty($document['standing']['filtered'])): ?>
+                        <?php if ($currentStanding): ?>
+                            <?php if (!empty($document['standing']['filtered'])): ?>
+                                <p><?= trans_html('No selected academic standing is included for this date.') ?></p>
+                            <?php else: ?>
+                                <p><?= trans_html('No standing is recorded for this date.') ?></p>
+                            <?php endif; ?>
+                        <?php elseif (!empty($document['standing']['filtered'])): ?>
                             <p><?= trans_html('No selected academic standing is included through this date.') ?></p>
                         <?php else: ?>
                             <p>No standing is recorded through this date.</p>
@@ -123,8 +136,10 @@ use function Codefy\Framework\Helpers\trans_html;
                             <?php foreach ($document['standing']['periods'] as $period): ?>
                                 <li>
                                     <strong><?= $escape($period['code']) ?> · <?= $escape($period['title']) ?></strong>
-                                    — <?= $escape($period['starts_on']) ?> through
-                                    <?= $escape($period['ends_on'] ?? 'No end recorded') ?>.
+                                    <?php if ($document['standing']['presentation']['show_dates'] ?? true): ?>
+                                        — <?= $escape($period['starts_on']) ?> through
+                                        <?= $escape($period['ends_on'] ?? 'No end recorded') ?>.
+                                    <?php endif; ?>
                                 </li>
                             <?php endforeach; ?>
                         </ul>

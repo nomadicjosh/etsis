@@ -29,6 +29,7 @@ use Domain\Student\Service\StudentPrimaryProgramLedger;
 use Domain\Transcript\Repository\TranscriptRepository;
 use Domain\Transcript\Repository\TranscriptReleasePolicyRepository;
 use Domain\Transcript\ValueObject\TranscriptReleasePolicy;
+use Domain\Transcript\ValueObject\TranscriptStandingPresentation;
 use Domain\Transcript\ValueObject\TranscriptReleaseConfirmation;
 use Domain\Transcript\ValueObject\TranscriptIssuer;
 use Domain\Transcript\ValueObject\TranscriptLayout;
@@ -404,6 +405,10 @@ final readonly class TranscriptFulfillmentService
                         isset($payload["document"]["standing"]),
                         $payload['release_review']['policy']['standing_definitions'] ?? null,
                         continuingEducation: ($payload['document']['purpose'] ?? 'academic') === 'continuing_education',
+                        standingPresentation: isset($payload['document']['standing']['presentation'])
+                            ? TranscriptStandingPresentation::fromArray(
+                                $payload['document']['standing']['presentation']
+                            ) : null,
                     );
                 } catch (ValidationException $error) {
                     $verificationFailed = true;
@@ -665,6 +670,8 @@ final readonly class TranscriptFulfillmentService
             isset($retained["document"]["standing"]),
             $retained['release_review']['policy']['standing_definitions'] ?? null,
             continuingEducation: ($retained['document']['purpose'] ?? 'academic') === 'continuing_education',
+            standingPresentation: isset($retained['document']['standing']['presentation'])
+                ? TranscriptStandingPresentation::fromArray($retained['document']['standing']['presentation']) : null,
         );
         $academic = $this->academicRevision($snapshot);
         if (
@@ -753,6 +760,7 @@ final readonly class TranscriptFulfillmentService
         ?bool $includeStanding = null,
         ?array $standingDefinitions = null,
         bool $continuingEducation = false,
+        ?TranscriptStandingPresentation $standingPresentation = null,
     ): array {
         if ($continuingEducation) {
             $includeStanding = false;
@@ -824,6 +832,7 @@ final readonly class TranscriptFulfillmentService
                 $standingPolicy = $this->releasePolicies->current();
                 $includeStanding = $standingPolicy->includeStanding;
                 $standingDefinitions = $standingPolicy->standingDefinitions;
+                $standingPresentation = $standingPolicy->standingPresentation;
             }
             $standing = $includeStanding
             ? $this->standing->snapshot(
@@ -833,6 +842,9 @@ final readonly class TranscriptFulfillmentService
                 $standingDefinitions,
             )
             : null;
+            if ($standing !== null && $standingPresentation !== null) {
+                $standing = $standingPresentation->apply($standing);
+            }
         } catch (CorruptHistoryException) {
             throw new ValidationException([
                 [
@@ -1106,6 +1118,18 @@ final readonly class TranscriptFulfillmentService
                 $row['created_at']
             );
         }
+        if (isset($p['document']['standing'])) {
+            $choice = $p['release_review']['policy']['standing_presentation'] ?? null;
+            if ($choice !== ($p['document']['standing']['presentation'] ?? null)) {
+                throw new CorruptHistoryException();
+            }
+            if ($choice !== null) {
+                $presentation = TranscriptStandingPresentation::fromArray($choice);
+                if ($presentation->apply($p['document']['standing']) !== $p['document']['standing']) {
+                    throw new CorruptHistoryException();
+                }
+            }
+        }
         TranscriptLayout::fromArray($p['document']['presentation']);
         if (!hash_equals($p['html_hash'], hash('sha256', $p['html']))) {
             throw new \RuntimeException('The stored accessible transcript failed verification.');
@@ -1121,6 +1145,9 @@ final readonly class TranscriptFulfillmentService
             $context['release_policy']['checks'],
             $context['release_policy']['include_standing'] ?? false,
             $context['release_policy']['standing_definitions'] ?? null,
+            isset($context['release_policy']['standing_presentation'])
+                ? TranscriptStandingPresentation::fromArray($context['release_policy']['standing_presentation'])
+                : new TranscriptStandingPresentation(),
         );
     }
 
@@ -1168,6 +1195,12 @@ final readonly class TranscriptFulfillmentService
     {
         if (isset($snapshot['standing'])) {
             unset($snapshot['standing']['stream_version']);
+            if (($snapshot['standing']['presentation']['show_dates'] ?? true) === false) {
+                foreach ($snapshot['standing']['periods'] as &$period) {
+                    unset($period['starts_on'], $period['ends_on']);
+                }
+                unset($period);
+            }
         }
         return $this->revision($snapshot);
     }

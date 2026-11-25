@@ -32,7 +32,8 @@ $policyResponse = $app->router->match($get->withUri(
 $policy = json_decode((string) $policyResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
     $policyResponse->getStatusCode() !== 200 ||
-    $policy !== ['revision' => 0, 'checks' => [], 'include_standing' => false, 'standing_definitions' => null] ||
+    $policy !== ['revision' => 0, 'checks' => [], 'include_standing' => false, 'standing_definitions' => null,
+            'standing_presentation' => ['periods' => 'through_cutoff', 'show_dates' => true]] ||
     !str_contains($policyResponse->getHeaderLine('Cache-Control'), 'no-store')
 ) {
     throw new RuntimeException('The institutional release policy read lost its private provider boundary.');
@@ -56,9 +57,20 @@ if (
 ) {
     throw new RuntimeException('A transcript setup command omitted its explicit standing selection.');
 }
-$policyCommand = ['revision' => 0, 'include_standing' => true, 'standing_definitions' => null, 'checks' => [
+$policyCommand = ['standing_presentation' => ['periods' => 'effective_at_cutoff', 'show_dates' => false],
+    'revision' => 0, 'include_standing' => true, 'standing_definitions' => null, 'checks' => [
     ['id' => $checkId, 'label' => 'Review fictional authorization',
     'details' => 'Use a fictional office record.', 'stage' => 'both']]];
+$missingPresentation = $policyCommand;
+unset($missingPresentation['standing_presentation']);
+$malformedPresentation = $policyCommand;
+$malformedPresentation['standing_presentation']['show_dates'] = 'false';
+if (
+    $teachingPost($policyPath, $missingPresentation)->getStatusCode() !== 422
+    || $teachingPost($policyPath, $malformedPresentation)->getStatusCode() !== 422
+) {
+    throw new RuntimeException('Transcript setup accepted absent or untyped presentation choices.');
+}
 if (
     $teachingPost($policyPath, $policyCommand)->getStatusCode() !== 200 ||
     $teachingPost($policyPath, $policyCommand)->getStatusCode() !== 409
@@ -91,6 +103,7 @@ if (
     $reviewResponse->getStatusCode() !== 200 ||
     !is_string($review["review_token"] ?? null) ||
     ($review['snapshot']['standing']['periods'] ?? null) !== [] ||
+    ($review['snapshot']['standing']['presentation'] ?? null) !== $policyCommand['standing_presentation'] ||
     ($review['snapshot']['standing']['through'] ?? null) !== $sis->clock->now()->format('Y-m-d') ||
     ($review['layout']['code'] ?? null) !== 'classic-letter' ||
     array_diff(
@@ -209,7 +222,8 @@ if (
 }
 
 $sis->access->grants = ['sis:transcript:manage', 'sis:student:read'];
-$disabledPolicy = ['revision' => 1, 'checks' => [], 'include_standing' => false, 'standing_definitions' => null];
+$disabledPolicy = ['standing_presentation' => ['periods' => 'through_cutoff', 'show_dates' => true],
+    'revision' => 1, 'checks' => [], 'include_standing' => false, 'standing_definitions' => null];
 if (
     $teachingPost($policyPath, $disabledPolicy)->getStatusCode() !== 403
 ) {

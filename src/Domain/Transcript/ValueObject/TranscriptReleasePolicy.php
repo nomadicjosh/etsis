@@ -23,6 +23,7 @@ final readonly class TranscriptReleasePolicy
         array $checks = [],
         public bool $includeStanding = false,
         ?array $standingDefinitions = null,
+        public TranscriptStandingPresentation $standingPresentation = new TranscriptStandingPresentation(),
     ) {
         if ($revision < 0 || $revision > 2000000000 || !array_is_list($checks) || count($checks) > 12) {
             self::invalid();
@@ -85,7 +86,7 @@ final readonly class TranscriptReleasePolicy
         );
     }
 
-    /** @return array{revision:int,checks:array,include_standing:bool,standing_definitions:?array} */
+    /** @return array<string,mixed> */
     public function describe(): array
     {
         return [
@@ -93,6 +94,7 @@ final readonly class TranscriptReleasePolicy
             "checks" => $this->checks,
             "include_standing" => $this->includeStanding,
             "standing_definitions" => $this->standingDefinitions,
+            "standing_presentation" => $this->standingPresentation->describe(),
         ];
     }
 
@@ -157,9 +159,9 @@ final readonly class TranscriptReleasePolicy
             ($evidence["actor_id"] ?? null) !== $actor ||
             ($evidence["confirmed_at"] ?? null) !== $at ||
             !is_array($evidence["policy"] ?? null) ||
-            !in_array(count($evidence["policy"]), [2, 3, 4], true) ||
+            !in_array(count($evidence["policy"]), [2, 3, 4, 5], true) ||
             array_diff(array_keys($evidence["policy"]), [
-                "revision", "checks", "include_standing", "standing_definitions",
+                "revision", "checks", "include_standing", "standing_definitions", "standing_presentation",
             ]) !== [] ||
             (array_key_exists("include_standing", $evidence["policy"]) &&
                 !is_bool($evidence["policy"]["include_standing"])) ||
@@ -176,6 +178,9 @@ final readonly class TranscriptReleasePolicy
             $evidence["policy"]["checks"],
             $evidence["policy"]["include_standing"] ?? false,
             $evidence["policy"]["standing_definitions"] ?? null,
+            array_key_exists("standing_presentation", $evidence["policy"])
+                ? TranscriptStandingPresentation::fromArray($evidence["policy"]["standing_presentation"])
+                : new TranscriptStandingPresentation(),
         );
         $confirmation = new TranscriptReleaseConfirmation($policy->revision, $evidence["confirmed"]);
         if ($confirmation->checks !== $evidence["confirmed"]) {
@@ -194,6 +199,9 @@ final readonly class TranscriptReleasePolicy
             $evidence["policy"]["checks"],
             $evidence["policy"]["include_standing"] ?? false,
             $evidence["policy"]["standing_definitions"] ?? null,
+            array_key_exists("standing_presentation", $evidence["policy"])
+                ? TranscriptStandingPresentation::fromArray($evidence["policy"]["standing_presentation"])
+                : new TranscriptStandingPresentation(),
         );
         return [
             "revision" => $policy->revision,
@@ -201,6 +209,7 @@ final readonly class TranscriptReleasePolicy
             "checks" => $policy->required($evidence["stage"]),
             "include_standing" => $policy->includeStanding,
             "standing_definitions" => $policy->standingDefinitions,
+            "standing_presentation" => $policy->standingPresentation->describe(),
         ];
     }
 

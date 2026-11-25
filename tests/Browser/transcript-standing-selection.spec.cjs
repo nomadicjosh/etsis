@@ -19,7 +19,7 @@ async function fixture(page, { selected = null, reject = false, saveWait = null 
                 if (reject) { reject = false; return route.fulfill({ status: 409, json: { error: 'Reload setup before saving.' } }); }
                 if (saveWait) await saveWait(data);
                 policy = { revision: policy.revision + 1, checks: data.checks, include_standing: data.include_standing,
-                    standing_definitions: data.standing_definitions };
+                    standing_definitions: data.standing_definitions, standing_presentation: data.standing_presentation };
             }
             result = { ...policy, standing_choices: definitions.filter(item => policy.standing_definitions?.includes(item.id)) };
         } else if (url.pathname === '/sis/transcript-policy/standings/') {
@@ -33,6 +33,7 @@ async function fixture(page, { selected = null, reject = false, saveWait = null 
     await page.goto('/admin/');
     await page.locator('.workspace-nav-link[data-workspace="transcripts"]').click();
     await page.getByRole('button', { name: 'Transcript setup', exact: true }).click();
+    await expect(page.locator('#record-drawer')).toHaveClass(/\bshow\b/);
     return { calls, errors, definitions };
 }
 
@@ -101,6 +102,8 @@ test('newer setup edits survive an accepted save and the following save uses the
     await page.getByRole('button', { name: 'Save setup', exact: true }).click();
     await pending;
     await page.getByLabel('Check title', { exact: true }).fill('Newer unsaved instructions');
+    await page.getByLabel('Standing periods to include', { exact: true }).selectOption('effective_at_cutoff');
+    await page.getByLabel('Print standing effective dates', { exact: true }).uncheck();
     release();
     await expect(page.locator('#drawer-body')).toContainText('Newer edits are still unsaved');
     await expect(page.getByLabel('Check title', { exact: true })).toHaveValue('Newer unsaved instructions');
@@ -110,6 +113,8 @@ test('newer setup edits survive an accepted save and the following save uses the
     expect(posts[0].data.checks[0].label).toBe('Preserved check');
     expect(posts[1].data.revision).toBe(1);
     expect(posts[1].data.checks[0].label).toBe('Newer unsaved instructions');
+    expect(posts[0].data.standing_presentation).toEqual({ periods: 'through_cutoff', show_dates: true });
+    expect(posts[1].data.standing_presentation).toEqual({ periods: 'effective_at_cutoff', show_dates: false });
     expect(errors).toEqual([]);
 });
 
@@ -184,5 +189,56 @@ test('temporarily disabling standing preserves the selected definitions for a la
     const posts = calls.filter(call => call.path === '/sis/transcript-policy/' && call.data);
     expect(posts.map(post => post.data.include_standing)).toEqual([false, true]);
     expect(posts.map(post => post.data.standing_definitions)).toEqual([[id(100)], [id(100)]]);
+    expect(errors).toEqual([]);
+});
+
+
+test('period and date choices survive stale saves, definition lookup and temporarily disabling standing', async ({ page }) => {
+    const { calls, errors } = await fixture(page, { reject: true });
+    await page.getByLabel('Standing periods to include', { exact: true }).selectOption('effective_at_cutoff');
+    await page.getByLabel('Print standing effective dates', { exact: true }).uncheck();
+    await page.getByLabel('Standings to include', { exact: true }).selectOption('selected');
+    const choices = page.getByRole('group', { name: 'Available standing definitions', exact: true });
+    await choices.getByRole('checkbox', { name: /REF00/ }).check();
+    await page.getByRole('button', { name: 'More definitions', exact: true }).click();
+    await expect(choices.getByRole('checkbox')).toHaveCount(10);
+    await page.getByRole('button', { name: 'Save setup', exact: true }).click();
+    await expect(page.getByLabel('Standing periods to include', { exact: true })).toHaveValue('effective_at_cutoff');
+    await expect(page.getByLabel('Print standing effective dates', { exact: true })).not.toBeChecked();
+    await page.getByRole('button', { name: 'Save setup', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Setup revision 1');
+    await page.getByLabel('Include recorded academic standing', { exact: true }).uncheck();
+    await expect(page.getByLabel('Standing periods to include', { exact: true })).not.toBeVisible();
+    await page.getByRole('button', { name: 'Save setup', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Setup revision 2');
+    await page.getByLabel('Include recorded academic standing', { exact: true }).check();
+    await expect(page.getByLabel('Standing periods to include', { exact: true })).toHaveValue('effective_at_cutoff');
+    await expect(page.getByLabel('Print standing effective dates', { exact: true })).not.toBeChecked();
+    expect(calls.filter(c => c.path === '/sis/transcript-policy/' && c.data).every(c =>
+        c.data.standing_presentation.periods === 'effective_at_cutoff' && !c.data.standing_presentation.show_dates)).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(errors).toEqual([]);
+});
+
+test('standing presentation controls have keyboard access and reflow at 320px and enlarged text', async ({ page }) => {
+    const { errors } = await fixture(page);
+    await page.setViewportSize({ width: 320, height: 900 });
+    const dates = page.getByLabel('Print standing effective dates', { exact: true });
+    await dates.scrollIntoViewIfNeeded();
+    await dates.focus();
+    await expect(dates).toBeFocused();
+    await dates.press('Space');
+    await expect(dates).not.toBeChecked();
+    await page.getByLabel('Standing periods to include', { exact: true }).selectOption('effective_at_cutoff');
+    for (const size of ['100%', '200%']) {
+        await page.evaluate(size => { document.documentElement.style.fontSize = size; }, size);
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
+        expect(await page.locator('#drawer-body').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+        const scan = await new AxeBuilder({ page }).include('#record-drawer')
+            .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+        expect(scan.violations.map(v => v.id)).toEqual([]);
+    }
+    await dates.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/etsis-transcript-standing-presentation-phone.png' });
     expect(errors).toEqual([]);
 });
