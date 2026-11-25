@@ -6,6 +6,8 @@ namespace Domain\Support\Enum;
 
 enum HistoryCheckSubject: string
 {
+    case GraduatePolicy = 'gradpolicy';
+    case GraduateApprovals = 'graduate';
     case Person = "person";
     case Student = "student";
     case Credit = "credit";
@@ -26,6 +28,10 @@ enum HistoryCheckSubject: string
     public function permissions(): array
     {
         return match ($this) {
+            self::GraduatePolicy => ['sis:registration:manage', 'sis:registration:graduate-policy:publish'],
+            self::GraduateApprovals => [
+                'sis:student:read', 'sis:registration:manage', 'sis:registration:graduate-override',
+            ],
             self::Person => ["sis:person:manage"],
             self::Student, self::Credit => ["sis:student:read"],
             self::Waitlist => ['sis:student:read', 'sis:registration:waitlist', 'sis:registration:manage'],
@@ -44,6 +50,8 @@ enum HistoryCheckSubject: string
     public function scope(): string
     {
         return match ($this) {
+            self::GraduatePolicy => 'graduate_registration_policy',
+            self::GraduateApprovals => 'graduate_course_approvals',
             self::Person => "person_profile",
             self::Student => "student_academic_inputs",
             self::Credit => "academic_credit",
@@ -66,6 +74,8 @@ enum HistoryCheckSubject: string
     public function referenceKey(): string
     {
         return match ($this) {
+            self::GraduatePolicy => 'policy_reference',
+            self::GraduateApprovals => 'pursuit_reference',
             self::Standing, self::Advisors, self::Requirements => "pursuit_reference",
             self::Load => "determination_reference",
             self::Progress => 'progress_record_reference',

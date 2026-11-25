@@ -5,6 +5,8 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans;
 
 return [
+    'check_policy' => trans('Check policy history'),
+    'check_approvals' => trans('Check pursuit approval history'),
     "policy" => trans("Undergraduate access to graduate courses"),
     "eyebrow" => trans("REGISTRATION POLICY"),
     "help" => trans(

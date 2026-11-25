@@ -42,6 +42,7 @@ final readonly class GraduateRegistrationPolicyService
     {
         $actor = $this->authorize();
         $result = $this->current();
+        $result["policy_reference"] = GraduateRegistrationPolicy::ID;
         $result["levels"] = [];
         foreach (["undergraduate_level_id", "graduate_level_id"] as $key) {
             if ($result["rules"][$key] !== null) {

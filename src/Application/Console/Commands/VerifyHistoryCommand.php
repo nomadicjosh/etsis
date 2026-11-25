@@ -26,6 +26,9 @@ final class VerifyHistoryCommand extends ConsoleCommand
     protected string $name = "sis:history:verify";
     protected string $description = "Verify protected chains, references and retry receipts in read-only batches.";
     protected array $options = [
+        ['graduate-policy', null, 'none', 'Compare institutional graduate policy history and its counter; no cursor.'],
+        ['graduate-approvals', null, 'required',
+            'Check one pursuit’s retained graduate approvals and references; no cursor.'],
         ["streams", null, "required", "Maximum stream chains visited (1–50).", "10"],
         ["events", null, "required", "Maximum global checks or selected-source replay events (1–2000).", "500"],
         ["cursor", null, "required", "Protected continuation from an earlier verification batch."],
@@ -86,11 +89,23 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 'position' => $this->getOptions('position'),
                 'time-entry' => $this->getOptions('time-entry'),
             ];
+            $graduatePolicy = $this->getOptions('graduate-policy') === true;
+            $graduateApprovals = $this->getOptions('graduate-approvals');
             $subjects = [$account, $student, $credit, $person, $application, $standing, $load,
                 $advisors, $requirements, $progress, $waitlist,
-                ...array_values($employment), ...array_values($catalog)];
+                ...array_values($employment), ...array_values($catalog),
+                $graduatePolicy ? \Domain\Registration\GraduateRegistrationPolicy::ID : null, $graduateApprovals];
             if (count(array_filter($subjects, static fn(mixed $id): bool => $id !== null)) > 1) {
                 throw new InvalidArgumentException();
+            }
+            if ($graduatePolicy || $graduateApprovals !== null) {
+                if (
+                    (!$graduatePolicy && !is_string($graduateApprovals)) || $cursor !== null
+                    || $this->input->hasParameterOption('--streams')
+                ) {
+                    throw new InvalidArgumentException();
+                }
+                return $this->graduate($graduatePolicy ? null : new EntityId($graduateApprovals), $events, $json);
             }
             foreach ($catalog as $kind => $reference) {
                 if ($reference === null) {
@@ -173,7 +188,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
                     . '--standing=PURSUIT_ULID, --load=DETERMINATION_ULID, --advisors=PURSUIT_ULID, '
                     . '--requirements=PURSUIT_ULID, --primary-position=EMPLOYEE_ULID, '
                     . '--position=POSITION_ULID, --time-entry=ENTRY_ULID, '
-                    . '--course=COURSE_ULID or --section=SECTION_ULID '
+                    . '--course=COURSE_ULID, --section=SECTION_ULID, --graduate-policy '
+                    . 'or --graduate-approvals=PURSUIT_ULID '
                     . 'with --events and optional --json.',
                 self::INVALID,
             );
@@ -285,6 +301,25 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 . 'not current policy, source registration freshness, census or graduation eligibility, '
                 . 'fresh progress reproduction, every retry receipt or archive completeness. '
                 . 'An empty observation is not verified prior history.');
+        }
+        return match ($result->status) {
+            'verified' => self::SUCCESS,
+            'observed_empty', 'changed', 'limited' => 3,
+            default => self::FAILURE,
+        };
+    }
+
+    private function graduate(?EntityId $pursuit, int $events, bool $json): int
+    {
+        $verifier = $this->codefy->make(\Domain\Registration\Repository\GraduateHistoryVerifier::class);
+        $result = $pursuit === null ? $verifier->policy($events) : $verifier->approvals($pursuit, $events);
+        if ($json) {
+            $this->terminalRaw(json_encode($result->describe(), JSON_THROW_ON_ERROR));
+        } else {
+            $this->terminalRaw('Selected graduate history: ' . $result->status . '; '
+                . $result->events . ' events checked; no records changed.');
+            $this->terminalRaw('This checks retained decisions and definitions, '
+                . 'not current eligibility or historical GPA arithmetic.');
         }
         return match ($result->status) {
             'verified' => self::SUCCESS,

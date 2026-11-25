@@ -307,7 +307,7 @@
     const waitlistStudio = window.createSectionWaitlist({ historyChecks: () => historyChecks, historyCheckLabels: config.history_check_labels, allocationLabels: config.waitlist_allocation_labels, bypassLabels: config.waitlist_bypass_labels, node, request, task, table, money, can, openDrawer,
         register: (student, section, back) => batchRegistration.single(student, back, { section_id: section }),
         registerGroup: (section, students, back, label) => batchRegistration.start(section, students, back, label) });
-    const graduateRegistration = window.createGraduateRegistration({ node, request, task, openDrawer, buildForm,
+    const graduateRegistration = window.createGraduateRegistration({ node, request, task, openDrawer, buildForm, can, historyChecks: () => historyChecks,
         labels: config.graduate_registration_labels });
     const batchRegistration = window.createWorkspaceRegistration({ graduate: graduateRegistration, graduateLabels: config.graduate_registration_labels, allocationLabels: config.waitlist_allocation_labels, node, request, task, can, table, money, recordSummary, buildForm, openDrawer, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const moodleStudio = window.createWorkspaceMoodle({ node, request, task, can });

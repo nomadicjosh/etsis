@@ -17,7 +17,18 @@ async function fixture(page) {
         const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : {};
         state.requests.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
         let result = { items: [], next_after: null };
-        if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
+        if (path.startsWith('/sis/history-checks/')) {
+            const kind = path.split('/')[3];
+            const reference = path.split('/')[4];
+            const receipt = { reference: id(90), status: kind === 'gradpolicy' ? 'observed_empty' : 'verified',
+                events_checked: kind === 'gradpolicy' ? 0 : 12, checked_at: '2026-11-25T12:00:00Z' };
+            result = path.endsWith('/history/') ? { items: [], next_after: null } : {
+                result: { status: receipt.status, scope: kind === 'gradpolicy' ? 'graduate_registration_policy' : 'graduate_course_approvals',
+                    [kind === 'gradpolicy' ? 'policy_reference' : 'pursuit_reference']: reference,
+                    events_checked: receipt.events_checked, records_checked: kind === 'gradpolicy' ? 0 : 2, issues: [], records_changed: false },
+                receipt, event_limit: 200,
+            };
+        } else if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path.startsWith('/sis/ui/data/')) result = { items: path.includes('/sections/') ? [section] : path.includes('/students/') ? [{ id: id(30), given_name: 'Fictional', family_name: 'Student', institutional_id: 'S-FICTIONAL', active: 1 }] : [], next_after: null };
         else if (path.endsWith('/eligible-programs/current/')) {
             if (state.deny) return route.fulfill({ status: 403, json: { error: 'Access denied.' } });
@@ -28,15 +39,17 @@ async function fixture(page) {
             state.saved = data.program_ids;
             state.revision = 'b'.repeat(64);
             result = { program_ids: state.saved, revision: state.revision };
-        } else if (path === '/sis/graduate-registration-policy/') result = { publication_id: null, version: 0,
+        } else if (path === '/sis/graduate-registration-policy/' && state.policyDenied) return route.fulfill({ status: 403, json: { error: 'Access denied.' } });
+        else if (path === '/sis/graduate-registration-policy/') result = { policy_reference: '01K00000000000000000000G31', publication_id: null, version: 0,
             rules: { enabled: false, undergraduate_level_id: null, graduate_level_id: null,
                 minimum_gpa_milli: 2000, minimum_graduate_grade_milli: null }, levels: [] };
         else if (path.endsWith('/graduate-registration-policy/levels/')) result = { items: levels, next_after: null };
         else if (path.endsWith('/graduate-registration-policy/review/')) result = { ...data,
             publication_id: id(25), review_token: 'fictional-policy-proof' };
         else if (path.endsWith('/graduate-registration-policy/publish/')) result = { status: 'published', version: 1, publication_id: id(25) };
+        else if (path.includes('/graduate-courses/') && path.endsWith('/current/') && state.approvalDenied) return route.fulfill({ status: 403, json: { error: 'Access denied.' } });
         else if (path.includes('/graduate-courses/') && path.endsWith('/current/')) result = {
-            pursuit_id: id(31), version: 0, required: true, can_advisor: true, can_registrar: false,
+            pursuit_id: id(31), version: 0, required: !state.noApprovalActions, can_advisor: !state.noApprovalActions, can_registrar: false,
             advisor_recorded: false, registrar_recorded: false,
             checks: [{ code: 'graduate_academic', label: 'Graduate-course academic eligibility', status: 'met', message: 'The current pursuit meets the academic policy.' },
                 { code: 'graduate_advisor', label: 'Advisor approval', status: 'blocked', message: 'Assigned-advisor approval is required.' }],
@@ -153,5 +166,95 @@ test('graduate approvals use a reviewed advisor decision and retain back navigat
     expect(state.requests.find(r => r.path.endsWith('/graduate-courses/00000000000000000000000001/confirm/')).data.action).toBe('advisor_approve');
     await page.getByRole('button', { name: 'Back to record', exact: true }).click();
     await expect(page.getByLabel('Choose a graduate course section', { exact: true })).toBeVisible();
+    expect(state.errors).toEqual([]);
+});
+
+test('policy history returns to the original unsaved draft and restores focus', async ({ page }) => {
+    const state = await fixture(page);
+    await page.goto('/admin/workspace/registration/');
+    await page.getByRole('button', { name: 'Undergraduate access to graduate courses', exact: true }).click();
+    await page.getByLabel('Minimum current undergraduate pursuit GPA', { exact: true }).fill('3.125');
+    await page.getByLabel('Reason for this decision', { exact: true }).fill('Fictional unfinished policy reason.');
+    await page.getByRole('button', { name: 'Check policy history', exact: true }).click();
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'No graduate decision observed', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.getByLabel('Minimum current undergraduate pursuit GPA', { exact: true })).toHaveValue('3.125');
+    await expect(page.getByLabel('Reason for this decision', { exact: true })).toHaveValue('Fictional unfinished policy reason.');
+    await expect(page.getByRole('button', { name: 'Check policy history', exact: true })).toBeFocused();
+    expect(state.requests.some(r => r.path.endsWith('/graduate-registration-policy/publish/'))).toBe(false);
+    expect(state.errors).toEqual([]);
+});
+
+test('approval history returns to the same pursuit draft at phone size', async ({ page }) => {
+    const state = await fixture(page);
+    await page.goto('/admin/workspace/students/');
+    await page.getByRole('searchbox', { name: 'Search this workspace', exact: true }).fill('Fictional');
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await page.getByRole('button', { name: 'Fictional Student', exact: true }).click();
+    await page.getByRole('button', { name: 'Review graduate-course approvals', exact: true }).click();
+    await page.getByRole('button', { name: 'SCI.501 · SCI.501.A · 26/FA — Fictional research', exact: true }).click();
+    await page.getByLabel('Reason for this decision', { exact: true }).fill('Fictional unfinished approval reason.');
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.getByRole('button', { name: 'Check pursuit approval history', exact: true }).click();
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Verified within this check', exact: true })).toBeVisible();
+    await noOverflow(page);
+    const scan = await new AxeBuilder({ page }).include('#record-drawer')
+        .withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(scan.violations.map(v => v.id)).toEqual([]);
+    await page.screenshot({ path: '/tmp/etsis-graduate-history-phone.png' });
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.getByLabel('Reason for this decision', { exact: true })).toHaveValue('Fictional unfinished approval reason.');
+    await expect(page.getByRole('button', { name: 'Check pursuit approval history', exact: true })).toBeFocused();
+    expect(state.requests.some(r => r.path.endsWith('/graduate-courses/00000000000000000000000001/confirm/'))).toBe(false);
+    expect(state.errors).toEqual([]);
+});
+
+test('lost policy authority prevents restoration of its draft after a history check', async ({ page }) => {
+    const state = await fixture(page);
+    await page.goto('/admin/workspace/registration/');
+    await page.getByRole('button', { name: 'Undergraduate access to graduate courses', exact: true }).click();
+    await page.getByLabel('Reason for this decision', { exact: true }).fill('Fictional private policy draft.');
+    await page.getByRole('button', { name: 'Check policy history', exact: true }).click();
+    state.policyDenied = true;
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.getByText('This information is no longer available to this account.', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Reason for this decision', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('Fictional private policy draft.', { exact: true })).toHaveCount(0);
+    expect(state.errors).toEqual([]);
+});
+
+async function openApprovals(page) {
+    await page.goto('/admin/workspace/students/');
+    await page.getByRole('searchbox', { name: 'Search this workspace', exact: true }).fill('Fictional');
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await page.getByRole('button', { name: 'Fictional Student', exact: true }).click();
+    await page.getByRole('button', { name: 'Review graduate-course approvals', exact: true }).click();
+    await page.getByRole('button', { name: 'SCI.501 · SCI.501.A · 26/FA — Fictional research', exact: true }).click();
+}
+
+test('support can inspect pursuit history when this section offers no approval action', async ({ page }) => {
+    const state = await fixture(page);
+    state.noApprovalActions = true;
+    await openApprovals(page);
+    await expect(page.getByRole('button', { name: 'Review decision', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Check pursuit approval history', exact: true }).click();
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+    await expect(page.getByRole('heading', { name: 'Verified within this check', exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Check pursuit approval history', exact: true })).toBeFocused();
+    expect(state.errors).toEqual([]);
+});
+
+test('lost approval access clears the private draft on return from support', async ({ page }) => {
+    const state = await fixture(page);
+    await openApprovals(page);
+    await page.getByLabel('Reason for this decision', { exact: true }).fill('Fictional private approval draft.');
+    await page.getByRole('button', { name: 'Check pursuit approval history', exact: true }).click();
+    state.approvalDenied = true;
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.getByText('This information is no longer available to this account.', { exact: true })).toBeVisible();
+    await expect(page.getByLabel('Reason for this decision', { exact: true })).toHaveCount(0);
     expect(state.errors).toEqual([]);
 });

@@ -60,6 +60,7 @@ final readonly class HistoryCheckService
         private \Domain\Registration\Waitlist\WaitlistRepository $waitlists,
         private \Domain\Catalog\Repository\CatalogProjectionVerifier $catalogHistory,
         private \Domain\Catalog\Repository\CatalogRevisionRepository $catalog,
+        private \Domain\Registration\Repository\GraduateHistoryVerifier $graduateHistory,
     ) {
     }
 
@@ -72,6 +73,12 @@ final readonly class HistoryCheckService
             if ($this->access->requirePermission($permission)->value !== $actor->value) {
                 throw new AccessDeniedException();
             }
+        }
+        if ($kind === HistoryCheckSubject::GraduatePolicy) {
+            if ($actor->value !== $this->access->authenticatedUserId()->value) {
+                throw new AccessDeniedException();
+            }
+            return new HistoryCheckScope($kind, $id);
         }
         if (in_array($kind, [HistoryCheckSubject::Course, HistoryCheckSubject::Section], true)) {
             if ($actor->value !== $this->access->authenticatedUserId()->value) {
@@ -107,7 +114,8 @@ final readonly class HistoryCheckService
         ))
         : null;
         $pursuit = match ($kind) {
-            HistoryCheckSubject::Standing, HistoryCheckSubject::Advisors, HistoryCheckSubject::Requirements => $id,
+            HistoryCheckSubject::Standing, HistoryCheckSubject::Advisors, HistoryCheckSubject::Requirements,
+            HistoryCheckSubject::GraduateApprovals => $id,
             HistoryCheckSubject::Load => new EntityId($load["pursuit_id"]),
             HistoryCheckSubject::Progress => new EntityId($progress['pursuit_id']),
             default => null,
@@ -119,7 +127,8 @@ final readonly class HistoryCheckService
             HistoryCheckSubject::Student => $id,
             HistoryCheckSubject::Credit => $this->receipts->creditStudent($id),
             HistoryCheckSubject::Waitlist => new EntityId($waiting['student_id']),
-            HistoryCheckSubject::Standing, HistoryCheckSubject::Advisors, HistoryCheckSubject::Requirements =>
+            HistoryCheckSubject::Standing, HistoryCheckSubject::Advisors, HistoryCheckSubject::Requirements,
+            HistoryCheckSubject::GraduateApprovals =>
             $this->students->assignment($id)->studentId,
             HistoryCheckSubject::Load => new EntityId($load["student_id"]),
             HistoryCheckSubject::Progress => new EntityId($progress['student_id']),
@@ -218,6 +227,10 @@ final readonly class HistoryCheckService
     {
         try {
             $result = match ($scope->kind) {
+                HistoryCheckSubject::GraduatePolicy => $this->graduateHistory
+                    ->policy(HistoryCheckReceipt::EVENT_LIMIT)->describe(),
+                HistoryCheckSubject::GraduateApprovals => $this->graduateHistory
+                    ->approvals($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Person => $this->persons
                     ->verify($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)
                     ->describe(),

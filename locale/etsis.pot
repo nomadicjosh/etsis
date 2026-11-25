@@ -5250,3 +5250,36 @@ msgstr ""
 #: src/Infrastructure/Persistence/Repository/SqlGraduateRegistrationPolicyState.php:45
 msgid "The institutional graduate-course registration policy changed. Review again."
 msgstr ""
+
+msgid "Graduate-course registration policy"
+msgstr ""
+
+msgid "Graduate-course approvals for this pursuit"
+msgstr ""
+
+msgid "Retained graduate decisions checked"
+msgstr ""
+
+msgid "Protected graduate decisions and technical counters"
+msgstr ""
+
+msgid "Original retained policy, course, program, curriculum and offering references"
+msgstr ""
+
+msgid "No graduate decision observed"
+msgstr ""
+
+msgid "No decision was recorded in this selected source. Earlier unrecorded activity remains unknown."
+msgstr ""
+
+msgid "Long histories need a bounded operator check. More than 200 reference selections, oversized inventories or the cooperative time limit need an offline review; increasing the event allowance alone does not remove those bounds."
+msgstr ""
+
+msgid "Compare recorded policy or pursuit approval decisions with their original definitions, including revoked decisions. This check does not recalculate earlier GPA, determine current registration eligibility or establish complete historical coverage. Academic and financial records remain unchanged."
+msgstr ""
+
+msgid "Check policy history"
+msgstr ""
+
+msgid "Check pursuit approval history"
+msgstr ""

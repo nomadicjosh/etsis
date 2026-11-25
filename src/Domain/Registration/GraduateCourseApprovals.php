@@ -173,6 +173,12 @@ final class GraduateCourseApprovals extends EventSourcedAggregate
         return $this->records[$operation->value] ?? null;
     }
 
+    /** Internal authenticated decisions, including revoked/superseded facts. Never return through ordinary APIs. */
+    public function decisions(): array
+    {
+        return array_values($this->records);
+    }
+
     public function __debugInfo(): array
     {
         return ["approvals" => "[protected graduate-course decisions]"];

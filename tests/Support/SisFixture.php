@@ -641,6 +641,47 @@ final class SisFixture
         );
     }
 
+    public function graduateVerifier(
+        ?\Domain\Shared\EventSourcing\HistoricalEventStore $history = null,
+    ): \Infrastructure\Projection\SqlGraduateHistoryVerifier {
+        $history ??= EventStoreFixture::history($this->connection->queryBuilder());
+        $policy = new \Domain\Registration\Service\GraduateRegistrationPolicyService(
+            $history,
+            $this->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
+            $this->transactions,
+            $this->audit,
+            $this->clock,
+            new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+            new \Infrastructure\Persistence\Repository\SqlGraduateRegistrationPolicyState($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($this->sql)
+        );
+        $approvals = new \Domain\Registration\Service\GraduateApprovalLedger(
+            $history,
+            new \Infrastructure\Persistence\Repository\SqlGraduateApprovalState($this->sql)
+        );
+        $references = new \Domain\Registration\Service\GraduateEvidenceReader(
+            $policy,
+            $approvals,
+            new \Domain\Catalog\Service\PublishedCourseReader($history),
+            new \Domain\Catalog\Service\PublishedProgramReader(
+                $history,
+                new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql)
+            ),
+            new \Domain\DegreeAudit\Service\PublishedRequirementsReader($history)
+        );
+        return new \Infrastructure\Projection\SqlGraduateHistoryVerifier(
+            $this->sql,
+            $history,
+            new \Infrastructure\Persistence\Repository\SqlGraduateRegistrationPolicyState($this->sql),
+            $approvals,
+            $references,
+            new \Domain\Registration\Service\RetainedSectionReader($history),
+            new \Infrastructure\Persistence\Repository\SqlSectionVersionRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlCourseVersionProjection($this->sql)
+        );
+    }
+
     public function graduateEvidence(): \Domain\Registration\Service\GraduateEvidenceReader
     {
         $history = EventStoreFixture::history($this->connection->queryBuilder());

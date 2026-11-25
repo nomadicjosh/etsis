@@ -43,6 +43,8 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
     };
     const text = key => labels[key] || fallbackLabels[key];
     const kinds = { waitlist: text('waitlist'), credit: text('academic_credit'), progress: text('recorded_progress'), advisors: text('advisor_assignments'), requirements: text('degree_selection'), person: 'Person profile', student: 'Student academic records', account: 'Student account', application: text('application'), standing: text('program_standing'), load: text('retained_load'), primary: text('primary_position'), position: text('position'), time: text('time_entry') };
+    kinds.gradpolicy = text('graduate_policy'); kinds.graduate = text('graduate_approvals');
+    const graduateKinds = ['gradpolicy', 'graduate'];
     const employmentKinds = ['primary', 'position', 'time'];
     kinds.course = text('catalog_course'); kinds.section = text('catalog_section');
     const catalogKinds = ['course', 'section'];
@@ -61,7 +63,10 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         progress_record: text('progress_components'), advisors: text('advisor_components'), requirements: text('requirement_components'), application: text('application_components'), intake: text('intake_component'), pursuit_identity: text('pursuit_identity'), standing: text('standing_components'), load_decision: text('load_components'), primary_position: text('primary_components'), position: text('position_components'), time_decision: text('time_components'), earlier_decision: text('earlier_time') };
     Object.assign(issues, { catalog_identity: text('catalog_identity'), publication: text('catalog_publication'),
         course_reference: text('course_reference'), course_binding: text('course_binding'), offering_selection: text('offering_selection') });
+    Object.assign(issues, { graduate_history: text('graduate_components'), retained_reference: text('graduate_references') });
     function observation(kind, state) {
+        if (graduateKinds.includes(kind) && state === 'limited') return [statuses.limited[0], text('graduate_limit_help')];
+        if (graduateKinds.includes(kind) && state === 'observed_empty') return [text('graduate_empty'), text('graduate_empty_help')];
         if (catalogKinds.includes(kind) && state === 'limited') return [statuses.limited[0], text('catalog_limit_help')];
         if (catalogKinds.includes(kind) && state === 'observed_empty') return [text('catalog_empty'), text('catalog_empty_help')];
         if (kind === 'time' && state === 'history_gaps') return [text('earlier_time'), text('earlier_time_help')];
@@ -112,7 +117,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
                 node('p', { class: 'text-break' }, `Support reference: ${receipt.reference}`),
                 node('p', {}, `Observed ${receipt.checked_at} · ${check.events_checked} events checked (maximum ${data.event_limit}).`));
             if (check.records_checked != null) result.append(node('p', {},
-                `${text(catalogKinds.includes(kind) ? 'catalog_count' : employmentKinds.includes(kind) ? 'hr_count' : kind === 'waitlist' ? 'waitlist_count' : kind === 'credit' ? 'credit_count' : kind === 'standing' ? 'standing_count' : kind === 'advisors' ? 'advisor_count' : kind === 'requirements' ? 'requirement_count' : kind === 'progress' ? 'progress_count' : 'load_count')}: ${check.records_checked}.`));
+                `${text(graduateKinds.includes(kind) ? 'graduate_count' : catalogKinds.includes(kind) ? 'catalog_count' : employmentKinds.includes(kind) ? 'hr_count' : kind === 'waitlist' ? 'waitlist_count' : kind === 'credit' ? 'credit_count' : kind === 'standing' ? 'standing_count' : kind === 'advisors' ? 'advisor_count' : kind === 'requirements' ? 'requirement_count' : kind === 'progress' ? 'progress_count' : 'load_count')}: ${check.records_checked}.`));
             if (check.position != null) result.append(node('p', {}, `Observed stream position: ${check.position}.`));
             if (check.current_records != null) result.append(node('p', {}, `Current academic records checked: ${check.current_records}.`));
             if (check.expected_postings != null) result.append(node('p', {}, `Expected postings checked: ${check.expected_postings}.`));
@@ -129,7 +134,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         controls.append(run, button('Refresh previous checks', () => load()));
         if (back) controls.append(node('button', { type: 'button', class: 'btn btn-link', onclick: event => task(back, event.currentTarget) }, 'Back to record'));
         body.append(node('h3', { class: 'h5' }, kinds[kind]),
-            node('p', {}, text(catalogKinds.includes(kind) ? 'catalog_help' : employmentKinds.includes(kind) ? 'hr_help' :
+            node('p', {}, text(graduateKinds.includes(kind) ? 'graduate_help' : catalogKinds.includes(kind) ? 'catalog_help' : employmentKinds.includes(kind) ? 'hr_help' :
                 kind === 'waitlist' ? 'waitlist_help' : kind === 'credit' ? 'credit_help' : kind === 'progress' ? 'progress_help' : ['advisors', 'requirements'].includes(kind) ? 'curriculum_help' : 'check_help')),
             node('p', { class: 'form-text' }, text(employmentKinds.includes(kind) ? 'hr_history_help' : 'history_help')),
             controls, status, result, history, node('div', { class: 'd-flex gap-2 flex-wrap' }, previous, older));
@@ -145,6 +150,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
             if (!page.items.length) history.append(node('p', {}, 'No previous checks for the current record routing on this page.'));
         }
         work(load);
+        return body;
     }
     return { open };
 };

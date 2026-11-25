@@ -395,6 +395,44 @@ final class HistoryCheckServiceTest extends TestCase
         require_once dirname(__DIR__) . "/Support/CampusFixture.php";
     }
 
+    public function testGraduateSupportAuditFailureAndRoutingChangesRollBackReceipts(): void
+    {
+        require_once dirname(__DIR__) . '/Support/GraduateRegistrationFixture.php';
+        $f = new \Tests\Support\GraduateRegistrationFixture();
+        $s = $f->sis;
+        $f->decide('advisor_approve');
+        $owner = $s->user();
+        $person = $s->admissions->student($f->student)->personId;
+        $before = $s->sql->one('sis_persons', ['id' => $person->value]);
+        $audit = $this->createMock(AuditTrail::class);
+        $audit->expects(self::once())->method('record')->willReturnCallback(
+            static function () use ($s, $person, $owner): void {
+                $s->sql->update('sis_persons', ['owner_user_id' => $owner->value], ['id' => $person->value]);
+            },
+        );
+        try {
+            $this->service($s, audit: $audit)->run(HistoryCheckSubject::GraduateApprovals, $f->pursuit);
+            self::fail('Graduate support retained a receipt after canonical routing changed.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame([], $s->sql->rows('sis_history_checks'));
+            self::assertSame($before, $s->sql->one('sis_persons', ['id' => $person->value]));
+        }
+        $failed = $this->createMock(AuditTrail::class);
+        $failed->expects(self::once())->method('record')->willThrowException(
+            new \RuntimeException('Fictional audit failure.'),
+        );
+        try {
+            $this->service($s, audit: $failed)->run(
+                HistoryCheckSubject::GraduatePolicy,
+                new EntityId(\Domain\Registration\GraduateRegistrationPolicy::ID)
+            );
+            self::fail('A failed policy support audit left a receipt behind.');
+        } catch (\RuntimeException $error) {
+            self::assertSame('Fictional audit failure.', $error->getMessage());
+            self::assertSame([], $s->sql->rows('sis_history_checks'));
+        }
+    }
+
     private function service(
         CampusFixture|\SisFixture $c,
         ?PersonProjectionVerifier $people = null,
@@ -472,6 +510,7 @@ final class HistoryCheckServiceTest extends TestCase
                 new \Infrastructure\Persistence\Repository\SqlSectionCourseBindingRepository($s->sql)
             ),
             new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($s->sql),
+            $s->graduateVerifier(),
         );
     }
 

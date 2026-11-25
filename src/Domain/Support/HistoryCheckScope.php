@@ -22,6 +22,16 @@ final readonly class HistoryCheckScope
         public ?EntityId $course = null,
         public ?EntityId $term = null,
     ) {
+        if ($kind === HistoryCheckSubject::GraduatePolicy) {
+            if (
+                $subject->value !== \Domain\Registration\GraduateRegistrationPolicy::ID
+                || $person !== null || $owner !== null || $student !== null || $pursuit !== null || $employee !== null
+                || $section !== null || $course !== null || $term !== null
+            ) {
+                throw new \InvalidArgumentException('Use the non-personal institutional graduate policy scope.');
+            }
+            return;
+        }
         $catalog = in_array($kind, [HistoryCheckSubject::Course, HistoryCheckSubject::Section], true);
         if (
             $catalog ? ($person !== null || $owner !== null || $student !== null || $pursuit !== null

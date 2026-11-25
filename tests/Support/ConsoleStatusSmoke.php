@@ -85,6 +85,7 @@ try {
                 'check-prerequisite-permissions',
                 'check-advising',
                 'check-graduate-registration',
+                'check-graduate-history',
                 'check-moodle-resolution',
                 'check-course-rules',
                 'check-prerequisite-groups',
@@ -356,6 +357,9 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/HistoryCheckBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-graduate-history') {
+            require __DIR__ . '/GraduateHistoryBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-graduate-registration') {
             $kernel->bootstrap();

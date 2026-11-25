@@ -5,6 +5,27 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'graduate_policy' => trans_html('Graduate-course registration policy'),
+    'graduate_approvals' => trans_html('Graduate-course approvals for this pursuit'),
+    'graduate_count' => trans_html('Retained graduate decisions checked'),
+    'graduate_components' => trans_html('Protected graduate decisions and technical counters'),
+    'graduate_references' => trans_html(
+        'Original retained policy, course, program, curriculum and offering references'
+    ),
+    'graduate_empty' => trans_html('No graduate decision observed'),
+    'graduate_empty_help' => trans_html(
+        'No decision was recorded in this selected source. Earlier unrecorded activity remains unknown.'
+    ),
+    'graduate_limit_help' => trans_html(
+        'Long histories need a bounded operator check. More than 200 reference selections, oversized inventories '
+        . 'or the cooperative time limit need an offline review; increasing the event allowance alone '
+        . 'does not remove those bounds.'
+    ),
+    'graduate_help' => trans_html(
+        'Compare recorded policy or pursuit approval decisions with their original definitions, including '
+        . 'revoked decisions. This check does not recalculate earlier GPA, determine current registration '
+        . 'eligibility or establish complete historical coverage. Academic and financial records remain unchanged.'
+    ),
     'catalog_course' => trans_html('Course publications'),
     'catalog_section' => trans_html('Section publications'),
     'check_course' => trans_html('Check course publication history'),

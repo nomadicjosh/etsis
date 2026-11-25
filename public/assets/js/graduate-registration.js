@@ -4,6 +4,10 @@ window.createGraduateRegistration = function (ui) {
     const { node, request, task, openDrawer } = ui;
     const t = key => ui.labels[key];
     const pending = new Set();
+    const supportAllowed = policy => ui.historyChecks && ui.can && [
+        'sis:history:verify', 'sis:audit:read', 'sis:registration:manage',
+        ...(policy ? ['sis:registration:graduate-policy:publish'] : ['sis:student:read', 'sis:registration:graduate-override']),
+    ].every(ui.can);
     const button = (key, run, style = "btn-outline-primary", icon = null) => node("button", {
         type: "button", class: `btn ${style}`, onclick: event => task(run, event.currentTarget),
     }, ...(icon ? [node("i", { class: `bi bi-${icon} me-2`, "aria-hidden": "true" })] : []), t(key));
@@ -104,6 +108,28 @@ window.createGraduateRegistration = function (ui) {
             bodyRef = fresh;
         };
         let bodyRef = body;
+        if (supportAllowed(true)) {
+            const check = button('check_policy', () => {
+                const panel = ui.historyChecks().open('gradpolicy', saved.policy_reference, async () => {
+                    if (!panel.isConnected) return;
+                    try {
+                        await request('/sis/graduate-registration-policy/');
+                        if (!panel.isConnected) return;
+                        edit();
+                        check.focus();
+                    } catch (failure) {
+                        if (!panel.isConnected) return;
+                        if ([401, 403].includes(failure.status)) {
+                            reason.value = '';
+                            const denied = openDrawer(t('policy'), t('eyebrow'));
+                            deny(denied, failure);
+                        } else throw failure;
+                    }
+                });
+            }, 'btn-outline-secondary', 'shield-check');
+            form.querySelector('.record-form-actions').append(check);
+        }
+
         form.addEventListener("submit", event => {
             event.preventDefault();
             task(async () => {
@@ -145,7 +171,7 @@ window.createGraduateRegistration = function (ui) {
         try { await loadLevels(false); } catch (failure) { if (!deny(body, failure) && body.isConnected) error.textContent = failure.message; }
     }
 
-    async function open(student, section, back = null, pursuit = null) {
+    async function open(student, section, back = null, pursuit = null, restore = null) {
         const key = `${student}:${section}`;
         const body = openDrawer(t("approvals"), t("eyebrow"));
         body.append(paragraph(t("loading")));
@@ -157,7 +183,11 @@ window.createGraduateRegistration = function (ui) {
         const base = `${ui.prefix || "/sis"}/students/${student}/graduate-courses/${section}/`;
         let saved;
         try { saved = await request(`${base}current/`, "POST", pursuit ? { pursuit_id: pursuit } : {}); }
-        catch (failure) { if (!deny(body, failure)) throw failure; return; }
+        catch (failure) {
+            if (!deny(body, failure)) throw failure;
+            if (restore) restore.reason = '';
+            return;
+        }
         if (!body.isConnected) return;
         body.replaceChildren(paragraph(t("approval_help")));
         if (!saved.required) body.append(node("p", { role: "status" }, t("not_required")));
@@ -172,14 +202,21 @@ window.createGraduateRegistration = function (ui) {
             if (saved.required) actions.push("registrar_override");
             if (saved.registrar_recorded) actions.push("registrar_revoke");
         }
+        let captureDraft = () => ({ pursuit: saved.pursuit_id, action: null, reason: '' });
         if (actions.length) {
             const action = node("select", { class: "form-select" }, ...actions.map(key => node("option", { value: key }, t(key))));
             const reason = reasonField();
+            if (restore && restore.pursuit === saved.pursuit_id && actions.includes(restore.action)) {
+                action.value = restore.action;
+                reason.value = restore.reason;
+            }
             const submit = node("button", { type: "submit", class: "btn btn-primary" }, t("review_decision"));
             const form = node("form", { class: "record-form" }, field("graduate-approval-action", "review_decision", action),
                 field("graduate-approval-reason", "reason", reason), submit);
             const error = node("p", { role: "alert", class: "text-danger" });
             body.append(form, error);
+            captureDraft = () => ({ pursuit: saved.pursuit_id, action: action.value, reason: reason.value });
+
             form.addEventListener("submit", event => {
                 event.preventDefault();
                 task(async () => {
@@ -210,8 +247,20 @@ window.createGraduateRegistration = function (ui) {
                 }, submit);
             });
         }
-        body.append(node("div", { class: "inline-actions" }, button("refresh", () => open(student, section, back, saved.pursuit_id),
-            "btn-outline-secondary", "arrow-clockwise"), ...(back ? [button("back", back, "btn-link", "arrow-left")] : [])));
+        const navigation = node("div", { class: "inline-actions" }, button("refresh", () => open(student, section, back, saved.pursuit_id),
+            "btn-outline-secondary", "arrow-clockwise"), ...(back ? [button("back", back, "btn-link", "arrow-left")] : []));
+        if (supportAllowed(false)) {
+            const check = button('check_approvals', () => {
+                const draft = captureDraft();
+                const panel = ui.historyChecks().open('graduate', saved.pursuit_id, async () => {
+                    if (!panel.isConnected) return;
+                    await open(student, section, back, saved.pursuit_id, draft);
+                });
+            }, 'btn-outline-secondary', 'shield-check');
+            navigation.append(check);
+            if (restore) requestAnimationFrame(() => { if (body.isConnected) check.focus(); });
+        }
+        body.append(navigation);
     }
 
     async function choose(student, pursuit, back) {
