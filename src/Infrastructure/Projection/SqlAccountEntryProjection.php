@@ -34,9 +34,13 @@ final readonly class SqlAccountEntryProjection
         $expected = $events[0]->playhead() - 1;
         $head = $this->sql->current('sis_account_entry_heads', $id);
         if (
-            ($expected === 0 && $head !== null) ||
-            ($expected > 0 && ($head === null || (int) $head['position'] !== $expected
-                || (int) $head['temporal_position'] !== $expected || $head['opened_at'] === null))
+            ($expected === 0 &&
+            $head !== null) ||
+            ($expected > 0 &&
+            ($head === null ||
+            (int) $head['position'] !== $expected ||
+                (int) $head['temporal_position'] !== $expected ||
+                $head['opened_at'] === null))
         ) {
             throw new CorruptHistoryException();
         }
@@ -157,6 +161,23 @@ final readonly class SqlAccountEntryProjection
         if ($enrichTemporal) {
             $this->verify($account, $events);
         }
+    }
+
+    /** Read-only verification shares the migration's deterministic state builder, never its write path.
+     * @param non-empty-list<DomainEvent> $events */
+    public function snapshot(
+        #[\SensitiveParameter] StudentAccount $account,
+        #[\SensitiveParameter] array $events,
+    ): array {
+        [$created] = $this->changes($account, $events);
+        $rows = [];
+        foreach ($account->entries() as $entry) {
+            $rows[] = $this->values($account, $entry)
+            + ($created[$entry['operation_id']] ?? throw new CorruptHistoryException());
+        }
+        return ['head' => ['id' => (string) $account->aggregateId(), 'position' => $account->playhead(),
+            'entry_count' => count($rows), 'opened_at' => $this->openedAt($events),
+            'temporal_position' => $account->playhead()], 'entries' => $rows];
     }
 
     /** Read-only verification shares the migration's deterministic state builder, never its write path.

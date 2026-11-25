@@ -15,6 +15,10 @@ final class SisServiceProvider extends CodefyServiceProvider
     public function register(): void
     {
         $bindings = [
+            \Domain\Finance\Repository\AccountProjectionRecovery::class =>
+                \Infrastructure\Projection\SqlAccountProjectionRecovery::class,
+            \Domain\Finance\Repository\AccountProjectionStageStorage::class =>
+                \Infrastructure\Operations\LocalAccountProjectionStageStorage::class,
             \Domain\DegreeAudit\Repository\TransferInstitutionDirectory::class =>
                 \Infrastructure\Persistence\Repository\SqlTransferInstitutionDirectory::class,
             \Domain\HumanResources\Repository\PrimaryPositionRepository::class =>
@@ -391,6 +395,13 @@ final class SisServiceProvider extends CodefyServiceProvider
         foreach ($bindings as $port => $adapter) {
             $this->codefy->alias($port, $adapter);
         }
+        $this->codefy->delegate(\Infrastructure\Operations\LocalAccountProjectionStageStorage::class, function () {
+            return new \Infrastructure\Operations\LocalAccountProjectionStageStorage(
+                $this->codefy->make(\Domain\Communications\Service\MessageCipher::class),
+                \Codefy\Framework\Helpers\storage_path('app/projection-rebuilds'),
+                $this->codefy->publicPath(),
+            );
+        });
         $this->codefy->delegate(\Infrastructure\Operations\LocalHistoryAnchorStorage::class, function () {
             return new \Infrastructure\Operations\LocalHistoryAnchorStorage(
                 $this->codefy->configContainer,

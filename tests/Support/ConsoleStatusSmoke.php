@@ -455,6 +455,9 @@ try {
         } elseif (($argv[1] ?? '') === 'check-waitlist-projections') {
             require __DIR__ . '/WaitlistProjectionBootChecks.php';
             $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-account-recovery') {
+            require __DIR__ . '/AccountRecoveryBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-catalog-projections') {
             require __DIR__ . '/CatalogProjectionBootChecks.php';
             $status = 0;

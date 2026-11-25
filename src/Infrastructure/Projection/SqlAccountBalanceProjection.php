@@ -135,6 +135,12 @@ final readonly class SqlAccountBalanceProjection
     }
 
     /** Read-only comparison against the reconstructed account; never initializes or repairs data. */
+    public function snapshot(#[\SensitiveParameter] StudentAccount $account): array
+    {
+        return ['id' => (string) $account->aggregateId()] + $this->values($account);
+    }
+
+    /** Read-only comparison against the reconstructed account; never initializes or repairs data. */
     public function verify(#[\SensitiveParameter] StudentAccount $account): void
     {
         $row = $this->sql->current('sis_account_balances', (string) $account->aggregateId());
