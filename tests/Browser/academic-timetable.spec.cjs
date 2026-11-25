@@ -59,6 +59,10 @@ async function fixture(page, { empty = false, theme = 'campus-harbor', overlaps 
         let response = {};
         if (path.endsWith('/context/')) response = { today: '2026-08-10', timezone: 'America/Los_Angeles',
             terms: empty ? [] : [term, other], recommended_term: empty ? null : term, next_after: null };
+        else if (path === '/portal/api/advising-appointments/calendar/') response = {
+            from: '2026-08-10', through: '2026-08-16', view: 'week', previous: '2026-08-03', next: '2026-08-17',
+            timezone: 'America/Los_Angeles', include_cancelled: false, items: [], days: [],
+        };
         else if (path.endsWith('/terms/')) response = { items: data.search === '27' ? [other] : [term, other], next_after: null };
         else if (path.endsWith('/view/')) {
             response = result(data);
@@ -95,7 +99,8 @@ test(`personal timetable pages accessible hybrid meetings in ${theme} without ov
     expect(accessibility.violations).toEqual([]);
     await page.setViewportSize({ width: 320, height: 900 });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-    expect(state.calls.every(call => call.path.includes('/timetable/'))).toBe(true);
+    expect(state.calls.every(call => call.path.includes('/timetable/')
+        || call.path === '/portal/api/advising-appointments/calendar/')).toBe(true);
     expect(state.calls.filter(call => call.data).every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(state.errors).toEqual([]);
 });
@@ -129,7 +134,9 @@ test('an account without classes sees a useful empty state in each portal theme'
         const state = await fixture(page, { empty: true, theme });
         await expect(page.locator('#campus-service-content')).toContainText('active course registration or teaching assignment');
         await expect(page.getByRole('button', { name: 'View timetable', exact: true })).toHaveCount(0);
-        expect(state.calls.map(call => call.path)).toEqual(['/portal/api/timetable/context/']);
+        expect(state.calls.map(call => call.path).sort()).toEqual([
+            '/portal/api/advising-appointments/calendar/', '/portal/api/timetable/context/',
+        ]);
         expect(state.errors).toEqual([]);
     }
 });

@@ -101,15 +101,20 @@ final class AdvisingAppointment implements JsonSerializable
             return $result;
         }
         $stamp = DateTimeImmutable::createFromFormat('!Y-m-d\TH:i:s\Z', $at, new DateTimeZone('UTC'));
+        $correction = in_array($action, ['correct_held', 'correct_no_show'], true);
         if (
             $stamp === false || $stamp->format('Y-m-d\TH:i:s\Z') !== $at
             || $at < $this->data['updated_at'] || $version !== $this->data['version']
-            || $this->data['status'] !== 'scheduled'
-            || !in_array($action, ['schedule', 'reschedule', 'cancel', 'held', 'no_show'], true)
+            || ($correction
+                ? !in_array($this->data['status'], ['held', 'no_show'], true)
+                    || $this->corrections() >= 5 || $this->data['status'] === substr($action, 8)
+                : $this->data['status'] !== 'scheduled')
+            || !in_array($action, ['schedule', 'reschedule', 'cancel', 'held', 'no_show',
+                'correct_held', 'correct_no_show'], true)
             || ($action === 'schedule') !== ($version === -1)
             || (($action === 'schedule' || $action === 'reschedule') !== ($time !== null))
             || ($action === 'reschedule' && $version >= 10)
-            || (in_array($action, ['held', 'no_show'], true) && $at < $this->data['time']['ends_at'])
+            || ((in_array($action, ['held', 'no_show'], true) || $correction) && $at < $this->data['time']['ends_at'])
         ) {
             throw new ConcurrentModificationException(trans(
                 'The appointment changed or this action is unavailable. Refresh and review its current state.'
@@ -123,7 +128,8 @@ final class AdvisingAppointment implements JsonSerializable
             $this->data['time'] = $time->facts();
         } else {
             $this->data['status'] = match ($action) {
-                'cancel' => 'cancelled', 'held' => 'held', 'no_show' => 'no_show',
+                'cancel' => 'cancelled', 'held', 'correct_held' => 'held',
+                'no_show', 'correct_no_show' => 'no_show',
             };
         }
         $result = ['id' => $this->data['id'], 'version' => $this->data['version'],
@@ -137,6 +143,12 @@ final class AdvisingAppointment implements JsonSerializable
     public function facts(): array
     {
         return $this->data;
+    }
+
+    public function corrections(): int
+    {
+        return count(array_filter($this->data['actions'], static fn(array $entry): bool =>
+            in_array($entry['action'], ['correct_held', 'correct_no_show'], true)));
     }
 
     public function view(): array
@@ -154,7 +166,7 @@ final class AdvisingAppointment implements JsonSerializable
         try {
             if (
                 ($data['purpose'] ?? null) !== 'advising.appointment' || !is_array($data['actions'])
-                || !array_is_list($data['actions']) || count($data['actions']) < 1 || count($data['actions']) > 12
+                || !array_is_list($data['actions']) || count($data['actions']) < 1 || count($data['actions']) > 17
             ) {
                 throw new CorruptHistoryException();
             }

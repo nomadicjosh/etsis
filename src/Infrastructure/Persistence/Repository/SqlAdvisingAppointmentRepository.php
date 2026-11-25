@@ -7,6 +7,7 @@ namespace Infrastructure\Persistence\Repository;
 use Domain\Advising\AdvisingAppointment;
 use Domain\Advising\AppointmentTime;
 use Domain\Advising\Repository\AdvisingAppointmentRepository;
+use Domain\Scheduling\CalendarPeriod;
 use Domain\Communications\Service\MessageCipher;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -91,6 +92,45 @@ final readonly class SqlAdvisingAppointmentRepository implements AdvisingAppoint
         return count($this->sql->rows('sis_advising_appointments', [
             'student_id' => $student->value, 'pursuit_id' => $pursuit->value, 'status' => 'scheduled',
         ], 20));
+    }
+
+    public function period(
+        ?EntityId $student,
+        ?EntityId $pursuit,
+        ?EntityId $owner,
+        CalendarPeriod $period,
+        bool $includeCancelled,
+    ): array {
+        if (($student === null) !== ($pursuit === null) || ($student === null && $owner === null)) {
+            throw new \LogicException('Use an explicit pursuit or a signed-in owner for the appointment calendar.');
+        }
+        $q = $this->sql->quote(...);
+        $sql = 'SELECT a.* FROM ' . $q('sis_advising_appointments') . ' a';
+        if ($owner !== null) {
+            $sql .= ' JOIN ' . $q('sis_students') . ' s ON s.' . $q('id') . ' = a.' . $q('student_id')
+            . ' JOIN ' . $q('sis_persons') . ' p ON p.' . $q('id') . ' = s.' . $q('person_id');
+        }
+        $utc = new \DateTimeZone('UTC');
+        $sql .= ' WHERE a.' . $q('starts_at') . ' < ? AND a.' . $q('ends_at') . ' > ?';
+        $parameters = [$period->endsAt->setTimezone($utc)->format('Y-m-d\TH:i:s\Z'),
+            $period->startsAt->setTimezone($utc)->format('Y-m-d\TH:i:s\Z')];
+        if ($student !== null) {
+            $sql .= ' AND a.' . $q('student_id') . ' = ? AND a.' . $q('pursuit_id') . ' = ?';
+            array_push($parameters, $student->value, $pursuit->value);
+        }
+        if ($owner !== null) {
+            $sql .= ' AND a.' . $q('owner_user_id') . ' = ? AND p.' . $q('owner_user_id') . ' = ?';
+            array_push($parameters, $owner->value, $owner->value);
+        }
+        if (!$includeCancelled) {
+            $sql .= ' AND a.' . $q('status') . ' <> ?';
+            $parameters[] = 'cancelled';
+        }
+        return array_map($this->open(...), $this->sql->fetch(
+            $sql . ' ORDER BY a.' . $q('starts_at') . ', a.' . $q('id'),
+            $parameters,
+            101
+        ));
     }
 
     public function conflict(EntityId $student, EntityId $host, EntityId $except, AppointmentTime $time): bool

@@ -3,7 +3,7 @@
     'use strict';
     let sequence = 0;
     window.createAdvisingAppointments = ({ node, request, labels: t }) => ({
-        mount(container, endpoint, { owner = false, portal = false } = {}) {
+        mount(container, endpoint, { owner = false, portal = false, selectedAppointment = null, onBack = null, onDenied = null } = {}) {
             const identity = `appointments-${++sequence}`;
             const controls = node('div', { class: 'd-flex flex-wrap gap-2 mb-3' });
             const status = node('p', { role: 'status', 'aria-live': 'polite', tabindex: '-1', id: `${identity}-status`, class: 'form-text text-break' });
@@ -25,6 +25,7 @@
                     if ([401, 403].includes(error.status)) {
                         content.replaceChildren(); editor.replaceChildren(); controls.replaceChildren(); drafts.clear(); creation = null; createId = null; hosts = []; activeDraft = null;
                         status.textContent = t.denied;
+                        onDenied?.();
                     } else {
                         const fields = Array.isArray(error.fields) ? error.fields : [];
                         status.textContent = fields.map(f => f.message).filter(v => typeof v === 'string').join(' ') || error.message || t.failure;
@@ -60,6 +61,7 @@
                 drafts.set(key, draft);
                 const form = node('form', { class: 'border rounded bg-white p-3 mb-3' });
                 form.append(node('h4', { class: 'h6' }, t[action] || t.schedule));
+                if (action.startsWith('correct_')) form.append(node('p', { class: 'form-text' }, t.correction_help));
                 let host = null, start = null, end = null;
                 if (action === 'schedule') {
                     host = node('select', { id: `${identity}-host`, name: 'host_person_id', class: 'form-select mb-3', required: true },
@@ -112,12 +114,16 @@
                     ...(change.time ? [node('p', {}, local(change.time))] : []),
                     node('p', { style: 'white-space:pre-wrap;overflow-wrap:anywhere' }, change.message)));
                 box.append(changes);
-                if (item.can_act) {
+                if (item.can_act || item.can_correct) {
                     const actions = node('div', { class: 'd-flex flex-wrap gap-2 mb-3' }), host = node('div');
                     const open = action => formFor(host, item, action);
                     if (item.can_reschedule) actions.append(button(t.reschedule, () => open('reschedule'), 'calendar2-week'));
-                    actions.append(button(t.cancel, () => open('cancel'), 'x-circle'));
-                    if (!owner && !item.cancel_only) actions.append(button(t.held, () => open('held'), 'check2-circle'), button(t.no_show, () => open('no_show'), 'person-x'));
+                    if (item.can_act) actions.append(button(t.cancel, () => open('cancel'), 'x-circle'));
+                    if (item.can_act && !owner && !item.cancel_only) actions.append(button(t.held, () => open('held'), 'check2-circle'), button(t.no_show, () => open('no_show'), 'person-x'));
+                    if (!owner && item.can_correct) {
+                        const target = item.status === 'held' ? 'correct_no_show' : 'correct_held';
+                        actions.append(button(t[target], () => open(target), 'pencil-square'));
+                    }
                     if (item.cancel_only) box.append(node('p', { class: 'form-text' }, t.cancel_only));
                     if (!owner && item.version >= 10) box.append(node('p', { class: 'form-text' }, t.reschedule_limit));
                     box.append(actions, host);
@@ -132,15 +138,25 @@
             const more = button(t.more, async () => { stack.push(after); after = next; await load(); }, 'arrow-right');
             const add = button(t.schedule, () => { creation ||= formFor(editor); }, 'calendar2-plus', true);
             previous.hidden = more.hidden = add.hidden = true;
-            controls.append(refresh, switcher, previous, more, ...(owner ? [] : [add]));
+            if (onBack) controls.append(button(t.back_calendar, onBack, 'arrow-left'));
+            controls.append(refresh, ...(selectedAppointment ? [] : [switcher, previous, more]), ...(owner ? [] : [add]));
+            if (!selectedAppointment) controls.append(button(t.calendar, async () => {
+                controls.hidden = true; editor.replaceChildren(); creation = null; content.replaceChildren();
+                availability.hidden = true;
+                await window.createAdvisingAppointmentCalendar({ node, request, labels: t }).mount(content, endpoint + 'calendar/', {
+                    owner, portal, detailEndpoint: () => endpoint,
+                    onDenied: () => { drafts.clear(); activeDraft = null; },
+                    onBack: () => work(async () => { controls.hidden = false; await load(); }),
+                });
+            }, 'calendar3'));
             container.append(node('h3', { class: 'h5' }, t.title), node('p', { class: 'form-text' }, t.intro), controls, availability, status, editor, content);
             async function load() {
                 const current = ++generation;
-                const data = await request(endpoint + 'list/', 'POST', { finished, after });
+                const data = await request(endpoint + 'list/', 'POST', { finished, after, ...(selectedAppointment ? { appointment_id: selectedAppointment } : {}) });
                 if (!container.isConnected || current !== generation) return;
                 hosts = data.hosts; zone = data.timezone; createId ||= data.new_id;
                 add.hidden = owner || !data.can_schedule;
-                availability.hidden = owner || data.can_schedule;
+                availability.hidden = owner || Boolean(selectedAppointment) || data.can_schedule;
                 if (!data.can_schedule) { editor.replaceChildren(); creation = null; drafts.delete('create'); if (activeDraft === 'create') activeDraft = null; }
                 next = data.next_after; more.hidden = !next; previous.hidden = !stack.length;
                 content.replaceChildren(...data.items.map(card));

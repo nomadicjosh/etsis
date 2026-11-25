@@ -2692,12 +2692,38 @@
             updates,
             bookings: bookingUpdates,
             admissionsupdates: content => window.createAdmissionCasework({ node: el, request, task, notify: notice }).updates(content),
-            timetable: async content => {
-                const context = await request('/portal/api/timetable/context/');
-                const selected = context.recommended_term || context.terms[0];
-                const initial = selected ? await request('/portal/api/timetable/view/', 'POST', { term_id: selected.id }) : null;
-                if (pageLeaving) return;
-                window.createAcademicTimetable({ node: el, request, task, table }).mount(content, context, initial);
+            timetable: content => {
+                const labels = JSON.parse(document.getElementById('advising-appointment-labels').textContent);
+                const academic = el('section', {}, el('p', { role: 'status' }, labels.class_loading));
+                const appointments = el('section', {}, el('p', { role: 'status' }, labels.calendar_loading));
+                content.append(academic, appointments);
+                const endpoint = '/portal/api/advising-appointments/calendar/';
+                async function classes() {
+                    try {
+                        const context = await request('/portal/api/timetable/context/');
+                        const selected = context.recommended_term || context.terms[0];
+                        const initial = selected ? await request('/portal/api/timetable/view/', 'POST', { term_id: selected.id }) : null;
+                        if (pageLeaving || !academic.isConnected) return;
+                        academic.replaceChildren();
+                        window.createAcademicTimetable({ node: el, request, task, table }).mount(academic, context, initial);
+                    } catch (error) {
+                        if (!pageLeaving && academic.isConnected) academic.replaceChildren(el('p', { role: 'status' }, labels.class_failure));
+                    }
+                }
+                async function calendar() {
+                    let initial = null, initialError = null;
+                    try { initial = await request(endpoint, 'POST', {}); }
+                    catch (error) { initialError = error; }
+                    if (pageLeaving || !appointments.isConnected) return;
+                    appointments.replaceChildren();
+                    window.createAdvisingAppointmentCalendar({ node: el, request, labels }).mount(appointments, endpoint, {
+                        owner: true, portal: true, initial, initialError,
+                    });
+                }
+                requestAnimationFrame(() => {
+                    if (pageLeaving || !content.isConnected) return;
+                    void classes(); void calendar();
+                });
             },
         };
         await actions[config.section](content);

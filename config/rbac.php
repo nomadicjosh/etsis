@@ -19,6 +19,9 @@ return [
         "sis:standing:correct" => ["description" => "Correct recorded academic standing on closed pursuits."],
         "sis:standing:configure" => ["description" => "Maintain institutional academic standing labels."],
         "sis:standing:manage" => ["description" => "Review dated student academic standing decisions."],
+        "sis:advising:appointments:correct" => [
+            "description" => "Correct recorded advising appointment attendance with a reason.",
+        ],
         "sis:advising:appointments:manage" => [
             "description" => "Schedule advising appointments and record attendance outcomes.",
         ],

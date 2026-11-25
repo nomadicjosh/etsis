@@ -174,6 +174,15 @@ return static function (Psr7Router $router): void {
     ])
         ->name('portal.standing.advisor');
     $appointments = \Application\Http\Controller\AdvisingAppointmentController::class;
+    $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/appointments/calendar/', [
+        $appointments, 'ownerCalendar',
+    ])->name('owner.appointments.calendar');
+    $router->map(['POST'], '/portal/api/advising/students/{student}/programs/{pursuit}/appointments/calendar/', [
+        $appointments, 'advisorCalendar',
+    ])->name('advisor.appointments.calendar');
+    $router->map(['POST'], '/portal/api/advising-appointments/calendar/', [
+        $appointments, 'myCalendar',
+    ])->name('owner.appointments.my_calendar');
     $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/appointments/list/', [
         $appointments, 'ownerList',
     ])->name('owner.appointments.list');

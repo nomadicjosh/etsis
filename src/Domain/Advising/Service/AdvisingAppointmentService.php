@@ -11,10 +11,12 @@ use Domain\Advising\AdvisingAppointment;
 use Domain\Advising\AppointmentTime;
 use Domain\Advising\Repository\AdvisingAppointmentRepository;
 use Domain\Audit\Repository\AuditTrail;
+use Domain\Scheduling\CalendarPeriod;
 use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
+use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
@@ -28,6 +30,7 @@ use function Codefy\Framework\Helpers\trans;
 final readonly class AdvisingAppointmentService
 {
     public const string PERMISSION = 'sis:advising:appointments:manage';
+    public const string CORRECT = 'sis:advising:appointments:correct';
 
     public function __construct(
         private AdvisingAppointmentRepository $records,
@@ -44,14 +47,14 @@ final readonly class AdvisingAppointmentService
     ) {
     }
 
-    private function context(EntityId $student, EntityId $pursuit): array
+    private function context(EntityId $student, EntityId $pursuit, ?HistoryReadBudget $budget = null): array
     {
         $s = $this->admissions->student($student);
         $p = $this->students->assignment($pursuit);
         if ($p->studentId->value !== $student->value) {
             throw new RecordNotFoundException(trans('Student program not found.'));
         }
-        $budget = new HistoryReadBudget();
+        $budget ??= new HistoryReadBudget();
         $version = $this->programs->verify($p, $budget);
         $primary = $this->primary->documentContext($s, $budget);
         return ['owner' => $this->admissions->person($s->personId)->ownerUserId?->value,
@@ -67,7 +70,10 @@ final readonly class AdvisingAppointmentService
     ): EntityId {
         $actor = $this->access->authenticatedUserId();
         if ($channel === 'owner') {
-            if ($this->context($student, $pursuit)['owner'] !== $actor->value) {
+            if (
+                $this->admissions->person($this->admissions->student($student)->personId)->ownerUserId?->value
+                !== $actor->value
+            ) {
                 throw new AccessDeniedException();
             }
         } else {
@@ -97,9 +103,10 @@ final readonly class AdvisingAppointmentService
         string $channel,
         EntityId $actor,
         array $context,
+        ?HistoryReadBudget $budget = null,
     ): void {
         $this->authorize($student, $pursuit, $channel, $actor);
-        if ($context !== $this->context($student, $pursuit)) {
+        if ($context !== $this->context($student, $pursuit, $budget)) {
             throw new ConcurrentModificationException(trans('Student context changed. Refresh appointments.'));
         }
     }
@@ -110,6 +117,7 @@ final readonly class AdvisingAppointmentService
         string $channel,
         bool $finished = false,
         ?EntityId $after = null,
+        ?EntityId $selected = null,
     ): array {
         $actor = $this->authorize($student, $pursuit, $channel);
         return $this->transactions->run(function () use (
@@ -118,17 +126,25 @@ final readonly class AdvisingAppointmentService
             $channel,
             $finished,
             $after,
-            $actor
+            $actor,
+            $selected,
 ): array {
             $context = $this->context($student, $pursuit);
             $hosts = $channel !== 'owner' && $context['current']
                 ? $this->advisors->appointmentHosts($student, $pursuit, $channel) : [];
-            $rows = $this->records->page($student, $pursuit, $channel === 'owner' ? $actor : null, $finished, $after);
+            $rows = $selected === null
+                ? $this->records->page($student, $pursuit, $channel === 'owner' ? $actor : null, $finished, $after)
+                : [$this->records->find($student, $pursuit, $selected)
+                    ?? throw new RecordNotFoundException(trans('Advising appointment not found.'))];
             $items = array_slice($rows, 0, 10);
             $views = [];
             $hostSnapshots = [];
+            $correctionAllowed = $this->canCorrect($channel, $actor);
             foreach ($items as $item) {
                 $data = $item->facts();
+                if ($channel === 'owner' && $data['owner_user_id'] !== $actor->value) {
+                    throw new AccessDeniedException();
+                }
                 $host = $this->admissions->person(new EntityId($data['host_person_id']));
                 $hostSnapshots[$host->id->value] = [$host->givenName, $host->familyName, $host->ownerUserId?->value];
                 $changed = $data['owner_user_id'] !== $context['owner']
@@ -142,6 +158,8 @@ final readonly class AdvisingAppointmentService
                     'can_act' => $canAct, 'cancel_only' => $channel === 'owner' || $changed,
                     'can_reschedule' => $canAct && !$changed && $channel !== 'owner' && $context['current']
                         && $data['version'] < 10,
+                    'can_correct' => !$changed && in_array($data['status'], ['held', 'no_show'], true)
+                        && $item->corrections() < 5 && $correctionAllowed,
                     'new_operation' => EntityId::generate()->value];
             }
             $this->audit->record($actor, 'advising.appointments_read', $student);
@@ -155,14 +173,129 @@ final readonly class AdvisingAppointmentService
                 }
             }
             $this->finish($student, $pursuit, $channel, $actor, $context);
+            if ($correctionAllowed && !$this->canCorrect($channel, $actor)) {
+                throw new AccessDeniedException();
+            }
             if ($hosts !== [] && $hosts !== $this->advisors->appointmentHosts($student, $pursuit, $channel)) {
                 throw new ConcurrentModificationException(trans('Advisor assignments changed. Refresh appointments.'));
             }
             return ['items' => $views, 'next_after' => count($rows) > 10 ? end($items)->facts()['id'] : null,
-                'new_id' => EntityId::generate()->value, 'can_schedule' => $hosts !== [] && $context['owner'] !== null,
+                'new_id' => EntityId::generate()->value,
+                'can_schedule' => $selected === null && $hosts !== [] && $context['owner'] !== null,
                 'hosts' => array_map(static fn(array $h): array => array_intersect_key($h, array_flip([
                     'advisor_person_id', 'name', 'starts_on', 'ends_on',
                 ])), $hosts), 'timezone' => $this->clock->now()->getTimezone()->getName(), 'now' => $this->now()];
+        });
+    }
+
+    private function canCorrect(string $channel, EntityId $actor): bool
+    {
+        if ($channel !== 'staff') {
+            return false;
+        }
+        try {
+            return $this->access->requirePermission(self::CORRECT)->value === $actor->value;
+        } catch (AccessDeniedException) {
+            return false;
+        }
+    }
+
+    /** Minimized chronological calendar; global reads are strictly the signed-in student's own appointments. */
+    public function calendar(
+        string $channel,
+        ?EntityId $student,
+        ?EntityId $pursuit,
+        ?string $date = null,
+        string $view = 'week',
+        bool $includeCancelled = false,
+    ): array {
+        if (($student === null) !== ($pursuit === null) || ($student === null && $channel !== 'owner')) {
+            throw new AccessDeniedException();
+        }
+        $actor = $student === null ? $this->access->authenticatedUserId()
+        : $this->authorize($student, $pursuit, $channel);
+        $period = new CalendarPeriod(
+            $date ?? $this->clock->now()->format('Y-m-d'),
+            $this->clock->now()->getTimezone(),
+            $view
+        );
+        return $this->transactions->run(function () use (
+            $channel,
+            $student,
+            $pursuit,
+            $actor,
+            $period,
+            $includeCancelled
+        ): array {
+            $read = fn(): array => $this->records->period(
+                $student,
+                $pursuit,
+                $channel === 'owner' ? $actor : null,
+                $period,
+                $includeCancelled
+            );
+            $records = $read();
+            if (count($records) > 100) {
+                throw new ValidationException([['field' => 'date', 'message' => trans(
+                    'More than 100 advising appointments match. Choose a week or ask the advising office for help.'
+                )]]);
+            }
+            $contexts = $hosts = $programs = $rows = [];
+            $budget = new HistoryReadBudget();
+            if ($student !== null) {
+                $contexts[$pursuit->value] = [$student, $pursuit, $this->context($student, $pursuit, $budget)];
+            }
+            foreach ($records as $item) {
+                $data = $item->facts();
+                $s = new EntityId($data['student_id']);
+                $p = new EntityId($data['pursuit_id']);
+                if (!isset($contexts[$p->value])) {
+                    $this->authorize($s, $p, $channel, $actor);
+                    $contexts[$p->value] = [$s, $p, $this->context($s, $p, $budget)];
+                }
+                $assignment = $this->students->assignment($p);
+                $programs[$assignment->programId->value] ??= $this->students->program($assignment->programId);
+                $program = $programs[$assignment->programId->value];
+                if (!isset($hosts[$data['host_person_id']])) {
+                    $host = $this->admissions->person(new EntityId($data['host_person_id']));
+                    $hosts[$host->id->value] = [$host->givenName, $host->familyName, $host->ownerUserId?->value];
+                }
+                [$givenName, $familyName] = $hosts[$data['host_person_id']];
+                $rows[] = ['id' => $data['id'], 'student_id' => $s->value, 'pursuit_id' => $p->value,
+                    'host_name' => $givenName . ' ' . $familyName,
+                    'program_code' => $program['code'], 'program_title' => $program['title'],
+                    'status' => $data['status'], 'starts_at' => $data['time']['starts_at'],
+                    'ends_at' => $data['time']['ends_at']];
+            }
+            $this->audit->record($actor, 'advising.appointment_calendar_read', $student ?? $actor);
+            if (
+                array_map(static fn(AdvisingAppointment $i): array => $i->facts(), $records)
+                !== array_map(static fn(AdvisingAppointment $i): array => $i->facts(), $read())
+            ) {
+                throw new ConcurrentModificationException(trans('Appointments changed. Refresh the calendar.'));
+            }
+            foreach ($contexts as [$s, $p, $context]) {
+                $this->finish($s, $p, $channel, $actor, $context, $budget);
+            }
+            foreach ($hosts as $id => $snapshot) {
+                $host = $this->admissions->person(new EntityId($id));
+                if ($snapshot !== [$host->givenName, $host->familyName, $host->ownerUserId?->value]) {
+                    throw new ConcurrentModificationException(trans('Advisor account changed. Refresh appointments.'));
+                }
+            }
+            foreach ($programs as $id => $program) {
+                if ($program !== $this->students->program(new EntityId($id))) {
+                    throw new ConcurrentModificationException(trans('Program labels changed. Refresh the calendar.'));
+                }
+            }
+            if ($actor->value !== $this->access->authenticatedUserId()->value) {
+                throw new AccessDeniedException();
+            }
+            if ($student !== null) {
+                $this->authorize($student, $pursuit, $channel, $actor);
+            }
+            return $period->summarize($rows, ['scheduled', 'held', 'no_show', 'cancelled'])
+                + ['today' => $this->clock->now()->format('Y-m-d'), 'include_cancelled' => $includeCancelled];
         });
     }
 
@@ -253,6 +386,10 @@ final readonly class AdvisingAppointmentService
         #[\SensitiveParameter] string $message,
     ): array {
         $actor = $this->authorize($student, $pursuit, $channel);
+        $correction = in_array($action, ['correct_held', 'correct_no_show'], true);
+        if ($correction && !$this->canCorrect($channel, $actor)) {
+            throw new AccessDeniedException();
+        }
         if (($channel === 'owner' && $action !== 'cancel') || $action === 'schedule') {
             throw new AccessDeniedException();
         }
@@ -266,13 +403,17 @@ final readonly class AdvisingAppointmentService
             $version,
             $time,
             $message,
-            $actor
+            $actor,
+            $correction,
         ): array {
             $old = $this->records->find($student, $pursuit, $id)
                 ?? throw new RecordNotFoundException(trans('Advising appointment not found.'));
             $host = new EntityId($old->facts()['host_person_id']);
             $this->lock($student, $host);
             $this->authorize($student, $pursuit, $channel, $actor);
+            if ($correction && !$this->canCorrect($channel, $actor)) {
+                throw new AccessDeniedException();
+            }
             $item = $this->records->find($student, $pursuit, $id)
                 ?? throw new RecordNotFoundException(trans('Advising appointment not found.'));
             $context = $this->context($student, $pursuit);
@@ -315,6 +456,9 @@ final readonly class AdvisingAppointmentService
             }
             if ($hostOwner !== $this->admissions->person($host)->ownerUserId?->value) {
                 throw new ConcurrentModificationException(trans('Advisor account changed. Refresh appointments.'));
+            }
+            if ($correction && !$this->canCorrect($channel, $actor)) {
+                throw new AccessDeniedException();
             }
             $this->finish($student, $pursuit, $channel, $actor, $context);
             return $result;

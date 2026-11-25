@@ -7,6 +7,7 @@ namespace Domain\Advising\Repository;
 use Domain\Advising\AdvisingAppointment;
 use Domain\Advising\AppointmentTime;
 use Domain\Shared\ValueObject\EntityId;
+use Domain\Scheduling\CalendarPeriod;
 
 interface AdvisingAppointmentRepository
 {
@@ -22,4 +23,12 @@ interface AdvisingAppointmentRepository
     public function activeCount(EntityId $student, EntityId $pursuit): int;
     public function conflict(EntityId $student, EntityId $host, EntityId $except, AppointmentTime $time): bool;
     public function save(AdvisingAppointment $item, ?int $expectedVersion): void;
+    /** @return list<AdvisingAppointment> Up to 101 rows; callers reject overflow without partial output. */
+    public function period(
+        ?EntityId $student,
+        ?EntityId $pursuit,
+        ?EntityId $owner,
+        CalendarPeriod $period,
+        bool $includeCancelled,
+    ): array;
 }

@@ -41,6 +41,43 @@ final readonly class AdvisingAppointmentController
         return $this->dispatch($r, $student, $pursuit, 'owner', 'list');
     }
 
+    public function staffCalendar(
+        #[\SensitiveParameter] ServerRequest $r,
+        string $student,
+        string $pursuit,
+    ): ResponseInterface {
+        return $this->dispatch($r, $student, $pursuit, 'staff', 'calendar');
+    }
+
+    public function advisorCalendar(
+        #[\SensitiveParameter] ServerRequest $r,
+        string $student,
+        string $pursuit,
+    ): ResponseInterface {
+        return $this->dispatch($r, $student, $pursuit, 'advisor', 'calendar');
+    }
+
+    public function ownerCalendar(
+        #[\SensitiveParameter] ServerRequest $r,
+        string $student,
+        string $pursuit,
+    ): ResponseInterface {
+        return $this->dispatch($r, $student, $pursuit, 'owner', 'calendar');
+    }
+
+    public function myCalendar(#[\SensitiveParameter] ServerRequest $r): ResponseInterface
+    {
+        $f = FormInput::from($r);
+        return new JsonResponse($this->service->calendar(
+            'owner',
+            null,
+            null,
+            $f->optionalText('date', 10),
+            $f->optionalText('view', 5) ?? 'week',
+            $f->boolean('include_cancelled')
+        ));
+    }
+
     public function staffSchedule(
         #[\SensitiveParameter] ServerRequest $r,
         string $student,
@@ -97,7 +134,18 @@ final readonly class AdvisingAppointmentController
                 $p,
                 $channel,
                 $f->boolean('finished'),
-                $f->optionalId('after')
+                $f->optionalId('after'),
+                $f->optionalId('appointment_id'),
+            ));
+        }
+        if ($method === 'calendar') {
+            return new JsonResponse($this->service->calendar(
+                $channel,
+                $s,
+                $p,
+                $f->optionalText('date', 10),
+                $f->optionalText('view', 5) ?? 'week',
+                $f->boolean('include_cancelled')
             ));
         }
         if ($method === 'schedule') {
@@ -113,7 +161,7 @@ final readonly class AdvisingAppointmentController
                 $f->bodyText('message')
             ));
         }
-        $action = $f->text('action', 12);
+        $action = $f->text('action', 16);
         $time = $action === 'reschedule' ? new AppointmentTime(
             $f->text('start', 16),
             $f->text('end', 16),
