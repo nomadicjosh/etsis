@@ -186,6 +186,11 @@ final class DegreeProgressTest extends TestCase
         $events = $s->sql->rows("sis_history_events");
         $receipts = $s->sql->rows("sis_history_operations");
         $repository = new class ($s) implements AcademicInputRepository {
+            public function selected(\Domain\Shared\ValueObject\EntityId $credit): ?array
+            {
+                throw new \LogicException('This fixture supplies only a whole-student inventory.');
+            }
+
             public int $reads = 0;
             public function __construct(private \SisFixture $s)
             {
@@ -510,6 +515,11 @@ final class DegreeProgressTest extends TestCase
             self::assertTrue(true);
         }
         $repository = new class ($s) implements AcademicInputRepository {
+            public function selected(\Domain\Shared\ValueObject\EntityId $credit): ?array
+            {
+                throw new \LogicException('This fixture supplies only a whole-student inventory.');
+            }
+
             public function __construct(private \SisFixture $s)
             {
             }
@@ -550,6 +560,11 @@ final class DegreeProgressTest extends TestCase
             $before[$table] = $s->sql->rows($table);
         }
         $repository = new class ($s) implements AcademicInputRepository {
+            public function selected(\Domain\Shared\ValueObject\EntityId $credit): ?array
+            {
+                throw new \LogicException('This fixture supplies only a whole-student inventory.');
+            }
+
             public int $reads = 0;
             public function __construct(private \SisFixture $s)
             {

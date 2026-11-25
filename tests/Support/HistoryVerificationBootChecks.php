@@ -33,15 +33,52 @@ if (($argv[1] ?? '') === 'check-academic-projections') {
             throw new RuntimeException('Invalid academic verification resolved storage or leaked input.');
         }
     }
+    foreach (
+        [['--credit' => 'fictional-private-input'],
+        ['--credit' => '00000000000000000000000000', '--streams' => '1'],
+        ['--credit' => '00000000000000000000000000', '--cursor' => 'fictional-private-input'],
+        ['--credit' => '00000000000000000000000000', '--student' => '00000000000000000000000000'],
+        ['--credit' => '00000000000000000000000000', '--account' => '00000000000000000000000000'],
+        ] as $options
+    ) {
+        if (
+            $early->execute(['--json' => true] + $options) !== 2
+            || str_contains($early->getDisplay(), 'fictional-private-input')
+        ) {
+            throw new RuntimeException('Invalid selected academic check resolved storage or exposed input.');
+        }
+    }
     $f = new HistoryVerificationFixture();
     $s = $f->sis;
     $student = $s->student()->id;
     $enrollment = $s->service->register($student, $s->section()->id);
+    $credit = $s->sql->one('sis_academic_credits', ['source_id' => $enrollment->id->value])['id'];
     $bindVerification($f);
     $kernel->bootstrap();
     $test = new \Symfony\Component\Console\Tester\CommandTester($kernel->all()['sis:history:verify']);
     $before = $f->digest();
     $s->connection->pdo->exec('PRAGMA query_only = ON');
+    $selectedOptions = ['--credit' => $credit, '--json' => true];
+    if ($test->execute($selectedOptions) !== 0) {
+        throw new RuntimeException('The actual selected academic provider failed a read-only check.');
+    }
+    $selected = json_decode($test->getDisplay(), true, flags: JSON_THROW_ON_ERROR);
+    if (
+        $selected['scope'] !== 'academic_credit' || $selected['records_checked'] !== 1
+        || $selected['current_records'] !== 1 || $selected['records_changed'] !== false
+        || str_contains($test->getDisplay(), $enrollment->id->value)
+    ) {
+        throw new RuntimeException('The selected credit check exposed sources or lost its scope.');
+    }
+    if (
+        $test->execute(['--events' => '1'] + $selectedOptions) !== 3
+        || json_decode($test->getDisplay(), true)['records_checked'] !== null
+        || $test->execute(['--credit' => '00000000000000000000000000', '--json' => true]) !== 1
+        || $test->execute(['--credit' => $credit]) !== 0
+        || !str_contains($test->getDisplay(), 'No records were changed') || $before !== $f->digest()
+    ) {
+        throw new RuntimeException('The selected check lost its limits, text output or read-only guarantee.');
+    }
     $options = ['--student' => $student->value, '--json' => true];
     if ($test->execute($options) !== 0) {
         throw new RuntimeException('Actual academic verification provider failed its read-only check.');

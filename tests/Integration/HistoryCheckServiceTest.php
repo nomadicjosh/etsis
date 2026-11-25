@@ -26,6 +26,106 @@ use PHPUnit\Framework\TestCase;
 
 final class HistoryCheckServiceTest extends TestCase
 {
+    public function testSelectedCreditChecksKeepAcademicFactsPrivateAndUseExistingReceipts(): void
+    {
+        require_once dirname(__DIR__) . '/Support/TransferAwardFixture.php';
+        $s = new \SisFixture();
+        $t = new \TransferAwardFixture($s, $s->dropCipher);
+        $before = \EventStoreFixture::historyDigest($s->sql);
+        $credits = $s->sql->rows('sis_academic_credits');
+        $service = $this->service($s);
+        $result = $service->run(HistoryCheckSubject::Credit, $t->credit);
+        self::assertSame('verified', $result['result']['status']);
+        self::assertSame(1, $result['result']['records_checked']);
+        self::assertSame(200, $result['event_limit']);
+        self::assertSame([$result['receipt']], $service->history(HistoryCheckSubject::Credit, $t->credit)['items']);
+        self::assertSame([], $service->history(HistoryCheckSubject::Student, $t->student)['items']);
+        $receipt = $s->sql->rows('sis_history_checks')[0];
+        self::assertSame('credit', $receipt['subject_type']);
+        foreach (['grade', 'course_code', 'source_id', 'payload', 'reason'] as $private) {
+            self::assertStringNotContainsString($private, json_encode($result));
+        }
+        self::assertSame($credits, $s->sql->rows('sis_academic_credits'));
+        self::assertSame($before, \EventStoreFixture::historyDigest($s->sql));
+    }
+
+    public function testSelectedCreditSupportRequiresEveryDutyAndProtectsSuperOwners(): void
+    {
+        require_once dirname(__DIR__) . '/Support/TransferAwardFixture.php';
+        $s = new \SisFixture();
+        $t = new \TransferAwardFixture($s, $s->dropCipher, $s->student($s->user())->id);
+        $s->access->staff = false;
+        $service = $this->service($s);
+        $duties = ['sis:student:read', 'sis:audit:read', 'sis:history:verify'];
+        foreach ($duties as $missing) {
+            $s->access->grants = array_values(array_diff($duties, [$missing]));
+            $this->rejects(
+                fn () => $service->run(HistoryCheckSubject::Credit, $t->credit),
+                AccessDeniedException::class
+            );
+            $this->rejects(
+                fn () => $service->history(HistoryCheckSubject::Credit, $t->credit),
+                AccessDeniedException::class
+            );
+        }
+        $s->access->grants = $duties;
+        $owner = $s->admissions->person($s->admissions->student($t->student)->personId)->ownerUserId;
+        $roles = new SqlAccessRepository($s->sql);
+        $roles->assign(\Domain\Access\Enum\GrantKind::UserRole, $owner, $roles->roleNamed('super')->id, true);
+        $this->rejects(
+            fn () => $service->run(HistoryCheckSubject::Credit, $t->credit),
+            AccessDeniedException::class
+        );
+        self::assertSame([], $s->sql->rows('sis_history_checks'));
+    }
+
+    public function testSelectedCreditVerificationRechecksRoutingAndRollsBackFailedReceiptAudits(): void
+    {
+        require_once dirname(__DIR__) . '/Support/TransferAwardFixture.php';
+        foreach (['routing', 'audit', 'permission'] as $kind) {
+            $s = new \SisFixture();
+            $t = new \TransferAwardFixture($s, $s->dropCipher, $s->student($s->user())->id);
+            $other = $s->legacyPerson($s->user(), 'Other', 'Fictional');
+            $provider = $this->createMock(AcademicProjectionVerifier::class);
+            $provider->expects(self::once())->method('credit')->with($t->credit, 200)
+                ->willReturnCallback(function () use ($s, $t, $other, $kind) {
+                    self::assertFalse($s->sql->inTransaction());
+                    if ($kind === 'routing') {
+                        $s->sql->update(
+                            'sis_students',
+                            ['person_id' => $other->id->value],
+                            ['id' => $t->student->value]
+                        );
+                    }
+                    return new \Domain\AcademicRecord\ValueObject\AcademicRecordProjectionCheck(
+                        'verified',
+                        $t->credit,
+                        1,
+                        1,
+                        false
+                    );
+                });
+            $audit = $this->createStub(AuditTrail::class);
+            $audit->method('record')->willReturnCallback(static function () use ($s, $kind): void {
+                if ($kind === 'audit') {
+                    throw new \RuntimeException('Fictional failed required audit.');
+                }
+                $s->access->staff = false;
+                $s->access->grants = [];
+            });
+            $expected = match ($kind) {
+                'routing' => ConcurrentModificationException::class,
+                'permission' => AccessDeniedException::class,
+                default => \RuntimeException::class,
+            };
+            $before = \EventStoreFixture::historyDigest($s->sql);
+            $this->rejects(fn () => $this->service($s, audit: $audit, academics: $provider)
+                ->run(HistoryCheckSubject::Credit, $t->credit), $expected);
+            self::assertSame([], $s->sql->rows('sis_history_checks'));
+            self::assertSame($before, \EventStoreFixture::historyDigest($s->sql));
+        }
+    }
+
     public function testProgressSupportProtectsSuperOwnersAndRetainsOnlyMinimizedMetadata(): void
     {
         require_once dirname(__DIR__) . '/Support/RecordedProgressVerificationFixture.php';

@@ -941,6 +941,11 @@ final class StudentGroupAllocationTest extends TestCase
             self::assertTrue(true);
         }
         $repository = new class ($s) implements AcademicInputRepository {
+            public function selected(\Domain\Shared\ValueObject\EntityId $credit): ?array
+            {
+                throw new \LogicException('This fixture supplies only a whole-student inventory.');
+            }
+
             public function __construct(private \SisFixture $s) {}
             public function inventory(EntityId $student): AcademicInputInventory
             {

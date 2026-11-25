@@ -13,6 +13,8 @@ interface HistoryCheckRepository
 {
     /** Resolve authorization routing without replaying a financial account. */
     public function accountStudent(EntityId $account): EntityId;
+    /** Current/retained academic source routing, without replaying or returning academic facts. */
+    public function creditStudent(EntityId $credit): EntityId;
     /** Indexed current authorization routing; no encrypted HR details or event replay. */
     public function employmentSubject(HistoryCheckSubject $kind, EntityId $id): EntityId;
     public function save(HistoryCheckReceipt $receipt): void;

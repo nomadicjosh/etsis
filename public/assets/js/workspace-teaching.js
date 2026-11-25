@@ -1741,6 +1741,7 @@ window.createWorkspaceTeaching = function (ui) {
     async function gradeHistory(sectionRow, student, back) {
         const body = openDrawer("Grade history", "ACADEMIC RECORD");
         body.append(button("Back to record", back, "btn-link"));
+        let selectedCheck = false;
         await pages(
             body,
             async (cursor) => {
@@ -1749,6 +1750,17 @@ window.createWorkspaceTeaching = function (ui) {
                     "POST",
                     { cursor: cursor || null },
                 );
+                if (
+                    !selectedCheck && body.isConnected && page.credit_id && ui.historyChecks &&
+                    ["sis:history:verify", "sis:audit:read", "sis:student:read"].every(ui.can)
+                ) {
+                    selectedCheck = true;
+                    body.prepend(
+                        button(ui.historyCheckLabels.check_credit, () =>
+                            ui.historyChecks().open("credit", page.credit_id, back),
+                        ),
+                    );
+                }
                 return { ...page, next_after: page.next_cursor };
             },
             (page) =>

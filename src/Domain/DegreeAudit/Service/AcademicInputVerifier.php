@@ -32,10 +32,26 @@ final readonly class AcademicInputVerifier
 
     public function verify(EntityId $student, HistoryReadBudget $budget): AcademicInputSet
     {
+        return $this->verifySources($student, $this->inputs->inventory($student)->sources, $budget);
+    }
+
+    public function selected(EntityId $credit, HistoryReadBudget $budget): ?AcademicInputSet
+    {
+        $selected = $this->inputs->selected($credit);
+        return $selected === null ? null : $this->verifySources(
+            new EntityId($selected['student_id']),
+            [$selected['source']],
+            $budget
+        );
+    }
+
+    /** @param list<array<string,mixed>> $sources */
+    private function verifySources(EntityId $student, array $sources, HistoryReadBudget $budget): AcademicInputSet
+    {
         $items = [];
         $references = [];
         $gaps = false;
-        foreach ($this->inputs->inventory($student)->sources as $source) {
+        foreach ($sources as $source) {
             if (!is_string($source["credit_id"])) {
                 throw new CorruptHistoryException();
             }

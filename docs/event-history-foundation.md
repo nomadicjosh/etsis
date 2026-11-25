@@ -73,6 +73,28 @@ An append checks the head and tail without rescanning the entire stream. A paged
 
 ## Read-only operator verification
 
+### Selected institutional and transfer academic checks
+
+Use one **academic credit ULID** for either institutional work or a transfer award:
+
+```sh
+ddev codex sis:history:verify --credit='<sis_academic_credits.id>' --events=500 --json
+```
+
+For retained early drops, use the original credit reference retained in academic stream routing; current enrollment and credit rows may correctly be absent. For transfers, use the credit reference, **not** the transfer award, equivalency, course, student or institutional number. A missing/unroutable credit is unverified, never a verified empty history. Operators need trusted deployment access to the database and history keys.
+
+This exclusive selector rejects other subjects, global `--streams` and continuation cursors before resolving storage. Its default 500-event allowance is configurable from 1–2,000 events, with the existing shared 4 MiB/five-second cooperative replay budget. Indexed credit/source identities resolve one source without the whole-student inventory's 200-source ceiling. Queries and replay are bounded; a single source that exceeds the allowance remains incomplete. Database query deadlines remain a deployment concern.
+
+The check reuses `AcademicInputVerifier` and the ordinary institutional-credit, registration and transfer readers. Institutional work compares protected credit/registration facts, retained source links, accepted offering/course and posting-term references, current projections and pending grade decisions. A transfer compares its protected award, credit and source projections through the existing transfer reader. Reasoned corrections and voids remain recorded facts. Retained early drops can verify with one source checked and zero current credit rows; a voided transfer still has a current row. An earlier untracked current observation reports **history_gaps** without creating events.
+
+Reads run without a transaction or write locks. Before/after comparisons include selected routing, current credit/source rows, student/person routing, relevant reference/pending projections and journal heads. Detected changes return **changed**. Corruption or missing references return **unverified**; allowance exhaustion returns **limited**. These outcomes disclose no partial source/current count. Verified results exit 0, gaps/changes/limits exit 3, missing/unverified results exit 1 and invalid options exit 2. Output contains only scope/reference, status, event/source/current counts, earlier-history uncertainty, fixed issue codes and `records_changed: false`; it contains no grades, quantities, source IDs, reasons or payloads.
+
+Staff can choose **Check selected academic history** from institutional **Grade history**, or a transfer award's **More** menu. All three duties are required: `sis:history:verify`, `sis:audit:read`, `sis:student:read`. Canonical-person and super-owner safeguards apply to both running checks and reading earlier receipts. Browser requests use the existing private/no-store, CSRF-protected support routes and fixed 200-event allowance. Verification itself is read-only; only the existing minimized support receipt and required audit are saved atomically afterward, with current authority/routing rechecked. No permission grants or schema changes are required.
+
+**Back to record** returns to the captured student/gradebook context or selected transfer award through its existing reader. Checking is explicit, without polling; denied access clears earlier results and detached responses cannot replace the returned record. Nothing is stored in browser storage.
+
+This is a selected source observation, not a projection repair, academic approval, full journal/receipt inventory, independent restore checkpoint, pursuit-attribution/equivalence review, degree audit or financial reconciliation. Sources whose credit and all routing facts disappeared together cannot be discovered by this selector. Broader historical reconciliation, reconstruction and archive/restore acceptance remain separate work. Ordinary reports continue to use authorized read models.
+
 ### Selected advisor and degree-selection checks
 
 Trusted operators can compare one pursuit's advisor assignments or selected degree baseline with protected history:

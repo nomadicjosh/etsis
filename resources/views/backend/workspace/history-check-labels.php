@@ -5,6 +5,15 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'academic_credit' => trans_html('Selected academic record'),
+    'credit_count' => trans_html('Academic sources checked'),
+    'check_credit' => trans_html('Check selected academic history'),
+    'credit_help' => trans_html(
+        'Compare this institutional or transfer credit with its available protected source, '
+        . 'registration and projections. '
+        . 'This uses a 200-event allowance and makes no correction. '
+        . 'Earlier gaps, pursuit attribution, equivalence, finances and full archive completeness need separate review.'
+    ),
     'recorded_progress' => trans_html('Recorded degree progress'),
     'progress_components' => trans_html('Accepted progress observation, protected history and projection'),
     'progress_count' => trans_html('Recorded progress observations checked'),

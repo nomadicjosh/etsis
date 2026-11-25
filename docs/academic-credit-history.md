@@ -14,6 +14,10 @@ The review shows the before/after grade, grade-point units, effective date and r
 
 **Grade history** provides bounded pages of curated decisions with effective/recorded timestamps. Student owners, assigned faculty and staff with academic-read authority can read the authorized record. Reasons and actor identifiers are withheld from this ordinary history view; raw protected streams have no browser/reporting endpoint. An early-dropped current record is not resurrected through this view.
 
+### Check a selected record's integrity
+
+In **Grade history**, authorized support staff can choose **Check selected academic history** to compare this credit and its registration/source projections with available protected history. This requires `sis:history:verify`, `sis:audit:read` and `sis:student:read`, independently of ordinary history access. The shared drawer runs only on request, records a minimal restricted support receipt and returns to the captured record. Earlier gaps, changes, damaged sources and exhausted limits remain distinct. See [selected academic integrity checks](event-history-foundation.md#selected-institutional-and-transfer-academic-checks) for scope, retained early-drop references and the read-only operator command. This does not correct a grade or certify degree completion.
+
 ### Use a coursework suggestion
 
 Faculty can now connect the working gradebook to an **initial** final-grade decision in the same **Record final grade** editor. The **Coursework suggestion** card compares the selected student's included work with the academic record's retained global/program grading ranges. Choose **Use suggested grade**, review the institutional grade, effective date and note, then explicitly confirm. Opening the editor or calculating a suggestion changes no academic or financial records.

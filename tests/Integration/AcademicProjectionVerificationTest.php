@@ -113,6 +113,11 @@ final class AcademicProjectionVerificationTest extends TestCase
         $student = $s->student()->id;
         $section = $s->section();
         $inputs = new class ($s, $section->id) implements AcademicInputRepository {
+            public function selected(\Domain\Shared\ValueObject\EntityId $credit): ?array
+            {
+                throw new \LogicException('This fixture supplies only a whole-student inventory.');
+            }
+
             private int $reads = 0;
             public function __construct(private SisFixture $s, private EntityId $section)
             {
@@ -187,6 +192,11 @@ final class AcademicProjectionVerificationTest extends TestCase
         $section = $s->section();
         $s->service->register($student, $section->id);
         $inputs = new class ($s, $section->id) implements AcademicInputRepository {
+            public function selected(\Domain\Shared\ValueObject\EntityId $credit): ?array
+            {
+                throw new \LogicException('This fixture supplies only a whole-student inventory.');
+            }
+
             private int $reads = 0;
             public function __construct(private SisFixture $s, private EntityId $section)
             {
@@ -222,5 +232,172 @@ final class AcademicProjectionVerificationTest extends TestCase
         $process->setTimeout(12);
         $process->run();
         self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+    public function testSelectedInstitutionalCheckIsReadOnlyAndNeverLoadsTheCareerInventory(): void
+    {
+        $s = new SisFixture();
+        $student = $s->student()->id;
+        $enrollment = $s->service->register($student, $s->section()->id);
+        $credit = new EntityId($s->sql->one('sis_academic_credits', ['source_id' => $enrollment->id->value])['id']);
+        $inputs = new class ($s) implements AcademicInputRepository {
+            public function __construct(private SisFixture $s)
+            {
+            }
+            public function inventory(EntityId $student): AcademicInputInventory
+            {
+                throw new \Domain\Shared\EventSourcing\HistoryReadLimitException();
+            }
+            public function selected(EntityId $credit): ?array
+            {
+                return new SqlAcademicInputRepository($this->s->sql)->selected($credit);
+            }
+        };
+        $before = $this->digest($s);
+        $s->connection->pdo->exec('PRAGMA query_only = ON');
+        $result = $this->service($s, $inputs)->credit($credit);
+        self::assertSame('verified', $result->status);
+        self::assertSame(1, $result->currentRecords);
+        self::assertFalse($result->earlierHistoryUnknown);
+        self::assertSame(2, $result->events);
+        self::assertSame(1, $result->describe()['records_checked']);
+        self::assertSame($before, $this->digest($s));
+        $text = json_encode($result->describe(), JSON_THROW_ON_ERROR);
+        $privateFields = [
+            $enrollment->id->value, $student->value, 'course_code', 'reason', 'grade', 'sealed', 'amount',
+        ];
+        foreach ($privateFields as $private) {
+            self::assertStringNotContainsString($private, $text);
+        }
+    }
+
+    public function testSelectedEarlyDropUsesRetainedReferencesWithoutRecreatingCurrentRows(): void
+    {
+        $s = new SisFixture();
+        $student = $s->student()->id;
+        $section = $s->section();
+        $enrollment = $s->service->register($student, $section->id);
+        $credit = new EntityId($s->sql->one('sis_academic_credits', ['source_id' => $enrollment->id->value])['id']);
+        $review = $s->drops->review($student, $section->id);
+        $s->drops->commit(
+            $student,
+            $section->id,
+            $enrollment->id,
+            $review['version'],
+            new EntityId($review['operation_id']),
+            $review['revision'],
+            $review['effective_on']
+        );
+        $before = $this->digest($s);
+        $s->connection->pdo->exec('PRAGMA query_only = ON');
+        $result = $this->service($s)->credit($credit);
+        self::assertSame('verified', $result->status);
+        self::assertSame(0, $result->currentRecords);
+        self::assertSame(1, $result->describe()['records_checked']);
+        self::assertGreaterThan(2, $result->events);
+        self::assertSame($before, $this->digest($s));
+    }
+
+    public function testSelectedTransferAwardKeepsObservedEarlierGapsAndVoidCorrectionsDistinct(): void
+    {
+        require_once dirname(__DIR__) . '/Support/TransferAwardFixture.php';
+        foreach (['recorded', 'legacy', 'voided'] as $kind) {
+            $s = new SisFixture();
+            $t = new \TransferAwardFixture($s, $s->dropCipher, legacy: $kind === 'legacy');
+            if ($kind === 'voided') {
+                $change = new \Domain\Transfer\ValueObject\AwardChange(
+                    'void',
+                    null,
+                    null,
+                    'Fictional support fixture.'
+                );
+                $service = $t->service();
+                $r = $service->preview($t->student, $t->award, $change);
+                $service->confirm(
+                    $t->student,
+                    $t->award,
+                    new EntityId($r['operation_id']),
+                    $change,
+                    $r['revision'],
+                    $r['review_token']
+                );
+            }
+            $before = $this->digest($s);
+            $s->connection->pdo->exec('PRAGMA query_only = ON');
+            $result = $this->service($s)->credit($t->credit);
+            self::assertSame($kind === 'legacy' ? 'history_gaps' : 'verified', $result->status, $kind);
+            self::assertSame(1, $result->currentRecords);
+            self::assertSame($kind === 'legacy', $result->earlierHistoryUnknown);
+            self::assertSame($before, $this->digest($s));
+            self::assertStringNotContainsString($t->award->value, json_encode($result->describe()));
+        }
+    }
+
+    public function testSelectedLimitsMissingIdentitiesAndProjectionDamageNeverReturnPartialEvidence(): void
+    {
+        foreach (['limited', 'missing', 'credit', 'student', 'journal', 'cross_student'] as $kind) {
+            $s = new SisFixture();
+            $student = $s->student()->id;
+            $enrollment = $s->service->register($student, $s->section()->id);
+            $credit = new EntityId($s->sql->one('sis_academic_credits', ['source_id' => $enrollment->id->value])['id']);
+            if ($kind === 'missing') {
+                $credit = EntityId::generate();
+            } elseif ($kind === 'credit') {
+                $s->sql->update('sis_academic_credits', ['attempted_milli' => 9999], ['id' => $credit->value]);
+            } elseif ($kind === 'journal') {
+                $head = $s->sql->one('sis_history_streams', ['aggregate_id' => $credit->value]);
+                $s->sql->update(
+                    'sis_history_events',
+                    ['sealed_event' => 'private-damaged-value'],
+                    ['stream_id' => $head['id']]
+                );
+            } elseif ($kind === 'student') {
+                $s->connection->pdo->exec('PRAGMA foreign_keys = OFF');
+                $s->sql->execute('DELETE FROM sis_students WHERE id = ?', [$student->value]);
+            } elseif ($kind === 'cross_student') {
+                $s->sql->update(
+                    'sis_academic_credits',
+                    ['student_id' => $s->student()->id->value],
+                    ['id' => $credit->value]
+                );
+            }
+            $before = $this->digest($s);
+            $s->connection->pdo->exec('PRAGMA query_only = ON');
+            $result = $this->service($s)->credit($credit, $kind === 'limited' ? 1 : 200);
+            self::assertSame($kind === 'limited' ? 'limited' : 'unverified', $result->status, $kind);
+            self::assertNull($result->currentRecords);
+            self::assertNull($result->earlierHistoryUnknown);
+            self::assertNull($result->describe()['records_checked']);
+            self::assertSame($before, $this->digest($s));
+            self::assertStringNotContainsString('private-damaged-value', json_encode($result->describe()));
+        }
+    }
+
+    public function testSelectedProjectionChangesDuringTheReadDiscardTheObservation(): void
+    {
+        $s = new SisFixture();
+        $student = $s->student()->id;
+        $enrollment = $s->service->register($student, $s->section()->id);
+        $credit = new EntityId($s->sql->one('sis_academic_credits', ['source_id' => $enrollment->id->value])['id']);
+        $inputs = new class ($s) implements AcademicInputRepository {
+            private int $reads = 0;
+            public function __construct(private SisFixture $s)
+            {
+            }
+            public function inventory(EntityId $student): AcademicInputInventory
+            {
+                throw new \LogicException('Only a selected source should be read.');
+            }
+            public function selected(EntityId $credit): ?array
+            {
+                if (++$this->reads === 2) {
+                    $this->s->sql->update('sis_academic_credits', ['version' => 999], ['id' => $credit->value]);
+                }
+                return new SqlAcademicInputRepository($this->s->sql)->selected($credit);
+            }
+        };
+        $result = $this->service($s, $inputs)->credit($credit);
+        self::assertSame('changed', $result->status);
+        self::assertSame([], $result->issues);
+        self::assertNull($result->currentRecords);
     }
 }

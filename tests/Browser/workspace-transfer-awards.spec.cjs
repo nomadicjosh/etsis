@@ -17,6 +17,7 @@ async function fixture(page, options = {}) {
         external = id(45),
         course = id(46),
         creditId = id(47);
+    const checks = [];
     let serial = 70,
         interrupted = false;
     let courseReview,
@@ -115,7 +116,19 @@ async function fixture(page, options = {}) {
         calls.push({ path, data, csrf: route.request().headers()["x-csrf-token"] });
         let result = {},
             status = 200;
-        if (path === "/sis/ui/metrics/") result = { cards: [], intake: [], pipeline: [], queue: [] };
+        if (path.includes('/history-checks/')) {
+            if (path.endsWith('/run/')) {
+                if (options.delayCheck) await options.delayCheck();
+                const status = options.checkStatus || 'verified';
+                const receipt = {reference: id(91), status, events_checked: status === 'limited' ? 200 : 2,
+                    checked_at: '2026-08-11T10:00:00Z'};
+                checks.unshift(receipt);
+                result = {result: {status, events_checked: receipt.events_checked, issues: [],
+                    records_checked: status === 'limited' ? null : 1, current_records: status === 'limited' ? null : 1},
+                    receipt, event_limit: 200};
+            } else result = {items: checks, next_after: null};
+        }
+        else if (path === "/sis/ui/metrics/") result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === "/sis/ui/operation-id/") result = { id: id(serial++) };
         else if (path.startsWith("/sis/ui/data/"))
             result = {
@@ -367,7 +380,7 @@ async function fixture(page, options = {}) {
             result = { items: [...operations.values()].reverse(), next_after: null };
         await route.fulfill({ status, json: result, headers: { "Cache-Control": "private, no-store" } });
     });
-    await page.goto(options.limited ? "/admin/transfer-only-fixture/" : "/admin/transfer-fixture/");
+    await page.goto(options.support ? "/admin/" : options.limited ? "/admin/transfer-only-fixture/" : "/admin/transfer-fixture/");
     await page.locator('.workspace-nav-link[data-workspace="institutions"]').click();
     await page.locator('#directory-tabs [data-workspace="equivalencies"]').click();
     await page.getByRole("button", { name: "Open EXT.101 → MATH.101", exact: true }).click();
@@ -856,4 +869,57 @@ test("registrar searches and replaces a receiving course without re-awarding cre
     await expect(page.locator("#drawer-body")).toContainText("MATH.101");
     expect(f.calls.filter((c) => c.path.endsWith("accepted-course/commit/"))).toHaveLength(1);
     expect(f.errors).toEqual([]);
+});
+
+for (const status of ['verified', 'limited']) {
+    test(`selected transfer credit ${status} check returns to its award`, async ({page}) => {
+        const {calls, errors} = await fixture(page, {support: true, checkStatus: status});
+        await recordAction(page, 'Check selected academic history');
+        await expect(page.getByRole('heading', {name: 'Selected academic record', exact: true})).toBeVisible();
+        expect(calls.some(c => c.path.endsWith('/run/'))).toBe(false);
+        const run = page.getByRole('button', {name: 'Run history check', exact: true});
+        await run.focus(); await page.keyboard.press('Enter');
+        const result = page.getByRole('region', {name: 'Current check result', exact: true});
+        await expect(result).toContainText(status === 'limited' ? 'Check limit reached' : 'Academic sources checked: 1');
+        expect(calls.find(c => c.path === `/sis/history-checks/credit/${id(47)}/run/`)).toBeTruthy();
+        await page.setViewportSize({width: 320, height: 812});
+        await page.evaluate(() => {document.documentElement.style.fontSize = '200%';});
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+        const axe = await new AxeBuilder({page}).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+        expect(axe.violations.map(v => v.id)).toEqual([]);
+        if (status === 'verified') await page.screenshot({path: '/tmp/etsis-selected-credit-phone.png'});
+        await page.getByRole('button', {name: 'Back to record', exact: true}).click();
+        await expect(page.getByRole('button', {name: 'Correct credits or grade', exact: true})).toBeVisible();
+        expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+        expect(errors).toEqual([]);
+    });
+}
+
+test('selected transfer credit check discards late results after returning to the award', async ({page}) => {
+    let requested, release;
+    const pending = new Promise(resolve => {requested = resolve;});
+    const held = new Promise(resolve => {release = resolve;});
+    const {errors} = await fixture(page, {support: true, delayCheck: async () => {requested(); await held;}});
+    await recordAction(page, 'Check selected academic history');
+    await page.getByRole('button', {name: 'Run history check', exact: true}).click();
+    await pending;
+    await page.getByRole('button', {name: 'Back to record', exact: true}).click();
+    const response = page.waitForResponse(r => r.url().endsWith('/run/'));
+    release(); await response;
+    await expect(page.getByRole('button', {name: 'Correct credits or grade', exact: true})).toBeVisible();
+    await expect(page.getByRole('region', {name: 'Current check result', exact: true})).toHaveCount(0);
+    expect(errors).toEqual([]);
+});
+
+test('selected transfer credit check clears results after permission loss', async ({page}) => {
+    const {errors} = await fixture(page, {support: true});
+    await recordAction(page, 'Check selected academic history');
+    await page.getByRole('button', {name: 'Run history check', exact: true}).click();
+    const result = page.getByRole('region', {name: 'Current check result', exact: true});
+    await expect(result).toContainText('Support reference:');
+    await page.route('**/history-checks/**', r => r.fulfill({status: 403, json: {error: 'Current support duty is required.'}}));
+    await page.getByRole('button', {name: 'Refresh previous checks', exact: true}).click();
+    await expect(result).toBeEmpty();
+    await expect(page.getByRole('region', {name: 'Previous history checks', exact: true})).toBeEmpty();
+    expect(errors).toEqual([]);
 });

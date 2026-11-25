@@ -12,6 +12,8 @@ use Domain\Support\Enum\HistoryCheckSubject;
 use Domain\Support\Repository\HistoryCheckRepository;
 use Infrastructure\Persistence\SqlRecords;
 
+use function Codefy\Framework\Helpers\trans;
+
 final readonly class SqlHistoryCheckRepository implements HistoryCheckRepository
 {
     public function __construct(private SqlRecords $sql)
@@ -34,6 +36,16 @@ final readonly class SqlHistoryCheckRepository implements HistoryCheckRepository
             1,
         )[0] ?? throw new RecordNotFoundException("Account not found.");
         return new EntityId($row["student_id"]);
+    }
+
+    public function creditStudent(EntityId $credit): EntityId
+    {
+        $selected =
+        new SqlAcademicInputRepository($this->sql)->selected($credit) ??
+        throw new RecordNotFoundException(
+            trans("Academic source routing not found."),
+        );
+        return new EntityId($selected["student_id"]);
     }
 
     public function save(HistoryCheckReceipt $receipt): void

@@ -86,6 +86,11 @@ final class SpecializationProgressTest extends TestCase
         self::assertSame('review', $this->preview($f)['status']);
         $f->select([]);
         $repo = new class implements AcademicInputRepository {
+            public function selected(\Domain\Shared\ValueObject\EntityId $credit): ?array
+            {
+                throw new \LogicException('This fixture supplies only a whole-student inventory.');
+            }
+
             public function inventory(EntityId $student): \Domain\DegreeAudit\ValueObject\AcademicInputInventory
             { throw new LogicException('Unassigned requirements must not collect academic work.'); }
         };
@@ -151,6 +156,11 @@ final class SpecializationProgressTest extends TestCase
             self::fail('A foreign student scope was accepted.');
         } catch (RecordNotFoundException) { self::assertTrue(true); }
         $repo = new class ($s) implements AcademicInputRepository {
+            public function selected(\Domain\Shared\ValueObject\EntityId $credit): ?array
+            {
+                throw new \LogicException('This fixture supplies only a whole-student inventory.');
+            }
+
             public function __construct(private SisFixture $s) {}
             public function inventory(EntityId $student): \Domain\DegreeAudit\ValueObject\AcademicInputInventory
             {

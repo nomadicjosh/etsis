@@ -138,6 +138,13 @@ window.createWorkspaceTransferAwards = function (ui) {
             more.push(
                 button("Void this award", () => edit(student, award, value, "void"), "btn-outline-danger"),
             );
+        if (ui.historyChecks && ["sis:history:verify", "sis:audit:read", "sis:student:read"].every(ui.can)) {
+            more.push(
+                button(ui.historyCheckLabels.check_credit, () =>
+                    ui.historyChecks().open("credit", value.credit.id, () => record(student, award)),
+                ),
+            );
+        }
         actions.append(actionMenu("More", more, { context: "More transfer award actions" }));
     }
     async function editCourse(student, award, value, target = null, draft = null) {

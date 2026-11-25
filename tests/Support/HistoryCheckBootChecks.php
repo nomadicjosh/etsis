@@ -28,6 +28,8 @@ require_once __DIR__ . '/StudentDecisionFixture.php';
 $supportDecisions = new \Tests\Support\StudentDecisionFixture($sis);
 require_once __DIR__ . '/EmploymentHistoryFixture.php';
 $supportEmployment = new \Tests\Support\EmploymentHistoryFixture($sis);
+require_once __DIR__ . '/TransferAwardFixture.php';
+$supportTransfer = new \TransferAwardFixture($sis, $sis->dropCipher, $supportStudent->id);
 $employmentFacts = $supportEmployment->facts();
 $supportEvents = array_map($sis->sql->rows(...), [
     "sis_history_events",
@@ -62,6 +64,7 @@ $supportRead = static function (string $path, array $data) use ($teachingPost): 
 $supportCases = [
     "person" => $supportStudent->personId->value,
     "student" => $supportStudent->id->value,
+    "credit" => $supportTransfer->credit->value,
     "account" => (string) $supportAccount->aggregateId(),
     "application" => $supportApplication->id->value,
     "standing" => $supportDecisions->pursuit->value,
@@ -85,7 +88,11 @@ foreach ($supportCases as $kind => $id) {
     if (
         ($checked["event_limit"] ?? null) !== 200 ||
         !isset($checked["receipt"]["reference"]) ||
-        (in_array($kind, ['account', 'application', 'standing', 'load', 'primary', 'position', 'time'], true) &&
+        (in_array(
+            $kind,
+            ['credit', 'account', 'application', 'standing', 'load', 'primary', 'position', 'time'],
+            true
+        ) &&
             ($checked["result"]["status"] ?? null) !== "verified")
     ) {
         throw new RuntimeException("The selected support check lost its fixed scope or allowance.");
@@ -116,22 +123,27 @@ foreach (
     'advisors' => 'sis:advising:manage', 'requirements' => 'sis:degree-audit:assign'] as $kind => $permission
 ) {
     $sis->access->grants = ['sis:history:verify', 'sis:audit:read', 'sis:student:read'];
-    if ($teachingPost($supportBase . $kind . '/' . $supportCases[$kind] . '/run/', [])->getStatusCode() !== 403) {
+    $response = $teachingPost($supportBase . $kind . '/' . $supportCases[$kind] . '/run/', []);
+    if ($response->getStatusCode() !== 403) {
         throw new RuntimeException('Support checking bypassed the independent student-decision duty.');
     }
 }
 foreach (['primary', 'position', 'time'] as $kind) {
-    foreach ([['sis:history:verify', 'sis:audit:read'], ['sis:hr:manage', 'sis:audit:read'],
-        ['sis:hr:manage', 'sis:history:verify']] as $grants) {
+    foreach (
+        [['sis:history:verify', 'sis:audit:read'], ['sis:hr:manage', 'sis:audit:read'],
+        ['sis:hr:manage', 'sis:history:verify']] as $grants
+    ) {
         $sis->access->grants = $grants;
-        if ($teachingPost($supportBase . $kind . '/' . $supportCases[$kind] . '/run/', [])->getStatusCode() !== 403) {
+        $response = $teachingPost($supportBase . $kind . '/' . $supportCases[$kind] . '/run/', []);
+        if ($response->getStatusCode() !== 403) {
             throw new RuntimeException('Employment support checking bypassed a required duty.');
         }
     }
 }
 $sis->access->actor = $supportEmployment->owner;
 $sis->access->grants = [];
-if ($teachingPost($supportBase . 'time/' . $supportEmployment->entry->value . '/history/', [])->getStatusCode() !== 403) {
+$response = $teachingPost($supportBase . 'time/' . $supportEmployment->entry->value . '/history/', []);
+if ($response->getStatusCode() !== 403) {
     throw new RuntimeException('Employee ownership granted support-history authority.');
 }
 $sis->access->staff = true;

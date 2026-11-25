@@ -30,6 +30,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
         ["events", null, "required", "Maximum global checks or selected-source replay events (1–2000).", "500"],
         ["cursor", null, "required", "Protected continuation from an earlier verification batch."],
         ["json", null, "none", "Emit machine-readable counts and a protected continuation cursor."],
+        ['credit', null, 'required', 'Check one institutional or transfer academic credit and source; no cursor.'],
         ['student', null, 'required', 'Check one student’s available academic sources and projections; no cursor.'],
         ['account', null, 'required', 'Verify one financial account and its balance/posting projections; no cursor.'],
         ['person', null, 'required', 'Compare one person’s profile projections with protected history; no cursor.'],
@@ -67,6 +68,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
             }
             $account = $this->getOptions('account');
             $student = $this->getOptions('student');
+            $credit = $this->getOptions('credit');
             $person = $this->getOptions('person');
             $application = $this->getOptions('application');
             $standing = $this->getOptions('standing');
@@ -79,7 +81,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 'position' => $this->getOptions('position'),
                 'time-entry' => $this->getOptions('time-entry'),
             ];
-            $subjects = [$account, $student, $person, $application, $standing, $load,
+            $subjects = [$account, $student, $credit, $person, $application, $standing, $load,
                 $advisors, $requirements, $progress, ...array_values($employment)];
             if (count(array_filter($subjects, static fn(mixed $id): bool => $id !== null)) > 1) {
                 throw new InvalidArgumentException();
@@ -117,6 +119,12 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 }
                 return $this->person(new EntityId($person), $events, $json);
             }
+            if ($credit !== null) {
+                if (!is_string($credit) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
+                    throw new InvalidArgumentException();
+                }
+                return $this->credit(new EntityId($credit), $events, $json);
+            }
             if ($student !== null) {
                 if (
                     !is_string($student) || $account !== null || $cursor !== null ||
@@ -140,7 +148,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 $json,
                 "invalid_input",
                 "Use --streams=1..50, --events=1..2000 and a valid optional verification cursor. "
-                    . 'Use one of --person=ULID, --account=ULID, --student=ULID, --application=ULID, '
+                    . 'Use one of --person=ULID, --account=ULID, --student=ULID, --credit=ULID, --application=ULID, '
                     . '--standing=PURSUIT_ULID, --load=DETERMINATION_ULID, --advisors=PURSUIT_ULID, '
                     . '--requirements=PURSUIT_ULID, --primary-position=EMPLOYEE_ULID, '
                     . '--position=POSITION_ULID or --time-entry=ENTRY_ULID '
@@ -259,6 +267,30 @@ final class VerifyHistoryCommand extends ConsoleCommand
         return match ($result->status) {
             'verified' => self::SUCCESS,
             'observed_empty', 'changed', 'limited' => 3,
+            default => self::FAILURE,
+        };
+    }
+
+    private function credit(EntityId $credit, int $events, bool $json): int
+    {
+        $result = $this->codefy->make(AcademicProjectionVerifier::class)->credit($credit, $events);
+        if ($json) {
+            $this->output->writeln(json_encode($result->describe(), JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
+        } else {
+            $this->terminalRaw('Selected academic check ' . $credit->value . ': ' . $result->status . '.');
+            $this->terminalRaw($result->events . ' events checked; '
+                . ($result->currentRecords ?? 'unknown') . ' current academic records.');
+            if ($result->issues !== []) {
+                $this->terminalRaw('Unverified components: ' . implode(', ', $result->issues) . '.');
+            }
+            $this->terminalRaw('No records were changed. This checks one institutional/transfer academic credit, '
+                . 'its surviving source/reference projections and available registration history. '
+                . 'It does not certify a full archive, pursuit attribution, equivalence, finance or graduation. '
+                . 'Earlier gaps, changed reads and limits require separate review.');
+        }
+        return match ($result->status) {
+            'verified' => self::SUCCESS,
+            'changed', 'limited', 'history_gaps' => 3,
             default => self::FAILURE,
         };
     }

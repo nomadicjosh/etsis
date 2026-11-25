@@ -73,7 +73,11 @@ test("registrar reviews a correction, preserves entries after expiry and reads b
                 ],
                 next_cursor: data.cursor ? null : "fictional-frozen-cursor",
                 earlier_history_unknown: true,
+                credit_id: id(6),
             };
+        else if (path.endsWith("/run/"))
+            result = {result: {status: "verified", events_checked: 4, records_checked: 1, current_records: 1, issues: []},
+                receipt: {reference: id(7), status: "verified", events_checked: 4, checked_at: "2026-08-11T10:00:00Z"}, event_limit: 200};
         else if (path.endsWith("/grade-choices/"))
             result = {
                 enrollment_id: id(5),
@@ -110,7 +114,7 @@ test("registrar reviews a correction, preserves entries after expiry and reads b
             headers: { "Cache-Control": "private, no-store" },
         });
     });
-    await page.goto("/admin/grade-amend-fixture/");
+    await page.goto("/admin/academic-support-fixture/");
     await page.locator('.workspace-nav-link[data-workspace="students"]').click();
     await page.locator("#directory-search").fill("a");
     await page.locator("#directory-search").press("Enter");
@@ -123,6 +127,11 @@ test("registrar reviews a correction, preserves entries after expiry and reads b
         .poll(() => calls.filter((c) => c.path.endsWith("/grade-history/")).at(-1)?.data)
         .toEqual({ cursor: "fictional-frozen-cursor" });
     await expect(page.locator("#drawer-body")).toContainText("Kept 4.5 registered credits; originally 3. Accepted corrections preserved: 1.");
+    await page.getByRole("button", { name: "Check selected academic history", exact: true }).click();
+    expect(calls.some(c => c.path.endsWith('/run/'))).toBe(false);
+    await page.getByRole('button', {name: 'Run history check', exact: true}).click();
+    await expect(page.getByRole('region', {name: 'Current check result', exact: true})).toContainText('Academic sources checked: 1');
+    expect(calls.find(c => c.path === `/sis/history-checks/credit/${id(6)}/run/`)).toBeTruthy();
     await page.getByRole("button", { name: "Back to record", exact: true }).click();
     await page.getByRole("button", { name: "View transcript", exact: true }).click();
     await page.getByRole("button", { name: "Review final grade", exact: true }).click();

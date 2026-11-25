@@ -277,6 +277,7 @@ echo $loader->render('framework::backend/workspace/index', [
     'permissions' => match ($path) {
         '/admin/admissions-only-fixture/' => ['sis:admissions:manage'],
         '/admin/form-editor-fixture/' => ['sis:forms:manage'],
+        '/admin/academic-support-fixture/' => ['sis:student:read', 'sis:gradebook:amend', 'sis:audit:read', 'sis:history:verify'],
         '/admin/grade-amend-fixture/' => ['sis:student:read', 'sis:gradebook:amend'],
         '/admin/closed-grade-fixture/' => ['sis:student:read', 'sis:gradebook:amend', 'sis:gradebook:closed'],
         '/admin/student-read-fixture/' => ['sis:student:read'],

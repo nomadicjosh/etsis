@@ -91,6 +91,7 @@ final readonly class HistoryCheckService
             HistoryCheckSubject::PrimaryPosition, HistoryCheckSubject::Position, HistoryCheckSubject::TimeEntry => null,
             HistoryCheckSubject::Application => null,
             HistoryCheckSubject::Student => $id,
+            HistoryCheckSubject::Credit => $this->receipts->creditStudent($id),
             HistoryCheckSubject::Standing, HistoryCheckSubject::Advisors, HistoryCheckSubject::Requirements =>
             $this->students->assignment($id)->studentId,
             HistoryCheckSubject::Load => new EntityId($load["student_id"]),
@@ -180,6 +181,8 @@ final readonly class HistoryCheckService
                 HistoryCheckSubject::Person => $this->persons
                     ->verify($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)
                     ->describe(),
+                HistoryCheckSubject::Credit => $this->academics
+                    ->credit($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Student => $this->academics
                     ->verify($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)
                     ->describe(),

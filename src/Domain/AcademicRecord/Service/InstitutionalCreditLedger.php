@@ -1545,7 +1545,7 @@ final readonly class InstitutionalCreditLedger
     ): array {
         [$id, $root, $facts] = $this->source($enrollment, $student, $section);
         if ($root->playhead() === 0) {
-            return ["items" => [], "next_cursor" => null, "earlier_history_unknown" => true];
+            return ["credit_id" => $id->value, "items" => [], "next_cursor" => null, "earlier_history_unknown" => true];
         }
         $page = $this->history->page($this->stream($id), $cursor, 10);
         $items = [];
@@ -1636,6 +1636,7 @@ final readonly class InstitutionalCreditLedger
             ];
         }
         return [
+            "credit_id" => $id->value,
             "items" => $items,
             "next_cursor" => $page->nextCursor,
             "earlier_history_unknown" => $root->provenance() === "observed_existing",

@@ -4150,3 +4150,23 @@ msgstr ""
 #: src/Domain/Support/Service/HistoryCheckService.php:80
 msgid "Recorded progress not found."
 msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:8
+msgid "Selected academic record"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:9
+msgid "Academic sources checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:10
+msgid "Check selected academic history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:12
+msgid "Compare this institutional or transfer credit with its available protected source, registration and projections. This uses a 200-event allowance and makes no correction. Earlier gaps, pursuit attribution, equivalence, finances and full archive completeness need separate review."
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlHistoryCheckRepository.php:44
+msgid "Academic source routing not found."
+msgstr ""

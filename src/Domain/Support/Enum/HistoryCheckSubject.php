@@ -8,6 +8,7 @@ enum HistoryCheckSubject: string
 {
     case Person = "person";
     case Student = "student";
+    case Credit = "credit";
     case Account = "account";
     case Application = "application";
     case Standing = "standing";
@@ -23,7 +24,7 @@ enum HistoryCheckSubject: string
     {
         return match ($this) {
             self::Person => ["sis:person:manage"],
-            self::Student => ["sis:student:read"],
+            self::Student, self::Credit => ["sis:student:read"],
             self::Account => ["sis:student:read", "sis:finance:read"],
             self::Application => ["sis:admissions:manage"],
             self::Standing => ["sis:student:read", "sis:standing:manage"],
@@ -40,6 +41,7 @@ enum HistoryCheckSubject: string
         return match ($this) {
             self::Person => "person_profile",
             self::Student => "student_academic_inputs",
+            self::Credit => "academic_credit",
             self::Account => "financial_account",
             self::Application => "admissions_application",
             self::Standing => "student_standing",
