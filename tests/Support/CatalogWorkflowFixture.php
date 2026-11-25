@@ -20,9 +20,9 @@ final class CatalogWorkflowFixture
     public SisFixture $sis;
     public SqlCatalogWorkflowRepository $operations;
 
-    public function __construct()
+    public function __construct(?SisFixture $sis = null)
     {
-        $this->fixture = new HiatusFixture();
+        $this->fixture = new HiatusFixture($sis);
         $this->sis = $this->fixture->sis;
         $this->operations = new SqlCatalogWorkflowRepository($this->sis->sql);
     }

@@ -31,11 +31,11 @@ final class OfferingCreditFixture
     public SectionCourseBindingService $bindings;
     private SqlHistoricalEventStore $history;
 
-    public function __construct(?SisFixture $sis = null)
+    public function __construct(?SisFixture $sis = null, int $fee = 0)
     {
         require_once __DIR__ . '/SisFixture.php';
         $this->sis = $s = $sis ?? new SisFixture();
-        $this->section = $s->section(fee: 0);
+        $this->section = $s->section(fee: $fee);
         $catalog = new SqlCatalogRevisionRepository($s->sql);
         $this->editor = new CatalogEditor($catalog, $s->registration, $s->access, $s->transactions, $s->audit);
         $this->history = $history = new SqlHistoricalEventStore(

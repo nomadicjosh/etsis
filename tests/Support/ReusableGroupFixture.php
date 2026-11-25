@@ -27,9 +27,9 @@ final class ReusableGroupFixture
     public EntityId $degree;
     public array $groupDefinition;
     public array $definition;
-    public function __construct()
+    public function __construct(?SisFixture $sis = null)
     {
-        $this->catalog = new CatalogWorkflowFixture();
+        $this->catalog = new CatalogWorkflowFixture($sis);
         $this->sis = $f = $this->catalog->sis;
         $a = new AcademicCalendarFixture($f);
         $a->type();

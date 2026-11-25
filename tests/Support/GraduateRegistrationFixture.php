@@ -34,9 +34,9 @@ final class GraduateRegistrationFixture
     public OfferingCreditFixture $target;
     public array $grades;
 
-    public function __construct()
+    public function __construct(?\SisFixture $sis = null, int $graduateFee = 0)
     {
-        $this->requirements = $r = new \StudentRequirementsFixture();
+        $this->requirements = $r = new \StudentRequirementsFixture($sis);
         $this->sis = $s = $r->f->sis;
         $this->student = $r->student;
         $this->pursuit = $r->assignment;
@@ -163,7 +163,7 @@ final class GraduateRegistrationFixture
             $review["reason"],
             $review["review_token"],
         );
-        $this->target = $this->offering($this->graduate);
+        $this->target = $this->offering($this->graduate, $graduateFee);
         $this->policy();
     }
 
@@ -186,9 +186,9 @@ final class GraduateRegistrationFixture
         );
     }
 
-    public function offering(EntityId $level): OfferingCreditFixture
+    public function offering(EntityId $level, int $fee = 0): OfferingCreditFixture
     {
-        $f = new OfferingCreditFixture($this->sis);
+        $f = new OfferingCreditFixture($this->sis, $fee);
         $row = new SqlClassificationRepository($this->sis->sql)->get($level);
         new SqlClassificationRepository($this->sis->sql)->assign(
             $f->section->courseId,

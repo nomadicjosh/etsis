@@ -49,6 +49,31 @@ try {
         actor: new EntityId($input['actor']),
         cipher: new DefuseMessageCipher($config)
     );
+    $fixture->clock->time = new DateTimeImmutable($input['now']);
+    $graduateTransactions = new class (
+        $fixture->transactions,
+        $input['pause_at'] ?? null,
+    ) implements \Domain\Shared\Persistence\UnitOfWork {
+        public function __construct(
+            private \Domain\Shared\Persistence\UnitOfWork $inner,
+            private ?string $pauseAt,
+        ) {
+        }
+
+        public function run(Closure $operation): mixed
+        {
+            return $this->inner->run(function () use ($operation): mixed {
+                $result = $operation();
+                if ($this->pauseAt === 'graduate.decision_staged') {
+                    fwrite(STDOUT, "staged\n");
+                    if (trim((string) fgets(STDIN)) !== 'continue') {
+                        exit(3);
+                    }
+                }
+                return $result;
+            });
+        }
+    };
     $audit = new class ($fixture->audit, $input['pause_at'] ?? null) implements AuditTrail {
         public function __construct(private AuditTrail $inner, private ?string $pauseAt)
         {
@@ -76,10 +101,14 @@ try {
     }
     fwrite(STDOUT, "running\n");
     require_once __DIR__ . '/AcademicRecoveryServices.php';
+    require_once __DIR__ . '/GraduateRecoveryServices.php';
     $academic = new \Tests\Support\AcademicRecoveryServices($fixture);
+    $graduate = new \Tests\Support\GraduateRecoveryServices($fixture);
     $command = $input['command'];
     try {
         $result = match ($input['action']) {
+            'publish_graduate_policy' => $graduate->publish($command, $audit, $graduateTransactions),
+            'confirm_graduate_approval' => $graduate->approve($command, $audit, $graduateTransactions),
             'waitlist_bypass' => $fixture->waitlistBypasses($audit)->confirm(
                 new \Domain\Registration\Waitlist\WaitlistBypass(
                     new EntityId($command['section']),

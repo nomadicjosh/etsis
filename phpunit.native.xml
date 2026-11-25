@@ -10,6 +10,7 @@
             <file>tests/Integration/WorkflowRecoveryTest.php</file>
             <file>tests/Integration/AcademicAdmissionsRecoveryTest.php</file>
             <file>tests/Integration/CoordinatedWaitlistRecoveryTest.php</file>
+            <file>tests/Integration/GraduateWorkflowRecoveryTest.php</file>
         </testsuite>
     </testsuites>
 </phpunit>

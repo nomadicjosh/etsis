@@ -19,9 +19,9 @@ final class StudentRequirementsFixture
     public EntityId $student;
     public EntityId $assignment;
     public EntityId $version;
-    public function __construct()
+    public function __construct(?\SisFixture $sis = null)
     {
-        $this->f = new ReusableGroupFixture();
+        $this->f = new ReusableGroupFixture($sis);
         $f = $this->f;
         $s = $f->sis;
         $f->definition["length_months"] = 48;

@@ -22,14 +22,14 @@ final class HiatusFixture
     public DefuseMessageCipher $cipher;
     public HiatusService $history;
 
-    public function __construct()
+    public function __construct(?SisFixture $sis = null)
     {
-        $this->sis = $f = new SisFixture();
+        $this->sis = $f = $sis ?? new SisFixture();
         $config = Collection::factory([]);
         $config->setConfigKey("app", [
             "crypto_key" => Key::createNewRandomKey()->saveToAsciiSafeString(),
         ]);
-        $this->cipher = new DefuseMessageCipher($config);
+        $this->cipher = $sis?->dropCipher ?? new DefuseMessageCipher($config);
         $this->repository = new SqlHiatusRepository($f->sql);
         $this->history = $this->service();
     }

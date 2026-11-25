@@ -618,13 +618,15 @@ final class SisFixture
             $this->graduateEvidence(),
         );
     }
-    public function graduatePolicies(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\Registration\Service\GraduateRegistrationPolicyService
-    {
+    public function graduatePolicies(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Shared\Persistence\UnitOfWork $transactions = null,
+    ): \Domain\Registration\Service\GraduateRegistrationPolicyService {
         return new \Domain\Registration\Service\GraduateRegistrationPolicyService(
             EventStoreFixture::history($this->connection->queryBuilder()),
             $this->access,
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
-            $this->transactions,
+            $transactions ?? $this->transactions,
             $audit ?? $this->audit,
             $this->clock,
             new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
@@ -768,8 +770,10 @@ final class SisFixture
         return new \Domain\Registration\Service\GraduateRegistrationGate($this->graduateAcademic(), $this->graduateApprovalsLedger());
     }
 
-    public function graduateApprovals(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\Registration\Service\GraduateCourseApprovalService
-    {
+    public function graduateApprovals(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\Shared\Persistence\UnitOfWork $transactions = null,
+    ): \Domain\Registration\Service\GraduateCourseApprovalService {
         return new \Domain\Registration\Service\GraduateCourseApprovalService(
             $this->graduateAcademic(),
             $this->graduateGate(),
@@ -782,7 +786,7 @@ final class SisFixture
             $this->advisors(),
             $this->access,
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($this->sql),
-            $this->transactions,
+            $transactions ?? $this->transactions,
             $audit ?? $this->audit,
             $this->clock,
             new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock)

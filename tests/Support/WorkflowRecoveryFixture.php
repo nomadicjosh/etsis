@@ -179,6 +179,7 @@ final class WorkflowRecoveryFixture
             'history' => $history,
             'cipher_key' => $this->cipherKey,
             'actor' => $this->sis->access->actor->value,
+            'now' => $this->sis->clock->now()->format(DATE_ATOM),
             'worker' => $index,
             'action' => $action,
             'command' => $command,
@@ -281,7 +282,8 @@ final class WorkflowRecoveryFixture
             'sis_waitlist_entries', 'sis_registration_updates', 'sis_registration_batches',
             'sis_applications', 'sis_application_intake', 'sis_application_revisions', 'sis_admission_updates',
             'sis_form_submissions', 'sis_grade_change_requests', 'sis_transfer_awards',
-            'sis_transfer_award_changes', 'sis_transfer_credit_streams', 'sis_audit'] as $table
+            'sis_transfer_award_changes', 'sis_transfer_credit_streams',
+            'sis_graduate_registration_policy_state', 'sis_graduate_course_approvals', 'sis_audit'] as $table
         ) {
             $rows = $this->sis->sql->rows($table);
             $encoded = array_map(static fn (array $row): string => json_encode($row, JSON_THROW_ON_ERROR), $rows);

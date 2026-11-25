@@ -56,3 +56,9 @@ The checker compares protected policy/approval history with its technical versio
 The browser shares one **200-event** allowance across the selected history and its referenced histories, plus bounded payload, reference-inventory and cooperative time limits. Missing or damaged evidence is unverified; concurrent changes and exhausted limits are incomplete observations without a partial successful decision count. Empty history leaves earlier unrecorded activity unknown. See [operator scope and bounds](event-history-foundation.md#selected-graduate-policy-and-approval-checks) for larger bounded checks.
 
 These checks do not recalculate an earlier GPA, authenticate every underlying academic input or retry receipt, certify archive completeness, approve enrollment or repair records. Registration continues to use its separate fresh eligibility and confirmation checks.
+
+## Recovery qualification
+
+[Selected PostgreSQL and SQLite recovery checks](native-workflow-qualification.md#graduate-policy-approval-and-registration-recovery) now cover policy publication, all four approval/revocation actions, duplicate confirmations, competing revocation/registration, interruption before commit and lost committed replies. They verify that later GPA/policy changes or revoked future consent preserve an accepted enrollment's earned-credit path, while unaccepted reviews must meet current rules. The optional minimum still considers every completed graduate attempt, including an earlier failure after a later pass.
+
+These are isolated fictional service/transaction checks. They create no application records, grant no permissions and do not replace institution-led policy, authentication, load or restore acceptance. Use the linked bounded operator procedure when rerunning them.

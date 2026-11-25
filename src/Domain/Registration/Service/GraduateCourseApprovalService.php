@@ -336,8 +336,9 @@ final readonly class GraduateCourseApprovalService
 
     private function lock(EntityId $student, EntityId $section): EntityId
     {
-        $initial = $this->admissions->student($student);
+        // Pin the student before reading routing; competing decisions must share the current boundary.
         $this->records->lockStudent($student);
+        $initial = $this->admissions->student($student);
         $this->records->lockPerson($initial->personId);
         $this->records->lockSection($section);
         $this->records->lockCourse($this->records->section($section)->courseId);
