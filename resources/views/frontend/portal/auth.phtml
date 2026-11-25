@@ -59,6 +59,21 @@ $applicationRegisterUrl = '/register/'
                     'Already have a campus account? Sign in to keep your person record and applications together.'
                 ); ?>
             </p>
+            <?php if (($registrationEmailDomains ?? []) !== []): ?>
+                <div class="campus-registration-domains border rounded bg-white mb-4" id="campus-registration-domains">
+                    <p class="mb-2"><?= trans_html('Use an email address from one of these accepted domains:') ?></p>
+                    <ul class="mb-0 text-break">
+                        <?php foreach ($registrationEmailDomains as $domain): ?>
+                            <li><?= str_replace('.', '.<wbr>', $this->esc($domain)) ?></li>
+                        <?php endforeach; ?>
+                    </ul>
+                    <p class="form-text mb-0 mt-2">
+                        <?= trans_html(
+                            'If you need another email address, contact the institution before creating an account.'
+                        ) ?>
+                    </p>
+                </div>
+            <?php endif; ?>
         <?php endif; ?>
         <form method="post" action="<?= $this->esc($url) ?>">
             <?= $csrfMarkup ?? csrf_field() ?>
@@ -74,6 +89,9 @@ $applicationRegisterUrl = '/register/'
                     <input
                         class="form-control"
                         id="campus-email"
+                        <?php if ($register && ($registrationEmailDomains ?? []) !== []): ?>
+                            aria-describedby="campus-registration-domains"
+                        <?php endif; ?>
                         <?php if ($signInFailed): ?>
                             aria-invalid="true"
                             aria-describedby="campus-sign-in-error"
@@ -161,7 +179,10 @@ $applicationRegisterUrl = '/register/'
             <?php endif; ?>
             <button class="btn campus-button w-100" type="submit"><?= $authSubmitLabel ?></button>
         </form>
-        <?php if ($logout || $register || !($maintenanceActive ?? false)): ?>
+        <?php if (
+            $logout || $register
+            || (!($maintenanceActive ?? false) && ($publicRegistrationEnabled ?? true))
+        ): ?>
             <p class="campus-muted mt-4 mb-0">
                 <?php if ($logout): ?>
                     <a href="/portal/student/"><?=trans_html('Return to my campus');?></a>

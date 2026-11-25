@@ -9,6 +9,7 @@ use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 use Psr\Http\Message\ServerRequestInterface;
 use Qubus\View\Native\NativeLoader;
+use Application\Http\Security\ApplicationContinuation;
 
 use function Codefy\Framework\Helpers\trans;
 
@@ -26,6 +27,13 @@ final class RegistrationPauseResponse
         // Navigation is deployment-owned and same-origin, even if configuration is malformed.
         if (preg_match('~^/(?:[a-zA-Z0-9_-]+/)+$~D', $loginPath) !== 1) {
             $loginPath = '/login/';
+        }
+        $values = $request->getMethod() === 'POST' ? $request->getParsedBody() : $request->getQueryParams();
+        $selection = ApplicationContinuation::selection(is_array($values) ? $values : []);
+        $registerPath = '/register/';
+        if ($selection !== []) {
+            $loginPath .= ApplicationContinuation::query(['continue' => 'apply'] + $selection);
+            $registerPath .= '?' . http_build_query($selection);
         }
         $message = $limited
         ? trans(
@@ -48,6 +56,7 @@ final class RegistrationPauseResponse
         $loader = new NativeLoader(['framework' => dirname(__DIR__, 4) . '/resources/views']);
         return new HtmlResponse($loader->render('framework::backend/errors/registration', [
             'limited' => $limited, 'message' => $message, 'retryAfter' => $retryAfter, 'loginPath' => $loginPath,
+            'registerPath' => $registerPath,
         ]), $status, $headers);
     }
 }

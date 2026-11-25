@@ -14,6 +14,10 @@ final class AppServiceProvider extends CodefyServiceProvider
 {
     public function register(): void
     {
+        $this->codefy->alias(
+            \Domain\User\Service\PublicRegistrationPolicyProvider::class,
+            \Infrastructure\Security\ConfiguredPublicRegistrationPolicy::class,
+        );
         $this->codefy->share(new FileRegistrationCounterLock(
             $this->codefy->storagePath() . '/framework/security/registration-locks',
         ));

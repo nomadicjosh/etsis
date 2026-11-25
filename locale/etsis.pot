@@ -4318,3 +4318,31 @@ msgstr ""
 #: src/Domain/Support/Service/HistoryCheckService.php
 msgid "Waitlist request not found."
 msgstr ""
+
+#: resources/views/backend/errors/registration-policy.phtml
+msgid "Campus account information"
+msgstr ""
+
+#: resources/views/backend/errors/registration-policy.phtml
+msgid "No account was created. Returning will not resubmit your details."
+msgstr ""
+
+#: src/Application/Http/Response/RegistrationPolicyResponse.php
+msgid "Public account creation is closed. Contact the institution if you need a campus account. You can still sign in to an existing account."
+msgstr ""
+
+#: src/Application/Http/Response/RegistrationPolicyResponse.php
+msgid "Use an email address from one of the domains accepted by this institution. Return to account creation to review the available domains."
+msgstr ""
+
+#: src/Application/Http/Response/RegistrationPolicyResponse.php
+msgid "Account creation is temporarily unavailable. Please try again later. You can still sign in to an existing account."
+msgstr ""
+
+#: resources/views/frontend/portal/auth.phtml
+msgid "Use an email address from one of these accepted domains:"
+msgstr ""
+
+#: resources/views/frontend/portal/auth.phtml
+msgid "If you need another email address, contact the institution before creating an account."
+msgstr ""

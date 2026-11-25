@@ -27,10 +27,26 @@ try {
         ->withHeader('Accept', 'text/html')->withParsedBody([
             'email' => 'fictional-private@example.invalid', 'password' => 'Fictional-private-password',
         ]);
+    $mode = $argv[1] ?? 'limited';
+    if (str_starts_with($mode, 'policy-') || $mode === 'target') {
+        $request = $request->withParsedBody((array) $request->getParsedBody() + [
+            'program' => '01K00000000000000000000001', 'term' => '01K00000000000000000000002',
+            'return' => 'https://example.invalid/PRIVATE', 'continue' => 'PRIVATE',
+        ]);
+    }
+    if (($argv[2] ?? '') === 'json') {
+        $request = $request->withHeader('Accept', 'application/json');
+    }
     $handler = new \Qubus\Routing\Handlers\CallableRequestHandler(
         static fn () => new \Laminas\Diactoros\Response\JsonResponse(['accepted' => true]),
     );
-    if (($argv[1] ?? '') === 'busy') {
+    if (str_starts_with($mode, 'policy-')) {
+        $response = \Application\Http\Response\RegistrationPolicyResponse::make(
+            $request,
+            substr($mode, 7),
+            '/staff-access/',
+        );
+    } elseif ($mode === 'busy') {
         $identifier = hash_hmac(
             'sha256',
             'public-registration:' . inet_pton('192.0.2.10'),

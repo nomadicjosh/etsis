@@ -26,6 +26,7 @@ final readonly class AuthController
         private LoginCookieReader $cookies,
         private LoginSessionAuthority $sessions,
         private MaintenanceMode $maintenance,
+        private \Domain\User\Service\PublicRegistrationPolicyProvider $registration,
     ) {
     }
 
@@ -51,6 +52,12 @@ final readonly class AuthController
             return new RedirectResponse("/portal/sign-in/" . $query);
         }
         $failed = ($request->getQueryParams()["notice"] ?? null) === "credentials";
+        try {
+            $publicRegistrationEnabled = $this->registration->current()->enabled;
+        } catch (\Throwable) {
+            // Unavailable signup settings never prevent an existing account from signing in.
+            $publicRegistrationEnabled = false;
+        }
         return $this->renderer->render("auth", $failed ? "Check your sign-in details" : "Welcome back", [
             "signInFailed" => $failed,
             "mode" => "login",
@@ -58,6 +65,7 @@ final readonly class AuthController
             "continue" => $continue,
             'applicationSelection' => $continue ? ApplicationContinuation::selection($request->getQueryParams()) : [],
             "maintenanceActive" => $maintenance,
+            'publicRegistrationEnabled' => $publicRegistrationEnabled,
         ]);
     }
 

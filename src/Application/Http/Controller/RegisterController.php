@@ -18,8 +18,12 @@ use Application\Http\Security\ApplicationContinuation;
 
 final class RegisterController extends BaseController
 {
-    public function __construct(protected Psr7Router $router, private CampusRenderer $renderer, private Gate $gate)
-    {
+    public function __construct(
+        protected Psr7Router $router,
+        private CampusRenderer $renderer,
+        private Gate $gate,
+        private \Domain\User\Service\PublicRegistrationPolicyProvider $registration,
+    ) {
     }
 
     /**
@@ -41,12 +45,21 @@ final class RegisterController extends BaseController
             );
         }
 
+        try {
+            $policy = $this->registration->current();
+        } catch (\Throwable) {
+            return $this->refuse($request, 'unavailable');
+        }
+        if (!$policy->enabled) {
+            return $this->refuse($request, 'closed');
+        }
         return $this->renderer->render(
             'auth',
             'Begin your next chapter',
             [
                 'mode' => 'register', 'continue' => true,
                 'applicationSelection' => $selection,
+                'registrationEmailDomains' => $policy->emailDomains,
                 'url' => $this->router->url(name: 'register.create'),
             ]
         );
@@ -65,6 +78,18 @@ final class RegisterController extends BaseController
             return $this->redirect(url: $selection === [] ? '/portal/student/'
                 : ApplicationContinuation::target($selection));
         }
+        try {
+            $policy = $this->registration->current();
+        } catch (\Throwable) {
+            return $this->refuse($request, 'unavailable');
+        }
+        if (!$policy->enabled) {
+            return $this->refuse($request, 'closed');
+        }
+        $body = $request->getParsedBody();
+        if (!$policy->permits(is_array($body) ? ($body['email'] ?? null) : null)) {
+            return $this->refuse($request, 'domain');
+        }
         if (false === $service->createAccount(RegisterUserValidator::make($request))) {
             return $this->redirect(
                 url: $this->router->url(
@@ -77,6 +102,15 @@ final class RegisterController extends BaseController
             url: $this->router->url(
                 name: 'auth.login'
             ) . ApplicationContinuation::query(['continue' => 'apply'] + $selection)
+        );
+    }
+
+    private function refuse(ServerRequest $request, string $reason): ResponseInterface
+    {
+        return \Application\Http\Response\RegistrationPolicyResponse::make(
+            $request,
+            $reason,
+            $this->router->url(name: 'auth.login'),
         );
     }
 }

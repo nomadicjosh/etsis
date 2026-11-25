@@ -67,7 +67,7 @@ try {
         $process = new Process([
             PHP_BINARY, "-d", "memory_limit=128M", "-d", "zend.exception_ignore_args=1", ...$args,
         ], $fixture, $env);
-        $process->setTimeout($debug ? 70 : 30);
+        $process->setTimeout(30);
         $process->run();
         if (!$process->isSuccessful()) {
             $last = "none";

@@ -1,0 +1,45 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_html;
+
+?>
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title><?= trans_html('Campus account information') ?> · etsis</title>
+        <link rel="stylesheet" href="/assets/vendor/bootstrap.min.css" />
+        <link rel="stylesheet" href="/assets/vendor/icons/bootstrap-icons.min.css" />
+        <link rel="stylesheet" href="/assets/css/workspace.css" />
+    </head>
+    <body>
+        <a class="skip-link" href="#registration-policy"><?= trans_html('Skip to account information') ?></a>
+        <main class="account-shell registration-policy-shell" id="registration-policy">
+            <section class="surface registration-policy-card" aria-labelledby="registration-policy-title">
+                <p class="eyebrow"><?= trans_html('CAMPUS ACCOUNT') ?></p>
+                <h1 class="h2 text-break" id="registration-policy-title">
+                    <?= trans_html('Campus account information') ?>
+                </h1>
+                <p class="mt-3"><?= $this->esc($message) ?></p>
+                <p class="muted-text">
+                    <?= trans_html('No account was created. Returning will not resubmit your details.') ?>
+                </p>
+                <div class="d-flex flex-wrap gap-2 mt-4">
+                    <a class="btn btn-primary" href="<?= $this->esc($loginPath) ?>">
+                        <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>
+                        <?= trans_html('Sign in to your account') ?>
+                    </a>
+                    <?php if (!$closed): ?>
+                        <a class="btn btn-outline-secondary" href="<?= $this->esc($registerPath) ?>">
+                            <i class="bi bi-arrow-left" aria-hidden="true"></i>
+                            <?= trans_html('Return to account creation') ?>
+                        </a>
+                    <?php endif; ?>
+                </div>
+            </section>
+        </main>
+    </body>
+</html>

@@ -19,6 +19,7 @@ $app->router->baseMiddleware = [
     "user.cookie.decrypt",
     "auth.session.authority",
     "bind.request",
+    "php.debugbar",
 ];
 $app->make(\Codefy\Framework\Http\Middleware\Csrf\CsrfTokenMiddleware::class);
 $request = static function (
@@ -43,6 +44,72 @@ $missingCsrf = $app->router->match(
 if ($missingCsrf->getStatusCode() !== 403 || $sql->rows('users', limit: 1) !== []) {
     throw new RuntimeException('Fresh registration did not reject a missing CSRF proof before writing.');
 }
+// Public policy uses actual providers/routes; rejected requests preserve all existing identity/history facts.
+$app->configContainer->setConfigKey('throttle', ['registration' => ['max_attempts' => 100, 'ttl' => 600]]);
+$policyTables = ['users', 'sis_persons', 'sis_history_events', 'sis_history_streams', 'sis_history_operations'];
+$policyBefore = array_map($sql->rows(...), $policyTables);
+$assertPolicy = static function (
+    \Psr\Http\Message\ResponseInterface $response,
+    int $expected,
+) use (
+    $sql,
+    $policyTables,
+    $policyBefore
+): void {
+    if (
+        $response->getStatusCode() !== $expected || $response->hasHeader('phpdebugbar-id')
+        || !str_contains($response->getHeaderLine('Cache-Control'), 'private, no-store')
+        || $policyBefore !== array_map($sql->rows(...), $policyTables)
+    ) {
+        throw new RuntimeException('The public account policy lost its status, privacy or no-write boundary.');
+    }
+    foreach (['PRIVATE', 'rejected@example.invalid', 'private-test-password'] as $value) {
+        if (str_contains((string) $response->getBody(), $value)) {
+            throw new RuntimeException('A public account policy response exposed submitted details.');
+        }
+    }
+};
+$policyBody = ['email' => 'rejected@example.invalid', 'password' => 'private-test-password',
+    'return' => 'https://example.invalid/PRIVATE', 'program' => '01K00000000000000000000001'];
+$app->configContainer->setConfigKey('registration', ['enabled' => false]);
+$assertPolicy($app->router->match($request('/register/')), 403);
+$assertPolicy($app->router->match($request('/create/', 'POST', $policyBody)), 403);
+$policyGet = $request('/login/')->withHeader('Accept', 'text/html');
+$policyLogin = $app->router->match($policyGet);
+if (
+    $policyLogin->getStatusCode() !== 200
+    || str_contains((string) $policyLogin->getBody(), 'Create your campus account')
+) {
+    throw new RuntimeException('Closing public signup hid existing sign-in or retained its signup invitation.');
+}
+$app->configContainer->setConfigKey('registration', ['enabled' => 'PRIVATE invalid flag']);
+$assertPolicy($app->router->match($request('/register/')), 503);
+$unavailable = $app->router->match($request('/create/', 'POST', $policyBody));
+$assertPolicy($unavailable, 503);
+if (
+    $unavailable->getHeaderLine('Retry-After') !== '5'
+    || $app->router->match($policyGet)->getStatusCode() !== 200
+) {
+    throw new RuntimeException('Invalid signup policy prevented existing sign-in or lost its retry header.');
+}
+$app->configContainer->setConfigKey('registration', ['enabled' => true, 'email_domains' => ['institution.example']]);
+$disallowedEmails = ['rejected@example.invalid', 'student@sub.institution.example',
+    'student@institution.example.evil.invalid', []];
+foreach ($disallowedEmails as $email) {
+    $response = $app->router->match($request('/create/', 'POST', array_replace($policyBody, ['email' => $email])));
+    $assertPolicy($response, 422);
+}
+$assertPolicy($app->router->match($request('/create/', 'POST', $policyBody)
+    ->withoutHeader('X-CSRF-Token')), 403);
+$app->configContainer->setConfigKey('registration', ['enabled' => true, 'email_domains' => ['EXAMPLE.INVALID']]);
+$registerPage = $app->router->match($request('/register/?program=01K00000000000000000000001')
+    ->withQueryParams(['program' => '01K00000000000000000000001'])->withHeader('Accept', 'text/html'));
+if (
+    $registerPage->getStatusCode() !== 200 || !str_contains((string) $registerPage->getBody(), 'example.invalid')
+    || !str_contains((string) $registerPage->getBody(), 'campus-registration-domains')
+) {
+    throw new RuntimeException('The actual registration page omitted its accepted email domains.');
+}
 $response = $app->router->match(
     $request("/create/", "POST", [
         "username" => "alpha_tester",
@@ -63,6 +130,7 @@ if (count($people) !== 1 || $people[0]['given_name'] !== 'Alex' || $people[0]['f
     throw new RuntimeException('Fresh registration did not retain one canonical person and explicit account ULID.');
 }
 $originalEvents = $sql->fetch('SELECT * FROM sis_history_events ORDER BY id', limit: 20);
+$app->configContainer->setConfigKey('registration', ['enabled' => false]);
 $access = $app->make(\Domain\Access\Repository\AccessRepository::class);
 if ($access->anySuper()) {
     throw new RuntimeException("Public registration granted a privileged role.");
@@ -96,6 +164,23 @@ if (!str_contains($admin->getHeaderLine("Cache-Control"), "no-store")) {
 }
 if ($tester->execute(["user_id" => $user["user_id"]], ["interactive" => false]) !== 1) {
     throw new RuntimeException("The initial administrator command remained usable after bootstrap.");
+}
+foreach (['GET', 'POST'] as $method) {
+    $signedInRegistration = $request(
+        $method === 'GET' ? '/register/' : '/create/',
+        $method,
+        ['program' => '01K00000000000000000000001', 'email' => 'PRIVATE ignored']
+    )
+        ->withQueryParams(['program' => '01K00000000000000000000001'])
+        ->withCookieParams(['USERSESSID' => $cookie]);
+    $redirected = $app->router->match($signedInRegistration);
+    if (
+        $redirected->getStatusCode() !== 302
+        || !str_contains($redirected->getHeaderLine('Location'), '/portal/apply/?program=')
+        || $originalEvents !== $sql->fetch('SELECT * FROM sis_history_events ORDER BY id', limit: 20)
+    ) {
+        throw new RuntimeException('Closed signup blocked an authenticated application continuation or changed facts.');
+    }
 }
 $subject = $app->router->match($request('/sis/catalog/subjects/save/', 'POST', [
     'code' => 'TEST', 'title' => 'Fictional subject', 'active' => true,

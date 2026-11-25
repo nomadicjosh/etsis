@@ -215,6 +215,9 @@ if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/lo
     } elseif ($path === '/login/' || $path === '/register/') {
         $template = 'auth'; $data += ['mode' => $path === '/login/' ? 'login' : 'register',
             'continue' => true, 'signInFailed' => ($_GET['notice'] ?? '') === 'credentials',
+            'registrationEmailDomains' => ($_GET['domains'] ?? '') === '1'
+                ? ['alumni.institution.example', 'institution.example'] : [],
+            'publicRegistrationEnabled' => ($_GET['registration'] ?? '') !== 'closed',
             'applicationSelection' => \Application\Http\Security\ApplicationContinuation::selection($_GET),
             'url' => $path === '/login/' ? '/auth/' : '/create/'];
     } elseif (

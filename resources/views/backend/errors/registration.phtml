@@ -38,7 +38,7 @@ use function Codefy\Framework\Helpers\trans_html;
                         <i class="bi bi-box-arrow-in-right" aria-hidden="true"></i>
                         <?= trans_html('Sign in to your account') ?>
                     </a>
-                    <a class="btn btn-outline-secondary" href="/register/">
+                    <a class="btn btn-outline-secondary" href="<?= $this->esc($registerPath) ?>">
                         <i class="bi bi-arrow-left" aria-hidden="true"></i>
                         <?= trans_html('Return to account creation') ?>
                     </a>

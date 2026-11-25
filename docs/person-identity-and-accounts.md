@@ -8,6 +8,44 @@
 
 Prospects register before applying. Public registration creates the person and basic sign-in account together; it does not create a student record or grant staff access. An accepted applicant becomes a student through the existing reviewed matriculation workflow, retaining the same person and account.
 
+### Institutional public signup policy
+
+Deployment operators configure public account creation in `config/registration.php`. The default remains open signup with no domain restriction:
+
+```php
+return [
+    'enabled' => true,
+    'email_domains' => [],
+];
+```
+
+Set `enabled` to the boolean `false` when accounts should be created by authorized staff. The public registration page and direct account-creation submissions then show **Public account creation is closed**, with a sign-in link and instructions to contact the institution. The sign-in page omits its signup invitation. Existing accounts can still sign in and continue applications; staff creation and private password setup retain their existing permissions and workflows. Maintenance mode continues enforcing its separate super-only sign-in policy.
+
+To limit new public accounts to selected email domains, leave signup enabled and list each exact domain:
+
+```php
+return [
+    'enabled' => true,
+    'email_domains' => ['institution.example', 'alumni.institution.example'],
+];
+```
+
+The account form explains accepted domains before collecting details. Domain comparison ignores case; each domain is an exact match. Subdomains must be listed separately. `institution.example.evil.invalid` and a similar suffix do not qualify. Use ASCII DNS names, including explicit Punycode names where needed, without `@`, protocols, IP addresses or wildcards. Configuration trims and lowercases names, rejects duplicate normalized domains and permits at most twenty names of up to 189 bytes each. This fits the existing 191-character account-email field. An empty list allows any email accepted by ordinary account validation. Names, usernames, passwords, duplicates and role restrictions still use the ordinary account rules.
+
+Use real booleans and a list of domain strings. Explicit nulls, strings instead of booleans, unknown keys and invalid domain definitions stop public signup with a private temporary-unavailability response. They do not silently restore open signup or prevent existing sign-in. These are deployment settings, not an administrator drawer or a browser preference; deploy consistent configuration to every serving process and reload any retained configuration before testing changes. No existing account, person, event, role or email is converted or disabled.
+
+This policy controls eligibility to submit a public signup. It does not verify control of a mailbox, establish institutional identity, match or adopt an existing person, grant a role, create a student, or approve an application. The existing one-person/account transaction remains authoritative. Institutional identity matching, email verification and further distributed abuse acceptance remain separate work.
+
+### Signup responses and return paths
+
+`GET /register/` and `POST /create/` both read the current signup policy. Closing signup returns HTTP 403; a disallowed or malformed email under a restricted policy returns HTTP 422; unavailable/invalid policy returns HTTP 503 with a five-second `Retry-After`. The existing request limiter can still return its own HTTP 429/503 response before the controller. CSRF rejection remains earlier than account creation. No rejected policy request performs password validation/hashing or writes identity/history facts.
+
+HTML responses offer the configured **Sign in to your account** route; email-policy and temporary failures also offer **Return to account creation**. These links preserve only valid public program/term ULIDs from the application choice. Throttled/busy registration responses preserve those same hints. Arbitrary return URLs, names, email addresses, passwords and other posted fields never enter those links, error bodies or browser storage. Returning is an ordinary GET and never resubmits the account form. Closed signup does not present a link back to the same unavailable form.
+
+JSON responses contain a translated `error` and fixed `code`: `public_registration_closed`, `registration_email_domain` or `public_registration_unavailable`. Responses remain private/no-store, vary by Accept, suppress debug collection and disclose no submitted account values, configuration or internal exception. The accessible policy page uses Bootstrap icons and the existing account appearance; accepted-domain guidance and closed-signup sign-in work across Harbor, Quad and Horizon.
+
+Fictional checks cover exact/suffix/subdomain cases, malformed settings, privacy, allowed and rejected signup through actual providers/routes, CSRF, existing sign-in and authenticated continuation, canonical person/basic-role creation and unchanged rejected identity/history facts. A fresh SQLite installation exercises the real setup, migration, registration and initial-super workflow. Browser checks cover keyboard navigation, phone/enlarged-text reflow and all bundled themes. This does not extend prior native installation evidence to populated native signup-policy, production load or multi-node qualification.
+
 ### Public registration request limits
 
 `POST /create/` uses the dedicated `registration.throttle` middleware. Configure `throttle.registration.max_attempts` and `throttle.registration.ttl` in `config/throttle.php`; the defaults allow five attempts per server-reported peer address within ten minutes. Attempts must be 1–10,000 and the interval 1–86,400 seconds. The existing top-level throttle settings and counter continue to govern sign-in separately. Requests admitted to the counter count whether account creation succeeds or fails; CSRF checks run earlier. A registration limit does not consume or reset the sign-in allowance.

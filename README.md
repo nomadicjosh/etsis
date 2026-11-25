@@ -65,6 +65,8 @@ Generate `.enc.key` **once for a new installation**. Reuse it when it already ex
 
 Open [the registration page](https://etsis.ddev.site/register/) and create your own account using a fictional name/email and a password of at least **26 characters**. Usernames use 6–20 lowercase letters, underscores or hyphens; for example, `alpha_tester`. Registration creates a person record and its ordinary sign-in account together. Staff-created people also receive an account, with private [initial password setup](docs/person-identity-and-accounts.md).
 
+Public signup defaults to open. Deployment operators can close it or require selected exact email domains in [the public signup policy](docs/person-identity-and-accounts.md#institutional-public-signup-policy), configured in `config/registration.php`. Keep it open while creating the initial account; closing it later preserves existing sign-in and authorized staff account creation.
+
 Then run:
 
 ```sh
