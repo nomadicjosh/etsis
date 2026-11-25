@@ -80,7 +80,7 @@ final class ReportExportTest extends TestCase
         ], 'joins' => [], 'filters' => null, 'having' => null, 'sort' => [], 'distinct' => false];
     }
 
-    private function report(SisFixture $s): EntityId
+    private function report(SisFixture $s, ?array $definition = null): EntityId
     {
         $id = EntityId::generate();
         new RelationalReportService(
@@ -93,8 +93,33 @@ final class ReportExportTest extends TestCase
             $s->dropCipher,
             $s->clock,
             $s->reportLifecycles()
-        )->save($id, EntityId::generate(), -1, 'Fictional export', $this->query());
+        )->save($id, EntityId::generate(), -1, 'Fictional export', $definition ?? $this->query());
         return $id;
+    }
+
+    public function testCustomLabelsUseTheCompleteEncryptedExportAndRemainFormulaSafe(): void
+    {
+        $s = new SisFixture();
+        $s->section(fee: 0);
+        $definition = ['dataset' => 'sections', 'columns' => [
+            ['field' => 'section_code', 'label' => 'Fictional label', 'aggregate' => 'none', 'label_mapping' => [
+                'branches' => [['when' => ['condition' => 'AND', 'rules' => [
+                    ['id' => 'enrollment_status', 'operator' => 'is_null'],
+                ]], 'label' => '=FICTIONAL-LABEL']], 'otherwise' => null,
+            ]],
+        ]];
+        $report = $this->report($s, $definition);
+        $service = $this->service($s);
+        $job = EntityId::generate();
+        $service->request($report, $job, 0);
+        self::assertSame(1, $service->work(true)['ready']);
+        $csv = implode('', $service->download($report, $job)->chunks);
+        self::assertStringContainsString("'=FICTIONAL-LABEL", $csv);
+        self::assertStringNotContainsString('FICTIONAL-LABEL', json_encode($s->sql->rows('sis_report_export_chunks')));
+        $s->access->staff = false;
+        $s->access->grants = ['sis:reporting:manage', 'sis:reporting:run', 'sis:catalog:manage'];
+        $this->expectException(AccessDeniedException::class);
+        $service->download($report, $job);
     }
 
     private function history(SisFixture $s): array
@@ -461,5 +486,4 @@ final class ReportExportTest extends TestCase
         self::assertStringNotContainsString('7500', $csv);
         self::assertSame($events, $this->history($s));
     }
-
 }

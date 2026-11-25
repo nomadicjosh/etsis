@@ -73,6 +73,18 @@ final readonly class ReportQuery
                 self::invalid("Choose a supported column summary.");
             }
             $type = $schema["fields"][$column["field"]]["type"];
+            if (array_key_exists('label_mapping', $column)) {
+                if (
+                    !is_array($column['label_mapping']) || isset($column['calculation']) ||
+                    isset($column['date_bucket'])
+                ) {
+                    self::invalid(\Codefy\Framework\Helpers\trans(
+                        'Custom labels cannot be combined with a calculation or calendar grouping.',
+                    ));
+                }
+                new ReportLabelMapping($column['label_mapping']);
+                $type = 'string';
+            }
             if (
                 array_key_exists('date_bucket', $column) &&
                 (!is_string($column['date_bucket']) || ReportDateBucket::tryFrom($column['date_bucket']) === null ||
@@ -133,6 +145,15 @@ final readonly class ReportQuery
             $this->group($column['conditions'] ?? null, $schema['fields'], 0, $count);
             if (($column['conditions'] ?? null) !== null && $before === $count) {
                 self::invalid('Add a column condition or clear the column conditions.');
+            }
+            foreach ($column['label_mapping']['branches'] ?? [] as $branch) {
+                $before = $count;
+                $this->group($branch['when'], $schema['fields'], 0, $count);
+                if ($before === $count) {
+                    self::invalid(\Codefy\Framework\Helpers\trans(
+                        'Each custom label needs at least one condition.',
+                    ));
+                }
             }
         }
         $existence = $definition['existence'] ?? [];
@@ -211,7 +232,9 @@ final readonly class ReportQuery
             if (isset($column['calculation'])) {
                 $relations[] = $this->schema['fields'][$column['calculation']['field']]['relation'];
             }
-            $collect($column['conditions'] ?? null);
+            foreach (self::predicateGroups($column) as $group) {
+                $collect($group);
+            }
         }
         foreach (array_unique($relations) as $relation) {
             while ($relation !== $this->schema['root']) {
@@ -234,6 +257,9 @@ final readonly class ReportQuery
     private function validateMoney(array $columns): void
     {
         foreach ($columns as $column) {
+            if (isset($column['label_mapping'])) {
+                continue; // The output is text, not a monetary amount.
+            }
             $field = $this->schema['fields'][$column['field']];
             $other = isset($column['calculation'])
             ? $this->schema['fields'][$column['calculation']['field']] : null;
@@ -256,7 +282,7 @@ final readonly class ReportQuery
             }
             if (
                 !array_any($columns, static fn(array $c): bool =>
-                $c['field'] === $currency && $c['aggregate'] === 'none')
+                $c['field'] === $currency && $c['aggregate'] === 'none' && !isset($c['label_mapping']))
             ) {
                 self::invalid('Keep Currency as an output column when reporting amounts. Summaries group by currency.');
             }
@@ -286,7 +312,9 @@ final readonly class ReportQuery
                     $collect($filter);
                 }
                 foreach ($columns as $c) {
-                    $collect($c['conditions'] ?? null);
+                    foreach (self::predicateGroups($c) as $group) {
+                        $collect($group);
+                    }
                 }
                 foreach ($relations as $relation) {
                     while ($relation !== $this->schema['root']) {
@@ -449,7 +477,20 @@ final readonly class ReportQuery
         $definition = $this->definition;
         // Output fields can introduce joins too. Keep them even when replacing the visible columns.
         foreach ($definition['columns'] as $column) {
-            foreach ([$column['field'], $column['calculation']['field'] ?? null] as $field) {
+            $fields = [$column['field'], $column['calculation']['field'] ?? null];
+            $collect = function (?array $group) use (&$collect, &$fields): void {
+                foreach ($group['rules'] ?? [] as $rule) {
+                    if (isset($rule['condition'])) {
+                        $collect($rule);
+                    } else {
+                        $fields[] = $rule['id'];
+                    }
+                }
+            };
+            foreach (self::predicateGroups($column) as $group) {
+                $collect($group);
+            }
+            foreach ($fields as $field) {
                 if ($field === null) {
                     continue;
                 }
@@ -499,9 +540,16 @@ final readonly class ReportQuery
         return match (true) {
             in_array($column["aggregate"], ["count", "count_distinct"], true) => "integer",
             $column["aggregate"] === "avg", isset($column["calculation"]) => "double",
+            isset($column['label_mapping']) => 'string',
             isset($column['date_bucket']) => ReportDateBucket::from($column['date_bucket'])->outputType(),
             default => $this->schema["fields"][$column["field"]]["type"],
         };
+    }
+
+    /** @return list<array|null> */
+    private static function predicateGroups(array $column): array
+    {
+        return [$column['conditions'] ?? null, ...array_column($column['label_mapping']['branches'] ?? [], 'when')];
     }
 
     /** @return list<string> */
@@ -511,6 +559,16 @@ final readonly class ReportQuery
             static fn(array $column): string => $column['label'],
             array_filter($this->definition['columns'], static fn(array $column): bool =>
                 ($column['conditions'] ?? null) !== null),
+        ));
+    }
+
+    /** @return list<string> */
+    public function labelledColumns(): array
+    {
+        return array_values(array_map(
+            static fn(array $column): string => $column['label'],
+            array_filter($this->definition['columns'], static fn(array $column): bool =>
+                isset($column['label_mapping'])),
         ));
     }
 
@@ -550,7 +608,9 @@ final readonly class ReportQuery
         };
         $collect($this->definition["filters"] ?? null);
         foreach ($this->definition['columns'] as $column) {
-            $collect($column['conditions'] ?? null);
+            foreach (self::predicateGroups($column) as $group) {
+                $collect($group);
+            }
         }
         foreach ($this->definition["join_filters"] ?? [] as $group) {
             $collect($group);

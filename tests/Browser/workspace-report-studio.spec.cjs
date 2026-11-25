@@ -1678,3 +1678,111 @@ for (const denied of [false, true]) test(`historical student balances preserve c
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
+
+async function customLabels(page) {
+    await page.getByRole('button', { name: 'Active and withdrawn registrations', exact: true }).click();
+    await page.getByRole('button', { name: /^Column 1 settings:/ }).click();
+    await page.getByRole('button', { name: 'Add custom labels', exact: true }).click();
+    await expect(page.locator('[data-report-label-editor] h2')).toBeFocused();
+}
+async function labelRule(page, label, field = 'capacity', value = '15') {
+    const editor = page.locator('[data-report-label-editor]');
+    await editor.locator('[aria-label^="Label rule "]').filter({ has: page.getByRole('button', { name: 'Edit rule', pressed: true }) })
+        .getByLabel('Show this label', { exact: true }).fill(label);
+    const conditions = page.getByRole('group', { name: 'When these conditions match', exact: true });
+    await conditions.getByLabel('When these conditions match: field', { exact: true }).selectOption(field);
+    await conditions.getByLabel('When these conditions match: comparison', { exact: true }).selectOption('greater');
+    await conditions.getByLabel('When these conditions match: value', { exact: true }).fill(value);
+}
+
+test('custom labels retain ordered branches, fallback, save and reopen without changing row filters', async ({ page }) => {
+    const f = await fixture(page);
+    await customLabels(page);
+    await page.getByLabel('Report name', { exact: true }).fill('Fictional labelled section report');
+    await labelRule(page, 'Larger <section>');
+    await page.getByRole('button', { name: 'Add label rule', exact: true }).click();
+    await labelRule(page, 'Very large', 'capacity', '25');
+    await page.getByLabel('Leave unmatched rows blank', { exact: true }).uncheck();
+    await page.getByLabel('Label for unmatched rows', { exact: true }).fill('Smaller section');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const definition = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(definition.columns[0].label_mapping.branches.map(branch => branch.label)).toEqual(['Larger <section>', 'Very large']);
+    expect(definition.columns[0].label_mapping.otherwise).toBe('Smaller section');
+    expect(definition.filters || null).toBeNull();
+    expect(definition.columns[1].conditions.rules[0].id).toBe('enrollment_status');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await expect(page.locator('[data-report-label-editor]').getByLabel('Show this label', { exact: true }).first()).toHaveValue('Larger <section>');
+    await expect(page.getByLabel('Label for unmatched rows', { exact: true })).toHaveValue('Smaller section');
+    expect(f.errors).toEqual([]);
+});
+
+test('custom label reordering and duplication preserve independent conditions and column focus', async ({ page }) => {
+    const f = await fixture(page);
+    await customLabels(page);
+    await labelRule(page, 'First label');
+    await page.getByRole('button', { name: 'Add label rule', exact: true }).click();
+    await labelRule(page, 'Second label', 'capacity', '25');
+    await page.locator('[aria-label="Label rule 2"]').getByRole('button', { name: 'Move rule up', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to column settings', exact: true }).click();
+    await expect(page.getByRole('complementary', { name: 'Column settings', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Edit custom labels', exact: true })).toBeFocused();
+    await page.getByRole('button', { name: 'Duplicate column', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit custom labels', exact: true }).click();
+    await page.locator('[aria-label="Label rule 1"]').getByLabel('Show this label', { exact: true }).fill('Copy label');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const definition = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(definition.columns[0].label_mapping.branches[0].label).toBe('Second label');
+    expect(definition.columns[1].label_mapping.branches[0].label).toBe('Copy label');
+    expect(definition.columns[1].label_mapping.branches[0].when.rules[0].value).toBe(25);
+    expect(f.errors).toEqual([]);
+});
+
+test('incomplete custom labels stop preview and preserve drafts at phone size', async ({ page }) => {
+    const f = await fixture(page);
+    await customLabels(page);
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Complete every label');
+    expect(f.calls.some(call => call.path.endsWith('/preview/'))).toBe(false);
+    await labelRule(page, 'Fictional phone label');
+    await page.setViewportSize({ width: 320, height: 900 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(await page.locator('.report-workbench').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
+    await page.locator('[aria-label="Label rule 1"]').scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/etsis-report-custom-labels-phone.png' });
+    await page.getByRole('group', { name: 'When these conditions match', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/etsis-report-custom-label-conditions-phone.png' });
+    for (const control of await page.locator('[data-report-label-editor] button').all())
+        expect(await control.locator('.bi').count()).toBeLessThanOrEqual(1);
+    await page.getByLabel('Leave unmatched rows blank', { exact: true }).focus();
+    await page.keyboard.press('Space');
+    await expect(page.getByLabel('Label for unmatched rows', { exact: true })).toBeEnabled();
+    await page.getByLabel('Label for unmatched rows', { exact: true }).fill('Unmatched');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns[0].label_mapping.otherwise).toBe('Unmatched');
+    await page.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await page.getByRole('button', { name: 'Use original field values', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Add custom labels', exact: true })).toBeFocused();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns[0].label_mapping).toBeUndefined();
+    expect(f.errors).toEqual([]);
+});
+
+test('custom labels remove a dependent column when its condition source is disconnected', async ({ page }) => {
+    const f = await fixture(page);
+    await customLabels(page);
+    await page.locator('[aria-label="Label rule 1"]').getByLabel('Show this label', { exact: true }).fill('Fictional term label');
+    const rules = page.getByRole('group', { name: 'When these conditions match', exact: true });
+    await rules.getByLabel('When these conditions match: field', { exact: true }).selectOption('term_code');
+    await rules.getByLabel('When these conditions match: comparison', { exact: true }).selectOption('equal');
+    await rules.getByLabel('When these conditions match: value', { exact: true }).fill('26/FA');
+    await page.getByRole('tab', { name: 'Fields', exact: true }).click();
+    await page.getByRole('button', { name: 'Remove Term and its fields', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const definition = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(definition.columns.map(column => column.field)).toEqual(['enrollment_id', 'enrollment_id']);
+    expect(definition.columns.some(column => column.label_mapping)).toBe(false);
+    expect(f.errors).toEqual([]);
+});

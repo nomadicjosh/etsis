@@ -243,6 +243,7 @@ final readonly class RelationalReportService
         return [
             "row_selection" => $query->rowSelectionSummary(),
             'conditional_columns' => $query->conditionalColumns(),
+            'labelled_columns' => $query->labelledColumns(),
             "id" => $id->value,
             "name" => $report->name,
             "version" => (int) $record["version"],
@@ -453,6 +454,7 @@ final readonly class RelationalReportService
         return [
             "row_selection" => $query->rowSelectionSummary(),
             'conditional_columns' => $query->conditionalColumns(),
+            'labelled_columns' => $query->labelledColumns(),
             'financial_as_of' => $query->definition['financial_as_of'] ?? null,
             "columns" => array_map(static fn(array $column): string => $column["label"], $query->definition["columns"]),
             "items" => array_slice($rows, 0, 50),

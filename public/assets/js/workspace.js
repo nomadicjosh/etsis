@@ -341,7 +341,7 @@
     const standingStudio = window.createWorkspaceStanding({ node, request, task, can, openDrawer, degreeAudit: () => degreeAuditStudio });
     const advisingStudio = window.createWorkspaceAdvising({ historyChecks: () => historyChecks, historyCheckLabels: config.history_check_labels, node, request, task, can, openDrawer });
     const studentStudio = window.createWorkspaceStudents({ ceuLabels: config.ceu_labels, historyCheckLabels: config.history_check_labels, historyChecks: () => historyChecks, prerequisitePermissions: () => prerequisitePermissions, enrollmentLoad: () => enrollmentLoad, standing: () => standingStudio, advising: () => advisingStudio, node, request, task, can, actionMenu, recordSummary, messageRecord: operations.messageRecord, disposeActionMenus, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
-    relationalStudio = window.createWorkspaceReportStudio({ reportingLabels: config.section_reporting_labels,
+    relationalStudio = window.createWorkspaceReportStudio({ labelLabels: config.report_label_labels, reportingLabels: config.section_reporting_labels,
         notify, notificationLabels: config.notification_labels,
         node, request, requestFile, task, can, table, openDrawer, actionMenu, disposeActionMenus,
         closeDrawer: () => drawer.hide(), simpleReport: () => reportStudio.create(),

@@ -5283,3 +5283,84 @@ msgstr ""
 
 msgid "Check pursuit approval history"
 msgstr ""
+
+msgid "Custom labels"
+msgstr ""
+
+msgid "Add custom labels"
+msgstr ""
+
+msgid "Edit custom labels"
+msgstr ""
+
+msgid "The first matching rule supplies the label. Rules label joined rows; they do not filter them or change student records."
+msgstr ""
+
+msgid "Choose a labelled column"
+msgstr ""
+
+msgid "Label rule"
+msgstr ""
+
+msgid "Show this label"
+msgstr ""
+
+msgid "When these conditions match"
+msgstr ""
+
+msgid "Edit rule"
+msgstr ""
+
+msgid "Add label rule"
+msgstr ""
+
+msgid "Move rule up"
+msgstr ""
+
+msgid "Move rule down"
+msgstr ""
+
+msgid "Remove label rule"
+msgstr ""
+
+msgid "Label for unmatched rows"
+msgstr ""
+
+msgid "Leave unmatched rows blank"
+msgstr ""
+
+msgid "Blank leaves the result unspecified. To label missing source values, add an explicit missing-value condition."
+msgstr ""
+
+msgid "Use original field values"
+msgstr ""
+
+msgid "Back to column settings"
+msgstr ""
+
+msgid "Complete every label and its conditions before previewing or saving."
+msgstr ""
+
+msgid "Use up to eight label rules per column. All report conditions share the existing forty-condition limit."
+msgstr ""
+
+msgid "Remove the calculation, calendar grouping or numeric summary before adding text labels."
+msgstr ""
+
+msgid "Custom labels from conditions"
+msgstr ""
+
+msgid "These columns use custom labels rather than original field values:"
+msgstr ""
+
+msgid "Count counts labelled rows. Distinct count counts different labels. To count students, summarize a separate student reference."
+msgstr ""
+
+msgid "Choose one to eight label rules, readable labels up to 120 characters, and a label or blank fallback."
+msgstr ""
+
+msgid "Custom labels cannot be combined with a calculation or calendar grouping."
+msgstr ""
+
+msgid "Each custom label needs at least one condition."
+msgstr ""

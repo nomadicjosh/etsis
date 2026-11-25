@@ -928,6 +928,26 @@ window.createWorkspaceReportStudio = function (ui) {
             conditionalColumn = null,
             activeTab = "design",
             readers = null;
+        const labelMappings = window.createReportLabelMappings({
+            node, button, labeled, icon, labels: ui.labelLabels, definition, fields: () => dataset.fields,
+            conditionBuilder, changed: dirty,
+            mutate: (change, focus) => {
+                if (frozen) return;
+                syncFilters(true);
+                change();
+                dirty();
+                renderFilters();
+                renderColumns();
+                renderMap();
+                focus?.();
+            },
+            back: column => {
+                syncFilters(true);
+                selectTab('design');
+                inspect(column);
+                requestAnimationFrame(() => inspector.querySelector('[data-report-label-action]')?.focus());
+            },
+        });
         let graphRevision = 0;
         const positions = new Map(),
             enabled = new Set([root]);
@@ -946,6 +966,8 @@ window.createWorkspaceReportStudio = function (ui) {
             connect(dataset.fields[c.field].relation);
             if (c.calculation) connect(dataset.fields[c.calculation.field].relation);
             conditionFields(c.conditions, id => connect(dataset.fields[id].relation));
+            for (const branch of c.label_mapping?.branches || [])
+                conditionFields(branch.when, id => connect(dataset.fields[id].relation));
         });
         Object.keys(definition.joins).forEach(connect);
         Object.keys(definition.record_selection).forEach(connect);
@@ -1642,7 +1664,8 @@ window.createWorkspaceReportStudio = function (ui) {
                     (column) =>
                         !branch.has(dataset.fields[column.field].relation) &&
                         (!column.calculation || !branch.has(dataset.fields[column.calculation.field].relation)) &&
-                        !hasConditionInBranch(column.conditions, branch),
+                        !hasConditionInBranch(column.conditions, branch) &&
+                        !(column.label_mapping?.branches || []).some(rule => hasConditionInBranch(rule.when, branch)),
                 ),
             );
             if (removesCopy) {
@@ -1730,7 +1753,8 @@ window.createWorkspaceReportStudio = function (ui) {
                     {},
                     column.calculation
                         ? `${dataset.fields[column.field].label} ${{ "+": "+", "-": "−", "*": "×", "/": "÷" }[column.calculation.operator]} ${dataset.fields[column.calculation.field].label}`
-                        : `${relationLabel(dataset.fields[column.field].relation)} · ${dataset.fields[column.field].label}`,
+                        : column.label_mapping ? ui.labelLabels.source
+                            : `${relationLabel(dataset.fields[column.field].relation)} · ${dataset.fields[column.field].label}`,
                 );
                 const periodLabel = column.date_bucket ? `${calendarLabel(column.date_bucket)} · ` : "";
                 const mode = button(periodLabel + summaryLabel(column.aggregate) + (column.conditions ? " · Filtered" : ""), () => inspect(column), "report-summary-button");
@@ -1811,6 +1835,7 @@ window.createWorkspaceReportStudio = function (ui) {
         function columnType(column) {
             if (["count", "count_distinct"].includes(column.aggregate)) return "integer";
             if (column.aggregate === "avg" || column.calculation) return "double";
+            if (column.label_mapping) return "string";
             return column.date_bucket ? column.date_bucket === "day" ? "date" : "string" : dataset.fields[column.field].type;
         }
         function summaryLabel(mode) {
@@ -1854,8 +1879,8 @@ window.createWorkspaceReportStudio = function (ui) {
                 "none",
                 "count",
                 "count_distinct",
-                ...(["integer", "double"].includes(field.type) ? ["sum", "avg"] : []),
-                ...(field.type !== "boolean" ? ["min", "max"] : []),
+                ...(!column.label_mapping && ["integer", "double"].includes(field.type) ? ["sum", "avg"] : []),
+                ...(column.label_mapping || field.type !== "boolean" ? ["min", "max"] : []),
             ];
             choices.forEach((mode) => {
                 const tile = button(
@@ -1885,7 +1910,8 @@ window.createWorkspaceReportStudio = function (ui) {
                 summaries,
                 node("p", { class: "form-text" }, "When you summarize a column, the other columns group your results."),
             );
-            if (["date", "datetime"].includes(field.type)) {
+            if (column.label_mapping) inspector.append(node('p', { class: 'form-text' }, ui.labelLabels.counts));
+            if (!column.label_mapping && ["date", "datetime"].includes(field.type)) {
                 const periods = node("div", { class: "report-summary-choices", role: "group", "aria-label": "Calendar grouping" });
                 for (const period of [null, "day", "month", "year"]) {
                     const choice = button(period ? calendarLabel(period) : "Original value", () => {
@@ -1909,6 +1935,20 @@ window.createWorkspaceReportStudio = function (ui) {
                         ? "Timestamp periods use UTC. Months include their year. Missing dates remain blank; filters still use the original timestamp."
                         : "Use the recorded calendar date. Months include their year. Missing dates remain blank; filters still use the original date."));
             }
+            const labelButton = button(ui.labelLabels[column.label_mapping ? 'edit' : 'add'], () => {
+                syncFilters(true);
+                labelMappings.select(column);
+                dirty();
+                closeInspector();
+                selectTab('filters');
+                panels.filters.querySelector('[data-report-label-editor] h2')?.focus();
+            });
+            if (!labelButton.querySelector('.bi')) labelButton.prepend(icon('tags'));
+            labelButton.querySelector('.bi').classList.add('me-2');
+            labelButton.setAttribute('data-report-label-action', 'true');
+            labelButton.disabled = !!column.calculation || !!column.date_bucket || ['sum', 'avg'].includes(column.aggregate);
+            inspector.append(labelButton);
+            if (labelButton.disabled) inspector.append(node('p', { class: 'form-text' }, ui.labelLabels.incompatible));
             const duplicate = button("Duplicate column", () => {
                 if (frozen) return;
                 if (definition.columns.length >= 16) throw new Error("Choose up to 16 report columns.");
@@ -1929,7 +1969,7 @@ window.createWorkspaceReportStudio = function (ui) {
                     panels.filters.querySelector('[data-report-column-editor] h3')?.focus();
                 }),
             );
-            if (["integer", "double"].includes(field.type)) {
+            if (!column.label_mapping && ["integer", "double"].includes(field.type)) {
                 inspector.append(node("h3", {}, "Calculate with another field"));
                 const operations = node("div", {
                     class: "report-calculation-operators",
@@ -2009,6 +2049,9 @@ window.createWorkspaceReportStudio = function (ui) {
         }
         function syncFilters(relaxed = false) {
             if (!readers) return;
+            readers.labels?.(relaxed);
+            for (const column of definition.columns) for (const branch of column.label_mapping?.branches || [])
+                conditionFields(branch.when, id => connect(dataset.fields[id].relation));
             for (const { column, read } of readers.columns || []) {
                 column.conditions = read(relaxed);
                 conditionFields(column.conditions, id => connect(dataset.fields[id].relation));
@@ -2072,6 +2115,7 @@ window.createWorkspaceReportStudio = function (ui) {
                 existence: {},
                 columns: [],
             };
+            next.labels = labelMappings.render(filtersBody);
             const summaryColumns = definition.columns.filter(column => column.aggregate !== "none");
             if (!summaryColumns.includes(conditionalColumn))
                 conditionalColumn = summaryColumns.find(column => column.conditions) || null;
@@ -2417,6 +2461,7 @@ window.createWorkspaceReportStudio = function (ui) {
             syncFilters();
             matchingLogic.normalize();
             matchingLogic.assertReady();
+            labelMappings.ready();
             return structuredClone(definition);
         }
         async function showPage(offset = 0) {
@@ -2525,6 +2570,11 @@ window.createWorkspaceReportStudio = function (ui) {
             node("p", { class: "form-text" }, "These columns include only rows matching their own conditions. Shared row filters still apply. Counts show zero when nothing matches; other summaries stay blank."),
         ) : null;
     }
+    function customLabelNote(columns = []) {
+        return columns.length ? node('aside', { class: 'report-row-selection-summary', 'aria-label': ui.labelLabels.title },
+            node('h3', {}, ui.labelLabels.title), node('p', {}, ui.labelLabels.result_note),
+            node('p', {}, columns.join(' · '))) : null;
+    }
     function renderResults(panel, result, load, exportPage = null, applicationAction = null) {
         chart?.destroy();
         chart = null;
@@ -2542,6 +2592,8 @@ window.createWorkspaceReportStudio = function (ui) {
         if (selectionNote) panel.append(selectionNote);
         const columnNote = conditionalNote(result.conditional_columns);
         if (columnNote) panel.append(columnNote);
+        const labelNote = customLabelNote(result.labelled_columns);
+        if (labelNote) panel.append(labelNote);
         if (!result.items.length) panel.append(node("p", {}, result.lifecycle?.mode === "static"
             ? "This static report captured no matching records."
             : "No records match yet. Try refining your conditions."));
@@ -2892,6 +2944,8 @@ window.createWorkspaceReportStudio = function (ui) {
             if (selectionNote) body.append(selectionNote);
             const columnNote = conditionalNote(saved.conditional_columns);
             if (columnNote) body.append(columnNote);
+            const labelNote = customLabelNote(saved.labelled_columns);
+            if (labelNote) body.append(labelNote);
         }
         if (saved.lifecycle?.expires_at) body.append(node("p", {}, `Automatic removal: ${saved.lifecycle.expires_at}.`));
         const recordTools = node("div", { class: "report-saved-tools" });

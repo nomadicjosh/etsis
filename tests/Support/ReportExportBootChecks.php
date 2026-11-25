@@ -89,11 +89,21 @@ $fundingDefinition['columns'][] = [
     'field' => 'posting_recorded_at', 'label' => 'Posting month UTC',
     'aggregate' => 'none', 'date_bucket' => 'month',
 ];
+$fundingDefinition['columns'][] = [
+    'field' => 'institutional_id', 'label' => 'Funding label', 'aggregate' => 'none',
+    'label_mapping' => ['branches' => [[
+        'when' => ['condition' => 'AND', 'rules' => [
+            ['id' => 'posting_payment_method', 'operator' => 'equal', 'value' => 'loan'],
+        ]], 'label' => '=FICTIONAL-LOAN',
+    ]], 'otherwise' => null],
+];
 $fundingPreview = $teachingPost('/sis/report-studio/preview/', ['definition' => $fundingDefinition, 'offset' => 0]);
 $fundingData = json_decode((string) $fundingPreview->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
     $fundingPreview->getStatusCode() !== 200 || ($fundingData['items'][0]['c0'] ?? null) !== 'loan' ||
     preg_match('/^\d{4}-\d{2}$/D', (string) ($fundingData['items'][0]['c3'] ?? '')) !== 1 ||
+    ($fundingData['items'][0]['c4'] ?? null) !== '=FICTIONAL-LOAN' ||
+    ($fundingData['labelled_columns'] ?? null) !== ['Funding label'] ||
     !str_contains($fundingPreview->getHeaderLine('Cache-Control'), 'no-store') ||
     $fundingPreview->hasHeader('phpdebugbar-id')
 ) {
@@ -107,6 +117,7 @@ $fundingCsv = $teachingPost('/sis/report-studio/' . $fundingReport . '/export/',
 if (
     $fundingSaved->getStatusCode() !== 201 || $fundingCsv->getStatusCode() !== 200 ||
     !str_contains((string) $fundingCsv->getBody(), 'loan') ||
+    !str_contains((string) $fundingCsv->getBody(), "'=FICTIONAL-LOAN") ||
     str_contains((string) $fundingCsv->getBody(), 'FICTIONAL-PRIVATE-REFERENCE') ||
     $events !== $sis->sql->rows('sis_history_events')
 ) {

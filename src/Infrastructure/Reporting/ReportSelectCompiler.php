@@ -58,12 +58,25 @@ final readonly class ReportSelectCompiler
                 ($op === "/" ? " * 1.0 / NULLIF(" . $other . ", 0)" : " " . $op . " " . $other) .
                 ")";
             }
+            $rowParameters = [];
+            if (isset($column['label_mapping'])) {
+                $rowExpression = 'CASE';
+                foreach ($column['label_mapping']['branches'] as $branch) {
+                    $when = $this->condition($branch['when'], $expression, $rowParameters, $s['fields']);
+                    $rowExpression .= ' WHEN ' . $when . ' THEN ?';
+                    $rowParameters[] = $branch['label'];
+                }
+                $rowExpression .= ' ELSE ? END';
+                $rowParameters[] = $column['label_mapping']['otherwise'];
+            }
+            $conditionParameters = [];
             $condition = $this->condition(
                 $column['conditions'] ?? null,
                 $expression,
-                $columnParameters,
+                $conditionParameters,
                 $s['fields'],
             );
+            array_push($columnParameters, ...$conditionParameters, ...$rowParameters);
             if ($condition !== '') {
                 $rowExpression = 'CASE WHEN ' . $condition . ' THEN ' . $rowExpression . ' ELSE NULL END';
             }
@@ -77,7 +90,10 @@ final readonly class ReportSelectCompiler
                 $groups[] = $term;
             }
             $metadata = $s['fields'][$column['field']];
-            if (in_array($metadata['expression'] ?? null, ['account_money', 'historical_account_money'], true)) {
+            if (
+                !isset($column['label_mapping']) &&
+                in_array($metadata['expression'] ?? null, ['account_money', 'historical_account_money'], true)
+            ) {
                 foreach ($d['columns'] as $currencyIndex => $currencyColumn) {
                     if (
                         $currencyColumn['field'] === $metadata['currency_field']
