@@ -22,8 +22,8 @@ final readonly class StandingProposalEvidence implements \JsonSerializable
     {
         try {
             if (
-                count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 1
-                || array_diff(array_keys($data), [...self::FIELDS, 'scope']) !== []
+                count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 2
+                || array_diff(array_keys($data), [...self::FIELDS, 'scope', 'assessment']) !== []
                 || array_diff(self::FIELDS, array_keys($data)) !== []
                 || strlen(json_encode($data, JSON_THROW_ON_ERROR)) > 1_048_576
                 || !is_int($data['policy_version']) || $data['policy_version'] < 1 || $data['policy_version'] > 2000
@@ -46,6 +46,14 @@ final readonly class StandingProposalEvidence implements \JsonSerializable
             }
             StandingPeriods::date($data['as_of']);
             $rules = $this->effectiveRules();
+            $assessment = array_key_exists('assessment', $data) ? new StandingGpaAssessment($data['assessment']) : null;
+            if (
+                ($assessment === null && ($rules->gpaBasis() !== 'cumulative'
+                    || array_key_exists('gpa_basis', $rules->facts)))
+                || ($assessment !== null && $assessment->data['basis'] !== $rules->gpaBasis())
+            ) {
+                throw new \InvalidArgumentException();
+            }
             if (
                 !is_array($data['calculation']) || count($data['calculation']) !== 3
                 || array_diff(
@@ -62,6 +70,15 @@ final readonly class StandingProposalEvidence implements \JsonSerializable
             foreach ($data['attempts'] as $work) {
                 $fields = ['id', 'course_id', 'credit_type', 'status', 'attempted_milli', 'completed_milli',
                     'quality_points_milli', 'grade_recorded', 'grade', 'completed_on', 'academic_on'];
+                if (($assessment?->data['basis'] ?? 'cumulative') === 'term') {
+                    $fields[] = 'posting_term_id';
+                    if (
+                        ($work['credit_type'] ?? null) !== 'institutional'
+                        || ($work['posting_term_id'] ?? null) !== $assessment->data['term']['id']
+                    ) {
+                        throw new \InvalidArgumentException();
+                    }
+                }
                 if (
                     !is_array($work) || count($work) !== count($fields)
                     || array_diff(array_keys($work), $fields) !== [] || isset($attempts[$work['id']])
@@ -132,6 +149,12 @@ final readonly class StandingProposalEvidence implements \JsonSerializable
         }
         $scope = new StandingProposalScope($this->data['scope']);
         return new StandingProposalRules($rules->selection($scope)['rules']);
+    }
+
+    public function assessmentSummary(): array
+    {
+        return isset($this->data['assessment']) ? new StandingGpaAssessment($this->data['assessment'])->summary()
+        : ['basis' => 'cumulative'];
     }
 
     public function scopeSummary(): ?array

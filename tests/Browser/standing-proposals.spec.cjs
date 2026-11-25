@@ -8,7 +8,9 @@ async function fixture(page) {
         { id: id(12), code: 'GOOD', title: 'Fictional <Good>', active: true }];
     const targets = { program: [{ id: id(4), code: 'ARTS.UG', title: 'Fictional <Arts>', active: true }],
         academic_level: [{ id: id(70), code: 'UG', title: 'Fictional undergraduate', active: true }] };
-    const state = { targets, rows: [], requests: [], errors: [], failed: false, denied: false,
+    const terms = Array.from({ length: 23 }, (_, n) => ({ id: id(200 + n), code: `TERM.${n}`,
+        starts_on: '2026-01-01', ends_on: '2026-05-31' }));
+    const state = { targets, terms, rows: [], requests: [], errors: [], failed: false, denied: false,
         rules: { enabled: false, minimum_gpa_credits_milli: 0, bands: [] }, version: 0, sequence: 30 };
     page.on('pageerror', error => state.errors.push(error.message));
     await page.route('**/sis/**', async route => {
@@ -35,15 +37,23 @@ async function fixture(page) {
             state.rules = data.rules; state.version++; result = { publication_id: id(20), version: state.version, status: 'published' };
         } else if (path.endsWith('/standing/')) result = { rows: state.rows, revision: 'a'.repeat(64), editable: true, historical_correction: false,
             program: { code: 'ARTS.UG', title: 'Fictional Arts' }, status: 'active' };
-        else if (path.endsWith('/standing/propose/')) result = { standing: { ...definitions[1], definition_id: definitions[1].id },
-            scope: state.proposalScope || { kind: 'institution' }, gpa_milli: 2000, gpa_credits_milli: 3000, as_of: '2026-11-25', policy_version: 1, policy_publication_id: id(20),
-            proposal: { period_id: id(state.sequence++), revision: 'b'.repeat(64), token: 'fictional-proposal-proof' } };
+        else if (path.endsWith('/standing/proposal-terms/')) {
+            if (state.termsDenied) return route.fulfill({ status: 403, json: { error: 'Fictional standing access lost.' } });
+            const items = state.terms.filter(t => t.code.toLowerCase().includes((data.search || '').toLowerCase()) && (!data.after || t.id > data.after));
+            result = { items: items.slice(0, 20), next_after: items.length > 20 ? items[19].id : null };
+        } else if (path.endsWith('/standing/propose/')) {
+            if (state.termRequired && !data.term_id) return route.fulfill({ status: 422, json: { error: 'Select a posting term for this term-GPA policy.' } });
+            state.lastAssessment = data.term_id ? { basis: 'term', term_code: state.terms.find(t => t.id === data.term_id).code } : { basis: 'cumulative' };
+            result = { standing: { ...definitions[1], definition_id: definitions[1].id },
+            scope: state.proposalScope || { kind: 'institution' }, assessment: state.lastAssessment, gpa_milli: 2000, gpa_credits_milli: 3000, as_of: '2026-11-25', policy_version: 1, policy_publication_id: id(20),
+            proposal: { ...(data.term_id ? { term_id: data.term_id } : {}), period_id: id(state.sequence++), revision: 'b'.repeat(64), token: 'fictional-proposal-proof' } };
+        }
         else if (path.endsWith('/standing/review/')) {
             if (state.failed) return route.fulfill({ status: 409, json: { error: 'Fictional academic work changed.' } });
             result = { ...data, before: state.rows, after: data.rows, operation_id: id(40), review_token: 'fictional-standing-proof' };
-        } else if (path.endsWith('/standing/commit/')) { state.rows = data.rows; result = { status: 'updated' }; }
+        } else if (path.endsWith('/standing/commit/')) { state.rows = data.rows; state.historyAssessment = state.lastAssessment; result = { status: 'updated' }; }
         else if (path.endsWith('/standing/history/')) result = { items: [{ version: 1, rows: state.rows, reason: 'Fictional accepted decision.', recorded_at: '2026-11-25T10:00:00Z',
-            proposal: { scope: state.historyScope, gpa_milli: 2000, gpa_credits_milli: 3000, as_of: '2026-11-25', policy_version: 1 } }], next_cursor: null };
+            proposal: { scope: state.historyScope, assessment: state.historyAssessment, gpa_milli: 2000, gpa_credits_milli: 3000, as_of: '2026-11-25', policy_version: 1 } }], next_cursor: null };
         else if (path.endsWith('/degree-requirements/progress/')) result = { status: 'needs_selection' };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
@@ -191,6 +201,7 @@ test('program and level editors preserve drafts and publish independent bands wi
     await page.getByRole('button', { name: 'Add program policy', exact: true }).click();
     await page.getByRole('button', { name: 'Use this policy target', exact: true }).click();
     await expect(page.getByRole('heading', { name: 'Program policy · ARTS.UG · Fictional <Arts>', exact: true })).toBeVisible();
+    await page.getByLabel('GPA basis', { exact: true }).selectOption('term');
     await page.getByLabel('Minimum institutional GPA credits', { exact: true }).fill('6.500');
     await band(page, 0);
     await expect(page.getByLabel('Minimum institutional GPA credits', { exact: true })).toHaveValue('6.500');
@@ -221,6 +232,8 @@ test('program and level editors preserve drafts and publish independent bands wi
     expect(state.rules.overrides.map(o => o.kind)).toEqual(['program', 'academic_level']);
     expect(state.rules.overrides[0].target.title).toBe('Fictional renamed program');
     expect(state.rules.overrides[0].rules.minimum_gpa_credits_milli).toBe(6500);
+    expect(state.rules.overrides[0].rules.gpa_basis).toBe('term');
+    expect(state.rules.gpa_basis).toBe('cumulative');
     expect(state.rules.overrides[0].rules.bands[0].minimum_gpa_milli).toBe(0);
     expect(state.rules.overrides[1].rules.enabled).toBe(false);
     await expect(page.locator('#drawer-body Arts')).toHaveCount(0);
@@ -294,5 +307,79 @@ test('proposal and history show the accepted level labels without substituting a
     await expect(page.locator('#drawer-body')).toContainText('Academic-level policy · UG · Fictional undergraduate');
     await expect(page.locator('#drawer-body')).not.toContainText('Fictional graduate');
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(state.errors).toEqual([]);
+});
+
+
+test('term selection pages and searches without losing the draft and retains term evidence on confirmation', async ({ page }) => {
+    const state = await fixture(page); state.termRequired = true;
+    await standing(page);
+    await page.getByLabel('Reason for change', { exact: true }).fill('Fictional selected-term assessment.');
+    await page.getByRole('button', { name: 'Propose from current GPA', exact: true }).click();
+    await expect(page.getByRole('alert')).toContainText('Select a posting term');
+    await page.getByRole('button', { name: 'Choose proposal term', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Use this posting term', exact: true })).toHaveCount(20);
+    await page.getByRole('button', { name: 'More posting terms', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Use this posting term', exact: true })).toHaveCount(3);
+    await page.getByRole('button', { name: 'Previous posting terms', exact: true }).click();
+    await page.getByLabel('Find a posting term', { exact: true }).fill('TERM.22');
+    await page.getByRole('button', { name: 'Search posting terms', exact: true }).click();
+    await page.getByRole('button', { name: 'Use this posting term', exact: true }).click();
+    await expect(page.getByLabel('Reason for change', { exact: true })).toHaveValue('Fictional selected-term assessment.');
+    await page.getByRole('button', { name: 'Propose from current GPA', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Current institutional GPA in a selected posting term');
+    await expect(page.locator('#drawer-body')).toContainText('TERM.22');
+    await page.getByRole('button', { name: 'Review changes', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm changes', exact: true }).click();
+    expect(state.requests.find(r => r.path.endsWith('/standing/commit/')).data.proposal.term_id).toBe(id(222));
+    await page.getByRole('button', { name: 'Standing history', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('TERM.22');
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(state.errors).toEqual([]);
+});
+
+test('changing a proposal term replaces the pending proposed row while keeping dates and reason', async ({ page }) => {
+    const state = await fixture(page); state.termRequired = true;
+    await standing(page);
+    await page.getByRole('button', { name: 'Choose proposal term', exact: true }).click();
+    await page.getByRole('button', { name: 'Use this posting term', exact: true }).first().click();
+    await page.getByRole('button', { name: 'Propose from current GPA', exact: true }).click();
+    await page.getByLabel('Effective from', { exact: true }).fill('2026-11-26');
+    await page.getByLabel('Policy reference (optional)', { exact: true }).fill('Fictional retained dates.');
+    await page.getByLabel('Reason for change', { exact: true }).fill('Fictional retained reason.');
+    await page.getByRole('button', { name: 'Choose proposal term', exact: true }).click();
+    await page.getByRole('button', { name: 'Use this posting term', exact: true }).nth(1).click();
+    await expect(page.getByRole('heading', { name: 'Current institutional GPA proposal', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Propose from current GPA', exact: true }).click();
+    await expect(page.getByLabel('Effective from', { exact: true })).toHaveCount(1);
+    await expect(page.getByLabel('Effective from', { exact: true })).toHaveValue('2026-11-26');
+    await expect(page.getByLabel('Policy reference (optional)', { exact: true })).toHaveValue('Fictional retained dates.');
+    await expect(page.getByLabel('Reason for change', { exact: true })).toHaveValue('Fictional retained reason.');
+    await page.getByRole('button', { name: 'Clear proposal term', exact: true }).click();
+    await expect(page.getByLabel('Effective from', { exact: true })).toHaveCount(0);
+    state.termsDenied = true;
+    await page.getByRole('button', { name: 'Choose proposal term', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional standing access lost.');
+    await expect(page.locator('#drawer-body input,#drawer-body textarea')).toHaveCount(0);
+    expect(state.errors).toEqual([]);
+});
+
+test('GPA basis and posting-term controls support keyboard input and narrow enlarged screens', async ({ page }) => {
+    const state = await fixture(page);
+    await page.setViewportSize({ width: 320, height: 900 });
+    await policy(page);
+    await page.getByLabel('GPA basis', { exact: true }).selectOption('term');
+    await reflow(page);
+    await page.screenshot({ path: '/tmp/etsis-standing-term-policy-phone.png' });
+    await standing(page);
+    await page.getByRole('button', { name: 'Choose proposal term', exact: true }).click();
+    await reflow(page);
+    const use = page.getByRole('button', { name: 'Use this posting term', exact: true }).first();
+    await use.focus(); await use.press('Enter');
+    await page.getByRole('button', { name: 'Propose from current GPA', exact: true }).click();
+    await page.setViewportSize({ width: 640, height: 900 });
+    await page.evaluate(() => { document.body.style.zoom = '2'; });
+    await reflow(page);
+    await page.screenshot({ path: '/tmp/etsis-standing-term-proposal-phone.png' });
     expect(state.errors).toEqual([]);
 });

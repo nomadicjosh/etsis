@@ -23,6 +23,8 @@ window.createStandingProposals = function (ui) {
     function summary(data, historical = false) {
         return card(node('h3', { class: 'h6' }, t(historical ? 'history' : 'calculated')),
             fact(t('applied_scope'), scopeName(data.scope)),
+            fact(t('gpa_basis'), t(data.assessment?.basis || 'cumulative')),
+            data.assessment?.term_code ? fact(t('choose_term'), data.assessment.term_code) : null,
             fact(t('gpa'), number(data.gpa_milli)), fact(t('credits'), number(data.gpa_credits_milli)),
             fact(t('as_of'), data.as_of), fact(t('current_version'), data.policy_version),
             historical ? null : node('p', { class: 'form-text mb-0' }, t('proposal_help')));
@@ -32,13 +34,13 @@ window.createStandingProposals = function (ui) {
         const loading = openDrawer(t('policy'), t('setup'));
         const saved = await request('/sis/academic-standing/proposal-policy/', 'POST', {});
         if (!loading.isConnected) return;
-        const draftSet = rules => ({ enabled: rules.enabled, minimumText: number(rules.minimum_gpa_credits_milli),
+        const draftSet = rules => ({ enabled: rules.enabled, gpa_basis: rules.gpa_basis || 'cumulative', minimumText: number(rules.minimum_gpa_credits_milli),
             bands: rules.bands.map(band => ({ ...band, floorText: number(band.minimum_gpa_milli) })) });
         let published = saved;
         let draft = { rules: draftSet(saved.rules), overrides: (saved.rules.overrides || []).map(scope =>
             ({ kind: scope.kind, target: { ...scope.target }, rules: draftSet(scope.rules) })), reason: '', version: saved.version };
         let pending = false;
-        const setFacts = set => ({ enabled: set.enabled, minimum_gpa_credits_milli: milli(set.minimumText),
+        const setFacts = set => ({ enabled: set.enabled, gpa_basis: set.gpa_basis, minimum_gpa_credits_milli: milli(set.minimumText),
             bands: set.bands.map(band => ({ definition_id: band.definition_id, code: band.code, title: band.title,
                 minimum_gpa_milli: milli(band.floorText) })).sort((a, b) => a.minimum_gpa_milli - b.minimum_gpa_milli) });
         const facts = () => ({ ...setFacts(draft.rules), overrides: draft.overrides.map(scope =>
@@ -46,7 +48,7 @@ window.createStandingProposals = function (ui) {
         const lock = (body, value) => {
             pending = value;
             body.setAttribute('aria-busy', String(value));
-            body.querySelectorAll('input,textarea,button').forEach(control => { control.disabled = value; });
+            body.querySelectorAll('input,textarea,button,select').forEach(control => { control.disabled = value; });
         };
         function failure(body, error) {
             if (!body.isConnected) return;
@@ -92,9 +94,14 @@ window.createStandingProposals = function (ui) {
                 min: '0', max: '999.999', step: '0.001', required: true, value: set.minimumText,
                 'aria-describedby': `${prefix}-credits-help` });
             minimum.addEventListener('input', () => { set.minimumText = minimum.value; });
+            const basis = node('select', { id: `${prefix}-basis`, class: 'form-select',
+                'aria-describedby': `${prefix}-basis-help` },
+                node('option', { value: 'cumulative' }, t('basis_cumulative')), node('option', { value: 'term' }, t('basis_term')));
+            basis.value = set.gpa_basis;
+            basis.addEventListener('change', () => { set.gpa_basis = basis.value; });
             const container = node('div', {}, card(node('div', { class: 'form-check mb-3' }, enabled,
                 node('label', { for: enabled.id, class: 'form-check-label' }, t(isDefault ? 'enabled' : 'override_enabled'))),
-                field(t('minimum_credits'), minimum, t('minimum_help'))));
+                field(t('gpa_basis'), basis, t('basis_help')), field(t('minimum_credits'), minimum, t('minimum_help'))));
             if (!set.bands.length) container.append(node('p', { role: 'status' }, t('empty')));
             set.bands.forEach((band, index) => {
                 const floor = node('input', { id: `${prefix}-floor-${index}`, type: 'number', class: 'form-control',
@@ -199,6 +206,7 @@ window.createStandingProposals = function (ui) {
 
         function policyDescription(rules) {
             const contents = node('div', {}, node('p', {}, t(rules.enabled ? 'on' : 'off')),
+                fact(t('gpa_basis'), t(rules.gpa_basis || 'cumulative')),
                 fact(t('minimum_credits'), number(rules.minimum_gpa_credits_milli)));
             for (const band of rules.bands) contents.append(fact(`${band.code} · ${band.title}`, `${t('floor')} ${number(band.minimum_gpa_milli)}`));
             return contents;
@@ -228,5 +236,36 @@ window.createStandingProposals = function (ui) {
         }
         render();
     }
-    return { policy, summary, t };
+    async function termPicker(base, back, choose, deny = null, search = '', after = null, trail = []) {
+        const body = openDrawer(t('choose_term'), t('term_context'));
+        let page;
+        try { page = await request(base + 'proposal-terms/', 'POST', { search, after }); }
+        catch (error) {
+            if ([401, 403].includes(error.status)) {
+                deny?.();
+                if (body.isConnected) body.replaceChildren(node('p', { class: 'alert alert-warning', role: 'alert' }, error.message));
+                return;
+            }
+            if (body.isConnected) body.append(node('p', { class: 'alert alert-warning', role: 'alert' }, error.message),
+                action('back_standing', 'arrow-left', back));
+            return;
+        }
+        if (!body.isConnected) return;
+        const input = node('input', { id: 'standing-proposal-term-search', type: 'search', class: 'form-control',
+            maxlength: 80, value: search });
+        const form = node('form', {}, field(t('find_term'), input),
+            node('button', { type: 'submit', class: 'btn btn-primary' }, t('search_terms')));
+        form.addEventListener('submit', event => { event.preventDefault(); task(() => termPicker(base, back, choose, deny, input.value)); });
+        body.append(action('back_standing', 'arrow-left', back), node('p', { class: 'form-text' }, t('term_help')), form);
+        if (!page.items.length) body.append(node('p', { role: 'status' }, t('no_terms')));
+        for (const item of page.items) body.append(card(node('h3', { class: 'h6 text-break' }, item.code),
+            node('p', { class: 'form-text' }, `${item.starts_on} – ${item.ends_on}`),
+            action('use_term', 'check2', () => choose(item))));
+        body.append(node('div', { class: 'inline-actions' },
+            trail.length ? action('previous_terms', 'arrow-left', () => termPicker(base, back, choose, deny, search,
+                trail.at(-1), trail.slice(0, -1))) : null,
+            page.next_after ? action('more_terms', 'arrow-right', () => termPicker(base, back, choose, deny, search,
+                page.next_after, [...trail, after])) : null));
+    }
+    return { policy, summary, termPicker, t };
 };

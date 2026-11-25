@@ -5,9 +5,9 @@ declare(strict_types=1);
 // Actual providers and private routes, using fictional SQLite records only.
 require_once __DIR__ . '/StandingScopeFixture.php';
 $standingScopeFixture = new \Tests\Support\StandingScopeFixture();
-$standingScopeFixture->publish([
-    $standingScopeFixture->override('academic_level', $standingScopeFixture->undergraduate),
-]);
+$scopedRules = $standingScopeFixture->override('academic_level', $standingScopeFixture->undergraduate);
+$scopedRules['rules']['gpa_basis'] = 'term';
+$standingScopeFixture->publish([$scopedRules]);
 $standingFixture = $standingScopeFixture->base;
 $httpSis = $standingFixture->sis;
 $kernel->bootstrap();
@@ -47,11 +47,19 @@ $review = $standingPost($policyBase . 'review/', ['rules' => $current['rules'], 
     'reason' => 'Fictional configured policy HTTP review.']);
 $standingPost($policyBase . 'publish/', $review);
 $standingPost($base . 'propose/', [], 403);
+$standingPost($base . 'proposal-terms/', [], 403);
 $sis->access->grants = ['sis:standing:manage', 'sis:student:read', 'sis:audit:read'];
 $before = $f->facts();
-$proposal = $standingPost($base . 'propose/', []);
+$terms = $standingPost($base . 'proposal-terms/', []);
+if (!in_array($sis->term->value, array_column($terms['items'], 'id'), true)) {
+    throw new RuntimeException('The standing term chooser required unrelated catalog authority.');
+}
+$standingPost($base . 'propose/', [], 422);
+$standingPost($base . 'propose/', ['term_id' => 'invalid'], 422);
+$proposal = $standingPost($base . 'propose/', ['term_id' => $sis->term->value]);
 if (
-    $proposal['gpa_milli'] !== 2000 || $proposal['standing']['code'] !== 'REVIEW'
+    $proposal['gpa_milli'] !== 2000 || ($proposal['assessment']['basis'] ?? null) !== 'term'
+    || $proposal['standing']['code'] !== 'REVIEW'
     || ($proposal['scope']['kind'] ?? null) !== 'academic_level' || ($proposal['scope']['code'] ?? null) !== 'UG'
     || str_contains(json_encode($proposal), 'level_source')
     || str_contains(json_encode($proposal), 'program_version_id')
@@ -72,6 +80,8 @@ if ($standingPost($base . 'commit/', $review) !== $saved) {
 $history = $standingPost($base . 'history/', []);
 if (
     ($history['items'][0]['proposal']['gpa_milli'] ?? null) !== 2000
+    || ($history['items'][0]['proposal']['assessment']['basis'] ?? null) !== 'term'
+    || str_contains(json_encode($history), 'posting_term_id')
     || ($history['items'][0]['proposal']['scope']['code'] ?? null) !== 'UG'
     || str_contains(json_encode($history), 'level_source') || str_contains(json_encode($history), 'program_version_id')
     || str_contains(json_encode($history), 'source_positions') || str_contains(json_encode($history), 'attempts')
@@ -81,9 +91,13 @@ if (
 $sis->access->grants = [];
 $sis->access->actor = $sis->admissions->person($sis->admissions->student($f->student)->personId)->ownerUserId;
 $standingPost($base . 'propose/', [], 403);
+$standingPost($base . 'proposal-terms/', [], 403);
 $ownerBase = '/portal/api/students/' . $f->student->value . '/programs/' . $f->pursuit->value . '/standing/';
 $owner = $standingPost($ownerBase, []);
-if (str_contains(json_encode($owner), 'proposal') || str_contains(json_encode($owner), 'gpa_milli')) {
+if (
+    str_contains(json_encode($owner), 'proposal') || str_contains(json_encode($owner), 'gpa_milli')
+    || str_contains(json_encode($owner), 'assessment')
+) {
     throw new RuntimeException('Staff calculation evidence leaked into the owner standing response.');
 }
 $sis->access->actor = $actor;

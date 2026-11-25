@@ -3,9 +3,9 @@ window.createWorkspaceStanding = function (ui) {
     "use strict";
     const { node, request, task, openDrawer, can } = ui;
     const proposals = window.createStandingProposals({ ...ui, labels: ui.proposalLabels });
-    const button = (label, run, style = "btn-outline-primary") => node("button", {
+    const button = (label, run, style = "btn-outline-primary", icon = null) => node("button", {
         type: "button", class: `btn ${style}`, onclick: event => task(run, event.currentTarget),
-    }, label);
+    }, icon ? node("i", { class: `bi bi-${icon} me-1`, "aria-hidden": "true" }) : null, label);
     const field = (label, input) => node("div", { class: "mb-3" }, node("label", {
         for: input.id, class: "form-label",
     }, label), input);
@@ -61,18 +61,26 @@ window.createWorkspaceStanding = function (ui) {
         const saved = await request(base);
         if (!loading.isConnected) return;
         let rows = saved.rows.map(row => ({ ...row })), reason = "", historicalEvidence = false;
-        let proposal = null, proposalInfo = null, notice = '';
+        let proposal = null, proposalInfo = null, proposalTerm = null, proposalDraft = null, notice = '';
         const clearProposal = () => { proposal = null; proposalInfo = null; notice = proposals.t('manual'); };
         async function propose() {
             const previous = document.getElementById('standing-reason');
-            const result = await request(base + 'propose/', 'POST', {});
+            const result = await request(base + 'propose/', 'POST', { term_id: proposalTerm?.id || null });
             if (!previous?.isConnected) return;
-            const old = proposal ? rows.find(row => row.id === proposal.period_id) : null;
+            const old = proposal ? rows.find(row => row.id === proposal.period_id) : proposalDraft;
             if (proposal) rows = rows.filter(row => row.id !== proposal.period_id);
             rows.push({ id: result.proposal.period_id, definition_id: result.standing.definition_id,
                 code: result.standing.code, title: result.standing.title,
                 starts_on: old?.starts_on || result.as_of, ends_on: old?.ends_on || null, policy_reference: old?.policy_reference || null });
-            proposal = result.proposal; proposalInfo = result; notice = ''; render();
+            proposal = result.proposal; proposalInfo = result; proposalDraft = null; notice = ''; render();
+        }
+        function changeTerm(value) {
+            if (proposal) {
+                proposalDraft = { ...rows.find(row => row.id === proposal.period_id) };
+                rows = rows.filter(row => row.id !== proposal.period_id);
+                proposal = null; proposalInfo = null; notice = proposals.t('term_changed');
+            }
+            proposalTerm = value; render();
         }
         async function choose(existing = null) {
             await definitions(render, async value => {
@@ -94,6 +102,14 @@ window.createWorkspaceStanding = function (ui) {
             const body = openDrawer("Academic standing", "EDIT → REVIEW → CONFIRM");
             const form = node("form"), cards = node("div");
             if (notice) cards.append(node("p", { role: "status", class: "alert alert-info" }, notice));
+            if (saved.editable && !saved.historical_correction) cards.append(node('section', { class: 'record-section bg-white border rounded p-3 mb-3' },
+                node('h3', { class: 'h6' }, proposals.t('choose_term')),
+                node('p', { class: 'text-break' }, proposalTerm?.code || proposals.t('term_none')),
+                node('p', { class: 'form-text' }, proposals.t('term_help')),
+                node('div', { class: 'inline-actions' }, button(proposals.t('choose_term'), () =>
+                    proposals.termPicker(base, render, item => changeTerm({ id: item.id, code: item.code }), () => {
+                        rows = []; reason = ''; historicalEvidence = false; proposal = proposalInfo = proposalTerm = proposalDraft = null;
+                    }), 'btn-outline-primary', 'calendar3'), proposalTerm ? button(proposals.t('clear_term'), () => changeTerm(null), 'btn-outline-secondary', 'x-lg') : null)));
             if (proposalInfo) cards.append(proposals.summary(proposalInfo),
                 node("div", { class: "inline-actions mb-3" },
                     button(proposals.t("clear"), () => { clearProposal(); render(); }, "btn-sm btn-outline-secondary")));

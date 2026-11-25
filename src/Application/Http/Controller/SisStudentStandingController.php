@@ -117,9 +117,30 @@ final readonly class SisStudentStandingController
         );
     }
 
-    public function propose(string $student, string $pursuit): ResponseInterface
-    {
-        return new JsonResponse($this->service->propose(new EntityId($student), new EntityId($pursuit)));
+    public function proposalTerms(
+        #[\SensitiveParameter] ServerRequest $request,
+        string $student,
+        string $pursuit
+    ): ResponseInterface {
+        $input = FormInput::from($request);
+        return new JsonResponse($this->service->proposalTerms(
+            new EntityId($student),
+            new EntityId($pursuit),
+            $input->search('search', 80),
+            $input->optionalId('after')
+        ));
+    }
+
+    public function propose(
+        #[\SensitiveParameter] ServerRequest $request,
+        string $student,
+        string $pursuit
+    ): ResponseInterface {
+        return new JsonResponse($this->service->propose(
+            new EntityId($student),
+            new EntityId($pursuit),
+            FormInput::from($request)->optionalId('term_id')
+        ));
     }
 
     private function proposal(#[\SensitiveParameter] ServerRequest $request): ?array

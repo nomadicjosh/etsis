@@ -413,6 +413,7 @@ final class SisFixture
             $advisors,
             $this->standingLedger(),
             $this->standingProposals(),
+            new \Infrastructure\Persistence\Repository\SqlStandingProposalTermRepository($this->sql),
         );
     }
 

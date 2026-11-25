@@ -5921,3 +5921,99 @@ msgstr ""
 #: src/Domain/Transcript/ValueObject/TranscriptStandingPresentation.php:51
 msgid "Choose all periods through preparation or only the effective standing, and an explicit date display choice."
 msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:18
+msgid "Count GPA credits after retained repeat rules under the selected basis. Undefined GPA never means zero GPA. This uses current recorded work and does not reconstruct an earlier assessment."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:103
+msgid "Academic standing review"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:104
+msgid "Search posting terms"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:105
+msgid "The proposal term changed. Calculate a fresh GPA proposal."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:106
+msgid "Cumulative GPA"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:107
+msgid "Term GPA"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:108
+msgid "GPA basis"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:109
+msgid "Current cumulative institutional GPA"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:110
+msgid "Current institutional GPA in a selected posting term"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:112
+msgid "Term GPA uses only verified institutional work posted to the selected term. Retained repeat rules apply within that term. This does not reconstruct GPA at an earlier date."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:115
+msgid "Choose proposal term"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:116
+msgid "Clear proposal term"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:117
+msgid "No proposal term selected"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:119
+msgid "Choose a term when the applicable published policy uses term GPA. Cumulative policies require no term. Calendar labels shown here are current references; qualifying work is verified separately."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:123
+msgid "Find a posting term"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:124
+msgid "Use this posting term"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:125
+msgid "No posting terms match this search."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:126
+msgid "More posting terms"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:127
+msgid "Previous posting terms"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:128
+msgid "Back to academic standing"
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:89
+msgid "Select a posting term for the applicable term-GPA standing policy."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:90
+msgid "The applicable standing policy uses cumulative GPA. Clear the selected proposal term."
+msgstr ""
+
+#: src/Domain/Student/Service/StudentStandingService.php:394
+msgid "Use a search of up to eighty characters."
+msgstr ""
+
+#: src/Domain/Student/ValueObject/StandingProposalRules.php:26
+msgid "Choose cumulative or selected-term institutional GPA for each rule set."
+msgstr ""

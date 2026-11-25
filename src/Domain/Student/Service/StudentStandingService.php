@@ -50,6 +50,7 @@ final readonly class StudentStandingService
         private AdvisorProgressAccess $advisors,
         private StudentStandingLedger $ledger,
         private StandingProposalService $proposals,
+        private \Domain\Student\Repository\StandingProposalTermRepository $proposalTerms,
     ) {
     }
 
@@ -338,10 +339,10 @@ final readonly class StudentStandingService
         });
     }
 
-    public function propose(EntityId $student, EntityId $pursuit): array
+    public function propose(EntityId $student, EntityId $pursuit, ?EntityId $term = null): array
     {
         $actor = $this->staff();
-        return $this->transactions->run(function () use ($student, $pursuit, $actor): array {
+        return $this->transactions->run(function () use ($student, $pursuit, $actor, $term): array {
             $this->students->lock($student);
             [$s, $p] = $this->scope($student, $pursuit);
             $this->current($s, $p);
@@ -350,7 +351,8 @@ final readonly class StudentStandingService
                 $student,
                 $pursuit,
                 $period,
-                new HistoryReadBudget(maximumBytes: 4_194_304, maximumMilliseconds: 5000)
+                new HistoryReadBudget(maximumBytes: 4_194_304, maximumMilliseconds: 5000),
+                $term
             );
             $proof = new \Domain\Student\ValueObject\StandingProposalEvidence($evidence);
             $revision = \Domain\Student\ValueObject\StandingProposalRules::hash($evidence);
@@ -359,11 +361,13 @@ final readonly class StudentStandingService
                 $evidence['gpa_credits_milli']
             );
             $this->staff($actor);
-            return ['standing' => $proof->band(), 'scope' => $proof->scopeSummary(), 'gpa_milli' => $gpa->milli(),
+            return ['standing' => $proof->band(), 'scope' => $proof->scopeSummary(),
+                'assessment' => $proof->assessmentSummary(), 'gpa_milli' => $gpa->milli(),
                 'gpa_credits_milli' => $gpa->creditsMilli, 'as_of' => $evidence['as_of'],
                 'policy_publication_id' => $evidence['policy_publication_id'],
                 'policy_version' => $evidence['policy_version'],
-                'proposal' => ['period_id' => $period->value, 'revision' => $revision,
+                'proposal' => [...$term === null ? [] : ['term_id' => $term->value],
+                    'period_id' => $period->value, 'revision' => $revision,
                     'token' => $this->proofs->issue(
                         'standing-proposal',
                         'registrar',
@@ -373,6 +377,27 @@ final readonly class StudentStandingService
                         $revision
                     )]];
         });
+    }
+
+    public function proposalTerms(
+        EntityId $student,
+        EntityId $pursuit,
+        string $search = '',
+        ?EntityId $after = null
+    ): array {
+        $actor = $this->staff();
+        if (
+            !mb_check_encoding($search, 'UTF-8') || mb_strlen($search) > 80
+            || preg_match('/[\x00-\x1F\x7F]/', $search)
+        ) {
+            throw new ValidationException([['field' => 'search',
+                'message' => \Codefy\Framework\Helpers\trans_html('Use a search of up to eighty characters.')]]);
+        }
+        [$s, $p] = $this->scope($student, $pursuit);
+        $this->current($s, $p);
+        $rows = $this->proposalTerms->page(trim($search), $after);
+        $this->staff($actor);
+        return ['items' => array_slice($rows, 0, 20), 'next_after' => count($rows) > 20 ? $rows[19]['id'] : null];
     }
 
     private function proposalEvidence(
@@ -387,7 +412,9 @@ final readonly class StudentStandingService
             return null;
         }
         if (
-            count($proposal) !== 3 || array_diff(array_keys($proposal), ['period_id', 'revision', 'token']) !== []
+            !in_array(count($proposal), [3, 4], true)
+            || array_diff(array_keys($proposal), ['period_id', 'revision', 'token', 'term_id']) !== []
+            || (array_key_exists('term_id', $proposal) && !is_string($proposal['term_id']))
             || !is_string($proposal['period_id'] ?? null) || !is_string($proposal['revision'] ?? null)
             || preg_match('/^[a-f0-9]{64}$/D', $proposal['revision']) !== 1 || !is_string($proposal['token'] ?? null)
         ) {
@@ -404,7 +431,13 @@ final readonly class StudentStandingService
             )]]);
         }
         $period = new EntityId($proposal['period_id']);
-        $evidence = $this->proposals->calculate($student, $pursuit, $period, $budget);
+        $evidence = $this->proposals->calculate(
+            $student,
+            $pursuit,
+            $period,
+            $budget,
+            isset($proposal['term_id']) ? new EntityId($proposal['term_id']) : null
+        );
         if (!hash_equals($proposal['revision'], \Domain\Student\ValueObject\StandingProposalRules::hash($evidence))) {
             throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans_html(
                 'The standing proposal source changed. Calculate and review it again.'

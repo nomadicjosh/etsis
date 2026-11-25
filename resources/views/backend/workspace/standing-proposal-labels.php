@@ -15,8 +15,8 @@ return [
     'enabled' => trans_html('Enable default institutional GPA proposals'),
     'minimum_credits' => trans_html('Minimum institutional GPA credits'),
     'minimum_help' => trans_html(
-        'Count GPA credits after retained repeat rules. Undefined GPA never means zero GPA. This ' .
-        'is a current cumulative assessment, not a term or backdated GPA calculation.'
+        'Count GPA credits after retained repeat rules under the selected basis. Undefined GPA never ' .
+        'means zero GPA. This uses current recorded work and does not reconstruct an earlier assessment.'
     ),
     'floor' => trans_html('GPA floor'),
     'band' => trans_html('GPA band'),
@@ -100,4 +100,30 @@ return [
     'more_targets' => trans_html('More policy targets'),
     'previous_targets' => trans_html('Previous policy targets'),
     'search_targets' => trans_html('Search policy targets'),
+    'term_context' => trans_html('Academic standing review'),
+    'search_terms' => trans_html('Search posting terms'),
+    'term_changed' => trans_html('The proposal term changed. Calculate a fresh GPA proposal.'),
+    'basis_cumulative' => trans_html('Cumulative GPA'),
+    'basis_term' => trans_html('Term GPA'),
+    'gpa_basis' => trans_html('GPA basis'),
+    'cumulative' => trans_html('Current cumulative institutional GPA'),
+    'term' => trans_html('Current institutional GPA in a selected posting term'),
+    'basis_help' => trans_html(
+        'Term GPA uses only verified institutional work posted to the selected term. Retained ' .
+        'repeat rules apply within that term. This does not reconstruct GPA at an earlier date.'
+    ),
+    'choose_term' => trans_html('Choose proposal term'),
+    'clear_term' => trans_html('Clear proposal term'),
+    'term_none' => trans_html('No proposal term selected'),
+    'term_help' => trans_html(
+        'Choose a term when the applicable published policy uses term GPA. Cumulative policies ' .
+        'require no term. Calendar labels shown here are current references; qualifying work is ' .
+        'verified separately.'
+    ),
+    'find_term' => trans_html('Find a posting term'),
+    'use_term' => trans_html('Use this posting term'),
+    'no_terms' => trans_html('No posting terms match this search.'),
+    'more_terms' => trans_html('More posting terms'),
+    'previous_terms' => trans_html('Previous posting terms'),
+    'back_standing' => trans_html('Back to academic standing'),
 ];

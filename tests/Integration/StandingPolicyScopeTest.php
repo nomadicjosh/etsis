@@ -226,7 +226,8 @@ final class StandingPolicyScopeTest extends TestCase
             EntityId::generate(),
             new \Domain\Shared\EventSourcing\HistoryReadBudget()
         );
-        unset($evidence['scope']); // Earlier decisions recorded only the original fifteen evidence fields.
+        // Earlier decisions recorded only the original fifteen evidence fields.
+        unset($evidence['scope'], $evidence['assessment']);
         $proof = new \Domain\Student\ValueObject\StandingProposalEvidence($evidence);
         $before = $f->facts();
         $summary = $f->sis->standingProposals()->summary($proof, new \Domain\Shared\EventSourcing\HistoryReadBudget());

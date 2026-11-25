@@ -40,8 +40,13 @@ final readonly class StandingProposalService
     ) {
     }
 
-    public function calculate(EntityId $student, EntityId $pursuit, EntityId $period, HistoryReadBudget $budget): array
-    {
+    public function calculate(
+        EntityId $student,
+        EntityId $pursuit,
+        EntityId $period,
+        HistoryReadBudget $budget,
+        ?EntityId $term = null
+    ): array {
         $publication = $this->policies->current($budget);
         $rules = new StandingProposalRules($publication['rules']);
         if ($publication['publication_id'] === null) {
@@ -79,6 +84,16 @@ final readonly class StandingProposalService
         if (!$effective->facts['enabled']) {
             $this->blocked(trans_html('Standing proposals are disabled by the policy that applies to this pursuit.'));
         }
+        if (($effective->gpaBasis() === 'term') !== ($term !== null)) {
+            $this->blocked($effective->gpaBasis() === 'term'
+                ? trans_html('Select a posting term for the applicable term-GPA standing policy.')
+                : trans_html('The applicable standing policy uses cumulative GPA. Clear the selected proposal term.'));
+        }
+        $termLabel = $term === null ? null : $this->students->term($term)['code'];
+        $assessment = new \Domain\Student\ValueObject\StandingGpaAssessment([
+            'basis' => $effective->gpaBasis(),
+            'term' => $term === null ? null : ['id' => $term->value, 'code' => $termLabel],
+        ]);
         $inputs = $this->inputs->collect($student, $pursuit, $budget);
         if ($inputs->status === AcademicInputStatus::Limited) {
             throw new \Domain\Shared\EventSourcing\HistoryReadLimitException();
@@ -90,6 +105,20 @@ final readonly class StandingProposalService
             $this->blocked(trans_html(
                 'Select retained requirements and verify this pursuit’s academic work before proposing standing.'
             ));
+        }
+        $capturedInputs = $inputs;
+        if ($term !== null) {
+            $items = array_values(array_filter($inputs->items, static fn(array $item): bool =>
+                $item['credit_type'] === 'institutional' && $item['term_id'] === $term->value));
+            $ids = array_flip(array_column($items, 'id'));
+            $inputs = new \Domain\DegreeAudit\ValueObject\AcademicInputSet(
+                $inputs->status,
+                $items,
+                array_values(array_filter(
+                    $inputs->references,
+                    static fn(array $r): bool => isset($ids[$r['credit_id']])
+                ))
+            );
         }
         $requirements = $this->grading->prepare($inputs->items, $context['requirements'], $budget);
         $calculation = AuditCalculationPolicy::fromRequirements($requirements);
@@ -113,7 +142,9 @@ final readonly class StandingProposalService
                 'The proposed standing definition changed or was retired. Review the published GPA policy.'
             ));
         }
+        $postingTerms = array_column($inputs->items, 'term_id', 'id');
         $frozen = array_map(static fn($a): array => [
+            ...$term === null ? [] : ['posting_term_id' => $postingTerms[$a->id->value]],
             'id' => $a->id->value, 'course_id' => $a->courseId->value, 'credit_type' => $a->origin,
             'status' => $a->status, 'attempted_milli' => $a->attemptedMilli, 'completed_milli' => $a->earnedMilli,
             'quality_points_milli' => $a->qualityMilli, 'grade_recorded' => $a->gradeRecorded,
@@ -122,9 +153,10 @@ final readonly class StandingProposalService
         $evidence = [
             'student_id' => $student->value, 'pursuit_id' => $pursuit->value, 'period_id' => $period->value,
             'policy_publication_id' => $publication['publication_id'], 'policy_version' => $publication['version'],
-            'rules' => $rules->facts, 'scope' => $scope->data, 'requirements_version_id' => $requirements['version_id'],
+            'rules' => $rules->facts, 'scope' => $scope->data, 'assessment' => $assessment->data,
+            'requirements_version_id' => $requirements['version_id'],
             'context_revision' => StandingProposalRules::hash([$context, $cohort]),
-            'input_revision' => StandingProposalRules::hash([$inputs->items, $inputs->references]),
+            'input_revision' => StandingProposalRules::hash([$capturedInputs->items, $capturedInputs->references]),
             'as_of' => $this->clock->now()->format('Y-m-d'),
             'gpa_credits_milli' => $result->gpa->creditsMilli, 'quality_points_milli' => $result->gpa->qualityMilli,
             'calculation' => ['definition' => ['policies' => $requirements['definition']['policies'] ?? []],
@@ -148,6 +180,7 @@ final readonly class StandingProposalService
         );
         return ['policy_version' => $proof->data['policy_version'], 'gpa_milli' => $gpa->milli(),
             'gpa_credits_milli' => $gpa->creditsMilli, 'as_of' => $proof->data['as_of'],
+            'assessment' => $proof->assessmentSummary(),
             ...$proof->scopeSummary() === null ? [] : ['scope' => $proof->scopeSummary()]];
     }
 

@@ -844,7 +844,8 @@ return static function (Psr7Router $router): void {
     }
     foreach (
         ['view' => ['', 'GET'], 'review' => ['review/', 'POST'], 'commit' => ['commit/', 'POST'],
-        'propose' => ['propose/', 'POST'], 'timeline' => ['history/', 'POST']] as $method => [$suffix, $verb]
+        'propose' => ['propose/', 'POST'], 'proposalTerms' => ['proposal-terms/', 'POST'],
+        'timeline' => ['history/', 'POST']] as $method => [$suffix, $verb]
     ) {
         $router->map([$verb], '/sis/students/{student}/programs/{pursuit}/standing/' . $suffix, [
             $standing, $method,

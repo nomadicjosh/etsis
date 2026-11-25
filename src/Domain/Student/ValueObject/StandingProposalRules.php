@@ -9,19 +9,26 @@ use Domain\Shared\ValueObject\EntityId;
 
 use function Codefy\Framework\Helpers\trans_html;
 
-/** Explicit institutional cumulative-GPA floors; no implicit institutional standing is supplied. */
+/** Explicit institutional GPA floors; no implicit institutional standing is supplied. */
 final readonly class StandingProposalRules
 {
     public const array BASE_FIELDS = ['enabled', 'minimum_gpa_credits_milli', 'bands'];
+    public const array RULE_FIELDS = [...self::BASE_FIELDS, 'gpa_basis'];
     public const array DEFAULT = [
-        'enabled' => false, 'minimum_gpa_credits_milli' => 0, 'bands' => [], 'overrides' => [],
+        'enabled' => false, 'minimum_gpa_credits_milli' => 0, 'bands' => [],
+        'overrides' => [], 'gpa_basis' => 'cumulative',
     ];
 
     public function __construct(public array $facts)
     {
+        if (array_key_exists('gpa_basis', $facts) && !in_array($facts['gpa_basis'], ['cumulative', 'term'], true)) {
+            throw new ValidationException([['field' => 'gpa_basis', 'message' => trans_html(
+                'Choose cumulative or selected-term institutional GPA for each rule set.'
+            )]]);
+        }
         try {
             if (
-                count($facts) < 3 || count($facts) > 4
+                count($facts) < 3 || count($facts) > 5
                 || array_diff(array_keys($facts), array_keys(self::DEFAULT)) !== []
                 || array_diff(self::BASE_FIELDS, array_keys($facts)) !== []
                 || !is_bool($facts['enabled']) || !is_int($facts['minimum_gpa_credits_milli'])
@@ -71,8 +78,9 @@ final readonly class StandingProposalRules
                         !is_array($override) || count($override) !== 3
                         || array_diff(array_keys($override), ['kind', 'target', 'rules']) !== []
                         || !is_string($override['kind']) || !is_array($override['target'])
-                        || !is_array($override['rules']) || count($override['rules']) !== 3
-                        || array_diff(array_keys($override['rules']), self::BASE_FIELDS) !== []
+                        || !is_array($override['rules']) || count($override['rules']) < 3
+                        || count($override['rules']) > 4
+                        || array_diff(array_keys($override['rules']), self::RULE_FIELDS) !== []
                     ) {
                         throw new \InvalidArgumentException();
                     }
@@ -134,7 +142,12 @@ final readonly class StandingProposalRules
         $level = array_find($this->facts['overrides'] ?? [], static fn(array $r): bool =>
             $r['kind'] === 'academic_level' && $r['target']['id'] === $scope->levelId());
         return $level ?? ['kind' => 'institution', 'target' => null,
-            'rules' => array_intersect_key($this->facts, array_flip(self::BASE_FIELDS))];
+            'rules' => array_intersect_key($this->facts, array_flip(self::RULE_FIELDS))];
+    }
+
+    public function gpaBasis(): string
+    {
+        return $this->facts['gpa_basis'] ?? 'cumulative';
     }
 
     public function band(int $gpaMilli): array
