@@ -31,6 +31,10 @@ return static function (Psr7Router $router): void {
     $router->get('/portal/api/profile-update-requests/identity/', [$profileRequests, 'mineIdentity']);
     $router->post('/portal/api/profile-update-requests/{requestId}/respond/', [$profileRequests, 'respond']);
     $revisions = \Application\Http\Controller\ApplicationRevisionController::class;
+    $changes = \Application\Http\Controller\AdmissionChangeRequestController::class;
+    $router->get('/portal/api/applications/{id}/change-requests/', [$changes, 'mine']);
+    $router->post('/portal/api/applications/{id}/change-requests/request/', [$changes, 'request']);
+    $router->post('/portal/api/applications/{id}/change-requests/cancel/', [$changes, 'cancel']);
     $dropPlans = \Application\Http\Controller\SisCourseDropPlanController::class;
     $router->post('/portal/api/drop-plan/choices/', [$dropPlans, 'ownerChoices']);
     $router->post('/portal/api/drop-plan/review/', [$dropPlans, 'ownerReview']);

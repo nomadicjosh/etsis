@@ -4346,3 +4346,232 @@ msgstr ""
 #: resources/views/frontend/portal/auth.phtml
 msgid "If you need another email address, contact the institution before creating an account."
 msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:8
+msgid "Application correction requests"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:10
+msgid "Ask admissions to review your planned program or entry term. Sending a request does not change your application or guarantee approval."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:14
+msgid "Review the applicant’s request. Use the separate correction editor when a change is appropriate, then reply and close this follow-up. Closing a follow-up does not change the application or approve admission."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:18
+msgid "Loading application correction requests…"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:19
+msgid "Refresh requests"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:20
+msgid "Open requests"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:21
+msgid "Closed requests"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:22
+msgid "Application correction request pages"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:23
+msgid "Previous"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:24
+msgid "Next"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:25
+msgid "No correction requests in this view."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:26
+msgid "Request a correction"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:27
+msgid "What needs attention?"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:28
+msgid "Planned program"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:30
+msgid "Describe the correction you would like"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:32
+msgid "Include only information needed to review this request. Do not include passwords, payment details or supporting documents."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:35
+msgid "Send request"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:37
+msgid "New correction requests are available while your application awaits an admissions decision. Contact admissions for other changes."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:40
+msgid "Awaiting admissions review"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:41
+msgid "Closed by admissions"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:42
+msgid "Cancelled by applicant"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:43
+msgid "Requested (UTC)"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:44
+msgid "Resolved (UTC)"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:46
+msgid "The application has changed since this request. Review its current program and term before responding."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:49
+msgid "The linked account has changed. This reply stays with the original request and will not create an update for a different account."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:52
+msgid "Reply visible to the applicant"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:54
+msgid "Explain what was changed or why a change could not be made. This message is visible to the applicant."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:56
+msgid "Reply and close follow-up"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:57
+msgid "Cancel request"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:59
+msgid "The applicant cancelled this correction request."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:61
+msgid "Review program correction"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:62
+msgid "Review entry-term correction"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:64
+msgid "Your reply draft is kept while you use the correction editor. Return to the application to finish this follow-up."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:67
+msgid "Saving follow-up…"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:68
+msgid "Follow-up saved."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:70
+msgid "The action could not be confirmed. Your captured action and draft are still here. Retry the same action or discard it before making another change."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:74
+msgid "Requests could not be refreshed. Any previous results and unsent drafts are still shown."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:77
+msgid "These requests are no longer available with your current access. Return to the application to review available actions."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:80
+msgid "Retry captured action"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:81
+msgid "Discard captured action"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:83
+msgid "Discard the local captured action? A previously accepted action stays saved. Refresh requests to review its current status."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:87
+msgid "Leave unfinished correction follow-ups? Unsent messages and captured actions will be discarded."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:89
+msgid "Wait for the current request to finish."
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:90
+msgid "Applicant correction requests"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:91
+msgid "Staff checklist not started"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:92
+msgid "Staff casework complete"
+msgstr ""
+
+#: resources/views/shared/admission-change-labels.php:94
+msgid "Open applicant correction requests remain visible even when staff casework is complete or the application is withdrawn. Assignment and due-date filters use staff casework."
+msgstr ""
+
+#: src/Domain/Admissions/AdmissionChangeRequest.php:38
+msgid "Enter a message of 1–1,000 characters."
+msgstr ""
+
+#: src/Domain/Admissions/AdmissionChangeRequest.php:63
+msgid "Choose planned program or entry term."
+msgstr ""
+
+#: src/Domain/Admissions/AdmissionChangeRequest.php:132
+msgid "This follow-up action was already accepted differently."
+msgstr ""
+
+#: src/Domain/Admissions/AdmissionChangeRequest.php:170
+#: src/Domain/Admissions/Service/AdmissionChangeRequestService.php:204
+#: src/Infrastructure/Persistence/Repository/SqlAdmissionChangeRequestRepository.php:191
+#: src/Infrastructure/Persistence/Repository/SqlAdmissionChangeRequestRepository.php:204
+msgid "Refresh this follow-up before responding."
+msgstr ""
+
+#: src/Domain/Admissions/Service/AdmissionChangeRequestService.php:133
+#: src/Domain/Admissions/Service/AdmissionChangeRequestService.php:146
+#: src/Domain/Admissions/Service/AdmissionChangeRequestService.php:336
+msgid "Refresh the application before continuing."
+msgstr ""
+
+#: src/Domain/Admissions/Service/AdmissionChangeRequestService.php:245
+msgid "This request reference was already used."
+msgstr ""
+
+#: src/Domain/Admissions/Service/AdmissionChangeRequestService.php:263
+msgid "Refresh an application awaiting a decision before requesting a correction."
+msgstr ""
+
+#: src/Domain/Admissions/Service/AdmissionChangeRequestService.php:283
+msgid "Review existing follow-ups or contact the admissions office before adding another."
+msgstr ""
+
+#: src/Domain/Admissions/Service/AdmissionChangeRequestService.php:324
+msgid "Application follow-up not found."
+msgstr ""

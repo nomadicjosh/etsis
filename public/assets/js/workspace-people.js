@@ -536,9 +536,10 @@ window.createWorkspacePeople = function (ui) {
         const documentEditor = window.createAdmissionDocuments({ node, request, task, notify, holdLabels: ui.documentHoldLabels, retentionLabels: ui.documentRetentionLabels }).mount(documents, row.id, { staff: true });
         body.append(documents);
         const offerArea = node('div'), withdrawalArea = node('div'); body.append(offerArea, withdrawalArea);
-        let background = null, identityUpdates = null, withdrawalEditor = null, answerEditor = null;
-        const otherForms = () => workbench.beforeLeave() && documentEditor.beforeLeave()
-            && (background?.beforeLeave() ?? true) && (identityUpdates?.beforeLeave() ?? true);
+        let background = null, identityUpdates = null, withdrawalEditor = null, answerEditor = null, correctionEditor = null;
+        const otherForms = (keepCorrectionDraft = false) => workbench.beforeLeave() && documentEditor.beforeLeave()
+            && (background?.beforeLeave() ?? true) && (identityUpdates?.beforeLeave() ?? true)
+            && (keepCorrectionDraft || (correctionEditor?.beforeLeave() ?? true));
         const offerEditor = window.createAdmissionOffers({ node, request, task, notify }).mount(offerArea, row.id,
             { staff: true, canIssue: can('sis:admissions:offers'), canPolicy: can('sis:admissions:policy'),
                 beforeChange: () => otherForms() && (withdrawalEditor?.beforeLeave() ?? true) });
@@ -549,9 +550,19 @@ window.createWorkspacePeople = function (ui) {
                     if (result.application_status !== app.status && body.isConnected && mayLeave()) await application(row);
                     else { try { await offerEditor.refresh(); } catch { notify('Request saved. Reopen the offer to refresh its status.'); } }
                 } });
-        function mayLeave() {
-            return otherForms() && offerEditor.beforeLeave() && (withdrawalEditor?.beforeLeave() ?? true) && (answerEditor?.beforeLeave() ?? true);
+        function mayLeave(keepCorrectionDraft = false) {
+            return otherForms(keepCorrectionDraft) && offerEditor.beforeLeave() && (withdrawalEditor?.beforeLeave() ?? true) && (answerEditor?.beforeLeave() ?? true);
         }
+        const correctionArea = node('div', { class: 'record-section mt-3' }); body.append(correctionArea);
+        row.changeRequestState ||= {};
+        const correctionReturn = () => { row.openChangeRequests = true; };
+        correctionEditor = window.createAdmissionChangeRequests({ node, request, task }).mount(correctionArea, row.id,
+            { staff: true, state: row.changeRequestState, initiallyOpen: row.openChangeRequests === true,
+                beforeOpen: () => mayLeave(true),
+                correctProgram: app.status === 'submitted' && can('sis:admissions:correct')
+                    ? () => { correctionReturn(); return programCorrection(row); } : null,
+                correctEntry: app.status === 'submitted' && can('sis:admissions:correct')
+                    ? () => { correctionReturn(); return entryTerm(row); } : null });
         if (typeof row.followUpBack === "function") body.prepend(
             button("Back to follow-up queue", () => mayLeave() && row.followUpBack()),
         );

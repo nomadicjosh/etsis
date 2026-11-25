@@ -64,6 +64,7 @@ try {
                 'check-portal',
                 'check-admission-readiness',
                 'check-admission-intake',
+                'check-admission-changes',
                 'check-drop-policy',
                 'check-hiatus-history',
                 'check-transcript-reviews',
@@ -338,6 +339,11 @@ try {
             require __DIR__ . '/AdmissionDeferralBootChecks.php';
             require __DIR__ . '/AdmissionProgramBootChecks.php';
             require __DIR__ . '/ApplicantApplicationHistoryBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-admission-changes') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/AdmissionChangeRequestBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-grade-certification') {
             $kernel->bootstrap();

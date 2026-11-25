@@ -87,6 +87,11 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
         <script defer src="/assets/js/admission-readiness.js"></script>
         <script defer src="/assets/js/application-history.js"></script>
         <script defer src="/assets/js/admission-casework.js"></script>
+        <script id="admission-change-labels" type="application/json"><?= json_encode(
+            require dirname(__DIR__, 5) . '/resources/views/shared/admission-change-labels.php',
+            JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR,
+        ) ?></script>
+        <script defer src="/assets/js/admission-change-requests.js"></script>
         <script defer src="/assets/js/person-addresses.js"></script>
         <script defer src="/assets/js/academic-timetable.js"></script>
         <script defer src="/assets/js/public-events.js"></script>

@@ -177,7 +177,11 @@ final readonly class SqlAdmissionCaseworkRepository implements AdmissionCasework
         ?EntityId $after
     ): array {
         $q = $this->sql->quote(...);
-        $where = ['c.' . $q('work_status') . ' IN (?, ?)', 'a.' . $q('status') . ' <> ?'];
+        $pending = '(SELECT COUNT(*) FROM ' . $q('sis_admission_change_requests') . ' r WHERE r.'
+        . $q('application_id') . ' = a.' . $q('id') . ' AND r.' . $q('person_id') . ' = a.'
+        . $q('person_id') . ' AND r.' . $q('status') . " = 'requested')";
+        $where = ['(c.' . $q('work_status') . ' IN (?, ?) OR ' . $pending . ' > 0)',
+            '(a.' . $q('status') . ' <> ? OR ' . $pending . ' > 0)'];
         $args = ['open', 'waiting', 'withdrawn'];
         if ($assignedTo !== null) {
             $where[] = 'c.' . $q('assigned_to') . ' = ?';
@@ -190,20 +194,22 @@ final readonly class SqlAdmissionCaseworkRepository implements AdmissionCasework
             $args[] = $today;
         }
         if ($after !== null) {
-            $where[] = 'c.' . $q('id') . ' < ?';
+            $where[] = 'a.' . $q('id') . ' < ?';
             $args[] = $after->value;
         }
         $columns = array_map(
-            static fn (string $field): string => 'c.' . $q($field),
-            ['id', 'application_id', 'assigned_to', 'office', 'work_status', 'next_due_on']
+            static fn(string $field): string => 'c.' . $q($field),
+            ['assigned_to', 'office', 'work_status', 'next_due_on']
         );
-        return $this->sql->fetch('SELECT ' . implode(', ', $columns)
+        return $this->sql->fetch('SELECT a.' . $q('id') . ', a.' . $q('id') . ' AS ' . $q('application_id')
+            . ', ' . implode(', ', $columns) . ', ' . $pending . ' AS ' . $q('requests_pending')
+            . ', CASE WHEN c.' . $q('id') . ' IS NULL THEN 1 ELSE 0 END AS ' . $q('casework_missing')
             . ', p.' . $q('given_name') . ', p.' . $q('family_name') . ', i.' . $q('institutional_id')
-            . ' FROM ' . $q('sis_admission_cases') . ' c JOIN ' . $q('sis_applications') . ' a ON a.' . $q('id')
-            . ' = c.' . $q('application_id') . ' JOIN ' . $q('sis_persons')
-            . ' p ON p.' . $q('id') . ' = a.' . $q('person_id')
-            . ' JOIN ' . $q('sis_person_identifiers') . ' i ON i.' . $q('person_id') . ' = p.' . $q('id')
-            . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY c.' . $q('id') . ' DESC', $args, 21);
+            . ' FROM ' . $q('sis_applications') . ' a LEFT JOIN ' . $q('sis_admission_cases') . ' c ON a.'
+            . $q('id') . ' = c.' . $q('application_id') . ' JOIN ' . $q('sis_persons') . ' p ON p.'
+            . $q('id') . ' = a.' . $q('person_id') . ' JOIN ' . $q('sis_person_identifiers') . ' i ON i.'
+            . $q('person_id') . ' = p.' . $q('id') . ' WHERE ' . implode(' AND ', $where)
+            . ' ORDER BY a.' . $q('id') . ' DESC', $args, 21);
     }
 
     private function validHash(mixed $value): bool

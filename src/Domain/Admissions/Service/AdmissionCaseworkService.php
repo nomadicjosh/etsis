@@ -334,6 +334,8 @@ final readonly class AdmissionCaseworkService
         }
         $names = $this->actors->names(array_values($ids));
         foreach ($rows as &$row) {
+            $row['requests_pending'] = (int) $row['requests_pending'];
+            $row['casework_missing'] = (bool) $row['casework_missing'];
             $row['assignee_name'] = $row['assigned_to'] === null ? 'Unassigned'
             : ($names[$row['assigned_to']] ?? 'Unavailable account');
             unset($row['assigned_to']);

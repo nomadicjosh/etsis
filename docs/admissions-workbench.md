@@ -44,20 +44,46 @@ Staff with `sis:forms:manage` can also **Create preset from draft** or **Edit pr
 
 The workbench itself requires `sis:admissions:manage`; authoring presets additionally requires the form-management permission in this screen. The preset configuration API permits a form manager to maintain a known preset without granting access to private applications.
 
+## Applicant program and entry-term correction requests
+
+Applicants open **Start your application → Your applications → Application correction requests** for the relevant application. Choose **Planned program** or **Entry term**, explain the requested correction, then choose **Send request**. New requests are available while the application awaits an admissions decision. Each application can have one open request for each area. A request asks the office to review a change; it does not replace the current target, approve admission, create a student or satisfy a formal checklist requirement.
+
+Use **Open requests** to review pending work and **Closed requests** to read earlier replies/cancellations. **Cancel request** withdraws the follow-up, leaving the application itself unchanged. For changes after an admission decision, contact admissions through the institution's normal channels; staff retain their existing separate deferral/withdrawal/decision workflows.
+
+### Staff review and correction returns
+
+Staff open **Admissions → an application → Application correction requests**, or open the application from **Follow-up queue**. The queue includes pending applicant requests even when no staff checklist exists, staff casework is done, or the application was subsequently withdrawn. It shows a request count without loading messages. Opening/requesting follow-up never creates or completes a staff checklist. Assignment and due-date filters continue to describe staff casework; an unstarted checklist has no inferred deadline.
+
+Staff with admissions-management access can read requests and enter a **Reply visible to the applicant**. Where a change is appropriate, staff who also have the existing correction duty can choose **Review program correction** or **Review entry-term correction**. These open the ordinary reviewed correction editors. Their program/form/calendar eligibility rules and permissions still apply. Return with **Back to application**; the same request panel reopens and keeps the unsent reply. A successful correction refreshes the application revision before follow-up closure. Request text is never interpreted as a program identifier, term selection or approval.
+
+Choose **Reply and close follow-up** to save the explanation. The reply may explain a completed correction, a declined change, or the additional institutional steps required. Closing the follow-up does not itself correct the program/intake or decide admission. A concurrent application change requires refresh before a new closure. Staff can resolve an existing follow-up after a later decision/withdrawal, but cannot use this panel to bypass the existing actual-change restrictions.
+
+Closure creates/coalesces the existing private admissions update reference only while the request's original account still owns the person/application. **Admissions updates → Read update → Application correction requests → Closed requests** opens the reply without loading student academic or financial context. Account relinking does not transfer earlier private request messages to a new owner or send the new account an update for the original owner's request. Separately authorized staff retain the request with an account-change explanation and the existing super-account safeguards.
+
+### Request limits, privacy and recovery
+
+Messages and replies allow 1–1,000 characters. Lists return ten records per page, filter owner/state before paging, and permit at most one hundred retained requests per application. Blank/invalid messages, duplicate open areas, stale revisions and excess requests fail without changing the application. Only current canonical owners may create/cancel their requests; staff privileges do not override the owner portal. Actual corrections keep their own independent authorization.
+
+A failed write keeps one captured action in memory. **Retry captured action** resends exactly that reference, revision and message; an accepted original retry returns its original result even after later corrections, admission decisions or matriculation. It never reopens a closed request or repeats a notification. **Discard captured action** clears that local capture and refreshes the current state; it does not undo a previously accepted action. Unsent messages/replies survive ordinary failed refreshes. Drawer/page leave guards protect unfinished work, access denial clears private details and detached responses cannot restore them. Private text is rendered as text and is never placed in browser storage, logs, email or background jobs.
+
+The request envelope, messages, replies and two bounded action receipts are encrypted operational CRUD casework in ULID-keyed `sis_admission_change_requests`, with indexed routing/state and compare-and-swap revisions. Required audits, account/application locks, source-history verification and final authority/source rechecks commit with the working change and update reference. Formal program/intake writers continue to preserve actual changes in the one existing protected journal. The additive migration inherits referenced PostgreSQL ID collations on converted installations, compiles for all five supported schema dialects, preserves existing facts on repeat, and refuses destructive rollback. Institution-approved retention/disposition remains separate; the follow-up list is not an academic-history or general reporting source.
+
 ## Work the follow-up queue
 
 The assignment filter and due-date checkbox share a bounded field group. **Refresh queue** applies those choices; paging sits above the results. Changing filters leaves previous results visible until refreshed. Failed paging retains the accepted page and cursor. Open a case and use **Back to follow-up queue** to return to its accepted assignment, due-date filter and page. **Back to Admissions** closes the queue.
 
 
-From **Admissions**, choose **Follow-up queue**. Filter **All open**, **Assigned to me** or **Unassigned**, optionally check **Due today or earlier**, then refresh. Open/waiting cases appear in pages of twenty, ordered by case creation identity with exclusive cursors. Private notes, instructions and encrypted case payloads are not loaded into this queue.
+From **Admissions**, choose **Follow-up queue**. Filter **All open**, **Assigned to me** or **Unassigned**, optionally check **Due today or earlier**, then refresh. Open/waiting cases and applications with pending applicant correction requests appear in pages of twenty, ordered by application identity with exclusive cursors. Private notes, instructions and encrypted case/request payloads are not loaded into this queue.
 
-The follow-up date is the earliest of the case's explicit follow-up date and its unfinished checklist item dates. Completed or not-needed items contribute no deadline. Done cases leave the queue but remain accessible through their applications. Dates use the institution's configured clock; the queue displays the institution date used for the comparison. This queue tracks work; it does not send automatic messages or make admissions decisions.
+The follow-up date is the earliest of the case's explicit follow-up date and its unfinished checklist item dates. Completed or not-needed items contribute no deadline. Done cases leave the queue unless an applicant correction request is still open; their completed casework remains unchanged. Dates use the institution's configured clock; the queue displays the institution date used for the comparison. This queue tracks work; it does not send automatic messages or make admissions decisions.
 
 ## Report on casework and return to the application
 
 In **Reports → Report Studio**, the **Applications & admissions** source now includes **Casework office**, **Casework status**, **Next casework due date** and **Casework updated UTC**. These are current operational routing facts, separate from the application’s admissions decision. The due date is the existing earliest unfinished-item/follow-up deadline used by the work queue; a done case has no next deadline. Missing casework remains blank rather than appearing open or unassigned by inference.
 
 Three starting points reuse the visual builder:
+
+These report starters describe staff casework. Applicant correction requests are handled in the follow-up queue and are not added as reportable message data.
 
 - **Admissions follow-up** lists open/waiting casework for applications that are not withdrawn, with program/intake and both application and work statuses. Add a due-date condition for the institution-calendar cutoff you want; the starter does not silently choose today.
 - **Admissions workload by office** counts distinct applications by office and work status under those same filters. Distinct counts avoid inflation when authorized related student records are joined. Add the desired named relationships and conditions using the ordinary builder.
@@ -77,7 +103,7 @@ Applicants open **Start your application → Your applications → Next steps** 
 
 If staff have not added guidance, the portal directs the applicant to contact admissions. Checklist progress alone is not an admission approval or registration confirmation. Reading next steps neither changes the application nor writes an event/audit. Closing it or refreshing the application list prevents detached viewers from restoring late results.
 
-Withdrawn applications are paused in the follow-up queue without changing their working case. Returning one to review restores its unfinished tasks; this is separate from changing a student record or closing a person account. See [application withdrawal](admissions-decisions.md#withdraw-an-application-or-return-it-to-review).
+Withdrawn applications are paused in the follow-up queue without changing their working case, unless an applicant correction request still needs a response. Returning one to review restores its unfinished tasks; this is separate from changing a student record or closing a person account. See [application withdrawal](admissions-decisions.md#withdraw-an-application-or-return-it-to-review).
 
 ## In-portal admissions updates
 

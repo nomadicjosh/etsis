@@ -358,7 +358,11 @@
                         onOutcome(result);
                         try { await offerEditor.refresh(); } catch { notify('Request saved. Reopen the offer to refresh its status.'); }
                     } });
-            return { beforeLeave: () => documentEditor.beforeLeave() && offerEditor.beforeLeave() && withdrawalEditor.beforeLeave(),
+            const correctionArea = node('div'); (documentTarget || container).append(correctionArea);
+            const correctionEditor = window.createAdmissionChangeRequests({ node, request, task }).mount(correctionArea, applicationId,
+                { toggleTarget: container, label,
+                    beforeOpen: () => documentEditor.beforeLeave() && offerEditor.beforeLeave() && withdrawalEditor.beforeLeave() });
+            return { beforeLeave: () => documentEditor.beforeLeave() && offerEditor.beforeLeave() && withdrawalEditor.beforeLeave() && correctionEditor.beforeLeave(),
                 openNextSteps: async () => { if (!expanded) await showNextSteps(); toggle.focus(); } };
         }
         function queue(container, openApplication, initial = null) {
@@ -385,7 +389,7 @@
             filters.append(node('fieldset', { class: 'record-form-section' },
                 node('legend', {}, 'Find follow-up work'), fields,
                 node('div', { class: 'inline-actions' }, refresh),
-                node('p', { class: 'form-text mb-0 mt-3' }, 'Follow-up is paused for withdrawn applications. Unfinished tasks return when an application returns to review.')));
+                node('p', { class: 'form-text mb-0 mt-3' }, window.admissionChangeLabels.queue_help)));
             filters.addEventListener('submit', event => { event.preventDefault(); if (!busy) task(() => load(criteria(), true)); });
             function controls() {
                 refresh.disabled = busy;
@@ -412,8 +416,9 @@
                     list.replaceChildren(...data.items.map(item => node('li', {}, node('article', { class: 'surface admission-followup-card' },
                         node('h3', { class: 'h6' }, `${item.given_name} ${item.family_name}`),
                         node('p', { class: 'form-text' }, `${item.institutional_id} · ${item.office || 'Office not set'} · ${item.assignee_name || 'Unassigned'}`),
-                        node('p', {}, `${item.work_status === 'waiting' ? 'Waiting' : 'Open'}${item.next_due_on ? ' · Follow up: ' + item.next_due_on : ''}`),
-                        button('Open application', () => openApplication({ id: item.application_id }, { ...accepted, stack: [...accepted.stack] }))))));
+                        node('p', {}, `${item.casework_missing ? window.admissionChangeLabels.case_missing : item.work_status === 'done' ? window.admissionChangeLabels.case_done : item.work_status === 'waiting' ? 'Waiting' : 'Open'}${item.next_due_on ? ' · Follow up: ' + item.next_due_on : ''}`),
+                        item.requests_pending ? node('p', { class: 'fw-semibold' }, `${window.admissionChangeLabels.queue_pending}: ${item.requests_pending}`) : null,
+                        button('Open application', () => openApplication({ id: item.application_id, openChangeRequests: item.requests_pending > 0 }, { ...accepted, stack: [...accepted.stack] }))))));
                     if (!data.items.length) list.append(node('li', {}, node('p', {}, 'No casework matches these filters.')));
                     status.textContent = `${data.items.length} casework record${data.items.length === 1 ? "" : "s"} · Institution date: ${data.today}`;
                     if (focus) status.focus({ preventScroll: true });
@@ -435,10 +440,15 @@
             const status = node('p', { class: 'form-text', role: 'status', 'aria-atomic': 'true' });
             const list = node('section', { 'aria-label': 'Admissions update list' });
             const detail = node('section', { class: 'mt-4', hidden: true, 'aria-label': 'Admissions update details' });
-            let pageRequest = 0, detailRequest = 0, cursor = null, stack = [], loadedFilter = false;
+            let pageRequest = 0, detailRequest = 0, cursor = null, stack = [], loadedFilter = false, correctionDetail = null;
             const refresh = button('Refresh updates', () => load()); filters.append(refresh);
-            function closeDetail() { detailRequest++; detail.hidden = true; detail.replaceChildren(); refresh.focus(); }
+            function closeDetail() {
+                if (!(correctionDetail?.beforeLeave() ?? true)) return;
+                detailRequest++; detail.hidden = true; detail.replaceChildren(); correctionDetail = null; refresh.focus();
+            }
             async function open(item) {
+                if (!(correctionDetail?.beforeLeave() ?? true)) return;
+                correctionDetail = null;
                 const ticket = ++detailRequest;
                 const heading = node('h2', { class: 'h4', tabindex: '-1' }, `${item.program_code} · ${item.program_title} · ${item.term_code}`);
                 const progress = node('p', { role: 'status', class: 'form-text' }, 'Loading your next steps…');
@@ -453,6 +463,9 @@
                     const historyArea = node('div'); body.append(historyArea);
                     const history = window.createApplicantApplicationHistory({ node, request, task }).mount(historyArea);
                     body.append(history.trigger(item.application_id, `${item.program_code} · ${item.term_code}`, () => heading.focus()));
+                    const correctionArea = node('div'); body.append(correctionArea);
+                    correctionDetail = window.createAdmissionChangeRequests({ node, request, task }).mount(correctionArea,
+                        item.application_id, { label: `${item.program_code} · ${item.term_code}` });
                     loaded = true; progress.textContent = 'Your current next steps are ready.';
                     const result = await request(`/portal/api/admissions-updates/${item.id}/read/`, 'POST', { revision: item.revision });
                     if (ticket !== detailRequest || !container.isConnected) return;
@@ -470,9 +483,10 @@
                 }
             }
             async function load(after = null, previous = [], keepDetail = false) {
+                if (!keepDetail && !(correctionDetail?.beforeLeave() ?? true)) return;
                 if (after && includeRead.checked !== loadedFilter) return load();
                 const showRead = includeRead.checked, ticket = ++pageRequest;
-                if (!keepDetail) { detailRequest++; detail.hidden = true; detail.replaceChildren(); }
+                if (!keepDetail) { detailRequest++; detail.hidden = true; detail.replaceChildren(); correctionDetail = null; }
                 status.textContent = 'Loading admissions updates…';
                 try {
                     const query = new URLSearchParams({ include_read: showRead ? '1' : '0' });

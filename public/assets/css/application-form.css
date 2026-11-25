@@ -23,6 +23,17 @@
 .application-answer-value { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; line-height: 1.6; }
 .application-answer-empty { color: #526375; font-style: italic; }
 .application-review { display: grid; gap: 1rem; }
+.admission-change-panel { min-width: 0; padding: 1rem; overflow-wrap: anywhere; }
+.admission-change-card { min-width: 0; padding: 1rem; }
+.admission-change-panel :is(fieldset, form, textarea) { min-width: 0; }
+.admission-change-panel textarea { resize: vertical; }
+.admission-change-panel .btn { min-height: 44px; text-align: start; }
+@media (max-width: 575px) {
+    .record-form-section.admission-change-panel { padding: .5rem 0; border-inline: 0; border-radius: 0; }
+    .admission-change-card { padding: .5rem; }
+    .admission-change-panel .form-control { padding-inline: .375rem; }
+    .admission-change-panel .inline-actions > .btn { flex: 1 1 100%; }
+}
 .application-review > .form-text { margin: 0; }
 .application-review-title { margin-bottom: 0; scroll-margin-top: 6rem; }
 .application-steps { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; list-style: none; margin: 0 0 1.5rem; padding: 0; color: #526375; }
