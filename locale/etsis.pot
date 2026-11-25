@@ -6814,3 +6814,209 @@ msgstr ""
 
 msgid "Recurring availability changed. Review it again."
 msgstr ""
+
+
+#: resources/views/shared/advising-appointment-labels.php:8
+#: resources/views/shared/advising-availability-labels.php:8
+msgid "Current booking limits"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:9
+msgid "Booking limits used for this change"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:10
+#: resources/views/shared/advising-availability-labels.php:9
+#: resources/views/shared/advising-booking-policy-labels.php:13
+msgid "Maximum active appointments per program pursuit"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:11
+#: resources/views/shared/advising-availability-labels.php:10
+#: resources/views/shared/advising-booking-policy-labels.php:14
+msgid "Minimum advance notice in minutes"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:12
+#: resources/views/shared/advising-availability-labels.php:11
+#: resources/views/shared/advising-booking-policy-labels.php:15
+msgid "Booking horizon in calendar days"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:14
+#: resources/views/shared/advising-availability-labels.php:13
+msgid ""
+"The active-appointment limit has been reached. Resolve existing appointments "
+"or contact the advising office."
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:8
+msgid "Appointment booking policy"
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:10
+msgid ""
+"Configure institution-wide limits for new advising appointment times. "
+"Existing appointments and original retries retain their accepted rules."
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:17
+msgid ""
+"Use 1–20 active appointments, 0–43,200 notice minutes and a 1–366-day "
+"horizon. Notice must be shorter than the horizon."
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:20
+msgid "Reason for this policy change"
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:21
+msgid "Review booking policy"
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:22
+msgid "Confirm policy change"
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:24
+msgid "Refresh current policy"
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:25
+msgid "Use default values"
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:26
+msgid "Default booking limits apply until your institution saves a policy."
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:27
+msgid "Booking policy history"
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:28
+msgid "Back to booking policy"
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:29
+msgid "Current rules"
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:30
+msgid "Proposed rules"
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:32
+msgid "Your policy change was accepted. Current rules are shown below."
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:34
+msgid "No recorded booking policy changes on this page."
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:35
+msgid "Older policy changes"
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:36
+msgid "Newer policy changes"
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:37
+msgid "Unable to complete the policy action. Your draft remains available."
+msgstr ""
+
+#: resources/views/shared/advising-booking-policy-labels.php:38
+msgid ""
+"Booking policy access is unavailable. Reopen after your access is restored."
+msgstr ""
+
+#: src/Application/Http/Controller/BookingPolicyController.php:31
+msgid "Booking policy action not found."
+msgstr ""
+
+#: src/Domain/Advising/BookingPolicyRevision.php:32
+msgid "Enter a policy-change reason of 1–1,000 characters."
+msgstr ""
+
+#: src/Domain/Advising/BookingPolicyRevision.php:78
+msgid "This booking policy change was accepted with different details."
+msgstr ""
+
+#: src/Domain/Advising/BookingPolicySnapshot.php:27
+msgid "Review complete appointment booking rules."
+msgstr ""
+
+#: src/Domain/Advising/BookingPolicySnapshot.php:33
+msgid "Use an appointment limit within the displayed range."
+msgstr ""
+
+#: src/Domain/Advising/BookingPolicySnapshot.php:38
+msgid "Minimum advance notice must be shorter than the booking horizon."
+msgstr ""
+
+#: src/Domain/Advising/BookingPolicySnapshot.php:43
+msgid "Unconfigured booking rules must use the documented defaults."
+msgstr ""
+
+#: src/Domain/Advising/BookingPolicySnapshot.php:81
+msgid ""
+"Choose a future time within the institution booking horizon and minimum "
+"advance notice."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:192
+msgid "Active appointments changed. Refresh the current list."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:346
+msgid "Active appointments changed. Refresh available times."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:421
+msgid ""
+"Resolve existing appointments before booking another under the institution "
+"active-appointment limit."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:605
+msgid ""
+"Resolve existing appointments before scheduling another under the "
+"institution active-appointment limit."
+msgstr ""
+
+#: src/Domain/Advising/Service/AdvisingAppointmentService.php:776
+msgid "Active appointments changed before completion. Refresh them."
+msgstr ""
+
+#: src/Domain/Advising/Service/BookingPolicyService.php:62
+msgid "Appointment booking policy changed. Refresh the current rules."
+msgstr ""
+
+#: src/Domain/Advising/Service/BookingPolicyService.php:85
+msgid "Reload booking policy before reviewing changes."
+msgstr ""
+
+#: src/Domain/Advising/Service/BookingPolicyService.php:135
+msgid "Booking policy changed after review. Review the current rules."
+msgstr ""
+
+#: src/Domain/Advising/Service/BookingPolicyService.php:146
+msgid "Booking policy changed before completion. Refresh it."
+msgstr ""
+
+#: src/Domain/Advising/Service/BookingPolicyService.php:169
+msgid "Use a valid booking-policy history page."
+msgstr ""
+
+#: src/Domain/Advising/Service/BookingPolicyService.php:177
+msgid "Booking-policy history changed. Refresh it."
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlBookingPolicyRepository.php:82
+msgid "Use a shorter booking-policy reason."
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlBookingPolicyRepository.php:90
+msgid "Booking policy changed. Refresh and review the current rules."
+msgstr ""

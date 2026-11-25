@@ -78,7 +78,22 @@ final class AdvisingAppointmentsFixture
             $s->transactions,
             $audit ?? $s->audit,
             $s->clock,
-            new \Infrastructure\Persistence\Repository\SqlAdvisingAvailabilityRepository($s->sql, $s->dropCipher)
+            new \Infrastructure\Persistence\Repository\SqlAdvisingAvailabilityRepository($s->sql, $s->dropCipher),
+            $this->policies(),
+        );
+    }
+
+    public function policies(?AuditTrail $audit = null): \Domain\Advising\Service\BookingPolicyService
+    {
+        $s = $this->sis;
+        return new \Domain\Advising\Service\BookingPolicyService(
+            new \Infrastructure\Persistence\Repository\SqlBookingPolicyRepository($s->sql, $s->dropCipher),
+            $s->access,
+            new SqlAccessRepository($s->sql),
+            $s->transactions,
+            $audit ?? $s->audit,
+            $s->clock,
+            new \Domain\Shared\Service\ReviewProof($s->dropCipher, $s->clock),
         );
     }
 

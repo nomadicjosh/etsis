@@ -34,6 +34,7 @@ final class AdvisingAppointment implements JsonSerializable
         #[\SensitiveParameter] string $message,
         string $at,
         ?AvailabilityBooking $booking = null,
+        ?BookingPolicySnapshot $policy = null,
     ): self {
         $booking?->verify($host, $hostUser, $time);
         $item = new self(['purpose' => 'advising.appointment', 'id' => $id->value,
@@ -42,7 +43,7 @@ final class AdvisingAppointment implements JsonSerializable
             'host_user_id' => $hostUser->value, 'status' => 'scheduled', 'version' => -1,
             'time' => $time->facts(), 'message' => '', 'created_at' => $at, 'updated_at' => $at,
             'actions' => [], ...$booking === null ? [] : ['booking' => $booking->facts()]]);
-        $item->apply($id, $actor, 'schedule', -1, $time, $message, $at);
+        $item->apply($id, $actor, 'schedule', -1, $time, $message, $at, $policy);
         return $item;
     }
 
@@ -64,12 +65,14 @@ final class AdvisingAppointment implements JsonSerializable
         int $version,
         ?AppointmentTime $time,
         #[\SensitiveParameter] string $message,
+        ?BookingPolicySnapshot $policy = null,
     ): string {
         return hash('sha256', json_encode(
             [$this->data['id'], $this->data['student_id'],
             $this->data['pursuit_id'], $this->data['owner_user_id'], $this->data['host_person_id'],
             $this->data['host_user_id'], $action, $version, $time?->facts(), self::message($message),
-                ...isset($this->data['booking']) ? [['booking' => $this->data['booking']]] : []],
+                ...isset($this->data['booking']) ? [['booking' => $this->data['booking']]] : [],
+                ...$policy === null ? [] : [['booking_policy' => $policy->facts()]]],
             JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
         ));
     }
@@ -98,8 +101,9 @@ final class AdvisingAppointment implements JsonSerializable
         ?AppointmentTime $time,
         #[\SensitiveParameter] string $message,
         string $at,
+        ?BookingPolicySnapshot $policy = null,
     ): array {
-        $intent = $this->intent($action, $version, $time, $message);
+        $intent = $this->intent($action, $version, $time, $message, $policy);
         if (($result = $this->retry($operation, $actor, $intent)) !== null) {
             return $result;
         }
@@ -124,6 +128,12 @@ final class AdvisingAppointment implements JsonSerializable
             ));
         }
         $time?->requireFuture($stamp);
+        if ($policy !== null) {
+            if ($time === null) {
+                throw new \InvalidArgumentException('Booking policy applies only to a new appointment time.');
+            }
+            $policy->requireTime($time, $stamp);
+        }
         $this->data['version']++;
         $this->data['message'] = self::message($message);
         $this->data['updated_at'] = $at;
@@ -139,13 +149,24 @@ final class AdvisingAppointment implements JsonSerializable
             'status' => $this->data['status']];
         $this->data['actions'][] = ['operation_id' => $operation->value, 'actor_id' => $actor->value,
             'action' => $action, 'expected_version' => $version, 'time' => $time?->facts(),
-            'message' => $this->data['message'], 'at' => $at, 'intent' => $intent, 'result' => $result];
+            'message' => $this->data['message'], 'at' => $at, 'intent' => $intent, 'result' => $result,
+            ...$policy === null ? [] : ['booking_policy' => $policy->facts()]];
         return $result;
     }
 
     public function facts(): array
     {
         return $this->data;
+    }
+
+    public function policyFor(EntityId $operation): ?BookingPolicySnapshot
+    {
+        foreach ($this->data['actions'] as $entry) {
+            if ($entry['operation_id'] === $operation->value) {
+                return isset($entry['booking_policy']) ? BookingPolicySnapshot::from($entry['booking_policy']) : null;
+            }
+        }
+        return null;
     }
 
     public function corrections(): int
@@ -160,7 +181,7 @@ final class AdvisingAppointment implements JsonSerializable
             'id', 'version', 'status', 'time', 'message', 'created_at', 'updated_at',
         ])) + ['changes' => array_map(static fn(array $a): array => array_intersect_key(
             $a,
-            array_flip(['action', 'time', 'message', 'at'])
+            array_flip(['action', 'time', 'message', 'at', 'booking_policy'])
         ), $this->data['actions'])];
     }
 
@@ -187,6 +208,7 @@ final class AdvisingAppointment implements JsonSerializable
                 $first['message'],
                 $first['at'],
                 isset($data['booking']) ? new AvailabilityBooking($data['booking']) : null,
+                isset($first['booking_policy']) ? BookingPolicySnapshot::from($first['booking_policy']) : null,
             );
             foreach (array_slice($data['actions'], 1) as $entry) {
                 $item->apply(
@@ -196,7 +218,8 @@ final class AdvisingAppointment implements JsonSerializable
                     $entry['expected_version'],
                     $entry['time'] === null ? null : $time($entry['time']),
                     $entry['message'],
-                    $entry['at']
+                    $entry['at'],
+                    isset($entry['booking_policy']) ? BookingPolicySnapshot::from($entry['booking_policy']) : null,
                 );
             }
             if ($item->facts() !== $data) {

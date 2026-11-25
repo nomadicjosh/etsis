@@ -194,3 +194,44 @@ foreach (
         throw new RuntimeException('A recurring availability route bypassed framework CSRF.');
     }
 }
+
+// Institution configuration has a separate duty and the same protected private transport.
+$policyBase = '/sis/advising-booking-policy/';
+$policyGrants = $sis->access->grants;
+$sis->access->staff = false;
+$sis->access->grants = ['sis:student:read', 'sis:advising:appointments:manage'];
+if ($teachingPost($policyBase . 'view/', [])->getStatusCode() !== 403) {
+    throw new RuntimeException('Appointment management inherited policy configuration authority.');
+}
+$sis->access->grants[] = 'sis:advising:policy';
+$policyView = $checkInPost($policyBase . 'view/', []);
+$policyInput = $policyView['current']['rules'] + ['version' => 0, 'reason' => 'Fictional institution booking setup.'];
+$policyReview = $checkInPost($policyBase . 'review/', $policyInput);
+$policyCommand = $policyInput + array_intersect_key($policyReview, array_flip(['id', 'review_token']));
+$policyResult = $checkInPost($policyBase . 'save/', $policyCommand);
+if (
+    $checkInPost($policyBase . 'save/', $policyCommand) !== $policyResult
+    || count($checkInPost($policyBase . 'history/', [])['items']) !== 1
+    || $checkInPost($appointmentBase . 'list/', [])['booking_policy']['revision'] !== 1
+) {
+    throw new RuntimeException('Reviewed institution policy did not persist through actual providers.');
+}
+$sis->access->actor = $sis->admissions->person($advisingStudent->personId)->ownerUserId;
+$sis->access->grants = [];
+if ($teachingPost($policyBase . 'history/', [])->getStatusCode() !== 403) {
+    throw new RuntimeException('Owner booking inherited private policy history authority.');
+}
+$sis->access->actor = $advisingActor;
+$sis->access->grants = $policyGrants;
+$sis->access->staff = true;
+foreach (['view', 'review', 'save', 'history'] as $action) {
+    $probe = $get->withMethod('POST')->withUri(new \Laminas\Diactoros\Uri(
+        'https://campus.example.invalid' . $policyBase . $action . '/'
+    ))->withoutHeader('X-CSRF-Token')->withParsedBody([]);
+    if ($app->router->match($probe)->getStatusCode() !== 403) {
+        throw new RuntimeException('A booking-policy route bypassed framework CSRF.');
+    }
+}
+if ($appointmentHistory !== $sis->sql->rows('sis_history_events')) {
+    throw new RuntimeException('Booking policy configuration fabricated academic history.');
+}

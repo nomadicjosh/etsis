@@ -2,6 +2,11 @@
 (() => {
     'use strict';
     let sequence = 0;
+    window.advisingBookingPolicySummary = (node, t, policy, title = t.policy) => policy
+        ? node('aside', { class: 'border rounded bg-white p-3 mb-3 text-break' }, node('h4', { class: 'h6' }, title),
+            node('dl', { class: 'mb-0' }, ...[['maximum_active', 'policy_maximum'], ['notice_minutes', 'policy_notice'], ['horizon_days', 'policy_horizon']]
+                .flatMap(([key, label]) => [node('dt', { class: 'form-text' }, t[label]), node('dd', {}, String(policy.rules[key]))])))
+        : node('div');
     window.createAdvisingAvailability = ({ node, request, labels: t }) => {
         const setup = (container, portal) => {
             const root = node('section'), output = node('div');
@@ -121,6 +126,7 @@
             },
             book(container, endpoint, { back = null } = {}) {
                 const { root, output, status, work, button } = setup(container, true);
+                const policyInfo = node('div');
                 const controls = node('form', { class: 'row g-3 mb-3' });
                 const host = node('select', { id: `booking-host-${++sequence}`, class: 'form-select', required: true });
                 const date = node('input', { id: `booking-date-${sequence}`, class: 'form-control', type: 'date', required: true });
@@ -130,9 +136,14 @@
                 const returnControl = back ? button(t.back, back, 'arrow-left') : null;
                 if (returnControl) returnControl.dataset.availabilityReturn = '';
                 root.prepend(node('h3', { class: 'h5' }, t.book), node('p', { class: 'form-text' }, t.booking_intro),
-                    ...(returnControl ? [returnControl] : []), controls);
+                    ...(returnControl ? [returnControl] : []), policyInfo, controls);
                 let selected = null, intent = null, generation = 0;
                 root.addEventListener('availability-denied', () => { selected = null; intent = null; generation++; });
+                function renderPolicy(data) {
+                    policyInfo.replaceChildren(window.advisingBookingPolicySummary(node, t, data.booking_policy));
+                    if (data.capacity_reached) { controls.hidden = true; output.replaceChildren(node('p', { role: 'status' }, t.capacity_reached)); return false; }
+                    return true;
+                }
                 const clear = () => { generation++; selected = null; intent = null; output.replaceChildren(); };
                 host.addEventListener('change', clear); date.addEventListener('input', clear);
                 controls.addEventListener('submit', event => { event.preventDefault(); work(async () => {
@@ -141,6 +152,7 @@
                     const requested = { host_person_id: host.value, date: date.value };
                     const data = await request(endpoint + 'available-times/', 'POST', requested);
                     if (!root.isConnected || epoch !== generation || requested.host_person_id !== host.value || requested.date !== date.value) return;
+                    if (!renderPolicy(data)) return;
                     output.replaceChildren(); selected = null; intent = null;
                     for (const window of data.windows) output.append(node('article', { class: 'border rounded bg-white p-3 mb-3 text-break' },
                         node('h4', { class: 'h6' }, `${window.time.start.replace('T', ' ')} – ${window.time.end.slice(11)} · ${window.time.timezone}`),
@@ -152,6 +164,7 @@
                     const epoch = ++generation;
                     const data = await request(endpoint + 'available-times/', 'POST', { window_id: window.id });
                     if (!root.isConnected || epoch !== generation) return;
+                    if (!renderPolicy(data)) return;
                     selected = data.window; intent = data.new_id; output.replaceChildren();
                     output.append(node('p', { style: 'white-space:pre-wrap;overflow-wrap:anywhere' }, selected.message));
                     const grid = node('div', { class: 'row g-2 mt-2' });
@@ -176,6 +189,7 @@
                 return work(async () => {
                     const data = await request(endpoint + 'available-times/', 'POST', {});
                     if (!root.isConnected) return;
+                    if (!renderPolicy(data)) return;
                     host.replaceChildren(...data.hosts.map(h => node('option', { value: h.id }, h.name))); date.value ||= data.today; date.min = data.today;
                     if (!data.hosts.length) { controls.hidden = true; output.append(node('p', {}, t.no_hosts)); }
                 });

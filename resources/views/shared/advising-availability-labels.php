@@ -5,6 +5,13 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'policy' => trans_html('Current booking limits'),
+    'policy_maximum' => trans_html('Maximum active appointments per program pursuit'),
+    'policy_notice' => trans_html('Minimum advance notice in minutes'),
+    'policy_horizon' => trans_html('Booking horizon in calendar days'),
+    'capacity_reached' => trans_html(
+        'The active-appointment limit has been reached. Resolve existing appointments or contact the advising office.'
+    ),
     'title' => trans_html('Advisor availability'),
     'mine' => trans_html('Manage my availability'),
     'intro' => trans_html('Offer dated times for assigned students to book. Closing availability stops '

@@ -44,6 +44,15 @@ final readonly class AdvisingRecoveryServices
             $audit ?? $s->audit,
             $s->clock,
             new SqlAdvisingAvailabilityRepository($s->sql, $s->dropCipher),
+            new \Domain\Advising\Service\BookingPolicyService(
+                new \Infrastructure\Persistence\Repository\SqlBookingPolicyRepository($s->sql, $s->dropCipher),
+                $s->access,
+                new SqlAccessRepository($s->sql),
+                $s->transactions,
+                $audit ?? $s->audit,
+                $s->clock,
+                new ReviewProof($s->dropCipher, $s->clock),
+            ),
         );
     }
 

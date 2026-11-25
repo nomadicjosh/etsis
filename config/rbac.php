@@ -25,6 +25,7 @@ return [
         "sis:advising:appointments:manage" => [
             "description" => "Schedule advising appointments and record attendance outcomes.",
         ],
+        'sis:advising:policy' => ['description' => 'Configure reviewed institution appointment booking limits.'],
         "sis:advising:checkin" => ["description" => "Record advising check-ins and manage student follow-up."],
         "sis:advising:manage" => ["description" => "Review dated student advisor assignments."],
         "sis:academic:course:amend" => [

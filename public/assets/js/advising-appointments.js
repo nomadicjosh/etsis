@@ -8,6 +8,7 @@
             const controls = node('div', { class: 'd-flex flex-wrap gap-2 mb-3' });
             const status = node('p', { role: 'status', 'aria-live': 'polite', tabindex: '-1', id: `${identity}-status`, class: 'form-text text-break' });
             const editor = node('div'), content = node('div');
+            const policyInfo = node('div');
             const availability = node('p', { class: 'form-text', hidden: true }, t.unavailable);
             const drafts = new Map();
             let finished = false, after = null, next = null, stack = [], busy = false, generation = 0, creation = null, createId = null, hosts = [], zone = '', activeDraft = null;
@@ -23,7 +24,7 @@
                 catch (error) {
                     if (!container.isConnected) return;
                     if ([401, 403].includes(error.status)) {
-                        content.replaceChildren(); editor.replaceChildren(); controls.replaceChildren(); drafts.clear(); creation = null; createId = null; hosts = []; activeDraft = null;
+                        content.replaceChildren(); editor.replaceChildren(); controls.replaceChildren(); policyInfo.replaceChildren(); drafts.clear(); creation = null; createId = null; hosts = []; activeDraft = null;
                         status.textContent = t.denied;
                         onDenied?.();
                     } else {
@@ -112,7 +113,8 @@
                 for (const change of item.changes) changes.append(node('div', { class: 'border-top pt-2 mt-2' },
                     node('p', { class: 'form-text' }, `${t.actions[change.action]} · ${change.at}`),
                     ...(change.time ? [node('p', {}, local(change.time))] : []),
-                    node('p', { style: 'white-space:pre-wrap;overflow-wrap:anywhere' }, change.message)));
+                    node('p', { style: 'white-space:pre-wrap;overflow-wrap:anywhere' }, change.message),
+                    ...(change.booking_policy ? [window.advisingBookingPolicySummary(node, t, change.booking_policy, t.applied_policy)] : [])));
                 box.append(changes);
                 if (item.can_act || item.can_correct) {
                     const actions = node('div', { class: 'd-flex flex-wrap gap-2 mb-3' }), host = node('div');
@@ -160,12 +162,14 @@
                     onBack: () => work(async () => { controls.hidden = false; await load(); }),
                 });
             }, 'calendar3'));
-            container.append(node('h3', { class: 'h5' }, t.title), node('p', { class: 'form-text' }, t.intro), controls, availability, status, editor, content);
+            container.append(node('h3', { class: 'h5' }, t.title), node('p', { class: 'form-text' }, t.intro), controls, availability, status, policyInfo, editor, content);
             async function load() {
                 const current = ++generation;
                 const data = await request(endpoint + 'list/', 'POST', { finished, after, ...(selectedAppointment ? { appointment_id: selectedAppointment } : {}) });
                 if (!container.isConnected || current !== generation) return;
                 hosts = data.hosts; zone = data.timezone; createId ||= data.new_id;
+                policyInfo.replaceChildren(window.advisingBookingPolicySummary(node, t, data.booking_policy));
+                if (data.capacity_reached) policyInfo.append(node('p', { class: 'form-text', role: 'status' }, t.capacity_reached));
                 add.hidden = owner || !data.can_schedule;
                 const booking = controls.querySelector('[data-owner-booking]');
                 if (booking) booking.hidden = !data.can_book;

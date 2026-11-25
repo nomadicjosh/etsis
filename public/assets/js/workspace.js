@@ -585,6 +585,10 @@
             tool('Grade corrections', () => teachingStudio.gradeChanges(), 'Review requested grade corrections', 'clipboard-check'));
         if (section === 'students' && can('sis:load:policy')) tools.append(
             tool('Load policy', () => enrollmentLoad.policy(), 'Configure enrollment load policies', 'sliders'));
+        if (section === 'students' && can('sis:advising:policy')) {
+            const labels = JSON.parse(document.getElementById('advising-booking-policy-labels').textContent);
+            tools.append(tool(labels.title, () => window.createAdvisingBookingPolicy({ node, request, openDrawer, labels }).open(), '', 'sliders'));
+        }
         if (section === 'students' && can('sis:student:read') && can('sis:advising:appointments:manage')) tools.append(
             tool(JSON.parse(document.getElementById('advising-availability-labels').textContent).title,
                 () => advisingStudio.availability(), '', 'calendar2-week'));

@@ -48,6 +48,7 @@ final readonly class AdvisingAppointmentService
         private AuditTrail $audit,
         private Clock $clock,
         private AdvisingAvailabilityRepository $availability,
+        private BookingPolicyService $policies,
     ) {
     }
 
@@ -136,6 +137,8 @@ final readonly class AdvisingAppointmentService
             $context = $this->context($student, $pursuit);
             $hosts = $channel !== 'owner' && $context['current']
                 ? $this->advisors->appointmentHosts($student, $pursuit, $channel) : [];
+            $policy = $this->policies->snapshot();
+            $capacity = $this->records->activeCount($student, $pursuit) >= $policy->rules['maximum_active'];
             $rows = $selected === null
                 ? $this->records->page($student, $pursuit, $channel === 'owner' ? $actor : null, $finished, $after)
                 : [$this->records->find($student, $pursuit, $selected)
@@ -183,10 +186,18 @@ final readonly class AdvisingAppointmentService
             if ($hosts !== [] && $hosts !== $this->advisors->appointmentHosts($student, $pursuit, $channel)) {
                 throw new ConcurrentModificationException(trans('Advisor assignments changed. Refresh appointments.'));
             }
+            $this->policies->assertCurrent($policy);
+            if ($capacity !== ($this->records->activeCount($student, $pursuit) >= $policy->rules['maximum_active'])) {
+                throw new ConcurrentModificationException(trans(
+                    'Active appointments changed. Refresh the current list.'
+                ));
+            }
             return ['items' => $views, 'next_after' => count($rows) > 10 ? end($items)->facts()['id'] : null,
+                'booking_policy' => $policy->facts(),
+                'capacity_reached' => $capacity,
                 'new_id' => EntityId::generate()->value,
-                'can_book' => $channel === 'owner' && $selected === null && $context['current'],
-                'can_schedule' => $selected === null && $hosts !== [] && $context['owner'] !== null,
+                'can_book' => !$capacity && $channel === 'owner' && $selected === null && $context['current'],
+                'can_schedule' => !$capacity && $selected === null && $hosts !== [] && $context['owner'] !== null,
                 'hosts' => array_map(static fn(array $h): array => array_intersect_key($h, array_flip([
                     'advisor_person_id', 'name', 'starts_on', 'ends_on',
                 ])), $hosts), 'timezone' => $this->clock->now()->getTimezone()->getName(), 'now' => $this->now()];
@@ -237,12 +248,16 @@ final readonly class AdvisingAppointmentService
                 throw new AccessDeniedException(trans('Self-booking requires the current primary active program.'));
             }
             $hosts = $this->advisors->appointmentHosts($student, $pursuit, 'owner');
+            $policy = $this->policies->snapshot();
+            $capacity = $this->records->activeCount($student, $pursuit) >= $policy->rules['maximum_active'];
             $result = ['hosts' => array_values(array_reduce($hosts, static function (array $all, array $h): array {
                 $all[$h['advisor_person_id']] = ['id' => $h['advisor_person_id'], 'name' => $h['name']];
                 return $all;
             }, [])), 'today' => $this->clock->now()->format('Y-m-d'),
                 'timezone' => $this->clock->now()->getTimezone()->getName(), 'new_id' => EntityId::generate()->value,
                 'windows' => [], 'slots' => []];
+            $result['booking_policy'] = $policy->facts();
+            $result['capacity_reached'] = $capacity;
             $read = null;
             $source = [];
             if ($windowId !== null) {
@@ -251,11 +266,14 @@ final readonly class AdvisingAppointmentService
                 ));
                 $this->bookable($window, $hosts);
                 $source = $window->facts();
-                $read = function () use ($window, $student): array {
+                $read = function () use ($window, $student, $policy, $capacity): array {
                     $slots = [];
+                    if ($capacity) {
+                        return $slots;
+                    }
                     foreach ($window->slots() as $slot) {
                         if (
-                            $slot->startsAt > $this->now() && !$this->records->conflict(
+                            $policy->permits($slot, $this->clock->now()) && !$this->records->conflict(
                                 $student,
                                 new EntityId($window->facts()['host_person_id']),
                                 new EntityId($window->facts()['id']),
@@ -322,6 +340,12 @@ final readonly class AdvisingAppointmentService
                 throw new ConcurrentModificationException(trans('Availability changed. Choose the date again.'));
             }
             $this->finish($student, $pursuit, 'owner', $actor, $context);
+            $this->policies->assertCurrent($policy);
+            if ($capacity !== ($this->records->activeCount($student, $pursuit) >= $policy->rules['maximum_active'])) {
+                throw new ConcurrentModificationException(trans(
+                    'Active appointments changed. Refresh available times.'
+                ));
+            }
             if ($hosts !== $this->advisors->appointmentHosts($student, $pursuit, 'owner')) {
                 throw new ConcurrentModificationException(trans('Advisor assignments changed. Refresh appointments.'));
             }
@@ -372,7 +396,8 @@ final readonly class AdvisingAppointmentService
                     'schedule',
                     -1,
                     $time,
-                    $facts['actions'][0]['message']
+                    $facts['actions'][0]['message'],
+                    $old->policyFor($id)
                 ));
             } else {
                 $window = $this->availability->find($windowId) ?? throw new RecordNotFoundException(trans(
@@ -389,9 +414,12 @@ final readonly class AdvisingAppointmentService
                     'Choose one of the offered times.'
                 ));
                 $hosts = $this->eligible($student, $pursuit, 'owner', $context, $host, $time, $id);
-                if ($this->records->activeCount($student, $pursuit) >= 20) {
+                $policy = $this->policies->snapshot();
+                $policy->requireTime($time, $this->clock->now());
+                if ($this->records->activeCount($student, $pursuit) >= $policy->rules['maximum_active']) {
                     throw new ConcurrentModificationException(trans(
-                        'Resolve existing appointments before booking another (20 active maximum per program).'
+                        'Resolve existing appointments before booking another under the institution '
+                        . 'active-appointment limit.'
                     ));
                 }
                 $item = AdvisingAppointment::create(
@@ -405,11 +433,15 @@ final readonly class AdvisingAppointmentService
                     $time,
                     $source['message'],
                     $this->now(),
-                    $booking
+                    $booking,
+                    $policy
                 );
                 $this->records->save($item, null);
                 $this->audit->record($actor, 'advising.appointment_self_booked', $id);
                 $this->verify($item);
+                $this->policies->assertCurrent($policy);
+                $policy->requireTime($time, $this->clock->now());
+                $this->assertCapacity($student, $pursuit, $policy);
                 if (
                     $this->availability->find($windowId)?->facts() !== $source
                     || $hosts !== $this->eligible($student, $pursuit, 'owner', $context, $host, $time, $id)
@@ -418,7 +450,7 @@ final readonly class AdvisingAppointmentService
                         'Availability changed before booking completed. Refresh it.'
                     ));
                 }
-                $result = $item->retry($id, $actor, $item->intent('schedule', -1, $time, $source['message']));
+                $result = $item->retry($id, $actor, $item->intent('schedule', -1, $time, $source['message'], $policy));
             }
             $this->finish($student, $pursuit, 'owner', $actor, $context);
             return $result;
@@ -563,12 +595,15 @@ final readonly class AdvisingAppointmentService
                 ) {
                     throw new AccessDeniedException();
                 }
-                $result = $old->retry($id, $actor, $old->intent('schedule', -1, $time, $message));
+                $result = $old->retry($id, $actor, $old->intent('schedule', -1, $time, $message, $old->policyFor($id)));
             } else {
                 $hosts = $this->eligible($student, $pursuit, $channel, $context, $host, $time);
-                if ($this->records->activeCount($student, $pursuit) >= 20) {
+                $policy = $this->policies->snapshot();
+                $policy->requireTime($time, $this->clock->now());
+                if ($this->records->activeCount($student, $pursuit) >= $policy->rules['maximum_active']) {
                     throw new ConcurrentModificationException(trans(
-                        'Resolve existing appointments before scheduling another (20 active maximum per program).'
+                        'Resolve existing appointments before scheduling another under the institution '
+                        . 'active-appointment limit.'
                     ));
                 }
                 $hostUser = $this->admissions->person($host)->ownerUserId ?? throw new AccessDeniedException();
@@ -582,17 +617,21 @@ final readonly class AdvisingAppointmentService
                     $actor,
                     $time,
                     $message,
-                    $this->now()
+                    $this->now(),
+                    policy: $policy
                 );
                 $this->records->save($item, null);
                 $this->audit->record($actor, 'advising.appointment_scheduled', $id);
                 $this->verify($item);
+                $this->policies->assertCurrent($policy);
+                $policy->requireTime($time, $this->clock->now());
+                $this->assertCapacity($student, $pursuit, $policy);
                 if ($hosts !== $this->eligible($student, $pursuit, $channel, $context, $host, $time, $id)) {
                     throw new ConcurrentModificationException(trans(
                         'Advisor assignments changed. Refresh appointments.'
                     ));
                 }
-                $result = $item->retry($id, $actor, $item->intent('schedule', -1, $time, $message));
+                $result = $item->retry($id, $actor, $item->intent('schedule', -1, $time, $message, $policy));
             }
             $this->finish($student, $pursuit, $channel, $actor, $context);
             return $result;
@@ -653,17 +692,24 @@ final readonly class AdvisingAppointmentService
             ) {
                 throw new AccessDeniedException();
             }
-            $intent = $item->intent($action, $version, $time, $message);
+            $accepted = in_array($operation->value, array_column($facts['actions'], 'operation_id'), true);
+            $policy = $time === null ? null : ($accepted ? $item->policyFor($operation) : $this->policies->snapshot());
+            $intent = $item->intent($action, $version, $time, $message, $policy);
             if (($result = $item->retry($operation, $actor, $intent)) === null) {
                 if ($channel === 'owner' && $this->now() >= $facts['time']['starts_at']) {
                     throw new AccessDeniedException(trans('Contact the advising office to change a past appointment.'));
                 }
                 $hosts = $time === null ? null
                     : $this->eligible($student, $pursuit, $channel, $context, $host, $time, $id);
-                $result = $item->apply($operation, $actor, $action, $version, $time, $message, $this->now());
+                $policy?->requireTime($time, $this->clock->now());
+                $result = $item->apply($operation, $actor, $action, $version, $time, $message, $this->now(), $policy);
                 $this->records->save($item, $version);
                 $this->audit->record($actor, 'advising.appointment_' . $action, $id);
                 $this->verify($item);
+                if ($policy !== null) {
+                    $this->policies->assertCurrent($policy);
+                    $policy->requireTime($time, $this->clock->now());
+                }
                 if (
                     $time !== null && $hosts !== $this->eligible(
                         $student,
@@ -718,6 +764,18 @@ final readonly class AdvisingAppointmentService
             ));
         }
         return $hosts;
+    }
+
+    private function assertCapacity(
+        EntityId $student,
+        EntityId $pursuit,
+        \Domain\Advising\BookingPolicySnapshot $policy
+    ): void {
+        if ($this->records->activeCount($student, $pursuit) > $policy->rules['maximum_active']) {
+            throw new ConcurrentModificationException(trans(
+                'Active appointments changed before completion. Refresh them.'
+            ));
+        }
     }
 
     private function lock(EntityId $student, EntityId $host): void

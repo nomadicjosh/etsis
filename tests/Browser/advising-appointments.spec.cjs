@@ -11,12 +11,16 @@ const original = () => ({ id: id(10), status: 'scheduled', version: 0, time: tim
 const availabilityWindow = () => ({ id: id(90), status: 'open', version: 0,
     time: time('2026-08-11T13:00', '2026-08-11T15:00'), slot_minutes: 30, message: 'Fictional office <b>meeting</b> instructions.',
     created_at: '2026-08-10T17:00:00Z', closed_at: null, close_reason: null });
+const defaultRules = () => ({ maximum_active: 20, notice_minutes: 0, horizon_days: 366 });
 async function fixture(page, channel = 'staff', options = {}) {
     const calls = [], errors = [];
     let windows = options.availabilitySeed ? [availabilityWindow()] : [], bookingRejected = options.staleBooking, closeRejected = options.staleClosure;
     const booked = new Map(), series = new Map();
     let seriesRejected = options.staleSeries, seriesCloseRejected = options.staleSeriesClose;
     let items = options.seed ? [original()] : channel === 'staff' ? [] : [original()], stale = options.stale, deny = false, sequence = 30;
+    const policies = [], policyReceipts = new Map(); let lostPolicyReply = options.lostPolicyReply;
+    const policy = () => ({ publication_id: policies.at(-1)?.id || null, revision: policies.length, rules: policies.at(-1)?.rules || defaultRules() });
+    if (options.policy) items.forEach(i => { i.changes[0].booking_policy = policy(); });
     page.on('pageerror', e => errors.push(e.message));
     await page.route(channel === 'staff' ? '**/sis/**' : '**/portal/api/**', async route => {
         const path = new URL(route.request().url()).pathname;
@@ -32,6 +36,23 @@ async function fixture(page, channel = 'staff', options = {}) {
         else if (path === '/portal/api/advising/') result = { items: [{ student_id: student, pursuit_id: pursuit, name: 'Alex Example', institutional_id: 'S-FICTIONAL', program: { code: 'BS.CS', title: 'Computing' }, entry_term: { code: '26/FA' } }], next_after: null };
         else if (path === '/portal/api/advising-availability/context/') result = { can_manage: channel === 'advisor' };
         else if (path === '/sis/advising-availability/candidates/') result = { items: [{ id: host, given_name: 'Fictional', family_name: 'Advisor' }], next_after: null };
+        else if (path.includes('/advising-booking-policy/')) {
+            if (deny) return route.fulfill({ status: 403, json: { error: 'Fictional policy access ended.' } });
+            if (path.endsWith('/view/')) result = { current: policy(), defaults: defaultRules() };
+            else if (path.endsWith('/history/')) {
+                const rows = [...policies].reverse().filter(p => data.before == null || p.revision < data.before);
+                result = { items: rows.slice(0, 10), next_before: rows.length > 10 ? rows[9].revision : null };
+            } else if (path.endsWith('/review/')) result = { id: id(sequence++), version: data.version, before: policy(),
+                rules: Object.fromEntries(Object.keys(defaultRules()).map(k => [k, data[k]])), reason: data.reason, review_token: 'fictional-policy-proof' };
+            else if (path.endsWith('/save/')) {
+                if (!policyReceipts.has(data.id)) {
+                    policies.push({ id: data.id, revision: policies.length + 1, rules: Object.fromEntries(Object.keys(defaultRules()).map(k => [k, data[k]])), reason: data.reason, at: '2026-08-10T17:00:00Z' });
+                    policyReceipts.set(data.id, { id: data.id, revision: policies.length });
+                }
+                if (lostPolicyReply) { lostPolicyReply = false; return route.fulfill({ status: 503, json: { error: 'Fictional lost policy reply. Retry the same confirmation.' } }); }
+                result = policyReceipts.get(data.id);
+            }
+        }
         else if (path.includes('/advising-availability/')) {
             if (deny) return route.fulfill({ status: 403, json: { error: 'Fictional availability access ended.' } });
             if (path.endsWith('/series-list/')) result = { items: [...series.values()].map(s => ({ id: s.id, from: s.pattern.from, through: s.pattern.through, count: s.windows.length, status: s.status })), next_after: null, can_create: true };
@@ -78,6 +99,7 @@ async function fixture(page, channel = 'staff', options = {}) {
         else if (path.endsWith('/appointments/available-times/')) {
             if (deny) return route.fulfill({ status: 403, json: { error: 'Fictional booking access ended.' } });
             result = { hosts: [{ id: host, name: 'Fictional Advisor' }], today: '2026-08-10', timezone: 'America/Los_Angeles', new_id: id(sequence++), windows: [], slots: [] };
+            if (options.policy) { result.booking_policy = policy(); result.capacity_reached = Boolean(options.capacity); }
             if (data.window_id) {
                 result.window = windows.find(w => w.id === data.window_id);
                 result.slots = ['13:00', '13:30', '14:00', '14:30'].map((hour, i) => time('2026-08-11T' + hour, '2026-08-11T' + ['13:30','14:00','14:30','15:00'][i]));
@@ -119,6 +141,7 @@ async function fixture(page, channel = 'staff', options = {}) {
                 can_reschedule: i.status === 'scheduled' && channel !== 'owner', can_act: i.status === 'scheduled', can_correct: channel === 'staff' && ['held', 'no_show'].includes(i.status), cancel_only: channel === 'owner', new_operation: id(sequence++) })),
                 next_after: null, new_id: id(sequence++), can_schedule: !data.appointment_id && channel !== 'owner', can_book: !data.appointment_id && channel === 'owner',
                 hosts: channel === 'owner' ? [] : [{ advisor_person_id: host, name: 'Fictional Advisor', starts_on: '2026-01-01', ends_on: null }], timezone: 'America/Los_Angeles' };
+            if (options.policy) { result.booking_policy = policy(); result.capacity_reached = Boolean(options.capacity); if (options.capacity) { result.can_schedule = false; result.can_book = false; } }
         } else if (path.endsWith('/appointments/schedule/')) {
             if (options.invalid) { options.invalid = false; return route.fulfill({ status: 422, json: { error: 'Please correct the highlighted fields.', errors: [{ field: 'message', message: 'Fictional details need clarification.' }] } }); }
             const item = { ...original(), id: data.appointment_id, time: time(data.start, data.end), message: data.message };
@@ -165,6 +188,94 @@ async function accessible(page) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
 }
+
+async function openPolicy(page) {
+    await page.goto('/admin/');
+    await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await workspaceTool(page, 'Appointment booking policy');
+    await expect(page.getByLabel('Maximum active appointments per program pursuit', { exact: true })).toHaveValue('20');
+}
+
+test('booking policy reviews defaults, preserves drafts and retries the original confirmation', async ({ page }) => {
+    const f = await fixture(page, 'staff', { lostPolicyReply: true }); await openPolicy(page);
+    await page.getByLabel('Maximum active appointments per program pursuit', { exact: true }).fill('3');
+    await page.getByLabel('Minimum advance notice in minutes', { exact: true }).fill('60');
+    await page.getByLabel('Reason for this policy change', { exact: true }).fill('Fictional <b>private</b> policy reason.');
+    await page.getByRole('button', { name: 'Review booking policy', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Proposed rules');
+    await page.getByRole('button', { name: 'Keep editing', exact: true }).click();
+    await expect(page.getByLabel('Reason for this policy change', { exact: true })).toHaveValue('Fictional <b>private</b> policy reason.');
+    await page.getByRole('button', { name: 'Review booking policy', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm policy change', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional lost policy reply.');
+    await page.getByRole('button', { name: 'Confirm policy change', exact: true }).click();
+    await expect(page.getByLabel('Maximum active appointments per program pursuit', { exact: true })).toHaveValue('3');
+    const saves = f.calls.filter(c => c.path.endsWith('/advising-booking-policy/save/'));
+    expect(saves[0].data).toEqual(saves[1].data);
+    await page.getByRole('button', { name: 'Booking policy history', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional <b>private</b> policy reason.');
+    expect(await page.locator('#drawer-body b').count()).toBe(0);
+    await page.getByRole('button', { name: 'Back to booking policy', exact: true }).click();
+    await page.getByRole('button', { name: 'Use default values', exact: true }).click();
+    await expect(page.getByLabel('Maximum active appointments per program pursuit', { exact: true })).toHaveValue('20');
+    expect(f.calls.filter(c => c.path.endsWith('/save/'))).toHaveLength(2);
+    expect(f.calls.filter(c => c.path.includes('/advising-booking-policy/')).every(c => c.csrf === 'fictional-test-token')).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+test('booking policy phone and keyboard controls preserve the draft through history', async ({ page }) => {
+    await fixture(page); await openPolicy(page);
+    await page.getByLabel('Reason for this policy change', { exact: true }).fill('Fictional saved draft.');
+    await page.getByRole('button', { name: 'Booking policy history', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to booking policy', exact: true }).click();
+    await expect(page.getByLabel('Reason for this policy change', { exact: true })).toHaveValue('Fictional saved draft.');
+    await accessible(page);
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    const review = page.getByRole('button', { name: 'Review booking policy', exact: true });
+    await review.scrollIntoViewIfNeeded(); await review.focus(); await page.keyboard.press('Enter');
+    await expect(page.getByRole('button', { name: 'Confirm policy change', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.screenshot({ path: '/tmp/etsis-booking-policy-phone.png', fullPage: true });
+});
+
+test('booking policy denies detached or changed reviews and clears private details on lost access', async ({ page }) => {
+    const f = await fixture(page); await openPolicy(page);
+    await page.getByLabel('Reason for this policy change', { exact: true }).fill('Fictional first draft.');
+    let release, began;
+    const gate = new Promise(resolve => { release = resolve; }), started = new Promise(resolve => { began = resolve; });
+    await page.route('**/advising-booking-policy/review/', async route => { began(); await gate; await route.fallback(); });
+    await page.getByRole('button', { name: 'Review booking policy', exact: true }).click(); await started;
+    await page.getByLabel('Reason for this policy change', { exact: true }).fill('Fictional changed private draft.');
+    release(); await expect(page.locator('#drawer-body')).toContainText('Your draft changed while the review loaded.');
+    await expect(page.getByRole('button', { name: 'Confirm policy change', exact: true })).toHaveCount(0);
+    f.deny(); await page.getByRole('button', { name: 'Refresh current policy', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Booking policy access is unavailable.');
+    await expect(page.getByLabel('Reason for this policy change', { exact: true })).toHaveCount(0);
+    expect(f.calls.some(c => c.path.endsWith('/save/'))).toBe(false); expect(f.errors).toEqual([]);
+});
+
+test('booking policy current and accepted limits appear privately with capacity explanations', async ({ page }) => {
+    const f = await fixture(page, 'owner', { policy: true, capacity: true }); await openPortal(page, 'owner');
+    await expect(page.locator('#campus-service-content')).toContainText('Current booking limits');
+    await expect(page.getByRole('button', { name: 'Book an available time', exact: true })).toHaveCount(0);
+    await page.locator('summary').filter({ hasText: 'Appointment changes' }).click();
+    await expect(page.locator('#campus-service-content')).toContainText('Booking limits used for this change');
+    await accessible(page); expect(f.errors).toEqual([]);
+});
+
+test('booking policy capacity refresh removes offered choices while preserving the return path', async ({ page }) => {
+    const options = { policy: true, availabilitySeed: true };
+    const f = await fixture(page, 'owner', options); await openPortal(page, 'owner');
+    await page.getByRole('button', { name: 'Book an available time', exact: true }).click();
+    await expect(page.locator('#campus-service-content')).toContainText('Current booking limits');
+    options.capacity = true;
+    await page.getByLabel('Availability date', { exact: true }).fill('2026-08-11');
+    await page.getByRole('button', { name: 'Find availability', exact: true }).click();
+    await expect(page.locator('#campus-service-content')).toContainText('The active-appointment limit has been reached.');
+    await expect(page.getByRole('button', { name: 'View available times', exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Back to appointments', exact: true }).click();
+    expect(f.calls.some(c => c.path.endsWith('/book/'))).toBe(false); expect(f.errors).toEqual([]);
+});
 
 test('staff schedules, reschedules and reviews original changes with professional phone controls', async ({ page }) => {
     const { calls, errors } = await fixture(page, 'staff', { invalid: true });
