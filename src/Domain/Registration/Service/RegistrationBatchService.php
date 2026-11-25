@@ -888,6 +888,7 @@ final readonly class RegistrationBatchService
                 $section->id,
                 $section->termId,
                 $course->publicationVersionId,
+                $selectedOffering,
             );
             $corequisite = $assignment === null ? null : $this->corequisites->evaluate(
                 $id,

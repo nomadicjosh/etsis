@@ -6,7 +6,10 @@ window.createRegistrationSchedule = function (ui) {
         document.getElementById('workspace-config') || document.getElementById('campus-config');
     const originLabels = ui.prerequisiteOriginLabels ||
         (configElement ? JSON.parse(configElement.textContent).prerequisite_origin_labels : null) || {};
-    const originDefaults = { completion_from: 'Completed from', completion_through: 'Completed through', field: 'Qualifying prerequisite coursework', either: 'Institutional or transfer',
+    const originDefaults = { max_age_months: 'Maximum age before section starts (months)', recency_start: 'Published section start',
+        recency_earliest: 'Earliest completion under age limit',
+        recency_unknown: 'The published section start is unavailable. Select a published offering to assess this age limit.',
+        completion_from: 'Completed from', completion_through: 'Completed through', field: 'Qualifying prerequisite coursework', either: 'Institutional or transfer',
         institutional: 'Institutional work only', transfer: 'Transfer work only',
         scope: 'This rule does not change earned credits or decide which work counts toward a degree.' };
     const originText = key => originLabels[key] || originDefaults[key];
@@ -127,6 +130,11 @@ window.createRegistrationSchedule = function (ui) {
                         group.minimum_grade_points_milli != null ? `Minimum ${group.minimum_grade_points_milli / 1000} grade points per counted course · ${group.completed_count} verified: ` : "",
                         group.completion_window ? node('p', { class: 'form-text' },
                             `${originText('completion_from')}: ${group.completion_window.from || '—'} · ${originText('completion_through')}: ${group.completion_window.through || '—'}`) : null,
+                        group.completion_window?.max_age_months != null ? node('p', { class: 'form-text' },
+                            `${originText('max_age_months')}: ${group.completion_window.max_age_months} · ` +
+                            (group.completion_anchor
+                                ? `${originText('recency_start')}: ${group.completion_anchor.starts_on} · ${originText('recency_earliest')}: ${group.completion_anchor.earliest_completion_on}`
+                                : originText('recency_unknown'))) : null,
                         group.credit_origin ? node('p', { class: 'form-text' },
                             `${originText('field')}: ${originText(group.credit_origin)}`) : null,
                         group.positions.map(position => {

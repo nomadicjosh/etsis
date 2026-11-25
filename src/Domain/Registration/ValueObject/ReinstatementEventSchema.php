@@ -112,7 +112,10 @@ final class ReinstatementEventSchema
         $schedule = new RegistrationScheduleDecision($value["schedule_evidence"]);
         if (
             $schedule->blocked() ||
-            $prerequisites->required !== $payload["eligibility"]["required_course_ids"]
+            $prerequisites->required !== $payload["eligibility"]["required_course_ids"] ||
+            ($prerequisites->groups?->hasRecency() &&
+                ($prerequisites->completionAnchor['section_version_id'] ?? null)
+                    !== ($value['section_version_id'] ?? null))
         ) {
             throw new InvalidArgumentException("Retain met reinstatement requirements.");
         }

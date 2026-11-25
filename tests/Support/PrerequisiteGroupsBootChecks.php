@@ -247,7 +247,11 @@ if ($teachingPost($base . 'prerequisite-groups/', $missingWindow)->getStatusCode
 }
 foreach (
     [false, [], [$window, null], [['from' => '2025-02-30', 'through' => null]],
-    [['from' => '2026-01-01', 'through' => '2025-01-01']]] as $invalid
+    [['from' => '2026-01-01', 'through' => '2025-01-01']],
+    ...array_map(
+        static fn($age): array => [['from' => null, 'through' => null, 'max_age_months' => $age]],
+        [null, 0, -1, 1201, 1.5, '60', true, []]
+    )] as $invalid
 ) {
     if (
         $teachingPost($base . 'prerequisite-groups/', array_replace(
@@ -262,4 +266,22 @@ $windowSaved = $teachingPost($base . 'prerequisite-groups/', $windowInput);
 $windowResult = json_decode((string) $windowSaved->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if ($windowSaved->getStatusCode() !== 200 || $windowResult['completion_windows'] !== [$window]) {
     throw new RuntimeException('The actual prerequisite API lost completion boundaries.');
+}
+
+// Recency uses the existing explicit completion policy, with no extra endpoint or historical backfill.
+$ageDraft = json_decode((string) $read()->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$ageWindow = ['from' => null, 'max_age_months' => 60, 'through' => null];
+$ageInput = array_replace($windowInput, ['revision' => $ageDraft['revision'], 'completion_windows' => [$ageWindow]]);
+$ageSaved = $teachingPost($base . 'prerequisite-groups/', $ageInput);
+$ageResult = json_decode((string) $ageSaved->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($ageSaved->getStatusCode() !== 200 || $ageResult['completion_windows'] !== [$ageWindow]) {
+    throw new RuntimeException('The private prerequisite API lost the calendar-month age limit.');
+}
+$ageReview = $teachingPost($base . 'publication/review/', ['reason' => 'Fictional prerequisite recency review.']);
+$agePlan = json_decode((string) $ageReview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $ageReview->getStatusCode() !== 200
+    || ($agePlan['definition']['prerequisite_completion_windows'] ?? null) !== [$ageWindow]
+) {
+    throw new RuntimeException('The publication review lost prerequisite recency.');
 }

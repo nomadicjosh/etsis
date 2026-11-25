@@ -86,6 +86,14 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
     await completion.getByLabel('Completed through', {exact: true}).fill('2024-12-31');
     await expect(page.getByRole('button', {name: 'Save requirements', exact: true})).toBeDisabled();
     await completion.getByLabel('Completed through', {exact: true}).fill('2025-12-31');
+    const age = completion.getByLabel('Maximum age before section starts (months)', {exact: true});
+    for (const invalid of ['0', '1201', '1.5']) {
+        await age.fill(invalid);
+        await expect(page.getByRole('button', {name: 'Save requirements', exact: true})).toBeDisabled();
+    }
+    await age.fill('');
+    await expect(completion.getByLabel('Completed from', {exact: true})).toHaveValue('2025-01-01');
+    await age.fill('60');
     await page.getByLabel('Qualifying prerequisite coursework', { exact: true }).selectOption(counted ? 'transfer' : 'institutional');
     await expect(page.getByRole('region', { name: 'Requirement 1', exact: true }))
         .toContainText(`Effective coursework source: ${counted ? 'Transfer work only' : 'Institutional work only'}`);
@@ -124,6 +132,7 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
     await page.getByRole('button', { name: 'Save requirements', exact: true }).click();
     await expect(page.getByLabel('Qualifying prerequisite coursework', { exact: true })).toHaveValue(counted ? 'transfer' : 'institutional');
     await expect(page.getByRole('region', {name: 'Requirement 1', exact: true}).getByLabel('Completed from', {exact: true})).toHaveValue('2025-01-01');
+    await expect(page.getByRole('region', {name: 'Requirement 1', exact: true}).getByLabel('Maximum age before section starts (months)', {exact: true})).toHaveValue('60');
     await expect(page.getByRole('region', { name: 'Requirement 1', exact: true }).getByLabel('Coursework source for this requirement', { exact: true })).toHaveValue(counted ? 'institutional' : 'transfer');
     await expect(page.getByRole('region', { name: 'Requirement 1', exact: true })).toContainText('MATH.110');
     await expect(page.getByRole('region', { name: 'Requirement 2', exact: true })).toContainText(counted ? 'MATH.110' : 'ENG.101');
@@ -143,6 +152,7 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
     await page.getByRole('button', { name: 'Review current definition', exact: true }).click();
     await page.getByText(pathways ? 'Meet 1 of 2 prerequisite requirements' : counted ? 'Meet the course counts in 2 requirements' : 'Complete one course from each of 2 requirements', { exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Completed from: 2025-01-01');
+    await expect(page.locator('#drawer-body')).toContainText('Maximum age before section starts (months): 60');
     await expect(page.locator('#drawer-body')).toContainText(counted ? 'At least 2 of: MATH.101 · Algebra <b>fictional</b>; MATH.110 · Foundations; ENG.101 · Academic writing' : 'MATH.101 · Algebra <b>fictional</b> OR MATH.110 · Foundations');
     await expect(page.locator('#drawer-body')).toContainText('ENG.101 · Academic writing');
     if (counted) await expect(page.locator('#drawer-body')).toContainText('Minimum 2.675 grade points per counted course');
@@ -157,7 +167,7 @@ for (const [counted, pathways] of [[false, false], [true, false], [true, true]])
     expect(minimumRequirements).toBe(pathways ? 1 : null);
     expect(minimums).toEqual(counted ? [2, 1] : [1, 1]);
     expect(corequisites).toEqual([id(5)]);
-    expect(completionWindows).toEqual([{from: '2025-01-01', through: '2025-12-31'}, null]);
+    expect(completionWindows).toEqual([{from: '2025-01-01', through: '2025-12-31', max_age_months: 60}, null]);
     expect(requirementOrigins).toEqual([counted ? 'institutional' : 'transfer', 'either']);
     expect(gradePoints).toEqual(counted ? [2675, 0] : [null, null]);
     const saves = calls.filter(call => call.path.endsWith('/prerequisite-groups/') && call.data);

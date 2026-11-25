@@ -180,7 +180,9 @@ window.createWorkspaceCatalog = function (ui) {
                         .join(group.minimum > 1 ? "; " : " OR ") +
                     (group.grade === null ? "" : ` · Minimum ${group.grade / 1000} grade points per counted course`) +
                     (review.prerequisite_requirement_credit_origins ? ` · ${prerequisiteOriginText(group.origin)}` : '') +
-                    (group.completionWindow ? ` · ${ui.prerequisiteOriginLabels.completion_from}: ${group.completionWindow.from || '—'}; ${ui.prerequisiteOriginLabels.completion_through}: ${group.completionWindow.through || '—'}` : '')).join(overallMinimum == null ? " AND " : "; ") +
+                    (group.completionWindow ? ` · ${ui.prerequisiteOriginLabels.completion_from}: ${group.completionWindow.from || '—'}; ${ui.prerequisiteOriginLabels.completion_through}: ${group.completionWindow.through || '—'}` +
+                        (group.completionWindow.max_age_months != null
+                            ? ` · ${ui.prerequisiteOriginLabels.max_age_months}: ${group.completionWindow.max_age_months}` : '') : '')).join(overallMinimum == null ? " AND " : "; ") +
                     (review.prerequisite_rule ? ". Keep every nested requirement or clear all prerequisites; restructure the cloned draft afterwards." : ". Unselected groups are omitted from the cloned draft.")) : null,
             groups.length && review.prerequisite_rule ? ui.prerequisites().ruleView(review.prerequisite_rule) : null,
             review.corequisites?.some(id => prerequisites.includes(id)) ? node("p", { class: "form-text" },

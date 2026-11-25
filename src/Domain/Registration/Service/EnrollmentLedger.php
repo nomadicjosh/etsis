@@ -60,6 +60,7 @@ final readonly class EnrollmentLedger
         }
         $this->verifyCourse($course, $budget ?? new HistoryReadBudget(), $courseRead);
         $selected = $this->verifyOffering($section, $course);
+        $this->verifyCompletionAnchor($prerequisites, $selected);
         if (
             $schedule->blocked() ||
             $schedule->facts["student_id"] !== $enrollment->studentId->value ||
@@ -331,6 +332,9 @@ final readonly class EnrollmentLedger
             $evidence["prerequisites"]->assignment->value !== $academic["assignment_id"]
         ) {
             throw new CorruptHistoryException();
+        }
+        if ($evidence['prerequisites']->groups?->hasRecency()) {
+            $this->verifyCompletionAnchor($evidence['prerequisites'], $this->selectedOffering($section->id));
         }
         $metadata = [
             "__aggregate_type" => "enrollment",
@@ -621,6 +625,22 @@ final readonly class EnrollmentLedger
             new \Domain\Catalog\Service\PublishedCourseReader($this->history),
             $budget
         );
+    }
+
+    private function verifyCompletionAnchor(
+        PrerequisiteDecision $decision,
+        ?\Domain\Registration\ValueObject\PublishedSectionDefinition $selected,
+    ): void {
+        if (!$decision->groups?->hasRecency()) {
+            return;
+        }
+        if (
+            ($decision->completionAnchor['section_version_id'] ?? null) !== $selected?->publication->value
+            || ($decision->completionAnchor['starts_on'] ?? null)
+                !== ($selected?->definition->data['instruction_starts_on'] ?? null)
+        ) {
+            throw new CorruptHistoryException();
+        }
     }
 
     /** @return array<string,mixed> */

@@ -122,6 +122,12 @@ final class EnrollmentHistory extends EventSourcedAggregate
             if ($decision->required !== $p["eligibility"]["required_course_ids"]) {
                 throw new CorruptHistoryException();
             }
+            if (
+                $decision->groups?->hasRecency()
+                && ($decision->completionAnchor['section_version_id'] ?? null) !== $this->sectionVersion
+            ) {
+                throw new CorruptHistoryException();
+            }
             if ($decision->permission !== null) {
                 $permission = $decision->permission->data;
                 if (

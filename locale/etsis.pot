@@ -4184,7 +4184,7 @@ msgid "Actual completion dates"
 msgstr ""
 
 #: resources/views/shared/prerequisite-origin-labels.php:11
-msgid "Optional inclusive dates for this requirement. Leave both blank for no date restriction. Unknown completion dates cannot meet a dated requirement; term and grade-recording dates are not substitutes."
+msgid "Optional inclusive dates for this requirement. Leave dates and the age limit blank for no date restriction. Unknown completion dates cannot meet a dated requirement; term and grade-recording dates are not substitutes."
 msgstr ""
 
 #: resources/views/shared/prerequisite-origin-labels.php:16
@@ -4213,4 +4213,40 @@ msgstr ""
 
 #: src/Application/Http/Controller/SisCoursePrerequisiteController.php:58
 msgid "Provide completion windows or explicitly leave all requirements unrestricted."
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:8
+msgid "Maximum age before section starts (months)"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:10
+msgid "Optional whole months from 1 through 1200; 60 means five years. Completion must fall within that many calendar months ending on the published section start, inclusive. Only coursework eligible for this pursuit is considered. Earned credit and degree requirements are unchanged."
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:15
+msgid "Published section start"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:16
+msgid "Earliest completion under age limit"
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:18
+msgid "The published section start is unavailable. Select a published offering to assess this age limit."
+msgstr ""
+
+#: resources/views/shared/prerequisite-origin-labels.php:20
+msgid "Check the completion dates and optional whole-month age limit."
+msgstr ""
+
+#: src/Domain/Catalog/ValueObject/PrerequisiteCompletionWindow.php:33
+msgid "Use a whole prerequisite age limit from 1 through 1200 months."
+msgstr ""
+
+#: src/Domain/Catalog/ValueObject/PrerequisiteCompletionWindow.php:54
+msgid "Use a valid published instructional start date."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationService.php:292
+msgid "The prerequisite decision changed. Review registration again."
 msgstr ""

@@ -67,3 +67,12 @@ Choose **Review course placement** from the degree or academic-work screen to re
 ## Combined degree progress
 
 Open **Degree requirements → Degree progress** to compare approved general credit/GPA minimums and course-group placement from the same verified current inputs. The [combined review](student-degree-progress.md) distinguishes institutional cumulative GPA from overall GPA and keeps undefined, unknown and below-minimum values separate. Its local contribution and placement drilldowns do not reread the student.
+
+
+## Work from a previously completed degree
+
+The required policy for this system is that coursework used in a previously **graduated** program, including at this same institution, must pass through a formal transfer-credit evaluation before it is considered for a new pursuit. A general cross-pursuit reuse approval is not completed-degree transfer approval. Preserve the original institutional attempt and degree; do not move, relabel or double-count those original facts. A new receiving decision must identify its source and the receiving pursuit explicitly.
+
+Formal graduation/credential decisions and enforcement of this distinction remain roadmap work. Current pursuit status is active or closed; a closed pursuit can represent several situations and does not prove that a degree was awarded. Existing general reuse controls must not be presented as implementing this completed-degree policy, nor should closed pursuits be silently treated as graduated. No completion/transfer event is inferred from present rows or an institution's program naming convention.
+
+Optional [prerequisite recency](course-publication.md#prerequisite-recency-at-section-start) is a separate eligibility check, applied after pursuit/source eligibility. It uses an actual completion date and the receiving section's published start. Meeting an age limit does not approve transfer, reuse, admission, degree placement or graduation.

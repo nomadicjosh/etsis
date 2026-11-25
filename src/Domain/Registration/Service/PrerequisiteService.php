@@ -30,7 +30,20 @@ final readonly class PrerequisiteService
         ?EntityId $section = null,
         ?EntityId $term = null,
         ?EntityId $courseVersion = null,
+        ?\Domain\Registration\ValueObject\PublishedSectionDefinition $offering = null,
     ): PrerequisiteDecision {
+        $anchor = null;
+        if ($groups?->hasRecency() && $offering !== null) {
+            if (
+                $offering->section->value !== $section?->value
+                || $offering->definition->data['term_id'] !== $term?->value
+                || $offering->definition->data['course_version_id'] !== $courseVersion?->value
+            ) {
+                throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+            }
+            $anchor = ['section_version_id' => $offering->publication->value,
+                'starts_on' => $offering->definition->data['instruction_starts_on']];
+        }
         if ($required === []) {
             return new PrerequisiteDecision($assignment, [], [], $groups);
         }
@@ -61,7 +74,14 @@ final readonly class PrerequisiteService
                 if ($ref === null) {
                     throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
                 }
-                if ($groups !== null && !$groups->acceptsWork($course, $ref['origin'], $work['completed_on'])) {
+                if (
+                    $groups !== null && !$groups->acceptsWork(
+                        $course,
+                        $ref['origin'],
+                        $work['completed_on'],
+                        $anchor['starts_on'] ?? null,
+                    )
+                ) {
                     continue;
                 }
                 $key = $groups?->completionWindows !== null
@@ -87,11 +107,24 @@ final readonly class PrerequisiteService
             }
         }
         ksort($completed, SORT_STRING);
-        $decision = new PrerequisiteDecision($assignment, $required, array_values($completed), $groups);
+        $decision = new PrerequisiteDecision(
+            $assignment,
+            $required,
+            array_values($completed),
+            $groups,
+            completionAnchor: $anchor,
+        );
         if (!$decision->isMet() && $section !== null && $term !== null) {
             $permission = $this->permissions->effective($student, $assignment, $section, $term, $courseVersion);
             if ($permission !== null) {
-                return new PrerequisiteDecision($assignment, $required, $decision->support, $groups, $permission);
+                return new PrerequisiteDecision(
+                    $assignment,
+                    $required,
+                    $decision->support,
+                    $groups,
+                    $permission,
+                    $anchor,
+                );
             }
         }
         return $decision;

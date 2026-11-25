@@ -20,6 +20,7 @@ final readonly class PrerequisiteGroups
      * @param int|null $minimumRequirements Absent means every requirement must be met. */
     public ?array $corequisites;
     public ?PrerequisiteRule $rule;
+    public ?array $completionWindows;
 
     public function __construct(
         array $groups,
@@ -30,7 +31,7 @@ final readonly class PrerequisiteGroups
         ?array $rule = null,
         public ?string $creditOrigin = null,
         public ?array $requirementCreditOrigins = null,
-        public ?array $completionWindows = null,
+        ?array $completionWindows = null,
     ) {
         if (
             !array_is_list($groups) || count($groups) > 100 ||
@@ -139,6 +140,11 @@ final readonly class PrerequisiteGroups
             throw new InvalidArgumentException('Choose an overall count or a nested rule, not both.');
         }
         $this->rule = $rule === null ? null : new PrerequisiteRule($rule, count($groups));
+        $this->completionWindows = $completionWindows === null ? null : array_map(
+            static fn(?array $window): ?array => $window === null ? null
+                : new PrerequisiteCompletionWindow($window)->definition,
+            $completionWindows,
+        );
     }
 
     /** @param list<string> $courses */
@@ -207,21 +213,25 @@ final readonly class PrerequisiteGroups
         return false;
     }
 
-    public function acceptsCompletion(int $index, ?string $completedOn): bool
+    public function hasRecency(): bool
     {
-        $window = $this->completionWindows[$index] ?? null;
-        return $window === null || ($completedOn !== null
-            && ($window['from'] === null || $completedOn >= $window['from'])
-            && ($window['through'] === null || $completedOn <= $window['through']));
+        return array_any($this->completionWindows ?? [], static fn(?array $window): bool =>
+            isset($window['max_age_months']));
     }
 
-    public function acceptsWork(string $course, string $origin, ?string $completedOn): bool
+    public function acceptsCompletion(int $index, ?string $completedOn, ?string $startsOn = null): bool
+    {
+        $window = $this->completionWindows[$index] ?? null;
+        return $window === null || new PrerequisiteCompletionWindow($window)->accepts($completedOn, $startsOn);
+    }
+
+    public function acceptsWork(string $course, string $origin, ?string $completedOn, ?string $startsOn = null): bool
     {
         foreach ($this->groups as $index => $group) {
             $policy = $this->originForRequirement($index);
             if (
                 in_array($course, $group, true) && ($policy === 'either' || $policy === $origin)
-                && $this->acceptsCompletion($index, $completedOn)
+                && $this->acceptsCompletion($index, $completedOn, $startsOn)
             ) {
                 return true;
             }

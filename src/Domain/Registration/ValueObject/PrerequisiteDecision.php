@@ -25,7 +25,19 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         #[\SensitiveParameter] array $support,
         public ?\Domain\Catalog\ValueObject\PrerequisiteGroups $groups = null,
         public ?PrerequisitePermissionReference $permission = null,
+        public ?array $completionAnchor = null,
     ) {
+        if ($completionAnchor !== null) {
+            if (
+                !$groups?->hasRecency() || count($completionAnchor) !== 2
+                || array_diff(array_keys($completionAnchor), ['section_version_id', 'starts_on']) !== []
+                || !is_string($completionAnchor['starts_on'] ?? null)
+                || !PrerequisiteCompletionWindow::validDate($completionAnchor['starts_on'])
+            ) {
+                throw new CorruptHistoryException();
+            }
+            self::id($completionAnchor['section_version_id'] ?? null);
+        }
         if (!array_is_list($required) || count($required) > 100 || !array_is_list($support)) {
             throw new CorruptHistoryException();
         }
@@ -94,7 +106,8 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
                 ($groups !== null && !$groups->acceptsWork(
                     $reference['course_id'],
                     $reference['origin'],
-                    $reference['completed_on'] ?? null
+                    $reference['completed_on'] ?? null,
+                    $completionAnchor['starts_on'] ?? null,
                 )) ||
                 !in_array($reference["course_id"], $required, true) ||
                 isset($courses[$courseKey]) ||
@@ -176,7 +189,14 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
                 ($this->groups->requirementCreditOrigins === null ? [] :
                 ['credit_origin' => $this->groups->originForRequirement($index)]) +
                 ($this->groups->completionWindows === null ? [] :
-                ['completion_window' => $this->groups->completionWindows[$index]]);
+                ['completion_window' => $this->groups->completionWindows[$index]]) +
+                (!isset($this->groups->completionWindows[$index]['max_age_months']) ? [] :
+                ['completion_anchor' => $this->completionAnchor === null ? null : [
+                    'starts_on' => $this->completionAnchor['starts_on'],
+                    'earliest_completion_on' => new PrerequisiteCompletionWindow(
+                        $this->groups->completionWindows[$index]
+                    )->earliestCompletion($this->completionAnchor['starts_on']),
+                ]]);
         }, $this->groups->groups, array_keys($this->groups->groups));
     }
 
@@ -206,7 +226,11 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         foreach ($this->support as $reference) {
             if (
                 ($origin === 'either' || $reference['origin'] === $origin)
-                && $this->groups->acceptsCompletion($index, $reference['completed_on'] ?? null)
+                && $this->groups->acceptsCompletion(
+                    $index,
+                    $reference['completed_on'] ?? null,
+                    $this->completionAnchor['starts_on'] ?? null,
+                )
             ) {
                 $course = $reference['course_id'];
                 $points[$course] = max($points[$course] ?? 0, $reference['grade_points_milli'] ?? 0);
@@ -298,6 +322,12 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
             }
             $keys[] = 'completion_windows';
         }
+        if (array_key_exists('completion_anchor', $facts)) {
+            if ($facts['completion_anchor'] !== null && !is_array($facts['completion_anchor'])) {
+                throw new CorruptHistoryException();
+            }
+            $keys[] = 'completion_anchor';
+        }
         if (array_key_exists('requirement_rule', $facts)) {
             if (!array_key_exists('requirement_groups', $facts) || !is_array($facts['requirement_rule'])) {
                 throw new CorruptHistoryException();
@@ -332,11 +362,15 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
                     ) : null,
                 permission: isset($facts['permission'])
                     ? new PrerequisitePermissionReference($facts['permission']) : null,
+                completionAnchor: $facts['completion_anchor'] ?? null,
             );
         } catch (\InvalidArgumentException) {
             throw new CorruptHistoryException();
         }
-        if (!$decision->isMet()) {
+        if (
+            !$decision->isMet()
+            || (bool) $decision->groups?->hasRecency() !== array_key_exists('completion_anchor', $facts)
+        ) {
             throw new CorruptHistoryException();
         }
         return $decision;
@@ -360,6 +394,7 @@ final readonly class PrerequisiteDecision implements \JsonSerializable
         ($this->groups?->requirementCreditOrigins === null ? [] :
         ['requirement_credit_origins' => $this->groups->requirementCreditOrigins]) +
         ($this->groups?->completionWindows === null ? [] : ['completion_windows' => $this->groups->completionWindows]) +
+        ($this->groups?->hasRecency() ? ['completion_anchor' => $this->completionAnchor] : []) +
         ($this->permission === null ? [] : ['permission' => $this->permission->data]);
     }
 

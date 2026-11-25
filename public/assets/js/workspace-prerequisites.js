@@ -5,7 +5,10 @@ window.createWorkspacePrerequisites = function (ui) {
     const originDefaults = {
         completion_from: 'Completed from', completion_through: 'Completed through',
         completion_window: 'Actual completion dates',
-        completion_help: 'Optional inclusive dates for this requirement. Leave both blank for no date restriction. Unknown completion dates cannot meet a dated requirement; term and grade-recording dates are not substitutes.',
+        completion_help: 'Optional inclusive dates for this requirement. Leave dates and the age limit blank for no date restriction. Unknown completion dates cannot meet a dated requirement; term and grade-recording dates are not substitutes.',
+        max_age_months: 'Maximum age before section starts (months)',
+        recency_help: 'Optional whole months from 1 through 1200; 60 means five years. Completion must fall within that many calendar months ending on the published section start, inclusive. Only coursework eligible for this pursuit is considered. Earned credit and degree requirements are unchanged.',
+        invalid_completion_policy: 'Check the completion dates and optional whole-month age limit.',
         invalid_completion_window: 'Check the completion dates; from must not be after through.',
 
         field: 'Qualifying prerequisite coursework', either: 'Institutional or transfer',
@@ -30,7 +33,8 @@ window.createWorkspacePrerequisites = function (ui) {
         return Number(whole || "0") * 1000 + Number(fraction.padEnd(3, "0"));
     }
     const floors = value => value.grade_points_milli || value.groups.map(() => null);
-    const windows = value => value.completion_windows ? structuredClone(value.completion_windows) : value.groups.map(() => null);
+    const windows = value => (value.completion_windows || value.groups.map(() => null)).map(window => window === null
+        ? null : {from: window.from, ...(window.max_age_months == null ? {} : {max_age_months: window.max_age_months}), through: window.through});
     const origins = value => value.requirement_credit_origins || value.groups.map(() => null);
     const ruleSize = rule => typeof rule === "number" ? 1 :
         1 + rule.children.reduce((total, child) => total + ruleSize(child), 0);
@@ -235,7 +239,7 @@ window.createWorkspacePrerequisites = function (ui) {
                 save.disabled = !changed || incomplete();
                 publish.disabled = changed || incomplete();
                 add.disabled = state.groups.length >= 100 || total >= 500 || (state.rule && ruleSize(state.rule) >= 199);
-                status.textContent = invalidWindow() ? originText('invalid_completion_window') : incomplete() ? "Check the overall requirement count, each course count and optional grade-point minimum before saving."
+                status.textContent = invalidWindow() ? originText('invalid_completion_policy') : incomplete() ? "Check the overall requirement count, each course count and optional grade-point minimum before saving."
                     : changed ? "Save your choices before reviewing publication." : notice || "Saved choices are ready for publication review.";
             }
             function removeRequirement(index) {
@@ -291,24 +295,34 @@ window.createWorkspacePrerequisites = function (ui) {
                     const completionFields = node('fieldset', { class: 'record-section mb-3' },
                         node('legend', { class: 'h6' }, originText('completion_window')));
                     const completionInputs = {};
+                    const age = node('input', { type: 'number', class: 'form-control', min: '1', max: '1200', step: '1',
+                        id: `prerequisite-completion-${index}-age`, value: state.completion_windows[index]?.max_age_months ?? '',
+                        'aria-describedby': `prerequisite-recency-help-${index}` });
+                    dateControls.push(age);
+                    const updateWindow = () => {
+                        const from = completionInputs.from.value || null, through = completionInputs.through.value || null;
+                        state.completion_windows[index] = from || through || age.value !== ''
+                            ? {from, ...(age.value === '' ? {} : {max_age_months: Number(age.value)}), through} : null;
+                        for (const control of Object.values(completionInputs)) control.setCustomValidity(
+                            from && through && from > through ? originText('invalid_completion_window') : '');
+                        update();
+                    };
+                    age.addEventListener('input', updateWindow);
                     for (const [key, label] of [['from', 'completion_from'], ['through', 'completion_through']]) {
                         const input = node('input', { type: 'date', class: 'form-control prerequisite-completion-date',
                             id: `prerequisite-completion-${index}-${key}`, min: '0001-01-01', max: '9999-12-31',
                             value: state.completion_windows[index]?.[key] || '',
                             'aria-describedby': `prerequisite-completion-help-${index}` });
                         completionInputs[key] = input; dateControls.push(input);
-                        input.addEventListener('input', () => {
-                            const from = completionInputs.from.value || null, through = completionInputs.through.value || null;
-                            state.completion_windows[index] = from || through ? {from, through} : null;
-                            for (const control of Object.values(completionInputs)) control.setCustomValidity(
-                                from && through && from > through ? originText('invalid_completion_window') : '');
-                            update();
-                        });
+                        input.addEventListener('input', updateWindow);
                         completionFields.append(node('div', { class: 'mb-2' },
                             node('label', { for: input.id, class: 'form-label' }, originText(label)), input));
                     }
                     completionFields.append(node('p', { class: 'form-text mb-0',
                         id: `prerequisite-completion-help-${index}` }, originText('completion_help')));
+                    completionFields.append(node('div', { class: 'mt-3' },
+                        node('label', { for: age.id, class: 'form-label' }, originText('max_age_months')), age,
+                        node('p', { class: 'form-text mb-0', id: `prerequisite-recency-help-${index}` }, originText('recency_help'))));
                     return node("section", { class: "surface border p-3 mb-3", "aria-label": `Requirement ${index + 1}` }, heading,
                         description, group.length > 1 || state.minimums[index] > 1 ? node("div", { class: "mb-3", style: "max-width: 14rem" },
                             node("label", { for: count.id, class: "form-label" }, "Courses required"), count) : null,
@@ -417,7 +431,9 @@ window.createWorkspacePrerequisites = function (ui) {
                         definition.prerequisite_requirement_credit_origins
                             ? ` · ${originText('requirement_field')}: ${originText(definition.prerequisite_requirement_credit_origins[index] ?? definition.prerequisite_credit_origin ?? 'either')}` : '',
                         definition.prerequisite_completion_windows?.[index]
-                            ? ` · ${originText('completion_from')}: ${definition.prerequisite_completion_windows[index].from || '—'}; ${originText('completion_through')}: ${definition.prerequisite_completion_windows[index].through || '—'}` : '',
+                            ? ` · ${originText('completion_from')}: ${definition.prerequisite_completion_windows[index].from || '—'}; ${originText('completion_through')}: ${definition.prerequisite_completion_windows[index].through || '—'}` +
+                                (definition.prerequisite_completion_windows[index].max_age_months != null
+                                    ? ` · ${originText('max_age_months')}: ${definition.prerequisite_completion_windows[index].max_age_months}` : '') : '',
                         definition.prerequisite_grade_points_milli?.[index] != null
                             ? ` · Minimum ${pointText(definition.prerequisite_grade_points_milli[index])} grade points per counted course` : ""))));
                 if (corequisites.length) view.append(node("h4", { class: "h6 mt-3" }, "Co-requisites — all required"),

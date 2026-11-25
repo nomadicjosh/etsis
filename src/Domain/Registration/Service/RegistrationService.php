@@ -164,6 +164,7 @@ final readonly class RegistrationService
                 $section->id,
                 $section->termId,
                 $course->publicationVersionId,
+                $course->prerequisiteGroups?->hasRecency() ? $this->offeringDefinition($section->id) : null,
             );
             $corequisites = $this->corequisites->evaluate(
                 $studentId,
@@ -273,7 +274,7 @@ final readonly class RegistrationService
             );
             $this->waitlists->complete($waitlistClaim, $enrollment, $actor);
             $this->verifyCourseSelection($sectionId, $budget, $courseRead);
-            if ($prerequisites->permission !== null) {
+            if ($prerequisites->permission !== null || $course->prerequisiteGroups?->hasRecency()) {
                 $freshPrerequisites = $this->prerequisites->evaluate(
                     $studentId,
                     $assignment,
@@ -283,10 +284,13 @@ final readonly class RegistrationService
                     $section->id,
                     $section->termId,
                     $course->publicationVersionId,
+                    $course->prerequisiteGroups?->hasRecency() ? $this->offeringDefinition($section->id) : null,
                 );
                 if ($freshPrerequisites->revision() !== $prerequisites->revision()) {
                     throw new ConcurrentModificationException(
-                        'The prerequisite exception changed. Review registration again.',
+                        \Codefy\Framework\Helpers\trans(
+                            'The prerequisite decision changed. Review registration again.',
+                        ),
                     );
                 }
             }
@@ -463,6 +467,7 @@ final readonly class RegistrationService
             $section->id,
             $section->termId,
             $course->publicationVersionId,
+            $course->prerequisiteGroups?->hasRecency() ? $this->offeringDefinition($section->id) : null,
         );
         if (($course->prerequisiteGroups?->corequisites ?? []) !== []) {
             $this->corequisites->verifyAccepted($enrollment, $budget, $corequisiteRead);
