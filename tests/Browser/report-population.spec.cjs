@@ -271,6 +271,7 @@ test('a messaging recipient uses the shared composer, explicit recipient queue a
     await drawer.getByRole('button', { name: /Save and continue/ }).click();
     await expect(drawer.getByRole('region', { name: 'Selected recipients', exact: true })).toContainText('2 selected recipients');
     await expect(drawer.locator('b')).toHaveCount(0);
+    await page.screenshot({path: '/tmp/etsis-report-recipient-notification-phone.png'});
     await drawer.getByRole('button', { name: 'Review message and recipients', exact: true }).click();
     await expect(drawer.getByRole('region', { name: 'Message and recipient review' })).toContainText('Fictional campus notice');
     await expect(drawer.getByRole('region', { name: 'Message and recipient review' })).toContainText('S-3');

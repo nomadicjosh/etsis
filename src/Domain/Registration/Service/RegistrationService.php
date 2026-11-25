@@ -59,6 +59,7 @@ final readonly class RegistrationService
         ?RegistrationCourseRead $courseRead = null,
         ?CoRequisitePlan $corequisitePlan = null,
         ?\Domain\Registration\Waitlist\WaitlistBypass $waitlistBypass = null,
+        ?\Domain\Shared\EventSourcing\HistoryReadBudget $waitlistBudget = null,
     ): Enrollment {
         $actor = $this->access->authenticatedUserId();
         $initialStudent = $this->admissions->student($studentId);
@@ -79,6 +80,7 @@ final readonly class RegistrationService
             $courseRead,
             $corequisitePlan,
             $waitlistBypass,
+            $waitlistBudget,
         ): Enrollment {
             // Eligibility locks follow student, person, section and course order.
             $this->repository->lockStudent($studentId);
@@ -119,7 +121,13 @@ final readonly class RegistrationService
             if ($waitlistBypass !== null && !$byStaff) {
                 throw new AccessDeniedException('Waitlist bypass requires staff registration.');
             }
-            $waitlistClaim = $this->waitlists->claim($sectionId, $studentId, $waitlistBypass);
+            $waitlistClaim = $this->waitlists->claim(
+                $sectionId,
+                $studentId,
+                $person->id,
+                $waitlistBypass,
+                $waitlistBudget,
+            );
             $course = $this->repository->courseForSection($section);
             if ($section->offeringCreditsMilli !== null && $section->publicationVersionId === null) {
                 throw new DomainException('Publish and select the section offering credits before registration.');

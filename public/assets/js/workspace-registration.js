@@ -580,7 +580,7 @@ window.createWorkspaceRegistration = function (ui) {
             back ? button("Back to registration", back) : null,
         );
     }
-    async function start(presetSection = "", presetStudents = [], back = null) {
+    async function start(presetSection = "", presetStudents = [], back = null, backLabel = "Back to report selection") {
         if (presetStudents.length > 25) throw new Error("Select no more than 25 students.");
         const chosen = new Map(
             presetStudents.map((student) => [
@@ -588,6 +588,19 @@ window.createWorkspaceRegistration = function (ui) {
                 `${student.institutional_id || "ID not assigned"} · ${student.name}`,
             ]),
         );
+        const allocationText = (key, fallback) => ui.allocationLabels?.[key] || fallback;
+        async function groupRequest(body, ...args) {
+            try { return await request(...args); }
+            catch (error) {
+                if (!body.isConnected) return;
+                if (error.status === 403) {
+                    chosen.clear();
+                    body.replaceChildren(node('p', { class: 'alert alert-warning', role: 'alert' },
+                        allocationText('access_changed', 'Access to this registration group changed. Reopen the task after checking access.')));
+                }
+                throw error;
+            }
+        }
         let sectionId = presetSection;
         async function selection() {
             const body = openRegistration("Register a group", "BATCH REGISTRATION");
@@ -626,7 +639,7 @@ window.createWorkspaceRegistration = function (ui) {
                 ),
                 tools,
             );
-            if (back) tools.append(button("Back to report selection", back));
+            if (back) tools.append(button(backLabel, back));
             const form = await buildForm(
                 [
                     ["section_id", "Course section", "lookup", "sections"],
@@ -705,7 +718,7 @@ window.createWorkspaceRegistration = function (ui) {
                         section_id: sectionId,
                         student_ids: [...chosen.keys()],
                     };
-                    const reviewed = await request(
+                    const reviewed = await groupRequest(body,
                         "/sis/registration-batches/review/",
                         "POST",
                         payload,
@@ -721,6 +734,7 @@ window.createWorkspaceRegistration = function (ui) {
             const body = openRegistration("Review group registration", "CONFIRM THE SELECTION");
             body.append(
                 button("Change selection", selection, "btn-link"),
+                ...(back ? [button(backLabel, back, 'btn-link')] : []),
                 node("h3", {}, section.code),
                 recordSummary([
                     ["Course", `${section.course_code} · ${section.course_title}`],
@@ -737,6 +751,9 @@ window.createWorkspaceRegistration = function (ui) {
                     "Review each student’s proposed charges below. Existing active enrollments are kept without a second charge. This review expires after 20 minutes; confirmation rechecks the selection and saves the group atomically.",
                 ),
             );
+            if (reviewed.students.some(student => student.waitlist?.queue_version != null))
+                body.append(node('p', { class: 'alert alert-info' }, allocationText('review_help',
+                    'Waiting students are processed in accepted queue order. Every earlier request must be included before a later request can register in this group.')));
             if (!section.active)
                 body.append(
                     node(
@@ -872,7 +889,7 @@ window.createWorkspaceRegistration = function (ui) {
             const submit = button(
                 "Confirm group registration",
                 async () => {
-                    const result = await request("/sis/registration-batches/commit/", "POST", {
+                    const result = await groupRequest(body, "/sis/registration-batches/commit/", "POST", {
                         ...payload,
                         operation_id: reviewed.operation_id,
                         revision: reviewed.revision,
@@ -881,7 +898,7 @@ window.createWorkspaceRegistration = function (ui) {
                     if (!body.isConnected) return;
                     await refreshDirectory();
                     if (!body.isConnected) return;
-                    receipt(result, () => start(sectionId));
+                    receipt(result, back || (() => start(sectionId)), back ? backLabel : undefined);
                 },
                 "btn-primary",
             );
@@ -918,7 +935,7 @@ window.createWorkspaceRegistration = function (ui) {
                     submit,
                     button("Refresh review", async () => {
                         submit.disabled = true;
-                        const next = await request(
+                        const next = await groupRequest(body,
                             "/sis/registration-batches/review/",
                             "POST",
                             payload,
@@ -927,11 +944,11 @@ window.createWorkspaceRegistration = function (ui) {
                     }),
                     button("Check batch receipt", async () => {
                         try {
-                            const result = await request(
+                            const result = await groupRequest(body,
                                 `/sis/registration-batches/${reviewed.operation_id}/`,
                             );
                             if (!body.isConnected) return;
-                            receipt(result, () => start(sectionId));
+                            receipt(result, back || (() => start(sectionId)), back ? backLabel : undefined);
                         } catch (error) {
                             if (error.status === 404)
                                 throw new Error(

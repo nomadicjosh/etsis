@@ -38,9 +38,17 @@ final readonly class WaitlistSeatGuard
         EntityId $section,
         array $students,
         ?HistoryReadBudget $budget = null,
+        bool $coordinated = false,
     ): array {
         $root = $this->ledger->load($section, $budget ?? WaitlistLedger::budget());
         $active = $root->active();
+        $selected = array_fill_keys(array_map(static fn(EntityId $id): string => $id->value, $students), true);
+        $predecessors = [];
+        $included = true;
+        foreach ($active as $entry) {
+            $predecessors[$entry['student_id']] = $included;
+            $included = $included && isset($selected[$entry['student_id']]);
+        }
         $results = [];
         foreach ($students as $student) {
             $mine = $root->forStudent($student->value);
@@ -48,20 +56,48 @@ final readonly class WaitlistSeatGuard
             $mine === null
             ? false
             : array_search($mine["id"], array_column($active, "id"), true);
+            $inOrder = $coordinated && ($predecessors[$student->value] ?? $included);
             $results[$student->value] = [
                 "enabled" => $root->policy()["enabled"],
                 "waiting_count" => count($active),
-                "can_register" => $active === [] || $active[0]["student_id"] === $student->value,
+                "can_register" => $active === [] || $active[0]["student_id"] === $student->value || $inOrder,
                 "entry_id" => $mine["id"] ?? null,
                 "rank" => $index === false ? null : $index + 1,
-            ];
+            ] + (!$coordinated || $active === [] ? [] : [
+                'queue_version' => $root->playhead(),
+                'selected_predecessors' => $active !== [] && $inOrder
+                    && $active[0]['student_id'] !== $student->value,
+            ]);
         }
         return $results;
     }
-    public function claim(EntityId $section, EntityId $student, ?WaitlistBypass $bypass = null): WaitlistClaim
+
+    /** Internal completion boundary; the coordinator holds the section lock and owns the transaction. */
+    public function verifyVersion(EntityId $section, int $expected, HistoryReadBudget $budget): void
     {
-        $budget = WaitlistLedger::budget();
+        if ($this->ledger->load($section, $budget)->playhead() !== $expected) {
+            throw new ConcurrentModificationException(
+                \Codefy\Framework\Helpers\trans('The coordinated waitlist changed before completion. Review again.'),
+            );
+        }
+    }
+    public function claim(
+        EntityId $section,
+        EntityId $student,
+        EntityId $person,
+        ?WaitlistBypass $bypass = null,
+        ?HistoryReadBudget $budget = null,
+    ): WaitlistClaim {
+        $budget ??= WaitlistLedger::budget();
         $root = $this->ledger->load($section, $budget);
+        $mine = $root->forStudent($student->value);
+        if ($mine !== null && $mine['person_id'] !== $person->value) {
+            throw new ConcurrentModificationException(
+                \Codefy\Framework\Helpers\trans(
+                    'The waiting request belongs to a different person. Review its routing.',
+                ),
+            );
+        }
         $first = $root->active()[0] ?? null;
         if ($bypass !== null) {
             $this->bypassAuthority($bypass);

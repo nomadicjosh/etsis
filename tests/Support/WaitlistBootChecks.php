@@ -202,3 +202,58 @@ if (
 }
 $sis->access->actor = $noticeStaff;
 $sis->access->staff = true;
+
+
+// Coordinated queue allocation reuses the actual private group-registration routes and CSRF boundary.
+$groupSection = $sis->section(capacity: 1);
+$groupFiller = $sis->student($sis->user());
+$sis->service->register($groupFiller->id, $groupSection->id, true);
+$groupPath = '/sis/sections/' . $groupSection->id->value . '/waitlist/';
+$groupPolicy = $postData($groupPath . 'policy/review/', [
+    'policy' => new \Domain\Registration\Waitlist\WaitlistPolicy(true, 50)->describe(), 'version' => 0,
+    'reason' => 'Fictional coordinated queue policy.',
+]);
+$postData($groupPath . 'policy/confirm/', $groupPolicy);
+$groupStudents = [$sis->student($sis->user()), $sis->student($sis->user())];
+$groupStudents = array_reverse($groupStudents);
+foreach ($groupStudents as $groupStudent) {
+    $groupJoin = $postData($groupPath . 'review/', [
+        'student_id' => $groupStudent->id->value, 'action' => 'requested', 'entry_id' => null,
+    ]);
+    $postData($groupPath . 'confirm/', ['student_id' => $groupStudent->id->value] + $groupJoin);
+}
+$groupDrop = $sis->drops->review($groupFiller->id, $groupSection->id);
+$sis->drops->commit(
+    $groupFiller->id,
+    $groupSection->id,
+    new \Domain\Shared\ValueObject\EntityId($groupDrop['enrollment_id']),
+    $groupDrop['version'],
+    new \Domain\Shared\ValueObject\EntityId($groupDrop['operation_id']),
+    $groupDrop['revision'],
+    $groupDrop['effective_on']
+);
+$sis->sql->update('sis_sections', ['capacity' => 2], ['id' => $groupSection->id->value]);
+$groupInput = ['section_id' => $groupSection->id->value,
+    'student_ids' => array_map(static fn($student): string => $student->id->value, $groupStudents)];
+$groupReview = $postData('/sis/registration-batches/review/', $groupInput);
+if (array_column(array_column($groupReview['students'], 'waitlist'), 'can_register') !== [true, true]) {
+    throw new RuntimeException('The real group route did not recognize selected queue predecessors.');
+}
+$groupCommit = $groupInput + array_intersect_key(
+    $groupReview,
+    array_flip(['operation_id', 'revision', 'review_token'])
+);
+$sis->access->staff = false;
+$sis->access->grants = ['sis:registration:waitlist', 'sis:student:read'];
+$postData('/sis/registration-batches/commit/', $groupCommit, 403);
+$sis->access->staff = true;
+$sis->access->grants = [];
+$groupResult = $postData('/sis/registration-batches/commit/', $groupCommit);
+if (
+    $groupResult['created'] !== 2
+    || array_column($groupResult['registrations'], 'student_id') !== $groupInput['student_ids']
+    || $read($groupPath)['waiting_count'] !== 0
+    || $postData('/sis/registration-batches/commit/', $groupCommit) !== $groupResult
+) {
+    throw new RuntimeException('The real group route lost accepted FIFO, atomic results or its original receipt.');
+}

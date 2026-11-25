@@ -620,7 +620,25 @@ final readonly class RegistrationBatchService
             $created = 0;
             $scheduleRead = new RegistrationScheduleRead();
             $courseRead = new RegistrationCourseRead();
-            foreach ($context["students"] as $row) {
+            $ordered = $context['students'];
+            $waitlistBudget = \Domain\Registration\Waitlist\WaitlistLedger::budget();
+            // Locks retain canonical identity order; actual seat decisions retain accepted FIFO order.
+            usort($ordered, static function (array $a, array $b): int {
+                $priority = ($a['waitlist']['rank'] ?? PHP_INT_MAX) <=> ($b['waitlist']['rank'] ?? PHP_INT_MAX);
+                return $priority ?: strcmp($a['id'], $b['id']);
+            });
+            foreach ($ordered as $row) {
+                if (
+                    $row['enrollment_id'] === null && $row['waitlist']['waiting_count'] > 0
+                    && !$row['waitlist']['can_register']
+                ) {
+                    throw new ValidationException([[
+                        'field' => 'students',
+                        'message' => \Codefy\Framework\Helpers\trans(
+                            'Include every earlier waiting request in this group or review its removal first.',
+                        ),
+                    ]]);
+                }
                 if ($row["schedule"]["blocked"]) {
                     throw new ValidationException([
                         [
@@ -660,6 +678,7 @@ final readonly class RegistrationBatchService
                         scheduleRead: $scheduleRead,
                         chargeQuote: $quotes[$row["id"]] ?? null,
                         courseRead: $courseRead,
+                        waitlistBudget: $waitlistBudget,
                     );
                 } catch (DomainException) {
                     throw new ValidationException([
@@ -697,10 +716,11 @@ final readonly class RegistrationBatchService
                 $this->clock->now()->format("Y-m-d\TH:i:sP"),
             );
             $this->audit->record($actor, "registration.batch_completed", $operation);
+            $queueVersion = $context['students'][0]['waitlist']['queue_version'] ?? null;
             foreach ($context['students'] as $reviewedStudent) {
                 if (
                     $reviewedStudent['enrollment_id'] === null &&
-                    $reviewedStudent['prerequisites']['permission'] !== null
+                    ($reviewedStudent['prerequisites']['permission'] !== null || $queueVersion !== null)
                 ) {
                     $this->registration->verifyCompletion(
                         new EntityId($reviewedStudent['id']),
@@ -712,6 +732,15 @@ final readonly class RegistrationBatchService
                         courseRead: $courseRead,
                     );
                 }
+            }
+            if ($queueVersion !== null) {
+                $completedRequests = count(array_filter($context['students'], static fn(array $row): bool =>
+                    $row['enrollment_id'] === null && $row['waitlist']['entry_id'] !== null));
+                $this->waitlists->verifyVersion(
+                    $selection->section,
+                    $queueVersion + $completedRequests,
+                    $waitlistBudget,
+                );
             }
             if (
                 $created > 0 && $this->windows->checked(
@@ -845,7 +874,12 @@ final readonly class RegistrationBatchService
         $corequired = $course->prerequisiteGroups?->corequisites ?? [];
         $corequisiteLabels = $this->repository->courseLabels($corequired);
         $records = $existing = $programs = [];
-        $waitlistStatuses = $this->waitlists->statuses($section->id, $selection->students, $budget);
+        $waitlistStatuses = $this->waitlists->statuses(
+            $section->id,
+            $selection->students,
+            $budget,
+            coordinated: $byStaff && count($selection->students) > 1 && !$reviewingWaitlistBypass,
+        );
         foreach ($selection->students as $id) {
             $records[$id->value] = $this->admissions->student($id);
             $existing[$id->value] = $this->repository->enrollment($id, $section->id);
@@ -943,8 +977,11 @@ final readonly class RegistrationBatchService
                     'status' => $reviewingWaitlistBypass ? 'review_required' :
                         ($waitlist['can_register'] ? 'met' : 'blocked'),
                     'message' => $reviewingWaitlistBypass ? 'A separately authorized waitlist bypass is required.' :
-                        ($waitlist['can_register'] ? 'Your request is the oldest accepted request.'
-                        : 'Earlier accepted waitlist requests have priority.'),
+                        (($waitlist['selected_predecessors'] ?? false)
+                        ? \Codefy\Framework\Helpers\trans(
+                            'Every earlier waiting request is selected in this group and will register first.',
+                        ) : ($waitlist['can_register'] ? 'Your request is the oldest accepted request.'
+                        : 'Earlier accepted waitlist requests have priority.')),
                     'next_step' => $reviewingWaitlistBypass || $waitlist['can_register'] ? null
                         : 'Wait for your turn or ask the registrar to review the queue.',
                 ];

@@ -185,7 +185,7 @@ final readonly class EnrollmentReinstatementService
                 $operation,
                 $intent,
             );
-            $claim = $this->waitlists->claim($section, $student);
+            $claim = $this->waitlists->claim($section, $student, $person);
             $eventContext = new EventContext(
                 $actor,
                 $this->clock->now(),

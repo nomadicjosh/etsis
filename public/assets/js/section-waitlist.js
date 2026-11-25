@@ -5,6 +5,12 @@ window.createSectionWaitlist = function (ui) {
     const portal = !!ui.portal;
     const render = (body, ...content) => body.replaceChildren(...content.filter(item => item != null));
     const bypassText = (key, fallback) => ui.bypassLabels?.[key] || fallback;
+    const allocationDefaults = {
+        title: 'Register oldest waiting requests', count: 'Number of oldest requests',
+        help: 'Choose consecutive requests from the start of this queue, up to the available seats and this page. Review eligibility and fees before confirming. One failure rolls back the entire group; later requests are not skipped into a place.',
+        review: 'Review oldest requests together', back: 'Back to waitlist',
+    };
+    const allocationText = key => ui.allocationLabels?.[key] || allocationDefaults[key];
     const open = ui.open || ((title) => ui.openDrawer(title, "SECTION WAITLIST"));
     const action = (label, run, primary = false) =>
         ui.button
@@ -378,6 +384,8 @@ window.createSectionWaitlist = function (ui) {
             notice(
                 `${data.policy.enabled ? "New requests allowed" : "New requests disabled"} · ${data.waiting_count} waiting · ${data.seats_remaining} available seats. Names and institutional IDs are current.`,
             ),
+            after === 0 && ui.registerGroup && ui.can?.('sis:registration:manage') && data.items[0]?.rank === 1
+                && data.seats_remaining > 0 ? allocation(section, data, back) : null,
             node(
                 "div",
                 {
@@ -412,6 +420,24 @@ window.createSectionWaitlist = function (ui) {
                 : null,
             back ? action("Back to section", back) : null,
         );
+    }
+    function allocation(section, data, back) {
+        const count = node('input', { type: 'number', id: 'waitlist-allocation-count', class: 'form-control',
+            min: '1', max: Math.min(20, data.items.length, data.seats_remaining), step: '1', value: '1', required: true,
+            'aria-describedby': 'waitlist-allocation-help' });
+        const review = action(allocationText('review'), () => {
+            if (!count.reportValidity()) return;
+            const chosen = data.items.slice(0, Number(count.value)).map(item => ({
+                id: item.student_id, name: item.current_name, institutional_id: item.current_institutional_id,
+            }));
+            return ui.registerGroup(section.id, chosen, () => staff(section, back), allocationText('back'));
+        }, true);
+        review.prepend(node('i', { class: 'bi bi-people', 'aria-hidden': 'true' }));
+        return node('section', { class: 'record-section mb-3', 'aria-labelledby': 'waitlist-allocation-heading' },
+            node('h3', { id: 'waitlist-allocation-heading', class: 'h6' }, allocationText('title')),
+            node('p', { id: 'waitlist-allocation-help', class: 'form-text' }, allocationText('help')),
+            node('div', { class: 'mb-3', style: 'max-width: 16rem' },
+                node('label', { for: count.id, class: 'form-label' }, allocationText('count')), count), review);
     }
     async function bypassHistory(section, back, before = null, through = null, previous = []) {
         const body = open(bypassText('history', 'Bypass decision history'));

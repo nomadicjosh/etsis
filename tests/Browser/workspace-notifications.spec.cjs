@@ -348,3 +348,32 @@ test('sound loading times out and hidden tabs or clearing feedback stop file pla
     expect(await page.evaluate(() => window.testStoppedFiles)).toBe(2);
     expect(f.errors).toEqual([]);
 });
+
+test('drawer feedback reserves space so the next action remains visible and clickable', async ({page}) => {
+    const f = await fixture(page);
+    await page.setViewportSize({width: 375, height: 812});
+    await page.evaluate(() => {
+        const drawer = document.getElementById('record-drawer');
+        drawer.querySelector('h2').textContent = 'Fictional workflow';
+        const body = document.getElementById('drawer-body');
+        const spacer = document.createElement('div'); spacer.style.height = '1200px';
+        const next = document.createElement('button'); next.type = 'button'; next.className = 'btn btn-primary';
+        next.textContent = 'Continue fictional workflow';
+        next.addEventListener('click', () => { next.textContent = 'Fictional workflow continued'; });
+        body.append(spacer, next);
+        window.bootstrap.Offcanvas.getOrCreateInstance(drawer).show();
+    });
+    await expect(page.locator('#record-drawer')).toHaveClass(/show/);
+    await emit(page, 'Fictional saved draft.');
+    await page.getByRole('button', {name: 'Continue fictional workflow', exact: true}).click();
+    await expect(page.getByRole('button', {name: 'Fictional workflow continued', exact: true})).toBeVisible();
+    const bounds = await page.evaluate(() => ({
+        action: document.querySelector('#drawer-body button').getBoundingClientRect().toJSON(),
+        stack: document.getElementById('workspace-status').getBoundingClientRect().toJSON(),
+    }));
+    expect(bounds.action.bottom).toBeLessThanOrEqual(bounds.stack.top);
+    await expect(page.locator('.workspace-notification-toast')).toBeVisible();
+    await page.locator('.workspace-notification-toast .btn-close').click();
+    await expect(page.locator('.workspace-notification-toast')).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});

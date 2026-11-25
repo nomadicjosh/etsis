@@ -4,6 +4,9 @@ Adopted direction, 2026-11-08. [Event-sourcing rationale](event-sourcing.md) gov
 
 ## Implementation progress
 
+[Coordinated waitlist allocation](registration-history.md#register-several-oldest-requests-together) now reuses the existing group/individual registration commands, ordinary FIFO queue events, academic/financial writers and private outcome updates. A selected group must contain every predecessor; locks and reviewed identities stay canonical while actual registrations execute in accepted queue order. The reviewed queue position and exact final advancement/current eligibility are checked atomically through the final audit. Earlier original receipts and event shapes remain unchanged; no new schema, event type or journal is added. Native contention/long-history acceptance remains separate.
+
+
 [Prerequisite recency](course-publication.md#prerequisite-recency-at-section-start) now optionally extends the same completion-window model with a bounded calendar-month limit. Genuine accepted evidence retains the selected section publication and instructional start, with inclusive clamped boundaries and no use of today's clock in replay. Same-attempt/pursuit/source/grade rules remain shared; final date changes roll back coupled registration/academic/finance effects. Earlier absent age/anchor fields and all recorded facts stay unchanged. Formal graduated-program transfer eligibility remains separate unfinished work: active/closed status is not graduation evidence and ordinary reuse is not completed-degree transfer approval.
 
 
@@ -135,7 +138,7 @@ Billing-rule lookup now uses reconstructible fields in its existing metadata tab
 | Context | Target source of truth | Read/edit boundary |
 | --- | --- | --- |
 | Student finance, journal and billing decisions | Event-sourced monetary/rule decisions and explicit reversals | Statements and accounting projections remain reconstructible; a replay never posts another charge or refund. |
-| Registration and seat allocation | Accepted registrations, cancellations, withdrawals, selected credits, seat/waitlist decisions and reasons | Section capacity is enforced atomically. Waitlists remain a future feature, not an existing guarantee. |
+| Registration and seat allocation | Accepted registrations, cancellations, withdrawals, selected credits, seat/waitlist decisions and reasons | Section capacity and bounded first-accepted waitlist priority are enforced atomically, including coordinated explicit groups. Offers/held seats and broader priority policies remain separate. |
 | Academic records | Credit awards, grade assignments/amendments, repeat/exclusion decisions and graduation/credential decisions | Corrections append new facts. Transcripts and degree-audit inputs use the retained course, grading and policy versions. |
 | Student lifecycle and program assignments | Matriculation, program/primary changes, leaves/returns, standing and load determinations | Capture effective dates and recorded times separately. Sensitive reasons have separate access controls. |
 | Admissions | Consequential submission, decision, offer/acceptance and matriculation transitions | Ordinary drafts need not be event sourced. Store protected document/submission references, not duplicated answers or document bytes in events. |

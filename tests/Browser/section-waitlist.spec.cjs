@@ -344,3 +344,112 @@ test("student joins and withdraws with review, then registers the oldest request
     expect(f.calls.every((c) => c.csrf === "fictional-test-token")).toBe(true);
     expect(f.errors).toEqual([]);
 });
+
+async function allocationFixture(page, failure = 'stale') {
+    const base = await staffFixture(page);
+    const waiting = [student, id(22)];
+    const requests = [];
+    let reviews = 0, commits = 0, registered = false;
+    let finishReview = null;
+    const receipt = () => ({batch_id: id(50 + reviews), section_id: section, created: 2, existing: 0,
+        registrations: waiting.map((value, index) => ({student_id: value, enrollment_id: id(70 + index), created: true, status: 'A'}))});
+    await page.route('**/sis/**', async route => {
+        const url = new URL(route.request().url());
+        const raw = route.request().postData();
+        const data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
+        if (data) requests.push({path: url.pathname, data, csrf: route.request().headers()['x-csrf-token']});
+        let result;
+        if (url.pathname.endsWith('/waitlist/')) result = {section_code: 'HIST 101.A', policy: defaults(),
+            waiting_count: registered ? 0 : 2, seats_remaining: registered ? 0 : 2,
+            items: registered ? [] : waiting.map((value, index) => ({entry_id: id(80 + index), student_id: value,
+                current_name: index ? 'Jordan <img> Fictional' : 'Alex Fictional', current_institutional_id: `S-FICTIONAL-${index}`,
+                accepted_position: index + 2, rank: index + 1})), next_after: null};
+        else if (url.pathname.endsWith('/registration-batches/review/')) {
+            reviews++;
+            if (failure === 'delayed') await new Promise(resolve => { finishReview = resolve; });
+            result = {operation_id: id(50 + reviews), revision: String(reviews).repeat(64), review_token: `fictional-group-${reviews}`,
+                section: {id: section, code: 'HIST 101.A', course_code: 'HIST 101', course_title: 'Fictional history',
+                    active: true, credits_milli: 3000, seats_remaining: 2, fee_minor: 1000, currency: 'USD', prerequisite_courses: []},
+                students: data.student_ids.map((value, index) => ({id: value, given_name: index ? 'Jordan <img>' : 'Alex',
+                    family_name: 'Fictional', institutional_id: `S-FICTIONAL-${index}`, active: true,
+                    enrollment_id: null, enrollment_status: null, issues: [],
+                    readiness: [{code: 'waitlist', label: 'Waitlist priority', status: 'met',
+                        message: index ? 'Every earlier waiting request is selected in this group and will register first.' : 'Your request is the oldest accepted request.'}],
+                    waitlist: {queue_version: 3, rank: index + 1, can_register: true, selected_predecessors: index > 0},
+                    schedule: {status: 'clear', blocked: false, conflict_count: 0, unpublished_count: 0, conflicts: []},
+                    charges: {total_minor: 1000, currency: 'USD', items: [], problems: []},
+                    prerequisites: {status: 'not_required', missing_count: 0, course_statuses: []}, corequisites: {status: 'not_required'}}))};
+        } else if (url.pathname.endsWith('/registration-batches/commit/')) {
+            commits++;
+            if (failure === 'denied') return route.fulfill({status: 403, json: {error: 'Access denied.'}});
+            if (failure === 'stale' && commits === 1) return route.fulfill({status: 409, json: {error: 'The waitlist changed. Refresh the review.'}});
+            registered = true;
+            result = receipt();
+        } else return route.fallback();
+        return route.fulfill({json: result, headers: {'Cache-Control': 'private, no-store'}});
+    });
+    await page.getByRole('button', {name: 'Section waitlist', exact: true}).click();
+    return {...base, waiting, requests, release: () => finishReview?.(), pending: () => !!finishReview};
+}
+
+async function chooseOldestGroup(page) {
+    await page.getByLabel('Number of oldest requests', {exact: true}).fill('2');
+    await page.getByRole('button', {name: 'Review oldest requests together', exact: true}).click();
+    await expect(page.getByRole('region', {name: 'Selected students', exact: true})).toContainText('2 selected students');
+    await expect(page.getByRole('combobox', {name: /^Course section/})).toHaveValue(section);
+}
+
+test('staff review consecutive oldest requests with stale drafts and returns through the shared group workflow', async ({page}) => {
+    const f = await allocationFixture(page);
+    await page.getByLabel('Number of oldest requests', {exact: true}).fill('3');
+    await page.getByRole('button', {name: 'Review oldest requests together', exact: true}).click();
+    await expect(page.getByLabel('Number of oldest requests', {exact: true})).toBeVisible();
+    await chooseOldestGroup(page);
+    await page.getByRole('button', {name: 'Review selected group', exact: true}).click();
+    await expect(page.locator('#drawer-body')).toContainText('Waiting students are processed in accepted queue order.');
+    await expect(page.locator('#drawer-body img')).toHaveCount(0);
+    await page.getByRole('button', {name: 'Change selection', exact: true}).click();
+    await expect(page.getByRole('region', {name: 'Selected students', exact: true})).toContainText('2 selected students');
+    await page.getByRole('button', {name: 'Review selected group', exact: true}).click();
+    await page.getByRole('button', {name: 'Confirm group registration', exact: true}).click();
+    await expect(page.locator('#drawer-error')).toContainText('The waitlist changed');
+    await expect(page.getByRole('region', {name: 'Reviewed registration group', exact: true})).toContainText('Jordan <img> Fictional');
+    await page.getByRole('button', {name: 'Refresh review', exact: true}).click();
+    await page.setViewportSize({width: 320, height: 812});
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    await accessible(page);
+    await page.getByRole('button', {name: 'Confirm group registration', exact: true}).click();
+    await expect(page.locator('#drawer-body')).toContainText('2 registrations created.');
+    await page.getByRole('button', {name: 'Back to waitlist', exact: true}).click();
+    await expect(page.locator('#drawer-body')).toContainText('No active waitlist requests.');
+    const reviews = f.requests.filter(item => item.path.endsWith('/registration-batches/review/'));
+    expect(reviews.every(item => JSON.stringify(item.data.student_ids) === JSON.stringify(f.waiting))).toBe(true);
+    expect(f.requests.every(item => item.csrf === 'fictional-test-token')).toBe(true);
+    expect(f.errors).toEqual([]);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+});
+
+test('lost group authority clears private review details and further confirmation controls', async ({page}) => {
+    const f = await allocationFixture(page, 'denied');
+    await chooseOldestGroup(page);
+    await page.getByRole('button', {name: 'Review selected group', exact: true}).click();
+    await page.getByRole('button', {name: 'Confirm group registration', exact: true}).click();
+    await expect(page.locator('#drawer-body')).toContainText('Access to this registration group changed.');
+    await expect(page.locator('#drawer-body')).not.toContainText('Alex Fictional');
+    await expect(page.getByRole('region', {name: 'Reviewed registration group', exact: true})).toHaveCount(0);
+    await expect(page.getByRole('button', {name: 'Confirm group registration', exact: true})).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('a delayed group review cannot replace the queue after returning to the record', async ({page}) => {
+    const f = await allocationFixture(page, 'delayed');
+    await chooseOldestGroup(page);
+    await page.getByRole('button', {name: 'Review selected group', exact: true}).click();
+    await expect.poll(f.pending).toBe(true);
+    await page.getByRole('button', {name: 'Back to waitlist', exact: true}).click();
+    await expect(page.getByLabel('Number of oldest requests', {exact: true})).toBeVisible();
+    f.release();
+    await expect(page.getByRole('button', {name: 'Review selected group', exact: true})).toHaveCount(0);
+    await expect(page.getByRole('region', {name: 'Reviewed registration group', exact: true})).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});

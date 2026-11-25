@@ -10,7 +10,7 @@ The bell in the workspace header opens **Recent workspace notifications**. It re
 
 Expand **Campus announcements** in this panel for reviewed campus news and account-specific read state. It loads separately on demand and retains its read state on the server. Clearing recent action feedback does not clear announcements or mark them read. See [publication, reading and sound behavior](campus-announcements.md).
 
-Only five toasts are visible at once. Further feedback remains available in the recent list. Toasts render as literal text, including any angle brackets in a message. They appear within the active drawer, modal or native report dialog so they remain visible and their dismiss controls work with the active focus boundary. The recent panel, cards and controls reflow on narrow screens and with enlarged text. Toasts do not animate.
+Only five toasts are visible at once. Further feedback remains available in the recent list. Toasts render as literal text, including any angle brackets in a message. They appear within the active drawer, modal or native report dialog so they remain visible and their dismiss controls work with the active focus boundary. In Bootstrap drawers, feedback occupies its own bounded footer space so it does not cover the next action button. The drawer body keeps its own scrolling; an empty notification region occupies no extra space. The recent panel, cards and controls reflow on narrow screens and with enlarged text. Toasts do not animate.
 
 ## Delete notifications
 

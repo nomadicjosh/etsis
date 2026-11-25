@@ -184,6 +184,7 @@ final class WaitlistWorkflowTest extends TestCase
             "sis_academic_credits",
             "sis_student_accounts",
             "sis_account_entries",
+            "sis_account_balances",
         ]);
     }
     public function testDisablingNewRequestsPreservesPriorityAndCancellationRejoinGoesToTheBack(): void
@@ -249,7 +250,10 @@ final class WaitlistWorkflowTest extends TestCase
             "sis_academic_credits",
             "sis_student_accounts",
             "sis_account_entries",
+            "sis_account_balances",
             "sis_audit",
+            "sis_registration_updates",
+            "sis_registration_batches",
         ]);
     }
 
@@ -447,5 +451,275 @@ final class WaitlistWorkflowTest extends TestCase
         self::assertSame(1, $visible["rank"]);
         self::assertArrayNotHasKey("items", $visible);
         self::assertArrayNotHasKey("current_name", $visible);
+    }
+
+    private function coordinated(int $count = 3, int $seats = 2): array
+    {
+        [$s, $section, $filler] = $this->fixture();
+        $this->policy($s, $section->id);
+        $waiting = [];
+        for ($index = 0; $index < $count; $index++) {
+            $waiting[] = $s->student($s->user());
+        }
+        // Deliberately reverse student identity order: accepted queue order is a separate fact.
+        usort($waiting, static fn($a, $b): int => strcmp($b->id->value, $a->id->value));
+        foreach ($waiting as $student) {
+            $this->join($s, $student->id, $section->id);
+        }
+        $this->drop($s, $filler->id, $section->id);
+        // Fictional ordinary capacity setup after the filler was removed; no historical event is edited.
+        $s->sql->update('sis_sections', ['capacity' => $seats], ['id' => $section->id->value]);
+        return [$s, $section, $waiting];
+    }
+
+    private function confirmGroup(
+        SisFixture $s,
+        RegistrationBatchSelection $selection,
+        array $review,
+        ?\Domain\Registration\Service\RegistrationBatchService $service = null
+    ): array {
+        return ($service ?? $s->registrationBatches())->commit(
+            new EntityId($review['operation_id']),
+            $selection,
+            $review['revision'],
+            $review['review_token'],
+            true
+        );
+    }
+
+    public function testCoordinatedOldestRequestsKeepFifoChargesNotificationsAndOriginalReceipts(): void
+    {
+        [$s, $section, $waiting] = $this->coordinated();
+        $selection = new RegistrationBatchSelection($section->id, $waiting[0]->id, $waiting[1]->id);
+        $before = $this->allFacts($s);
+        try {
+            $s->service->register($waiting[1]->id, $section->id, true);
+            self::fail('A later individual request bypassed the oldest waiting student.');
+        } catch (ValidationException) {
+            self::assertSame($before, $this->allFacts($s));
+        }
+        $review = $s->registrationBatches()->review($selection);
+        self::assertSame([true, true], array_column(array_column($review['students'], 'waitlist'), 'can_register'));
+        self::assertSame(
+            [true, false],
+            array_column(array_column($review['students'], 'waitlist'), 'selected_predecessors'),
+        );
+        self::assertSame($before, $this->allFacts($s));
+        $result = $this->confirmGroup($s, $selection, $review);
+        self::assertSame(
+            array_map(static fn($student): string => $student->id->value, array_slice($waiting, 0, 2)),
+            array_column($result['registrations'], 'student_id')
+        );
+        self::assertSame(2, $result['created']);
+        self::assertSame(2, $s->registration->sectionCount($section->id));
+        self::assertSame([$waiting[2]->id->value], array_column($s->waitlistLedger()->load(
+            $section->id,
+            \Domain\Registration\Waitlist\WaitlistLedger::budget()
+        )->active(), 'student_id'));
+        self::assertCount(2, $s->sql->rows('sis_registration_updates'));
+        foreach (array_slice($waiting, 0, 2) as $student) {
+            $account = $s->sql->one('sis_student_accounts', ['student_id' => $student->id->value]);
+            self::assertSame(
+                10000,
+                $s->accounts->get(new \Domain\Finance\ValueObject\AccountId($account['id']))->balance()->minor,
+            );
+        }
+        $this->drop($s, $waiting[0]->id, $section->id);
+        $notice = $s->sql->rows('sis_registration_updates')[0];
+        $s->sql->execute('DELETE FROM sis_registration_updates WHERE id = ?', [$notice['id']]);
+        $s->clock->time = $s->clock->time->modify('+1 day');
+        $before = $this->allFacts($s);
+        self::assertSame($result, $this->confirmGroup($s, $selection, $review));
+        self::assertSame($before, $this->allFacts($s));
+    }
+
+    public static function incompleteCoordinatedGroups(): array
+    {
+        return [[[0, 2]], [[1, 2]]];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('incompleteCoordinatedGroups')]
+    public function testCoordinatedGroupsCannotSkipAnyUnselectedEarlierRequest(array $indexes): void
+    {
+        [$s, $section, $waiting] = $this->coordinated();
+        $selection = new RegistrationBatchSelection(
+            $section->id,
+            ...array_map(static fn(int $index): EntityId => $waiting[$index]->id, $indexes)
+        );
+        $review = $s->registrationBatches()->review($selection);
+        self::assertContains(false, array_column(array_column($review['students'], 'waitlist'), 'can_register'));
+        $before = $this->allFacts($s);
+        try {
+            $this->confirmGroup($s, $selection, $review);
+            self::fail('A group skipped an earlier waiting request.');
+        } catch (ValidationException) {
+            self::assertSame($before, $this->allFacts($s));
+        }
+    }
+
+    public function testCoordinatedFailureAtTheSecondSeatRestoresEveryFirstSeatEffect(): void
+    {
+        [$s, $section, $waiting] = $this->coordinated(seats: 1);
+        $selection = new RegistrationBatchSelection($section->id, $waiting[0]->id, $waiting[1]->id);
+        $review = $s->registrationBatches()->review($selection);
+        $before = $this->allFacts($s);
+        try {
+            $this->confirmGroup($s, $selection, $review);
+            self::fail('Insufficient seats left a partial queue allocation.');
+        } catch (ValidationException) {
+            self::assertSame($before, $this->allFacts($s));
+        }
+    }
+
+    public function testCoordinatedReviewDetectsQueueDecisionsEvenWhenPolicyValuesAreRestored(): void
+    {
+        [$s, $section, $waiting] = $this->coordinated();
+        $selection = new RegistrationBatchSelection($section->id, $waiting[0]->id, $waiting[1]->id);
+        $review = $s->registrationBatches()->review($selection);
+        $this->policy($s, $section->id, false);
+        $this->policy($s, $section->id, true);
+        $before = $this->allFacts($s);
+        try {
+            $this->confirmGroup($s, $selection, $review);
+            self::fail('A restored policy hid intervening queue decisions.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, $this->allFacts($s));
+        }
+    }
+
+    public static function coordinatedFinalFailures(): array
+    {
+        return [['queue', ConcurrentModificationException::class], ['hold', \DomainException::class],
+            ['authority', AccessDeniedException::class], ['audit', \LogicException::class]];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('coordinatedFinalFailures')]
+    public function testCoordinatedFinalFailuresRestoreQueueAcademicsFinanceNoticesAndReceipt(
+        string $failure,
+        string $expected
+    ): void {
+        [$s, $section, $waiting] = $this->coordinated();
+        $selection = new RegistrationBatchSelection($section->id, $waiting[0]->id, $waiting[1]->id);
+        $audit = $this->createStub(AuditTrail::class);
+        $onAudit = function ($actor, $action) use ($s, $section, $waiting, $failure): void {
+            if ($action !== 'registration.batch_completed') {
+                return;
+            }
+            if ($failure === 'queue') {
+                $this->policy($s, $section->id, false);
+            } elseif ($failure === 'hold') {
+                $s->sql->insert('sis_restrictions', ['id' => EntityId::generate()->value,
+                    'person_id' => $waiting[0]->personId->value, 'code' => 'ADVISING', 'severity' => 99,
+                    'starts_on' => '2026-08-01', 'ends_on' => null, 'blocks_staff' => 1]);
+            } elseif ($failure === 'authority') {
+                $s->access->staff = false;
+                $s->access->grants = [];
+            } else {
+                throw new \LogicException('Fictional final group audit failure.');
+            }
+        };
+        $audit->method('record')->willReturnCallback($onAudit);
+        $service = $s->registrationBatches(audit: $audit);
+        $review = $service->review($selection);
+        $tables = $this->allFacts($s);
+        $holds = $s->sql->rows('sis_restrictions');
+        $error = null;
+        try {
+            $this->confirmGroup($s, $selection, $review, $service);
+        } catch (\Throwable $caught) {
+            $error = $caught;
+        }
+        self::assertInstanceOf($expected, $error);
+        self::assertSame($tables, $this->allFacts($s));
+        self::assertSame($holds, $s->sql->rows('sis_restrictions'));
+    }
+
+    public function testCoordinatedOwnerCannotRegisterAGroupAndAnotherStaffActorCannotUseTheProof(): void
+    {
+        [$s, $section, $waiting] = $this->coordinated();
+        $selection = new RegistrationBatchSelection($section->id, $waiting[0]->id, $waiting[1]->id);
+        $review = $s->registrationBatches()->review($selection);
+        $before = $this->allFacts($s);
+        $staff = $s->access->actor;
+        $s->access->staff = false;
+        $s->access->actor = $s->admissions->person($waiting[0]->personId)->ownerUserId;
+        try {
+            $s->registrationBatches()->review($selection, false);
+            self::fail('An owner opened a multi-student registration.');
+        } catch (AccessDeniedException) {
+            self::assertSame($before, $this->allFacts($s));
+        }
+        $s->access->staff = true;
+        // The currently signed-in actor changed; the reviewing staff actor remains distinct.
+        try {
+            $this->confirmGroup($s, $selection, $review);
+            self::fail('Another actor used the original group proof.');
+        } catch (AccessDeniedException) {
+            self::assertSame($before, $this->allFacts($s));
+        }
+        $s->access->actor = $staff;
+        $s->clock->time = $s->clock->time->modify('+21 minutes');
+        try {
+            $this->confirmGroup($s, $selection, $review);
+            self::fail('An expired queue-group review was accepted.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, $this->allFacts($s));
+        }
+    }
+
+    public function testCoordinatedFullSelectedQueuePrecedesAnUnqueuedStudent(): void
+    {
+        [$s, $section, $waiting] = $this->coordinated(count: 2, seats: 3);
+        $unqueued = $s->student($s->user());
+        $selection = new RegistrationBatchSelection($section->id, $unqueued->id, $waiting[1]->id, $waiting[0]->id);
+        $review = $s->registrationBatches()->review($selection);
+        $result = $this->confirmGroup($s, $selection, $review);
+        self::assertSame(
+            [$waiting[0]->id->value, $waiting[1]->id->value, $unqueued->id->value],
+            array_column($result['registrations'], 'student_id')
+        );
+        self::assertCount(2, $s->sql->rows('sis_registration_updates'));
+    }
+
+    public function testCoordinatedMaximumGroupIsBoundedAndPreservesEveryQueuePosition(): void
+    {
+        [$s, $section, $waiting] = $this->coordinated(count: 25, seats: 25);
+        $selection = new RegistrationBatchSelection(
+            $section->id,
+            ...array_map(static fn($student): EntityId => $student->id, $waiting)
+        );
+        $review = $s->registrationBatches()->review($selection);
+        $result = $this->confirmGroup($s, $selection, $review);
+        self::assertSame(25, $result['created']);
+        self::assertSame(
+            array_map(static fn($student): string => $student->id->value, $waiting),
+            array_column($result['registrations'], 'student_id')
+        );
+        self::assertCount(25, $s->sql->rows('sis_registration_updates'));
+        self::assertSame([], $s->waitlistLedger()->load(
+            $section->id,
+            \Domain\Registration\Waitlist\WaitlistLedger::budget()
+        )->active());
+    }
+
+    public function testCoordinatedReplayAllowanceDoesNotRestartForEachWaitingStudent(): void
+    {
+        [$s, $section, $waiting] = $this->coordinated(count: 25, seats: 25);
+        for ($index = 0; $index < 30; $index++) {
+            $this->policy($s, $section->id, false);
+            $this->policy($s, $section->id, true);
+        }
+        $selection = new RegistrationBatchSelection(
+            $section->id,
+            ...array_map(static fn($student): EntityId => $student->id, $waiting),
+        );
+        $review = $s->registrationBatches()->review($selection);
+        $before = $this->allFacts($s);
+        try {
+            $this->confirmGroup($s, $selection, $review);
+            self::fail('A group restarted its replay allowance for each waiting student.');
+        } catch (\Domain\Shared\EventSourcing\HistoryReadLimitException) {
+            self::assertSame($before, $this->allFacts($s));
+        }
     }
 }

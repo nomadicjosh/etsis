@@ -4250,3 +4250,47 @@ msgstr ""
 #: src/Domain/Registration/Service/RegistrationService.php:292
 msgid "The prerequisite decision changed. Review registration again."
 msgstr ""
+
+#: resources/views/backend/workspace/waitlist-allocation-labels.php:8
+msgid "Register oldest waiting requests"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-allocation-labels.php:9
+msgid "Number of oldest requests"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-allocation-labels.php:11
+msgid "Choose consecutive requests from the start of this queue, up to the available seats and this page. Review eligibility and fees before confirming. One failure rolls back the entire group; later requests are not skipped into a place."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-allocation-labels.php:15
+msgid "Review oldest requests together"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-allocation-labels.php:16
+msgid "Back to waitlist"
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-allocation-labels.php:18
+msgid "Waiting students are processed in accepted queue order. Every earlier request must be included before a later request can register in this group."
+msgstr ""
+
+#: resources/views/backend/workspace/waitlist-allocation-labels.php:21
+msgid "Access to this registration group changed. Reopen the task after checking access."
+msgstr ""
+
+#: src/Domain/Registration/Waitlist/WaitlistSeatGuard.php:80
+msgid "The coordinated waitlist changed before completion. Review again."
+msgstr ""
+
+#: src/Domain/Registration/Waitlist/WaitlistSeatGuard.php:96
+msgid "The waiting request belongs to a different person. Review its routing."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationBatchService.php:637
+msgid "Include every earlier waiting request in this group or review its removal first."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationBatchService.php:976
+msgid "Every earlier waiting request is selected in this group and will register first."
+msgstr ""
