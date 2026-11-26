@@ -89,6 +89,12 @@ final class TranscriptFixture
             $layouts ?? new \Infrastructure\Documents\RegisteredTranscriptLayouts(),
             new \Infrastructure\Persistence\Repository\SqlTranscriptReleasePolicyRepository($f->sql, $this->campus->cipher),
             $standing ?? $f->standingLedger(),
+            new \Domain\Transcript\Service\TranscriptNotifications(
+                new \Infrastructure\Persistence\Repository\SqlTranscriptUpdatesRepository($f->sql),
+                $records ?? $this->repository,
+                $f->admissions,
+                $f->clock,
+            ),
         );
     }
 }

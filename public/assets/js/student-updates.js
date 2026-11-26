@@ -1,8 +1,8 @@
 /* Private, account-pinned outcome notices. Loading and deletion are explicit; nothing is persisted in this browser. */
 'use strict';
 window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'registration', notificationsOnly = false, changed = () => {} }) => {
-    if (!['registration', 'advising', 'academic'].includes(kind)) throw new Error('Unsupported student update source.');
-    const advising = kind === 'advising', academic = kind === 'academic';
+    if (!['registration', 'advising', 'academic', 'transcript'].includes(kind)) throw new Error('Unsupported student update source.');
+    const advising = kind === 'advising', academic = kind === 'academic', transcript = kind === 'transcript';
     const endpoint = `/portal/api/${kind}-updates/`;
     const advisingDefaults = {
         advising_updates: 'Advising updates', advising_loading: 'Loading advising updates…',
@@ -81,11 +81,11 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
             baseline = true; cursor = after; previous = stack;
             const list = node('ul', { class: 'list-unstyled registration-updates-list' });
             for (const item of result.items) {
-                if (!(advising ? ['open', 'closed', 'cancelled'] : academic ? ['posted', 'corrected'] : ['registered', 'removed']).includes(item.status)) throw new Error('Invalid registration outcome.');
+                if (!(advising ? ['open', 'closed', 'cancelled'] : academic ? ['posted', 'corrected'] : transcript ? ['ready', 'fulfilled'] : ['registered', 'removed']).includes(item.status)) throw new Error('Invalid registration outcome.');
                 const card = node('li', { class: 'registration-update-card border rounded mb-3 text-start' },
                     node('h3', { class: 'h6' }, text(`registration_${item.status}`)),
-                    node('p', { class: 'fw-semibold text-break mb-1' }, advising ? item.program_code : `${item.course_code} · ${item.section_code} · ${item.term_code}`),
-                    node('p', { class: 'text-break' }, advising ? item.program_title : item.course_title),
+                    node('p', { class: 'fw-semibold text-break mb-1' }, transcript ? text(`transcript_${item.delivery}`) : advising ? item.program_code : `${item.course_code} · ${item.section_code} · ${item.term_code}`),
+                    node('p', { class: 'text-break' }, transcript ? `${text('transcript_requested_on')} · ${String(item.requested_at).slice(0, 10)}` : advising ? item.program_title : item.course_title),
                     node('time', { class: 'form-text d-block mb-2', datetime: item.recorded_at },
                         new Date(item.recorded_at).toLocaleString()),
                     node('span', { class: 'badge text-bg-light border mb-2' }, text(item.unread ? 'announcement_unread' : 'announcement_read')));
@@ -93,7 +93,8 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
                 const actions = node('div', { class: 'd-flex flex-wrap gap-2' });
                 if (item.unread && !notificationsOnly) actions.append(button('registration_mark', 'check2', () => mutate(item, 'read')));
                 actions.append(button('registration_delete', 'trash', () => mutate(item, 'delete')),
-                    academic ? button('registration_link', 'arrow-right', () => openAcademicRecord(item))
+                    transcript ? button('registration_link', 'arrow-right', () => openTranscriptRequest(item))
+                        : academic ? button('registration_link', 'arrow-right', () => openAcademicRecord(item))
                         : advising ? button('registration_link', 'arrow-right', () => openCheckIn(item))
                         : node('a', { href: '/portal/student/registration/', class: 'btn btn-outline-secondary btn-sm' },
                             icon('arrow-right'), text('registration_link')));
@@ -141,6 +142,35 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
             content.replaceChildren(node('div', { class: 'd-flex flex-wrap gap-2 my-3' }, back,
                 button('registration_delete', 'trash', () => mutate(item, 'delete'))), title,
                 node('p', { class: 'form-text' }, text('academic_current_help')), facts);
+            status.textContent = ''; title.focus(); changed();
+        } catch (error) { failed(turn, error); }
+        finally { if (active(turn)) controls(false); }
+    }
+    async function openTranscriptRequest(item) {
+        const turn = ++serial; controls(true);
+        try {
+            if (typeof item.id !== 'string' || !/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(item.id)) throw new Error('Invalid transcript notification.');
+            const result = await request(`${endpoint}${encodeURIComponent(item.id)}/`);
+            if (!active(turn)) return;
+            if (!['ready', 'fulfilled'].includes(result.status) || !['pickup', 'electronic'].includes(result.delivery)) throw new Error('Invalid transcript outcome.');
+            await request(`${endpoint}${encodeURIComponent(item.id)}/read/`, 'POST', { revision: item.revision });
+            if (!active(turn)) return;
+            const back = button('registration_back', 'arrow-left', async () => {
+                const loaded = await load(cursor, previous);
+                if (loaded) (content.querySelector('button') || status).focus();
+            });
+            const title = node('h3', { class: 'h6 text-break', tabindex: '-1' }, text('transcript_current'));
+            const facts = node('dl', { class: 'record-summary record-summary-paired' });
+            for (const [key, value] of [['transcript_requested_on', String(result.requested_at).slice(0, 10)],
+                ['transcript_delivery', text(`transcript_${result.delivery}`)],
+                ['transcript_status', text(`transcript_${result.status}`)]]) {
+                facts.append(node('div', {}, node('dt', {}, text(key)), node('dd', {}, value)));
+            }
+            content.replaceChildren(node('div', { class: 'd-flex flex-wrap gap-2 my-3' }, back,
+                button('registration_delete', 'trash', () => mutate(item, 'delete'))), title, facts,
+                node('p', { class: 'form-text' }, text('transcript_privacy')),
+                node('a', { href: '/portal/student/transcripts/', class: 'btn btn-outline-secondary btn-sm' },
+                    icon('arrow-right'), text('transcript_requests')));
             status.textContent = ''; title.focus(); changed();
         } catch (error) { failed(turn, error); }
         finally { if (active(turn)) controls(false); }

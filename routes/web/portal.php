@@ -16,6 +16,15 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $transcriptUpdates = \Application\Http\Controller\TranscriptUpdatesController::class;
+    $router->get('/portal/api/transcript-updates/', [$transcriptUpdates, 'page'])
+        ->name('portal.transcript-updates');
+    $router->get('/portal/api/transcript-updates/{id}/', [$transcriptUpdates, 'detail'])
+        ->name('portal.transcript-updates.detail');
+    $router->post('/portal/api/transcript-updates/{id}/read/', [$transcriptUpdates, 'read'])
+        ->name('portal.transcript-updates.read');
+    $router->post('/portal/api/transcript-updates/{id}/delete/', [$transcriptUpdates, 'delete'])
+        ->name('portal.transcript-updates.delete');
     $academicUpdates = \Application\Http\Controller\AcademicUpdatesController::class;
     $router->get('/portal/api/academic-updates/', [$academicUpdates, 'page'])->name('portal.academic-updates');
     $router->get('/portal/api/academic-updates/{id}/', [$academicUpdates, 'detail'])

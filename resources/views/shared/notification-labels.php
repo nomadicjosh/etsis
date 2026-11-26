@@ -5,6 +5,40 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    "transcript_updates" => trans_html("Transcript updates"),
+    "transcript_loading" => trans_html("Loading transcript updates…"),
+    "transcript_help" => trans_html("Transcript preparation and recorded delivery updates appear here."),
+    "transcript_empty" => trans_html("There are no transcript updates."),
+    "transcript_include" => trans_html("Show read updates"),
+    "transcript_refresh" => trans_html("Refresh transcript updates"),
+    "transcript_pages" => trans_html("Transcript update pages"),
+    "transcript_previous" => trans_html("Previous updates"),
+    "transcript_more" => trans_html("More updates"),
+    "transcript_ready" => trans_html("Transcript prepared"),
+    "transcript_fulfilled" => trans_html("Transcript delivery recorded"),
+    "transcript_mark" => trans_html("Mark as read"),
+    "transcript_delete" => trans_html("Delete update"),
+    "transcript_loaded" => trans_html("Transcript updates loaded."),
+    "transcript_failed" => trans_html("Transcript updates are unavailable. Reopen this section to try again."),
+    "transcript_denied" => trans_html("Transcript updates are unavailable for this account."),
+    "transcript_changed" => trans_html("This update changed or is unavailable. Reopen the list."),
+    "transcript_new" => trans_html("New transcript updates are available."),
+    "transcript_link" => trans_html("View transcript request"),
+    "transcript_back" => trans_html("Back to transcript updates"),
+    "transcript_marked" => trans_html("Transcript update marked as read."),
+    "transcript_deleted" => trans_html("Transcript update deleted."),
+    "transcript_requested_on" => trans_html("Requested"),
+    "transcript_delivery" => trans_html("Delivery method"),
+    "transcript_status" => trans_html("Current status"),
+    "transcript_current" => trans_html("Current transcript request"),
+    "transcript_requests" => trans_html("Open transcript requests"),
+    "transcript_pickup" => trans_html("Registrar pickup"),
+    "transcript_electronic" => trans_html("Electronic"),
+    "transcript_privacy" => trans_html(
+        "Preparation is separate from delivery. The registrar controls document release; "
+        . "this update provides status only."
+    ),
+
     'notifications_retry' => trans_html('These notifications are unavailable. Reopen this section to try again.'),
     'academic_updates' => trans_html('Academic updates'),
     'academic_loading' => trans_html('Loading academic updates…'),

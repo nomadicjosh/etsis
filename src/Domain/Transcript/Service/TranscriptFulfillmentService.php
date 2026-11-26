@@ -55,6 +55,7 @@ final readonly class TranscriptFulfillmentService
         private TranscriptLayoutCatalog $layouts,
         private TranscriptReleasePolicyRepository $releasePolicies,
         private TranscriptStandingSource $standing,
+        private TranscriptNotifications $notifications,
     ) {
     }
 
@@ -333,6 +334,7 @@ final readonly class TranscriptFulfillmentService
                 "encrypted_content" => $encrypted,
             ]);
             $this->records->status($request, "ready", $version);
+            $notification = $this->notifications->record($request, $operation, $operation, "ready");
             $this->audit->record($actor, "transcript.document_prepared", $operation);
             $after = $this->context($request, $layoutCode);
             if (
@@ -356,6 +358,7 @@ final readonly class TranscriptFulfillmentService
             );
             $this->releasePolicies->assertCurrent($this->policy($context));
             $this->authorize($actor);
+            $this->notifications->verify($notification);
             return $this->describe(
                 $this->records->document($operation) ??
                     throw new RecordNotFoundException("Prepared document not found."),
@@ -597,6 +600,7 @@ final readonly class TranscriptFulfillmentService
                 ),
             ]);
             $this->records->status($request, "fulfilled", $version);
+            $notification = $this->notifications->record($request, $document, $operation, "fulfilled");
             $this->audit->record($actor, "transcript.delivery_recorded", $document);
             $this->check(
                 $this->revision($this->deliveryContext($request, $document, $input, completed: true)),
@@ -613,6 +617,7 @@ final readonly class TranscriptFulfillmentService
             );
             $this->releasePolicies->assertCurrent($policy);
             $this->authorize($actor);
+            $this->notifications->verify($notification);
             return $result;
         });
     }

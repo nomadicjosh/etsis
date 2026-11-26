@@ -7947,3 +7947,140 @@ msgstr ""
 #: src/Domain/Person/ValueObject/NotificationPreferences.php:26
 msgid "Choose valid notification display and sound preferences."
 msgstr ""
+
+#: resources/views/shared/notification-labels.php:8
+msgid "Transcript updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:9
+msgid "Loading transcript updates…"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:10
+msgid "Transcript preparation and recorded delivery updates appear here."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:11
+msgid "There are no transcript updates."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:13
+msgid "Refresh transcript updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:14
+msgid "Transcript update pages"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:17
+msgid "Transcript prepared"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:18
+msgid "Transcript delivery recorded"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:21
+msgid "Transcript updates loaded."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:22
+msgid "Transcript updates are unavailable. Reopen this section to try again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:23
+msgid "Transcript updates are unavailable for this account."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:25
+msgid "New transcript updates are available."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:26
+msgid "View transcript request"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:27
+msgid "Back to transcript updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:28
+msgid "Transcript update marked as read."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:29
+msgid "Transcript update deleted."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:30
+msgid "Requested"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:31
+msgid "Delivery method"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:32
+msgid "Current status"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:33
+msgid "Current transcript request"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:34
+msgid "Open transcript requests"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:35
+msgid "Registrar pickup"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:36
+msgid "Electronic"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:37
+msgid "Preparation is separate from delivery. The registrar controls document release; this update provides status only."
+msgstr ""
+
+#: src/Application/Http/Controller/TranscriptUpdatesController.php:30
+msgid "Choose whether to include read transcript notifications."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptNotifications.php:41
+msgid "The transcript outcome changed. Review again."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptNotifications.php:64
+msgid "The transcript notification was not saved."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptNotifications.php:90
+msgid "The transcript outcome, notification or owner changed before completion."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptUpdatesService.php:55
+msgid "Use the complete transcript notification cursor."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptUpdatesService.php:60
+msgid "Use a valid transcript notification cursor."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptUpdatesService.php:77
+#: src/Domain/Transcript/Service/TranscriptUpdatesService.php:99
+msgid "Transcript notifications changed. Reopen the list."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptUpdatesService.php:113
+msgid "The transcript request changed. Reopen the notification."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptUpdatesService.php:134
+msgid "The transcript notification changed before completion."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptUpdatesService.php:182
+msgid "Reload the current transcript notification."
+msgstr ""

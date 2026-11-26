@@ -60,6 +60,12 @@ final class EarnedCeuTranscriptTest extends TestCase
             new \Infrastructure\Documents\RegisteredTranscriptLayouts(),
             new \Infrastructure\Persistence\Repository\SqlTranscriptReleasePolicyRepository($s->sql, $s->dropCipher),
             $s->standingLedger(),
+            new \Domain\Transcript\Service\TranscriptNotifications(
+                new \Infrastructure\Persistence\Repository\SqlTranscriptUpdatesRepository($s->sql),
+                $records,
+                $s->admissions,
+                $s->clock,
+            ),
         );
         $f->confirm($f->review());
         $unofficial = new \Domain\Transfer\Service\TransferService(

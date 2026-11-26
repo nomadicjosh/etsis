@@ -15,7 +15,7 @@ window.createWorkspaceNotifications = function (ui) {
     const history = [], visible = new Map();
     let dialog = null, list = null, empty = null, audio = null, sequence = 0, lastSound = -Infinity;
     let disposed = false;
-    let announcements = null, registrationUpdates = null, advisingUpdates = null, academicUpdates = null, importUpdates = null;
+    let announcements = null, registrationUpdates = null, advisingUpdates = null, academicUpdates = null, transcriptUpdates = null, importUpdates = null;
     let persistentUnread = 0, importTimer = null, importLoading = false, importStopped = false, identityKnown = false;
     let refreshAgain = false;
     let activeSound = null, pendingSound = null, decodedSound = null, soundGeneration = 0;
@@ -134,7 +134,7 @@ window.createWorkspaceNotifications = function (ui) {
         importLoading = true;
         try {
             let count = 0;
-            const endpoints = ['/portal/api/academic-updates/', ...(importLabels.notices ? ['/sis/imports/notices/'] : [])];
+            const endpoints = ['/portal/api/academic-updates/', '/portal/api/transcript-updates/', ...(importLabels.notices ? ['/sis/imports/notices/'] : [])];
             for (const endpoint of endpoints) {
                 try {
                     const result = await request(endpoint);
@@ -236,6 +236,7 @@ window.createWorkspaceNotifications = function (ui) {
         registrationUpdates?.destroy(); registrationUpdates = null;
         advisingUpdates?.destroy(); advisingUpdates = null;
         academicUpdates?.destroy(); academicUpdates = null;
+        transcriptUpdates?.destroy(); transcriptUpdates = null;
         importUpdates?.destroy(); importUpdates = null;
         const previous = dialog;
         dialog = list = empty = null;
@@ -296,6 +297,19 @@ window.createWorkspaceNotifications = function (ui) {
                 currentDialog.querySelector('.workspace-notification-dialog-body').prepend(importSection);
             }
             if (window.createStudentUpdates) {
+                const transcriptBody = node('div', { class: 'campus-announcements-body' });
+                const transcriptSection = node('details', { class: 'campus-announcements' },
+                    node('summary', {}, glyph('file-earmark-text'), text('transcript_updates', 'Transcript updates')), transcriptBody);
+                transcriptSection.addEventListener('toggle', () => {
+                    if (dialog !== currentDialog) return;
+                    transcriptUpdates?.destroy(); transcriptUpdates = null;
+                    if (transcriptSection.open) {
+                        transcriptUpdates = window.createStudentUpdates({ node, request, labels, notify,
+                            kind: 'transcript', notificationsOnly: true, changed: refreshPrivateCounts });
+                        transcriptUpdates.mount(transcriptBody);
+                    }
+                });
+                currentDialog.querySelector('.workspace-notification-dialog-body').prepend(transcriptSection);
                 const academicBody = node('div', { class: 'campus-announcements-body' });
                 const academicSection = node('details', { class: 'campus-announcements' },
                     node('summary', {}, glyph('mortarboard'), text('academic_updates', 'Academic updates')), academicBody);

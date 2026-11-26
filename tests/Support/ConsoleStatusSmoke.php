@@ -65,6 +65,7 @@ try {
                 'check-standing-proposals',
                 'check-maintenance',
                 'check-notification-preferences',
+                'check-transcript-updates',
                 'check-profile-requests',
                 'check-portal',
                 'check-admission-readiness',
@@ -372,6 +373,11 @@ try {
             $httpSis = $graduateFixture->sis;
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/GraduateRegistrationBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-transcript-updates') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/TranscriptUpdatesBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-notification-preferences') {
             $kernel->bootstrap();
