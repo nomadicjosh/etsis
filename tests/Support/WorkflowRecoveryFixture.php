@@ -297,7 +297,10 @@ final class WorkflowRecoveryFixture
             'sis_graduate_registration_policy_state', 'sis_graduate_course_approvals',
             'sis_student_advisors', 'sis_advising_appointments', 'sis_advising_availability',
             'sis_advising_availability_series', 'sis_advising_booking_policies', 'sis_section_meeting_plans',
-            'sis_advising_checkins', 'sis_advising_updates', 'sis_audit'] as $table
+            'sis_advising_checkins', 'sis_advising_updates', 'users', 'sis_person_identifiers',
+            'sis_account_setup', 'sis_person_imports', 'sis_catalog_operations', 'sis_import_mappings',
+            'sis_subject_import_mappings', 'sis_class_import_mappings', 'sis_program_import_mappings',
+            'sis_import_jobs', 'sis_import_artifacts', 'sis_import_notices', 'sis_audit'] as $table
         ) {
             $rows = $this->sis->sql->rows($table);
             $encoded = array_map(static fn (array $row): string => json_encode($row, JSON_THROW_ON_ERROR), $rows);

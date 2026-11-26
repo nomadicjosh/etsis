@@ -1886,7 +1886,10 @@ final class SisFixture
     }
     public function registrationService(): \Domain\Person\Service\PersonRegistrationService
     {
-        $columns = array_column($this->connection->pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC), 'name');
+        $columns = $this->connection->getSchema()->getColumns('users', clear: true);
+        if (!is_array($columns)) {
+            throw new LogicException('Prepare the fictional account table before creating people.');
+        }
         foreach (['username', 'token', 'middle_name', 'password', 'created_on'] as $column) {
             if (!in_array($column, $columns, true)) {
                 $this->connection->pdo->exec('ALTER TABLE users ADD COLUMN ' . $column . ' VARCHAR(191)');

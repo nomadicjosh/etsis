@@ -17,6 +17,7 @@ use Domain\Finance\ValueObject\AccountId;
 use Domain\Registration\ValueObject\RegistrationBatchSelection;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
+use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Communications\DefuseMessageCipher;
 use Qubus\Config\Collection;
@@ -74,6 +75,29 @@ try {
             });
         }
     };
+    $importTransactions = new class ($fixture->transactions, $input['pause_at'] ?? null) implements UnitOfWork {
+        private int $calls = 0;
+
+        public function __construct(
+            private \Domain\Shared\Persistence\UnitOfWork $inner,
+            private ?string $pauseAt,
+        ) {
+        }
+
+        public function run(Closure $operation): mixed
+        {
+            return $this->inner->run(function () use ($operation): mixed {
+                $result = $operation();
+                if (++$this->calls === 1 && $this->pauseAt === 'import.claim_staged') {
+                    fwrite(STDOUT, "staged\n");
+                    if (trim((string) fgets(STDIN)) !== 'continue') {
+                        exit(3);
+                    }
+                }
+                return $result;
+            });
+        }
+    };
     $audit = new class ($fixture->audit, $input['pause_at'] ?? null) implements AuditTrail {
         public function __construct(private AuditTrail $inner, private ?string $pauseAt)
         {
@@ -103,12 +127,16 @@ try {
     require_once __DIR__ . '/AcademicRecoveryServices.php';
     require_once __DIR__ . '/GraduateRecoveryServices.php';
     require_once __DIR__ . '/AdvisingRecoveryServices.php';
+    require_once __DIR__ . '/ImportRecoveryServices.php';
     $academic = new \Tests\Support\AcademicRecoveryServices($fixture);
     $graduate = new \Tests\Support\GraduateRecoveryServices($fixture);
     $advising = new \Tests\Support\AdvisingRecoveryServices($fixture);
+    $imports = new \Tests\Support\ImportRecoveryServices($fixture);
     $command = $input['command'];
     try {
         $result = match ($input['action']) {
+            'import_run' => ['status' => $imports->worker($audit, $importTransactions)->runOne()],
+            'import_submit' => $imports->queue($audit)->submit($command['token']),
             'advising_schedule', 'advising_act', 'advising_book', 'advising_window_create',
             'advising_window_close', 'advising_series_create', 'advising_series_close',
             'advising_policy_save', 'advising_class_publish' =>
