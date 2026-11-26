@@ -97,6 +97,12 @@ final class ChargeSourceWorkflowTest extends TestCase
             array_column($s->sql->rows('sis_account_entries'), 'charge_source')
         );
         self::assertSame(8500, $root->balance()->minor);
+        $breakdown = ['dataset' => 'accounts', 'columns' => array_map(
+            static fn(string $field): array => ['field' => $field, 'label' => $field, 'aggregate' => 'none'],
+            ['currency', 'tuition_minor', 'fees_minor']
+        )];
+        $row = $this->reports($s)->preview($breakdown, 0)['items'][0];
+        self::assertSame([4000, 4500], [$row['c1'], $row['c2']]);
         $before = $this->journal($s);
         $s->service->register($student->id, $section->id);
         self::assertSame($before, $this->journal($s));
@@ -117,6 +123,8 @@ final class ChargeSourceWorkflowTest extends TestCase
             array_column($root->entries(), 'charge_source')
         );
         self::assertSame(2000, $root->balance()->minor);
+        $row = $this->reports($s)->preview($breakdown, 0)['items'][0];
+        self::assertSame([1000, 1000], [$row['c1'], $row['c2']]);
     }
 
     public function testCorrectionsCreditsAndReportsRetainSourceWithoutReclassifyingEarlierEntries(): void

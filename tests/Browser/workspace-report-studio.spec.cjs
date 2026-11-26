@@ -256,6 +256,11 @@ async function fixture(page, options = {}) {
         for (const key of ['balance', 'charges', 'payments', 'refunds']) fields[key].relation = 'account';
         fields.cutoff_utc = { label: 'Recorded cutoff UTC', type: 'datetime', relation: 'account' };
     }
+    if (options.accounts) {
+        for (const [key, label] of Object.entries({ tuition: 'Net tuition', fees: 'Net fees',
+            manual_charges: 'Net staff-recorded charges', unclassified_charges: 'Net unclassified charges' }))
+            fields[key] = { label: label + (options.historical ? ' at cutoff' : ''), type: 'double', relation: 'account' };
+    }
     if (options.casework) dataset.relationships.casework = {label:'Current admissions casework',parent:'application',many:false};
     if (options.postingLinks) dataset.relationships.entry = {
         label: 'Financial postings', parent: 'account', many: true,
@@ -318,7 +323,7 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/report-studio/save/') { definition = data.definition; name = data.name; version = data.version + 1; result = { id: data.report_id }; }
         else if (path.endsWith('/preview/') || path.endsWith('/run/')) {
             const query = data.definition || definition;
-            const values = { cutoff_utc: query.financial_as_of?.replace('T', ' ').replace('Z', ''), pursuit_id: id(92), component_row_id: id(93), component_code: 'ART', component_title: 'Retained <b>concentration</b>', component_kind: 'concentration', component_active: true, department_title: 'English <b>department</b>', school_title: 'Arts <college>', parent_major_code: 'ENG', academic_year_code: '2026-2027', pursuit_status: 'active', cohort_matches: true, checkin_id: id(95), due_on: '2026-11-25', followup_status: 'responded', attendance_id: id(94), held_on: '2026-11-21', attendance_status: 'absent', section_code: 'MATH.101.A', determined_on: '2026-11-21', classification_title: 'Full time', registered_credits: 6.25, determination_id: id(90), student_id: id(91), application_id: id(80), case_office:'Admissions <b>fictional</b>', case_work_status:'waiting', case_due_on:'2026-09-01', posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
+            const values = { tuition: 25, fees: 3, manual_charges: 2, unclassified_charges: 0, cutoff_utc: query.financial_as_of?.replace('T', ' ').replace('Z', ''), pursuit_id: id(92), component_row_id: id(93), component_code: 'ART', component_title: 'Retained <b>concentration</b>', component_kind: 'concentration', component_active: true, department_title: 'English <b>department</b>', school_title: 'Arts <college>', parent_major_code: 'ENG', academic_year_code: '2026-2027', pursuit_status: 'active', cohort_matches: true, checkin_id: id(95), due_on: '2026-11-25', followup_status: 'responded', attendance_id: id(94), held_on: '2026-11-21', attendance_status: 'absent', section_code: 'MATH.101.A', determined_on: '2026-11-21', classification_title: 'Full time', registered_credits: 6.25, determination_id: id(90), student_id: id(91), application_id: id(80), case_office:'Admissions <b>fictional</b>', case_work_status:'waiting', case_due_on:'2026-09-01', posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
                 latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
@@ -1784,5 +1789,31 @@ test('custom labels remove a dependent column when its condition source is disco
     const definition = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
     expect(definition.columns.map(column => column.field)).toEqual(['enrollment_id', 'enrollment_id']);
     expect(definition.columns.some(column => column.label_mapping)).toBe(false);
+    expect(f.errors).toEqual([]);
+});
+
+for (const historical of [false, true]) test(`account charge components preserve ${historical ? 'cutoff' : 'current'} source in the existing builder`, async ({ page }) => {
+    const f = await fixture(page, { accounts: true, historical });
+    await page.getByRole('button', { name: historical ? 'Student balances at a cutoff' : 'Outstanding student balances', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    if (historical) await studio.getByLabel('Recorded activity through (UTC, inclusive second)', { exact: true }).fill('2026-08-03T10:00:00');
+    for (const key of ['tuition', 'fees', 'manual_charges', 'unclassified_charges'])
+        await studio.locator(`[data-report-field="${key}"] input`).check();
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional account charge breakdown');
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    const region = studio.getByRole('region', { name: 'Relational report results', exact: true });
+    await expect(region).toContainText(historical ? 'Net tuition at cutoff' : 'Net tuition');
+    const preview = f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(preview.columns.map(c => c.field)).toEqual(expect.arrayContaining(['currency', 'tuition', 'fees', 'manual_charges', 'unclassified_charges']));
+    expect(preview.dataset).toBe(historical ? 'historical_accounts' : 'accounts');
+    if (historical) expect(preview.financial_as_of).toBe('2026-08-03T10:00:00Z');
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
+    await studio.getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(studio.locator('[data-report-field="tuition"] input')).toBeChecked();
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await accessible(page);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });

@@ -8272,3 +8272,67 @@ msgstr ""
 #: src/Domain/Transcript/Service/TranscriptWorklistService.php:309
 msgid "Transcript assignment changed before completion."
 msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:15
+msgid "Net tuition at cutoff"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:15
+msgid "Net tuition at cutoff in minor units"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:16
+msgid "Net fees at cutoff"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:16
+msgid "Net fees at cutoff in minor units"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:18
+msgid "Net staff-recorded charges at cutoff"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:19
+msgid "Net staff-recorded charges at cutoff in minor units"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:22
+msgid "Net unclassified charges at cutoff"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:23
+msgid "Net unclassified charges at cutoff in minor units"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:26
+msgid "Net tuition"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:26
+msgid "Net tuition in minor units"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:27
+msgid "Net fees"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:27
+msgid "Net fees in minor units"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:29
+msgid "Net staff-recorded charges"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:29
+msgid "Net staff-recorded charges in minor units"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:32
+msgid "Net unclassified charges"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AccountChargeReportSchema.php:32
+msgid "Net unclassified charges in minor units"
+msgstr ""

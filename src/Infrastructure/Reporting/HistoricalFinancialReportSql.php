@@ -56,6 +56,9 @@ final readonly class HistoricalFinancialReportSql
     }
     public function amount(string $alias, string $measure, string $value): string
     {
+        if (in_array($measure, ['tuition', 'fees', 'manual_charges', 'unclassified_charges'], true)) {
+            return new AccountChargeReportSql($this->sql)->amount($alias, $measure, $value);
+        }
         $q = $this->sql->quote(...);
         $type = match ($measure) {
             "balance" => null,

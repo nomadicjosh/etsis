@@ -1387,3 +1387,7 @@ The existing [transcript preparation and delivery workflow](#verify-the-academic
 ## Transcript work assignment
 
 The existing staff **Transcript requests** screen now supports [current transcript work assignments](transcript-worklists.md): All/My/Unassigned and status filters, canonical eligible-colleague search, explicit claim/reassign/clear saves and current request/assignment revisions. Assignment is operational routing; it grants no authority and changes no request, prepared document, delivery evidence, notification or academic fact. Finished requests preserve their assignment for inspection. The current authorization, audit, stale-save and private-view boundaries are described in that guide.
+
+## Account-level tuition and fee breakdowns
+
+The existing current and recorded-cutoff student-account sources now offer [independent net charge components](account-charge-reports.md): tuition, fees, staff-recorded charges and explicit unknown sources. Each aggregates at account/currency grain without joining charge and payment detail together. Accepted linked credits, replacements and reversals preserve their retained categories and recorded chronology. Ordinary field controls, matching-record filters, currency-safe summaries, private saves/shares/static captures and complete background exports remain shared; no financial fact or schema changes.

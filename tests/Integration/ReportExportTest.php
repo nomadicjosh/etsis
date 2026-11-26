@@ -6,6 +6,11 @@ namespace Tests\Integration;
 
 use Domain\Access\Repository\AccessRepository;
 use Domain\Audit\Repository\AuditTrail;
+use Domain\Finance\Enum\ChargeSource;
+use Domain\Finance\Enum\EntryType;
+use Domain\Finance\StudentAccount;
+use Domain\Finance\ValueObject\AccountId;
+use Domain\Finance\ValueObject\Money;
 use Domain\Reporting\Repository\ReportExportCapture;
 use Domain\Reporting\Service\RelationalReportService;
 use Domain\Reporting\Service\ReportExportRetention;
@@ -95,6 +100,41 @@ final class ReportExportTest extends TestCase
             $s->reportLifecycles()
         )->save($id, EntityId::generate(), -1, 'Fictional export', $definition ?? $this->query());
         return $id;
+    }
+
+    public function testAccountChargeComponentsUseTheExistingEncryptedBackgroundExport(): void
+    {
+        $s = new SisFixture();
+        $account = StudentAccount::open(new AccountId(), $s->student()->id, $s->term, 'USD');
+        $account->post(
+            EntityId::generate(),
+            EntryType::Charge,
+            new Money(5000, 'USD'),
+            $s->access->actor,
+            chargeSource: ChargeSource::TermTuition
+        );
+        $account->post(
+            EntityId::generate(),
+            EntryType::Charge,
+            new Money(250, 'USD'),
+            $s->access->actor,
+            chargeSource: ChargeSource::TermFee
+        );
+        $s->saveAccount($account);
+        $definition = ['dataset' => 'accounts', 'columns' => array_map(
+            static fn(string $field): array => ['field' => $field, 'label' => $field, 'aggregate' => 'none'],
+            ['currency', 'tuition_minor', 'fees_minor', 'manual_charges_minor', 'unclassified_charges_minor']
+        )];
+        $report = $this->report($s, $definition);
+        $service = $this->service($s);
+        $job = EntityId::generate();
+        $before = $this->history($s);
+        $service->request($report, $job, 0);
+        self::assertSame(1, $service->work(true)['ready']);
+        $csv = implode('', $service->download($report, $job)->chunks);
+        self::assertSame(['USD', '5000', '250', '0', '0'], str_getcsv(explode("\n", trim($csv))[1], escape: ''));
+        self::assertStringNotContainsString('tuition_minor', json_encode($s->sql->rows('sis_report_export_chunks')));
+        self::assertSame($before, $this->history($s));
     }
 
     public function testCustomLabelsUseTheCompleteEncryptedExportAndRemainFormulaSafe(): void

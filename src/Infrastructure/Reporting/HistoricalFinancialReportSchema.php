@@ -13,12 +13,13 @@ final class HistoricalFinancialReportSchema
         unset($accounts["relationships"]["entry"], $accounts["relationships"]["balance"]);
         $accounts["fields"] = array_filter(
             $accounts["fields"],
-            static fn(array $field): bool => !in_array(
+            static fn(array $field): bool => !isset($field['charge_component']) && !in_array(
                 $field["relation"],
                 ["entry", "balance"],
                 true,
             ),
         );
+        $accounts['fields'] += AccountChargeReportSchema::fields(historical: true);
         foreach (
             [
                 "balance" => "Balance",

@@ -254,6 +254,9 @@ final readonly class ReportSelectCompiler
     {
         $q = $this->sql->quote(...);
         $name = $q($alias) . '.' . $q($field['column']);
+        if (isset($field['charge_component'])) {
+            $name = new AccountChargeReportSql($this->sql)->amount($alias, $field['charge_component']);
+        }
         if (($field['expression'] ?? null) === 'historical_cutoff') {
             return new HistoricalFinancialReportSql($this->sql)->cutoff($field['financial_as_of']);
         }

@@ -15,6 +15,10 @@ $f->save($a, "2026-08-03T10:00:00Z");
 $httpSis = $f->sis;
 require __DIR__ . "/SisHttpFixture.php";
 $definition = $f->definition();
+$definition['columns'] = array_merge($definition['columns'], array_map(
+    static fn(string $field): array => ['field' => $field, 'label' => $field, 'aggregate' => 'none'],
+    ['tuition_minor', 'fees_minor', 'manual_charges_minor', 'unclassified_charges_minor']
+));
 $post = static function (
     string $path,
     array $data,
@@ -34,7 +38,8 @@ $before = $sis->sql->rows("sis_history_events");
 $preview = $post("/sis/report-studio/preview/", ["definition" => $definition, "offset" => 0]);
 if (
     ($preview["items"][0]["c2"] ?? null) !== 10000 ||
-    $preview["financial_as_of"] !== $definition["financial_as_of"]
+    $preview["financial_as_of"] !== $definition["financial_as_of"] ||
+    array_slice(array_values($preview['items'][0]), 6) !== [0, 0, 0, 10000]
 ) {
     throw new RuntimeException("The real historical financial report lost its cutoff or amount.");
 }
