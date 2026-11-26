@@ -1213,6 +1213,10 @@ final readonly class InstitutionalCreditLedger
         }
         $this->actor($context->actor);
         [$id, $root, $facts] = $this->source($closed->id, $closed->studentId, $closed->sectionId, $budget);
+        if ($outcome['delete_records'] && isset($root->earnedCeus()['earned_milli'])) {
+            throw new ValidationException([['field' => 'enrollment_id', 'message' =>
+                \Codefy\Framework\Helpers\trans('Resolve the recorded CEU award before removing this attempt.')]]);
+        }
         $op = $this->operation($id, $context->correlation, "drop");
         $base = null;
         if ($root->playhead() === 0) {

@@ -1313,7 +1313,7 @@ final readonly class HistoricalSchemaRegistry
                     }
                     continue;
                 }
-                if ($name === 'withdrawn_ceu_decision') {
+                if (in_array($name, ['withdrawn_ceu_decision', 'independent_ceu_completion'], true)) {
                     if ($value !== true || $class !== \Domain\AcademicRecord\Event\EarnedCeusWereDecided::class) {
                         throw new CorruptHistoryException();
                     }

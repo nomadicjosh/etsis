@@ -519,6 +519,9 @@ final class AcademicCredit extends EventSourcedAggregate
             throw new CorruptHistoryException();
         }
         $o = $p["outcome"];
+        if ($o['delete_records'] && isset($this->earnedCeus['earned_milli'])) {
+            throw new CorruptHistoryException();
+        }
         $reference = $event->metaParam("drop_policy", null);
         if ($reference !== null) {
             \Domain\Registration\ValueObject\DropPolicyReference::validate($reference, $o["policy_version"]);
@@ -609,13 +612,16 @@ final class AcademicCredit extends EventSourcedAggregate
         $this->assertNext($p);
         $award = new \Domain\AcademicRecord\ValueObject\EarnedCeus($p['award'])->facts;
         $withdrawn = $this->credit['status'] === 'W';
+        $independent = $event->metaParam('independent_ceu_completion', false);
         if (
             !\Domain\AcademicRecord\ValueObject\EarnedCeus::same($p['previous_award'], $this->earnedCeus) ||
             \Domain\AcademicRecord\ValueObject\EarnedCeus::same($p['previous_award'], $award) ||
             !$this->canDecideEarnedCeus() || $award['section_version_id'] !== $this->sectionVersion ||
             $event->metaParam('withdrawn_ceu_decision', false) !== $withdrawn ||
-            (!$withdrawn && $this->completedOn !== $award['completed_on']) ||
-            ($award['earned_milli'] !== null && !$this->grade['passes']) ||
+            !is_bool($independent) ||
+            (!$independent && ($this->grade === null ||
+                (!$withdrawn && ($this->completedOn === null || $this->completedOn !== $award['completed_on'])) ||
+                ($award['earned_milli'] !== null && !$this->grade['passes']))) ||
             ($this->earnedCeus === null && $award['earned_milli'] === null) ||
             isset($this->ceuDecisions[$p['decision_id']])
         ) {
@@ -635,14 +641,13 @@ final class AcademicCredit extends EventSourcedAggregate
         return $this->earnedCeus;
     }
 
-    /** CEU completion is independent of academic completion on a verified withdrawn attempt. */
+    /** Verified CEU completion never requires an academic grade or creates academic credit. */
     public function canDecideEarnedCeus(): bool
     {
         return $this->playhead() > 0 && $this->provenance === 'registration' &&
-        $this->sectionVersion !== null && $this->pendingGradeChange === null && $this->grade !== null &&
-        ($this->grade['passes'] || $this->earnedCeus !== null) &&
-        (($this->credit['status'] === 'W' && $this->canCorrectSource()) ||
-        (in_array($this->credit['status'], ['A', 'N'], true) && $this->completedOn !== null));
+        $this->sectionVersion !== null && $this->pendingGradeChange === null &&
+        in_array($this->credit['status'], ['A', 'N', 'W'], true) &&
+        !WithdrawnCreditQuantities::requiresReview($this->credit, $this->grade);
     }
 
     public function ceuDecision(EntityId $operation): ?array

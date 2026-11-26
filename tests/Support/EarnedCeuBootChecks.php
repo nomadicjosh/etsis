@@ -14,11 +14,8 @@ $send = static function (string $suffix, array $data = [], int $status = 200) us
 $view = $send('view');
 $body = ['expected_version' => $view['expected_version'], 'expected_position' => $view['expected_position'],
     'earned_milli' => 1250, 'effective_on' => '2026-08-01', 'reason' => 'Fictional institutional CEU evidence.',
-    'acknowledged' => true];
-if ($earnedFixture->withdrawn) {
-    $body['completed_on'] = '2026-08-01';
-    $send('review', array_diff_key($body, ['completed_on' => true]), 422);
-}
+    'acknowledged' => true, 'completed_on' => '2026-08-01'];
+$send('review', array_diff_key($body, ['completed_on' => true]), 422);
 $send('review', array_diff_key($body, ['earned_milli' => true]), 422);
 $send('review', array_replace($body, ['earned_milli' => 1251]), 422);
 $review = $send('review', $body);

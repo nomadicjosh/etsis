@@ -90,7 +90,9 @@ final readonly class CourseDropService
                     'institutional_id' => $first['institutional_id']],
                 'courses' => array_map(static fn(array $row): array => array_intersect_key(
                     $row,
-                    array_flip(['section_id', 'section_code', 'effective_on', 'outcome', 'corequisites'])
+                    array_flip([
+                        'section_id', 'section_code', 'effective_on', 'outcome', 'corequisites', 'has_earned_ceus',
+                    ])
                 ), $context['courses'])];
             return $visible + ['operation_id' => $operation->value, 'revision' => $revision,
                 'review_token' => $this->proofs->issue(
@@ -742,6 +744,13 @@ final readonly class CourseDropService
         }
         $s = $this->admissions->student($student);
         $p = $this->admissions->person($s->personId);
+        [, $academic] = $this->credits->decisionRecord($student, $section, $e->id, budget: $budget);
+        $ceuAward = $academic->earnedCeus();
+        $outcome = $this->policy->outcome($e->termId, $effective, $e->studentId, $e->id, $e->sectionId, $budget);
+        if ($outcome['delete_records'] && isset($ceuAward['earned_milli'])) {
+            throw new ValidationException([['field' => 'enrollment_id', 'message' =>
+                \Codefy\Framework\Helpers\trans('Resolve the recorded CEU award before removing this attempt.')]]);
+        }
         return [
             "student_id" => $student->value,
             "section_id" => $section->value,
@@ -755,13 +764,14 @@ final readonly class CourseDropService
             "effective_on" => $effective,
             "timezone" => $now->getTimezone()->getName(),
             "credit" => $credit,
+            ...($ceuAward !== null ? ['has_earned_ceus' => isset($ceuAward['earned_milli'])] : []),
             "corequisites" => ($dependencyRead ?? $this->dependencies(
                 $student,
                 $dropping === [] ? [$section->value] : $dropping,
                 $budget,
                 $replacement,
             ))->summary(),
-            "outcome" => $this->policy->outcome($e->termId, $effective, $e->studentId, $e->id, $e->sectionId, $budget),
+            "outcome" => $outcome,
         ];
     }
     /** Internal institutional setting for related authorized lifecycle reviews. */

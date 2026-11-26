@@ -5,6 +5,10 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'withdrawal_preserves' => trans_html(
+        'This academic withdrawal preserves the independently recorded CEUs. Any CEU correction '
+        . 'or revocation requires a separate reviewed decision.',
+    ),
     'ceu_empty' => trans_html('No earned CEU awards are recorded for this transcript.'),
     'record_course' => trans_html('Course'),
     'record_title' => trans_html('Title'),
@@ -66,13 +70,13 @@ return [
     'earned_none' => trans_html('No earned CEUs'),
     'earned_loading' => trans_html('Loading earned CEU evidence…'),
     'earned_help' => trans_html(
-        'Record earned CEUs only after verifying institutional completion evidence. Offered CEUs are '
-        . 'a separate publication; this decision changes neither academic credits, GPA, registration '
-        . 'load nor charges.',
+        'Verify the continuing education completion evidence and date. An academic grade is not '
+        . 'required and does not determine earned CEUs. This decision changes neither academic '
+        . 'credits, GPA, registration load nor charges.',
     ),
     'earned_unavailable' => trans_html(
-        'This attempt needs registrar review: a retained offered CEU declaration, a verified passing '
-        . 'grade, completion evidence and no pending grade correction are required. Removed or '
+        'This attempt needs registrar review: a retained offered CEU declaration, consistent attempt '
+        . 'records and no pending grade correction are required. Removed or '
         . 'unknown attempts need separate resolution.',
     ),
     'earned_ceu_completion' => trans_html('Verified CEU completion date'),

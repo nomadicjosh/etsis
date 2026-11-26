@@ -103,12 +103,24 @@ final class WithdrawnEarnedCeuTest extends TestCase
         }
     }
 
-    public function testWithdrawalAloneDoesNotSupplyPassingCompletionEvidence(): void
+    public function testWithdrawalAloneDoesNotSupplyCeuCompletionEvidence(): void
     {
         $f = new EarnedCeuFixture(complete: false, withdrawn: true);
-        self::assertFalse($f->service->view($f->student, $f->offering->section->id, $f->enrollment)['can_record']);
+        $current = $f->service->view($f->student, $f->offering->section->id, $f->enrollment);
+        self::assertNull($current['earned_ceus']);
         $this->expectException(ValidationException::class);
-        $f->review();
+        $f->service->review(
+            $f->student,
+            $f->offering->section->id,
+            $f->enrollment,
+            $current['expected_version'],
+            $current['expected_position'],
+            1250,
+            '2026-09-02',
+            'Fictional CEU evidence without a completion date.',
+            true,
+            null,
+        );
     }
 
     public function testFinalClosedAuthorityLossOrChangedEnrollmentRollsBackTheEntireDecision(): void
@@ -171,7 +183,7 @@ final class WithdrawnEarnedCeuTest extends TestCase
         }
     }
 
-    public function testAChangedFailingGradeBlocksNumericAwardsButAllowsExplicitRevocation(): void
+    public function testAChangedAcademicGradeDoesNotDetermineCeusAndRevocationStaysExplicit(): void
     {
         $f = new EarnedCeuFixture(withdrawn: true);
         $f->confirm($f->review());
@@ -189,15 +201,9 @@ final class WithdrawnEarnedCeuTest extends TestCase
             effective: '2026-09-02',
         );
         $s->academicCredits()->commit($f->student, $section, $review['review_token']);
-        try {
-            $f->review(750);
-            self::fail('A failing withdrawn grade awarded numeric CEUs.');
-        } catch (ValidationException) {
-            self::assertSame(
-                1250,
-                $f->service->view($f->student, $section, $f->enrollment)['earned_ceus']['earned_milli'],
-            );
-        }
+        self::assertSame(1250, $f->service->view($f->student, $section, $f->enrollment)['earned_ceus']['earned_milli']);
+        $f->confirm($f->review(750));
+        self::assertSame(750, $f->service->view($f->student, $section, $f->enrollment)['earned_ceus']['earned_milli']);
         $f->confirm($f->review(null));
         self::assertNull($f->service->view($f->student, $section, $f->enrollment)['earned_ceus']['earned_milli']);
         self::assertSame(0, (int) $s->sql->one('sis_academic_credits', ['id' => $f->credit->value])['completed_milli']);

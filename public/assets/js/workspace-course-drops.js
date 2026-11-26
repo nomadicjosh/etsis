@@ -50,6 +50,8 @@ window.createWorkspaceCourseDrops = function (ui) {
                     : `GPA treatment: ${plan.outcome.counts_gpa ? "counts toward GPA under the catalog grade definition" : "excluded from GPA"}.`,
             ),
         );
+        if (plan.has_earned_ceus === true) body.append(node('p', { class: 'alert alert-info' },
+            ui.ceuLabels?.withdrawal_preserves || 'This academic withdrawal preserves the independently recorded CEUs. Any CEU correction or revocation requires a separate reviewed decision.'));
         const command = Object.fromEntries(
             [
                 "student_id",
@@ -451,7 +453,7 @@ window.createWorkspaceCourseDrops = function (ui) {
         );
         const editor = Array.from(body.childNodes);
     }
-    const plans = window.createRegistrationDrops({ node, request, task,
+    const plans = window.createRegistrationDrops({ node, request, task, ceuLabels: ui.ceuLabels,
         open: title => openDrawer(title, 'REGISTRATION'), prefix: '/sis/drop-plans/' });
     return { review, policy, plan: plans.start };
 };

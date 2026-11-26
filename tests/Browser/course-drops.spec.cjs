@@ -11,6 +11,7 @@ async function fixture(page, late = false) {
     const sent = [], errors = []; let committed = false;
     page.on('pageerror', error => errors.push(error.message));
     const plan = { student_id: student, section_id: section, enrollment_id: enrollment, version: 0,
+        has_earned_ceus: late,
         operation_id: operation, revision: 'a'.repeat(64), effective_on: '2026-08-10',
         section_code: 'MATH.101.A', given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL',
         outcome: { delete_records: !late, grade_code: late ? 'D' : null, counts_gpa: late, term_code: '26/FA', grace_ends_on: '2026-08-15' } };
@@ -28,7 +29,8 @@ async function fixture(page, late = false) {
             else if (path.endsWith('/review/')) result = { operation_id: operation, revision: 'a'.repeat(64),
                 review_token: 'fictional-drop-plan-proof', student: { given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }, courses: [
                     { ...plan, section_code: 'CHEM.101.A', outcome: { ...plan.outcome, delete_records: true } },
-                    { ...plan, section_id: second, section_code: 'CHEM.101L.A', outcome: { ...plan.outcome, delete_records: false, grade_code: 'W' } },
+                    { ...plan, section_id: second, section_code: 'CHEM.101L.A', has_earned_ceus: true,
+                        outcome: { ...plan.outcome, delete_records: false, grade_code: 'W' } },
                 ] };
             else if (path.endsWith('/commit/')) { status = 500; result = { error: 'Fictional interrupted confirmation. Check saved drops.' }; }
             else result = { drop_plan_id: operation, removed: 1, withdrawn: 1, drops: [] };
@@ -99,7 +101,10 @@ for (const late of [false, true]) test(`student reviews ${late ? 'late D with re
     await page.goto('/portal/student/registration/');
     await page.getByRole('button', { name: 'Drop / withdraw', exact: true }).click();
     await expect(page.locator('#campus-dialog')).toContainText(late ? 'grade D' : 'cash refunds require a separate review');
-    if (late) await expect(page.locator('#campus-dialog')).toContainText('course charge stays payable');
+    if (late) {
+        await expect(page.locator('#campus-dialog')).toContainText('course charge stays payable');
+        await expect(page.locator('#campus-dialog')).toContainText('preserves the independently recorded CEUs');
+    }
     await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
     await page.getByRole('button', { name: 'Confirm drop / withdrawal', exact: true }).click();
     await expect(page.locator('#campus-dialog-error')).toContainText('interrupted');
@@ -131,6 +136,7 @@ for (const owner of [false, true]) test(`${owner ? 'student' : 'staff'} selects 
     const body = page.locator(owner ? '#campus-dialog-body' : '#drawer-body');
     await expect(body).toContainText('Reverse the original course charge');
     await expect(body).toContainText('grade W');
+    await expect(body).toContainText('preserves the independently recorded CEUs');
     await expect(body.locator('b')).toHaveCount(0);
     await page.getByRole('button', { name: 'Change selection', exact: true }).click();
     await expect(page.getByRole('checkbox', { name: /CHEM.101 ·/ })).toBeChecked();
@@ -146,6 +152,20 @@ for (const owner of [false, true]) test(`${owner ? 'student' : 'staff'} selects 
     expect(commit[0].data).toMatchObject({ student_id: student, section_ids: [section, id(6)], review_token: 'fictional-drop-plan-proof' });
     expect(commit[0].csrf).toBe('fictional-test-token');
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('staff see that a late withdrawal preserves separately recorded CEUs', async ({ page }) => {
+    const f = await fixture(page, true);
+    await page.goto('/admin/');
+    await page.locator('.workspace-nav-link[data-workspace="students"]').click();
+    await page.locator('#directory-search').fill('a');
+    await page.locator('#directory-search').press('Enter');
+    await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
+    await page.getByRole('button', { name: 'Drop / withdraw', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('preserves the independently recorded CEUs');
+    await page.setViewportSize({ width: 320, height: 812 });
+    await accessible(page);
     expect(f.errors).toEqual([]);
 });
 

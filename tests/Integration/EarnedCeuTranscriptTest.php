@@ -21,15 +21,24 @@ final class EarnedCeuTranscriptTest extends TestCase
 
     public static function academicQuantities(): array
     {
-        return [[0, false], [3000, false], [0, true], [3000, true]];
+        return [[0, false, true, true], [3000, false, true, true], [0, true, true, true], [3000, true, true, true],
+            [0, false, false, true], [3000, false, false, true], [0, true, false, true], [3000, true, false, true],
+            [0, true, false, false]];
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('academicQuantities')]
     public function testCeusAreIsolatedFromAcademicTranscriptsAndEarlierPreparedCeuDocumentsStayExact(
         int $academicMilli,
         bool $withdrawn,
+        bool $complete,
+        bool $knownWithdrawalGrade,
     ): void {
-        $f = new EarnedCeuFixture(academicMilli: $academicMilli, withdrawn: $withdrawn);
+        $f = new EarnedCeuFixture(
+            complete: $complete,
+            academicMilli: $academicMilli,
+            withdrawn: $withdrawn,
+            knownWithdrawalGrade: $knownWithdrawalGrade,
+        );
         $s = $f->sis;
         $records = new SqlTranscriptRepository($s->sql);
         $request = EntityId::generate();

@@ -42,11 +42,23 @@ final class EarnedCeuTest extends TestCase
         self::assertSame([1250, 750, null], array_column(array_column($history['items'], 'after'), 'earned_milli'));
     }
 
-    public function testOfferedDeclarationAndCompletionAreRequiredAndAStaleReviewCreatesNothing(): void
+    public function testExplicitCeuCompletionEvidenceIsRequiredWithoutAnAcademicGrade(): void
     {
         $f = new EarnedCeuFixture(false);
         $this->expectException(\Domain\Shared\Exception\ValidationException::class);
-        $f->review();
+        $current = $f->service->view($f->student, $f->offering->section->id, $f->enrollment);
+        $f->service->review(
+            $f->student,
+            $f->offering->section->id,
+            $f->enrollment,
+            $current['expected_version'],
+            $current['expected_position'],
+            1250,
+            '2026-08-01',
+            'Fictional CEU evidence requiring an explicit completion date.',
+            true,
+            null,
+        );
     }
 
     public function testChangedAcademicPositionAndExpiredReviewRefuseNewDecisionsButPreserveAcceptedRetries(): void

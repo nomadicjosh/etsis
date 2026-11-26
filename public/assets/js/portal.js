@@ -1921,7 +1921,8 @@
         });
     }
 
-    const dropPlans = window.createRegistrationDrops({ node: el, request, task, prefix: '/portal/api/drop-plan/',
+    const dropPlans = window.createRegistrationDrops({ node: el, request, task, ceuLabels: config.ceu_labels,
+        prefix: '/portal/api/drop-plan/',
         open: title => { const body = el('div'); dialog(title, body); return body; } });
     async function registration(container) {
         if (!me.students.length) {
@@ -1976,6 +1977,8 @@
                                                 el('p', {}, plan.outcome.delete_records
                                                     ? 'Your enrollment and academic credit will be removed. The original course charge will be reversed if present. This may leave an account credit; cash refunds require a separate review. Other institutional fees are unchanged.'
                                                     : `Your course stays on your academic record with grade ${plan.outcome.grade_code} and zero earned credits. The original course charge stays payable. GPA treatment: ${plan.outcome.counts_gpa ? 'counts toward GPA under the catalog grade definition' : 'excluded from GPA'}.`),
+                                                plan.has_earned_ceus === true ? el('p', { class: 'alert alert-info' },
+                                                    config.ceu_labels?.withdrawal_preserves || 'This academic withdrawal preserves the independently recorded CEUs. Any CEU correction or revocation requires a separate reviewed decision.') : null,
                                                 plan.corequisites?.warning ? el('div', { role: 'status', class: plan.corequisites.blocked ? 'alert alert-danger' : 'alert alert-warning' },
                                                     el('p', {}, plan.corequisites.blocked ? 'This drop leaves a required co-requisite unsupported. Review the linked courses together.' :
                                                         'This drop leaves a co-requisite unsupported. Institutional policy permits proceeding with this warning.'),

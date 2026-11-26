@@ -42,6 +42,8 @@ final class EarnedCeuFixture
         ?int $offeredMilli = 1250,
         int $academicMilli = 3000,
         public bool $withdrawn = false,
+        bool $lateDropPolicy = false,
+        bool $knownWithdrawalGrade = true,
     ) {
         require_once __DIR__ . '/OfferingCreditFixture.php';
         $this->offering = $f = new OfferingCreditFixture();
@@ -62,9 +64,10 @@ final class EarnedCeuFixture
         }
         $s->gradeScale([['code' => 'P', 'min_score_milli' => 0, 'max_score_milli' => 100000,
             'points_milli' => 0, 'passes' => true, 'counts_gpa' => false],
-            ...($withdrawn ? [['code' => 'W', 'min_score_milli' => null, 'max_score_milli' => null,
+            ...(($withdrawn || $lateDropPolicy) && $knownWithdrawalGrade
+                ? [['code' => 'W', 'min_score_milli' => null, 'max_score_milli' => null,
                 'points_milli' => 0, 'passes' => false, 'counts_gpa' => false]] : [])]);
-        if ($withdrawn) {
+        if (($withdrawn || $lateDropPolicy) && $knownWithdrawalGrade) {
             $s->publishDropPolicy($s->term, -1, new \Domain\Registration\ValueObject\DropWindows([
                 ['through' => null, 'grade_code' => 'W'],
             ]));
@@ -144,7 +147,7 @@ final class EarnedCeuFixture
             $this->withdrawn ? $this->sis->clock->now()->format('Y-m-d') : '2026-08-01',
             'Fictional institutional CEU evidence.',
             true,
-            $this->withdrawn ? '2026-08-01' : null,
+            '2026-08-01',
         );
     }
 

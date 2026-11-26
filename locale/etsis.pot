@@ -10270,3 +10270,23 @@ msgstr ""
 #: resources/views/shared/ceu-labels.php
 msgid "Previously recorded CEU completion date"
 msgstr ""
+
+#: src/Domain/AcademicRecord/Service/EarnedCeuService.php
+msgid "Enter the independently verified CEU completion date."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/InstitutionalCreditLedger.php
+msgid "Resolve the recorded CEU award before removing this attempt."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php
+msgid "This academic withdrawal preserves the independently recorded CEUs. Any CEU correction or revocation requires a separate reviewed decision."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php
+msgid "Verify the continuing education completion evidence and date. An academic grade is not required and does not determine earned CEUs. This decision changes neither academic credits, GPA, registration load nor charges."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php
+msgid "This attempt needs registrar review: a retained offered CEU declaration, consistent attempt records and no pending grade correction are required. Removed or unknown attempts need separate resolution."
+msgstr ""

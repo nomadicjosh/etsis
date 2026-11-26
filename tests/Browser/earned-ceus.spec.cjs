@@ -27,7 +27,9 @@ async function fixture(page, options = {}) {
             if (path.endsWith('/view/')) {
                 if (options.delayed) await pending;
                 result = { course_code: 'CE.101', course_title: 'Fictional continuing education', offered_milli: 1250,
-                    earned_ceus: award, completed_on: options.withdrawn ? null : '2026-08-01', expected_version: 2, expected_position: 3,
+                    earned_ceus: award, completed_on: options.withdrawn || options.ungraded ? null
+                        : options.academicDate || '2026-08-01',
+                    expected_version: 2, expected_position: 3,
                     withdrawn: !!options.withdrawn,
                     can_record: !options.readOnly, can_manage: !options.readOnly, today: '2026-08-10' };
             } else if (path.endsWith('/review/')) {
@@ -58,6 +60,7 @@ async function fixture(page, options = {}) {
 
 async function enter(page) {
     await page.getByLabel('Earned continuing education units (CEUs)', { exact: true }).fill('1.234');
+    await page.getByLabel('Verified CEU completion date', { exact: true }).fill('2026-08-01');
     await page.getByLabel('Reason and institutional completion evidence', { exact: true }).fill('Fictional reviewed completion evidence.');
     await page.getByRole('checkbox', { name: /I verified the institutional evidence/ }).check();
 }
@@ -213,5 +216,35 @@ test('withdrawn CEU authority explains the extra duty without exposing protected
     await expect(page.getByLabel('Verified CEU completion date', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Earned CEU history', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Back to record', exact: true })).toBeVisible();
+    expect(f.errors).toEqual([]);
+});
+
+for (const ungraded of [true, false]) test(`${ungraded ? 'ungraded' : 'graded'} CEUs use an independent completion date and preserve it through review`, async ({ page }) => {
+    const f = await fixture(page, { ungraded, academicDate: '2026-08-03' });
+    const completion = page.getByLabel('Verified CEU completion date', { exact: true });
+    await expect(completion).toHaveValue(ungraded ? '' : '2026-08-03');
+    await expect(page.locator('#drawer-body')).toContainText('An academic grade is not required');
+    await page.getByLabel('Earned continuing education units (CEUs)', { exact: true }).fill('1.000');
+    await page.getByLabel('Reason and institutional completion evidence', { exact: true })
+        .fill('Fictional verified professional development completion.');
+    await page.getByRole('checkbox', { name: /I verified the institutional evidence/ }).check();
+    if (ungraded) {
+        await page.getByRole('button', { name: 'Review earned CEUs', exact: true }).click();
+        expect(f.calls.filter(call => call.path.endsWith('/review/'))).toHaveLength(0);
+    }
+    await completion.fill('2026-08-02');
+    await page.getByLabel('Effective date of this CEU decision', { exact: true }).fill('2026-08-02');
+    await page.getByRole('button', { name: 'Review earned CEUs', exact: true }).click();
+    expect(f.calls.find(call => call.path.endsWith('/review/')).data)
+        .toMatchObject({ earned_milli: 1000, completed_on: '2026-08-02', effective_on: '2026-08-02' });
+    await page.getByRole('button', { name: 'Change CEU decision', exact: true }).click();
+    await expect(completion).toHaveValue('2026-08-02');
+    await page.setViewportSize({ width: 320, height: 812 });
+    await accessible(page);
+    await page.getByRole('button', { name: 'Review earned CEUs', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm CEU decision', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Earned CEU decision recorded.');
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.locator('#drawer-title')).toHaveText('Alex Example');
     expect(f.errors).toEqual([]);
 });

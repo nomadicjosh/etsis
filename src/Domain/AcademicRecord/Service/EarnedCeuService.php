@@ -87,7 +87,7 @@ final readonly class EarnedCeuService
         string $effectiveOn,
         #[\SensitiveParameter] string $reason,
         bool $acknowledged,
-        ?string $completedOn = null,
+        ?string $completedOn,
     ): array {
         $actor = $this->authorize(true);
         $reason = $this->reason($reason, $acknowledged);
@@ -175,7 +175,8 @@ final readonly class EarnedCeuService
             $budget = new HistoryReadBudget();
             [$id, $root, $facts, $offered] = $this->source($student, $section, $enrollment, $budget, true);
             $withdrawn = $facts['status'] === 'W';
-            $this->sameActor($actor, true, $withdrawn);
+            $closed = in_array($facts['status'], ['W', 'D'], true);
+            $this->sameActor($actor, true, $closed);
             $accepted = $root->ceuDecision($operation);
             $this->proofs->validate(
                 $token,
@@ -191,7 +192,7 @@ final readonly class EarnedCeuService
                 if (!hash_equals($accepted['intent'], $intent) || $this->history->verifyOperation($operation) !== 1) {
                     throw new ConcurrentModificationException(trans('This operation belongs to another CEU decision.'));
                 }
-                $this->sameActor($actor, true, $withdrawn);
+                $this->sameActor($actor, true, $closed);
                 return $accepted['receipt'];
             }
             $current = $this->fresh(
@@ -213,7 +214,7 @@ final readonly class EarnedCeuService
             $event = EarnedCeusWereDecided::occur(new AcademicCreditId($id->value), [
                 'decision_id' => $operation->value, 'previous_decision_id' => $root->decision(),
                 'previous_award' => $root->earnedCeus(), 'award' => $award, 'intent' => $intent,
-            ], ['__aggregate_type' => 'academic_credit'] +
+            ], ['__aggregate_type' => 'academic_credit', 'independent_ceu_completion' => true] +
                 ($withdrawn ? ['withdrawn_ceu_decision' => true] : []))->withPlayhead($root->playhead() + 1);
             $root->acceptHistorical($event);
             $receipt = $this->history->append(
@@ -245,7 +246,7 @@ final readonly class EarnedCeuService
                 throw new CorruptHistoryException();
             }
             $this->proofs->validate($token, 'earned-ceus', 'staff', $enrollment, $actor, $operation, $intent);
-            $this->sameActor($actor, true, $withdrawn);
+            $this->sameActor($actor, true, $closed);
             return $receipt;
         });
     }
@@ -256,8 +257,8 @@ final readonly class EarnedCeuService
         return $this->transactions->run(function () use ($student, $section, $enrollment, $cursor, $actor): array {
             $this->lock($student, $section, $actor, true);
             [$id, , $facts] = $this->source($student, $section, $enrollment, new HistoryReadBudget(), true);
-            $withdrawn = $facts['status'] === 'W';
-            $this->sameActor($actor, true, $withdrawn);
+            $closed = in_array($facts['status'], ['W', 'D'], true);
+            $this->sameActor($actor, true, $closed);
             $page = $this->history->page($this->stream($id), $cursor, 10);
             $items = [];
             foreach ($page->events as $stored) {
@@ -278,7 +279,7 @@ final readonly class EarnedCeuService
                 $item['actor_name'] = $names[$item['actor_id']] ?? null;
             }
             unset($item);
-            $this->sameActor($actor, true, $withdrawn);
+            $this->sameActor($actor, true, $closed);
             return ['items' => $items, 'next_cursor' => $page->nextCursor];
         });
     }
@@ -292,11 +293,11 @@ final readonly class EarnedCeuService
     ): array {
         [$id, $root, $facts] = $this->credits->decisionRecord($student, $section, $enrollment, $allowRemoved, $budget);
         $registered = $this->records->enrollment($enrollment);
-        if (
-            $registered === null || $registered['student_id'] !== $student->value ||
-            $registered['section_id'] !== $section->value || $registered['status'] !== $facts['status'] ||
-            $registered['term_id'] !== ($root->registrationTermId() ?? $facts['term_id'])
-        ) {
+        $removed = $registered === null && $allowRemoved && $facts['status'] === 'D';
+        $sameScope = $registered !== null && $registered['student_id'] === $student->value &&
+        $registered['section_id'] === $section->value && $registered['status'] === $facts['status'] &&
+        $registered['term_id'] === ($root->registrationTermId() ?? $facts['term_id']);
+        if (!$removed && !$sameScope) {
             throw new CorruptHistoryException();
         }
         $offered = null;
@@ -319,26 +320,22 @@ final readonly class EarnedCeuService
         int $position,
         ?int $milli,
         string $effectiveOn,
-        ?string $completedOn = null,
+        ?string $completedOn,
     ): array {
         if ($facts['version'] !== $version || $root->playhead() !== $position) {
             throw new ConcurrentModificationException(trans('The academic record changed. Reload earned CEUs.'));
         }
-        if (!$this->eligible($root, $offered) || ($milli !== null && !$root->grade()['passes'])) {
+        if (!$this->eligible($root, $offered)) {
             throw new ValidationException([['field' => 'earned_milli', 'message' =>
                 trans(
                     'Earned CEUs need a verified active or withdrawn institutional attempt, '
                     . 'a published offering declaration, completion evidence and no pending grade correction.',
                 )]]);
         }
-        if ($facts['status'] !== 'W' && $completedOn !== null && $completedOn !== $root->completedOn()) {
-            throw new ValidationException([['field' => 'completed_on', 'message' =>
-                trans('Use the verified academic completion date for an active attempt.')]]);
-        }
-        $completion = $facts['status'] === 'W' ? $completedOn : $root->completedOn();
+        $completion = $completedOn;
         if ($completion === null) {
             throw new ValidationException([['field' => 'completed_on', 'message' =>
-                trans('Enter the independently verified CEU completion date for this withdrawn attempt.')]]);
+                trans('Enter the independently verified CEU completion date.')]]);
         }
         $award = new EarnedCeus(['earned_milli' => $milli, 'offered_milli' => $offered,
             'section_version_id' => $root->sectionVersion(), 'completed_on' => $completion])->facts;
@@ -403,13 +400,13 @@ final readonly class EarnedCeuService
         $this->sameActor($actor, $write);
     }
 
-    private function authorize(bool $write, bool $withdrawn = false): EntityId
+    private function authorize(bool $write, bool $closed = false): EntityId
     {
         $actor = $this->access->requirePermission('sis:student:read');
         if ($write && $this->access->requirePermission(EarnedCeus::PERMISSION)->value !== $actor->value) {
             throw new AccessDeniedException();
         }
-        if ($withdrawn && $this->access->requirePermission('sis:gradebook:closed')->value !== $actor->value) {
+        if ($closed && $this->access->requirePermission('sis:gradebook:closed')->value !== $actor->value) {
             throw new AccessDeniedException();
         }
         if ($this->access->authenticatedUserId()->value !== $actor->value) {
@@ -418,9 +415,9 @@ final readonly class EarnedCeuService
         return $actor;
     }
 
-    private function sameActor(EntityId $actor, bool $write, bool $withdrawn = false): void
+    private function sameActor(EntityId $actor, bool $write, bool $closed = false): void
     {
-        if ($this->authorize($write, $withdrawn)->value !== $actor->value) {
+        if ($this->authorize($write, $closed)->value !== $actor->value) {
             throw new AccessDeniedException();
         }
     }

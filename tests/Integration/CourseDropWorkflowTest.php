@@ -12,6 +12,7 @@ use Domain\Gradebook\GradeDefinition;
 use Domain\Registration\ValueObject\DropWindows;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 use PHPUnit\Framework\TestCase;
@@ -317,7 +318,11 @@ final class CourseDropWorkflowTest extends TestCase
             try {
                 $this->commit($f, $r);
                 self::fail("Stale drop was accepted.");
-            } catch (ConcurrentModificationException) {
+            } catch (ConcurrentModificationException | CorruptHistoryException $error) {
+                self::assertInstanceOf(
+                    $change === 'credit' ? CorruptHistoryException::class : ConcurrentModificationException::class,
+                    $error,
+                );
                 self::assertCount(1, $f->sql->rows("sis_enrollments"));
             }
             self::assertSame($events, $f->sql->rows("sis_history_events"));

@@ -96,7 +96,9 @@ window.createRegistrationDrops = function (ui) {
                     node('p', {}, `Effective ${row.effective_on}. Drop/add ends ${row.outcome.grace_ends_on}.`),
                     node('p', {}, row.outcome.delete_records
                         ? 'Remove the current enrollment and academic credit. Reverse the original course charge if present.'
-                        : `Keep the attempted course with grade ${row.outcome.grade_code} and no earned credit. Keep its charge. GPA: ${row.outcome.counts_gpa ? 'included' : 'excluded'}.`))),
+                        : `Keep the attempted course with grade ${row.outcome.grade_code} and no earned credit. Keep its charge. GPA: ${row.outcome.counts_gpa ? 'included' : 'excluded'}.`),
+                    ...(row.has_earned_ceus === true ? [node('p', { class: 'alert alert-info' },
+                        ui.ceuLabels?.withdrawal_preserves || 'This academic withdrawal preserves the independently recorded CEUs. Any CEU correction or revocation requires a separate reviewed decision.')] : []))),
                 node('p', { class: 'form-text' }, 'Reviews expire after 20 minutes. Any account credit is considered separately for a refund; other institutional fees stay unchanged.'),
                 node('div', { class: 'inline-actions d-flex flex-wrap gap-2' },
                     button('Change selection', () => choose()),

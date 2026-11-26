@@ -895,7 +895,7 @@ final readonly class TranscriptFulfillmentService
                 ]);
             }
             if (
-                $work["grade"] === null &&
+                !$continuingEducation && empty($work['continuing_education_only']) && $work["grade"] === null &&
                 ($work["grade_recorded"] ||
                     $work["status"] === "W" ||
                     $work["completed_milli"] > 0 ||
