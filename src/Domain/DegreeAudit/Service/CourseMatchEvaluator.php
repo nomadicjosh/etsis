@@ -261,7 +261,8 @@ final readonly class CourseMatchEvaluator
                     ...$restricted ? ['allowed_credit_origins' => array_keys($origins[$id] ?? [])] : [],
                     'pursuit_started_on' => $effective['pursuit_started_on'] ?? null,
                     'evaluated_on' => $effective['evaluated_on'] ?? null,
-                    ...($definition['work_eligibility']['max_age_months_at_pursuit_start'] ?? null) !== null
+                    ...(($definition['work_eligibility']['max_age_months_at_pursuit_start'] ?? null) !== null
+                        || ($definition['work_eligibility']['completed_since_pursuit_start'] ?? false))
                         ? ['work_eligibility_context' => new GroupWorkEligibility($definition['work_eligibility'])
                             ->recencyContext($effective['pursuit_started_on'] ?? null)] : [],
                     ...($definition['work_eligibility']['max_age_months_at_evaluation'] ?? null) !== null
@@ -506,5 +507,4 @@ final readonly class CourseMatchEvaluator
         }
         return $grade['points_milli'] < $minimum ? Status::InsufficientGrade : null;
     }
-
 }

@@ -189,6 +189,7 @@ window.createWorkspaceDegreeAudit = function (ui) {
             definition.work_eligibility.completed_from || definition.work_eligibility.completed_through ||
             definition.work_eligibility.max_age_months_at_pursuit_start != null ||
             definition.work_eligibility.max_age_months_at_evaluation != null ||
+            definition.work_eligibility.completed_since_pursuit_start ||
             definition.work_eligibility.transfer_institutions?.length))
             summary.warnings.push("Catalog totals do not check a student's credit origin or actual completion date. Run a student test.");
         if ((definition.rules || []).some(rule => rule.credit_origin && rule.credit_origin !== "any"))
@@ -1110,6 +1111,10 @@ window.createWorkspaceDegreeAudit = function (ui) {
             eligibilityHelp.textContent = window.degreeGroupEligibilityText(eligibility);
         }
         origin.addEventListener("change", () => changeEligibility("credit_origin", origin.value));
+        const sinceStart = node('input', { type: 'checkbox', class: 'form-check-input',
+            id: `audit-since-start-${++sequence}`, checked: eligibility.completed_since_pursuit_start ?? false,
+            'aria-describedby': `audit-since-start-help-${sequence}` });
+        sinceStart.addEventListener('change', () => changeEligibility('completed_since_pursuit_start', sinceStart.checked));
         const selectedInstitutions = node("div", { class: "record-section" });
         const institutionResults = node("div", { class: "record-section", role: "region", "aria-label": "Sending institution search results", "aria-live": "polite" });
         const institutionSearch = node("input", { type: "search", maxlength: 80, class: "form-control" });
@@ -1158,6 +1163,9 @@ window.createWorkspaceDegreeAudit = function (ui) {
         const eligibilityFields = node("fieldset", { class: "mt-3" },
             node("legend", { class: "h6" }, "Coursework eligibility"),
             node("label", { for: origin.id, class: "form-label" }, "Count coursework from"), origin,
+            node('div', { class: 'form-check mt-3' }, sinceStart,
+                node('label', { for: sinceStart.id, class: 'form-check-label' }, window.degreeEligibilityLabels.since_start)),
+            node('p', { id: sinceStart.getAttribute('aria-describedby'), class: 'form-text' }, window.degreeEligibilityLabels.since_start_help),
             field("Completed on or after (optional)", eligibility.completed_from, v => changeEligibility("completed_from", v), { type: "date" }),
             field("Completed on or before (optional)", eligibility.completed_through, v => changeEligibility("completed_through", v), { type: "date" }),
             field("Maximum age before pursuit start (months, optional)", eligibility.max_age_months_at_pursuit_start,

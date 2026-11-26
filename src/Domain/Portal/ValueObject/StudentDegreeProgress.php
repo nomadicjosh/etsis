@@ -188,6 +188,7 @@ final readonly class StudentDegreeProgress
                     'max_age_months_at_pursuit_start',
                     'transfer_institutions',
                     'max_age_months_at_evaluation',
+                    'completed_since_pursuit_start',
                 ]);
                 try {
                     $group["work_eligibility"] = new GroupWorkEligibility($facts)->facts;
@@ -219,7 +220,10 @@ final readonly class StudentDegreeProgress
                     }
                     $group['work_evaluation_context'] = $expected;
                 }
-                if (($facts['max_age_months_at_pursuit_start'] ?? null) !== null) {
+                if (
+                    ($facts['max_age_months_at_pursuit_start'] ?? null) !== null
+                    || ($facts['completed_since_pursuit_start'] ?? false)
+                ) {
                     $context = $value['work_eligibility_context'] ?? null;
                     if (!is_array($context) || count($context) !== 2) {
                         throw new CorruptHistoryException();

@@ -6,7 +6,12 @@ window.degreeGroupEligibilityText = function (facts, context = null, evaluation 
     return `${origin[facts?.credit_origin || "any"]}. ` + transfer +
         (facts?.completed_from || facts?.completed_through
             ? `Actual completion ${[facts.completed_from ? `on or after ${facts.completed_from}` : "", facts.completed_through ? `on or before ${facts.completed_through}` : ""].filter(Boolean).join(" and ")}. Missing completion dates require review.`
-            : (facts?.max_age_months_at_pursuit_start != null || facts?.max_age_months_at_evaluation != null) ? "No fixed completion-date window." : "No completion-date restriction.") +
+            : (facts?.max_age_months_at_pursuit_start != null || facts?.max_age_months_at_evaluation != null || facts?.completed_since_pursuit_start) ? "No fixed completion-date window." : "No completion-date restriction.") +
+        (facts?.completed_since_pursuit_start
+            ? ` ${window.degreeEligibilityLabels.since_start_rule} ` +
+                (context?.pursuit_started_on
+                    ? window.degreeEligibilityLabels.since_start_date.replace('{date}', context.pursuit_started_on)
+                    : context ? window.degreeEligibilityLabels.start_unknown : '') : '') +
         (facts?.max_age_months_at_pursuit_start != null
             ? ` Maximum age: ${facts.max_age_months_at_pursuit_start} calendar months before the recorded pursuit start. ` +
                 (context?.pursuit_started_on
@@ -71,6 +76,9 @@ window.programOrganizationText = function (classifications) {
             ? { additional_departments: classifications.additional_departments } : {},
     });
 };
+window.degreeEligibilityLabels = JSON.parse(
+    document.getElementById('degree-eligibility-labels')?.textContent || '{}',
+);
 window.curriculumOwnershipLabels = JSON.parse(
     document.getElementById("curriculum-ownership-labels")?.textContent || "{}",
 );
@@ -536,7 +544,8 @@ window.createDegreeNamedCourseReview = function (ui, rows, resolve) {
         transfer_institution_unknown: "Review the award's retained sending-institution evidence before allocating it.",
         origin_unknown: "The recorded credit origin needed by this group is unavailable.",
         completion_date_unknown: "Record the actual completion date before evaluating this group's date or age rule.",
-        pursuit_start_unknown: "Review the actual pursuit start before evaluating this group's course-age limit.",
+        pursuit_start_unknown: window.degreeEligibilityLabels.start_review,
+        completed_before_pursuit_start: window.degreeEligibilityLabels.before_start,
         evaluation_date_unknown: "Refresh progress with its explicit review date before evaluating expiration.",
         completion_expired: "Completed too early for this group at the retained review date.",
         completion_too_old: "Completed too early for this group's age limit at the recorded pursuit start.",

@@ -338,7 +338,7 @@ For a window from **2020-01-01** through **2026-08-10**, both boundary days qual
 
 Publishing a changed rule does not replace a student's selected requirements or rewrite an earlier publication. Earlier group definitions without these fields remain unchanged and keep their original unrestricted meaning. After selecting the appropriate published requirements, inspect [student progress explanations](student-degree-progress.md#coursework-origin-and-completion-eligibility). Missing eligibility facts produce a needs-review result with no speculative partial plan; known exclusions can produce an honest shortfall. Working and temporary tests save no student evaluation or academic change.
 
-The new optional fields extend the current group definition directly. Existing authoring, publication, expected revisions, audit, permissions, expiring reviews and private responses remain in force. Publications stay in the existing protected journal. No schema migration, event conversion, new permission or parallel policy store is required. Pursuit-start course-age rules are implemented below. Expiration measured at evaluation/graduation, finer transfer-source restrictions, remaining chronology rules and retained final evaluations remain future work.
+The new optional fields extend the current group definition directly. Existing authoring, publication, expected revisions, audit, permissions, expiring reviews and private responses remain in force. Publications stay in the existing protected journal. No schema migration, event conversion, new permission or parallel policy store is required. Pursuit-start age and completion rules, review-date expiration and sending-institution lists are implemented below. Expiration at graduation, broader transfer-source/chronology rules and final eligibility decisions remain future work.
 
 ## Course age at the recorded pursuit start
 
@@ -359,6 +359,20 @@ Staff and student group cards show the published limit, the recorded reference a
 Recorded progress observations retain the exact rule and pursuit-date context in their already protected frozen basis. Later completion corrections, group publications or clock changes do not rewrite those observations. Reproduction uses the frozen inputs through the shared evaluator; an original accepted retry retains its earlier receipt. New observations and fresh progress use the current verified academic facts under the student's selected requirements.
 
 The current group definition is extended directly with optional `max_age_months_at_pursuit_start`. Earlier publications lacking the field retain their exact original shape and unrestricted age behavior, including older three-field eligibility policies. No new model wrapper, route, grant, migration, parallel journal or inferred historical date is introduced. Existing authoring permissions, expected revisions, required audit, publication review hashes, CSRF/private responses and replay/search budgets remain in force.
+
+
+
+## Completion on or after pursuit start
+
+In **Course group library → Build a group → Coursework eligibility**, enable **Require completion on or after pursuit start** only for a group that requires coursework completed during or after the student's program pursuit began. It is off in a new group. The lower boundary is the **actual pursuit start recorded with that student's selected degree requirements**, shared by the degree and its selected major/minor/specialization requirements. A component's later assignment date does not reset that start.
+
+For a recorded start of **2026-08-10**, actual completion on **2026-08-10** or later qualifies; **2026-08-09** does not qualify for this group. There is no additional end date from this switch. Fixed **Completed on or after/before** boundaries, credit origin, sending institution, grades and the independent age rules must also be satisfied. With both this switch and an age-at-start limit enabled, the effective lower boundary is the pursuit start itself.
+
+Use actual completion evidence for institutional work and transfer awards. A local posting term, award date, source-period start, catalog date or event timestamp cannot make earlier work qualify. Missing actual completion or a missing recorded pursuit start requires registrar review without a speculative partial placement. Use the existing completion correction or degree-requirements review, then deliberately refresh progress. This rule does not infer whether a student graduated from another pursuit or authorize receiving transfer credit from a completed program; those remain separate decisions.
+
+The restriction controls contributions to **this group**. Earlier work remains awarded credit and may satisfy other eligible groups; independent earned-credit and GPA policies continue to apply. It is not a residency requirement or a graduation decision. Approved substitutes, saved-rule candidates and temporary student tests use the same gate.
+
+Draft save, preview, revision, reviewed publication and retained-version inspection preserve the switch. Disable it explicitly to remove the restriction in a future publication. Earlier publications without the field keep their original meaning, and publishing a later version does not change requirements already selected for a student. Staff/student cards show the rule and inclusive recorded start, or explain missing evidence. [Recorded progress reviews](student-degree-progress.md#completion-since-pursuit-start) retain their exact policy, date context and result after later academic corrections; new reviews use the verified current facts under the selected requirements. No historical date or earlier policy is backfilled.
 
 
 ## Sending-institution restrictions

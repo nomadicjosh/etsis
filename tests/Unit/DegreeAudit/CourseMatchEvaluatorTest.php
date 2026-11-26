@@ -11,6 +11,30 @@ use PHPUnit\Framework\TestCase;
 
 final class CourseMatchEvaluatorTest extends TestCase
 {
+    public function testPursuitCompletionGateAppliesToBothOriginsAndReturnsTheRetainedBoundary(): void
+    {
+        [$work, $requirements, $effective] = $this->inputs();
+        $requirements['group_details'][self::id(4)]['definition']['work_eligibility'] = array_replace(
+            \Domain\DegreeAudit\ValueObject\GroupWorkEligibility::DEFAULT,
+            ['completed_since_pursuit_start' => true]
+        );
+        $effective['pursuit_started_on'] = '2026-01-31';
+        foreach (['institutional', 'transfer'] as $origin) {
+            $work['credit_type'] = $origin;
+            $work['completed_on'] = '2026-01-30';
+            self::assertSame(
+                'completed_before_pursuit_start',
+                $this->first($work, $requirements, $effective)['status']
+            );
+            $work['completed_on'] = '2026-01-31';
+            $match = $this->first($work, $requirements, $effective);
+            self::assertSame('candidate', $match['status']);
+            self::assertSame('2026-01-31', $match['work_eligibility_context']['earliest_completion_on']);
+        }
+        unset($effective['pursuit_started_on']);
+        self::assertSame('pursuit_start_unknown', $this->first($work, $requirements, $effective)['status']);
+    }
+
     private static function id(int $n): string
     {
         return str_pad((string) $n, 26, "0", STR_PAD_LEFT);
@@ -334,7 +358,7 @@ final class CourseMatchEvaluatorTest extends TestCase
         $evaluator = new CourseMatchEvaluator();
         $items = $evaluator->allocation($attempts, $r, $e);
         $rows = $evaluator->namedReview($r, $items, [['id' => $group, 'placements' => []]], [], false)[
-            $group
+        $group
         ];
         self::assertSame(
             ['candidate', 'in_progress', 'insufficient_grade', 'course_version_unknown', 'dropped'],
@@ -373,7 +397,7 @@ final class CourseMatchEvaluatorTest extends TestCase
         self::assertSame([true, true], array_column($row['attempts'], 'selected'));
         self::assertSame([true, true], array_column($row['attempts'], 'via_substitution'));
         $waived = $evaluator->namedReview($r, [], [['id' => $group, 'placements' => []]], [$target], true)[
-            $group
+        $group
         ][0];
         self::assertTrue($waived['waived']);
         self::assertSame('not_used', $waived['placement']);

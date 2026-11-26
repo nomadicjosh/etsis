@@ -124,7 +124,8 @@ final readonly class GroupAllocationEvaluator
                 "required_credits_milli" => $e["min_credits_milli"],
                 "required_courses" => $e["min_courses"] ?? 0,
                 "minimum_grade_points_milli" => $e["min_course_grade_points_milli"] ?? null,
-                ...($d['work_eligibility']['max_age_months_at_pursuit_start'] ?? null) !== null
+                ...(($d['work_eligibility']['max_age_months_at_pursuit_start'] ?? null) !== null
+                    || ($d['work_eligibility']['completed_since_pursuit_start'] ?? false))
                     ? ['work_eligibility_context' => new GroupWorkEligibility($d['work_eligibility'])
                         ->recencyContext($effective['pursuit_started_on'] ?? null)] : [],
                 ...($d['work_eligibility']['max_age_months_at_evaluation'] ?? null) !== null

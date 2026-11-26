@@ -523,6 +523,7 @@ async function fixture(page, options = {}) {
                 published_version_id: null,
                 revision: 0,
             };
+        else if (path === '/sis/imports/notices/') response = { items: [], next_after: null };
         else if (path.includes("/sis/ui/operations/")) response = { items: [], next_after: null };
         if (response === undefined) throw new Error(`Unexpected fixture request ${path}`);
         await route.fulfill({ json: response, headers: { "Cache-Control": "private, no-store" } });
@@ -2056,6 +2057,56 @@ test("group coursework eligibility rejects an inverted window without losing the
     expect(f.errors).toEqual([]);
 });
 
+
+test('pursuit completion survives preview, a rejected save and retained publication inspection', async ({ page }) => {
+    const f = await fixture(page);
+    await workspaceTool(page, 'Course group library');
+    await page.getByRole('button', { name: 'Build General education', exact: true }).click();
+    const choice = page.getByLabel('Require completion on or after pursuit start', { exact: true });
+    await expect(choice).not.toBeChecked();
+    await choice.focus(); await page.keyboard.press('Space');
+    await page.getByRole('button', { name: 'Requirements preview', exact: true }).click();
+    await expect(page.getByRole('dialog')).toContainText('Actual completion must be on or after the recorded pursuit start.');
+    await page.getByRole('button', { name: 'Back to builder', exact: true }).click();
+    await expect(choice).toBeChecked();
+    let reject = true;
+    await page.route(`**/sis/course-groups/${f.group}/save/`, async route => {
+        if (reject) { reject = false; return route.fulfill({ status: 409, json: { error: 'Fictional changed group. Review your draft.' } }); }
+        return route.fallback();
+    });
+    await page.getByRole('button', { name: 'Save group draft', exact: true }).click();
+    await expect(page.getByRole('dialog').getByRole('alert')).toContainText('Fictional changed group.');
+    await expect(choice).toBeChecked();
+    await page.getByRole('button', { name: 'Save & review publication', exact: true }).click();
+    await page.getByLabel('Reason for publication', { exact: true }).fill('Fictional pursuit completion policy.');
+    await page.getByRole('button', { name: 'Prepare publication', exact: true }).click();
+    await expect(page.getByRole('dialog')).toContainText('Actual completion must be on or after the recorded pursuit start.');
+    await page.getByRole('button', { name: 'Publish reviewed version', exact: true }).click();
+    await page.getByRole('button', { name: 'Inspect version 2', exact: true }).click();
+    await expect(page.getByRole('dialog')).toContainText('Actual completion must be on or after the recorded pursuit start.');
+    expect(f.groups.get(f.group).versions[0].definition.work_eligibility?.completed_since_pursuit_start).not.toBe(true);
+    expect(f.groups.get(f.group).versions[1].definition.work_eligibility.completed_since_pursuit_start).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+test('pursuit completion can be explicitly disabled with keyboard and enlarged narrow-screen controls', async ({ page }) => {
+    const f = await fixture(page);
+    await workspaceTool(page, 'Course group library');
+    await page.getByRole('button', { name: 'Build General education', exact: true }).click();
+    const choice = page.getByLabel('Require completion on or after pursuit start', { exact: true });
+    await page.setViewportSize({ width: 320, height: 1000 });
+    await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+    await choice.focus(); await page.keyboard.press('Space'); await expect(choice).toBeChecked();
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await choice.scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/etsis-pursuit-completion-phone.png' });
+    await page.keyboard.press('Space');
+    await page.getByRole('button', { name: 'Save group draft', exact: true }).click();
+    expect(f.calls.find(c => c.path.endsWith('/save/')).body.definition.work_eligibility.completed_since_pursuit_start).toBe(false);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
 
 test("course-age limit survives preview and rejects invalid months without losing the draft", async ({ page }) => {
     const f = await fixture(page);

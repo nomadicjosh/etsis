@@ -20,6 +20,7 @@ enum CourseMatchStatus: string
     case TransferInstitutionUnknown = 'transfer_institution_unknown';
     case CompletionDateUnknown = "completion_date_unknown";
     case CompletedBeforeWindow = "completed_before_window";
+    case CompletedBeforePursuitStart = 'completed_before_pursuit_start';
     case CompletedAfterWindow = "completed_after_window";
     case PursuitStartUnknown = 'pursuit_start_unknown';
     case EvaluationDateUnknown = "evaluation_date_unknown";
@@ -70,10 +71,13 @@ enum CourseMatchStatus: string
             ),
             self::CompletedBeforeWindow
             => trans_html("The actual completion date is before this group's permitted window."),
+            self::CompletedBeforePursuitStart => trans_html(
+                'The actual completion date is before the recorded pursuit start required by this group.'
+            ),
             self::CompletedAfterWindow
             => trans_html("The actual completion date is after this group's permitted window."),
             self::PursuitStartUnknown
-            => trans_html("The recorded pursuit start is unavailable; this group's course-age rule needs review."),
+            => trans_html("The recorded pursuit start is unavailable; this group's completion rule needs review."),
             self::EvaluationDateUnknown => trans_html(
                 "The review date required by this group's expiration rule is unavailable."
             ),

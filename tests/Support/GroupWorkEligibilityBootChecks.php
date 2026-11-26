@@ -12,6 +12,7 @@ $policy = [
     "credit_origin" => "institutional",
     "completed_from" => "2020-01-01",
     "completed_through" => "2026-08-10",
+    'completed_since_pursuit_start' => true,
 ];
 $definition["work_eligibility"] = $policy;
 $invalid = $definition;
@@ -149,6 +150,25 @@ if (
     || $before !== $sis->sql->rows('sis_history_events')
 ) {
     throw new RuntimeException('A requirement grade floor changed history or lost precision.');
+}
+foreach ([null, 0, 1, 'true', 'false'] as $invalidChoice) {
+    $sinceStart = ['revision' => $gradeRead['revision'], 'definition' => $gradeRead['definition']];
+    $sinceStart['definition']['work_eligibility']['completed_since_pursuit_start'] = $invalidChoice;
+    if (
+        $teachingPost($base . 'save/', $sinceStart)->getStatusCode() !== 422
+        || $readEligibility()->getStatusCode() !== 200
+        || $before !== $sis->sql->rows('sis_history_events')
+    ) {
+        throw new RuntimeException('A malformed pursuit completion choice changed a draft or academic history.');
+    }
+}
+$sinceStart['definition']['work_eligibility']['completed_since_pursuit_start'] = false;
+if ($teachingPost($base . 'save/', $sinceStart)->getStatusCode() !== 200) {
+    throw new RuntimeException('The pursuit completion restriction could not be explicitly disabled.');
+}
+$disabled = json_decode((string) $readEligibility()->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($disabled['definition']['work_eligibility']['completed_since_pursuit_start'] !== false) {
+    throw new RuntimeException('An explicit false pursuit completion rule was lost.');
 }
 $sis->access->staff = false;
 $sis->access->grants = [];

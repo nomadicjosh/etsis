@@ -29,6 +29,7 @@ final class CombinedDegreeProgressTest extends TestCase
         ?int $evaluationMonths = null,
         ?string $cardOrigin = null,
         ?int $cardGrade = null,
+        bool $sinceStart = false,
     ): StudentSpecializationRequirementsFixture
     {
         $r = new ReusableGroupFixture();
@@ -54,6 +55,9 @@ final class CombinedDegreeProgressTest extends TestCase
         }
         if ($recencyMonths !== null) {
             $d['work_eligibility']['max_age_months_at_pursuit_start'] = $recencyMonths;
+        }
+        if ($sinceStart) {
+            $d['work_eligibility']['completed_since_pursuit_start'] = true;
         }
         if ($evaluationMonths !== null) {
             $d['work_eligibility']['max_age_months_at_evaluation'] = $evaluationMonths;
@@ -1395,6 +1399,149 @@ final class CombinedDegreeProgressTest extends TestCase
         self::assertSame("2026-08-11 06:55:00", $f->r->sis->sql->rows("sis_degree_progress_records")[0]["recorded_at"]);
     }
 
+    public function testPursuitCompletionBoundaryUsesOneRetainedStartAcrossComponentsAndOwnerViews(): void
+    {
+        $f = $this->fixture('multiple_components', sinceStart: true);
+        $s = $f->r->sis;
+        [$section, $enrollment] = $this->work($f, 0);
+        $before = $this->snapshot($f);
+        $unknown = $this->preview($f);
+        self::assertSame('needs_review', $unknown['status']);
+        self::assertArrayNotHasKey('outcome', $unknown);
+        self::assertSame($before, $this->snapshot($f));
+        $dates = $s->academicDates();
+        $review = $dates->review(
+            $f->student,
+            $section->id,
+            $enrollment,
+            '2026-01-31',
+            1,
+            'Fictional actual completion at the retained start.'
+        );
+        $dates->commit($f->student, $section->id, $review['review_token']);
+        $before = $this->snapshot($f);
+        $current = $this->preview($f);
+        self::assertSame('feasible', $current['outcome']);
+        foreach ($current['components'] as $component) {
+            $group = $component['progress']['allocation']['groups'][0];
+            self::assertTrue($group['work_eligibility']['completed_since_pursuit_start']);
+            self::assertSame(
+                ['pursuit_started_on' => '2026-01-31', 'earliest_completion_on' => '2026-01-31'],
+                $group['work_eligibility_context']
+            );
+        }
+        $owner = new \Domain\Portal\ValueObject\StudentDegreeProgress($current)->describe();
+        $group = $owner['components'][0]['progress']['allocation']['groups'][0];
+        self::assertTrue($group['work_eligibility']['completed_since_pursuit_start']);
+        self::assertSame('2026-01-31', $group['work_eligibility_context']['earliest_completion_on']);
+        self::assertSame($before, $this->snapshot($f));
+        $row = $f->r->groups->view($f->r->group);
+        $later = $row['definition'];
+        $later['work_eligibility']['completed_since_pursuit_start'] = false;
+        $f->r->groups->save($f->r->group, $row['revision'], new CourseGroupDefinitionV2($later));
+        $f->r->publishGroup();
+        self::assertSame($current, $this->preview($f));
+        $tampered = $current;
+        $tampered['components'][0]['progress']['allocation']['groups'][0]
+        ['work_eligibility_context']['earliest_completion_on'] = '2026-01-30';
+        $this->expectException(\Domain\Shared\EventSourcing\CorruptHistoryException::class);
+        new \Domain\Portal\ValueObject\StudentDegreeProgress($tampered);
+    }
+
+    public function testRecordedPursuitCompletionReproducesAfterAnActualCompletionCorrection(): void
+    {
+        $f = $this->fixture('multiple_components', sinceStart: true);
+        $s = $f->r->sis;
+        [$section, $enrollment] = $this->work($f, 0);
+        $dates = $s->academicDates();
+        $review = $dates->review(
+            $f->student,
+            $section->id,
+            $enrollment,
+            '2026-01-31',
+            1,
+            'Fictional completion at pursuit start.'
+        );
+        $dates->commit($f->student, $section->id, $review['review_token']);
+        $records = $this->recordedService($f);
+        $review = $records->review($f->student, $f->assignment, 'Fictional pursuit completion observation.');
+        $args = [$f->student, $f->assignment, new EntityId($review['operation_id']), $review['revision'],
+            $review['reason'], $review['review_token']];
+        $receipt = $records->confirm(...$args);
+        $original = $records->show($f->student, $f->assignment, $args[2], 'staff');
+        self::assertTrue($original['summary']['components'][0]['groups'][0]
+            ['work_eligibility']['completed_since_pursuit_start']);
+        $events = iterator_to_array(\EventStoreFixture::framework($s->connection->queryBuilder())
+            ->getAggregateHistoryFor(new \Domain\DegreeAudit\ValueObject\DegreeProgressRecordId($args[2]->value)));
+        $snapshot = new \Domain\DegreeAudit\ValueObject\DegreeProgressSnapshot($events[0]->payload()['snapshot']);
+        $change = $dates->review(
+            $f->student,
+            $section->id,
+            $enrollment,
+            '2026-01-30',
+            2,
+            'Fictional correction before pursuit start.'
+        );
+        $dates->commit($f->student, $section->id, $change['review_token']);
+        $before = $this->snapshot($f);
+        $fresh = $this->preview($f);
+        self::assertSame('infeasible', $fresh['outcome']);
+        self::assertSame(4000, $fresh['components'][0]['progress']['gpa']['overall']['milli']);
+        self::assertSame(3000, array_column(
+            $fresh['components'][0]['progress']['minimums'],
+            'actual_minimum_milli',
+            'key'
+        )['min_credits_milli']);
+        self::assertTrue($this->service($f)->verifySnapshot($snapshot));
+        self::assertSame($before, $this->snapshot($f));
+        $s->clock->time = $s->clock->time->modify('+1 year');
+        self::assertSame($receipt, $records->confirm(...$args));
+        self::assertSame($original, $records->show($f->student, $f->assignment, $args[2], 'staff'));
+    }
+
+    public function testPursuitCompletionReviewRejectsChangedSourcesEvenWhenPlacementStillSucceeds(): void
+    {
+        $f = $this->fixture('multiple_components', sinceStart: true);
+        $s = $f->r->sis;
+        [$section, $enrollment] = $this->work($f, 0);
+        $dates = $s->academicDates();
+        $review = $dates->review(
+            $f->student,
+            $section->id,
+            $enrollment,
+            '2026-01-31',
+            1,
+            'Fictional completion at pursuit start.'
+        );
+        $dates->commit($f->student, $section->id, $review['review_token']);
+        $records = $this->recordedService($f);
+        $review = $records->review($f->student, $f->assignment, 'Fictional observation before a source correction.');
+        $change = $dates->review(
+            $f->student,
+            $section->id,
+            $enrollment,
+            '2026-02-01',
+            2,
+            'Fictional later actual completion.'
+        );
+        $dates->commit($f->student, $section->id, $change['review_token']);
+        self::assertSame('feasible', $this->preview($f)['outcome']);
+        $before = $this->snapshot($f);
+        try {
+            $records->confirm(
+                $f->student,
+                $f->assignment,
+                new EntityId($review['operation_id']),
+                $review['revision'],
+                $review['reason'],
+                $review['review_token']
+            );
+            self::fail('An earlier pursuit completion review accepted changed sources.');
+        } catch (\Domain\Shared\Exception\ConcurrentModificationException) {
+            self::assertSame($before, $this->snapshot($f));
+            self::assertSame([], $s->sql->rows('sis_degree_progress_records'));
+        }
+    }
     public function testRecencyUsesOneRetainedPursuitStartAcrossDegreeAndSelectedComponents(): void
     {
         $f = $this->fixture("multiple_components", recencyMonths: 12);

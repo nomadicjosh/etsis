@@ -15,6 +15,8 @@ async function fixture(page,options={}) {
         let data;
         if(path==='/portal/api/me/') data={students:options.noStudent?[]:[{id:student,primary_program_id:program}]};
         else if(path.endsWith('/degree-programs/')) data={items:[{id:body.after?id(44):pursuit,program_code:body.after?'DUAL':'BSCS',program_title:'Computing <script>fictional</script>',term_code:'26/FA',status:'active',catalog_year:'2026-2027'}],next_after:options.morePrograms&&!body.after?pursuit:null};
+        else if(path==='/portal/api/notification-preferences/') data={desktop:false,sound:false,sound_file:'',volume:50};
+        else if (['/portal/api/academic-updates/', '/portal/api/transcript-updates/'].includes(path)) data={items:[],next_after:null};
         else if(path.endsWith('/standing/')) data={items:options.standing || [],as_of:'2026-08-10'};
         else if(path.endsWith('/advisors/')) data={items:options.advisors || [],pursuit_status:'active',as_of:'2026-08-10'};
         else if(path.endsWith('/degree-progress/')) {
@@ -630,6 +632,30 @@ test('portal recorded progress reopens an earlier summary without enabling acade
     expect(f.errors).toEqual([]);
 });
 
+
+for (const unknown of [false, true]) test(`student pursuit completion explains ${unknown ? 'unknown recorded dates' : 'the inclusive recorded start'}`, async ({page}) => {
+    const f = await fixture(page, {
+        groupEligibility: { credit_origin: 'any', completed_from: null, completed_through: null,
+            completed_since_pursuit_start: true },
+        recencyContext: { pursuit_started_on: unknown ? null : '2026-08-10',
+            earliest_completion_on: unknown ? null : '2026-08-10' },
+        recencyUnknown: unknown,
+    });
+    await page.getByRole('button', { name: 'Review progress · BSCS · 26/FA', exact: true }).click();
+    const content = page.locator('#campus-service-content');
+    await expect(content).toContainText('Actual completion must be on or after the recorded pursuit start.');
+    await expect(content).toContainText(unknown
+        ? 'The recorded pursuit start is unavailable; registrar review is required.'
+        : 'Recorded pursuit start: 2026-08-10 (inclusive).');
+    await expect(content).not.toContainText('No completion-date restriction.');
+    if (unknown) {
+        await page.getByRole('button', { name: 'Open degree progress guide', exact: true }).click();
+        await expect(page.getByRole('complementary', { name: 'Degree progress guide', exact: true })).toContainText('Review the recorded pursuit start');
+    }
+    await page.setViewportSize({ width: 320, height: 1000 }); await accessible(page);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
 
 for (const unknown of [false, true]) test(`student course-age explanation uses ${unknown ? 'an explicit unknown pursuit start' : 'the retained pursuit start and inclusive boundary'}`, async ({page}) => {
     const f = await fixture(page, {

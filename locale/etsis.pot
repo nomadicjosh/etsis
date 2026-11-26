@@ -8679,3 +8679,53 @@ msgstr ""
 #: resources/views/shared/coursework-category-labels.php:15
 msgid "Categories with a regular-assignment bonus limit: {count}."
 msgstr ""
+
+
+#: src/Domain/DegreeAudit/ValueObject/GroupWorkEligibility.php:46
+msgid "Choose whether completion must be on or after the recorded pursuit start."
+msgstr ""
+
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:75
+msgid "The actual completion date is before the recorded pursuit start required by this group."
+msgstr ""
+
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:80
+msgid "The recorded pursuit start is unavailable; this group's completion rule needs review."
+msgstr ""
+
+
+#: resources/views/shared/degree-eligibility-labels.php:8
+msgid "Require completion on or after pursuit start"
+msgstr ""
+
+
+#: resources/views/shared/degree-eligibility-labels.php:10
+msgid "Use the actual completion date and recorded start of the selected program pursuit. This restricts this group only; awarded credit and GPA stay unchanged."
+msgstr ""
+
+
+#: resources/views/shared/degree-eligibility-labels.php:13
+msgid "Actual completion must be on or after the recorded pursuit start."
+msgstr ""
+
+
+#: resources/views/shared/degree-eligibility-labels.php:14
+msgid "Recorded pursuit start: {date} (inclusive)."
+msgstr ""
+
+
+#: resources/views/shared/degree-eligibility-labels.php:15
+msgid "The recorded pursuit start is unavailable; registrar review is required."
+msgstr ""
+
+
+#: resources/views/shared/degree-eligibility-labels.php:16
+msgid "Completed before the recorded pursuit start required by this group."
+msgstr ""
+
+
+#: resources/views/shared/degree-eligibility-labels.php:17
+msgid "Review the recorded pursuit start before evaluating this group’s completion rule."
+msgstr ""

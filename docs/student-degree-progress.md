@@ -241,6 +241,18 @@ If the actual completion date or recorded pursuit start is missing, otherwise el
 
 The degree and selected curriculum components use the same recorded pursuit start. Later group drafts/publications leave already selected requirements unchanged. A recorded progress observation retains its earlier date context and result after later corrections; deliberately refreshed progress/new observations remain separate facts. This is not graduation eligibility or an automatic credential decision.
 
+
+### Completion since pursuit start
+
+A published group may [require actual completion on or after the recorded pursuit start](degree-audit-builder.md#completion-on-or-after-pursuit-start). Staff and student group cards show that rule and the inclusive start date. With a **2026-08-10** start, work actually completed on **2026-08-09** is excluded from this group; completion on the start date qualifies if the other retained rules are met. Degree and selected component requirements use one verified program-pursuit start. A later component assignment does not create a new reference date.
+
+Known earlier completion can support a group shortage. Missing actual completion or a missing recorded start instead needs registrar review, with no guessed date or partial plan. The local guide directs staff to the existing evidence review and an explicit progress refresh. Posting terms and current program status do not substitute for those facts. Transfer work uses its actual retained completion date too; this switch does not establish graduated-program receiving-transfer eligibility.
+
+Excluded work retains its awarded credit, grade and independent earned-credit/GPA treatment and may satisfy another eligible group. Named courses, approved substitutes and saved-rule matches share this rule, including temporary tests. Older absent or explicitly disabled rules leave this restriction off. A later group publication cannot replace the student's selected requirements.
+
+A recorded progress review freezes the original rule, recorded start, actual completion evidence and result. Reproduction uses that frozen basis after a real completion correction; an original accepted confirmation retry still returns its earlier receipt. A correction invalidates an unaccepted review even when placement would still succeed. Fresh progress and new recorded reviews remain separate observations. This is a group eligibility rule, not a residency or graduation decision.
+
+
 ## Recorded progress reviews
 
 Open **Student programs → selected pursuit → Degree requirements → Recorded progress reviews**. Staff with the independent **`sis:degree-audit:record`** duty and student-read access can choose **Record a new progress review**, enter a reason, review the captured summary and explicitly confirm. Reading progress, assigning requirements and authoring curricula do not grant this new duty; administrators must assign it deliberately. An unmet minimum or an infeasible placement can be recorded honestly. Recording a review does not certify graduation eligibility, award a credential, change academic credit or alter financial accounts.

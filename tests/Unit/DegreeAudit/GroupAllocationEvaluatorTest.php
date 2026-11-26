@@ -1425,4 +1425,46 @@ final class GroupAllocationEvaluatorTest extends TestCase
             self::assertSame([], $outside["groups"][0]["placements"]);
         }
     }
+
+    public function testPursuitCompletionIsSharedByNamedSavedRuleAndApprovedSubstituteWork(): void
+    {
+        $named = $this->requirements([self::id(1) => $this->group(1)]);
+        $saved = $this->requirements([self::id(1) => $this->ruleGroup(1)]);
+        foreach (
+            [
+            [$named, $this->effective($named)],
+            [$saved, $this->effective($saved)],
+            $this->substitutionRuleInputs(),
+            ] as [$requirements, $effective]
+        ) {
+            $requirements['group_details'][self::id(1)]['definition']['work_eligibility'] = array_replace(
+                \Domain\DegreeAudit\ValueObject\GroupWorkEligibility::DEFAULT,
+                ['completed_since_pursuit_start' => true]
+            );
+            $work = $this->work(1001);
+            $decisions = $this->decisions([$work], $requirements);
+            $unknown = $this->evaluator()->evaluate([$work], $requirements, $effective, $decisions);
+            self::assertSame('needs_review', $unknown['outcome']);
+            self::assertContains('completion_date_unknown', $unknown['issues']);
+            self::assertSame([], $unknown['groups'][0]['placements']);
+            $work['completed_on'] = '2026-01-30';
+            $unknown = $this->evaluator()->evaluate([$work], $requirements, $effective, $decisions);
+            self::assertContains('pursuit_start_unknown', $unknown['issues']);
+            $effective['pursuit_started_on'] = '2026-01-31';
+            $outside = $this->evaluator()->evaluate([$work], $requirements, $effective, $decisions);
+            self::assertSame('infeasible', $outside['outcome']);
+            self::assertSame([], $outside['groups'][0]['placements']);
+            self::assertTrue($outside['groups'][0]['gaps']['has_shortfall']);
+            foreach (['2026-01-31', '2026-02-01'] as $date) {
+                $work['completed_on'] = $date;
+                $included = $this->evaluator()->evaluate([$work], $requirements, $effective, $decisions);
+                self::assertSame('feasible', $included['outcome']);
+                self::assertCount(1, $included['groups'][0]['placements']);
+                self::assertSame(
+                    '2026-01-31',
+                    $included['groups'][0]['work_eligibility_context']['earliest_completion_on']
+                );
+            }
+        }
+    }
 }

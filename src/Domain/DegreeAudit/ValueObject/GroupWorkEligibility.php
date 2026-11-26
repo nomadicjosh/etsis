@@ -10,6 +10,8 @@ use InvalidArgumentException;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\ValueObject\TransferLabel;
 
+use function Codefy\Framework\Helpers\trans;
+
 /** Published group restrictions on recorded origin and actual completion, never posting dates. */
 final readonly class GroupWorkEligibility
 {
@@ -20,12 +22,13 @@ final readonly class GroupWorkEligibility
         "max_age_months_at_pursuit_start" => null,
         "transfer_institutions" => [],
         "max_age_months_at_evaluation" => null,
+        'completed_since_pursuit_start' => false,
     ];
 
     public function __construct(public array $facts = self::DEFAULT)
     {
         if (
-            !in_array(count($facts), [3, 4, 5, 6], true) ||
+            !in_array(count($facts), [3, 4, 5, 6, 7], true) ||
             array_diff(array_keys($facts), array_keys(self::DEFAULT)) !== [] ||
             array_diff(
                 ["credit_origin", "completed_from", "completed_through"],
@@ -34,6 +37,14 @@ final readonly class GroupWorkEligibility
             !in_array($facts["credit_origin"] ?? null, ["any", "institutional", "transfer"], true)
         ) {
             self::invalid();
+        }
+        if (
+            array_key_exists('completed_since_pursuit_start', $facts)
+            && !is_bool($facts['completed_since_pursuit_start'])
+        ) {
+            throw new InvalidArgumentException(trans(
+                'Choose whether completion must be on or after the recorded pursuit start.'
+            ));
         }
         foreach (["max_age_months_at_pursuit_start", "max_age_months_at_evaluation"] as $key) {
             $months = $facts[$key] ?? null;
@@ -129,7 +140,8 @@ final readonly class GroupWorkEligibility
             $this->facts["completed_from"] === null &&
             $this->facts["completed_through"] === null &&
             $months === null &&
-            ($this->facts["max_age_months_at_evaluation"] ?? null) === null
+            ($this->facts["max_age_months_at_evaluation"] ?? null) === null &&
+            !($this->facts['completed_since_pursuit_start'] ?? false)
         ) {
             return null;
         }
@@ -148,6 +160,15 @@ final readonly class GroupWorkEligibility
             $completedOn > $this->facts["completed_through"]
         ) {
             return CourseMatchStatus::CompletedAfterWindow;
+        }
+        if ($this->facts['completed_since_pursuit_start'] ?? false) {
+            if ($pursuitStartedOn === null) {
+                return CourseMatchStatus::PursuitStartUnknown;
+            }
+            self::date($pursuitStartedOn);
+            if ($completedOn < $pursuitStartedOn) {
+                return CourseMatchStatus::CompletedBeforePursuitStart;
+            }
         }
         if ($months !== null) {
             $context = $this->recencyContext($pursuitStartedOn);
@@ -170,18 +191,21 @@ final readonly class GroupWorkEligibility
         return null;
     }
 
-    /** Calendar-month subtraction clamps to the last valid day; the boundary is inclusive.
+    /** Effective lower bound at the recorded pursuit start; calendar-month boundaries clamp inclusively.
      * @return array{pursuit_started_on:?string,earliest_completion_on:?string}
      */
     public function recencyContext(?string $pursuitStartedOn = null): array
     {
         $months = $this->facts["max_age_months_at_pursuit_start"] ?? null;
-        if ($months === null || $pursuitStartedOn === null) {
+        $sinceStart = $this->facts['completed_since_pursuit_start'] ?? false;
+        if (($months === null && !$sinceStart) || $pursuitStartedOn === null) {
             return ["pursuit_started_on" => null, "earliest_completion_on" => null];
         }
+        self::date($pursuitStartedOn);
         return [
             "pursuit_started_on" => $pursuitStartedOn,
-            "earliest_completion_on" => self::earliestCompletion($pursuitStartedOn, $months),
+            "earliest_completion_on" => $sinceStart ? $pursuitStartedOn
+                : self::earliestCompletion($pursuitStartedOn, $months),
         ];
     }
 
@@ -257,7 +281,7 @@ final readonly class GroupWorkEligibility
             if (
                 ($group["definition"]["work_eligibility"]["max_age_months_at_pursuit_start"] ??
                     null) !==
-                null
+                null || ($group['definition']['work_eligibility']['completed_since_pursuit_start'] ?? false)
             ) {
                 return true;
             }
