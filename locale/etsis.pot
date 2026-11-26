@@ -8729,3 +8729,61 @@ msgstr ""
 #: resources/views/shared/degree-eligibility-labels.php:17
 msgid "Review the recorded pursuit start before evaluating this group’s completion rule."
 msgstr ""
+
+
+#: resources/blocks/accordion/config.php:8
+#: resources/blocks/carousel/config.php:8
+msgid "Component"
+msgstr ""
+
+
+#: resources/blocks/accordion/config.php:9
+msgid "Accordion"
+msgstr ""
+
+
+#: resources/blocks/accordion/config.php:14
+#: resources/blocks/carousel/config.php:19
+msgid "Number of items (1–20)"
+msgstr ""
+
+
+#: resources/blocks/carousel/config.php:9
+msgid "Carousel"
+msgstr ""
+
+
+#: resources/blocks/carousel/config.php:14
+msgid "Accessible carousel name"
+msgstr ""
+
+
+#: resources/blocks/carousel/config.php:15
+#: resources/blocks/carousel/view.php:13
+msgid "Featured information"
+msgstr ""
+
+
+#: resources/blocks/carousel/view.php:12
+msgid "Slide {current} of {total}."
+msgstr ""
+
+
+#: resources/blocks/carousel/view.php:19
+msgid "carousel"
+msgstr ""
+
+
+#: resources/blocks/carousel/view.php:29
+msgid "slide"
+msgstr ""
+
+
+#: resources/blocks/carousel/view.php:47
+msgid "Previous slide"
+msgstr ""
+
+
+#: resources/blocks/carousel/view.php:56
+msgid "Next slide"
+msgstr ""

@@ -90,7 +90,7 @@ $visibilityChecks = ["2026-08-10T17:00:00Z" => false, "2026-08-11T17:00:00Z" => 
 foreach ($visibilityChecks as $instant => $visible) {
     $sis->clock->time = new \DateTimeImmutable($instant);
     foreach (["campus-harbor", "campus-quad", "campus-horizon"] as $slug) {
-        $theme = new \Vihzhuo\Theme($config["theme"], $slug);
+        $theme = new \Application\Service\WebsiteTheme($config["theme"], $slug);
         $html = new \Vihzhuo\Modules\GrapesJS\PageRenderer($theme, $page)->render();
         if (str_contains($html, "Fictional scheduled campus notice") !== $visible) {
             throw new RuntimeException("Native news block bypassed its publication window.");

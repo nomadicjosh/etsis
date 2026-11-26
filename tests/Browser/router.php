@@ -10,6 +10,26 @@ if (PHP_SAPI !== 'cli-server') {
 
 $root = dirname(__DIR__, 2);
 $path = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+// Match public/.htaccess for clean theme assets on PHP's development server.
+if (is_string($path) && preg_match('~^/themes/([a-zA-Z0-9_-]+)/(?!public/)(.+)$~D', $path, $assetParts)) {
+    $assetRoot = realpath($root . '/public/themes/' . $assetParts[1] . '/public');
+    $asset = $assetRoot === false ? false : realpath($assetRoot . '/' . rawurldecode($assetParts[2]));
+    $extension = $asset === false ? '' : strtolower(pathinfo($asset, PATHINFO_EXTENSION));
+    $types = ['css' => 'text/css', 'js' => 'application/javascript', 'svg' => 'image/svg+xml',
+        'ico' => 'image/x-icon', 'png' => 'image/png', 'jpg' => 'image/jpeg',
+        'woff' => 'font/woff', 'woff2' => 'font/woff2'];
+    if (
+        $asset === false || !is_file($asset) || !str_starts_with($asset, $assetRoot . '/')
+        || !isset($types[$extension])
+    ) {
+        http_response_code(404);
+        return;
+    }
+    header('Content-Type: ' . $types[$extension]);
+    readfile($asset);
+    return;
+}
+
 if (is_string($path) && (str_starts_with($path, '/assets/') || str_starts_with($path, '/themes/'))) {
     return false;
 }
@@ -22,6 +42,11 @@ $viewConfig->setConfigKey('app', ['language' => 'en', 'charset' => 'UTF-8', 'loc
 $viewApp = \Codefy\Framework\Helpers\get_fresh_bootstrap();
 $viewApp->delegate(\Qubus\Config\ConfigContainer::class, static fn () => $viewConfig);
 $viewApp->delegate('codefy.config', static fn () => $viewConfig);
+
+if ($path === '/fixture/website-blocks/') {
+    require __DIR__ . '/website-blocks-fixture.php';
+    return;
+}
 
 if ($path === '/fixture/site-navigation/') {
     require_once $root . '/tests/Support/WebsiteFixture.php';

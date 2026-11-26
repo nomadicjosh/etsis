@@ -44,6 +44,22 @@ Native block discovery uses `view.php` or `view.html`; `.phtml` is the applicati
 
 A page already open in the designer must be reopened to load the changed block definitions. Configure and approve the saved page using the normal review workflow after editing it.
 
+
+## Accessible accordion and carousel blocks
+
+**Accordion** and **Carousel** remain dynamic PHP blocks: select the block and use **Settings → Number of items (1–20)** to change their structure. Edit headings, answers and slide content in their nested HTML child blocks. Existing relative child IDs stay the same, so already saved heading/body/slide content is retained. Each rendered accordion uses separate DOM IDs for its headers and panels; two accordions on one page cannot open each other's answers. All answers start collapsed with matching button state. Tab reaches each heading, and Enter or Space toggles it. Opening another answer closes the earlier answer in that same accordion only. Keep interactive links and controls in the answer, rather than inside the heading button.
+
+A carousel starts with its **first** slide visible, including when it has only one slide. Multiple-slide carousels offer visible **Previous slide** and **Next slide** Bootstrap buttons with icons, keyboard arrow navigation and a polite **Slide N of M** status. Focus stays on the control used. Hidden slides and their links stay out of the ordinary keyboard/accessibility flow. Slides do not advance automatically or on swipe; visitors control when information changes. One-slide carousels omit redundant movement buttons. Reduced-motion preferences suppress slide transitions, and controls wrap at narrow widths and enlarged text.
+
+Give every carousel a meaningful **Accessible carousel name**, especially when placing more than one on a page. The setting is escaped as text. The starter image has empty alternative text as a decorative placeholder; supply meaningful alternative text for images that convey information, and keep required information available as text rather than only inside an image. Announcements and program/student data retain their separate publication/privacy workflows.
+
+Rendering is bounded to **1–20 items per block**. Nonpositive counts render one item; malformed counts render the two-item default; larger valid integers render twenty. These display bounds do not rewrite stored designs. Review existing large blocks deliberately before publication. Structure settings and canvas editing do not approve a page or change its saved publication.
+
+The shared behavior and focus styles load in Harbor, Quad, Horizon and Bootstrap Business. Business also has a keyboard **Skip to main content** link targeting the page body after navigation. Theme assets use clean URLs such as `/themes/bootstrap-business/css/style.css`; Apache maps them into the physical theme `public/` directory. `WebsiteTheme` keeps actual parent/child asset resolution while excluding that directory name from URLs. Use paths relative to `public/` in `phpb_theme_asset()`, such as `css/style.css`. Other web servers need an equivalent mapping. The PHP browser-test router supplies a restricted static-file equivalent because it does not read `.htaccess`.
+
+Focused checks cover real nested saved content, independent instances, keyboard controls and focus, one-item and bounded/malformed settings, escaped labels, self-only script policy, all four bundled styles, clean asset requests, 320px/200% text and automated accessibility. They do not qualify other form/content blocks, every assistive technology or an institution's third-party theme. A saved page still needs its normal design save and publication review; no institutional design or academic record is modified by these source changes.
+
+
 ## Review and schedule a page
 
 1. Create the page, review its routes/translations and design it in the existing page builder. Save your design.

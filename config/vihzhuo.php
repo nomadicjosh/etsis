@@ -149,7 +149,7 @@ return [
      |
      */
         'theme' => [
-            'class' => Vihzhuo\Theme::class,
+            'class' => Application\Service\WebsiteTheme::class,
             'folder' => public_path('themes'),
             'folder_url' => '/themes',
             'active_theme' => env('PORTAL_THEME', 'campus-harbor'),

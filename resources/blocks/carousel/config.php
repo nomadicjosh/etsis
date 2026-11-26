@@ -1,13 +1,23 @@
 <?php
 
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_html;
+
 return [
-    'category' => 'Component',
-    'title' => 'Carousel',
+    'category' => trans_html('Component'),
+    'title' => trans_html('Carousel'),
     'icon' => 'fa fa-panorama',
     'settings' => [
-        'carousel_item_count' => [
+        'carousel_label' => [
             'type' => 'text',
-            'label' => 'Number of Items',
+            'label' => trans_html('Accessible carousel name'),
+            'value' => trans_html('Featured information'),
+        ],
+        'carousel_item_count' => [
+            'type' => 'number',
+            'label' => trans_html('Number of items (1–20)'),
+            'placeholder' => '1–20',
             'value' => '2'
         ],
     ],

@@ -149,7 +149,7 @@ if (
         "The actual manager did not use the current page-settings design and native CSRF form.",
     );
 }
-$activeTheme = new \Vihzhuo\Theme($websiteConfig["theme"], $websiteConfig["theme"]["active_theme"]);
+$activeTheme = new \Application\Service\WebsiteTheme($websiteConfig["theme"], $websiteConfig["theme"]["active_theme"]);
 $themeBlocks = $activeTheme->getThemeBlocks();
 foreach (["campus-hero", "campus-pathways", "campus-invitation", "lead"] as $editableSlug) {
     if (!($themeBlocks[$editableSlug] ?? null)?->isHtmlBlock()) {
@@ -199,6 +199,50 @@ foreach (["campus-courses", "campus-programs", "campus-news", "campus-events"] a
         throw new RuntimeException(
             "Live feed copy settings were ignored or rendered without escaping.",
         );
+    }
+}
+// Exercise the real reusable blocks before opening the native designer.
+foreach (['accordion', 'carousel'] as $slug) {
+    $setting = $slug . '_item_count';
+    foreach (
+        ['0' => 1, '-2' => 1, '1' => 1, '2' => 2, '20' => 20, '999999' => 20,
+            'invalid' => 2, '2.5' => 2] as $count => $expected
+    ) {
+        $html = $publicRenderer->renderWithSlug($slug, [
+            'settings' => ['attributes' => [
+                $setting => (string) $count,
+                'carousel_label' => 'Fictional <img src=x onerror=alert(1)> label',
+            ]],
+        ]);
+        $document = new \DOMDocument();
+        @$document->loadHTML($html);
+        $xpath = new \DOMXPath($document);
+        $items = $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), " '
+            . $slug . '-item ")]');
+        if ($items->length !== $expected) {
+            throw new RuntimeException('Interactive block settings escaped their rendering bound.');
+        }
+        if ($slug === 'carousel') {
+            $active = $xpath->query('//*[contains(concat(" ", normalize-space(@class), " "), " active ")]');
+            if (
+                $active->length !== 1 || $active->item(0) !== $items->item(0)
+                || str_contains($html, 'data-bs-ride=') || str_contains($html, '<img src=x')
+                || !str_contains($html, 'aria-live="polite"')
+            ) {
+                throw new RuntimeException('A carousel lost its safe label, first slide or deliberate movement.');
+            }
+        }
+    }
+    $adapter = new \Vihzhuo\Modules\GrapesJS\Block\BlockAdapter(
+        new \Vihzhuo\Modules\GrapesJS\PageRenderer($activeTheme, $pageRecord, true),
+        $themeBlocks[$slug]
+    );
+    $settings = array_column($adapter->getBlockSettingsArray(), null, 'name');
+    if (
+        $themeBlocks[$slug]->isHtmlBlock() || $settings[$setting]['type'] !== 'number'
+        || ($slug === 'carousel' && !isset($settings['carousel_label']))
+    ) {
+        throw new RuntimeException('The native designer lost the controlled block settings.');
     }
 }
 $phpb_db->query(

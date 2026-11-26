@@ -3075,7 +3075,7 @@ $page->setTranslations([
     "en" => ["meta_title" => "Fictional page", "meta_description" => "", "route" => "/"],
 ]);
 foreach (["campus-harbor", "campus-quad", "campus-horizon"] as $slug) {
-    $theme = new \Vihzhuo\Theme($config["theme"], $slug);
+    $theme = new \Application\Service\WebsiteTheme($config["theme"], $slug);
     $blocks = $theme->getThemeBlocks();
     $foreachItems = [
         "campus-hero",
@@ -3093,7 +3093,7 @@ foreach (["campus-harbor", "campus-quad", "campus-horizon"] as $slug) {
     }
     $html = new \Vihzhuo\Modules\GrapesJS\PageRenderer($theme, $page)->render();
     if (
-        !str_contains($html, "/themes/" . $slug . "/public/css/theme.css") ||
+        !str_contains($html, "/themes/" . $slug . "/css/theme.css") ||
         !str_contains($html, "Public fixture") ||
         str_contains($html, "Campus-only fixture") ||
         str_contains($html, "[block slug=")
@@ -5041,16 +5041,39 @@ if (
 ) {
     throw new RuntimeException('The private course-import review did not boot.');
 }
+// A browser confirmation queues work; the server worker rechecks the fictional enabled actor.
+$sis->registrationService();
+$sis->sql->update(
+    'users',
+    ['token' => 'fictional-worker-token', 'password' => 'fictional-test-hash'],
+    ['user_id' => $sis->access->actor->value]
+);
+$importPermission = $sis->sql->one('sis_access_permissions', ['name' => 'sis:import:manage']);
+new \Infrastructure\Persistence\Repository\SqlAccessRepository($sis->sql)->assign(
+    \Domain\Access\Enum\GrantKind::UserPermission,
+    $sis->access->actor,
+    new \Domain\Shared\ValueObject\EntityId($importPermission['id']),
+    true
+);
 $courseImportPayload['review_token'] = $courseImportBody['review_token'];
 $courseImportSaved = $teachingPost('/sis/imports/commit/', $courseImportPayload);
 $courseImportAgain = $teachingPost('/sis/imports/commit/', $courseImportPayload);
+$courseImportQueued = json_decode((string) $courseImportSaved->getBody(), true, flags: JSON_THROW_ON_ERROR);
 if (
     $courseImportSaved->getStatusCode() !== 200 || $courseImportAgain->getStatusCode() !== 200
     || (string) $courseImportSaved->getBody() !== (string) $courseImportAgain->getBody()
-    || (int) $sis->sql->one('sis_courses', ['code' => 'IMPORT.NATIVE'])['active'] !== 0
+    || $courseImportQueued['state'] !== 'queued'
+    || $sis->sql->rows('sis_courses', ['code' => 'IMPORT.NATIVE']) !== []
     || $sis->sql->rows('sis_history_events') !== $courseImportEvents
 ) {
     throw new RuntimeException('Import confirmation lost its draft, original receipt or historical boundary.');
+}
+if (
+    $app->make(\Domain\Import\Service\ImportWorker::class)->runOne() !== 'completed'
+    || (int) $sis->sql->one('sis_courses', ['code' => 'IMPORT.NATIVE'])['active'] !== 0
+    || $sis->sql->rows('sis_history_events') !== $courseImportEvents
+) {
+    throw new RuntimeException('The server import worker lost the reviewed draft or history boundary.');
 }
 $courseImportedId = $sis->sql->one('sis_courses', ['code' => 'IMPORT.NATIVE'])['id'];
 if (

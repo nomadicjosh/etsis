@@ -22,7 +22,7 @@ $loginUrl = $loginUrl ?? "/" . trim(\Codefy\Framework\Helpers\config("auth.login
 $signedIn = $signedIn ?? \Codefy\Framework\Helpers\gate()->isLoggedIn();
 $staffAccess = $staffAccess ?? $signedIn && \Codefy\Framework\Helpers\gate("sis:person:manage");
 $theme = ThemeContext::current();
-$themeAsset = $theme?->getAssetPath("public/css/theme.css") ?? "/themes/campus-harbor/public/css/theme.css";
+$themeAsset = $theme?->getAssetPath("css/theme.css") ?? "/themes/campus-harbor/css/theme.css";
 $title = $page->getTranslation("meta_title", "en") ?: $portalName;
 $siteNavigation ??= [];
 foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
@@ -55,6 +55,8 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
             <script defer src="/assets/js/workspace-notifications.js"></script>
         <?php endif; ?>
         <link rel="stylesheet" href="/assets/css/site-navigation.css">
+        <link rel="stylesheet" href="/assets/css/website-blocks.css">
+        <script defer src="/assets/js/website-blocks.js"></script>
         <script defer src="/assets/vendor/bootstrap.bundle.min.js"></script>
         <script defer src="/assets/js/site-navigation.js"></script>
         <script defer src="/assets/js/review-guidance.js"></script>

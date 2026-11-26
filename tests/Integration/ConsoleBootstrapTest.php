@@ -217,7 +217,7 @@ final class ConsoleBootstrapTest extends TestCase
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=128M',
             dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-portal']);
         // This growing whole-workspace fixture makes hundreds of HTTP calls in one bounded process.
-        $process->setTimeout(15);
+        $process->setTimeout(25);
         $process->run();
         self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
     }

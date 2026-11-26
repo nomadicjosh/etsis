@@ -1,26 +1,67 @@
 <?php
 
-use Qubus\Support\DataType;
+declare(strict_types=1);
 
-$random = new DataType()->string->random(type: 'alpha', length: 6);
-$itemCount = intval($block->setting('carousel_item_count'));
-$itemCount = $itemCount < 0 ? 1 : $itemCount;
+use function Codefy\Framework\Helpers\trans_attr;
+use function Codefy\Framework\Helpers\trans_html;
+
+$instance = 'carousel-' . bin2hex(random_bytes(8));
+$count = filter_var($block->setting('carousel_item_count'), FILTER_VALIDATE_INT);
+$itemCount = max(1, min(20, $count === false ? 2 : $count));
+$status = trans_html('Slide {current} of {total}.');
+$label = $block->setting('carousel_label') ?: trans_attr('Featured information');
 ?>
-
-<div id="carousel<?=$random;?>" class="carousel slide carousel-fade" data-bs-ride="carousel">
+<div
+    id="<?= $instance ?>"
+    class="carousel slide website-carousel"
+    role="region"
+    aria-roledescription="<?= trans_attr('carousel') ?>"
+    aria-label="<?= $label ?>"
+    data-bs-interval="false"
+    data-bs-touch="false"
+>
     <div class="carousel-inner">
-        <?php for ($i = 0; $i < $itemCount; $i++) : ?>
-        <div class="carousel-item<?= $i === 1 ? ' active' : '';?>" id="carousel-item-<?=$i;?>">
-            [block slug="carousel-item" id="carousel-item-<?= $i ?>"]
-        </div>
+        <?php for ($index = 0; $index < $itemCount; $index++) : ?>
+            <div
+                class="carousel-item<?= $index === 0 ? ' active' : '' ?>"
+                role="group"
+                aria-roledescription="<?= trans_attr('slide') ?>"
+                aria-label="<?= phpb_e(strtr($status, [
+                    '{current}' => (string) ($index + 1), '{total}' => (string) $itemCount,
+                ])) ?>"
+            >
+                [block slug="carousel-item" id="carousel-item-<?= $index ?>"]
+            </div>
         <?php endfor; ?>
     </div>
-    <button class="carousel-control-prev" type="button" data-bs-target="#carousel<?=$random;?>" data-bs-slide="prev">
-        <span class="carousel-control-prev-icon" aria-hidden="true"></span>
-        <span class="visually-hidden">Previous</span>
-    </button>
-    <button class="carousel-control-next" type="button" data-bs-target="#carousel<?=$random;?>" data-bs-slide="next">
-        <span class="carousel-control-next-icon" aria-hidden="true"></span>
-        <span class="visually-hidden">Next</span>
-    </button>
+    <div class="website-carousel-controls d-flex flex-wrap align-items-center gap-3 mt-3">
+        <?php if ($itemCount > 1) : ?>
+            <button
+                class="btn btn-outline-primary"
+                type="button"
+                data-bs-target="#<?= $instance ?>"
+                data-bs-slide="prev"
+                aria-controls="<?= $instance ?>"
+            >
+                <i class="bi bi-chevron-left" aria-hidden="true"></i> <?= trans_html('Previous slide') ?>
+            </button>
+            <button
+                class="btn btn-outline-primary"
+                type="button"
+                data-bs-target="#<?= $instance ?>"
+                data-bs-slide="next"
+                aria-controls="<?= $instance ?>"
+            >
+            <?= trans_html('Next slide') ?> <i class="bi bi-chevron-right" aria-hidden="true"></i>
+            </button>
+        <?php endif; ?>
+        <p
+            class="mb-0"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            data-carousel-status
+            data-slide-status-template="<?= phpb_e($status) ?>"
+        ><?= phpb_e(strtr($status, ['{current}' => '1', '{total}' => (string) $itemCount])) ?></p>
+    </div>
 </div>

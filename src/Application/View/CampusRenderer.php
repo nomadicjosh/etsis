@@ -15,7 +15,7 @@ use Qubus\View\Native\NativeLoader;
 use Throwable;
 use Vihzhuo\Core\ThemeContext;
 use Vihzhuo\Page;
-use Vihzhuo\Theme;
+use Application\Service\WebsiteTheme;
 use Vihzhuo\ThemeLayout;
 use InvalidArgumentException;
 
@@ -55,7 +55,7 @@ final readonly class CampusRenderer
         if (!in_array($themeSlug, ["campus-harbor", "campus-quad", "campus-horizon"], true)) {
             $themeSlug = "campus-harbor";
         }
-        $theme = new Theme(
+        $theme = new WebsiteTheme(
             [
                 "folder" => $root . "/public/themes",
                 "folder_url" => "/themes",

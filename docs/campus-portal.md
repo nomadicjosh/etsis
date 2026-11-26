@@ -40,7 +40,7 @@ The themes in `public/themes` are:
 | `campus-quad` | Heritage green and gold, arched illustration, formal program cards |
 | `campus-horizon` | Plum accents, contemporary headings, softer shapes |
 
-Quad and Horizon inherit Harbor's page structure while supplying their own CSS. Harbor inherits the existing Bootstrap Business blocks, so the existing theme and registered `resources/blocks` remain available. Theme assets use direct `/themes/{theme}/public/...` paths so Apache rewrite rules are not required to load them.
+Quad and Horizon inherit Harbor's page structure while supplying their own CSS. Harbor inherits the existing Bootstrap Business blocks, so the existing theme and registered `resources/blocks` remain available. Theme assets use clean `/themes/{theme}/...` URLs. `public/.htaccess` maps these internally to each theme's physical `public/` directory; `public/` is not part of the generated URL. The application `WebsiteTheme` resolves the actual owning theme before emitting that URL, so child-theme overrides and inherited parent assets both work. DDEV uses Apache; another web server needs the equivalent static-file mapping.
 
 Use **Page builder** in the staff workspace or open `/admin/manager`. Creating a page with the **Campus portal — complete page** layout offers a starter in the editor when the page has no content. It contains six native blocks: welcome, pathways, live course offerings, public news, programs, and application invitation. The welcome copy and live-section headings have block settings. Existing pages are never overwritten. Save through the builder to persist the starter; choose `/` as the page route to use it as the institution homepage. `/portal/` remains the application-provided welcome route.
 
