@@ -9838,3 +9838,182 @@ msgstr ""
 #: resources/views/frontend/website/embed.phtml:55
 msgid "If embedded content does not appear, use the direct link above."
 msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:24
+msgid "People"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:25
+msgid "Admissions"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:26
+msgid "Students"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:27
+msgid "Academic catalog"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:30
+msgid "My teaching"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:31
+msgid "Registration"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:32
+msgid "Holds & restrictions"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:33
+msgid "Transfer credit"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:34
+msgid "Spaces & scheduling"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:35
+msgid "Student accounts"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:36
+msgid "Team & timesheets"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:37
+msgid "Communications"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:38
+msgid "Transcript requests"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:39
+msgid "Campus content"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:42
+msgid "Shared reports"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:43
+msgid "Reports"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:44
+msgid "Application forms"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:46
+msgid "Rules & audiences"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:47
+msgid "Roles & access"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:48
+msgid "Moodle integration"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:49
+msgid "Page builder"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:60
+msgid "YOUR CAMPUS"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:60
+msgid "Campus"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:60
+msgid "Campus navigation"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:61
+msgid "DAILY OPERATIONS"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:61
+msgid "Operations"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:61
+msgid "Operations navigation"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:62
+msgid "BUILD & EXPLORE"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:62
+msgid "Tools"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:62
+msgid "Tools navigation"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:283
+msgid "CAMPUS WORKSPACE"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:294
+msgid "Campus operations"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:295
+msgid "Academic & administrative tools"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:352
+#: resources/views/backend/workspace/navigation-tools.phtml:52
+msgid "Collapse navigation sidebar"
+msgstr ""
+
+#: resources/views/backend/workspace/navigation-tools.phtml:10
+msgid "Full sidebar"
+msgstr ""
+
+#: resources/views/backend/workspace/navigation-tools.phtml:10
+msgid "Labels beside each icon"
+msgstr ""
+
+#: resources/views/backend/workspace/navigation-tools.phtml:11
+msgid "Compact sidebar"
+msgstr ""
+
+#: resources/views/backend/workspace/navigation-tools.phtml:11
+msgid "Icons with flyout labels"
+msgstr ""
+
+#: resources/views/backend/workspace/navigation-tools.phtml:12
+msgid "Top navigation"
+msgstr ""
+
+#: resources/views/backend/workspace/navigation-tools.phtml:12
+msgid "Grouped menus above the workspace"
+msgstr ""
+
+#: resources/views/backend/workspace/navigation-tools.phtml:23
+#: resources/views/backend/workspace/navigation-tools.phtml:24
+#: resources/views/backend/workspace/navigation-tools.phtml:31
+msgid "Navigation layout"
+msgstr ""
+
+#: resources/views/backend/workspace/navigation-tools.phtml:53
+msgid "Expand navigation sidebar"
+msgstr ""
+
+#: resources/views/backend/workspace/navigation-tools.phtml:54
+msgid "{layout} selected."
+msgstr ""
+
+#: resources/views/backend/workspace/navigation-tools.phtml:55
+msgid "Layout saved for larger screens. Mobile navigation keeps full labels."
+msgstr ""

@@ -768,8 +768,8 @@ External student-progress AI remains deferred by project direction; catalog-auth
 - [ ] 1098-T's for students
 - [x] [Protected SSN entry and correction on canonical person profiles](person-ssns.md): independent staff viewing/correction duties, saved last-four masks with no reveal, double-entry reviewed replacements/clearing, protected reasoned history, atomic concurrency/retries and encrypted mask-only projection in the existing journal.
 - [ ] Data Protection (if not already implemented): Use strong encryption (such as AES-256 at rest and TLS 1.2+ in transit).
-- [ ] An option to collapse the workspace sidebar, showing only icons with flyouts.
-- [ ] Instead of the left sidebar in the workspace, provide other beautiful and fun to use horizontal alternatives.
+- [x] [Provide a compact workspace sidebar](backend-workspace.md#choose-a-navigation-layout): an icon rail with accessible names, hoverable keyboard/focus flyout labels, Escape dismissal, scroll-aware viewport placement, direct collapse/expand controls and a bounded browser-only layout preference. Preserve current screens, drafts, drawers and server-filtered destinations; use full labelled mobile navigation.
+- [x] [Provide horizontal workspace navigation](backend-workspace.md#choose-a-navigation-layout): grouped Campus/Operations/Tools Bootstrap menus above the workspace, current-parent state, keyboard/focus return, viewport-bounded scrolling menus, sticky header offsets and the same authorized links. Offer full/compact/top layouts through one accessible chooser, apply saved preferences before startup, and retain mobile and unavailable-storage fallbacks.
 
 ## Next implementation stages
 

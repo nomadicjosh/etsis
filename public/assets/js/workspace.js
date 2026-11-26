@@ -430,6 +430,7 @@
             link.classList.toggle('active', active);
             if (active) link.setAttribute('aria-current', 'page'); else link.removeAttribute('aria-current');
         });
+        window.dispatchEvent(new Event('etsis:workspace-navigation'));
         $all('[data-requires]').forEach(element => { element.hidden = !can(element.dataset.requires); });
         $one('#topbar-page').textContent = pageNames[section] || 'Workspace';
         const parent = navigationParent(section), parentLink = $one('#topbar-parent');

@@ -1,0 +1,57 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans;
+use function Codefy\Framework\Helpers\trans_attr;
+use function Codefy\Framework\Helpers\trans_html;
+
+$layoutChoices = [
+    'sidebar' => [trans('Full sidebar'), 'layout-sidebar-inset', trans('Labels beside each icon')],
+    'compact' => [trans('Compact sidebar'), 'layout-sidebar', trans('Icons with flyout labels')],
+    'horizontal' => [trans('Top navigation'), 'layout-text-window', trans('Grouped menus above the workspace')],
+];
+?>
+<div class="dropdown workspace-navigation-tools" hidden>
+    <button
+        id="workspace-layout-toggle"
+        class="icon-button"
+        type="button"
+        data-bs-toggle="dropdown"
+        aria-expanded="false"
+        aria-haspopup="menu"
+        aria-label="<?= trans_attr('Navigation layout') ?>"
+        title="<?= trans_attr('Navigation layout') ?>"
+    ><i class="bi bi-layout-sidebar" aria-hidden="true"></i></button>
+    <div
+        class="dropdown-menu dropdown-menu-end workspace-layout-menu"
+        role="menu"
+        aria-labelledby="workspace-layout-toggle"
+    >
+        <p class="dropdown-header" aria-hidden="true"><?= trans_html('Navigation layout') ?></p>
+        <?php foreach ($layoutChoices as $value => [$label, $icon, $help]) : ?>
+            <button
+                class="dropdown-item"
+                type="button"
+                role="menuitemradio"
+                aria-checked="<?= $value === 'sidebar' ? 'true' : 'false' ?>"
+                data-navigation-layout="<?= $value ?>"
+            >
+                <i class="bi bi-<?= $icon ?>" aria-hidden="true"></i>
+                <span><strong><?= $this->esc($label) ?></strong><small><?= $this->esc($help) ?></small></span>
+                <i
+                    class="bi bi-check2 layout-selected"
+                    aria-hidden="true"<?= $value === 'sidebar' ? '' : ' hidden' ?>
+                ></i>
+            </button>
+        <?php endforeach; ?>
+    </div>
+</div>
+<span id="workspace-navigation-status" class="visually-hidden" role="status" aria-live="polite"></span>
+<script type="application/json" id="workspace-navigation-labels"><?= json_encode([
+    'collapse' => trans('Collapse navigation sidebar'),
+    'expand' => trans('Expand navigation sidebar'),
+    'selected' => trans('{layout} selected.'),
+    'mobile' => trans('Layout saved for larger screens. Mobile navigation keeps full labels.'),
+    'layouts' => array_map(static fn (array $choice): string => $choice[0], $layoutChoices),
+], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?></script>

@@ -31,6 +31,22 @@ Phone navigation fits a 320-pixel viewport and keeps the navigation list scrolla
 
 This update uses the existing self-hosted Bootstrap and icon assets. It changes no institutional data or schema. Authorization, browser CSRF protection, private AJAX responses and POST-based sign-out remain in place.
 
+### Choose a navigation layout
+
+Use **Navigation layout** in the workspace header to choose a layout. The full sidebar is the default. All choices use the same server-filtered destinations and keep the existing screen, breadcrumb and record/task workflow.
+
+- **Full sidebar** shows each icon and label in the existing scrollable sidebar.
+- **Compact sidebar** gives the screen more room with an 80-pixel icon rail. Hover or focus an icon to reveal its label. The label can itself be hovered, and Escape dismisses it without moving keyboard focus. Enter follows the original link. The header's **Collapse navigation sidebar** / **Expand navigation sidebar** button switches directly between the full and compact sidebar.
+- **Top navigation** replaces the side rail with **Campus**, **Operations** and **Tools** menus above the workspace. Empty permission-filtered groups are omitted. Related screens continue to mark their parent group. Bootstrap controls the menu's expanded state, arrow-key selection and Escape focus return; the shared floating-menu presentation keeps menus above clipping containers and within the viewport. Long menus scroll, labels align to the left, and text wraps. Branding, the breadcrumb and header actions remain available.
+
+Below 992 CSS pixels, every preference uses the full labelled mobile drawer. Open it with **Open navigation**, scroll its links, or use Escape / **Close navigation** to dismiss it. The chosen desktop layout returns when the screen is wider again. Choosing a layout on a phone explicitly reports that it is saved for larger screens. Menus and flyouts are bounded at narrow sizes and enlarged text, with visible focus and the existing reduced-motion rules.
+
+Only the layout name (`sidebar`, `compact` or `horizontal`) is saved under `etsis.workspace.navigation` in this browser and site origin. It is a presentation preference shared by users of that browser, not a person/permission preference. No record identifiers, private responses, credentials or draft contents are stored. Invalid saved values fall back to the full sidebar. When storage is unavailable the current page can still change layouts; without JavaScript the full sidebar remains the default. The preference loads before the body is rendered, so reloading another workspace does not briefly show the wrong sidebar width while the main workspace script starts.
+
+Changing layouts does not navigate, submit a form, close a record drawer, discard a draft or grant access. Resizing an open record preview retains that preview. Actual navigation still uses the existing unsaved-work guard, private read/write APIs and server authorization. Website management, replies and newsletter links remain real external-screen links in the same filtered **Tools** group. No database migration, report, event history or new dependency is added.
+
+Browser qualification covers all three layouts, restricted links, keyboard/hover flyouts, Bootstrap menus, current-parent state, reloads and delayed startup, storage failure, drafts/drawers, mobile transitions, 320px/200% reflow and automated accessibility. Institution-led assistive-technology acceptance remains part of release qualification.
+
 ### Record forms and catalog tasks
 
 Person creation and profile edits, new course/program records, program details, and individual/planned sections use named field groups. Related short fields share a row on larger screens; names, lookups, descriptions and instructional text receive the space they need. At phone widths the groups become one column. Section setup follows **Course & section → Teaching & registration → Section fee** in both the individual editor and offering planner.
