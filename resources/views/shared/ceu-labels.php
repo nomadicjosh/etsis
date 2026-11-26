@@ -71,9 +71,20 @@ return [
         . 'load nor charges.',
     ),
     'earned_unavailable' => trans_html(
-        'This attempt needs registrar review: a retained offered CEU declaration, a posted passing '
-        . 'grade, an actual completion date and no pending grade correction are required. Closed or '
+        'This attempt needs registrar review: a retained offered CEU declaration, a verified passing '
+        . 'grade, completion evidence and no pending grade correction are required. Removed or '
         . 'unknown attempts need separate resolution.',
+    ),
+    'earned_ceu_completion' => trans_html('Verified CEU completion date'),
+    'earned_previous_completion' => trans_html('Previously recorded CEU completion date'),
+    'earned_withdrawn' => trans_html(
+        'Withdrawn academic attempt. Record CEUs only for independently verified completed continuing '
+        . 'education. The CEU completion date belongs to this award; enrollment stays withdrawn and '
+        . 'academic earned credit stays zero.',
+    ),
+    'earned_withdrawn_read_only' => trans_html(
+        'Decisions and protected history for withdrawn attempts require both earned-CEU and '
+        . 'closed-record permissions.',
     ),
     'earned_mode' => trans_html('Earned CEU decision'),
     'earned_value_mode' => trans_html('Record earned CEUs'),

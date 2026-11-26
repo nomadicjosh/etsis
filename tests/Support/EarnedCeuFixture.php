@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Tests\Support;
 
 use Domain\AcademicRecord\Service\EarnedCeuService;
+use Domain\AcademicRecord\Service\CeuRecordService;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Registration\Service\RetainedSectionReader;
 use Domain\Registration\ValueObject\OfferingCeuChoice;
@@ -24,8 +25,24 @@ final class EarnedCeuFixture
     public EntityId $credit;
     public EarnedCeuService $service;
 
-    public function __construct(bool $complete = true, ?int $offeredMilli = 1250, int $academicMilli = 3000)
+    public function records(): CeuRecordService
     {
+        $s = $this->sis;
+        return new CeuRecordService(
+            $s->inputVerifier(),
+            new SqlAcademicCreditRepository($s->sql),
+            $s->admissions,
+            $s->access,
+            $s->transactions,
+        );
+    }
+
+    public function __construct(
+        bool $complete = true,
+        ?int $offeredMilli = 1250,
+        int $academicMilli = 3000,
+        public bool $withdrawn = false,
+    ) {
         require_once __DIR__ . '/OfferingCreditFixture.php';
         $this->offering = $f = new OfferingCreditFixture();
         $this->sis = $s = $f->sis;
@@ -43,28 +60,49 @@ final class EarnedCeuFixture
                 $f->editor->creditSettings('courses', $f->section->courseId)['revision']
             );
         }
+        $s->gradeScale([['code' => 'P', 'min_score_milli' => 0, 'max_score_milli' => 100000,
+            'points_milli' => 0, 'passes' => true, 'counts_gpa' => false],
+            ...($withdrawn ? [['code' => 'W', 'min_score_milli' => null, 'max_score_milli' => null,
+                'points_milli' => 0, 'passes' => false, 'counts_gpa' => false]] : [])]);
+        if ($withdrawn) {
+            $s->publishDropPolicy($s->term, -1, new \Domain\Registration\ValueObject\DropWindows([
+                ['through' => null, 'grade_code' => 'W'],
+            ]));
+        }
         $f->bind();
         $f->select($f->publish());
-        $s->gradeScale([['code' => 'P', 'min_score_milli' => 0, 'max_score_milli' => 100000,
-            'points_milli' => 0, 'passes' => true, 'counts_gpa' => false]]);
         $this->student = $s->student()->id;
         $this->enrollment = $s->service->register($this->student, $f->section->id, true)->id;
         $this->credit = new EntityId(
             $s->sql->one('sis_academic_credits', ['source_id' => $this->enrollment->value])['id'],
         );
+        if ($withdrawn) {
+            $s->clock->time = new \DateTimeImmutable('2026-09-02T12:00:00-07:00');
+            $s->service->drop($this->student, $f->section->id);
+        }
         if ($complete) {
             $grade = new EntityId($s->sql->rows('sis_grades')[0]['id']);
-            $review = $s->academicCredits()->review($this->student, $f->section->id, $this->enrollment, $grade, 0);
-            $s->academicCredits()->commit($this->student, $f->section->id, $review['review_token']);
-            $date = $s->academicDates()->review(
+            $review = $s->academicCredits()->review(
                 $this->student,
                 $f->section->id,
                 $this->enrollment,
-                '2026-08-01',
-                1,
-                'Fictional verified completion.'
+                $grade,
+                $withdrawn ? 1 : 0,
+                reason: 'Fictional verified institutional completion evidence.',
+                effective: $s->clock->now()->format('Y-m-d'),
             );
-            $s->academicDates()->commit($this->student, $f->section->id, $date['review_token']);
+            $s->academicCredits()->commit($this->student, $f->section->id, $review['review_token']);
+            if (!$withdrawn) {
+                $date = $s->academicDates()->review(
+                    $this->student,
+                    $f->section->id,
+                    $this->enrollment,
+                    '2026-08-01',
+                    1,
+                    'Fictional verified completion.'
+                );
+                $s->academicDates()->commit($this->student, $f->section->id, $date['review_token']);
+            }
         }
         $this->service = $this->service();
     }
@@ -103,9 +141,10 @@ final class EarnedCeuFixture
             $current['expected_version'],
             $current['expected_position'],
             $milli,
-            '2026-08-01',
+            $this->withdrawn ? $this->sis->clock->now()->format('Y-m-d') : '2026-08-01',
             'Fictional institutional CEU evidence.',
-            true
+            true,
+            $this->withdrawn ? '2026-08-01' : null,
         );
     }
 

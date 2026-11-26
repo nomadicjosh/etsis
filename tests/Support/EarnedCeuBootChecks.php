@@ -15,11 +15,27 @@ $view = $send('view');
 $body = ['expected_version' => $view['expected_version'], 'expected_position' => $view['expected_position'],
     'earned_milli' => 1250, 'effective_on' => '2026-08-01', 'reason' => 'Fictional institutional CEU evidence.',
     'acknowledged' => true];
+if ($earnedFixture->withdrawn) {
+    $body['completed_on'] = '2026-08-01';
+    $send('review', array_diff_key($body, ['completed_on' => true]), 422);
+}
 $send('review', array_diff_key($body, ['earned_milli' => true]), 422);
 $send('review', array_replace($body, ['earned_milli' => 1251]), 422);
 $review = $send('review', $body);
 $confirmation = ['command' => $review['command'], 'review_token' => $review['review_token']];
 $receipt = $send('confirm', $confirmation);
+if ($earnedFixture->withdrawn) {
+    $before = $sis->sql->one('sis_academic_credits', ['id' => $earnedFixture->credit->value]);
+    if ($before['status'] !== 'W' || (int) $before['completed_milli'] !== 0 || $send('view')['completed_on'] !== null) {
+        throw new RuntimeException('A withdrawn CEU decision changed academic completion.');
+    }
+    $sis->access->staff = false;
+    $sis->access->grants = ['sis:student:read', 'sis:academic:ceus:amend'];
+    $send('confirm', $confirmation, 403);
+    $send('history', [], 403);
+    $send('review', $body, 403);
+    $sis->access->staff = true;
+}
 if ($send('confirm', $confirmation) !== $receipt || $send('view')['earned_ceus']['earned_milli'] !== 1250) {
     throw new RuntimeException('Earned CEU confirmation or original retry failed.');
 }

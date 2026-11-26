@@ -51,6 +51,7 @@ try {
                 'check-credit-policies',
                 'check-ceus',
                 'check-earned-ceus',
+                'check-withdrawn-ceus',
                 'check-website-publications',
                 'check-coursework-grade-policy',
                 'check-curriculum-components',
@@ -290,10 +291,12 @@ try {
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/WebsitePublicationBootChecks.php';
             $status = 0;
-        } elseif (($argv[1] ?? '') === 'check-earned-ceus') {
+        } elseif (in_array(($argv[1] ?? ''), ['check-earned-ceus', 'check-withdrawn-ceus'], true)) {
             $kernel->bootstrap();
             require_once __DIR__ . '/EarnedCeuFixture.php';
-            $earnedFixture = new \Tests\Support\EarnedCeuFixture();
+            $earnedFixture = new \Tests\Support\EarnedCeuFixture(
+                withdrawn: ($argv[1] ?? '') === 'check-withdrawn-ceus',
+            );
             $httpSis = $earnedFixture->sis;
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/EarnedCeuBootChecks.php';

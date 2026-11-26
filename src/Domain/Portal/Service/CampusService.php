@@ -38,6 +38,7 @@ final readonly class CampusService
         private Clock $clock,
         private \Domain\Person\Service\PersonContactService $contacts,
         private \Domain\Registration\Service\RegistrationBatchService $registrations,
+        private \Domain\AcademicRecord\Service\CeuRecordService $ceuRecords,
     ) {
     }
 
@@ -217,8 +218,18 @@ final readonly class CampusService
     /** @return list<array<string, mixed>> */
     public function transcript(EntityId $student, bool $continuingEducation = false): array
     {
-        $this->repository->ownedStudent($this->access->authenticatedUserId(), $student);
-        return $this->transfers->transcript($student, $continuingEducation);
+        $actor = $this->access->authenticatedUserId();
+        return $this->transactions->run(function () use ($actor, $student, $continuingEducation): array {
+            $this->repository->ownedStudent($actor, $student);
+            $result = $continuingEducation
+                ? $this->ceuRecords->record($student)
+                : $this->transfers->transcript($student);
+            $this->repository->ownedStudent($actor, $student);
+            if ($this->access->authenticatedUserId()->value !== $actor->value) {
+                throw new \Domain\Shared\Exception\AccessDeniedException();
+            }
+            return $result;
+        });
     }
 
     /** @return list<array<string, mixed>> */

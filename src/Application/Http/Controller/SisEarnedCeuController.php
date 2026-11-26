@@ -56,7 +56,8 @@ final readonly class SisEarnedCeuController
             $body['earned_milli'],
             $input->text('effective_on', 10),
             $input->text('reason', 1000),
-            $input->requiredBoolean('acknowledged')
+            $input->requiredBoolean('acknowledged'),
+            $input->optionalText('completed_on', 10),
         ));
     }
 

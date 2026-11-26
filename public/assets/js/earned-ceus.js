@@ -23,14 +23,17 @@ window.createEarnedCeus = function (ui) {
         const current = ticket => panel.isConnected && ticket === epoch;
         const draft = preset || { mode: 'value', value: data.earned_ceus?.earned_milli === null
             || !data.earned_ceus ? '' : String(data.earned_ceus.earned_milli / 1000),
-        effective: data.today, reason: '', acknowledged: false };
+        effective: data.today, completion: data.earned_ceus?.completed_on || '', reason: '', acknowledged: false };
         const details = (pairs) => node('dl', { class: 'detail-list' }, pairs.map(([label, value]) =>
             node('div', {}, node('dt', {}, label), node('dd', {}, value))));
         const context = () => node('div', {}, node('p', { class: 'fw-semibold' }, `${data.course_code} · ${data.course_title}`),
             details([[text('section_title', 'Offered CEUs'), window.continuingEducationText(
                 data.offered_milli === null ? null : { ceu_milli: data.offered_milli }, labels)],
             [text('earned_title', 'Earned CEUs'), quantity(data.earned_ceus)],
-            [text('earned_completion', 'Verified actual completion'), data.completed_on || text('earned_date_unknown', 'Not recorded')]]));
+            [data.withdrawn ? text('earned_previous_completion', 'Previously recorded CEU completion date') : text('earned_completion', 'Verified actual completion'),
+                (data.withdrawn ? data.earned_ceus?.completed_on : data.completed_on) || text('earned_date_unknown', 'Not recorded')]]),
+            ...(data.withdrawn ? [node('p', { class: 'alert alert-info' }, text('earned_withdrawn',
+                'Withdrawn academic attempt. Record CEUs only for independently verified completed continuing education. The CEU completion date belongs to this award; enrollment stays withdrawn and academic earned credit stays zero.'))] : []));
         const purge = error => { if ([401, 403].includes(error.status)) panel.replaceChildren(); throw error; };
         function edit() {
             ++epoch;
@@ -38,8 +41,9 @@ window.createEarnedCeus = function (ui) {
                 'Record earned CEUs only after verifying institutional completion evidence. Offered CEUs are a separate publication; this decision changes neither academic credits, GPA, registration load nor charges.')));
             if (!data.can_record) {
                 panel.append(node('p', { class: 'alert alert-info', role: 'status' }, data.can_manage ? text('earned_unavailable',
-                    'This attempt needs registrar review: a retained offered CEU declaration, a posted passing grade, an actual completion date and no pending grade correction are required. Closed or unknown attempts need separate resolution.')
-                    : text('earned_read_only', 'You can review recorded CEUs. Award and correction actions require the earned-CEU permission.')));
+                    'This attempt needs registrar review: a retained offered CEU declaration, a verified passing grade, completion evidence and no pending grade correction are required. Removed or unknown attempts need separate resolution.')
+                    : data.withdrawn ? text('earned_withdrawn_read_only', 'Decisions and protected history for withdrawn attempts require both earned-CEU and closed-record permissions.')
+                        : text('earned_read_only', 'You can review recorded CEUs. Award and correction actions require the earned-CEU permission.')));
                 if (data.can_manage) panel.append(button(text('earned_history', 'Earned CEU history'), 'clock-history', () => history()));
                 return;
             }
@@ -60,6 +64,10 @@ window.createEarnedCeus = function (ui) {
                 type: 'date', id: 'earned-ceu-effective', class: 'form-control', required: true,
                 min: data.completed_on, max: data.today, value: draft.effective,
             }));
+            const completion = data.withdrawn ? field(text('earned_ceu_completion', 'Verified CEU completion date'), node('input', {
+                type: 'date', id: 'earned-ceu-completion', class: 'form-control', required: true,
+                max: data.today, value: draft.completion,
+            })) : null;
             const reason = field(text('earned_reason', 'Reason and institutional completion evidence'), node('textarea', {
                 id: 'earned-ceu-reason', class: 'form-control', maxlength: '1000', rows: '4', required: true,
             }, draft.reason));
@@ -70,7 +78,7 @@ window.createEarnedCeus = function (ui) {
             const update = () => { amount.disabled = mode.value === 'revoke'; };
             mode.addEventListener('change', update); update();
             form.addEventListener('input', () => Object.assign(draft, { mode: mode.value, value: amount.value,
-                effective: effective.value, reason: reason.value, acknowledged: ack.checked }));
+                effective: effective.value, completion: completion?.value || '', reason: reason.value, acknowledged: ack.checked }));
             const submit = node('button', { type: 'submit', class: 'btn btn-primary' }, text('earned_review', 'Review earned CEUs'));
             form.append(fields, node('div', { class: 'inline-actions' }, submit,
                 button(text('earned_history', 'Earned CEU history'), 'clock-history', () => history()),
@@ -93,7 +101,8 @@ window.createEarnedCeus = function (ui) {
                     try {
                         const reviewed = await request(base + 'review/', 'POST', { expected_version: data.expected_version,
                             expected_position: data.expected_position, earned_milli: milli, effective_on: effective.value,
-                            reason: reason.value, acknowledged: ack.checked });
+                            reason: reason.value, acknowledged: ack.checked,
+                            ...(completion ? { completed_on: completion.value } : {}) });
                         if (current(ticket)) review(reviewed);
                     } catch (error) { purge(error); } finally { fields.disabled = false; }
                 }, submit);
@@ -105,7 +114,10 @@ window.createEarnedCeus = function (ui) {
             const heading = node('h3', { class: 'h5', tabindex: '-1' }, text('earned_review', 'Review earned CEUs'));
             panel.replaceChildren(heading, context(), details([
                 [text('earned_before', 'Previously recorded CEUs'), quantity(reviewed.command.previous_award)],
+                [text('earned_previous_completion', 'Previously recorded CEU completion date'),
+                    reviewed.command.previous_award?.completed_on || text('earned_date_unknown', 'Not recorded')],
                 [text('earned_after', 'Reviewed earned CEUs'), quantity(reviewed.command.award)],
+                [text('earned_ceu_completion', 'Verified CEU completion date'), reviewed.command.award.completed_on],
                 [text('earned_effective', 'Effective date of this CEU decision'), reviewed.command.effective_on],
                 [text('earned_reason', 'Reason and institutional completion evidence'), reviewed.command.reason],
             ]));
@@ -132,7 +144,10 @@ window.createEarnedCeus = function (ui) {
                 if (!current(ticket)) return;
                 const cards = result.items.map(item => node('section', { class: 'record-form-section' }, details([
                     [text('earned_before', 'Previously recorded CEUs'), quantity(item.before)],
+                    [text('earned_previous_completion', 'Previously recorded CEU completion date'),
+                        item.before?.completed_on || text('earned_date_unknown', 'Not recorded')],
                     [text('earned_after', 'Reviewed earned CEUs'), quantity(item.after)],
+                    [text('earned_ceu_completion', 'Verified CEU completion date'), item.after.completed_on || text('earned_date_unknown', 'Not recorded')],
                     [text('earned_effective_at', 'Effective at'), dateTime(item.effective_at)],
                     [text('earned_recorded', 'Recorded at'), dateTime(item.recorded_at)],
                     [text('earned_actor', 'Recorded by (current name)'), item.actor_name

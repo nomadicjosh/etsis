@@ -16,11 +16,12 @@ final readonly class EarnedCeus
 {
     public const string PERMISSION = 'sis:academic:ceus:amend';
     public const array EVENT_FIELDS = ['decision_id', 'previous_decision_id', 'previous_award', 'award', 'intent'];
+    private const array FIELDS = ['earned_milli', 'offered_milli', 'section_version_id', 'completed_on'];
 
     /** @param array<string, mixed> $facts */
     public function __construct(public array $facts)
     {
-        $fields = ['earned_milli', 'offered_milli', 'section_version_id', 'completed_on'];
+        $fields = self::FIELDS;
         if (
             count($facts) !== count($fields) || array_diff(array_keys($facts), $fields) !== [] ||
             !array_key_exists('earned_milli', $facts) ||
@@ -36,6 +37,20 @@ final readonly class EarnedCeus
         if ($facts['earned_milli'] !== null && $facts['earned_milli'] > $facts['offered_milli']) {
             throw new InvalidArgumentException(trans('Earned CEUs cannot exceed the accepted offering declaration.'));
         }
+    }
+
+    /** Compare typed quantities without treating an explicit zero as a revoked award. */
+    public static function same(?array $first, ?array $second): bool
+    {
+        if ($first === null || $second === null) {
+            return $first === $second;
+        }
+        foreach (self::FIELDS as $field) {
+            if ($first[$field] !== $second[$field]) {
+                return false;
+            }
+        }
+        return true;
     }
 
     public static function stored(?string $json): ?self

@@ -176,4 +176,23 @@ final class EarnedCeuTest extends TestCase
         $this->expectException(\Domain\Shared\Exception\ValidationException::class);
         $f->review(1);
     }
+
+    public function testRevocationAndExplicitZeroStayDistinctAndCommandKeyOrderDoesNotChangeTheDecision(): void
+    {
+        $f = new EarnedCeuFixture();
+        $f->confirm($f->review(0));
+        $f->confirm($f->review(null));
+        $review = $f->review(0);
+        $review['command']['previous_award'] = array_reverse($review['command']['previous_award'], true);
+        $review['command']['award'] = array_reverse($review['command']['award'], true);
+        $f->confirm($review);
+        self::assertSame(
+            0,
+            $f->service->view($f->student, $f->offering->section->id, $f->enrollment)['earned_ceus']['earned_milli'],
+        );
+        $f->confirm($f->review(null));
+        self::assertNull(
+            $f->service->view($f->student, $f->offering->section->id, $f->enrollment)['earned_ceus']['earned_milli'],
+        );
+    }
 }

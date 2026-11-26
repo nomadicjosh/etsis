@@ -27,13 +27,14 @@ async function fixture(page, options = {}) {
             if (path.endsWith('/view/')) {
                 if (options.delayed) await pending;
                 result = { course_code: 'CE.101', course_title: 'Fictional continuing education', offered_milli: 1250,
-                    earned_ceus: award, completed_on: '2026-08-01', expected_version: 2, expected_position: 3,
+                    earned_ceus: award, completed_on: options.withdrawn ? null : '2026-08-01', expected_version: 2, expected_position: 3,
+                    withdrawn: !!options.withdrawn,
                     can_record: !options.readOnly, can_manage: !options.readOnly, today: '2026-08-10' };
             } else if (path.endsWith('/review/')) {
                 if (options.denied) return route.fulfill({ status: 403, json: { error: 'Fictional authority ended.' } });
                 command = { operation_id: id(4), expected_version: data.expected_version, expected_position: data.expected_position,
                     previous_award: award, award: { earned_milli: data.earned_milli, offered_milli: 1250,
-                        section_version_id: id(5), completed_on: '2026-08-01' }, effective_on: data.effective_on,
+                        section_version_id: id(5), completed_on: data.completed_on || '2026-08-01' }, effective_on: data.effective_on,
                     reason: data.reason, acknowledged: data.acknowledged };
                 result = { command, review_token: 'fictional-earned-ceu-review' };
             } else if (path.endsWith('/confirm/')) {
@@ -174,5 +175,43 @@ test('student-read staff can browse CEU attempts and return without registration
     await expect(page.locator('#drawer-title')).toHaveText('Earned CEU records');
     await page.getByRole('button', { name: 'Back to record', exact: true }).click();
     await expect(page.locator('#drawer-title')).toHaveText('Alex Example');
+    expect(f.errors).toEqual([]);
+});
+
+for (const layout of ['phone', 'enlarged text']) {
+    test(`withdrawn CEUs keep a separate completion date through review and history (${layout})`, async ({ page }) => {
+        const f = await fixture(page, { withdrawn: true, list: true });
+        await page.getByRole('button', { name: /CE.101 · Fictional continuing education/ }).click();
+        await expect(page.locator('#drawer-body')).toContainText('enrollment stays withdrawn and academic earned credit stays zero');
+        await enter(page);
+        await page.getByLabel('Verified CEU completion date', { exact: true }).fill('2026-08-02');
+        await page.getByRole('button', { name: 'Earned CEU history', exact: true }).click();
+        await page.getByRole('button', { name: 'Return to CEU decision', exact: true }).click();
+        await expect(page.getByLabel('Verified CEU completion date', { exact: true })).toHaveValue('2026-08-02');
+        await page.setViewportSize({ width: layout === 'phone' ? 320 : 1280, height: 812 });
+        if (layout === 'enlarged text') {
+            const rootSize = await page.evaluate(() => parseFloat(getComputedStyle(document.documentElement).fontSize));
+            await page.route('**/fixtures/withdrawn-ceu-enlarged.css', route => route.fulfill({ contentType: 'text/css',
+                body: `html {font-size:${rootSize * 2}px!important;}` }));
+            await page.addStyleTag({ url: '/fixtures/withdrawn-ceu-enlarged.css' });
+        }
+        await accessible(page);
+        await page.getByRole('button', { name: 'Review earned CEUs', exact: true }).click();
+        await expect(page.locator('#drawer-body')).toContainText('2026-08-02');
+        expect(f.calls.find(c => c.path.endsWith('/review/')).data).toMatchObject({ completed_on: '2026-08-02', earned_milli: 1234 });
+        await page.getByRole('button', { name: 'Confirm CEU decision', exact: true }).click();
+        await expect(page.locator('#drawer-body')).toContainText('Earned CEU decision recorded.');
+        await page.getByRole('button', { name: 'Back to CEU records', exact: true }).click();
+        await expect(page.locator('#drawer-title')).toHaveText('Earned CEU records');
+        expect(f.errors).toEqual([]);
+    });
+}
+
+test('withdrawn CEU authority explains the extra duty without exposing protected history', async ({ page }) => {
+    const f = await fixture(page, { withdrawn: true, readOnly: true });
+    await expect(page.locator('#drawer-body')).toContainText('both earned-CEU and closed-record permissions');
+    await expect(page.getByLabel('Verified CEU completion date', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Earned CEU history', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Back to record', exact: true })).toBeVisible();
     expect(f.errors).toEqual([]);
 });

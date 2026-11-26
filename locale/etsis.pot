@@ -10238,3 +10238,35 @@ msgstr ""
 #: resources/views/shared/timetable-export-labels.php:22
 msgid "Your timetable is unavailable for this account. Sign in again or contact your records office."
 msgstr ""
+
+#: src/Domain/AcademicRecord/Service/EarnedCeuService.php
+msgid "Earned CEUs need a verified active or withdrawn institutional attempt, a published offering declaration, completion evidence and no pending grade correction."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/EarnedCeuService.php
+msgid "Use the verified academic completion date for an active attempt."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/EarnedCeuService.php
+msgid "Enter the independently verified CEU completion date for this withdrawn attempt."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php
+msgid "This attempt needs registrar review: a retained offered CEU declaration, a verified passing grade, completion evidence and no pending grade correction are required. Removed or unknown attempts need separate resolution."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php
+msgid "Verified CEU completion date"
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php
+msgid "Withdrawn academic attempt. Record CEUs only for independently verified completed continuing education. The CEU completion date belongs to this award; enrollment stays withdrawn and academic earned credit stays zero."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php
+msgid "Decisions and protected history for withdrawn attempts require both earned-CEU and closed-record permissions."
+msgstr ""
+
+#: resources/views/shared/ceu-labels.php
+msgid "Previously recorded CEU completion date"
+msgstr ""

@@ -191,6 +191,13 @@ final class CampusFixture
             $f->clock,
             $this->contacts,
             $f->registrationBatches(),
+            new \Domain\AcademicRecord\Service\CeuRecordService(
+                $f->inputVerifier(),
+                new \Infrastructure\Persistence\Repository\SqlAcademicCreditRepository($f->sql),
+                $f->admissions,
+                $f->access,
+                $f->transactions,
+            ),
         );
         $posts = new SqlPortalRepository($f->sql, $f->clock);
         $this->posts = new PortalService(

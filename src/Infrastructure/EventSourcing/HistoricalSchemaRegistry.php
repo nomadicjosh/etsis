@@ -1313,6 +1313,12 @@ final readonly class HistoricalSchemaRegistry
                     }
                     continue;
                 }
+                if ($name === 'withdrawn_ceu_decision') {
+                    if ($value !== true || $class !== \Domain\AcademicRecord\Event\EarnedCeusWereDecided::class) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'withdrawal_grade_correction') {
                     if (
                         $value !== true || !in_array($class, [

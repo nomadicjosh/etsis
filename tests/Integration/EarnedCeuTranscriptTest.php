@@ -21,14 +21,15 @@ final class EarnedCeuTranscriptTest extends TestCase
 
     public static function academicQuantities(): array
     {
-        return [[0], [3000]];
+        return [[0, false], [3000, false], [0, true], [3000, true]];
     }
 
     #[\PHPUnit\Framework\Attributes\DataProvider('academicQuantities')]
     public function testCeusAreIsolatedFromAcademicTranscriptsAndEarlierPreparedCeuDocumentsStayExact(
-        int $academicMilli
+        int $academicMilli,
+        bool $withdrawn,
     ): void {
-        $f = new EarnedCeuFixture(academicMilli: $academicMilli);
+        $f = new EarnedCeuFixture(academicMilli: $academicMilli, withdrawn: $withdrawn);
         $s = $f->sis;
         $records = new SqlTranscriptRepository($s->sql);
         $request = EntityId::generate();
@@ -84,7 +85,7 @@ final class EarnedCeuTranscriptTest extends TestCase
             self::assertArrayNotHasKey('earned_ceus', $row);
             self::assertArrayNotHasKey('continuing_education_only', $row);
         }
-        $ceuRecord = $unofficial->transcript($f->student, true);
+        $ceuRecord = $f->records()->record($f->student);
         self::assertSame(1250, $ceuRecord[0]['earned_ceus']['earned_milli']);
         self::assertArrayNotHasKey('completed_milli', $ceuRecord[0]);
         $academic = $service->review($request);
@@ -115,6 +116,31 @@ final class EarnedCeuTranscriptTest extends TestCase
         $html = $service->html($request, $document);
         $before = $s->sql->rows('sis_transcript_documents');
         $f->confirm($f->review(750));
+        if ($withdrawn) {
+            $current = $f->service->view($f->student, $f->offering->section->id, $f->enrollment);
+            $dateReview = $f->service->review(
+                $f->student,
+                $f->offering->section->id,
+                $f->enrollment,
+                $current['expected_version'],
+                $current['expected_position'],
+                750,
+                '2026-09-02',
+                'Fictional corrected CEU completion evidence.',
+                true,
+                '2026-08-02',
+            );
+            $f->confirm($dateReview);
+            $history = $f->service->history($f->student, $f->offering->section->id, $f->enrollment);
+            $dateDecision = $history['items'][array_key_last($history['items'])];
+            self::assertSame('2026-08-01', $dateDecision['before']['completed_on']);
+            self::assertSame('2026-08-02', $dateDecision['after']['completed_on']);
+            self::assertSame(
+                '2026-08-02',
+                $service->review($request, 'ceu-a4')['snapshot']['credits'][0]['earned_ceus']['completed_on'],
+            );
+            self::assertNull($f->service->view($f->student, $f->offering->section->id, $f->enrollment)['completed_on']);
+        }
         self::assertSame($before, $s->sql->rows('sis_transcript_documents'));
         self::assertSame($pdf, $service->pdf($request, $document));
         self::assertSame($html, $service->html($request, $document));

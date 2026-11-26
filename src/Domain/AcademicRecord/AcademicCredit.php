@@ -608,11 +608,13 @@ final class AcademicCredit extends EventSourcedAggregate
         $p = $event->payload();
         $this->assertNext($p);
         $award = new \Domain\AcademicRecord\ValueObject\EarnedCeus($p['award'])->facts;
+        $withdrawn = $this->credit['status'] === 'W';
         if (
-            $p['previous_award'] != $this->earnedCeus || $p['previous_award'] == $award ||
-            $award['section_version_id'] !== $this->sectionVersion || $this->pendingGradeChange !== null ||
-            $this->completedOn === null || $this->completedOn !== $award['completed_on'] ||
-            $this->grade === null || !in_array($this->credit['status'], ['A', 'N'], true) ||
+            !\Domain\AcademicRecord\ValueObject\EarnedCeus::same($p['previous_award'], $this->earnedCeus) ||
+            \Domain\AcademicRecord\ValueObject\EarnedCeus::same($p['previous_award'], $award) ||
+            !$this->canDecideEarnedCeus() || $award['section_version_id'] !== $this->sectionVersion ||
+            $event->metaParam('withdrawn_ceu_decision', false) !== $withdrawn ||
+            (!$withdrawn && $this->completedOn !== $award['completed_on']) ||
             ($award['earned_milli'] !== null && !$this->grade['passes']) ||
             ($this->earnedCeus === null && $award['earned_milli'] === null) ||
             isset($this->ceuDecisions[$p['decision_id']])
@@ -631,6 +633,16 @@ final class AcademicCredit extends EventSourcedAggregate
     public function earnedCeus(): ?array
     {
         return $this->earnedCeus;
+    }
+
+    /** CEU completion is independent of academic completion on a verified withdrawn attempt. */
+    public function canDecideEarnedCeus(): bool
+    {
+        return $this->playhead() > 0 && $this->provenance === 'registration' &&
+        $this->sectionVersion !== null && $this->pendingGradeChange === null && $this->grade !== null &&
+        ($this->grade['passes'] || $this->earnedCeus !== null) &&
+        (($this->credit['status'] === 'W' && $this->canCorrectSource()) ||
+        (in_array($this->credit['status'], ['A', 'N'], true) && $this->completedOn !== null));
     }
 
     public function ceuDecision(EntityId $operation): ?array

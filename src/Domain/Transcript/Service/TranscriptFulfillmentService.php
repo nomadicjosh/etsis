@@ -943,7 +943,7 @@ final readonly class TranscriptFulfillmentService
         unset($row);
         if ($continuingEducation) {
             $rows = array_values(array_filter($rows, static fn (array $row): bool =>
-                isset($row['earned_ceus']['earned_milli']) && in_array($row['status'], ['A', 'N'], true)));
+                isset($row['earned_ceus']['earned_milli']) && in_array($row['status'], ['A', 'N', 'W'], true)));
         } else {
             $rows = array_values(array_filter($rows, static fn (array $row): bool =>
                 empty($row['continuing_education_only'])));
