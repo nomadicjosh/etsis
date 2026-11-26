@@ -68,10 +68,11 @@ for (const staff of [false, true]) test(`${staff ? 'workspace' : 'portal'} opens
     await f.section.getByRole('button', {name: 'Send response', exact: true}).click();
     await expect(f.section).toContainText('Fictional student follow-up response.');
     await f.section.getByRole('button', {name: 'Back to advising updates', exact: true}).click();
-    await expect(f.section).toContainText('There are no matching advising updates.');
-    await expect(f.section.getByRole('button', {name: 'Refresh advising updates', exact: true})).toBeFocused();
+    await expect(f.section).toContainText('New advising follow-up');
+    await expect(f.section).toContainText('Read');
+    await expect(f.section.locator('[data-update-id] button').first()).toBeFocused();
     f.resolve();
-    await f.section.getByRole('button', {name: 'Refresh advising updates', exact: true}).click();
+    await f.disclosure.click(); await f.disclosure.click();
     await expect(f.section).toContainText('Advising follow-up closed');
     await f.section.getByRole('button', {name: 'View check-in', exact: true}).click();
     await expect(f.section).toContainText('Fictional advisor outcome.');
@@ -89,7 +90,6 @@ test('personal advising deletion persists after reload and creates no replacemen
     await page.keyboard.press('Escape');
     await page.reload();
     await f.trigger.click(); await f.disclosure.click();
-    await f.section.getByLabel('Show read updates', {exact: true}).check();
     await expect(f.section).toContainText('There are no matching advising updates.');
     await expect(page.locator('.workspace-notification-history li')).toHaveCount(0);
     expect(f.calls.filter(call => call.path.endsWith('/delete/'))[0].data).toEqual({revision: 0});
@@ -101,8 +101,8 @@ test('stale notices preserve the list and denied selected follow-up clears its p
     await f.disclosure.click();
     await expect(f.section).toContainText('New advising follow-up');
     f.conflict();
-    await f.section.getByRole('button', {name: 'Mark as read', exact: true}).click();
-    await expect(f.section).toContainText('This update changed or is unavailable. Refresh the list.');
+    await f.section.getByRole('button', {name: 'View check-in', exact: true}).click();
+    await expect(f.section).toContainText('These notifications are unavailable. Reopen this section to try again.');
     await expect(f.section).toContainText('Fictional arts program');
     await page.reload();
     const fresh = await fixture(page);

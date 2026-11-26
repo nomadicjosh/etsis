@@ -66,12 +66,10 @@ test('persistent import notices support read filtering and permanent deletion', 
     await expect(page.locator('[data-notification-count]')).toHaveText('1');
     await page.getByText('Import updates', { exact: true }).click();
     await expect(page.locator('.workspace-notification-dialog-body')).toContainText('32 / 32');
-    await page.getByRole('button', { name: 'Mark as read', exact: true }).click();
-    await expect(page.getByText('There are no matching import updates.', { exact: true })).toBeVisible();
-    await page.getByLabel('Show read updates', { exact: true }).check();
+    await expect(page.getByRole('button', { name: 'Mark as read', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Delete notification', exact: true }).click();
     await expect(page.getByText('There are no matching import updates.', { exact: true })).toBeVisible();
-    expect(mutations).toEqual(['read', 'remove']);
+    expect(mutations).toEqual(['remove']);
 });
 
 test('import-only staff can use catalog activity without receiving person creation controls', async ({ page }) => {

@@ -55,14 +55,9 @@ for (const staff of [false, true]) test(`${staff ? 'staff' : 'portal'} reader op
     await f.dialog.getByRole('button', { name: 'Fictional announcement 100', exact: true }).click();
     await expect(f.dialog).toContainText('Fictional <b>literal</b> announcement content.');
     await expect(f.dialog.locator('.campus-announcement-content b')).toHaveCount(0);
-    expect(f.reads).toEqual([]);
-    await f.dialog.getByRole('button', { name: 'Mark as read', exact: true }).click();
-    await expect(f.dialog).toContainText('Marked as read. This is not a policy acknowledgement.');
+    await expect(f.dialog.getByRole('button', { name: 'Mark as read', exact: true })).toHaveCount(0);
     expect(f.reads).toEqual([{ revision: 1 }]);
-    await expect(f.dialog.getByRole('button', { name: 'Back to list', exact: true })).toBeFocused();
     await f.dialog.getByRole('button', { name: 'Back to list', exact: true }).click();
-    await expect(f.dialog.getByRole('button', { name: 'Fictional announcement 100', exact: true })).toHaveCount(0);
-    await f.dialog.getByLabel('Show read items', { exact: true }).check();
     await expect(f.dialog.getByRole('button', { name: 'Fictional announcement 100', exact: true })).toBeVisible();
     await f.dialog.getByRole('button', { name: 'Clear recent notifications', exact: true }).click();
     await expect(f.dialog.getByRole('button', { name: 'Fictional announcement 100', exact: true })).toBeVisible();
@@ -81,21 +76,19 @@ test('deleting an announcement from either list or detail stays deleted after re
     await f.dialog.getByRole('button', { name: 'Fictional announcement 99', exact: true }).click();
     await f.dialog.getByRole('button', { name: 'Delete announcement', exact: true }).click();
     await expect(f.dialog).toContainText('There are no matching campus announcements.');
-    await f.dialog.getByLabel('Show read items', { exact: true }).check();
-    await expect(f.dialog).toContainText('There are no matching campus announcements.');
     await page.keyboard.press('Escape');
     await page.reload();
     await f.trigger.click(); await f.disclosure.click();
     await expect(f.dialog).toContainText('There are no matching campus announcements.');
     expect(f.requests.filter(row => row.method === 'POST').map(row => row.path))
-        .toEqual([`/portal/api/announcements/${id(100)}/delete/`, `/portal/api/announcements/${id(99)}/delete/`]);
+        .toEqual([`/portal/api/announcements/${id(100)}/delete/`, `/portal/api/announcements/${id(99)}/read/`, `/portal/api/announcements/${id(99)}/delete/`]);
     expect(f.errors).toEqual([]);
 });
-test('announcements page both ways, retry a failed feed and notify only an observed refresh change', async ({ page }) => {
+test('announcements page both ways, retry a failed feed and reopen without duplicate feedback', async ({ page }) => {
     const f = await fixture(page, { count: 25, failed: true });
     await f.disclosure.click();
-    await expect(f.dialog).toContainText('Announcements could not load.');
-    await f.dialog.getByRole('button', { name: 'Refresh announcements', exact: true }).click();
+    await expect(f.dialog).toContainText('These notifications are unavailable. Reopen this section to try again.');
+    await f.disclosure.click(); await f.disclosure.click();
     await expect(f.dialog.locator('.campus-announcement-list > li')).toHaveCount(20);
     await f.dialog.getByRole('button', { name: 'More announcements', exact: true }).click();
     await expect(f.dialog.locator('.campus-announcement-list > li')).toHaveCount(5);
@@ -103,23 +96,21 @@ test('announcements page both ways, retry a failed feed and notify only an obser
     await expect(f.dialog.locator('.campus-announcement-list > li')).toHaveCount(20);
     await expect(f.dialog.locator('.workspace-notification-entry')).toHaveCount(0);
     f.add();
-    await f.dialog.getByRole('button', { name: 'Refresh announcements', exact: true }).click();
-    await expect(f.dialog.locator('.workspace-notification-entry')).toContainText('New campus announcements are available.');
-    await f.dialog.getByRole('button', { name: 'Refresh announcements', exact: true }).click();
-    await expect(f.dialog.locator('.workspace-notification-entry')).toHaveCount(1);
+    await f.disclosure.click(); await f.disclosure.click();
+    await expect(f.dialog).toContainText('Fictional new announcement');
+    await f.disclosure.click(); await f.disclosure.click();
+    await expect(f.dialog.locator('.workspace-notification-entry')).toHaveCount(0);
     expect(f.reads).toEqual([]);
     expect(f.errors).toEqual([]);
 });
-test('stale read confirmation stays visible for refresh and denial clears private content', async ({ page }) => {
+test('stale read confirmation keeps retry controls and denial clears private content', async ({ page }) => {
     const f = await fixture(page);
     await f.disclosure.click();
-    await f.dialog.getByRole('button', { name: 'Fictional announcement 100', exact: true }).click();
     f.conflict();
-    await f.dialog.getByRole('button', { name: 'Mark as read', exact: true }).click();
-    await expect(f.dialog).toContainText('This announcement changed or is unavailable. Refresh the list.');
-    await expect(f.dialog.getByRole('button', { name: 'Mark as read', exact: true })).toBeEnabled();
+    await f.dialog.getByRole('button', { name: 'Fictional announcement 100', exact: true }).click();
+    await expect(f.dialog).toContainText('These notifications are unavailable. Reopen this section to try again.');
     f.deny();
-    await f.dialog.getByRole('button', { name: 'Refresh announcements', exact: true }).click();
+    await f.disclosure.click(); await f.disclosure.click();
     await expect(f.dialog).toHaveCount(0);
     await expect(page.locator('body')).not.toContainText('Fictional <b>literal</b> announcement content.');
     expect(f.errors).toEqual([]);
@@ -165,7 +156,7 @@ test('safe rich content and announcement controls reflow with keyboard and enlar
     expect(scan.violations.map(item => ({ id: item.id, target: item.nodes.map(node => node.target) }))).toEqual([]);
     await page.screenshot({ path: '/tmp/etsis-announcements-phone.png' });
     expect(await f.dialog.evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
-    await f.dialog.getByRole('button', { name: 'Mark as read', exact: true }).scrollIntoViewIfNeeded();
+    await f.dialog.getByRole('button', { name: 'Delete announcement', exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: '/tmp/etsis-announcements-phone.png' });
     await page.keyboard.press('Escape');
     await expect(f.trigger).toBeFocused();

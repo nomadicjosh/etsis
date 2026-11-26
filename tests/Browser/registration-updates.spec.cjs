@@ -48,22 +48,17 @@ for (const staff of [false, true]) test(`${staff ? 'staff' : 'portal'} reads and
     await expect(f.section.locator('li')).toHaveCount(2);
     await expect(f.section).toContainText('Fictional <b>world history</b>');
     await expect(f.section.locator('b')).toHaveCount(0);
-    await f.section.getByRole('button', { name: 'Mark as read', exact: true }).first().click();
-    await expect(f.section).toContainText('Registration update marked as read.');
-    await expect(f.section.locator('li')).toHaveCount(1);
-    await f.section.getByLabel('Show read updates', { exact: true }).check();
-    await expect(f.section.locator('li')).toHaveCount(2);
+    await expect(f.section.getByRole('button', { name: 'Mark as read', exact: true })).toHaveCount(0);
     await f.section.getByRole('button', { name: 'Delete update', exact: true }).first().click();
     await expect(f.section).toContainText('Registration update deleted.');
     await expect(f.section.locator('li')).toHaveCount(1);
     await expect(f.dialog.locator('.workspace-notification-entry')).toHaveCount(0);
     await page.keyboard.press('Escape'); await page.reload();
     await f.trigger.click(); await f.disclosure.click();
-    await f.section.getByLabel('Show read updates', { exact: true }).check();
     await expect(f.section.locator('li')).toHaveCount(1);
     await expect(f.section).not.toContainText('Fictional 100');
     expect(f.requests.filter(row => row.method === 'POST').map(row => row.path))
-        .toEqual([`/portal/api/registration-updates/${id(100)}/read/`, `/portal/api/registration-updates/${id(100)}/delete/`]);
+        .toEqual([`/portal/api/registration-updates/${id(100)}/delete/`]);
     expect(await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } })))
         .toEqual({ local: {}, session: {} });
     expect(f.errors).toEqual([]);
@@ -77,7 +72,7 @@ test('updates page in both directions and clear private content after access is 
     await f.section.getByRole('button', { name: 'Previous updates', exact: true }).click();
     await expect(f.section.locator('li')).toHaveCount(20);
     f.deny();
-    await f.section.getByRole('button', { name: 'Refresh registration updates', exact: true }).click();
+    await f.disclosure.click(); await f.disclosure.click();
     await expect(f.dialog).toHaveCount(0);
     await expect(page.locator('body')).not.toContainText('Fictional <b>world history</b>');
     expect(f.errors).toEqual([]);
@@ -92,7 +87,7 @@ test('closing rejects a late update and controls reflow at 320px with enlarged t
     await page.route('**/portal/api/registration-updates/?*', async route => {
         arrived(); await gate; await route.fulfill({ json: { items: [], next: null } });
     });
-    await f.section.getByRole('button', { name: 'Refresh registration updates', exact: true }).click();
+    await f.disclosure.click(); await f.disclosure.click();
     await requested; await f.disclosure.click(); release();
     await expect(f.section.locator('.campus-announcements-body')).toBeEmpty();
     await page.unroute('**/portal/api/registration-updates/?*');

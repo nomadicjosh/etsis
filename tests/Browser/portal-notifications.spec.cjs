@@ -28,33 +28,16 @@ async function fixture(page) {
     await expect(page.getByRole('button', { name: 'Save personal information', exact: true })).toBeVisible();
     return { errors, writes, deny: () => { denied = true; } };
 }
-test('owner actions use shared toasts and retain only sound/display choices across portal and staff pages', async ({ page }) => {
+test('owner action feedback stays private and its notification area contains no preferences', async ({ page }) => {
     const f = await fixture(page);
     await page.getByLabel('What would you like us to call you?').fill('Avery');
     await page.getByRole('button', { name: 'Save personal information', exact: true }).click();
-    await expect(page.locator('#campus-notice .toast')).toContainText('Your contact information is up to date.');
-    expect(f.writes).toHaveLength(1);
-    expect(f.writes[0].version).toBe(0);
-    expect(await page.evaluate(() => window.testAudioContexts)).toBe(0);
     await trigger(page).click();
     await expect(dialog(page)).toContainText('Your contact information is up to date.');
-    await page.getByLabel('Notification sound', { exact: true }).selectOption('piano');
-    await page.getByRole('button', { name: 'Test notification sound', exact: true }).click();
-    await expect(dialog(page)).toContainText('Sound preview played.');
-    await page.getByLabel('Keep notifications on screen until dismissed', { exact: true }).check();
-    const storage = await page.evaluate(() => ({ local: { ...localStorage }, session: { ...sessionStorage } }));
-    expect(storage).toEqual({ local: { 'etsis.workspace.notification-preferences':
-        JSON.stringify({ sound: true, keep_visible: true, sound_id: 'piano' }) }, session: {} });
-    await page.screenshot({ path: '/tmp/etsis-portal-notifications-desktop.png' });
-    await page.keyboard.press('Escape');
-    await expect(trigger(page)).toBeFocused();
-    await page.route('**/sis/**', route => route.fulfill({ json: { items: [], cards: [], intake: [], pipeline: [], queue: [] } }));
-    await page.goto('/admin/');
-    await page.getByRole('button', { name: 'Recent workspace notifications', exact: true }).click();
-    await expect(page.getByLabel('Notification sound', { exact: true })).toHaveValue('piano');
-    await expect(page.getByLabel('Play notification sounds', { exact: true })).toBeChecked();
-    await expect(page.getByRole('dialog')).not.toContainText('Your contact information is up to date.');
-    expect(await page.evaluate(() => window.testAudioContexts)).toBe(1);
+    await expect(dialog(page).locator('input,select')).toHaveCount(0);
+    await expect(dialog(page).getByRole('button', { name: 'Delete notification', exact: true })).toBeVisible();
+    expect(f.writes).toHaveLength(1);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
 test('portal notifications clear after access denial and page leave without changing action requests', async ({ page }) => {
@@ -93,7 +76,7 @@ test('portal feedback respects modal focus, narrow reflow and accessible prefere
     await page.setViewportSize({ width: 320, height: 812 });
     await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
     await trigger(page).click();
-    await expect(page.getByLabel('Notification sound', { exact: true })).toHaveValue('tone');
+    await expect(dialog(page).locator('input,select')).toHaveCount(0);
     const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(scan.violations.map(item => ({ id: item.id, targets: item.nodes.map(node => node.target) }))).toEqual([]);
     await page.screenshot({ path: '/tmp/etsis-portal-notifications-phone.png' });
@@ -106,7 +89,6 @@ test('portal feedback respects modal focus, narrow reflow and accessible prefere
     expect(await page.evaluate(() => ({ width: document.documentElement.scrollWidth, viewport: innerWidth,
         offset: scrollX }))).toEqual({ width: 320, viewport: 320, offset: 0 });
     expect(await dialog(page).evaluate(node => node.scrollWidth <= node.clientWidth)).toBe(true);
-    await page.getByLabel('Notification sound', { exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: '/tmp/etsis-portal-notifications-phone-controls.png' });
     await page.keyboard.press('Escape');
     await expect(trigger(page)).toBeFocused();

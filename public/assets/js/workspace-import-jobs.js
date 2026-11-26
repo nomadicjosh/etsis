@@ -126,7 +126,7 @@ window.createWorkspaceImportJobs = ({ node, request, task, openDrawer, can, noti
     return { activity, detail, people };
 };
 
-window.createImportUpdates = ({ node, request, labels, changed = () => {} }) => {
+window.createImportUpdates = ({ node, request, labels, changed = () => {}, notificationsOnly = false }) => {
     const text = key => labels[key] || key;
     let host = null, disposed = false, serial = 0;
     const icon = name => node('i', { class: `bi bi-${name}`, 'aria-hidden': 'true' });
@@ -152,7 +152,7 @@ window.createImportUpdates = ({ node, request, labels, changed = () => {} }) => 
                     catch { if (!disposed) status.textContent = text('failed'); }
                     finally { actions.querySelectorAll('button').forEach(el => { el.disabled = false; }); }
                 };
-                if (item.unread) actions.append(button('mark', 'check2', () => mutate('read')));
+                if (item.unread && !notificationsOnly) actions.append(button('mark', 'check2', () => mutate('read')));
                 actions.append(button('delete', 'trash', () => mutate('remove')));
                 list.append(node('li', { class: 'registration-update-card border rounded mb-3 text-start' },
                     node('h3', { class: 'h6' }, text(item.state)),
@@ -170,10 +170,16 @@ window.createImportUpdates = ({ node, request, labels, changed = () => {} }) => 
         mount(target) {
             host = target;
             include = node('input', { type: 'checkbox', class: 'form-check-input', id: 'import-updates-include' });
+            include.checked = notificationsOnly;
             include.addEventListener('change', () => load());
             status = node('p', { role: 'status', class: 'form-text' }); content = node('div');
             host.replaceChildren(node('p', {}, text('notice_help')), node('div', { class: 'form-check mb-3' }, include,
                 node('label', { class: 'form-check-label', for: include.id }, text('include'))), button('refresh', 'arrow-clockwise', () => load()), status, content);
+            if (notificationsOnly) {
+                include.parentElement.hidden = true;
+                host.querySelector(':scope > button').hidden = true;
+                host.querySelector(':scope > p').remove();
+            }
             load();
         },
         destroy() { disposed = true; serial++; host?.replaceChildren(); host = null; },

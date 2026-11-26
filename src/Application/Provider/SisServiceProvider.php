@@ -282,6 +282,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlAdmissionPolicyRepository::class,
             \Domain\Admissions\Repository\AdmissionCaseworkRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlAdmissionCaseworkRepository::class,
+            \Domain\AcademicRecord\Repository\AcademicUpdatesRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlAcademicUpdatesRepository::class,
             \Domain\Registration\Repository\RegistrationUpdatesRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlRegistrationUpdatesRepository::class,
             \Domain\Advising\Repository\AdvisingUpdatesRepository::class =>
@@ -298,6 +300,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlProgramDiscoveryRepository::class,
             \Domain\Portal\Repository\AnnouncementRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlAnnouncementRepository::class,
+            \Domain\Person\Repository\NotificationPreferencesRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlNotificationPreferencesRepository::class,
             \Domain\Person\Repository\PersonProfileRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlPersonProfileRepository::class,
             \Domain\Person\Repository\PersonAccountRepository::class =>

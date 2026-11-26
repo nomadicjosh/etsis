@@ -59,6 +59,7 @@ final readonly class InstitutionalCreditLedger
         private WorkPursuitLedger $pursuits,
         private \Domain\AcademicRecord\Repository\GradeChangeRepository $changes,
         private CourseworkGradeService $coursework,
+        private AcademicNotifications $notifications,
     ) {
     }
 
@@ -675,6 +676,12 @@ final readonly class InstitutionalCreditLedger
                         $current["version"],
                     );
                 }
+                $notification = $requested ? null : $this->notifications->record(
+                    $root->credit(),
+                    $section,
+                    $op,
+                    $d["amendment"],
+                );
                 $this->audit->record(
                     $actor,
                     $requested
@@ -705,6 +712,9 @@ final readonly class InstitutionalCreditLedger
                     throw new ConcurrentModificationException(
                         "This grade review expired during confirmation. Review again.",
                     );
+                }
+                if ($notification !== null) {
+                    $this->notifications->verify($notification);
                 }
             }
             $this->actor($actor);
@@ -1026,6 +1036,12 @@ final readonly class InstitutionalCreditLedger
                     new EntityId($row["enrollment_id"]),
                     $row["version"],
                 );
+                $notification = $d["outcome"] === 'approved' ? $this->notifications->record(
+                    $root->credit(),
+                    $section,
+                    new EntityId($d['operation_id']),
+                    true
+                ) : null;
                 $this->audit->record($actor, "academic.grade_change_" . $d["outcome"], $id);
                 if ($d["expires_at"] <= $this->clock->now()->getTimestamp()) {
                     throw new ConcurrentModificationException(
@@ -1037,6 +1053,9 @@ final readonly class InstitutionalCreditLedger
                     !$this->same($root->credit(), $this->records->projection(new EntityId($d["credit_id"])))
                 ) {
                     throw new CorruptHistoryException();
+                }
+                if ($notification !== null) {
+                    $this->notifications->verify($notification);
                 }
             }
             $this->actor($actor);
@@ -1272,7 +1291,7 @@ final readonly class InstitutionalCreditLedger
             throw new ValidationException([
                 [
                     "field" => "enrollment",
-                    "message" => \Codefy\Framework\Helpers\trans(
+                    "message" => \Codefy\Framework\Helpers\trans_html(
                         "Only a tracked withdrawal with an unchanged academic award can be reinstated. " .
                         "Resolve later academic changes and pending grade requests separately."
                     ),

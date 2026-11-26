@@ -930,6 +930,12 @@ final class SisFixture
                 new \Infrastructure\Persistence\Repository\SqlGradebookRepository($this->sql),
                 $this->comparisonPolicies(),
             ),
+            new \Domain\AcademicRecord\Service\AcademicNotifications(
+                new \Infrastructure\Persistence\Repository\SqlAcademicUpdatesRepository($this->sql),
+                new \Infrastructure\Persistence\Repository\SqlAcademicCreditRepository($this->sql),
+                $this->admissions,
+                $this->clock,
+            ),
         );
     }
     public function workPursuitLedger(): \Domain\AcademicRecord\Service\WorkPursuitLedger

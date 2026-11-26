@@ -98,6 +98,8 @@
         labels: config.notification_labels, importLabels: config.import_labels, request,
     });
 
+    void notifications.loadPreferences();
+
     async function send(path, method = 'GET', data, accept = 'application/json') {
         const multipart = typeof FormData !== 'undefined' && data instanceof FormData;
         const response = await fetch(path, {
@@ -756,6 +758,7 @@
 
     function openDrawer(title, eyebrow = 'CONNECTED RECORD', options = {}) {
         if (!teachingStudio.canLeave()) throw new Error('Save or discard your worksheet changes before opening another task.');
+        notifications.stopPreview();
         cleanupFormConditions();
         relationalStudio?.cleanup();
         $one('#workspace-alert').hidden = true;
@@ -1277,6 +1280,12 @@
                 if (can('sis:person:manage') && can('sis:communications:manage')) extra.push({ label: 'Message person', icon: 'envelope',
                     run: () => operations.messageRecord('person', id, () => openPerson(id), body) });
                 if (person.ownerUserId && can('admin:edit:user')) extra.push({ label: 'Manage sign-in account', icon: 'key', run: () => peopleStudio.account(person) });
+                if (can('sis:person:manage')) extra.push({ label: config.notification_labels.preferences,
+                    icon: 'bell', run: async () => {
+                        const host = openDrawer(config.notification_labels.preferences);
+                        await window.createPersonNotificationPreferences({ node, request, labels: config.notification_labels,
+                            player: notifications }).mount(host, `/sis/people/${person.id.value}/notification-preferences/`);
+                    } });
                 if (can('sis:person:manage')) extra.push({ label: 'Account setup', icon: 'envelope', run: () => accountSetup(person) });
                 if (can('sis:person:assign-id')) extra.push({ label: 'Change institutional ID', icon: 'person-vcard', run: () => editInstitutionalId(person) });
                 if (can('sis:person:manage') && can('sis:audit:read') && can('sis:history:verify')) extra.push({ label: 'Check profile history', icon: 'shield-check', run: () => historyChecks.open('person', person.id.value, () => openPerson(person.id.value)) });

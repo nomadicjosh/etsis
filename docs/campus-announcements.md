@@ -16,17 +16,17 @@ Editing approved news returns it to draft. Its revised wording requires fresh ap
 
 ## Read and return
 
-Open the header bell, then expand **Campus announcements**. The list loads on demand, twenty items per page, newest content identities first. Use **More announcements**, **Previous announcements** and **Refresh announcements** to navigate the live list. There is no background polling. New publication or read changes can move items between pages; refresh from the beginning for the current list.
+Open the header bell, then expand **Campus announcements**. The list loads on demand, twenty items per page, newest content identities first. Use **More announcements** and **Previous announcements** to navigate the live list; close and reopen the section to reload it. There is no background polling. New publication or read changes can move items between pages; reopen from the beginning for the current list.
 
-Open a title to read the full announcement, then use **Mark as read** if desired. Opening alone does not mark it read. **Back to list** returns to the accepted page and filter; **Show read items** includes announcements already read by this account. Reopening the panel or signing in again reads the persisted state from the server. Another account has its own state, even if it has registrar or publishing permissions.
+Open a title to read the full announcement and automatically mark that displayed revision read. **Back to list** returns to the accepted page. Read and unread notices stay listed until deleted. Reopening the panel or signing in again reads persisted state from the server. Another account has its own state, even if it has registrar or publishing permissions.
 
 The reader preserves approved formatting and useful links using the existing server sanitizer and local DOMPurify renderer. Plain text retains literal angle brackets. The drawer/dialog keeps keyboard focus, visible errors and narrow-screen reflow; closing the disclosure or panel discards its private page contents and ignores late responses.
 
-Read state means that this account marked the displayed revision read. It is **not a policy acknowledgement, proof of understanding, required acceptance or legal delivery receipt**. A stale request cannot hide a later publication. Repeat requests for the same available revision retain the original read timestamp without another audit entry. Each account/content pair keeps one current revision and read timestamp, not a historical acknowledgement ledger.
+Read state means that this account opened the displayed revision. It is **not a policy acknowledgement, proof of understanding, required acceptance or legal delivery receipt**. A stale request cannot hide a later publication. Repeat requests for the same available revision retain the original read timestamp without another audit entry. Each account/content pair keeps one current revision and read timestamp, not a historical acknowledgement ledger.
 
 ## Delete an announcement from your drawer
 
-Use **Delete announcement** beside a list item or inside its opened detail. The server physically deletes this account's read metadata and hides the displayed publication, including from **Show read items**. Reopening and reloading do not restore it. Other accounts and the underlying published campus news remain unchanged; deleting a personal notification does not archive institutional content.
+Use **Delete announcement** beside a list item or inside its opened detail. The server physically deletes this account's read metadata and hides the displayed publication. Reopening and reloading do not restore it. Other accounts and the underlying published campus news remain unchanged; deleting a personal notification does not archive institutional content.
 
 Because an announcement is shared news rather than a separate copy for each reader, the server retains one minimal account/content/revision suppression marker. It has no wording, read timestamp or revision history. This prevents the same publication from immediately being delivered again. A later reviewed republication has a higher revision and can appear as a new unread announcement. Retrying deletion of the earlier revision never hides that newer revision. There is no notification trash/archive or undo screen.
 
@@ -34,9 +34,9 @@ Deletion requires the displayed revision, current signed-in ownership and CSRF. 
 
 ## Sound and temporary feedback
 
-Initial loading, opening older unread items, paging and marking read are silent. A deliberate refresh can show **New campus announcements are available** when a newer content identity or a changed previously observed revision appears. This uses the existing optional, rate-limited [notification sound](workspace-notifications.md#sound-and-display-preferences); it sends no message and does not mark anything read. The observed identity/version set is bounded to one hundred page-local entries. Reopening starts a fresh silent observation.
+Loading, reading, paging and reopening are silent. There is no refresh toolbar in the notification center and no duplicate action toast for reading or deleting a notice. Sound/display settings are under the person's workspace drawer or the portal's **Personal information** screen; see [notification preferences](workspace-notifications.md#sound-and-display-preferences).
 
-The bell's numeric badge still counts recent temporary action feedback. It is not an institution-wide unread-announcement count. **Clear recent notifications** clears temporary feedback only; announcement content and account read state remain in their own workflow. Sound/display preferences remain the only notification values saved in browser storage. Published wording, content identities, reading state and other institutional data are never written there.
+**Clear recent notifications** clears temporary action feedback only. Announcement content and account read state remain in their own workflow. No announcement content, identities, reading state or notification preferences enter browser storage.
 
 ## Privacy and implementation
 

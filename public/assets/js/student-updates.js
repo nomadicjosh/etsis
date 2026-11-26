@@ -1,8 +1,8 @@
 /* Private, account-pinned outcome notices. Loading and deletion are explicit; nothing is persisted in this browser. */
 'use strict';
-window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'registration' }) => {
-    if (!['registration', 'advising'].includes(kind)) throw new Error('Unsupported student update source.');
-    const advising = kind === 'advising';
+window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'registration', notificationsOnly = false, changed = () => {} }) => {
+    if (!['registration', 'advising', 'academic'].includes(kind)) throw new Error('Unsupported student update source.');
+    const advising = kind === 'advising', academic = kind === 'academic';
     const endpoint = `/portal/api/${kind}-updates/`;
     const advisingDefaults = {
         advising_updates: 'Advising updates', advising_loading: 'Loading advising updates…',
@@ -38,7 +38,7 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
         announcement_unread: 'Unread', announcement_read: 'Read',
     };
     const text = key => {
-        const name = advising ? key.replace(/^registration_/, 'advising_') : key;
+        const name = kind === 'registration' ? key : key.replace(/^registration_/, `${kind}_`);
         return labels[name] || advisingDefaults[name] || defaults[name];
     };
     const icon = name => node('i', { class: `bi bi-${name}`, 'aria-hidden': 'true' });
@@ -60,7 +60,8 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
         if ([401, 403].includes(error.status)) {
             content.replaceChildren(); seen.clear();
             status.textContent = text('registration_denied');
-        } else status.textContent = text([404, 409].includes(error.status) ? 'registration_changed' : 'registration_failed');
+        } else status.textContent = notificationsOnly ? labels.notifications_retry
+            : text([404, 409].includes(error.status) ? 'registration_changed' : 'registration_failed');
         status.focus();
     }
     async function load(after = null, stack = [], announce = false) {
@@ -80,7 +81,7 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
             baseline = true; cursor = after; previous = stack;
             const list = node('ul', { class: 'list-unstyled registration-updates-list' });
             for (const item of result.items) {
-                if (!(advising ? ['open', 'closed', 'cancelled'] : ['registered', 'removed']).includes(item.status)) throw new Error('Invalid registration outcome.');
+                if (!(advising ? ['open', 'closed', 'cancelled'] : academic ? ['posted', 'corrected'] : ['registered', 'removed']).includes(item.status)) throw new Error('Invalid registration outcome.');
                 const card = node('li', { class: 'registration-update-card border rounded mb-3 text-start' },
                     node('h3', { class: 'h6' }, text(`registration_${item.status}`)),
                     node('p', { class: 'fw-semibold text-break mb-1' }, advising ? item.program_code : `${item.course_code} · ${item.section_code} · ${item.term_code}`),
@@ -90,9 +91,10 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
                     node('span', { class: 'badge text-bg-light border mb-2' }, text(item.unread ? 'announcement_unread' : 'announcement_read')));
                 card.dataset.updateId = item.id;
                 const actions = node('div', { class: 'd-flex flex-wrap gap-2' });
-                if (item.unread) actions.append(button('registration_mark', 'check2', () => mutate(item, 'read')));
+                if (item.unread && !notificationsOnly) actions.append(button('registration_mark', 'check2', () => mutate(item, 'read')));
                 actions.append(button('registration_delete', 'trash', () => mutate(item, 'delete')),
-                    advising ? button('registration_link', 'arrow-right', () => openCheckIn(item))
+                    academic ? button('registration_link', 'arrow-right', () => openAcademicRecord(item))
+                        : advising ? button('registration_link', 'arrow-right', () => openCheckIn(item))
                         : node('a', { href: '/portal/student/registration/', class: 'btn btn-outline-secondary btn-sm' },
                             icon('arrow-right'), text('registration_link')));
                 card.append(actions); list.append(card);
@@ -113,11 +115,33 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
         try {
             await request(`${endpoint}${encodeURIComponent(item.id)}/${action}/`, 'POST', { revision: item.revision });
             if (!active(turn)) return;
-            const loaded = await load(cursor, previous);
+            const loaded = await load(cursor, previous); changed();
             if (loaded && !disposed && root?.isConnected) {
                 status.textContent = text(action === 'delete' ? 'registration_deleted' : 'registration_marked');
                 status.focus();
             }
+        } catch (error) { failed(turn, error); }
+        finally { if (active(turn)) controls(false); }
+    }
+    async function openAcademicRecord(item) {
+        const turn = ++serial; controls(true);
+        try {
+            if (typeof item.id !== 'string' || !/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(item.id)) throw new Error('Invalid academic notification.');
+            const result = await request(`${endpoint}${encodeURIComponent(item.id)}/`);
+            if (!active(turn)) return;
+            await request(`${endpoint}${encodeURIComponent(item.id)}/read/`, 'POST', { revision: item.revision });
+            if (!active(turn)) return;
+            const back = button('registration_back', 'arrow-left', async () => { await load(cursor, previous); (content.querySelector('button') || status).focus(); });
+            const title = node('h3', { class: 'h6 text-break', tabindex: '-1' }, `${result.course_code} · ${result.course_title}`);
+            const facts = node('dl', { class: 'record-summary record-summary-paired' });
+            for (const [key, value] of [['academic_grade', result.grade || text('academic_ungraded')],
+                ['academic_term', result.term_code], ['academic_credits', String(result.completed_milli / 1000)]]) {
+                facts.append(node('div', {}, node('dt', {}, text(key)), node('dd', {}, value)));
+            }
+            content.replaceChildren(node('div', { class: 'd-flex flex-wrap gap-2 my-3' }, back,
+                button('registration_delete', 'trash', () => mutate(item, 'delete'))), title,
+                node('p', { class: 'form-text' }, text('academic_current_help')), facts);
+            status.textContent = ''; title.focus(); changed();
         } catch (error) { failed(turn, error); }
         finally { if (active(turn)) controls(false); }
     }
@@ -132,7 +156,7 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
                 const loaded = await load(cursor, previous);
                 if (loaded) {
                     const original = [...content.querySelectorAll('[data-update-id]')].find(card => card.dataset.updateId === item.id);
-                    (original?.querySelector('button') || refresh).focus();
+                    (original?.querySelector('button') || status).focus();
                 }
             });
             const selected = node('section');
@@ -151,12 +175,17 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
         status = node('p', { role: 'status', tabindex: '-1', class: 'form-text' });
         content = node('div');
         include = node('input', { id: `${kind}-updates-include-read`, type: 'checkbox', class: 'form-check-input' });
+        include.checked = notificationsOnly;
         include.addEventListener('change', () => { if (!busy) void load(); });
         refresh = button('registration_refresh', 'arrow-clockwise', () => load(null, [], true));
         root.replaceChildren(node('p', { class: 'form-text' }, text('registration_help')),
             node('div', { class: 'form-check my-3' }, include,
                 node('label', { for: include.id, class: 'form-check-label' }, text('registration_include'))),
             refresh, status, content);
+        if (notificationsOnly) {
+            refresh.hidden = true; include.parentElement.hidden = true;
+            root.querySelector(':scope > p.form-text')?.remove();
+        }
         void load();
     }
     function destroy() { disposed = true; ++serial; seen.clear(); root?.replaceChildren(); root = null; }

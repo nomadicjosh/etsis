@@ -530,3 +530,8 @@ The existing protected journal is authoritative. The singleton `sis_grade_compar
 ## Earned continuing education units
 
 [Earned CEUs](earned-ceu-records.md) are explicit, reasoned academic-record decisions under an independent duty, with accepted offering and actual-completion evidence, reviewed corrections/revocation and preserved earlier facts. They use the existing credit stream and do not change academic quantities, grades/GPA, registration load or charges. CEUs are excluded from undergraduate/graduate academic transcripts and appear only in deliberately selected CEU transcript formats. Closed/unknown/transfer CEU resolution remains open.
+
+
+## Personal final-grade notices
+
+Newly accepted final-grade posting, direct correction and independent correction approval also create a [private academic notification](workspace-notifications.md#private-final-grade-updates) in the same transaction. Pending/rejected/cancelled correction requests stay silent. Only one latest disposable notice is retained per credit. It links to the owner's current verified record without copying the grade or correction reason. Accepted retries and projection replay never recreate notices, and deleting a notice leaves all academic facts intact.

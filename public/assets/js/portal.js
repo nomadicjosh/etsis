@@ -488,6 +488,7 @@
         const result = await request('/portal/api/me/');
         if (pageLeaving) throw new Error('This page is closing.');
         me = result;
+        void notifications?.loadPreferences();
         return me;
     }
 
@@ -715,7 +716,10 @@
             } },
         );
         container.append(surface('Educational background', education));
-
+        const notificationPreferences = el('div');
+        container.append(surface(notificationLabels.preferences, notificationPreferences));
+        void window.createPersonNotificationPreferences({ node: el, request, labels: notificationLabels,
+            player: notifications }).mount(notificationPreferences, '/portal/api/notification-preferences/', { expanded: false });
     }
 
     function submittedApplications(applications, documentGuards = null) {

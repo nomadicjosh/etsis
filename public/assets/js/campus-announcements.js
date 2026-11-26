@@ -1,7 +1,7 @@
 /* Owner-only editorial announcements. Content and reading state never enter browser storage. */
 window.createCampusAnnouncements = function (ui) {
     'use strict';
-    const { node, request, labels = {}, notify } = ui;
+    const { node, request, labels = {}, notify, notificationsOnly = false } = ui;
     const text = (key, fallback) => labels[key] || fallback;
     const icon = name => node('i', { class: `bi bi-${name}`, 'aria-hidden': 'true' });
     let root, content, status, include, refresh, serial = 0, disposed = false;
@@ -16,7 +16,9 @@ window.createCampusAnnouncements = function (ui) {
         if (!active(turn)) return;
         if ([401, 403].includes(error.status)) { destroy(); return; }
         status.setAttribute('role', 'alert');
-        status.textContent = error.status === 409 || error.status === 404
+        status.textContent = notificationsOnly
+            ? text('notifications_retry', 'These notifications are unavailable. Reopen this section to try again.')
+            : error.status === 409 || error.status === 404
             ? text('announcement_changed', 'This announcement changed or is unavailable. Refresh the list.')
             : text('announcement_failed', 'Announcements could not load. Use Refresh announcements to try again.');
         status.focus();
@@ -77,6 +79,11 @@ window.createCampusAnnouncements = function (ui) {
             const result = await request(`/portal/api/announcements/${encodeURIComponent(id)}/`);
             if (!active(turn)) return;
             if (result.id !== id || typeof result.content !== 'string') throw new Error('Invalid announcement.');
+            if (notificationsOnly && result.unread) {
+                await request(`/portal/api/announcements/${encodeURIComponent(id)}/read/`, 'POST', { revision: result.revision });
+                if (!active(turn)) return;
+                result.unread = false;
+            }
             const heading = node('h3', { class: 'h5 text-break', tabindex: '-1' }, result.title);
             const message = node('div', { class: 'campus-announcement-content' },
                 window.CampusRichText.article(result, node));
@@ -94,7 +101,7 @@ window.createCampusAnnouncements = function (ui) {
                 } catch (error) { failed(turn, error); }
                 finally { if (active(turn)) control.disabled = false; }
             });
-            mark.hidden = !result.unread;
+            mark.hidden = notificationsOnly || !result.unread;
             const back = button('announcement_back', 'Back to list', 'arrow-left', async () => {
                 await load(cursor, previous);
                 if (!disposed && root.isConnected) status.focus();
@@ -111,6 +118,7 @@ window.createCampusAnnouncements = function (ui) {
         root = container;
         status = node('p', { role: 'status', tabindex: '-1', class: 'form-text' });
         include = node('input', { id: 'campus-announcements-include-read', type: 'checkbox', class: 'form-check-input' });
+        include.checked = notificationsOnly;
         include.addEventListener('change', () => { void load(); });
         refresh = button('announcement_refresh', 'Refresh announcements', 'arrow-clockwise', () => load(null, [], true));
         content = node('div');
@@ -119,6 +127,7 @@ window.createCampusAnnouncements = function (ui) {
         node('div', { class: 'form-check my-3' }, include,
             node('label', { for: include.id, class: 'form-check-label' },
                 text('announcement_include', 'Show read items'))), refresh, status, content);
+        if (notificationsOnly) { refresh.hidden = true; include.parentElement.hidden = true; root.querySelector(':scope > p.form-text')?.remove(); }
         void load();
     }
     function destroy() {

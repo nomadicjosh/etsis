@@ -22,6 +22,12 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $notificationPreferences = \Application\Http\Controller\NotificationPreferencesController::class;
+    $router->get('/sis/people/{id}/notification-preferences/', [$notificationPreferences, 'view'])
+        ->name('sis.people.notification-preferences');
+    $router->post('/sis/people/{id}/notification-preferences/', [$notificationPreferences, 'save'])
+        ->name('sis.people.notification-preferences.save');
+
     $website = \Application\Http\Controller\WebsitePublicationController::class;
     $router->get('/sis/website/pages/', [$website, 'pages']);
     $router->get('/sis/website/pages/{id}/', [$website, 'page']);

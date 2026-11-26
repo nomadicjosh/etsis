@@ -245,3 +245,8 @@ This foundation covers current person creation, names, privacy, identifiers, per
 ## Import new people
 
 Use **Import data → Import people** for create-only CSV intake. [The import guide](catalog-imports.md#import-people) explains mapping, required email uniqueness, server processing, progress and completion notifications. Both import and person-management permission are required. Every accepted row uses the ordinary protected canonical person/account creation path and awaits private password setup. The import never merges an existing person, creates a second person on a role change, imports historical academic facts or assigns student/employment capabilities.
+
+
+## Notification preferences
+
+Use **People → person → More → Notification preferences** to manage that person's optional sound, sound choice and keep-visible setting; **Back to record** returns to the person. An authorized person manager may edit another person's choices without changing their own runtime preferences. Students use **Personal information → Notification preferences** in the portal. Both editors save the same person-owned server record; previewing a sound saves nothing. See [the preference and privacy guide](workspace-notifications.md#sound-and-display-preferences). The header bell contains notices, record links and deletion controls.

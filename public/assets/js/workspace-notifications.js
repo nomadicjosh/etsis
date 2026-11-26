@@ -1,9 +1,8 @@
-/* Bounded, page-local action feedback. Browser storage contains preferences only. */
+/* Bounded action feedback with person-owned server preferences. No notification data enters browser storage. */
 window.createWorkspaceNotifications = function (ui) {
     'use strict';
     const { node, stack, trigger, bootstrap, labels = {}, importLabels = {}, request } = ui;
     const text = (key, fallback) => labels[key] || fallback;
-    const preferenceKey = 'etsis.workspace.notification-preferences';
     const sounds = Object.freeze({
         tone: null,
         message: '/assets/sounds/message-notification-4.wav',
@@ -11,41 +10,45 @@ window.createWorkspaceNotifications = function (ui) {
         bird: '/assets/sounds/bird_notification.mp3',
         piano: '/assets/sounds/piano-notification-5b.mp3',
     });
-    const soundNames = { tone: ['sound_tone', 'Short tone'], message: ['sound_message', 'Message'],
-        warm: ['sound_warm', 'Warm success'], bird: ['sound_bird', 'Bird'], piano: ['sound_piano', 'Piano'] };
     let preferences = { sound: false, keep_visible: false, sound_id: 'tone' };
-    try {
-        const raw = localStorage.getItem(preferenceKey);
-        const saved = raw && raw.length <= 256 ? JSON.parse(raw) : null;
-        if (saved && Object.keys(saved).every(key => ['sound', 'keep_visible', 'sound_id'].includes(key))
-            && typeof saved.sound === 'boolean' && typeof saved.keep_visible === 'boolean') {
-            preferences = { sound: saved.sound, keep_visible: saved.keep_visible,
-                sound_id: typeof saved.sound_id === 'string' && Object.hasOwn(sounds, saved.sound_id)
-                    ? saved.sound_id : 'tone' };
-        }
-    } catch (_) { /* Storage may be disabled; this page still works. */ }
+    try { localStorage.removeItem('etsis.workspace.notification-preferences'); } catch (_) { /* No browser preference store. */ }
     const history = [], visible = new Map();
     let dialog = null, list = null, empty = null, audio = null, sequence = 0, lastSound = -Infinity;
     let disposed = false;
-    let announcements = null, registrationUpdates = null, advisingUpdates = null, importUpdates = null;
-    let importUnread = 0, importTimer = null, importLoading = false, importStopped = false;
+    let announcements = null, registrationUpdates = null, advisingUpdates = null, academicUpdates = null, importUpdates = null;
+    let persistentUnread = 0, importTimer = null, importLoading = false, importStopped = false, identityKnown = false;
+    let refreshAgain = false;
     let activeSound = null, pendingSound = null, decodedSound = null, soundGeneration = 0;
     const icons = { success: 'check-circle', info: 'info-circle', warning: 'exclamation-triangle' };
     const titles = { success: 'Completed', info: 'Update', warning: 'Needs attention' };
     const glyph = name => node('i', { class: `bi bi-${name}`, 'aria-hidden': 'true' });
     const badge = trigger.querySelector('[data-notification-count]');
-    function savePreferences() {
-        try { localStorage.setItem(preferenceKey, JSON.stringify(preferences)); }
-        catch (_) { /* Keep the same preferences in memory for this page. */ }
+    let preferenceGeneration = 0;
+    function applyPreferences(values) {
+        if (!values || typeof values.sound !== 'boolean' || typeof values.keep_visible !== 'boolean'
+            || !Object.hasOwn(sounds, values.sound_id)) return false;
+        preferenceGeneration++; stopSound();
+        preferences = { sound: values.sound, sound_id: values.sound_id, keep_visible: values.keep_visible };
+        visible.forEach(configure); return true;
     }
-    async function sound(preview = false) {
-        if (!preferences.sound || document.hidden || disposed) return false;
+    async function loadPreferences() {
+        if (!request || disposed) return;
+        identityKnown = true; void refreshPrivateCounts();
+        const turn = ++preferenceGeneration;
+        try {
+            const data = await request('/portal/api/notification-preferences/');
+            if (!disposed && !importStopped && turn === preferenceGeneration) applyPreferences(data.preferences);
+        } catch (_) { /* Defaults remain quiet if this private preference read is unavailable. */ }
+    }
+    async function sound(preview = false, selected = null, canPlay = () => true) {
+        if ((!preview && !preferences.sound) || document.hidden || disposed || !canPlay()) return false;
         const now = performance.now();
         if (!preview && (activeSound || now - lastSound < 2000)) return false;
         if (preview) { ++soundGeneration; stopPlayback(); }
-        const generation = soundGeneration, selection = preferences.sound_id;
-        const currentRequest = () => preferences.sound && !document.hidden && !disposed
-            && soundGeneration === generation && preferences.sound_id === selection;
+        const generation = soundGeneration, selection = preview ? selected : preferences.sound_id;
+        if (!Object.hasOwn(sounds, selection)) return false;
+        const currentRequest = () => (preview || preferences.sound) && !document.hidden && !disposed && canPlay()
+            && soundGeneration === generation && (preview || preferences.sound_id === selection);
         try {
             const Context = window.AudioContext || window.webkitAudioContext;
             if (!Context) return false;
@@ -118,25 +121,32 @@ window.createWorkspaceNotifications = function (ui) {
     }
     function onVisibilityChange() {
         if (document.hidden) { stopSound(); clearTimeout(importTimer); }
-        else refreshImports();
+        else refreshPrivateCounts();
     }
     function updateBadge() {
-        const count = history.length + importUnread;
+        const count = history.length + persistentUnread;
         if (badge) { badge.textContent = String(count); badge.hidden = !count; }
     }
-    async function refreshImports() {
+    async function refreshPrivateCounts() {
         clearTimeout(importTimer);
-        if (!request || !importLabels.notices || disposed || importStopped || document.hidden || importLoading) return;
+        if (!request || !identityKnown || disposed || importStopped || document.hidden) return;
+        if (importLoading) { refreshAgain = true; return; }
         importLoading = true;
         try {
-            const result = await request('/sis/imports/notices/');
-            if (!disposed && !importStopped && Array.isArray(result.items)) {
-                importUnread = result.items.length; updateBadge();
+            let count = 0;
+            const endpoints = ['/portal/api/academic-updates/', ...(importLabels.notices ? ['/sis/imports/notices/'] : [])];
+            for (const endpoint of endpoints) {
+                try {
+                    const result = await request(endpoint);
+                    if (Array.isArray(result.items)) count += result.items.length;
+                } catch (_) { /* One unavailable source does not hide another source's notices. */ }
             }
+            if (!disposed && !importStopped) { persistentUnread = count; updateBadge(); }
         } catch (_) { /* Existing private notifications remain available when the server recovers. */ }
         finally {
             importLoading = false;
-            if (!disposed && !importStopped && !document.hidden) importTimer = setTimeout(refreshImports, 60000);
+            if (refreshAgain) { refreshAgain = false; void refreshPrivateCounts(); }
+            else if (!disposed && !importStopped && !document.hidden) importTimer = setTimeout(refreshPrivateCounts, 60000);
         }
     }
     function unlockSound() {
@@ -225,6 +235,7 @@ window.createWorkspaceNotifications = function (ui) {
         announcements?.destroy(); announcements = null;
         registrationUpdates?.destroy(); registrationUpdates = null;
         advisingUpdates?.destroy(); advisingUpdates = null;
+        academicUpdates?.destroy(); academicUpdates = null;
         importUpdates?.destroy(); importUpdates = null;
         const previous = dialog;
         dialog = list = empty = null;
@@ -242,40 +253,6 @@ window.createWorkspaceNotifications = function (ui) {
             text('title', 'Notifications'));
         const close = node('button', { type: 'button', class: 'btn-close',
             'aria-label': text('close', 'Close notifications'), onclick: closeHistory });
-        const soundControl = node('input', { type: 'checkbox', id: 'workspace-notification-sound',
-            class: 'form-check-input', checked: preferences.sound });
-        const keep = node('input', { type: 'checkbox', id: 'workspace-notification-keep',
-            class: 'form-check-input', checked: preferences.keep_visible });
-        const audioStatus = node('p', { class: 'form-text mb-0', role: 'status' });
-        const selection = node('select', { id: 'workspace-notification-sound-choice', class: 'form-select',
-            'aria-describedby': 'workspace-notification-sound-help' },
-            ...Object.entries(soundNames).map(([value, [key, fallback]]) =>
-                node('option', { value }, text(key, fallback))));
-        selection.value = preferences.sound_id;
-        selection.addEventListener('change', () => {
-            if (!Object.hasOwn(sounds, selection.value)) return;
-            stopSound(); preferences.sound_id = selection.value; savePreferences();
-            audioStatus.textContent = '';
-            if (preferences.sound) unlockSound();
-        });
-        soundControl.addEventListener('change', () => {
-            preferences.sound = soundControl.checked; savePreferences();
-            audioStatus.textContent = '';
-            if (preferences.sound) unlockSound(); else stopSound();
-        });
-        keep.addEventListener('change', () => {
-            preferences.keep_visible = keep.checked; savePreferences();
-            visible.forEach(configure);
-        });
-        const test = node('button', { type: 'button', class: 'btn btn-outline-primary btn-sm', onclick: async () => {
-            if (!soundControl.checked) { soundControl.checked = preferences.sound = true; savePreferences(); }
-            audioStatus.textContent = text('sound_loading', 'Preparing sound…');
-            const playback = sound(true), generation = soundGeneration;
-            const played = await playback;
-            if (audioStatus.isConnected && preferences.sound && soundGeneration === generation) audioStatus.textContent = played
-                ? text('sound_played', 'Sound preview played.') :
-                text('sound_unavailable', 'Sound is unavailable. Visual notifications will still appear.');
-        } }, glyph('volume-up'), text('test_sound', 'Test notification sound'));
         list = node('ol', { class: 'workspace-notification-history list-unstyled mb-0' });
         empty = node('p', { class: 'text-secondary' },
             text('empty', 'There are no notifications from this workspace session.'));
@@ -286,21 +263,6 @@ window.createWorkspaceNotifications = function (ui) {
             node('div', { class: 'workspace-notification-dialog-body' },
                 node('p', { id: 'workspace-notification-help', class: 'text-secondary' }, text('session_help',
                     'Recent action feedback stays only in this page. Reloading or signing out clears it. Recorded decisions and background job status remain in their own workspaces.')),
-                node('div', { class: 'workspace-notification-preferences' },
-                    node('div', { class: 'form-check' }, soundControl,
-                        node('label', { for: soundControl.id, class: 'form-check-label' },
-                            text('sound', 'Play notification sounds'))),
-                    node('div', { class: 'workspace-notification-sound-choice' },
-                        node('label', { for: selection.id, class: 'form-label' }, text('sound_choice', 'Notification sound')),
-                        selection,
-                        node('p', { id: 'workspace-notification-sound-help', class: 'form-text' },
-                            text('sound_help', 'Choose a sound, then test it. Changing this choice does not play audio.'))),
-                    node('div', { class: 'form-check' }, keep,
-                        node('label', { for: keep.id, class: 'form-check-label' },
-                            text('keep_visible', 'Keep notifications on screen until dismissed'))),
-                    node('p', { class: 'form-text' }, text('preference_help',
-                        'Only these display and sound preferences are saved in this browser. Notification messages and campus records are never saved here.')),
-                    test, audioStatus),
                 empty, list,
                 node('button', { type: 'button', class: 'btn btn-outline-secondary mt-3', onclick: () => clear(false) },
                     glyph('trash'), text('clear', 'Clear recent notifications'))));
@@ -314,7 +276,7 @@ window.createWorkspaceNotifications = function (ui) {
                 if (dialog !== currentDialog) return;
                 announcements?.destroy(); announcements = null;
                 if (section.open && dialog === currentDialog) {
-                    announcements = window.createCampusAnnouncements({ node, request, labels, notify });
+                    announcements = window.createCampusAnnouncements({ node, request, labels, notify, notificationsOnly: true });
                     announcements.mount(body);
                 }
             });
@@ -327,13 +289,27 @@ window.createWorkspaceNotifications = function (ui) {
                     if (dialog !== currentDialog) return;
                     importUpdates?.destroy(); importUpdates = null;
                     if (importSection.open) {
-                        importUpdates = window.createImportUpdates({ node, request, labels: importLabels, changed: refreshImports });
+                        importUpdates = window.createImportUpdates({ node, request, labels: importLabels, changed: refreshPrivateCounts, notificationsOnly: true });
                         importUpdates.mount(importBody);
                     }
                 });
                 currentDialog.querySelector('.workspace-notification-dialog-body').prepend(importSection);
             }
             if (window.createStudentUpdates) {
+                const academicBody = node('div', { class: 'campus-announcements-body' });
+                const academicSection = node('details', { class: 'campus-announcements' },
+                    node('summary', {}, glyph('mortarboard'), text('academic_updates', 'Academic updates')), academicBody);
+                academicSection.addEventListener('toggle', () => {
+                    if (dialog !== currentDialog) return;
+                    academicUpdates?.destroy(); academicUpdates = null;
+                    if (academicSection.open) {
+                        academicUpdates = window.createStudentUpdates({ node, request, labels, notify,
+                            kind: 'academic', notificationsOnly: true, changed: refreshPrivateCounts });
+                        academicUpdates.mount(academicBody);
+                    }
+                });
+                currentDialog.querySelector('.workspace-notification-dialog-body').prepend(academicSection);
+
                 const updatesBody = node('div', { class: 'campus-announcements-body' });
                 const updatesSection = node('details', { class: 'campus-announcements' },
                     node('summary', {}, glyph('person-check'), text('registration_updates', 'Registration updates')), updatesBody);
@@ -341,7 +317,7 @@ window.createWorkspaceNotifications = function (ui) {
                     if (dialog !== currentDialog) return;
                     registrationUpdates?.destroy(); registrationUpdates = null;
                     if (updatesSection.open) {
-                        registrationUpdates = window.createStudentUpdates({ node, request, labels, notify });
+                        registrationUpdates = window.createStudentUpdates({ node, request, labels, notify, notificationsOnly: true });
                         registrationUpdates.mount(updatesBody);
                     }
                 });
@@ -353,7 +329,7 @@ window.createWorkspaceNotifications = function (ui) {
                     if (dialog !== currentDialog) return;
                     advisingUpdates?.destroy(); advisingUpdates = null;
                     if (advisingSection.open) {
-                        advisingUpdates = window.createStudentUpdates({ node, request, labels, notify, kind: 'advising' });
+                        advisingUpdates = window.createStudentUpdates({ node, request, labels, notify, kind: 'advising', notificationsOnly: true });
                         advisingUpdates.mount(advisingBody);
                     }
                 });
@@ -373,7 +349,7 @@ window.createWorkspaceNotifications = function (ui) {
         stopSound();
         if (close) closeHistory();
     }
-    function onPageShow() { importStopped = false; refreshImports(); }
+    function onPageShow() { importStopped = false; refreshPrivateCounts(); }
     function onPageHide() { importStopped = true; clearTimeout(importTimer); clear(); stopSound(); }
     function destroy() {
         clearTimeout(importTimer); clear(); disposed = true; stopSound(); observer.disconnect();
@@ -388,8 +364,10 @@ window.createWorkspaceNotifications = function (ui) {
         window.removeEventListener('pagehide', onPageHide);
         window.removeEventListener('pageshow', onPageShow);
         document.removeEventListener('visibilitychange', onVisibilityChange);
+        document.removeEventListener('hide.bs.offcanvas', stopSound);
+        document.removeEventListener('hide.bs.modal', stopSound);
     }
-    refreshImports();
+    refreshPrivateCounts();
     trigger.addEventListener('click', openHistory);
     for (const event of ['shown.bs.offcanvas', 'hidden.bs.offcanvas', 'shown.bs.modal', 'hidden.bs.modal'])
         document.addEventListener(event, mount);
@@ -399,6 +377,9 @@ window.createWorkspaceNotifications = function (ui) {
     window.addEventListener('pagehide', onPageHide);
     window.addEventListener('pageshow', onPageShow);
     document.addEventListener('visibilitychange', onVisibilityChange);
+    document.addEventListener('hide.bs.offcanvas', stopSound);
+    document.addEventListener('hide.bs.modal', stopSound);
     renderHistory();
-    return { notify, clear, destroy };
+    return { notify, clear, destroy, applyPreferences, loadPreferences,
+        previewSound: (selection, canPlay) => sound(true, selection, canPlay), stopPreview: stopSound };
 };

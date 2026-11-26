@@ -16,6 +16,20 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $academicUpdates = \Application\Http\Controller\AcademicUpdatesController::class;
+    $router->get('/portal/api/academic-updates/', [$academicUpdates, 'page'])->name('portal.academic-updates');
+    $router->get('/portal/api/academic-updates/{id}/', [$academicUpdates, 'detail'])
+        ->name('portal.academic-updates.detail');
+    $router->post('/portal/api/academic-updates/{id}/read/', [$academicUpdates, 'read'])
+        ->name('portal.academic-updates.read');
+    $router->post('/portal/api/academic-updates/{id}/delete/', [$academicUpdates, 'delete'])
+        ->name('portal.academic-updates.delete');
+    $notificationPreferences = \Application\Http\Controller\NotificationPreferencesController::class;
+    $router->get('/portal/api/notification-preferences/', [$notificationPreferences, 'view'])
+        ->name('portal.notification-preferences');
+    $router->post('/portal/api/notification-preferences/', [$notificationPreferences, 'save'])
+        ->name('portal.notification-preferences.save');
+
     $graduateApproval = \Application\Http\Controller\SisGraduateApprovalController::class;
     $router->post('/portal/api/students/{student}/graduate-courses/{section}/current/', [$graduateApproval, 'view'])
         ->name('portal.graduate.current');

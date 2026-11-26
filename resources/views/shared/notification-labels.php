@@ -5,6 +5,53 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'notifications_retry' => trans_html('These notifications are unavailable. Reopen this section to try again.'),
+    'academic_updates' => trans_html('Academic updates'),
+    'academic_loading' => trans_html('Loading academic updates…'),
+    'academic_help' => trans_html('Posted final grades and approved corrections appear here.'),
+    'academic_empty' => trans_html('There are no academic updates.'),
+    'academic_include' => trans_html('Show read updates'),
+    'academic_refresh' => trans_html('Refresh academic updates'),
+    'academic_pages' => trans_html('Academic update pages'),
+    'academic_previous' => trans_html('Previous updates'),
+    'academic_more' => trans_html('More updates'),
+    'academic_posted' => trans_html('Final grade available'),
+    'academic_corrected' => trans_html('Final grade updated'),
+    'academic_mark' => trans_html('Mark as read'),
+    'academic_delete' => trans_html('Delete update'),
+    'academic_loaded' => trans_html('Academic updates loaded.'),
+    'academic_failed' => trans_html('Academic updates could not load. Reopen this section to try again.'),
+    'academic_denied' => trans_html('Academic updates are unavailable for this account.'),
+    'academic_changed' => trans_html('This update changed or is unavailable. Reopen the list.'),
+    'academic_new' => trans_html('New academic updates are available.'),
+    'academic_link' => trans_html('View academic record'),
+    'academic_back' => trans_html('Back to academic updates'),
+    'academic_marked' => trans_html('Academic update marked as read.'),
+    'academic_deleted' => trans_html('Academic update deleted.'),
+    'academic_grade' => trans_html('Current final grade'),
+    'academic_term' => trans_html('Academic term'),
+    'academic_credits' => trans_html('Completed academic credits'),
+    'academic_ungraded' => trans_html('No current final grade'),
+    'academic_current_help' => trans_html(
+        'This is the current verified academic record. Later corrections may have changed the original '
+        . 'notification outcome.'
+    ),
+
+    'preferences' => trans_html('Notification preferences'),
+    'preferences_edit' => trans_html('Manage notification preferences'),
+    'preferences_loading' => trans_html('Loading notification preferences…'),
+    'preferences_save' => trans_html('Save notification preferences'),
+    'preferences_discard' => trans_html('Close without saving'),
+    'preferences_saving' => trans_html('Saving notification preferences…'),
+    'preferences_saved' => trans_html('Notification preferences saved.'),
+    'preferences_changed' => trans_html('Preferences changed elsewhere. Close and reopen this editor before saving.'),
+    'preferences_failed' => trans_html(
+        'Notification preferences are unavailable. Close and reopen this editor to try again.'
+    ),
+    'preferences_help' => trans_html(
+        'These display and sound preferences belong to this person and follow their sign-in between browsers. '
+        . 'Previewing a sound saves nothing.'
+    ),
     'advising_updates' => trans_html('Advising updates'),
     'advising_loading' => trans_html('Loading advising updates…'),
     'advising_help' => trans_html(

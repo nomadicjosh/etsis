@@ -7769,3 +7769,181 @@ msgstr ""
 #: src/Application/Http/Controller/SisImportQueueController.php:67
 msgid "Choose a valid import page."
 msgstr ""
+
+#: resources/views/shared/notification-labels.php:8
+msgid "These notifications are unavailable. Reopen this section to try again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:9
+msgid "Academic updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:10
+msgid "Loading academic updates…"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:11
+msgid "Posted final grades and approved corrections appear here."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:12
+msgid "There are no academic updates."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:14
+msgid "Refresh academic updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:15
+msgid "Academic update pages"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:18
+msgid "Final grade available"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:19
+msgid "Final grade updated"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:22
+msgid "Academic updates loaded."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:23
+msgid "Academic updates could not load. Reopen this section to try again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:24
+msgid "Academic updates are unavailable for this account."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:25
+msgid "This update changed or is unavailable. Reopen the list."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:26
+msgid "New academic updates are available."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:27
+msgid "View academic record"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:28
+msgid "Back to academic updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:29
+msgid "Academic update marked as read."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:30
+msgid "Academic update deleted."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:31
+msgid "Current final grade"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:32
+msgid "Academic term"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:33
+msgid "Completed academic credits"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:34
+msgid "No current final grade"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:35
+msgid "This is the current verified academic record. Later corrections may have changed the original notification outcome."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:40
+msgid "Notification preferences"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:41
+msgid "Manage notification preferences"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:42
+msgid "Loading notification preferences…"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:43
+msgid "Save notification preferences"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:44
+msgid "Close without saving"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:45
+msgid "Saving notification preferences…"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:46
+msgid "Notification preferences saved."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:47
+msgid "Preferences changed elsewhere. Close and reopen this editor before saving."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:48
+msgid "Notification preferences are unavailable. Close and reopen this editor to try again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:51
+msgid "These display and sound preferences belong to this person and follow their sign-in between browsers. Previewing a sound saves nothing."
+msgstr ""
+
+#: src/Application/Http/Controller/AcademicUpdatesController.php:30
+msgid "Choose whether to include read academic notifications."
+msgstr ""
+
+#: src/Application/Http/Controller/NotificationPreferencesController.php:34
+msgid "Choose valid notification preferences."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/AcademicNotifications.php:73
+msgid "The academic notification or its owner changed before completion."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/AcademicUpdatesService.php:57
+msgid "Use the complete academic notification cursor."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/AcademicUpdatesService.php:62
+msgid "Use a valid academic notification cursor."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/AcademicUpdatesService.php:86
+#: src/Domain/AcademicRecord/Service/AcademicUpdatesService.php:120
+#: src/Domain/AcademicRecord/Service/AcademicUpdatesService.php:181
+msgid "Academic notifications changed. Refresh the list."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/AcademicUpdatesService.php:114
+msgid "The academic record changed. Open the notification again."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/AcademicUpdatesService.php:163
+msgid "Reload the current academic notification."
+msgstr ""
+
+#: src/Domain/Person/Service/NotificationPreferencesService.php:67
+msgid "Notification preferences changed. Reload them before saving."
+msgstr ""
+
+#: src/Domain/Person/Service/NotificationPreferencesService.php:82
+msgid "Notification preferences changed before saving completed."
+msgstr ""
+
+#: src/Domain/Person/ValueObject/NotificationPreferences.php:26
+msgid "Choose valid notification display and sound preferences."
+msgstr ""
