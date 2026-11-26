@@ -326,6 +326,37 @@ JSON contains only `status`, `scope: student_academic_inputs`, `student_referenc
 
 Fictional fixtures verify recorded institutional and transfer work, earlier unknown transfer rows, early removals, projection/journal damage, limits, concurrent registrations and changed existing heads. Populated checks run with SQLite writes prohibited and unchanged journal/source/audit/finance snapshots. The native command is exercised through actual lazy providers. A bounded MariaDB check on 2026-11-20 correctly rejected a missing canonical student; that database contained no students and 20 journal events. All eleven inspected journal/support/academic/audit table checksums were unchanged. Populated MariaDB and other live-driver acceptance, isolated rebuilds, protected checkpoints and restore certification remain open.
 
+## Selected person SSN verification
+
+A separate selected check protects the SSN stream without broadening ordinary profile verification:
+
+```sh
+ddev codex sis:history:verify --ssn-person='<sis_persons.id>' --events=500 --json
+```
+
+Use the canonical person ULID. The option is exclusive with every other selected subject, `--streams` and `--cursor`. Its event allowance is 1–500, default 500. Invalid selections fail before storage resolution. This is a trusted deployment operation with database/decryption-key access; the command extends `ConsoleCommand` and uses plain console strings.
+
+One shared `PersonSsnReader` authenticates ordered reasoned decisions and their original intents, then compares the encrypted purpose/person/version-bound mask projection. The same reader serves normal SSN corrections. The selected check reads no credential or ordinary profile-value columns, takes no write locks and refuses enclosing transactions. It captures and rechecks canonical person/account/identifier routing, the protected stream head and encrypted projection. Concurrent selected changes return an incomplete `changed` result. Later identity/account changes do not rewrite the original correction's retained context.
+
+The replay has a shared 2 MiB payload allowance and a five-second cooperative guard. Each selected inventory query returns at most two rows, detecting invalid duplicates rather than expanding with institution size. A missing person/account link is `unverified`; absence of both SSN history and projection is only `observed_empty`, with earlier history unknown. A projection without history is never adopted. A missing, malformed, mismatched, foreign-person or extra-field encrypted projection fails verification. Clearing the saved SSN leaves genuine prior decisions and a current cleared projection that can still verify.
+
+| Status / application exit | Meaning |
+| --- | --- |
+| `verified` / 0 | Protected SSN decisions and the current mask projection match at the observed point. |
+| `observed_empty` / 3 | No SSN decisions or projection were observed; earlier history remains unknown. |
+| `changed` / 3 | Selected routing/head/projection changed during observation; repeat deliberately. |
+| `limited` / 3 | Event, payload or time limits prevented completion. |
+| `unverified` / 1 | Identity, journal or projection needs operator review, or protected storage is unavailable. |
+| Invalid input / 2 | Invalid reference, bounds or incompatible selectors; storage is not resolved. |
+
+Output contains only fixed status, `scope: person_ssn`, the selected person reference, event count, a position for complete observations, whitelisted issue codes and `records_changed: false`. Issue codes are `identity`, `journal`, `ssn_projection` and `unavailable`. No full number, last-four mask, reason, name, intent hash, random nonce, ciphertext, key, review proof or exception text is returned. The checker never repairs, appends history, records an audit, grants access or sends anything. It does not validate government issuance/ownership, every retry receipt, archive completeness, independent checkpoints, retention or restore readiness.
+
+### Staff SSN support checks
+
+From **People → person → More person actions → Check SSN history**, staff can deliberately run the same selected check with the existing fixed 200-event browser allowance. This action remains available independently of whether a damaged SSN projection prevents opening the ordinary SSN editor. It requires **all** of `sis:person:manage`, `sis:person:ssn:read`, `sis:history:verify` and `sis:audit:read`; the correction duty is separate. These are current raw enabled-account permissions as well as ordinary authorization checks, with canonical account and Super-owner safeguards.
+
+The existing support facade records only its ordinary minimized operational receipt and required audit after verification. Actor/duty/owner changes or audit failure roll back this metadata. Earlier receipts use the existing current-routing ten-row paging and never store numbers, masks, reasons or replay bodies. Denial clears displayed results/history; late replies cannot replace a returned person record. **Back to record** reopens the person under fresh access. The flow uses existing Bootstrap controls, keyboard/focus, narrow-screen and enlarged-text behavior without browser storage. No route family, schema, permission grant, authoritative event, report, notification, job or repair queue is added. A support receipt describes its observation, not a continuing guarantee about the record.
+
 ## Selected person profile verification
 
 Use the same operator command to compare **one canonical person** across their shared profile areas:

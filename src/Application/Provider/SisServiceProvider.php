@@ -113,6 +113,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlHistoryCheckRepository::class,
             \Domain\Person\Repository\PersonProjectionVerifier::class =>
                 \Infrastructure\Projection\SqlPersonProjectionVerifier::class,
+            \Domain\Person\Repository\PersonSsnProjectionVerifier::class =>
+                \Infrastructure\Projection\SqlPersonSsnProjectionVerifier::class,
             \Domain\Student\Repository\StudentDecisionProjectionVerifier::class =>
                 \Infrastructure\Projection\SqlStudentDecisionProjectionVerifier::class,
             \Domain\Registration\Waitlist\WaitlistProjectionVerifier::class =>

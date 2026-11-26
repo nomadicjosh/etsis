@@ -35,7 +35,8 @@ final readonly class PersonSsnService
 {
     public const string READ = 'sis:person:ssn:read';
     public const string MANAGE = 'sis:person:ssn:manage';
-    public const int MAX_EVENTS = 500;
+    public const int MAX_EVENTS = PersonSsnReader::MAX_EVENTS;
+    private PersonSsnReader $reader;
 
     public function __construct(
         private PersonSsnRepository $records,
@@ -50,6 +51,7 @@ final readonly class PersonSsnService
         private AuditTrail $audit,
         private Clock $clock,
     ) {
+        $this->reader = new PersonSsnReader($records, $history, $cipher);
     }
 
     private function authorize(EntityId $id, EntityId $actor, bool $write, bool $audit = false): Person
@@ -94,52 +96,11 @@ final readonly class PersonSsnService
 
     private function load(EntityId $id): PersonSsnHistory
     {
-        $root = PersonSsnHistory::root(new PersonSsnId($id->value));
-        $budget = new HistoryReadBudget(
+        return $this->reader->read($id, new HistoryReadBudget(
             maximumEvents: self::MAX_EVENTS,
             maximumBytes: 2097152,
             maximumMilliseconds: 5000
-        );
-        $cursor = null;
-        do {
-            $page = $budget->page($this->history, $this->stream($id), $cursor);
-            if ($page->throughVersion > self::MAX_EVENTS) {
-                throw new HistoryReadLimitException();
-            }
-            foreach ($page->events as $stored) {
-                $root->accept($stored);
-            }
-            $cursor = $page->nextCursor;
-        } while ($cursor !== null);
-        if ($root->playhead() !== $page->throughVersion) {
-            throw new CorruptHistoryException();
-        }
-        $row = $this->records->find($id);
-        if ($root->playhead() === 0) {
-            if ($row !== null) {
-                throw new CorruptHistoryException();
-            }
-        } else {
-            try {
-                if (
-                    $row === null || (int) $row['version'] !== $root->playhead()
-                    || strlen($row['sealed_data']) > 4096
-                    || json_decode($this->cipher->open($row['sealed_data']), true, 8, JSON_THROW_ON_ERROR)
-                        !== $this->projection($id, $root->playhead(), $root->lastFour())
-                ) {
-                    throw new CorruptHistoryException();
-                }
-            } catch (\Throwable) {
-                throw new CorruptHistoryException();
-            }
-        }
-        return $root;
-    }
-
-    private function projection(EntityId $id, int $version, ?string $lastFour): array
-    {
-        return ['purpose' => 'person.ssn.mask', 'person_id' => $id->value, 'version' => $version,
-            'last_four' => $lastFour];
+        ));
     }
 
     private function mask(?string $lastFour): ?string
@@ -280,7 +241,7 @@ final readonly class PersonSsnService
                 [$event]
             );
             $this->records->save($id, $version, $this->cipher->seal(json_encode(
-                $this->projection($id, $version + 1, $number?->lastFour()),
+                PersonSsnReader::projection($id, $version + 1, $number?->lastFour()),
                 JSON_THROW_ON_ERROR
             )));
             $this->audit->record($actor, 'person.ssn_recorded', $id);

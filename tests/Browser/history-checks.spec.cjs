@@ -50,17 +50,17 @@ async function fixture(page, kind, { denied = false, delay = null, outcome = nul
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto('/admin/');
-    const dataset = { person: 'people', student: 'students', account: 'accounts', application: 'applications', standing: 'students', load: 'students', advisors: 'students', requirements: 'students' }[kind];
+    const dataset = { ssn: 'people', person: 'people', student: 'students', account: 'accounts', application: 'applications', standing: 'students', load: 'students', advisors: 'students', requirements: 'students' }[kind];
     await page.locator(`.workspace-nav-link[data-workspace="${dataset}"]`).click();
     await page.getByLabel('Search this workspace').fill('Fictional');
     await page.getByLabel('Search this workspace').press('Enter');
     await page.getByRole('button', { name: kind === 'account' ? 'Fictional account' : 'Fictional Person', exact: true }).click();
     return { calls, errors };
 }
-for (const kind of ['person', 'student', 'account', 'application']) {
+for (const kind of ['ssn', 'person', 'student', 'account', 'application']) {
     test(`${kind} support check is explicit, bounded and separate from source facts`, async ({ page }) => {
         const { calls, errors } = await fixture(page, kind);
-        const label = { person: 'Check profile history', student: 'Check academic history', account: 'Check account history', application: 'Check application history' }[kind];
+        const label = { ssn: 'Check SSN history', person: 'Check profile history', student: 'Check academic history', account: 'Check account history', application: 'Check application history' }[kind];
         if (kind === 'account') await page.getByRole('button', { name: label, exact: true }).click();
         else await recordAction(page, label);
         await expect(page.getByRole('region', { name: 'Previous history checks', exact: true })).toContainText('No previous checks');
@@ -83,14 +83,57 @@ for (const kind of ['person', 'student', 'account', 'application']) {
         await page.getByRole('button', { name: 'Previous checks page', exact: true }).click();
         await expect(history).toContainText('2026-08-10T17:00:00Z');
         await page.setViewportSize({ width: 320, height: 812 });
+        if (kind === 'ssn') await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
         const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
         expect(axe.violations.map(v => ({ id: v.id, targets: v.nodes.map(n => n.target) }))).toEqual([]);
         expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
         expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+        if (kind === 'ssn') await page.screenshot({ path: '/tmp/etsis-ssn-check-phone.png' });
         expect(calls.filter(c => c.path.includes('/history-checks/')).every(c => c.csrf === 'fictional-test-token')).toBe(true);
         expect(errors).toEqual([]);
     });
 }
+
+test('ssn empty and limited results retain their separate meaning and masked values never appear', async ({ page }) => {
+    const { calls, errors } = await fixture(page, 'ssn', { outcome: 'observed_empty' });
+    await recordAction(page, 'Check SSN history');
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Current check result' })).toContainText('No saved SSN history observed');
+    await page.getByRole('button', { name: 'Older checks', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Previous history checks' })).toContainText('Check limit reached');
+    expect(calls.filter(c => c.path.includes('/history-checks/')).every(c => c.path.includes('/ssn/'))).toBe(true);
+    await expect(page.locator('#drawer-body')).not.toContainText('***-**-');
+    expect(errors).toEqual([]);
+});
+
+test('ssn duty loss clears earlier results and returning reopens the current person record', async ({ page }) => {
+    const { errors } = await fixture(page, 'ssn');
+    await recordAction(page, 'Check SSN history');
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Current check result' })).toContainText('Support reference:');
+    await page.route('**/history-checks/ssn/**', route => route.fulfill({ status: 403, json: { error: 'Current SSN duty is required.' } }));
+    await page.getByRole('button', { name: 'Refresh previous checks', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Current check result' })).toBeEmpty();
+    await expect(page.getByRole('region', { name: 'Previous history checks' })).toBeEmpty();
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'More person actions', exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
+});
+
+test('ssn delayed checks cannot reopen a dismissed result', async ({ page }) => {
+    let arrived, release;
+    const requested = new Promise(resolve => { arrived = resolve; });
+    const hold = new Promise(resolve => { release = resolve; });
+    const { errors } = await fixture(page, 'ssn', { delay: async () => { arrived(); await hold; } });
+    await recordAction(page, 'Check SSN history');
+    await page.getByRole('button', { name: 'Run history check', exact: true }).click(); await requested;
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    const finished = page.waitForResponse(response => response.url().endsWith('/run/'));
+    release(); await finished;
+    await expect(page.getByRole('region', { name: 'Current check result' })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'More person actions', exact: true })).toBeVisible();
+    expect(errors).toEqual([]);
+});
 
 test('leaving a pending check prevents its result from replacing the next record', async ({ page }) => {
     let requested, release;

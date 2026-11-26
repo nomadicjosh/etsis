@@ -6,6 +6,7 @@ use function Codefy\Framework\Helpers\trans_html;
 
 return [
     'title' => trans_html('Social Security number'),
+    'check' => trans_html('Check SSN history'),
     'back' => trans_html('Back to record'),
     'saved' => trans_html('Saved SSN'),
     'none' => trans_html('No saved SSN'),

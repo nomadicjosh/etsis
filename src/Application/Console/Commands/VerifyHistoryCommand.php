@@ -43,6 +43,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
         ['student', null, 'required', 'Check one student’s available academic sources and projections; no cursor.'],
         ['account', null, 'required', 'Verify one financial account and its balance/posting projections; no cursor.'],
         ['person', null, 'required', 'Compare one person’s profile projections with protected history; no cursor.'],
+        ['ssn-person', null, 'required', 'Check one person’s private SSN projection; 1–500 events, no cursor.'],
         ['application', null, 'required', 'Compare one admissions application with protected history; no cursor.'],
         ['standing', null, 'required', 'Compare standing under one program pursuit with protected history; no cursor.'],
         ['load', null, 'required', 'Compare one retained load determination with protected history; no cursor.'],
@@ -79,6 +80,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
             $student = $this->getOptions('student');
             $credit = $this->getOptions('credit');
             $person = $this->getOptions('person');
+            $ssn = $this->getOptions('ssn-person');
             $application = $this->getOptions('application');
             $standing = $this->getOptions('standing');
             $load = $this->getOptions('load');
@@ -96,12 +98,21 @@ final class VerifyHistoryCommand extends ConsoleCommand
             ];
             $graduatePolicy = $this->getOptions('graduate-policy') === true;
             $graduateApprovals = $this->getOptions('graduate-approvals');
-            $subjects = [$account, $student, $credit, $person, $application, $standing, $load,
+            $subjects = [$account, $student, $credit, $person, $ssn, $application, $standing, $load,
                 $advisors, $requirements, $progress, $waitlist,
                 ...array_values($employment), ...array_values($catalog),
                 $graduatePolicy ? \Domain\Registration\GraduateRegistrationPolicy::ID : null, $graduateApprovals];
             if (count(array_filter($subjects, static fn(mixed $id): bool => $id !== null)) > 1) {
                 throw new InvalidArgumentException();
+            }
+            if ($ssn !== null) {
+                if (
+                    !is_string($ssn) || $events > 500 || $cursor !== null
+                    || $this->input->hasParameterOption('--streams')
+                ) {
+                    throw new InvalidArgumentException();
+                }
+                return $this->ssn(new EntityId($ssn), $events, $json);
             }
             if ($graduatePolicy || $graduateApprovals !== null) {
                 if (
@@ -195,7 +206,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
                     . '--position=POSITION_ULID, --time-entry=ENTRY_ULID, '
                     . '--course=COURSE_ULID, --section=SECTION_ULID, --graduate-policy '
                     . 'or --graduate-approvals=PURSUIT_ULID '
-                    . 'with --events and optional --json.',
+                    . 'with --events and optional --json. Use --ssn-person=PERSON_ULID with --events=1..500.',
                 self::INVALID,
             );
         } catch (HistoryVerificationFailedException $exception) {
@@ -245,6 +256,30 @@ final class VerifyHistoryCommand extends ConsoleCommand
             );
         }
         return $result->complete ? self::SUCCESS : 3;
+    }
+
+    private function ssn(EntityId $person, int $events, bool $json): int
+    {
+        $result = $this->codefy->make(\Domain\Person\Repository\PersonSsnProjectionVerifier::class)
+            ->verify($person, $events);
+        if ($json) {
+            $this->terminalRaw(json_encode($result->describe(), JSON_THROW_ON_ERROR));
+        } else {
+            $this->terminalRaw('Selected person SSN history: ' . $result->status . '; '
+                . $result->events . ' events checked. No records were changed.');
+            if ($result->issues !== []) {
+                $this->terminalRaw('Components requiring review: ' . implode(', ', $result->issues) . '.');
+            }
+            $this->terminalRaw('This compares protected decisions and the saved mask projection. '
+                . 'It does not reveal numbers, validate issuance or ownership, repair records '
+                . 'or certify retention, every retry receipt or archive completeness. '
+                . 'An empty observation does not establish earlier history.');
+        }
+        return match ($result->status) {
+            'verified' => self::SUCCESS,
+            'observed_empty', 'changed', 'limited' => 3,
+            default => self::FAILURE,
+        };
     }
 
     private function employment(string $kind, EntityId $id, int $events, bool $json): int

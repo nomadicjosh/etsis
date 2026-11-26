@@ -8619,3 +8619,37 @@ msgid ""
 "Reloading preserves your replacement draft and requires a new correction "
 "review."
 msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:9
+msgid "Check SSN history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:8
+msgid "Person SSN history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:9
+msgid "Saved SSN projection"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:10
+msgid "No saved SSN history observed"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:11
+msgid ""
+"No SSN decision or saved mask was found. Earlier history remains unknown."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:13
+msgid ""
+"Compare saved SSN history with its protected projection using a 200-event "
+"allowance. The check displays no number, mask or correction reason and makes "
+"no correction."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:17
+msgid ""
+"A trusted operator can check up to 500 SSN decisions. Larger histories or "
+"byte/time limits need a separate operational review."
+msgstr ""

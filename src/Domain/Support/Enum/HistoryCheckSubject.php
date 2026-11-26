@@ -9,6 +9,7 @@ enum HistoryCheckSubject: string
     case GraduatePolicy = 'gradpolicy';
     case GraduateApprovals = 'graduate';
     case Person = "person";
+    case Ssn = 'ssn';
     case Student = "student";
     case Credit = "credit";
     case Waitlist = 'waitlist';
@@ -36,6 +37,7 @@ enum HistoryCheckSubject: string
                 'sis:student:read', 'sis:registration:manage', 'sis:registration:graduate-override',
             ],
             self::Person => ["sis:person:manage"],
+            self::Ssn => ['sis:person:manage', 'sis:person:ssn:read'],
             self::Student, self::Credit => ["sis:student:read"],
             self::Waitlist => ['sis:student:read', 'sis:registration:waitlist', 'sis:registration:manage'],
             self::Course, self::Section, self::Program, self::CourseGroup, self::Curriculum => ['sis:catalog:manage'],
@@ -56,6 +58,7 @@ enum HistoryCheckSubject: string
             self::GraduatePolicy => 'graduate_registration_policy',
             self::GraduateApprovals => 'graduate_course_approvals',
             self::Person => "person_profile",
+            self::Ssn => 'person_ssn',
             self::Student => "student_academic_inputs",
             self::Credit => "academic_credit",
             self::Waitlist => 'waitlist_entry',
@@ -87,6 +90,7 @@ enum HistoryCheckSubject: string
             self::Progress => 'progress_record_reference',
             self::PrimaryPosition => 'primary_position_reference',
             self::TimeEntry => 'time_entry_reference',
+            self::Ssn => 'person_reference',
             default => $this->value . "_reference",
         };
     }

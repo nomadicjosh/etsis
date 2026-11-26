@@ -22,6 +22,12 @@ Viewing requires both `sis:person:manage` and `sis:person:ssn:read`. Corrections
 
 The installation defines the two SSN permissions without granting them to ordinary roles or accounts. Administrators assign them deliberately through existing access management. The existing super role retains its established access. Profile ownership alone does not authorize this staff task, and there is no student-portal SSN editor.
 
+## Check saved-record integrity
+
+Use **More person actions → Check SSN history** for a bounded diagnostic, even if damaged saved data prevents opening the editor. It requires person management, SSN viewing, support verification and audit duties together; SSN correction authority remains separate. The result and its restricted support receipt contain no number, last-four mask or correction reason. Nothing is repaired. **Back to record** returns to the person.
+
+Trusted deployment operators can use the [separate read-only SSN verification mode](event-history-foundation.md#selected-person-ssn-verification), with at most 500 events. The browser uses a fixed 200-event allowance. Empty, changed, limited and unverified observations remain distinct from a verified comparison. Neither path validates issuance/ownership or certifies historical completeness.
+
 ## Protected storage and limits
 
 Real entry, replacement and clearing decisions use the existing protected `sis_history_events` journal in a private `person_ssn` stream keyed by the canonical person. There is no second event table or invented earlier history. The complete number and correction intent remain encrypted inside each authoritative payload. A private random nonce prevents the journal's visible operation fingerprint from becoming a simple SSN lookup hash. The current `sis_person_ssns` projection contains only an encrypted last-four mask, bound to the person and accepted version; it contains no full number or standalone SSN hash.

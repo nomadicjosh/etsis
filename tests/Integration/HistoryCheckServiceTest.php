@@ -26,6 +26,101 @@ use PHPUnit\Framework\TestCase;
 
 final class HistoryCheckServiceTest extends TestCase
 {
+    public function testSsnSupportUsesIndependentCurrentDutiesAndReceiptsWithoutPrivateValues(): void
+    {
+        require_once dirname(__DIR__) . '/Support/PersonSsnFixture.php';
+        $f = new \Tests\Support\PersonSsnFixture();
+        $f->grant('sis:history:verify', true);
+        $f->confirm($f->review());
+        $f->grant('sis:person:ssn:manage', false);
+        $service = $this->service($f->sis);
+        $before = $f->facts();
+        $result = $service->run(HistoryCheckSubject::Ssn, $f->person->id);
+        self::assertSame('verified', $result['result']['status']);
+        self::assertSame(1, $result['result']['events_checked']);
+        self::assertSame($before, $f->facts());
+        self::assertSame('ssn', $f->sis->sql->rows('sis_history_checks')[0]['subject_type']);
+        foreach (['000001234', '1234', 'number', 'sealed', 'Fictional', 'nonce', 'intent'] as $private) {
+            self::assertStringNotContainsString($private, json_encode($result));
+        }
+        self::assertCount(1, $service->history(HistoryCheckSubject::Ssn, $f->person->id)['items']);
+        $f->grant('sis:person:ssn:read', false);
+        $this->expectException(AccessDeniedException::class);
+        $service->history(HistoryCheckSubject::Ssn, $f->person->id);
+    }
+
+    public function testSsnSupportCannotUseCachedAuthorityOrMissingIndependentPermissions(): void
+    {
+        require_once dirname(__DIR__) . '/Support/PersonSsnFixture.php';
+        $f = new \Tests\Support\PersonSsnFixture();
+        $f->grant('sis:history:verify', true);
+        foreach (['sis:person:manage', 'sis:person:ssn:read', 'sis:history:verify', 'sis:audit:read'] as $duty) {
+            $f->grant($duty, false);
+            $this->rejects(
+                fn() => $this->service($f->sis)->run(HistoryCheckSubject::Ssn, $f->person->id),
+                AccessDeniedException::class
+            );
+            self::assertSame([], $f->sis->sql->rows('sis_history_checks'));
+            $f->grant($duty, true);
+        }
+        $f->sis->sql->update('users', ['sign_in_enabled' => 0], ['user_id' => $f->sis->access->actor->value]);
+        $this->rejects(
+            fn() => $this->service($f->sis)->run(HistoryCheckSubject::Ssn, $f->person->id),
+            AccessDeniedException::class
+        );
+    }
+
+    public function testSsnSupportAuditDutyAndRoutingFailuresRollbackOnlyTheAttemptedSupportReceipt(): void
+    {
+        require_once dirname(__DIR__) . '/Support/PersonSsnFixture.php';
+        foreach (['audit', 'duty', 'owner', 'actor'] as $failure) {
+            $f = new \Tests\Support\PersonSsnFixture();
+            $f->grant('sis:history:verify', true);
+            $f->confirm($f->review());
+            $other = $f->sis->user();
+            $before = $f->facts();
+            $audit = $this->createStub(AuditTrail::class);
+            $audit->method('record')->willReturnCallback(static function () use ($f, $failure, $other): void {
+                if ($failure === 'audit') {
+                    throw new \RuntimeException('Fictional audit failure.');
+                }
+                if ($failure === 'duty') {
+                    $f->grant('sis:person:ssn:read', false);
+                }
+                if ($failure === 'owner') {
+                    $f->sis->sql->update(
+                        'sis_persons',
+                        ['owner_user_id' => $other->value],
+                        ['id' => $f->person->id->value]
+                    );
+                }
+                if ($failure === 'actor') {
+                    $f->sis->access->actor = $other;
+                }
+            });
+            $this->rejects(fn() => $this->service($f->sis, audit: $audit)
+                ->run(HistoryCheckSubject::Ssn, $f->person->id), \RuntimeException::class);
+            self::assertSame([], $f->sis->sql->rows('sis_history_checks'));
+            self::assertSame($before, $f->facts());
+        }
+    }
+
+    public function testSsnSupportPreservesTheSuperOwnerBoundary(): void
+    {
+        require_once dirname(__DIR__) . '/Support/PersonSsnFixture.php';
+        $f = new \Tests\Support\PersonSsnFixture();
+        $f->grant('sis:history:verify', true);
+        $role = $f->sis->sql->one('sis_access_roles', ['name' => 'super']);
+        $f->roles->assign(
+            \Domain\Access\Enum\GrantKind::UserRole,
+            $f->person->ownerUserId,
+            new EntityId($role['id']),
+            true
+        );
+        $this->expectException(AccessDeniedException::class);
+        $this->service($f->sis)->run(HistoryCheckSubject::Ssn, $f->person->id);
+    }
+
     public function testCurriculumSupportUsesIndependentDutiesAndMinimalNonPersonalReceipts(): void
     {
         require_once dirname(__DIR__) . '/Support/ReusableGroupFixture.php';
@@ -596,6 +691,14 @@ final class HistoryCheckServiceTest extends TestCase
             $s->graduateVerifier(),
             new \Infrastructure\Persistence\Repository\SqlCourseGroupRepository($s->sql),
             new \Infrastructure\Persistence\Repository\SqlRequirementsRepository($s->sql),
+            new \Infrastructure\Projection\SqlPersonSsnProjectionVerifier(
+                $s->sql,
+                new \Domain\Person\Service\PersonSsnReader(
+                    new \Infrastructure\Persistence\Repository\SqlPersonSsnRepository($s->sql),
+                    \EventStoreFixture::history($s->connection->queryBuilder()),
+                    $cipher
+                )
+            ),
         );
     }
 

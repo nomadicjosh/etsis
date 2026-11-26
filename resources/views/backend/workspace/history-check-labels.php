@@ -5,6 +5,18 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'ssn' => trans_html('Person SSN history'),
+    'ssn_components' => trans_html('Saved SSN projection'),
+    'ssn_empty' => trans_html('No saved SSN history observed'),
+    'ssn_empty_help' => trans_html('No SSN decision or saved mask was found. Earlier history remains unknown.'),
+    'ssn_help' => trans_html(
+        'Compare saved SSN history with its protected projection using a 200-event allowance. '
+        . 'The check displays no number, mask or correction reason and makes no correction.'
+    ),
+    'ssn_limit_help' => trans_html(
+        'A trusted operator can check up to 500 SSN decisions. Larger histories or byte/time limits '
+        . 'need a separate operational review.'
+    ),
     'graduate_policy' => trans_html('Graduate-course registration policy'),
     'graduate_approvals' => trans_html('Graduate-course approvals for this pursuit'),
     'graduate_count' => trans_html('Retained graduate decisions checked'),

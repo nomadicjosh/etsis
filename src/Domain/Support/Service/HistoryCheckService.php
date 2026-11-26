@@ -63,6 +63,7 @@ final readonly class HistoryCheckService
         private \Domain\Registration\Repository\GraduateHistoryVerifier $graduateHistory,
         private \Domain\DegreeAudit\Repository\CourseGroupRepository $courseGroups,
         private \Domain\DegreeAudit\Repository\RequirementsRepository $curricula,
+        private \Domain\Person\Repository\PersonSsnProjectionVerifier $ssns,
     ) {
     }
 
@@ -72,7 +73,14 @@ final readonly class HistoryCheckService
         EntityId $actor,
     ): HistoryCheckScope {
         foreach (["sis:history:verify", "sis:audit:read", ...$kind->permissions()] as $permission) {
-            if ($this->access->requirePermission($permission)->value !== $actor->value) {
+            if (
+                $this->access->requirePermission($permission)->value !== $actor->value
+                || ($kind === HistoryCheckSubject::Ssn && !in_array(
+                    $actor->value,
+                    $this->roles->allowedUsers([$actor], $permission),
+                    true
+                ))
+            ) {
                 throw new AccessDeniedException();
             }
         }
@@ -136,7 +144,7 @@ final readonly class HistoryCheckService
             default => null,
         };
         $student = match ($kind) {
-            HistoryCheckSubject::Person => null,
+            HistoryCheckSubject::Person, HistoryCheckSubject::Ssn => null,
             HistoryCheckSubject::PrimaryPosition, HistoryCheckSubject::Position, HistoryCheckSubject::TimeEntry => null,
             HistoryCheckSubject::Application => null,
             HistoryCheckSubject::Student => $id,
@@ -161,6 +169,7 @@ final readonly class HistoryCheckService
                     : ($student === null ? $id : $this->admissions->student($student)->personId)),
         );
         if (
+            ($kind === HistoryCheckSubject::Ssn && $person->ownerUserId === null) ||
             ($waiting !== null && $waiting['person_id'] !== $person->id->value) ||
             $actor->value !== $this->access->authenticatedUserId()->value ||
             ($person->ownerUserId !== null &&
@@ -250,6 +259,8 @@ final readonly class HistoryCheckService
                 HistoryCheckSubject::Person => $this->persons
                     ->verify($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)
                     ->describe(),
+                HistoryCheckSubject::Ssn => $this->ssns
+                    ->verify($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Course => $this->catalogHistory
                     ->course($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Section => $this->catalogHistory

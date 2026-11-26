@@ -1295,6 +1295,10 @@
                         node, request, task, openDrawer, labels: config.person_ssn_labels,
                     }).open(person.id.value, () => openPerson(person.id.value)),
                 });
+                if (can('sis:person:manage') && can('sis:person:ssn:read') && can('sis:history:verify') && can('sis:audit:read')) extra.push({
+                    label: config.person_ssn_labels.check, icon: 'shield-check',
+                    run: () => historyChecks.open('ssn', person.id.value, () => openPerson(person.id.value)),
+                });
                 if (can('sis:person:manage')) extra.push({ label: 'Account setup', icon: 'envelope', run: () => accountSetup(person) });
                 if (can('sis:person:assign-id')) extra.push({ label: 'Change institutional ID', icon: 'person-vcard', run: () => editInstitutionalId(person) });
                 if (can('sis:person:manage') && can('sis:audit:read') && can('sis:history:verify')) extra.push({ label: 'Check profile history', icon: 'shield-check', run: () => historyChecks.open('person', person.id.value, () => openPerson(person.id.value)) });
