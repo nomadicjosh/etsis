@@ -24,6 +24,7 @@ final class EventClassMap
     public static function registered(): array
     {
         return [
+            \Domain\Person\Event\PersonSsnWasRecorded::class,
             \Domain\Registration\Event\EnrollmentWasReinstated::class,
             \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class,
             \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class,

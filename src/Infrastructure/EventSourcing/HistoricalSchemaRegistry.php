@@ -52,6 +52,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Person\Event\PersonSsnWasRecorded::class => [
+                'type' => 'person_ssn', 'root' => \Domain\Person\PersonSsnHistory::class,
+                'fields' => \Domain\Person\PersonSsnHistory::FIELDS,
+            ],
             \Domain\Registration\Event\EnrollmentWasReinstated::class => [
                 'type' => 'enrollment', 'root' => \Domain\Registration\EnrollmentHistory::class,
                 'fields' => \Domain\Registration\ValueObject\ReinstatementEventSchema::ENROLLMENT,
@@ -657,6 +661,12 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if ($class === \Domain\Person\Event\PersonSsnWasRecorded::class) {
+                \Domain\Person\PersonSsnHistory::validate($payload);
+                if ($payload['person_id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if (
                 in_array($class, [\Domain\Student\Event\StudentStandingWasRecorded::class,
                 \Domain\Student\Event\StudentStandingWasCorrected::class], true)
@@ -1145,6 +1155,7 @@ final readonly class HistoricalSchemaRegistry
                 // This complete payload is validated by its bounded typed schema above.
                 if (
                     in_array($class, [
+                    \Domain\Person\Event\PersonSsnWasRecorded::class,
                     \Domain\Registration\Event\EnrollmentWasReinstated::class,
                     \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class,
                     \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class,
@@ -1857,6 +1868,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Person\PersonSsnHistory::class => 'person_ssn',
             \Domain\Registration\Waitlist\SectionWaitlist::class => 'section_waitlist',
             \Domain\Student\StandingProposalPolicy::class => 'standing_proposal_policy',
             \Domain\Registration\GraduateRegistrationPolicy::class => 'graduate_registration_policy',
@@ -1917,6 +1929,7 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            'person_ssn' => new \Domain\Person\ValueObject\PersonSsnId($id),
             'section_waitlist' => new \Domain\Registration\Waitlist\WaitlistId($id),
             'standing_proposal_policy' => new \Domain\Student\ValueObject\StandingProposalPolicyId($id),
             'graduate_registration_policy' => new \Domain\Registration\ValueObject\GraduateRegistrationPolicyId($id),

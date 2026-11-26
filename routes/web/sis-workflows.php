@@ -1175,6 +1175,11 @@ return static function (Psr7Router $router): void {
     $router->post('/sis/moodle/sections/{section}/link/', [SisMoodleSectionController::class, 'link']);
     $router->post("/sis/moodle/check/", [SisMoodleController::class, "check"]);
     $router->get("/sis/moodle/installation/", [SisMoodleBindingController::class, "status"]);
+    $ssn = \Application\Http\Controller\PersonSsnController::class;
+    $router->get('/sis/people/{person}/ssn/', [$ssn, 'view']);
+    foreach (['review', 'confirm', 'history'] as $method) {
+        $router->post('/sis/people/{person}/ssn/' . $method . '/', [$ssn, $method]);
+    }
     $router->get('/sis/people/{person}/moodle/', [SisMoodlePersonLinkController::class, 'status']);
     $router->get('/sis/people/{person}/moodle/account-request/', [SisMoodleAccountRequestController::class, 'status']);
     $router->post(

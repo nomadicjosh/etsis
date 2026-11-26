@@ -114,6 +114,10 @@ An explicit observation says that existing details were first recorded when trac
 
 The review verifies the selected person's protected stream, attribution and current core identity using shared `ProfileHistory` checks. Replay is limited to 2,000 events; summaries and actor-name lookups are bounded to each twenty-entry response. Reading or paging writes no event, receipt, audit row or projection. There is no new schema, event type or parallel event table. Student academic, financial and employment decisions and User credential/sign-in decisions retain their separate domain histories.
 
+## Social Security numbers
+
+Authorized staff can [record or correct an SSN](person-ssns.md) from the person’s More person actions menu. Saved values show only the last four digits. Full replacements require two hidden entries, a reason and explicit review/confirmation; there is no full-number reveal. Independent viewing/correction duties protect the separate private stream in the existing journal.
+
 ## Contact changes
 
 The portal personal-information form and **People → Contact information** save preferred name, phone and mailing address through the same Person-domain workflow. The encrypted `sis_portal_contacts` table remains the current read model; its original name does not make these details student-only. A signed-in prospect, student or employee edits their own person contact information in the portal. Staff privileges never override this owner-only portal boundary. The separate staff workspace requires `sis:person:manage` for reads and edits, without requiring or granting password/sign-in-email administration. Only a super administrator can use that staff workflow for a super account.

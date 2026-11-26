@@ -308,6 +308,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlNotificationPreferencesRepository::class,
             \Domain\Person\Repository\PersonProfileRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlPersonProfileRepository::class,
+            \Domain\Person\Repository\PersonSsnRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlPersonSsnRepository::class,
             \Domain\Person\Repository\PersonAccountRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlPersonAccountRepository::class,
             \Domain\User\Repository\UserAggregateRepository::class =>

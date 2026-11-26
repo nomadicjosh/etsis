@@ -8464,3 +8464,158 @@ msgstr ""
 #: src/Domain/Student/ValueObject/StandingLoadRequirement.php:29
 msgid "Use inclusive registered-credit bounds from 0 to 999.999 and an optional exact load classification code."
 msgstr ""
+
+#: src/Domain/Person/ValueObject/SocialSecurityNumber.php:21
+msgid "Enter nine digits, with optional hyphens in the form 123-45-6789."
+msgstr ""
+
+#: src/Domain/Person/PersonSsnHistory.php:126
+msgid ""
+"Enter a correction reason (up to 1000 characters), without the SSN or other "
+"nine-digit numbers."
+msgstr ""
+
+#: src/Domain/Person/Service/PersonSsnService.php:84
+msgid "The person changed. Reopen the SSN record."
+msgstr ""
+
+#: src/Domain/Person/Service/PersonSsnService.php:186
+msgid "The SSN record changed. Reload before reviewing."
+msgstr ""
+
+#: src/Domain/Person/Service/PersonSsnService.php:262
+msgid "The SSN record changed. Review the current record again."
+msgstr ""
+
+#: src/Application/Http/Controller/PersonSsnController.php:66
+msgid "Provide a replacement SSN or explicitly select clearing the number."
+msgstr ""
+
+#: src/Application/Http/Controller/PersonSsnController.php:74
+msgid "Enter the replacement SSN twice."
+msgstr ""
+
+#: src/Application/Http/Controller/PersonSsnController.php:80
+msgid "The replacement SSN entries do not match."
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:8
+msgid "Social Security number"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:10
+msgid "Saved SSN"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:11
+msgid "No saved SSN"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:12
+msgid ""
+"Saved numbers show only the last four digits. Enter a full replacement for a "
+"correction."
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:13
+msgid "Replacement SSN"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:14
+msgid "Enter replacement SSN again"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:15
+msgid "Reason for SSN correction"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:16
+msgid ""
+"Explain the correction without including the SSN or other nine-digit numbers."
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:17
+msgid "Review SSN correction"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:18
+msgid "Clear saved SSN"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:19
+msgid "Before"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:20
+msgid "After"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:21
+msgid ""
+"Only the last four digits are shown, even when a correction changes earlier "
+"digits."
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:22
+msgid "Confirm SSN correction"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:24
+msgid "Reload saved mask"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:25
+msgid "SSN correction history"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:26
+msgid "More SSN history"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:27
+msgid "Previous SSN history"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:28
+msgid "No SSN decisions have been recorded."
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:29
+msgid "Number recorded"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:30
+msgid "Number cleared"
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:31
+msgid "SSN correction recorded. Only the saved last four digits are displayed."
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:32
+msgid ""
+"Your access permits masked viewing. Editing requires the separate SSN "
+"correction duty."
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:33
+msgid ""
+"This record needs operator review before another SSN decision can be "
+"recorded."
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:34
+msgid "SSN access changed. Reopen the person record before continuing."
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:35
+msgid ""
+"The SSN task could not be completed. Review the current record before trying "
+"again."
+msgstr ""
+
+#: resources/views/shared/person-ssn-labels.php:36
+msgid ""
+"Reloading preserves your replacement draft and requires a new correction "
+"review."
+msgstr ""

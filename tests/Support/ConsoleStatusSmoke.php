@@ -64,6 +64,7 @@ try {
                 'check-program-campus',
                 'check-standing-proposals',
                 'check-standing-load',
+                'check-person-ssn',
                 'check-maintenance',
                 'check-notification-preferences',
                 'check-transcript-updates',
@@ -517,6 +518,10 @@ try {
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-application-projections') {
             require __DIR__ . '/ApplicationProjectionBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-person-ssn') {
+            $kernel->bootstrap();
+            require __DIR__ . '/PersonSsnBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-person-projections') {
             require __DIR__ . '/PersonProjectionBootChecks.php';

@@ -749,7 +749,7 @@ External student-progress AI remains deferred by project direction; catalog-auth
 - [x] [Connect owner transcript notices and current request status](workspace-notifications.md#private-transcript-updates) across the compact workspace/portal bell: bounded indexed pages, exact revision acknowledgement, minimal owner-only detail, preserved return navigation, physical deletion and visible-only unread counts. Preserve source documents/requests/academic facts and keep settings in their person-owned editor.
 - [ ] Secure, protected, encrypted web browser ssh/console access to run only console commands for their specific tenant. This is optional and can be made available to users who don't have ssh access via their hosting provider or need it for a multi-tenant setup. Or whatever is the best setup or secure solution to solve this problem.
 - [ ] 1098-T's for students
-- [ ] Support for adding/updating SSN's on profiles, but secured, protected, encrypted.
+- [x] [Protected SSN entry and correction on canonical person profiles](person-ssns.md): independent staff viewing/correction duties, saved last-four masks with no reveal, double-entry reviewed replacements/clearing, protected reasoned history, atomic concurrency/retries and encrypted mask-only projection in the existing journal.
 - [ ] Data Protection (if not already implemented): Use strong encryption (such as AES-256 at rest and TLS 1.2+ in transit).
 
 ## Next implementation stages

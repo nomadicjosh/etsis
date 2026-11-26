@@ -72,6 +72,8 @@ final readonly class WorkspaceService
         "sis:moodle:link-person",
         'sis:moodle:create-person',
         "sis:person:manage",
+        "sis:person:ssn:read",
+        "sis:person:ssn:manage",
         "sis:person:assign-id",
         "sis:admissions:manage",
         "sis:admissions:documents:retain",
