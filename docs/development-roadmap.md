@@ -490,7 +490,9 @@ Authoring, exception inputs and [paged academic-work review](student-academic-wo
 - [x] [Route website replies through explicit department/form access](website-forms.md#choose-the-department-and-permissions): optional active department, independent read/manage duties, administrator-managed department inbox membership or exact page/form grants, scope-filtered paging and current permission/account/membership checks. A form grant cannot bypass a department; new routing preserves the original department on earlier submissions. Grant no automatic staff access.
 - [x] [Complete encrypted public intake and the deletable website inbox](website-forms.md#review-and-delete-submissions): published-definition validation, framework CSRF, browser-bound expiring tickets, atomic original retries, conditional-answer rejection, baseline rate/honeypot controls, bounded private listing/read/status changes and confirmed permanent deletion. Keep answer-free retry metadata separately bounded and prunable; add no admission/person record, academic event stream or report.
 - [x] [Connect consented website forms to newsletter and lead lists](website-newsletters.md): encrypted Sendy/Mailchimp/Mautic or signed-webhook connections, independent integration duty, immutable destinations, published email/name and optional consent mappings, reference-only atomic jobs and bounded server delivery. Preserve provider suppression/confirmation behavior, stop uncertain/interrupted sends for review, surface scoped status/retry in the existing inbox and cancel jobs when inquiries are permanently deleted. Live provider/deployment acceptance remains institutional qualification.
-- [ ] Complete remaining form/content-block keyboard and accessibility acceptance beyond the page-publication, menus, native website forms/inbox and shared accordion/carousel workflows above, including institution-selected third-party theme and assistive-technology qualification.
+- [x] [Complete native video/map authoring and safe destinations](website-publishing-and-menus.md#accessible-video-and-map-blocks): shared escaped title/description/address settings, bounded approved HTTPS embed URLs, deliberate accessible player options, inactive native previews, editor telemetry opt-out and preserved saved designs/approvals.
+- [x] [Complete visitor-controlled external media](website-publishing-and-menus.md#accessible-video-and-map-blocks): per-instance keyboard load/hide, truthful focus/expanded/status behavior, no provider requests before activation, no-script/direct-link alternatives, responsive white cards and narrow frame policy across all four bundled themes.
+- [ ] Complete remaining form/content-block keyboard and accessibility acceptance beyond the page-publication, menus, native website forms/inbox, accordion/carousel and video/map workflows above, including institution-selected third-party theme and assistive-technology qualification.
 
 **Done when:** applicants and authorized offices can see the appropriate next step, every consequential outcome retains its reason/context, and public intake cannot reveal another person's identity or records.
 
@@ -766,6 +768,8 @@ External student-progress AI remains deferred by project direction; catalog-auth
 - [ ] 1098-T's for students
 - [x] [Protected SSN entry and correction on canonical person profiles](person-ssns.md): independent staff viewing/correction duties, saved last-four masks with no reveal, double-entry reviewed replacements/clearing, protected reasoned history, atomic concurrency/retries and encrypted mask-only projection in the existing journal.
 - [ ] Data Protection (if not already implemented): Use strong encryption (such as AES-256 at rest and TLS 1.2+ in transit).
+- [ ] An option to collapse the workspace sidebar, showing only icons with flyouts.
+- [ ] Instead of the left sidebar in the workspace, provide other beautiful and fun to use horizontal alternatives.
 
 ## Next implementation stages
 

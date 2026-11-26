@@ -20,6 +20,9 @@ $websiteConfig["theme"]["active_theme"] = "PageBuilderTheme";
 $websiteConfig["theme"]["parents"] = [];
 $websiteConfig["router"]["use_router"] = false;
 \Vihzhuo\Extensions::registerBlock('regular-form', $root . '/resources/blocks/forms/form');
+foreach (['youtube', 'google-map'] as $slug) {
+    \Vihzhuo\Extensions::registerBlock($slug, $root . '/resources/blocks/' . $slug);
+}
 new \Application\Service\CodefyPageBuilder($websiteConfig);
 global $phpb_db;
 $phpb_db->query(
@@ -81,6 +84,17 @@ if (($_GET['forms'] ?? '') === '1') {
     $data['blocks']['en']['IDcontact'] = ['slug' => 'regular-form', 'settings' => ['attributes' => [
         'website-definition' => json_encode($websiteForm, JSON_THROW_ON_ERROR),
     ]]];
+    $record->setData(['data' => $data], false);
+}
+if (($_GET['embeds'] ?? '') === '1') {
+    require __DIR__ . '/website-embed-data.php';
+    $data = $record->getBuilderData();
+    foreach ($websiteEmbeds as $slug => $attributes) {
+        $data['html'][0] .= '[block slug="' . $slug . '" id="ID' . $slug . '"]';
+        $data['components'][0][] = ['tagName' => 'phpb-block',
+            'attributes' => ['slug' => $slug, 'id' => 'ID' . $slug]];
+        $data['blocks']['en']['ID' . $slug] = ['slug' => $slug, 'settings' => ['attributes' => $attributes]];
+    }
     $record->setData(['data' => $data], false);
 }
 $request = new \Qubus\Http\ServerRequest(

@@ -9739,3 +9739,102 @@ msgstr ""
 #: src/Domain/WebsiteForms/ValueObject/WebsiteFormDefinition.php:176
 msgid "Map an unconditional required email and a separate optional newsletter consent checkbox."
 msgstr ""
+
+#: resources/blocks/youtube/config.php:8
+#: resources/blocks/google-map/config.php:8
+msgid "Basic"
+msgstr ""
+
+#: resources/blocks/youtube/config.php:9
+msgid "YouTube Video"
+msgstr ""
+
+#: resources/blocks/youtube/config.php:14
+msgid "YouTube embed URL (HTTPS)"
+msgstr ""
+
+#: resources/blocks/youtube/config.php:20
+msgid "Video title"
+msgstr ""
+
+#: resources/blocks/youtube/config.php:21
+#: resources/views/frontend/website/embed.phtml:11
+msgid "Video"
+msgstr ""
+
+#: resources/blocks/youtube/config.php:25
+msgid "Video description or transcript summary"
+msgstr ""
+
+#: resources/blocks/google-map/config.php:9
+msgid "Google Maps"
+msgstr ""
+
+#: resources/blocks/google-map/config.php:14
+msgid "Google Maps embed URL (HTTPS)"
+msgstr ""
+
+#: resources/blocks/google-map/config.php:20
+msgid "Map title"
+msgstr ""
+
+#: resources/blocks/google-map/config.php:21
+#: resources/views/frontend/website/embed.phtml:11
+msgid "Location map"
+msgstr ""
+
+#: resources/blocks/google-map/config.php:25
+msgid "Street address or location description"
+msgstr ""
+
+#: resources/views/frontend/website/embed.phtml:12
+msgid "Load video"
+msgstr ""
+
+#: resources/views/frontend/website/embed.phtml:12
+msgid "Load map"
+msgstr ""
+
+#: resources/views/frontend/website/embed.phtml:13
+msgid "Hide video"
+msgstr ""
+
+#: resources/views/frontend/website/embed.phtml:13
+msgid "Hide map"
+msgstr ""
+
+#: resources/views/frontend/website/embed.phtml:21
+msgid "External content is inactive in the page designer."
+msgstr ""
+
+#: resources/views/frontend/website/embed.phtml:24
+msgid "This embed is unavailable. Check its HTTPS embed URL in block settings."
+msgstr ""
+
+#: resources/views/frontend/website/embed.phtml:27
+msgid "Loading this video connects your browser to YouTube."
+msgstr ""
+
+#: resources/views/frontend/website/embed.phtml:28
+msgid "Loading this map connects your browser to Google Maps."
+msgstr ""
+
+#: resources/views/frontend/website/embed.phtml:38
+msgid "External content enabled. Use Tab to reach its controls."
+msgstr ""
+
+#: resources/views/frontend/website/embed.phtml:39
+msgid "External content hidden."
+msgstr ""
+
+#: resources/views/frontend/website/embed.phtml:49
+msgid "Open video on YouTube"
+msgstr ""
+
+#: resources/views/frontend/website/embed.phtml:49
+msgid "Open location in Google Maps"
+msgstr ""
+
+#: resources/views/frontend/website/embed.phtml:55
+msgid "If embedded content does not appear, use the direct link above."
+msgstr ""

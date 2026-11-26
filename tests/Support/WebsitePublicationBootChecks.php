@@ -248,6 +248,7 @@ foreach (['accordion', 'carousel'] as $slug) {
         throw new RuntimeException('The native designer lost the controlled block settings.');
     }
 }
+require __DIR__ . '/WebsiteEmbedBootChecks.php';
 $phpb_db->query(
     "CREATE TABLE uploads (id INTEGER PRIMARY KEY, public_id VARCHAR(50), original_file TEXT, " .
         "mime_type VARCHAR(100), server_file TEXT)",

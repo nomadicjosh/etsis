@@ -1,14 +1,29 @@
 <?php
 
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_html;
+
 return [
-    'category' => 'Basic',
-    'title' => 'Google Maps',
+    'category' => trans_html('Basic'),
+    'title' => trans_html('Google Maps'),
     'icon' => 'fa fa-map-location',
     'settings' => [
         'map_embed_url' => [
             'type' => 'text',
-            'label' => 'Google Map Embed Url',
-            'value' => 'https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d5894.431764339356!2d-71.10994702329464!3d42.380547371191106!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x89e37737c3f68273%3A0x939e0d13b0350b23!2s10%20Eliot%20St%2C%20Somerville%2C%20MA%2002143!5e0!3m2!1sen!2sus!4v1772050541943!5m2!1sen!2sus'
+            'label' => trans_html('Google Maps embed URL (HTTPS)'),
+            'placeholder' => 'https://www.google.com/maps/embed?pb=...',
+            'value' => '',
+        ],
+        'map_title' => [
+            'type' => 'text',
+            'label' => trans_html('Map title'),
+            'value' => trans_html('Location map'),
+        ],
+        'map_address' => [
+            'type' => 'text',
+            'label' => trans_html('Street address or location description'),
+            'value' => '',
         ],
     ],
 ];

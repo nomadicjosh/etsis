@@ -1,0 +1,58 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans;
+use function Codefy\Framework\Helpers\trans_attr;
+use function Codefy\Framework\Helpers\trans_html;
+
+$id = 'embed-' . bin2hex(random_bytes(8));
+$isVideo = $provider === 'youtube';
+$title = trim($title) ?: ($isVideo ? trans('Video') : trans('Location map'));
+$load = $isVideo ? trans('Load video') : trans('Load map');
+$hide = $isVideo ? trans('Hide video') : trans('Hide map');
+?>
+<figure class="website-embed website-embed-<?= $isVideo ? 'video' : 'map' ?> my-4 p-3 border rounded">
+    <figcaption id="<?= $id ?>-title" class="fw-semibold mb-2"><?= phpb_e($title) ?></figcaption>
+    <?php if (trim($description) !== '') : ?>
+        <p class="website-embed-description"><?= phpb_e($description) ?></p>
+    <?php endif; ?>
+    <?php if ($preview) : ?>
+        <p class="mb-0"><?= trans_html('External content is inactive in the page designer.') ?></p>
+    <?php endif; ?>
+    <?php if ($embed === null) : ?>
+        <p class="mb-0"><?= trans_html('This embed is unavailable. Check its HTTPS embed URL in block settings.') ?></p>
+    <?php elseif (!$preview) : ?>
+        <p><?= $isVideo
+            ? trans_html('Loading this video connects your browser to YouTube.')
+            : trans_html('Loading this map connects your browser to Google Maps.') ?></p>
+        <div class="d-flex flex-wrap align-items-center gap-3 mb-3">
+            <button
+                type="button"
+                class="btn btn-outline-primary"
+                data-website-embed
+                data-embed-source="<?= phpb_e($embed->source) ?>"
+                data-embed-title="<?= phpb_e($title) ?>"
+                data-load-label="<?= phpb_e($load) ?>"
+                data-hide-label="<?= phpb_e($hide) ?>"
+                data-loaded-status="<?= trans_attr('External content enabled. Use Tab to reach its controls.') ?>"
+                data-hidden-status="<?= trans_attr('External content hidden.') ?>"
+                aria-expanded="false"
+                aria-controls="<?= $id ?>-frame"
+                aria-describedby="<?= $id ?>-title"
+                hidden
+            >
+                <i class="bi <?= $isVideo ? 'bi-play-btn' : 'bi-map' ?>" aria-hidden="true"></i>
+                <span data-embed-label><?= phpb_e($load) ?></span>
+            </button>
+            <a href="<?= phpb_e($embed->link) ?>" rel="noreferrer" referrerpolicy="no-referrer">
+                <?= $isVideo ? trans_html('Open video on YouTube') : trans_html('Open location in Google Maps') ?>
+            </a>
+        </div>
+        <div id="<?= $id ?>-frame" class="website-embed-frame" hidden></div>
+        <p class="website-embed-status mb-0" role="status" aria-live="polite" aria-atomic="true"></p>
+        <p class="small mt-2 mb-0">
+            <?= trans_html('If embedded content does not appear, use the direct link above.') ?>
+        </p>
+    <?php endif; ?>
+</figure>

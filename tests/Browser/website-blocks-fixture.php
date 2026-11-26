@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 // Native block rendering in isolated memory. Never boot institutional services or resolve live navigation.
+$loader = new \Qubus\View\Native\NativeLoader(['framework' => $root . '/resources/views']);
+$viewApp->delegate(\Qubus\View\Renderer::class, static fn () => $loader);
 $websiteConfig = require $root . '/config/vihzhuo.php';
 $websiteConfig['general']['base_url'] = 'http://127.0.0.1:8127';
 $websiteConfig['storage']['database'] = ['dsn' => 'sqlite::memory:', 'prefix' => ''];
@@ -49,6 +51,13 @@ foreach (['one', 'two'] as $name) {
         ],
     ];
 }
+if (($_GET['embeds'] ?? '') === '1') {
+    require __DIR__ . '/website-embed-data.php';
+    foreach ($websiteEmbeds as $slug => $attributes) {
+        \Vihzhuo\Extensions::registerBlock($slug, $root . '/resources/blocks/' . $slug);
+        $blocks['ID' . $slug] = ['slug' => $slug, 'settings' => ['attributes' => $attributes]];
+    }
+}
 if (($_GET['forms'] ?? '') === '1') {
     require __DIR__ . '/website-form-data.php';
     \Vihzhuo\Extensions::registerBlock('regular-form', $root . '/resources/blocks/forms/form');
@@ -59,12 +68,16 @@ if (($_GET['forms'] ?? '') === '1') {
 $page = new \Vihzhuo\Page();
 $page->setData(['id' => 1, 'layout' => 'page-template', 'data' => ['blocks' => ['en' => $blocks]]]);
 $page->setTranslations(['en' => ['meta_title' => 'Fictional interactive blocks', 'meta_description' => '']]);
-$renderer = new \Vihzhuo\Modules\GrapesJS\PageRenderer($theme, $page, ($_GET['edit'] ?? '') === '1');
+phpb_set_in_editmode(($_GET['edit'] ?? '') === '1');
+$renderer = new \Vihzhuo\Modules\GrapesJS\PageRenderer($theme, $page, phpb_in_editmode());
 $body = '<div class="container py-4"><h1 id="page-title">Fictional interactive information</h1>';
-foreach (['one', 'two'] as $name) {
+foreach ((($_GET['embeds'] ?? '') === '1' ? [] : ['one', 'two']) as $name) {
     $body .= '<section aria-label="Questions ' . $name . '" class="mb-4">'
     . $renderer->renderBlock('accordion', 'IDquestions-' . $name) . '</section>';
     $body .= $renderer->renderBlock('carousel', 'IDhighlights-' . $name);
+}
+foreach (array_keys($websiteEmbeds ?? []) as $slug) {
+    $body .= $renderer->renderBlock($slug, 'ID' . $slug);
 }
 if (($_GET['forms'] ?? '') === '1') {
     $body .= $renderer->renderBlock('regular-form', 'IDcontact');
@@ -79,5 +92,7 @@ $html = \Vihzhuo\Core\ThemeContext::render($theme, $layout->getViewFile(), [
 $html = str_replace(['[block slug="bb-navbar"]', '[block slug="bb-footer"]'], '', $html);
 header('Cache-Control: private, no-store');
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
-    . "img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; frame-ancestors 'self'");
+    . "img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; frame-ancestors 'self'; "
+    . "frame-src https://www.youtube-nocookie.com/embed/ https://www.google.com/maps/embed "
+    . "https://www.google.com/maps/embed/v1/");
 echo $html;

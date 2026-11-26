@@ -1,24 +1,29 @@
 <?php
 
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_html;
+
 return [
-    'category' => 'Basic',
-    'title' => 'YouTube Video',
+    'category' => trans_html('Basic'),
+    'title' => trans_html('YouTube Video'),
     'icon' => 'fa fa-brands fa-square-youtube',
     'settings' => [
         'youtube_embed_url' => [
             'type' => 'text',
-            'label' => 'Youtube Embed URL',
-            'value' => 'https://www.youtube.com/embed/K5QMMNxB0ck?si=mFDkBdQih93F1TUH'
+            'label' => trans_html('YouTube embed URL (HTTPS)'),
+            'placeholder' => 'https://www.youtube.com/embed/VIDEO_ID',
+            'value' => '',
         ],
-        'youtube_video_width' => [
+        'youtube_title' => [
             'type' => 'text',
-            'label' => 'Embed Width',
-            'value' => '560'
+            'label' => trans_html('Video title'),
+            'value' => trans_html('Video'),
         ],
-        'youtube_video_height' => [
+        'youtube_description' => [
             'type' => 'text',
-            'label' => 'Embed Height',
-            'value' => '315'
+            'label' => trans_html('Video description or transcript summary'),
+            'value' => '',
         ],
     ],
 ];

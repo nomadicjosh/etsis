@@ -16,6 +16,7 @@
 
     // GrapesJS uploads files through its own transport.
     window.addEventListener('vihzhuo:grapesjs:before-init', event => {
+        event.detail.telemetry = false;
         const assets = event.detail.assetManager;
         if (assets && typeof assets.upload === 'string' && sameOrigin(assets.upload)) {
             assets.headers = {...assets.headers, [header]: token};

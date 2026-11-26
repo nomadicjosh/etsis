@@ -106,7 +106,9 @@ final readonly class CampusRenderer
             "Content-Security-Policy" =>
                 "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " .
                 "img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; " .
-                "form-action 'self'; frame-ancestors 'self'",
+                "form-action 'self'; frame-ancestors 'self'; " .
+                "frame-src 'self' https://www.youtube-nocookie.com/embed/ " .
+                "https://www.google.com/maps/embed https://www.google.com/maps/embed/v1/",
         ]);
     }
 
