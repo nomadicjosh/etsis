@@ -61,6 +61,17 @@ final readonly class AcademicTimetableService
     /** @return array<string,mixed> */
     public function timetable(EntityId $term, ?string $date = null, string $view = 'week'): array
     {
+        return $this->read($term, $date, $view, false);
+    }
+
+    /** Internal export source; protected publication metadata is never placed in ordinary timetable JSON. */
+    public function calendar(EntityId $term, ?string $date = null, string $view = 'week'): array
+    {
+        return $this->read($term, $date, $view, true);
+    }
+
+    private function read(EntityId $term, ?string $date, string $view, bool $calendar): array
+    {
         $owner = $this->access->authenticatedUserId();
         $selected = $this->repository->term($owner, $term);
         $now = $this->clock->now();
@@ -107,6 +118,10 @@ final readonly class AcademicTimetableService
                     'room_code' => $location['code'] ?? null, 'room_name' => $location['name'] ?? null,
                     'building_code' => $location['building_code'] ?? null,
                     'building_name' => $location['building_name'] ?? null];
+                if ($calendar) {
+                    $rows[array_key_last($rows)]['plan_version'] = $stored->event->playhead();
+                    $rows[array_key_last($rows)]['published_at'] = $stored->recordedAt->format(DATE_ATOM);
+                }
                 if (count($rows) > 500) {
                     throw new ValidationException([['field' => 'date',
                         'message' => 'More than 500 meetings match. Choose a week or ask your records office for help.',

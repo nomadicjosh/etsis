@@ -78,10 +78,11 @@
         return element;
     }
 
-    async function request(path, method = 'GET', data) {
+    async function request(path, method = 'GET', data, signal) {
         const multipart = typeof FormData !== 'undefined' && data instanceof FormData;
         const token = one('#campus-csrf input')?.value;
         const response = await fetch(path, {
+            signal,
             method,
             credentials: 'same-origin',
             cache: 'no-store',
@@ -2732,7 +2733,8 @@
                         const initial = selected ? await request('/portal/api/timetable/view/', 'POST', { term_id: selected.id }) : null;
                         if (pageLeaving || !academic.isConnected) return;
                         academic.replaceChildren();
-                        window.createAcademicTimetable({ node: el, request, task, table }).mount(academic, context, initial);
+                        window.createAcademicTimetable({ node: el, request, task, table,
+                            labels: config.timetable_export_labels }).mount(academic, context, initial);
                     } catch (error) {
                         if (!pageLeaving && academic.isConnected) academic.replaceChildren(el('p', { role: 'status' }, labels.class_failure));
                     }

@@ -10151,7 +10151,7 @@ msgstr ""
 msgid "The standing changed. Reopen the notification."
 msgstr ""
 
-#: src/Application/View/PublicEventCalendar.php:41
+#: src/Application/View/PublicEventCalendar.php:31
 msgid "Public campus events"
 msgstr ""
 
@@ -10189,4 +10189,52 @@ msgstr ""
 
 #: resources/views/frontend/portal/components/event-feed.phtml:37
 msgid "A downloaded copy does not update. Subscribed calendars refresh on their own schedule and may retain older copies. Check this page for current availability. Private classes, bookings and joining credentials are never included."
+msgstr ""
+
+#: src/Application/View/AcademicTimetableCalendar.php:23
+msgid "Online · No room"
+msgstr ""
+
+#: src/Application/View/AcademicTimetableCalendar.php:35
+msgid "Published class meeting. This calendar is a snapshot. Check My timetable for updates."
+msgstr ""
+
+#: src/Application/View/AcademicTimetableCalendar.php:40
+msgid "My academic timetable"
+msgstr ""
+
+#: src/Application/Service/AcademicTimetableExport.php:41
+msgid "Your published timetable changed. Refresh it."
+msgstr ""
+
+#: resources/views/shared/timetable-export-labels.php:8
+msgid "Take your class timetable with you"
+msgstr ""
+
+#: resources/views/shared/timetable-export-labels.php:9
+msgid "Download class calendar (.ics)"
+msgstr ""
+
+#: resources/views/shared/timetable-export-labels.php:11
+msgid "Rechecks the current published class meetings for this entire week or month. Daily pages and overlap filters do not limit the download. Advising appointments are separate."
+msgstr ""
+
+#: resources/views/shared/timetable-export-labels.php:15
+msgid "The file contains private class information and imports meetings as busy time. Store it securely. Copies do not update or get recalled; check My timetable for changes."
+msgstr ""
+
+#: resources/views/shared/timetable-export-labels.php:18
+msgid "Preparing your private class calendar…"
+msgstr ""
+
+#: resources/views/shared/timetable-export-labels.php:19
+msgid "Calendar download started. This copy will not update automatically."
+msgstr ""
+
+#: resources/views/shared/timetable-export-labels.php:20
+msgid "The class calendar could not be prepared. Refresh your timetable and try again."
+msgstr ""
+
+#: resources/views/shared/timetable-export-labels.php:22
+msgid "Your timetable is unavailable for this account. Sign in again or contact your records office."
 msgstr ""

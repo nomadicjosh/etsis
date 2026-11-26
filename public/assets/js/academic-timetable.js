@@ -1,7 +1,7 @@
 /* Owner-only published class times. All state stays in this page; no booking or roster controls. */
 window.createAcademicTimetable = function (ui) {
     'use strict';
-    const { node, request, task, table } = ui;
+    const { node, request, task, table, labels } = ui;
     const base = '/portal/api/timetable/';
     const label = date => new Date(`${date}T12:00:00Z`).toLocaleDateString(undefined, {
         timeZone: 'UTC', weekday: 'long', month: 'short', day: 'numeric', year: 'numeric',
@@ -21,6 +21,8 @@ window.createAcademicTimetable = function (ui) {
         }
         let generation = 0, searchGeneration = 0, current = initial, day = null, dailyPage = 0;
         let overlapsOnly = false, inspected = null, comparisonPage = 0;
+        let exporting = false, exportButton = null, exportStatus = null;
+        let exportAbort = null;
         let terms = context.terms, nextAfter = context.next_after, selectedTerm = context.recommended_term || terms[0];
         let available = new Map();
         const form = node('form', { class: 'academic-timetable-controls' });
@@ -62,6 +64,7 @@ window.createAcademicTimetable = function (ui) {
         modes();
         const invalidate = () => {
             generation++;
+            exportAbort?.abort();
             output.replaceChildren(node('p', { class: 'campus-muted', role: 'status' }, 'Choose View timetable to show these dates.'));
         };
         date.addEventListener('input', invalidate);
@@ -92,6 +95,7 @@ window.createAcademicTimetable = function (ui) {
         async function load() {
             if (!form.reportValidity()) return;
             const serial = ++generation;
+            exportAbort?.abort();
             const query = { term_id: term.value, date: date.value, view };
             output.replaceChildren(node('p', { role: 'status' }, 'Getting your published class times…'));
             const result = await request(`${base}view/`, 'POST', query);
@@ -102,6 +106,60 @@ window.createAcademicTimetable = function (ui) {
         const clock = instant => new Date(instant).toLocaleString(undefined, {
             timeZone: current.timezone, timeZoneName: 'shortOffset',
         });
+        async function downloadCalendar() {
+            if (exporting || !current || !root.isConnected) return;
+            exporting = true;
+            const serial = generation;
+            const query = { term_id: current.term.id, date: current.from, view: current.view };
+            const active = () => root.isConnected && generation === serial;
+            const controller = new AbortController(); exportAbort = controller;
+            const timeout = setTimeout(() => controller.abort(), 15000);
+            const leaving = () => controller.abort();
+            window.addEventListener('pagehide', leaving, { once: true });
+            exportStatus.textContent = labels.preparing;
+            exportStatus.setAttribute('role', 'status');
+            try {
+                const result = await request(`${base}export/`, 'POST', query, controller.signal);
+                if (!active()) return;
+                if (typeof result.calendar !== 'string' || !result.calendar.startsWith('BEGIN:VCALENDAR\r\n')
+                    || !result.calendar.endsWith('END:VCALENDAR\r\n')) throw new Error(labels.failed);
+                const file = new Blob([result.calendar], { type: 'text/calendar;charset=utf-8' });
+                if (file.size > 2097152) throw new Error(labels.failed);
+                const url = URL.createObjectURL(file);
+                const cleanup = () => {
+                    URL.revokeObjectURL(url); clearTimeout(timer);
+                    window.removeEventListener('pagehide', cleanup);
+                };
+                const timer = setTimeout(cleanup, 1000);
+                window.addEventListener('pagehide', cleanup, { once: true });
+                const link = node('a', { href: url, download: 'my-timetable.ics', hidden: true });
+                root.append(link); link.click(); link.remove();
+                exportStatus.textContent = labels.started;
+            } catch (error) {
+                if (!active()) return;
+                if ([401, 403].includes(error.status)) {
+                    generation++; current = null;
+                    root.replaceChildren(node('p', { role: 'alert' }, labels.denied));
+                } else {
+                    exportStatus.setAttribute('role', 'alert'); exportStatus.textContent = labels.failed;
+                }
+            } finally {
+                clearTimeout(timeout); window.removeEventListener('pagehide', leaving);
+                if (exportAbort === controller) exportAbort = null;
+                exporting = false;
+                if (exportButton?.isConnected) exportButton.disabled = false;
+            }
+        }
+
+        function calendarDownload() {
+            exportButton = button(labels.download, downloadCalendar);
+            exportButton.prepend(node('i', { class: 'bi bi-calendar2-plus', 'aria-hidden': 'true' }));
+            exportButton.disabled = exporting;
+            exportStatus = node('p', { role: 'status', class: 'form-text mt-2 mb-0' }, exporting ? labels.preparing : '');
+            return node('section', { class: 'border rounded bg-white p-3 my-4', 'aria-label': labels.title },
+                node('h3', { class: 'h5' }, labels.title), node('p', {}, labels.scope),
+                node('p', { class: 'form-text' }, labels.privacy), exportButton, exportStatus);
+        }
         const classLabel = item => node('div', {}, node('strong', { class: 'd-block' }, item.section_code),
             node('span', {}, item.title || item.course_code || 'Course details unavailable'));
         const location = item => node('div', {}, node('span', { class: 'd-block' }, item.room_code
@@ -235,7 +293,7 @@ window.createAcademicTimetable = function (ui) {
             classes.append(list);
             output.replaceChildren(title, node('p', { class: 'campus-muted' },
                 `${current.totals.published} published meetings in this ${current.view}. ${current.timezone}.`),
-                overlapSummary(), navigation, days, details, classes);
+                overlapSummary(), calendarDownload(), navigation, days, details, classes);
             const comparison = inspected ? inspect(selected, byId) : null;
             if (comparison) details.append(comparison.panel);
             if (focus === 'period') title.focus();

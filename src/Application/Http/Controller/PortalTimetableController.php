@@ -12,8 +12,10 @@ use Qubus\Http\ServerRequest;
 
 final readonly class PortalTimetableController
 {
-    public function __construct(private AcademicTimetableService $timetable)
-    {
+    public function __construct(
+        private AcademicTimetableService $timetable,
+        private \Application\Service\AcademicTimetableExport $export,
+    ) {
     }
 
     public function context(): ResponseInterface
@@ -35,5 +37,15 @@ final readonly class PortalTimetableController
             $form->optionalText('date', 10),
             $form->optionalText('view', 5) ?? 'week'
         ));
+    }
+
+    public function export(ServerRequest $request): ResponseInterface
+    {
+        $form = FormInput::from($request);
+        return new JsonResponse(['calendar' => $this->export->prepare(
+            $form->id('term_id'),
+            $form->optionalText('date', 10),
+            $form->optionalText('view', 5) ?? 'week',
+        )]);
     }
 }

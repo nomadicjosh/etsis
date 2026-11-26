@@ -71,6 +71,7 @@ try {
                 'check-transcript-updates',
                 'check-standing-updates',
                 'check-public-event-feed',
+                'check-timetable-export',
                 'check-transcript-worklist',
                 'check-profile-requests',
                 'check-portal',
@@ -387,6 +388,14 @@ try {
             $httpSis = $worklistFixture->transcripts->sis;
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/TranscriptWorklistBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-timetable-export') {
+            $kernel->bootstrap();
+            require __DIR__ . '/TimetableExportFixture.php';
+            $calendarFixture = new \Tests\Support\TimetableExportFixture();
+            $httpSis = $calendarFixture->school->sis;
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/TimetableExportBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-public-event-feed') {
             $kernel->bootstrap();
