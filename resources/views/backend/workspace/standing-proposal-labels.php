@@ -5,6 +5,39 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'load_rules' => trans_html('Recorded enrollment-load requirement'),
+    'load_required' => trans_html('Require a selected load determination'),
+    'load_min' => trans_html('Minimum registered credits (inclusive)'),
+    'load_max' => trans_html('Maximum registered credits (optional, inclusive)'),
+    'load_code' => trans_html('Required load classification code (optional)'),
+    'load_policy_help' => trans_html(
+        'Use a verified determination for the same pursuit. Bounds are inclusive; blank maximum is unrestricted. '
+        . 'Classification matches the exact code retained by that determination. This does not infer a census.'
+    ),
+    'load_yes' => trans_html('Required'),
+    'load_no_max' => trans_html('No maximum'),
+    'load_any_classification' => trans_html('Any recorded classification, including unclassified'),
+    'load_evidence' => trans_html('Recorded enrollment-load evidence'),
+    'load_reference' => trans_html('Determination reference'),
+    'load_restricted' => trans_html('Enrollment-load duty is required to view the retained load details.'),
+    'load_term' => trans_html('Load determination term'),
+    'load_date' => trans_html('Determination date'),
+    'load_credits' => trans_html('Recorded registered credits'),
+    'load_classification' => trans_html('Retained load classification'),
+    'load_unclassified' => trans_html('No recorded classification'),
+    'load_choose' => trans_html('Choose recorded load determination'),
+    'load_use' => trans_html('Use this determination'),
+    'load_clear' => trans_html('Clear load determination'),
+    'load_pick_help' => trans_html(
+        'Choose only when the applicable standing policy requires recorded load. Select a term, then a dated '
+        . 'determination. Term GPA requires the same term. Later registration does not recalculate this evidence.'
+    ),
+    'load_empty' => trans_html('No recorded load determinations exist for this pursuit and term.'),
+    'load_more' => trans_html('More determinations'),
+    'load_previous' => trans_html('Previous determinations'),
+    'load_changed' => trans_html('The selected load evidence changed. Calculate a fresh standing proposal.'),
+    'load_denied' => trans_html('Standing or enrollment-load access changed. Reopen the record before continuing.'),
+    'load_reopen' => trans_html('Reopen academic standing'),
     'policy' => trans_html('Standing proposal policy'),
     'setup' => trans_html('Institution setup'),
     'intro' => trans_html(

@@ -330,6 +330,11 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
             new \Domain\Catalog\Service\PublishedProgramReader($history,
                 new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql)),
+            new \Domain\Student\Service\LoadDeterminationLedger(
+                new \Infrastructure\Persistence\Repository\SqlLoadDeterminationRepository($this->sql),
+                $history
+            ),
+            $this->access,
         );
     }
 

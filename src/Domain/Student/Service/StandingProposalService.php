@@ -37,6 +37,8 @@ final readonly class StandingProposalService
         private StudentProgramStatusLedger $programs,
         private \Domain\Student\Repository\StudentRecordRepository $students,
         private \Domain\Catalog\Service\PublishedProgramReader $publications,
+        private LoadDeterminationLedger $loadHistory,
+        private \Domain\Shared\Security\StudentAccess $access,
     ) {
     }
 
@@ -45,7 +47,8 @@ final readonly class StandingProposalService
         EntityId $pursuit,
         EntityId $period,
         HistoryReadBudget $budget,
-        ?EntityId $term = null
+        ?EntityId $term = null,
+        ?EntityId $load = null
     ): array {
         $publication = $this->policies->current($budget);
         $rules = new StandingProposalRules($publication['rules']);
@@ -94,6 +97,7 @@ final readonly class StandingProposalService
             'basis' => $effective->gpaBasis(),
             'term' => $term === null ? null : ['id' => $term->value, 'code' => $termLabel],
         ]);
+        $loadAssessment = $this->loadAssessment($student, $pursuit, $effective, $term, $load, $budget);
         $inputs = $this->inputs->collect($student, $pursuit, $budget);
         if ($inputs->status === AcademicInputStatus::Limited) {
             throw new \Domain\Shared\EventSourcing\HistoryReadLimitException();
@@ -163,11 +167,15 @@ final readonly class StandingProposalService
                 'grade_scale' => ['version_id' => $requirements['grade_scale']['version_id'] ?? null],
                 'identical_grading_publications' => $requirements['identical_grading_publications'] ?? []],
             'attempts' => $frozen,
+            ...$loadAssessment === null ? [] : ['load_assessment' => $loadAssessment->data],
             'source_positions' => array_map(static fn(array $r): array => array_intersect_key($r, array_flip([
                 'credit_id', 'source_id', 'section_id', 'academic_version', 'registration_version', 'pursuit_version',
             ])), $inputs->references),
         ];
         new StandingProposalEvidence($evidence);
+        if ($loadAssessment !== null) {
+            $this->requireLoadAccess();
+        }
         return $evidence;
     }
 
@@ -180,8 +188,79 @@ final readonly class StandingProposalService
         );
         return ['policy_version' => $proof->data['policy_version'], 'gpa_milli' => $gpa->milli(),
             'gpa_credits_milli' => $gpa->creditsMilli, 'as_of' => $proof->data['as_of'],
-            'assessment' => $proof->assessmentSummary(),
+            'assessment' => $proof->assessmentSummary(), ...$this->loadSummary($proof),
             ...$proof->scopeSummary() === null ? [] : ['scope' => $proof->scopeSummary()]];
+    }
+
+    private function loadAssessment(
+        EntityId $student,
+        EntityId $pursuit,
+        StandingProposalRules $rules,
+        ?EntityId $term,
+        ?EntityId $load,
+        HistoryReadBudget $budget,
+    ): ?\Domain\Student\ValueObject\StandingLoadAssessment {
+        $required = isset($rules->facts['load_requirement']);
+        if (!$required && $load === null) {
+            return null;
+        }
+        $actor = $this->requireLoadAccess();
+        if (!$required) {
+            $this->blocked(trans_html(
+                'The applicable standing policy has no load requirement. Clear the selected determination.'
+            ));
+        }
+        if ($load === null) {
+            $this->blocked(trans_html('Select a recorded enrollment-load determination for this standing policy.'));
+        }
+        $stored = $this->loadHistory->restore($load, $budget);
+        if ($stored === null) {
+            $this->blocked(trans_html('The selected enrollment-load determination is unavailable. Choose it again.'));
+        }
+        $assessment = new \Domain\Student\ValueObject\StandingLoadAssessment([
+            'record_id' => $load->value, 'snapshot' => $stored->event->payload()['snapshot'],
+        ]);
+        try {
+            $assessment->validateFor(
+                $student->value,
+                $pursuit->value,
+                $this->clock->now()->format('Y-m-d'),
+                $term?->value,
+                $rules->facts['load_requirement']
+            );
+        } catch (\Domain\Shared\EventSourcing\CorruptHistoryException) {
+            $this->blocked(trans_html(
+                'Choose a determination for this pursuit that meets the published load bounds and classification; '
+                . 'term GPA requires the same term.'
+            ));
+        }
+        if ($this->access->requirePermission(LoadDeterminationService::PERMISSION)->value !== $actor->value) {
+            throw new \Domain\Shared\Exception\AccessDeniedException();
+        }
+        return $assessment;
+    }
+
+    private function requireLoadAccess(): EntityId
+    {
+        $actor = $this->access->authenticatedUserId();
+        if ($this->access->requirePermission(LoadDeterminationService::PERMISSION)->value !== $actor->value) {
+            throw new \Domain\Shared\Exception\AccessDeniedException();
+        }
+        return $actor;
+    }
+
+    public function loadSummary(\Domain\Student\ValueObject\StandingProposalEvidence $proof): array
+    {
+        if (!isset($proof->data['load_assessment'])) {
+            return [];
+        }
+        try {
+            $this->access->requirePermission(LoadDeterminationService::PERMISSION);
+        } catch (\Domain\Shared\Exception\AccessDeniedException) {
+            return ['load' => ['restricted' => true]];
+        }
+        $load = new \Domain\Student\ValueObject\StandingLoadAssessment($proof->data['load_assessment']);
+        return ['load' => $load->summary()];
     }
 
     private function blocked(string $message): never

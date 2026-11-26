@@ -63,6 +63,7 @@ try {
                 'check-curriculum-projections',
                 'check-program-campus',
                 'check-standing-proposals',
+                'check-standing-load',
                 'check-maintenance',
                 'check-notification-preferences',
                 'check-transcript-updates',
@@ -497,6 +498,10 @@ try {
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-standing-proposals') {
             require __DIR__ . '/StandingProposalBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-standing-load') {
+            $kernel->bootstrap();
+            require __DIR__ . '/StandingLoadBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-program-campus') {
             require __DIR__ . '/ProgramCampusBootChecks.php';

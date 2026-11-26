@@ -13,7 +13,7 @@ use function Codefy\Framework\Helpers\trans_html;
 final readonly class StandingProposalRules
 {
     public const array BASE_FIELDS = ['enabled', 'minimum_gpa_credits_milli', 'bands'];
-    public const array RULE_FIELDS = [...self::BASE_FIELDS, 'gpa_basis'];
+    public const array RULE_FIELDS = [...self::BASE_FIELDS, 'gpa_basis', 'load_requirement'];
     public const array DEFAULT = [
         'enabled' => false, 'minimum_gpa_credits_milli' => 0, 'bands' => [],
         'overrides' => [], 'gpa_basis' => 'cumulative',
@@ -21,6 +21,14 @@ final readonly class StandingProposalRules
 
     public function __construct(public array $facts)
     {
+        if (array_key_exists('load_requirement', $facts)) {
+            if (!is_array($facts['load_requirement'])) {
+                throw new ValidationException([['field' => 'load_requirement', 'message' => trans_html(
+                    'Provide complete recorded-load requirements or omit them for GPA-only proposals.'
+                )]]);
+            }
+            new StandingLoadRequirement($facts['load_requirement']);
+        }
         if (array_key_exists('gpa_basis', $facts) && !in_array($facts['gpa_basis'], ['cumulative', 'term'], true)) {
             throw new ValidationException([['field' => 'gpa_basis', 'message' => trans_html(
                 'Choose cumulative or selected-term institutional GPA for each rule set.'
@@ -28,8 +36,8 @@ final readonly class StandingProposalRules
         }
         try {
             if (
-                count($facts) < 3 || count($facts) > 5
-                || array_diff(array_keys($facts), array_keys(self::DEFAULT)) !== []
+                count($facts) < 3 || count($facts) > 6
+                || array_diff(array_keys($facts), [...array_keys(self::DEFAULT), 'load_requirement']) !== []
                 || array_diff(self::BASE_FIELDS, array_keys($facts)) !== []
                 || !is_bool($facts['enabled']) || !is_int($facts['minimum_gpa_credits_milli'])
                 || $facts['minimum_gpa_credits_milli'] < 0 || $facts['minimum_gpa_credits_milli'] > 999999
@@ -79,7 +87,7 @@ final readonly class StandingProposalRules
                         || array_diff(array_keys($override), ['kind', 'target', 'rules']) !== []
                         || !is_string($override['kind']) || !is_array($override['target'])
                         || !is_array($override['rules']) || count($override['rules']) < 3
-                        || count($override['rules']) > 4
+                        || count($override['rules']) > 5
                         || array_diff(array_keys($override['rules']), self::RULE_FIELDS) !== []
                     ) {
                         throw new \InvalidArgumentException();

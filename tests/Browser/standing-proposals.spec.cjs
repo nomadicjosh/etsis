@@ -42,18 +42,29 @@ async function fixture(page) {
             const items = state.terms.filter(t => t.code.toLowerCase().includes((data.search || '').toLowerCase()) && (!data.after || t.id > data.after));
             result = { items: items.slice(0, 20), next_after: items.length > 20 ? items[19].id : null };
         } else if (path.endsWith('/standing/propose/')) {
+            if (state.loadDenied) return route.fulfill({ status: 403, json: { error: 'Fictional load access lost.' } });
             if (state.termRequired && !data.term_id) return route.fulfill({ status: 422, json: { error: 'Select a posting term for this term-GPA policy.' } });
             state.lastAssessment = data.term_id ? { basis: 'term', term_code: state.terms.find(t => t.id === data.term_id).code } : { basis: 'cumulative' };
-            result = { standing: { ...definitions[1], definition_id: definitions[1].id },
+            state.lastLoad = data.load_id ? { record_id: data.load_id, term_code: 'TERM.0', determined_on: '2026-05-01',
+                credits_milli: 12000, classification: { code: 'FULL', label: 'Fictional full time' } } : null;
+            result = { ...(state.lastLoad ? { load: state.lastLoad } : {}), standing: { ...definitions[1], definition_id: definitions[1].id },
             scope: state.proposalScope || { kind: 'institution' }, assessment: state.lastAssessment, gpa_milli: 2000, gpa_credits_milli: 3000, as_of: '2026-11-25', policy_version: 1, policy_publication_id: id(20),
-            proposal: { ...(data.term_id ? { term_id: data.term_id } : {}), period_id: id(state.sequence++), revision: 'b'.repeat(64), token: 'fictional-proposal-proof' } };
+            proposal: { ...(data.load_id ? { load_id: data.load_id } : {}), ...(data.term_id ? { term_id: data.term_id } : {}), period_id: id(state.sequence++), revision: 'b'.repeat(64), token: 'fictional-proposal-proof' } };
+        }
+        else if (path.endsWith('/load/determinations/')) {
+            if (state.loadDenied) return route.fulfill({ status: 403, json: { error: 'Fictional load access lost.' } });
+            const items = Array.from({ length: 12 }, (_, n) => ({ id: id(400+n), term: { id: data.term_id, code: 'TERM.0' },
+                as_of_date: '2026-05-01', credits_milli: 12000, classification: { code: 'FULL', label: 'Fictional full time' } }))
+                .filter(item => !data.after || item.id < data.after).sort((a,b) => b.id.localeCompare(a.id));
+            result = { items: items.slice(0,10), next_after: items.length > 10 ? items[9].id : null };
         }
         else if (path.endsWith('/standing/review/')) {
+            if (state.loadDenied) return route.fulfill({ status: 403, json: { error: 'Fictional load access lost.' } });
             if (state.failed) return route.fulfill({ status: 409, json: { error: 'Fictional academic work changed.' } });
             result = { ...data, before: state.rows, after: data.rows, operation_id: id(40), review_token: 'fictional-standing-proof' };
-        } else if (path.endsWith('/standing/commit/')) { state.rows = data.rows; state.historyAssessment = state.lastAssessment; result = { status: 'updated' }; }
+        } else if (path.endsWith('/standing/commit/')) { state.rows = data.rows; state.historyAssessment = state.lastAssessment; state.historyLoad = state.lastLoad; result = { status: 'updated' }; }
         else if (path.endsWith('/standing/history/')) result = { items: [{ version: 1, rows: state.rows, reason: 'Fictional accepted decision.', recorded_at: '2026-11-25T10:00:00Z',
-            proposal: { scope: state.historyScope, assessment: state.historyAssessment, gpa_milli: 2000, gpa_credits_milli: 3000, as_of: '2026-11-25', policy_version: 1 } }], next_cursor: null };
+            proposal: { ...(state.historyLoad ? { load: state.historyLoad } : {}), scope: state.historyScope, assessment: state.historyAssessment, gpa_milli: 2000, gpa_credits_milli: 3000, as_of: '2026-11-25', policy_version: 1 } }], next_cursor: null };
         else if (path.endsWith('/degree-requirements/progress/')) result = { status: 'needs_selection' };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
@@ -381,5 +392,85 @@ test('GPA basis and posting-term controls support keyboard input and narrow enla
     await page.evaluate(() => { document.body.style.zoom = '2'; });
     await reflow(page);
     await page.screenshot({ path: '/tmp/etsis-standing-term-proposal-phone.png' });
+    expect(state.errors).toEqual([]);
+});
+
+test('recorded-load policy controls preserve their own bounds through review and publication', async ({ page }) => {
+    const state = await fixture(page); await policy(page);
+    await page.getByLabel('Require a selected load determination', { exact: true }).check();
+    await page.getByLabel('Minimum registered credits (inclusive)', { exact: true }).fill('12.000');
+    await page.getByLabel('Maximum registered credits (optional, inclusive)', { exact: true }).fill('18.000');
+    await page.getByLabel('Required load classification code (optional)', { exact: true }).fill('FULL');
+    await page.getByLabel('Reason for policy publication', { exact: true }).fill('Fictional load requirement.');
+    await page.getByRole('button', { name: 'Review proposal policy', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('12.000');
+    await page.getByRole('button', { name: 'Publish proposal policy', exact: true }).click();
+    expect(state.rules.load_requirement).toEqual({ minimum_credits_milli: 12000, maximum_credits_milli: 18000, classification_code: 'FULL' });
+    await expect(page.getByLabel('Required load classification code (optional)', { exact: true })).toHaveValue('FULL');
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.addStyleTag({ content: 'html { font-size: 200%; }' }); await reflow(page);
+    expect(state.errors).toEqual([]);
+});
+
+async function selectLoad(page) {
+    await page.getByRole('button', { name: 'Choose recorded load determination', exact: true }).click();
+    await page.getByRole('button', { name: 'Use this posting term', exact: true }).first().click();
+    await page.getByRole('button', { name: 'More determinations', exact: true }).click();
+    await page.getByRole('button', { name: 'Use this determination', exact: true }).last().click();
+}
+
+test('selected recorded load pages and returns with standing drafts, then stays in accepted evidence', async ({ page }) => {
+    const state = await fixture(page); await standing(page);
+    await page.getByLabel('Reason for change', { exact: true }).fill('Fictional retained load decision.');
+    await selectLoad(page);
+    await expect(page.getByLabel('Reason for change', { exact: true })).toHaveValue('Fictional retained load decision.');
+    await page.getByRole('button', { name: 'Propose from current GPA', exact: true }).click();
+    const request = state.requests.filter(r => r.path.endsWith('/standing/propose/')).at(-1);
+    expect(request.data.load_id).toBe(id(400));
+    state.failed = true;
+    await page.getByRole('button', { name: 'Review changes', exact: true }).click();
+    await expect(page.getByLabel('Reason for change', { exact: true })).toHaveValue('Fictional retained load decision.');
+    await expect(page.locator('#drawer-body')).toContainText('Fictional full time');
+    state.failed = false;
+    await page.getByRole('button', { name: 'Review changes', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm changes', exact: true }).click();
+    await page.getByRole('button', { name: 'Standing history', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Fictional full time');
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.addStyleTag({ content: 'html { font-size: 200%; }' }); await reflow(page);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(state.errors).toEqual([]);
+});
+
+test('lost load authority clears the selected evidence and standing draft before another review', async ({ page }) => {
+    const state = await fixture(page); await standing(page); await selectLoad(page);
+    await page.getByRole('button', { name: 'Propose from current GPA', exact: true }).click();
+    await page.getByLabel('Reason for change', { exact: true }).fill('Private fictional load draft.');
+    state.loadDenied = true;
+    await page.getByRole('button', { name: 'Review changes', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Reopen academic standing', exact: true })).toBeVisible();
+    await expect(page.getByLabel('Reason for change', { exact: true })).toHaveCount(0);
+    await expect(page.locator('#drawer-body')).not.toContainText('Fictional full time');
+    expect(state.requests.some(r => r.path.endsWith('/standing/commit/'))).toBe(false);
+    expect(state.errors).toEqual([]);
+});
+
+test('late load history cannot restore choices after closing the standing task', async ({ page }) => {
+    const state = await fixture(page); await standing(page);
+    let signal, release;
+    const arrived = new Promise(resolve => { signal = resolve; });
+    const gate = new Promise(resolve => { release = resolve; });
+    await page.route('**/load/determinations/', async route => {
+        signal(); await gate;
+        await route.fulfill({ json: { items: [{ id: id(999), term: { code: 'Private late term' }, as_of_date: '2026-05-01', credits_milli: 3000,
+            classification: { code: 'LATE', label: 'Private late classification' } }], next_after: null } });
+    });
+    await page.getByRole('button', { name: 'Choose recorded load determination', exact: true }).click();
+    await page.getByRole('button', { name: 'Use this posting term', exact: true }).first().click();
+    await arrived;
+    await page.getByRole('button', { name: 'Close record', exact: true }).click(); release();
+    await page.waitForTimeout(50);
+    await expect(page.locator('body')).not.toContainText('Private late classification');
+    expect(state.requests.some(r => r.path.endsWith('/standing/commit/'))).toBe(false);
     expect(state.errors).toEqual([]);
 });

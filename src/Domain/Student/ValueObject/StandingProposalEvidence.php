@@ -22,8 +22,8 @@ final readonly class StandingProposalEvidence implements \JsonSerializable
     {
         try {
             if (
-                count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 2
-                || array_diff(array_keys($data), [...self::FIELDS, 'scope', 'assessment']) !== []
+                count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 3
+                || array_diff(array_keys($data), [...self::FIELDS, 'scope', 'assessment', 'load_assessment']) !== []
                 || array_diff(self::FIELDS, array_keys($data)) !== []
                 || strlen(json_encode($data, JSON_THROW_ON_ERROR)) > 1_048_576
                 || !is_int($data['policy_version']) || $data['policy_version'] < 1 || $data['policy_version'] > 2000
@@ -47,6 +47,18 @@ final readonly class StandingProposalEvidence implements \JsonSerializable
             StandingPeriods::date($data['as_of']);
             $rules = $this->effectiveRules();
             $assessment = array_key_exists('assessment', $data) ? new StandingGpaAssessment($data['assessment']) : null;
+            if (isset($rules->facts['load_requirement']) !== array_key_exists('load_assessment', $data)) {
+                throw new \InvalidArgumentException();
+            }
+            if (array_key_exists('load_assessment', $data)) {
+                new StandingLoadAssessment($data['load_assessment'])->validateFor(
+                    $data['student_id'],
+                    $data['pursuit_id'],
+                    $data['as_of'],
+                    $assessment?->data['term']['id'] ?? null,
+                    $rules->facts['load_requirement']
+                );
+            }
             if (
                 ($assessment === null && ($rules->gpaBasis() !== 'cumulative'
                     || array_key_exists('gpa_basis', $rules->facts)))

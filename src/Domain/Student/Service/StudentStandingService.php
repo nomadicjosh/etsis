@@ -339,10 +339,10 @@ final readonly class StudentStandingService
         });
     }
 
-    public function propose(EntityId $student, EntityId $pursuit, ?EntityId $term = null): array
+    public function propose(EntityId $student, EntityId $pursuit, ?EntityId $term = null, ?EntityId $load = null): array
     {
         $actor = $this->staff();
-        return $this->transactions->run(function () use ($student, $pursuit, $actor, $term): array {
+        return $this->transactions->run(function () use ($student, $pursuit, $actor, $term, $load): array {
             $this->students->lock($student);
             [$s, $p] = $this->scope($student, $pursuit);
             $this->current($s, $p);
@@ -352,7 +352,8 @@ final readonly class StudentStandingService
                 $pursuit,
                 $period,
                 new HistoryReadBudget(maximumBytes: 4_194_304, maximumMilliseconds: 5000),
-                $term
+                $term,
+                $load
             );
             $proof = new \Domain\Student\ValueObject\StandingProposalEvidence($evidence);
             $revision = \Domain\Student\ValueObject\StandingProposalRules::hash($evidence);
@@ -362,11 +363,13 @@ final readonly class StudentStandingService
             );
             $this->staff($actor);
             return ['standing' => $proof->band(), 'scope' => $proof->scopeSummary(),
-                'assessment' => $proof->assessmentSummary(), 'gpa_milli' => $gpa->milli(),
+                'assessment' => $proof->assessmentSummary(), ...$this->proposals->loadSummary($proof),
+                'gpa_milli' => $gpa->milli(),
                 'gpa_credits_milli' => $gpa->creditsMilli, 'as_of' => $evidence['as_of'],
                 'policy_publication_id' => $evidence['policy_publication_id'],
                 'policy_version' => $evidence['policy_version'],
                 'proposal' => [...$term === null ? [] : ['term_id' => $term->value],
+                    ...$load === null ? [] : ['load_id' => $load->value],
                     'period_id' => $period->value, 'revision' => $revision,
                     'token' => $this->proofs->issue(
                         'standing-proposal',
@@ -412,9 +415,10 @@ final readonly class StudentStandingService
             return null;
         }
         if (
-            !in_array(count($proposal), [3, 4], true)
-            || array_diff(array_keys($proposal), ['period_id', 'revision', 'token', 'term_id']) !== []
+            !in_array(count($proposal), [3, 4, 5], true)
+            || array_diff(array_keys($proposal), ['period_id', 'revision', 'token', 'term_id', 'load_id']) !== []
             || (array_key_exists('term_id', $proposal) && !is_string($proposal['term_id']))
+            || (array_key_exists('load_id', $proposal) && !is_string($proposal['load_id']))
             || !is_string($proposal['period_id'] ?? null) || !is_string($proposal['revision'] ?? null)
             || preg_match('/^[a-f0-9]{64}$/D', $proposal['revision']) !== 1 || !is_string($proposal['token'] ?? null)
         ) {
@@ -436,7 +440,8 @@ final readonly class StudentStandingService
             $pursuit,
             $period,
             $budget,
-            isset($proposal['term_id']) ? new EntityId($proposal['term_id']) : null
+            isset($proposal['term_id']) ? new EntityId($proposal['term_id']) : null,
+            isset($proposal['load_id']) ? new EntityId($proposal['load_id']) : null
         );
         if (!hash_equals($proposal['revision'], \Domain\Student\ValueObject\StandingProposalRules::hash($evidence))) {
             throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans_html(
@@ -516,6 +521,18 @@ final readonly class StudentStandingService
                 ...($proof = StudentStanding::proposalEvidence($stored->event)) === null ? []
                     : ["proposal" => $this->proposals->summary($proof, $proposalBudget)],
             ];
+        }
+        if (array_any($items, static fn(array $item): bool => isset($item['proposal']['load']))) {
+            try {
+                $this->authorize(LoadDeterminationService::PERMISSION, $actor);
+            } catch (AccessDeniedException) {
+                foreach ($items as &$item) {
+                    if (isset($item['proposal']['load'])) {
+                        $item['proposal']['load'] = ['restricted' => true];
+                    }
+                }
+                unset($item);
+            }
         }
         $this->staff($actor);
         $this->authorize("sis:audit:read", $actor);

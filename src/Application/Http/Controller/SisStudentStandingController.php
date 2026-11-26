@@ -139,7 +139,8 @@ final readonly class SisStudentStandingController
         return new JsonResponse($this->service->propose(
             new EntityId($student),
             new EntityId($pursuit),
-            FormInput::from($request)->optionalId('term_id')
+            FormInput::from($request)->optionalId('term_id'),
+            FormInput::from($request)->optionalId('load_id')
         ));
     }
 

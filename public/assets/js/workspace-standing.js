@@ -61,18 +61,43 @@ window.createWorkspaceStanding = function (ui) {
         const saved = await request(base);
         if (!loading.isConnected) return;
         let rows = saved.rows.map(row => ({ ...row })), reason = "", historicalEvidence = false;
-        let proposal = null, proposalInfo = null, proposalTerm = null, proposalDraft = null, notice = '';
+        let proposal = null, proposalInfo = null, proposalTerm = null, proposalLoad = null, proposalDraft = null, notice = '', revoked = false;
+        const denySources = () => {
+            rows = []; reason = ''; historicalEvidence = false; proposal = proposalInfo = proposalTerm = proposalLoad = proposalDraft = null; revoked = true;
+        };
+        async function guardedRequest(body, url, data) {
+            try { return await request(url, 'POST', data); }
+            catch (error) {
+                if (body.isConnected && [401, 403].includes(error.status)) { denySources(); render(); }
+                throw error;
+            }
+        }
         const clearProposal = () => { proposal = null; proposalInfo = null; notice = proposals.t('manual'); };
         async function propose() {
             const previous = document.getElementById('standing-reason');
-            const result = await request(base + 'propose/', 'POST', { term_id: proposalTerm?.id || null });
+            const source = JSON.stringify([proposalTerm?.id, proposalLoad?.id]);
+            let result;
+            try { result = await request(base + 'propose/', 'POST', { term_id: proposalTerm?.id || null,
+                ...(proposalLoad ? { load_id: proposalLoad.id } : {}) }); }
+            catch (error) {
+                if (previous?.isConnected && [401, 403].includes(error.status)) { denySources(); render(); }
+                throw error;
+            }
             if (!previous?.isConnected) return;
+            if (source !== JSON.stringify([proposalTerm?.id, proposalLoad?.id])) return;
             const old = proposal ? rows.find(row => row.id === proposal.period_id) : proposalDraft;
             if (proposal) rows = rows.filter(row => row.id !== proposal.period_id);
             rows.push({ id: result.proposal.period_id, definition_id: result.standing.definition_id,
                 code: result.standing.code, title: result.standing.title,
                 starts_on: old?.starts_on || result.as_of, ends_on: old?.ends_on || null, policy_reference: old?.policy_reference || null });
             proposal = result.proposal; proposalInfo = result; proposalDraft = null; notice = ''; render();
+        }
+        function changeLoad(value) {
+            if (proposal) {
+                proposalDraft = { ...rows.find(row => row.id === proposal.period_id) };
+                rows = rows.filter(row => row.id !== proposal.period_id); proposal = null; proposalInfo = null;
+            }
+            proposalLoad = value; notice = proposals.t('load_changed'); render();
         }
         function changeTerm(value) {
             if (proposal) {
@@ -100,6 +125,11 @@ window.createWorkspaceStanding = function (ui) {
         }
         function render() {
             const body = openDrawer("Academic standing", "EDIT → REVIEW → CONFIRM");
+            if (revoked) {
+                body.append(node('p', { class: 'alert alert-warning', role: 'alert' }, proposals.t('load_denied')),
+                    button(proposals.t('load_reopen'), () => open(student, pursuit, back), 'btn-outline-primary', 'arrow-clockwise'));
+                return;
+            }
             const form = node("form"), cards = node("div");
             if (notice) cards.append(node("p", { role: "status", class: "alert alert-info" }, notice));
             if (saved.editable && !saved.historical_correction) cards.append(node('section', { class: 'record-section bg-white border rounded p-3 mb-3' },
@@ -107,9 +137,14 @@ window.createWorkspaceStanding = function (ui) {
                 node('p', { class: 'text-break' }, proposalTerm?.code || proposals.t('term_none')),
                 node('p', { class: 'form-text' }, proposals.t('term_help')),
                 node('div', { class: 'inline-actions' }, button(proposals.t('choose_term'), () =>
-                    proposals.termPicker(base, render, item => changeTerm({ id: item.id, code: item.code }), () => {
-                        rows = []; reason = ''; historicalEvidence = false; proposal = proposalInfo = proposalTerm = proposalDraft = null;
-                    }), 'btn-outline-primary', 'calendar3'), proposalTerm ? button(proposals.t('clear_term'), () => changeTerm(null), 'btn-outline-secondary', 'x-lg') : null)));
+                    proposals.termPicker(base, render, item => changeTerm({ id: item.id, code: item.code }), denySources),
+                    'btn-outline-primary', 'calendar3'), proposalTerm ? button(proposals.t('clear_term'), () => changeTerm(null), 'btn-outline-secondary', 'x-lg') : null)));
+            if (saved.editable && !saved.historical_correction && can('sis:load:determine')) cards.append(node('section', {
+                class: 'record-section bg-white border rounded p-3 mb-3' }, node('h3', { class: 'h6' }, proposals.t('load_evidence')),
+                node('p', { class: 'form-text' }, proposals.t('load_pick_help')), proposalLoad ? proposals.loadSummary(proposalLoad) : null,
+                node('div', { class: 'inline-actions' }, button(proposals.t('load_choose'), () => proposals.loadPicker(
+                    base, render, changeLoad, denySources), 'btn-outline-primary', 'list-check'),
+                proposalLoad ? button(proposals.t('load_clear'), () => changeLoad(null), 'btn-outline-secondary', 'x-lg') : null)));
             if (proposalInfo) cards.append(proposals.summary(proposalInfo),
                 node("div", { class: "inline-actions mb-3" },
                     button(proposals.t("clear"), () => { clearProposal(); render(); }, "btn-sm btn-outline-secondary")));
@@ -153,7 +188,7 @@ window.createWorkspaceStanding = function (ui) {
             form.addEventListener("submit", event => { event.preventDefault(); task(async () => {
                 if (!form.reportValidity()) return;
                 const draft = JSON.stringify([facts(rows), reason, historicalEvidence, proposal]);
-                const result = await request(base + "review/", "POST", { rows: facts(rows), revision: saved.revision, reason, historical_evidence: historicalEvidence, proposal });
+                const result = await guardedRequest(body, base + "review/", { rows: facts(rows), revision: saved.revision, reason, historical_evidence: historicalEvidence, proposal });
                 if (!body.isConnected) return;
                 if (draft !== JSON.stringify([facts(rows), reason, historicalEvidence, proposal])) {
                     body.prepend(node("p", { class: "alert alert-info", role: "status" }, "Your draft changed. Review the current draft again.")); return;
@@ -175,7 +210,7 @@ window.createWorkspaceStanding = function (ui) {
                 node("p", { class: "text-break" }, data.reason),
                 data.historical_evidence ? node("p", { class: "alert alert-info" }, "Historical correction: institutional evidence confirmed. The pursuit remains closed and earlier decisions stay retained.") : null, node("p", { class: "form-text" }, "Students and current assigned advisors see the accepted label and dates. Staff reasons and policy references remain private."),
                 node("div", { class: "inline-actions" }, button("Confirm changes", async () => {
-                    await request(base + "commit/", "POST", { rows: data.rows, revision: data.revision, reason: data.reason,
+                    await guardedRequest(body, base + "commit/", { rows: data.rows, revision: data.revision, reason: data.reason,
                         operation_id: data.operation_id, review_token: data.review_token, historical_evidence: data.historical_evidence === true, proposal: data.proposal || null });
                     if (body.isConnected) await open(student, pursuit, back);
                 }, "btn-primary"), button("Keep editing", render, "btn-link")));

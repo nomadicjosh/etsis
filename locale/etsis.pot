@@ -8336,3 +8336,131 @@ msgstr ""
 #: src/Infrastructure/Reporting/AccountChargeReportSchema.php:32
 msgid "Net unclassified charges in minor units"
 msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:8
+msgid "Recorded enrollment-load requirement"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:9
+msgid "Require a selected load determination"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:10
+msgid "Minimum registered credits (inclusive)"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:11
+msgid "Maximum registered credits (optional, inclusive)"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:12
+msgid "Required load classification code (optional)"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:13
+msgid "Use a verified determination for the same pursuit. Bounds are inclusive; blank maximum is unrestricted. Classification matches the exact code retained by that determination. This does not infer a census."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:18
+msgid "No maximum"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:19
+msgid "Any recorded classification, including unclassified"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:20
+msgid "Recorded enrollment-load evidence"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:21
+msgid "Determination reference"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:22
+msgid "Enrollment-load duty is required to view the retained load details."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:23
+msgid "Load determination term"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:24
+msgid "Determination date"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:25
+msgid "Recorded registered credits"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:26
+msgid "Retained load classification"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:27
+msgid "No recorded classification"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:28
+msgid "Choose recorded load determination"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:29
+msgid "Use this determination"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:30
+msgid "Clear load determination"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:31
+msgid "Choose only when the applicable standing policy requires recorded load. Select a term, then a dated determination. Term GPA requires the same term. Later registration does not recalculate this evidence."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:35
+msgid "No recorded load determinations exist for this pursuit and term."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:36
+msgid "More determinations"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:37
+msgid "Previous determinations"
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:38
+msgid "The selected load evidence changed. Calculate a fresh standing proposal."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:39
+msgid "Standing or enrollment-load access changed. Reopen the record before continuing."
+msgstr ""
+
+#: resources/views/backend/workspace/standing-proposal-labels.php:40
+msgid "Reopen academic standing"
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:209
+msgid "The applicable standing policy has no load requirement. Clear the selected determination."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:214
+msgid "Select a recorded enrollment-load determination for this standing policy."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:218
+msgid "The selected enrollment-load determination is unavailable. Choose it again."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingProposalService.php:232
+msgid "Choose a determination for this pursuit that meets the published load bounds and classification; term GPA requires the same term."
+msgstr ""
+
+#: src/Domain/Student/ValueObject/StandingProposalRules.php:26
+msgid "Provide complete recorded-load requirements or omit them for GPA-only proposals."
+msgstr ""
+
+#: src/Domain/Student/ValueObject/StandingLoadRequirement.php:29
+msgid "Use inclusive registered-credit bounds from 0 to 999.999 and an optional exact load classification code."
+msgstr ""
