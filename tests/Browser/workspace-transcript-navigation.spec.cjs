@@ -22,7 +22,7 @@ async function fixture(page, { status = 'ready', limited = false, check = 'verif
         calls.push({ path, data, method: request.method() });
         let result = { items: [], next_after: null };
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
-        else if (path === '/sis/ui/data/transcripts/') result.items = [{ id: id(1), status, delivery: 'pickup', version: 7 }];
+        else if ((path === '/sis/ui/data/transcripts/' || path === '/sis/transcript-worklist/')) result.items = [{ id: id(1), status, delivery: 'pickup', version: 7 }];
         else if (path === `/portal/api/transcripts/${id(1)}/`) result = { id: id(1), status, recipient: '', delivery: 'pickup' };
         else if (path.endsWith('/fulfillment/')) {
             if (delayed === 'request') await pending;

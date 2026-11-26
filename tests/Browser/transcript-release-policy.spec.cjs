@@ -20,7 +20,7 @@ test('release check setup preserves stale edits, supports keyboard use and keeps
             if (data) policy = { revision: policy.revision + 1, checks: data.checks, include_standing: data.include_standing };
             result = policy;
         } else if (path === '/sis/transcript-policy/check-id/') result = { id: id(++sequence) };
-        else if (path.startsWith('/sis/ui/data/')) result = { items: [], next_after: null };
+        else if ((path.startsWith('/sis/ui/data/') || path === '/sis/transcript-worklist/')) result = { items: [], next_after: null };
         else if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });

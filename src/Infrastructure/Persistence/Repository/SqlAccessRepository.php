@@ -14,6 +14,8 @@ use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\SqlRecords;
 
+use function Codefy\Framework\Helpers\trans_html;
+
 /** No permission graph or user-wide permission set is hydrated on the authorization path. */
 final readonly class SqlAccessRepository implements AccessRepository
 {
@@ -57,14 +59,24 @@ final readonly class SqlAccessRepository implements AccessRepository
         return array_column($this->sql->fetch($sql, [...$ids, $permission], 20), 'user_id');
     }
 
-    public function eligibleAccounts(string $permission, string $search, ?EntityId $after = null): array
+    public function eligibleAccounts(array $permissions, string $search, ?EntityId $after = null): array
     {
         $q = $this->sql->quote(...);
         $user = 'u.' . $q('user_id');
-        $where = ['u.' . $q('sign_in_enabled') . ' = 1', '(' . $this->superMatch($user)
-            . ' OR EXISTS (SELECT p.' . $q('id') . ' FROM ' . $q('sis_access_permissions') . ' p WHERE p.'
-            . $q('name') . ' = ? AND ' . $this->permissionMatch($user) . '))'];
-        $args = [$permission];
+        if ($permissions === [] || count($permissions) > 4) {
+            throw new \InvalidArgumentException(trans_html('Use one to four required account permissions.'));
+        }
+        $where = ['u.' . $q('sign_in_enabled') . ' = 1'];
+        $args = [];
+        foreach (array_unique($permissions) as $permission) {
+            if (!is_string($permission) || $permission === '') {
+                throw new \InvalidArgumentException(trans_html('Use named account permissions.'));
+            }
+            $where[] = '(' . $this->superMatch($user) . ' OR EXISTS (SELECT p.' . $q('id')
+            . ' FROM ' . $q('sis_access_permissions') . ' p WHERE p.' . $q('name') . ' = ? AND '
+            . $this->permissionMatch($user) . '))';
+            $args[] = $permission;
+        }
         $fields = ['person.' . $q('given_name'), 'person.' . $q('family_name'), 'i.' . $q('institutional_id')];
         foreach (preg_split('/\s+/u', trim($search), -1, PREG_SPLIT_NO_EMPTY) ?: [] as $term) {
             $where[] = '(' . implode(' OR ', array_map(static fn (string $field): string =>
@@ -76,7 +88,9 @@ final readonly class SqlAccessRepository implements AccessRepository
             $where[] = $user . ' > ?';
             $args[] = $after->value;
         }
-        return $this->sql->fetch('SELECT ' . $user . ' AS ' . $q('id') . ', person.' . $q('given_name')
+        return $this->sql->fetch('SELECT ' . $user . ' AS ' . $q('id')
+            . ', person.' . $q('id') . ' AS ' . $q('person_id')
+            . ', person.' . $q('given_name')
             . ', person.' . $q('family_name') . ', i.' . $q('institutional_id') . ' FROM ' . $q('users')
             . ' u JOIN ' . $q('sis_persons') . ' person ON person.' . $q('owner_user_id') . ' = ' . $user
             . ' JOIN ' . $q('sis_person_identifiers') . ' i ON i.' . $q('person_id') . ' = person.' . $q('id')

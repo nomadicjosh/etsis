@@ -78,9 +78,9 @@ for (const [academicCheck, dates] of [["verified", true], ["history_gaps", true]
                 await route.fulfill({ json: policy }); return;
             }
             if (path === "/sis/ui/metrics/") result = { cards: [], intake: [], pipeline: [], queue: [] };
-            else if (path.startsWith("/sis/ui/data/"))
+            else if ((path.startsWith("/sis/ui/data/") || path === "/sis/transcript-worklist/"))
                 result = {
-                    items: path.includes("/transcripts/")
+                    items: (path.includes("/transcripts/") || path === "/sis/transcript-worklist/")
                         ? [
                               {
                                   id: request,

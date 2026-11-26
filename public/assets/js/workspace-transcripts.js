@@ -379,6 +379,13 @@ window.createWorkspaceTranscripts = function (ui) {
         if (!body.isConnected) return;
         loading.remove();
         currentStatus.replaceChildren(badge(current.status));
+        if (ui.worklist) {
+            const assignment = node('section', { class: 'record-section' });
+            body.append(assignment);
+            void ui.worklist.mount(assignment, id, message => {
+                if (body.isConnected) body.replaceChildren(node('p', { class: 'alert alert-warning', role: 'alert' }, message));
+            });
+        }
         const progress = workflow(current.status);
         if (progress) body.append(progress);
         const actions = node("div", {

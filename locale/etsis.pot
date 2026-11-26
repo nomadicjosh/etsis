@@ -8084,3 +8084,191 @@ msgstr ""
 #: src/Domain/Transcript/Service/TranscriptUpdatesService.php:182
 msgid "Reload the current transcript notification."
 msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlAccessRepository.php:67
+msgid "Use one to four required account permissions."
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlAccessRepository.php:73
+msgid "Use named account permissions."
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:8
+msgid "Transcript assignment access changed. Reopen the request after your office access is restored."
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:11
+msgid "Work assignment"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:12
+msgid "Route this request to an eligible colleague. Assignment grants no access and does not prepare or deliver a transcript."
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:16
+msgid "Assigned work"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:17
+msgid "Request status"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:18
+msgid "All"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:19
+msgid "My work"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:20
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:156
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:197
+msgid "Unassigned"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:21
+msgid "Active requests"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:22
+msgid "Pending"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:24
+msgid "Finished requests"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:25
+msgid "Assigned to"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:26
+msgid "Current assignment"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:27
+msgid "Loading transcript assignment…"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:28
+msgid "Reload assignment"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:29
+msgid "Finished requests retain their assignment; they cannot be reassigned."
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:30
+msgid "Assignment to save"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:31
+msgid "Assign to me"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:32
+msgid "Clear assignment"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:33
+msgid "You"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:34
+msgid "Search eligible colleagues"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:35
+msgid "Search colleagues"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:36
+msgid "Searching eligible colleagues…"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:37
+msgid "Enter at least two characters to find eligible colleagues."
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:38
+msgid "Choose a colleague; save the assignment when ready."
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:39
+msgid "No eligible colleagues match this search."
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:40
+msgid "Previous colleagues"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:41
+msgid "More colleagues"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:42
+msgid "Save assignment"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:43
+msgid "Saving assignment…"
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:44
+msgid "Transcript assignment saved."
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:45
+msgid "The request or assignment changed. Reload the assignment before saving; your selection is retained."
+msgstr ""
+
+#: resources/views/shared/transcript-worklist-labels.php:48
+msgid "The assignment is unavailable. Reload it or reopen the request to try again."
+msgstr ""
+
+#: src/Application/Http/Controller/TranscriptWorklistController.php:56
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:74
+msgid "Choose an eligible colleague or explicitly clear the assignment."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:83
+msgid "The selected colleague changed. Search again."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:90
+msgid "Choose an enabled colleague with transcript and student-read access."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:107
+msgid "Search with up to eighty characters."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:123
+msgid "Eligible colleagues changed. Search again."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:146
+msgid "Choose a transcript worklist and status."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:158
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:205
+msgid "Assigned account unavailable"
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:174
+msgid "The transcript worklist changed. Reload it."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:218
+msgid "The transcript assignment changed. Reload it."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:282
+msgid "The request or assignment changed. Reload before saving."
+msgstr ""
+
+#: src/Domain/Transcript/Service/TranscriptWorklistService.php:309
+msgid "Transcript assignment changed before completion."
+msgstr ""

@@ -17,8 +17,9 @@ interface AccessRepository
      * @return list<string> Allowed account IDs, bounded to twenty candidates.
      */
     public function allowedUsers(array $users, string $permission): array;
-    /** @return list<array{id:string,given_name:string,family_name:string,institutional_id:string}> */
-    public function eligibleAccounts(string $permission, string $search, ?EntityId $after = null): array;
+    /** @param list<string> $permissions All required duties, filtered before paging.
+     * @return list<array{id:string,person_id:string,given_name:string,family_name:string,institutional_id:string}> */
+    public function eligibleAccounts(array $permissions, string $search, ?EntityId $after = null): array;
     public function anyoneCanManage(): bool;
     public function isSuper(string $userId): bool;
     public function anySuper(): bool;

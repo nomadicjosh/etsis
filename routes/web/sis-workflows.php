@@ -69,6 +69,12 @@ return static function (Psr7Router $router): void {
     $router->post('/sis/registration-plans/commit/', [SisRegistrationBatchController::class, 'commitPlan']);
 
     /** @var Psr7Router&Mappable $router */
+    $transcriptWork = \Application\Http\Controller\TranscriptWorklistController::class;
+    $router->get('/sis/transcript-worklist/', [$transcriptWork, 'page']);
+    $router->get('/sis/transcript-worklist/assignees/', [$transcriptWork, 'assignees']);
+    $router->get('/sis/transcript-requests/{id}/assignment/', [$transcriptWork, 'view']);
+    $router->post('/sis/transcript-requests/{id}/assignment/', [$transcriptWork, 'save']);
+
     $router->post('/sis/offices/', [SisOfficeController::class, 'choices']);
     $router->post('/sis/offices/{id}/save/', [SisOfficeController::class, 'save']);
     $router->post('/sis/offices/{id}/delegates/', [SisOfficeController::class, 'delegates']);

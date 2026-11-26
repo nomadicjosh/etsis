@@ -329,7 +329,9 @@
     const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, recordSummary, actionMenu, buildForm, formData, notify, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId), closeDrawer: () => drawer.hide() });
     const importJobs = window.createWorkspaceImportJobs({ node, request, task, openDrawer, can, notify, table, labels: config.import_labels });
     const importStudio = window.createWorkspaceImports({ jobs: importJobs, labels: config.import_labels, node, table, request, notify, number, task, can, recordSummary, subjects: () => catalogStudio.subjects(), classifications: kind => classificationStudio.library(kind) });
-    const transcriptStudio = window.createWorkspaceTranscripts({ ceuLabels: config.ceu_labels, standingLabels: config.transcript_standing_labels, node, request, requestHtml, requestFile, task, can, recordSummary, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const transcriptWorklist = window.createTranscriptWorklist({ node, request, labels: config.transcript_worklist_labels,
+        changed: () => current === 'transcripts' ? task(() => loadDirectory()) : Promise.resolve() });
+    const transcriptStudio = window.createWorkspaceTranscripts({ worklist: transcriptWorklist, ceuLabels: config.ceu_labels, standingLabels: config.transcript_standing_labels, node, request, requestHtml, requestFile, task, can, recordSummary, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, money, recordSummary, actionMenu,
         buildForm, formData, openDrawer, account: (id, back, label) => operations.openAccount(id, back, label) });
     const hiatusStudio = window.createWorkspaceHiatus({ node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
@@ -511,7 +513,7 @@
         for (const item of data.queue || []) queue.append(node('a', { class: 'queue-row', href: `/admin/workspace/${item.destination}/`, 'data-workspace': item.destination }, node('div', {}, node('span', { class: 'queue-count' }, number(item.value)), node('span', {}, item.label, node('small', { class: 'queue-caption' }, Number(item.value) ? 'Waiting for review' : 'All caught up. A little breathing room.'))), icon('arrow-right')));
     }
 
-    async function records(dataset, search = '', after = '') { return dataset === 'academic_years' ? request('/sis/academic-years/', 'POST', { ...(search ? { search } : {}), ...(after ? { after } : {}) }) : request(`/sis/ui/data/${dataset}/`, 'POST', { search, after }); }
+    async function records(dataset, search = '', after = '') { return dataset === 'transcripts' && can('sis:student:read') ? transcriptWorklist.page(search, after) : dataset === 'academic_years' ? request('/sis/academic-years/', 'POST', { ...(search ? { search } : {}), ...(after ? { after } : {}) }) : request(`/sis/ui/data/${dataset}/`, 'POST', { search, after }); }
     function recordOption(item, dataset = '') {
         return { value: dataset === 'faculty' ? item.owner_user_id : item.id, label: dataset === 'rooms' ? [item.code, item.name, item.building_name].filter(Boolean).join(' · ') : item.term_code ? [item.code, item.course_code, item.term_code].filter(Boolean).join(' · ') : item.institutional_id ? `${item.given_name} ${item.family_name} · ${item.institutional_id}` : [item.code, item.title || item.name || item.job_title].filter(Boolean).join(' · ') || item.id };
     }
@@ -658,6 +660,7 @@
         if (section === 'registration' && can('sis:registration:graduate-policy:publish') && can('sis:registration:manage')) tools.append(
             tool(config.graduate_registration_labels.policy, () => graduateRegistration.policy(), config.graduate_registration_labels.policy, 'mortarboard'));
         if (section === 'registration' && can('sis:registration:policy')) tools.append(tool('Timetable policy', () => batchRegistration.policy(), 'Registration timetable policy', 'calendar-check'));
+        if (section === 'transcripts' && can('sis:student:read')) transcriptWorklist.filters(tools, () => task(() => loadDirectory()));
         tabs.hidden = visibleRelated.length === 0;
         tools.hidden = tools.childElementCount === 0;
         $one('#directory-navigation').hidden = tabs.hidden && tools.hidden;
@@ -706,8 +709,9 @@
         listRows = append ? [...listRows, ...result.items] : result.items; nextAfter = result.next_after;
         const results = $one('#directory-results'); clear(results);
         if (!listRows.length) results.append(emptyState(directoryQuery ? 'No matching records' : 'No records yet', directoryQuery ? 'Try a different name, code or search term.' : definition.action && can(definition.permission) ? 'Add your first record using the button above.' : 'Records available to your role will appear here.', definition.icon));
-        else results.append(node('div', { class: 'table-responsive', tabindex: '0', role: 'region', 'aria-label': 'Scrollable records' }, table([...definition.columns.map(([label]) => label), ''], listRows.map(row => [
+        else results.append(node('div', { class: 'table-responsive', tabindex: '0', role: 'region', 'aria-label': 'Scrollable records' }, table([...definition.columns.map(([label]) => label), ...(section === 'transcripts' && can('sis:student:read') ? [config.transcript_worklist_labels.assigned] : []), ''], listRows.map(row => [
             ...definition.columns.map(([, field], index) => renderCell(section, row, field, index)),
+            ...(section === 'transcripts' && can('sis:student:read') ? [row.assignee_name || config.transcript_worklist_labels.unassigned] : []),
             node('button', { class: 'icon-button', type: 'button', 'aria-label': `Open ${recordLabel(row)}`, onclick: () => task(() => openRecord(section, row)) }, icon('arrow-up-right')),
         ]), `${definition.title} records`)));
         $one('#record-count').textContent = `${number(listRows.length)} ${listRows.length === 1 ? 'record' : 'records'}${nextAfter ? ' loaded' : ''}`;

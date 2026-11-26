@@ -66,6 +66,7 @@ try {
                 'check-maintenance',
                 'check-notification-preferences',
                 'check-transcript-updates',
+                'check-transcript-worklist',
                 'check-profile-requests',
                 'check-portal',
                 'check-admission-readiness',
@@ -373,6 +374,14 @@ try {
             $httpSis = $graduateFixture->sis;
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/GraduateRegistrationBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-transcript-worklist') {
+            $kernel->bootstrap();
+            require __DIR__ . '/TranscriptWorklistFixture.php';
+            $worklistFixture = new \Tests\Support\TranscriptWorklistFixture();
+            $httpSis = $worklistFixture->transcripts->sis;
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/TranscriptWorklistBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-transcript-updates') {
             $kernel->bootstrap();

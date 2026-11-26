@@ -38,7 +38,7 @@ test('staff choose a layout, preview it privately and prepare only the newly ack
                 await route.fulfill({ json: { revision: 0, checks: [] } }); return;
             }
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
-        else if (path.startsWith('/sis/ui/data/')) result = { items: [{ id: requestId, student_id: id(3),
+        else if ((path.startsWith('/sis/ui/data/') || path === '/sis/transcript-worklist/')) result = { items: [{ id: requestId, student_id: id(3),
             delivery: 'pickup', status: state.saved ? 'ready' : 'pending', version: state.saved ? 1 : 0 }], next_after: null };
         else if (path.endsWith('/fulfillment/')) result = { status: state.saved ? 'ready' : 'pending',
             version: state.saved ? 1 : 0, document: state.saved ? metadata : null };

@@ -231,7 +231,7 @@ final readonly class AdmissionCaseworkService
         if (mb_strlen($search) < 2) {
             return ['items' => [], 'next_after' => null, 'search_required' => true];
         }
-        $rows = $this->permissions->eligibleAccounts('sis:admissions:manage', $search, $after);
+        $rows = $this->permissions->eligibleAccounts(['sis:admissions:manage'], $search, $after);
         $more = count($rows) > 20;
         $rows = array_slice($rows, 0, 20);
         $this->manager($actor);
