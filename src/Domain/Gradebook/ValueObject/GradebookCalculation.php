@@ -24,8 +24,9 @@ final readonly class GradebookCalculation
 
     /** @param array<string, int> $weights Hundredths of a percent, keyed by assignment ULID.
      * @param list<array{title:string, weight_hundredths:int, assignments:list<string>, drop_lowest?:int,
-     * protected_assignments?:list<string>, cap_at_hundred?:bool, bonus_only_cap_hundredths?:int}> $categories
-     * Bonus-only caps use hundredths of a percentage point, independently of recorded assignment points.
+     * protected_assignments?:list<string>, cap_at_hundred?:bool, bonus_only_cap_hundredths?:int,
+     * regular_bonus_cap_hundredths?:int}> $categories
+     * Bonus contribution caps use hundredths of a percentage point, independently of recorded assignment points.
      * @param list<string> $bonusAssignments Derived from the selected assignments, never client settings.
      */
     public function __construct(
@@ -82,6 +83,7 @@ final readonly class GradebookCalculation
                     'protected_assignments',
                     'cap_at_hundred',
                     'bonus_only_cap_hundredths',
+                    'regular_bonus_cap_hundredths',
                 ]) !== [] ||
                 !is_string($category["title"] ?? null) ||
                 !is_int($category["weight_hundredths"] ?? null) ||
@@ -148,6 +150,16 @@ final readonly class GradebookCalculation
                 );
             }
             $protected = array_key_exists('protected_assignments', $category) ? $category['protected_assignments'] : [];
+            if (
+                array_key_exists('regular_bonus_cap_hundredths', $category) &&
+                (!is_int($category['regular_bonus_cap_hundredths']) || $category['regular_bonus_cap_hundredths'] < 0 ||
+                    $category['regular_bonus_cap_hundredths'] > 10000)
+            ) {
+                self::invalid(
+                    trans('Use a regular-assignment bonus limit from 0 to 100 percentage points, or leave it blank.'),
+                    'categories',
+                );
+            }
             if (
                 !is_array($protected) || !array_is_list($protected) || count($protected) > self::LIMIT
             ) {
@@ -441,6 +453,17 @@ final readonly class GradebookCalculation
                 $bonusApplied = $bonusLimited ? $allowed : BigRational::of($bonusOnlyEarned);
                 $countedExact = $bonusApplied->plus($earned - $bonusOnlyEarned);
             }
+            $regularCap = $category['regular_bonus_cap_hundredths'] ?? null;
+            $regularBonusEarned = $bonusEarned - $bonusOnlyEarned;
+            $regularApplied = null;
+            $regularLimited = false;
+            if ($regularCap !== null && $gradedPossible > 0) {
+                $allowed = BigRational::ofFraction($gradedPossible * $regularCap, 10000);
+                $regularLimited = BigRational::of($regularBonusEarned)->compareTo($allowed) > 0;
+                $regularApplied = $regularLimited ? $allowed : BigRational::of($regularBonusEarned);
+                $countedExact = ($countedExact ?? BigRational::of($earned))
+                    ->minus($regularBonusEarned)->plus($regularApplied);
+            }
             $categoryCapped = ($category['cap_at_hundred'] ?? false) && $gradedPossible > 0 &&
             ($countedExact === null ? $earned > $gradedPossible : $countedExact->compareTo($gradedPossible) > 0);
             $countedEarned = ($category['cap_at_hundred'] ?? false) ? min($earned, $gradedPossible) : $earned;
@@ -488,6 +511,15 @@ final readonly class GradebookCalculation
                         $bonusApplied?->dividedBy($gradedPossible),
                     )['percent_hundredths'],
                     'bonus_only_limited' => $bonusLimited,
+                ] : [],
+                ...$regularCap !== null ? [
+                    'regular_bonus_cap_hundredths' => $regularCap,
+                    'regular_bonus_raw_percent_hundredths' => self::percentage($gradedPossible === 0
+                        ? null : BigRational::ofFraction($regularBonusEarned, $gradedPossible))['percent_hundredths'],
+                    'regular_bonus_applied_percent_hundredths' => self::percentage(
+                        $regularApplied?->dividedBy($gradedPossible),
+                    )['percent_hundredths'],
+                    'regular_bonus_limited' => $regularLimited,
                 ] : [],
                 ...array_key_exists('cap_at_hundred', $category) ? [
                     'cap_at_hundred' => $category['cap_at_hundred'],

@@ -8653,3 +8653,29 @@ msgid ""
 "A trusted operator can check up to 500 SSN decisions. Larger histories or "
 "byte/time limits need a separate operational review."
 msgstr ""
+
+#: src/Domain/Gradebook/ValueObject/GradebookCalculation.php:159
+msgid ""
+"Use a regular-assignment bonus limit from 0 to 100 percentage points, or "
+"leave it blank."
+msgstr ""
+
+#: resources/views/shared/coursework-category-labels.php:8
+msgid "Maximum regular-assignment bonus percentage points (optional)"
+msgstr ""
+
+#: resources/views/shared/coursework-category-labels.php:10
+msgid ""
+"Limit only points earned above the base maximum on regular assignments. "
+"Blank is unrestricted; zero counts no regular bonus. Apply after drops and "
+"excusals, before category weighting and the cap. Bonus-only work has its own "
+"limit. Saved marks stay unchanged."
+msgstr ""
+
+#: resources/views/shared/coursework-category-labels.php:14
+msgid "Regular-assignment bonus contribution limit: {limit} percentage points."
+msgstr ""
+
+#: resources/views/shared/coursework-category-labels.php:15
+msgid "Categories with a regular-assignment bonus limit: {count}."
+msgstr ""

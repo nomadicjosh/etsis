@@ -46,7 +46,8 @@ final readonly class GradebookService
 
     /** @param array<string, int> $weights
      * @param list<array{title:string, weight_hundredths:int, assignments:list<string>, drop_lowest?:int,
-     * protected_assignments?:list<string>, cap_at_hundred?:bool}> $categories
+     * protected_assignments?:list<string>, cap_at_hundred?:bool, bonus_only_cap_hundredths?:int,
+     * regular_bonus_cap_hundredths?:int}> $categories
      * @return array<string, mixed>
      */
     public function saveCalculation(

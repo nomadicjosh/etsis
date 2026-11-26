@@ -5,6 +5,14 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'regular_limit' => trans_html('Maximum regular-assignment bonus percentage points (optional)'),
+    'regular_limit_help' => trans_html(
+        'Limit only points earned above the base maximum on regular assignments. Blank is unrestricted; '
+        . 'zero counts no regular bonus. Apply after drops and excusals, before category weighting and the cap. '
+        . 'Bonus-only work has its own limit. Saved marks stay unchanged.'
+    ),
+    'regular_limit_feedback' => trans_html('Regular-assignment bonus contribution limit: {limit} percentage points.'),
+    'summary_regular_limits' => trans_html('Categories with a regular-assignment bonus limit: {count}.'),
     'bonus_limit' => trans_html('Maximum bonus-only percentage points (optional)'),
     'bonus_limit_help' => trans_html(
         'Leave blank for no additional limit. Zero excludes bonus-only contributions. '

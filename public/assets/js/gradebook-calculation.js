@@ -28,8 +28,10 @@ window.createGradebookCalculation = function (ui) {
         const rules = summary.category_rules;
         const summaryText = rules ? `${score} · ${t('summary').replace('{caps}', rules.capped_categories)
             .replace('{protected}', rules.protected_assignments)}` : score;
-        return rules?.bonus_limit_categories ? `${summaryText} ${t('summary_bonus_limits')
+        const bonusText = rules?.bonus_limit_categories ? `${summaryText} ${t('summary_bonus_limits')
             .replace('{count}', rules.bonus_limit_categories)}` : summaryText;
+        return rules?.regular_bonus_limit_categories ? `${bonusText} ${t('summary_regular_limits')
+            .replace('{count}', rules.regular_bonus_limit_categories)}` : bonusText;
     }
     function policyEditor(setup) {
         const policy = setup.grade_policy;
@@ -205,7 +207,7 @@ window.createGradebookCalculation = function (ui) {
                 ? node(
                       "p",
                       { class: "small" },
-                      summary.categories?.some(category => category.cap_at_hundred || category.bonus_only_cap_hundredths !== undefined)
+                      summary.categories?.some(category => category.cap_at_hundred || category.bonus_only_cap_hundredths !== undefined || category.regular_bonus_cap_hundredths !== undefined)
                           ? t('bonus_caps')
                           : `${Number(summary.bonus_earned_hundredths || 0) / 100} bonus points in counted work. Possible points remain the denominator, so this running average can exceed 100%. Official grades are recorded separately.`,
                   )
@@ -298,6 +300,11 @@ window.createGradebookCalculation = function (ui) {
                                           category.bonus_only_raw_percent_hundredths == null ? ` ${t('bonus_limit_awaiting')}`
                                               : ` ${t('bonus_limit_applied').replace('{raw}', (category.bonus_only_raw_percent_hundredths / 100).toFixed(2))
                                                   .replace('{applied}', (category.bonus_only_applied_percent_hundredths / 100).toFixed(2))}`) : null,
+                                      category.regular_bonus_cap_hundredths !== undefined ? node('p', { class: 'small mb-0 mt-1' },
+                                          t('regular_limit_feedback').replace('{limit}', (category.regular_bonus_cap_hundredths / 100).toFixed(2)),
+                                          category.regular_bonus_raw_percent_hundredths == null ? ` ${t('bonus_limit_awaiting')}`
+                                              : ` ${t('bonus_limit_applied').replace('{raw}', (category.regular_bonus_raw_percent_hundredths / 100).toFixed(2))
+                                                  .replace('{applied}', (category.regular_bonus_applied_percent_hundredths / 100).toFixed(2))}`) : null,
                                       category.protected_assignments ? node('p', { class: 'small mb-0 mt-1' },
                                           `${t('protected_count')}: ${category.protected_assignments}.`) : null,
                                       category.excused
@@ -559,6 +566,14 @@ window.createGradebookCalculation = function (ui) {
             });
             const bonusError = node('div', { id: `${key}-bonus-error`, class: 'invalid-feedback', role: 'alert', hidden: true }, t('bonus_limit_error'));
             bonusLimit.addEventListener('input', changed);
+            const regularLimit = node('input', {
+                id: `${key}-regular-limit`, type: 'number', class: 'form-control', min: '0', max: '100', step: '0.01',
+                value: value.regular_bonus_cap_hundredths === undefined ? '' : (value.regular_bonus_cap_hundredths / 100).toFixed(2),
+                'aria-label': `${t('regular_limit')}: ${value.title || t('rules')}`,
+                'aria-describedby': `${key}-regular-help ${key}-regular-error`,
+            });
+            const regularError = node('div', { id: `${key}-regular-error`, class: 'invalid-feedback', role: 'alert', hidden: true }, t('bonus_limit_error'));
+            regularLimit.addEventListener('input', changed);
             const row = node(
                 "div",
                 { class: "border rounded p-3 bg-white" },
@@ -592,8 +607,12 @@ window.createGradebookCalculation = function (ui) {
                     node('label', { for: bonusLimit.id, class: 'form-label' }, t('bonus_limit')),
                     bonusLimit, bonusError,
                     node('p', { id: `${key}-bonus-help`, class: 'form-text mb-0' }, t('bonus_limit_help'))),
+                node('div', { class: 'mt-3' },
+                    node('label', { for: regularLimit.id, class: 'form-label' }, t('regular_limit')),
+                    regularLimit, regularError,
+                    node('p', { id: `${key}-regular-help`, class: 'form-text mb-0' }, t('regular_limit_help'))),
             );
-            const entry = { key, title, weight, drop, dropError, remove, row, cap, bonusLimit, bonusError,
+            const entry = { key, title, weight, drop, dropError, remove, row, cap, bonusLimit, bonusError, regularLimit, regularError,
                 protected: new Set(value.protected_assignments || []) };
             categories.push(entry);
             value.assignments.forEach((id) => {
@@ -601,6 +620,8 @@ window.createGradebookCalculation = function (ui) {
             });
             title.addEventListener("input", () => {
                 cap.setAttribute('aria-label', `${t('cap')}: ${title.value.trim() || t('rules')}`);
+                regularLimit.setAttribute('aria-label', `${t('regular_limit')}: ${title.value.trim() || t('rules')}`);
+                bonusLimit.setAttribute('aria-label', `${t('bonus_limit')}: ${title.value.trim() || t('rules')}`);
                 remove.setAttribute(
                     "aria-label",
                     `Remove category ${title.value.trim() || "new category"}`,
@@ -674,6 +695,7 @@ window.createGradebookCalculation = function (ui) {
                 ...(c.cap.checked ? { cap_at_hundred: true } : {}),
                 ...(c.protected.size ? { protected_assignments: [...c.protected].sort() } : {}),
                 ...(c.bonusLimit.value.trim() === '' ? {} : { bonus_only_cap_hundredths: parseBonusLimit(c.bonusLimit.value) }),
+                ...(c.regularLimit.value.trim() === '' ? {} : { regular_bonus_cap_hundredths: parseBonusLimit(c.regularLimit.value) }),
             }));
         }
         function parseBonusLimit(value) {
@@ -708,6 +730,12 @@ window.createGradebookCalculation = function (ui) {
                 category.bonusLimit.classList.toggle('is-invalid', !bonusValid);
                 category.bonusLimit.setCustomValidity(bonusValid ? '' : t('bonus_limit_error'));
                 category.bonusError.hidden = bonusValid;
+                const regularValid = category.regularLimit.value.trim() === '' ||
+                    Number.isInteger(parseBonusLimit(category.regularLimit.value));
+                category.regularLimit.setAttribute('aria-invalid', String(!regularValid));
+                category.regularLimit.classList.toggle('is-invalid', !regularValid);
+                category.regularLimit.setCustomValidity(regularValid ? '' : t('bonus_limit_error'));
+                category.regularError.hidden = regularValid;
             });
             const titles = values.map((c) => c.title.toLocaleLowerCase());
             return (
@@ -724,7 +752,8 @@ window.createGradebookCalculation = function (ui) {
                         Number.isInteger(c.drop_lowest) &&
                         c.drop_lowest >= 0 &&
                         c.drop_lowest <= 499 &&
-                        (c.bonus_only_cap_hundredths === undefined || Number.isInteger(c.bonus_only_cap_hundredths)),
+                        (c.bonus_only_cap_hundredths === undefined || Number.isInteger(c.bonus_only_cap_hundredths)) &&
+                        (c.regular_bonus_cap_hundredths === undefined || Number.isInteger(c.regular_bonus_cap_hundredths)),
                 ) &&
                 values.reduce((sum, c) => sum + c.weight_hundredths, 0) === 10000
             );

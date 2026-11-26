@@ -68,7 +68,7 @@ $body['mode'] = 'category';
 $body['categories'] = [['title' => 'Fictional exams', 'weight_hundredths' => 10000,
     'assignments' => [$workingAssignment->id->value], 'drop_lowest' => 1,
     'protected_assignments' => [$workingAssignment->id->value], 'cap_at_hundred' => true,
-    'bonus_only_cap_hundredths' => 0]];
+    'bonus_only_cap_hundredths' => 0, 'regular_bonus_cap_hundredths' => 555]];
 $body['revision'] = $readPolicySetup()['revision'];
 $categoryResponse = $teachingPost($path, $body);
 $categorySaved = json_decode((string) $categoryResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
@@ -85,15 +85,18 @@ if (
 ) {
     throw new RuntimeException('Malformed category rules changed setup or academic history.');
 }
-foreach ([null, '500', -1, 10001, 1.5] as $invalidLimit) {
-    $invalidCategories = $body;
-    $invalidCategories['revision'] = $categorySaved['revision'];
-    $invalidCategories['categories'][0]['bonus_only_cap_hundredths'] = $invalidLimit;
-    if (
-        $teachingPost($path, $invalidCategories)->getStatusCode() !== 422 ||
-        $readPolicySetup()['categories'] !== $body['categories'] || $before !== $sis->sql->rows('sis_history_events')
-    ) {
-        throw new RuntimeException('An invalid bonus-only limit escaped the private setup boundary.');
+foreach (['bonus_only_cap_hundredths', 'regular_bonus_cap_hundredths'] as $field) {
+    foreach ([null, '500', -1, 10001, 1.5] as $invalidLimit) {
+        $invalidCategories = $body;
+        $invalidCategories['revision'] = $categorySaved['revision'];
+        $invalidCategories['categories'][0][$field] = $invalidLimit;
+        if (
+            $teachingPost($path, $invalidCategories)->getStatusCode() !== 422 ||
+            $readPolicySetup()['categories'] !== $body['categories'] ||
+            $before !== $sis->sql->rows('sis_history_events')
+        ) {
+            throw new RuntimeException('An invalid bonus contribution limit escaped the private setup boundary.');
+        }
     }
 }
 $sis->access->actor = $sis->user();

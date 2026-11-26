@@ -21,6 +21,119 @@ use SisFixture;
 
 final class CourseworkGradeTest extends TestCase
 {
+    private function regularBonusFixture(): array
+    {
+        $fixture = [$f, $book, $student, $section, $a] = $this->fixture();
+        $bonus = new Assignment(
+            EntityId::generate(),
+            $section->id,
+            'Fictional regular bonus quiz',
+            1000,
+            $a->dueOn,
+            1000
+        );
+        $book->addAssignment($bonus);
+        $book->score($bonus->id, $student->id, 2000, 0);
+        $categories = [['title' => 'Fictional regular work', 'weight_hundredths' => 10000,
+            'assignments' => [$a->id->value, $bonus->id->value], 'regular_bonus_cap_hundredths' => 0]];
+        $book->saveCalculation(
+            $section->id,
+            'category',
+            [],
+            $book->calculationSetup($section->id)['revision'],
+            $categories
+        );
+        return $fixture;
+    }
+
+    public function testRegularBonusLimitRemainsInAcceptedEvidenceAfterLaterWorkingAndOwnerFeedbackChanges(): void
+    {
+        $fixture = [$f, $book, $student, $section] = $this->regularBonusFixture();
+        $finance = $f->financialEvents();
+        $scores = $f->sql->rows('sis_scores');
+        $review = $this->review($fixture);
+        self::assertSame('B', $review['grade']['code']);
+        self::assertSame(1, $review['coursework_summary']['category_rules']['regular_bonus_limit_categories']);
+        $receipt = $book->commitFinalGrade($student->id, $section->id, $review['review_token']);
+        $credit = new EntityId($f->sql->rows('sis_academic_credits')[0]['id']);
+        $facts = $this->evidence($f, $credit)->facts;
+        self::assertSame('1020/11', $facts['exact_percent']);
+        self::assertSame(0, $facts['categories'][0]['regular_bonus_cap_hundredths']);
+        $this->evidence($f, $credit)->verifyCalculation();
+        $setup = $book->calculationSetup($section->id);
+        $categories = $setup['categories'];
+        $categories[0]['regular_bonus_cap_hundredths'] = 500;
+        $book->saveCalculation($section->id, 'category', [], $setup['revision'], $categories);
+        self::assertSame(9773, $book->summary($student->id, $section->id)['percent_hundredths']);
+        self::assertSame('B', $book->gradeChoices($student->id, $section->id)['current_grade_code']);
+        $f->clock->time = $f->clock->time->modify('+1 day');
+        self::assertSame($receipt, $book->commitFinalGrade($student->id, $section->id, $review['review_token']));
+        self::assertSame($facts, $this->evidence($f, $credit)->facts);
+        $this->evidence($f, $credit)->verifyCalculation();
+        self::assertSame($finance, $f->financialEvents());
+        self::assertSame($scores, $f->sql->rows('sis_scores'));
+        $history = $book->gradeHistory($student->id, $section->id)['items'];
+        $decisions = array_values(array_filter(
+            $history,
+            static fn(array $row): bool => $row['action'] === 'grade_decided'
+        ));
+        self::assertSame(1, $decisions[0]['coursework_summary']['category_rules']['regular_bonus_limit_categories']);
+        self::assertArrayNotHasKey('scores', $decisions[0]['coursework_summary']);
+        $f->access->staff = false;
+        $f->access->grants = [];
+        $f->access->actor = $f->admissions->person($student->personId)->ownerUserId;
+        $feedback = $book->summary($student->id, $section->id);
+        self::assertSame(500, $feedback['categories'][0]['regular_bonus_applied_percent_hundredths']);
+        self::assertSame(909, $feedback['categories'][0]['regular_bonus_raw_percent_hundredths']);
+        $f->access->actor = $f->user();
+        $this->expectException(AccessDeniedException::class);
+        $book->summary($student->id, $section->id);
+    }
+
+    public function testChangedRegularBonusLimitRequiresFreshReviewEvenForAnUnchangedSuggestedGrade(): void
+    {
+        $fixture = [$f, $book, $student, $section] = $this->regularBonusFixture();
+        $review = $this->review($fixture);
+        $setup = $book->calculationSetup($section->id);
+        $categories = $setup['categories'];
+        $categories[0]['regular_bonus_cap_hundredths'] = 1;
+        $book->saveCalculation($section->id, 'category', [], $setup['revision'], $categories);
+        self::assertSame('B', $book->gradeChoices($student->id, $section->id)['coursework']['grade_code']);
+        $before = EventStoreFixture::historyDigest($f->sql);
+        try {
+            $book->commitFinalGrade($student->id, $section->id, $review['review_token']);
+            self::fail('A changed regular bonus rule reused an unaccepted review.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, EventStoreFixture::historyDigest($f->sql));
+        }
+    }
+
+    public function testRegularBonusRuleDriftDuringFinalAuditRollsBackTheWholeGradeDecision(): void
+    {
+        $fixture = [$f, $book, $student, $section] = $this->regularBonusFixture();
+        $review = $this->review($fixture);
+        $tables = ['sis_academic_credits', 'sis_history_events', 'sis_history_streams', 'sis_history_operations',
+            'sis_gradebook_calculations', 'sis_scores'];
+        $before = array_map($f->sql->rows(...), $tables);
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method('record')->willReturnCallback(function () use ($f, $section): void {
+            $settings = $f->sql->one('sis_gradebook_calculations', ['id' => $section->id->value]);
+            $categories = json_decode($settings['categories'], true);
+            $categories[0]['regular_bonus_cap_hundredths'] = 1;
+            $f->sql->update(
+                'sis_gradebook_calculations',
+                ['categories' => json_encode($categories)],
+                ['id' => $section->id->value]
+            );
+        });
+        try {
+            $f->academicCredits($audit)->commit($student->id, $section->id, $review['review_token']);
+            self::fail('A regular bonus rule changed during the required audit.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, array_map($f->sql->rows(...), $tables));
+        }
+    }
+
     private function categoryFixture(): array
     {
         $fixture = [$f, $book, $student, $section, $a] = $this->fixture();

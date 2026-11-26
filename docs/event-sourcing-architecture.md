@@ -14,6 +14,8 @@ Adopted direction, 2026-11-08. [Event-sourcing rationale](event-sourcing.md) gov
 
 ## Implementation progress
 
+[Regular bonus limits](academic-credit-history.md#limit-bonus-from-regular-assignments-within-a-category) now flow from audited working category configuration into exact coursework calculations and existing protected final-grade evidence. Earlier absent fields retain their unrestricted meaning; accepted decisions and original retries preserve their exact rules after later edits. Changed rules, including same-letter outcomes and required-audit mutations, invalidate unaccepted reviews atomically. No new schema, event type or journal is added.
+
 [Private advising updates](academic-advising.md#private-advising-updates) are disposable account-pinned working references, created/replaced only beside genuine accepted check-in actions in the same transaction as encrypted conversations and required audit. Source receipts, final routing/authority and expected versions remain verified; accepted retries and reads never recreate deleted notifications. The one latest notice contains no conversation body, note or historical archive, and ordinary student-update reads disclose only minimized current labels and fixed action metadata. No event type, authoritative stream or journal changes; new nullable/retained academic facts are not inferred. The shared bell opens the exact owner-verified current/finished check-in independently of degree-progress availability. Institution-led retention and external/due-date delivery remain separate work.
 
 

@@ -18,6 +18,26 @@ use PHPUnit\Framework\TestCase;
 
 final class CourseworkEvidenceTest extends TestCase
 {
+    public function testRegularBonusRulesRetainTheirMeaningAndEarlierAbsentRulesStayAbsent(): void
+    {
+        $facts = $this->facts();
+        $old = new CourseworkGradeEvidence($facts);
+        $old->verifyCalculation();
+        self::assertArrayNotHasKey('category_rules', $old->summary());
+        $facts['mode'] = 'category';
+        $facts['categories'] = [['title' => 'Fictional work', 'weight_hundredths' => 10000,
+            'assignments' => [$facts['scores'][0][0]], 'regular_bonus_cap_hundredths' => 0]];
+        $bounded = new CourseworkGradeEvidence($facts);
+        $bounded->verifyCalculation();
+        self::assertSame(['capped_categories' => 0, 'protected_assignments' => 0,
+            'regular_bonus_limit_categories' => 1], $bounded->summary()['category_rules']);
+        self::assertArrayNotHasKey('scores', $bounded->summary());
+        $changed = $facts;
+        $changed['categories'][0]['regular_bonus_cap_hundredths'] = 1;
+        self::assertNotSame($bounded->revision(), new CourseworkGradeEvidence($changed)->revision());
+        self::assertSame([], $old->facts['categories']);
+    }
+
     private function facts(): array
     {
         return [

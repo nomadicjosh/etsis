@@ -15,6 +15,8 @@ test('student coursework explains protected assignments and the category cap', a
                 cap_at_hundred: true, capped: true, protected_assignments: 1, weight_hundredths: 10000,
                 bonus_only_cap_hundredths: 500, bonus_only_raw_percent_hundredths: 2000,
                 bonus_only_applied_percent_hundredths: 500, bonus_only_limited: true,
+                regular_bonus_cap_hundredths: 250, regular_bonus_raw_percent_hundredths: 5000,
+                regular_bonus_applied_percent_hundredths: 250, regular_bonus_limited: true,
                 assignments: 2, graded: 2, coverage_hundredths: 10000 }] },
         items: [{ title: 'Fictional exam', earned_hundredths: 1500, possible_hundredths: 1000,
             bonus_hundredths: 500, category_title: 'Fictional coursework', category_weight_hundredths: 10000,
@@ -28,30 +30,35 @@ test('student coursework explains protected assignments and the category cap', a
     await expect(dialog).toContainText('Uncapped category average: 170.00%.');
     await expect(dialog).toContainText('Bonus-only contribution limit: 5.00 percentage points.');
     await expect(dialog).toContainText('Recorded contribution: 20.00; counted before the category cap: 5.00 percentage points.');
+    await expect(dialog).toContainText('Regular-assignment bonus contribution limit: 2.50 percentage points.');
+    await expect(dialog).toContainText('Recorded contribution: 50.00; counted before the category cap: 2.50 percentage points.');
     await expect(dialog).toContainText('Protected from automatic drops');
     await expect(dialog).toContainText('Recorded bonus points are shown before category caps.');
     expect((await new AxeBuilder({ page }).include('#campus-dialog').analyze()).violations).toEqual([]);
 });
 
-for (const awaiting of [false, true]) test(`student coursework explains an explicit zero bonus limit${awaiting ? ' before regular grading' : ''}`, async ({ page }) => {
+for (const kind of ['bonus_only', 'regular_bonus']) {
+for (const awaiting of [false, true]) test(`student coursework explains an explicit zero ${kind} limit${awaiting ? ' before regular grading' : ''}`, async ({ page }) => {
     await mockServices(page);
     await page.route('**/portal/api/students/*/sections/*/scores/', route => route.fulfill({ json: {
         summary: { mode: 'category', percent_hundredths: awaiting ? null : 9000, coverage_hundredths: awaiting ? 0 : 10000,
             pending: awaiting ? 1 : 0, excused: 0, excluded: 0, dropped: 0, bonus_enabled: true,
             categories: [{ title: 'Fictional coursework', percent_hundredths: awaiting ? null : 9000, weight_hundredths: 10000,
-                bonus_only_cap_hundredths: 0, bonus_only_raw_percent_hundredths: awaiting ? null : 1000,
-                bonus_only_applied_percent_hundredths: awaiting ? null : 0, bonus_only_limited: !awaiting,
+                [`${kind}_cap_hundredths`]: 0, [`${kind}_raw_percent_hundredths`]: awaiting ? null : 1000,
+                [`${kind}_applied_percent_hundredths`]: awaiting ? null : 0, [`${kind}_limited`]: !awaiting,
                 assignments: 2, graded: awaiting ? 1 : 2, coverage_hundredths: awaiting ? 0 : 10000 }] }, items: [],
     } }));
     await page.goto('/portal/student/grades/');
     await page.getByRole('button', { name: 'MATH.101 · MATH.101.01: assignment scores', exact: true }).click();
     const dialog = page.getByRole('dialog');
-    await expect(dialog).toContainText('Bonus-only contribution limit: 0.00 percentage points.');
+    await expect(dialog).toContainText(kind === 'bonus_only' ? 'Bonus-only contribution limit: 0.00 percentage points.'
+        : 'Regular-assignment bonus contribution limit: 0.00 percentage points.');
     await expect(dialog).toContainText(awaiting ? 'Graded regular work is required before this contribution can be calculated.'
         : 'Recorded contribution: 10.00; counted before the category cap: 0.00 percentage points.');
     await expect(dialog.getByRole('spinbutton')).toHaveCount(0);
     expect((await new AxeBuilder({ page }).include('#campus-dialog').analyze()).violations).toEqual([]);
 });
+}
 
 async function accessible(page) {
     const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
