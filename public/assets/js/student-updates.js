@@ -1,8 +1,8 @@
 /* Private, account-pinned outcome notices. Loading and deletion are explicit; nothing is persisted in this browser. */
 'use strict';
 window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'registration', notificationsOnly = false, changed = () => {} }) => {
-    if (!['registration', 'advising', 'academic', 'transcript'].includes(kind)) throw new Error('Unsupported student update source.');
-    const advising = kind === 'advising', academic = kind === 'academic', transcript = kind === 'transcript';
+    if (!['registration', 'advising', 'academic', 'transcript', 'standing'].includes(kind)) throw new Error('Unsupported student update source.');
+    const advising = kind === 'advising', academic = kind === 'academic', transcript = kind === 'transcript', standing = kind === 'standing';
     const endpoint = `/portal/api/${kind}-updates/`;
     const advisingDefaults = {
         advising_updates: 'Advising updates', advising_loading: 'Loading advising updates…',
@@ -81,11 +81,11 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
             baseline = true; cursor = after; previous = stack;
             const list = node('ul', { class: 'list-unstyled registration-updates-list' });
             for (const item of result.items) {
-                if (!(advising ? ['open', 'closed', 'cancelled'] : academic ? ['posted', 'corrected'] : transcript ? ['ready', 'fulfilled'] : ['registered', 'removed']).includes(item.status)) throw new Error('Invalid registration outcome.');
+                if (!(standing ? ['recorded', 'corrected'] : advising ? ['open', 'closed', 'cancelled'] : academic ? ['posted', 'corrected'] : transcript ? ['ready', 'fulfilled'] : ['registered', 'removed']).includes(item.status)) throw new Error('Invalid registration outcome.');
                 const card = node('li', { class: 'registration-update-card border rounded mb-3 text-start' },
                     node('h3', { class: 'h6' }, text(`registration_${item.status}`)),
-                    node('p', { class: 'fw-semibold text-break mb-1' }, transcript ? text(`transcript_${item.delivery}`) : advising ? item.program_code : `${item.course_code} · ${item.section_code} · ${item.term_code}`),
-                    node('p', { class: 'text-break' }, transcript ? `${text('transcript_requested_on')} · ${String(item.requested_at).slice(0, 10)}` : advising ? item.program_title : item.course_title),
+                    node('p', { class: 'fw-semibold text-break mb-1' }, transcript ? text(`transcript_${item.delivery}`) : advising || standing ? item.program_code : `${item.course_code} · ${item.section_code} · ${item.term_code}`),
+                    node('p', { class: 'text-break' }, transcript ? `${text('transcript_requested_on')} · ${String(item.requested_at).slice(0, 10)}` : advising || standing ? item.program_title : item.course_title),
                     node('time', { class: 'form-text d-block mb-2', datetime: item.recorded_at },
                         new Date(item.recorded_at).toLocaleString()),
                     node('span', { class: 'badge text-bg-light border mb-2' }, text(item.unread ? 'announcement_unread' : 'announcement_read')));
@@ -94,6 +94,7 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
                 if (item.unread && !notificationsOnly) actions.append(button('registration_mark', 'check2', () => mutate(item, 'read')));
                 actions.append(button('registration_delete', 'trash', () => mutate(item, 'delete')),
                     transcript ? button('registration_link', 'arrow-right', () => openTranscriptRequest(item))
+                        : standing ? button('registration_link', 'arrow-right', () => openStanding(item))
                         : academic ? button('registration_link', 'arrow-right', () => openAcademicRecord(item))
                         : advising ? button('registration_link', 'arrow-right', () => openCheckIn(item))
                         : node('a', { href: '/portal/student/registration/', class: 'btn btn-outline-secondary btn-sm' },
@@ -121,6 +122,38 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
                 status.textContent = text(action === 'delete' ? 'registration_deleted' : 'registration_marked');
                 status.focus();
             }
+        } catch (error) { failed(turn, error); }
+        finally { if (active(turn)) controls(false); }
+    }
+    async function openStanding(item) {
+        const turn = ++serial; controls(true);
+        try {
+            if (typeof item.id !== 'string' || !/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(item.id)) throw new Error('Invalid standing notification.');
+            const result = await request(`${endpoint}${encodeURIComponent(item.id)}/`);
+            if (!active(turn)) return;
+            await request(`${endpoint}${encodeURIComponent(item.id)}/read/`, 'POST', { revision: item.revision });
+            if (!active(turn)) return;
+            const back = button('registration_back', 'arrow-left', async () => {
+                const loaded = await load(cursor, previous);
+                if (loaded) (content.querySelector('button') || status).focus();
+            });
+            const title = node('h3', { class: 'h6 text-break', tabindex: '-1' }, text('standing_current'));
+            const periods = node('ul', { class: 'list-unstyled' });
+            for (const period of result.items) {
+                const dates = node('dl', { class: 'record-summary record-summary-paired' });
+                for (const [label, value] of [['standing_from', period.starts_on], ['standing_through', period.ends_on || text('standing_ongoing')]]) {
+                    dates.append(node('div', {}, node('dt', {}, text(label)), node('dd', {}, value)));
+                }
+                periods.append(node('li', { class: 'border rounded bg-white p-3 mb-3' },
+                    node('h4', { class: 'h6 text-break' }, `${period.code} · ${period.title}`), dates));
+            }
+            content.replaceChildren(node('div', { class: 'd-flex flex-wrap gap-2 my-3' }, back,
+                button('registration_delete', 'trash', () => mutate(item, 'delete'))), title,
+                node('p', { class: 'fw-semibold text-break' }, `${result.program_code} · ${result.program_title}`),
+                node('p', { class: 'form-text' }, text('standing_current_help')),
+                ...(result.pursuit_status === 'closed' ? [node('p', { class: 'alert alert-info' }, text('standing_closed'))] : []),
+                result.items.length ? periods : node('p', {}, text('standing_no_periods')));
+            status.textContent = ''; title.focus(); changed();
         } catch (error) { failed(turn, error); }
         finally { if (active(turn)) controls(false); }
     }

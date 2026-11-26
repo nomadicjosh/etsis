@@ -419,6 +419,12 @@ final class SisFixture
             $this->standingLedger(),
             $this->standingProposals(),
             new \Infrastructure\Persistence\Repository\SqlStandingProposalTermRepository($this->sql),
+            new \Domain\Student\Service\StandingNotifications(
+                new \Infrastructure\Persistence\Repository\SqlStandingUpdatesRepository($this->sql),
+                $this->admissions,
+                new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+                $this->clock,
+            ),
         );
     }
 

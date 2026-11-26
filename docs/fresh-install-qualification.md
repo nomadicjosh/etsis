@@ -29,6 +29,16 @@ These checks establish selected fresh-install and initial-access behavior. They 
 
 An adjacent fixture correction gives admissions evidence its own private temporary storage root and cleanup. It prevents a test from bootstrapping the configured application merely to resolve a storage path. Production document storage is unchanged.
 
+## Migration receipt insertion
+
+On November 26, 2026, applying the private standing-notice migration to the configured PostgreSQL database exposed a framework query-builder defect: inserting a migration receipt appended an empty `RETURNING` clause. That attempt rolled back the table creation and receipt together; read-only fingerprints confirmed the original database was unchanged.
+
+`bootstrap/phpmig.php` now selects the application `DatabaseMigrationAdapter`. Its receipt insert uses quoted identifiers and prepared values directly, with no generated-identity lookup or `RETURNING` clause. New receipt timestamps use UTC and a 24-hour format. Earlier receipts are preserved. Framework installation, ledger lookup and rollback behavior remain inherited, and no vendor source is changed.
+
+The focused regression reproduces the advertised returning capability with SQLite, preserves earlier receipts, and verifies transactional DDL/receipt rollback on duplicate receipt failure. PostgreSQL accepted the ordinary standing-notice table and one receipt after the fix. This qualifies this selected migration path, not every query-builder insert or every PDO engine. Broad native migration acceptance remains open on the roadmap.
+
+The connected SQLite fresh-install regression passes with the ordinary migrate/repeat commands, registration, first-administrator bootstrap and authenticated access. Its accepted-domain assertion now checks DOM text: existing narrow-screen word-break markup splits the domain in raw HTML without changing the displayed value. No registration behavior was changed.
+
 ## Run the selected checks
 
 Use the configured PHP interpreter with PDO SQLite and the selected native driver. `phpunit.install.xml` selects only `AlphaInstallTest`; it uses the same explicit opt-in and owned database lease as the native workflow runner. For the current PostgreSQL workstation:

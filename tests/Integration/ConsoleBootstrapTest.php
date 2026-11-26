@@ -9,6 +9,20 @@ use Symfony\Component\Process\Process;
 
 final class ConsoleBootstrapTest extends TestCase
 {
+    public function testStandingUpdatesUseActualProvidersPrivateOwnerReadsAndCsrf(): void
+    {
+        $process = new Process([
+            PHP_BINARY,
+            '-d',
+            'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php',
+            'check-standing-updates',
+        ]);
+        $process->setTimeout(15);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testStandingProposalsUseActualProvidersIndependentDutiesCsrfAndPrivateEvidence(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',

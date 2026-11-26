@@ -104,9 +104,15 @@ $assertPolicy($app->router->match($request('/create/', 'POST', $policyBody)
 $app->configContainer->setConfigKey('registration', ['enabled' => true, 'email_domains' => ['EXAMPLE.INVALID']]);
 $registerPage = $app->router->match($request('/register/?program=01K00000000000000000000001')
     ->withQueryParams(['program' => '01K00000000000000000000001'])->withHeader('Accept', 'text/html'));
+$registrationDocument = new DOMDocument();
+$registrationDocument->loadHTML(
+    (string) $registerPage->getBody(),
+    LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING
+);
+$acceptedDomains = $registrationDocument->getElementById('campus-registration-domains');
 if (
-    $registerPage->getStatusCode() !== 200 || !str_contains((string) $registerPage->getBody(), 'example.invalid')
-    || !str_contains((string) $registerPage->getBody(), 'campus-registration-domains')
+    $registerPage->getStatusCode() !== 200
+    || !str_contains($acceptedDomains?->textContent ?? '', 'example.invalid')
 ) {
     throw new RuntimeException('The actual registration page omitted its accepted email domains.');
 }

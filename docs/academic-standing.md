@@ -37,6 +37,18 @@ Current assigned primary/additional advisors see the same minimal standing prese
 
 A program change keeps the former pursuit's standing under its original identity. It does not copy a determination into the new pursuit. Closing a pursuit does not erase its recorded periods or turn them into a withdrawal from the institution.
 
+## Private standing updates
+
+After a registrar confirms a genuine standing change, the student's linked account receives **Academic standing updated**. An explicitly confirmed correction under a closed pursuit produces **Historical academic standing corrected**. Manual decisions and confirmed GPA/load proposals use the same publication path. Review screens, unconfirmed proposals, definition/policy edits and projection replay create no notice. Existing decisions are not backfilled.
+
+Open the workspace or signed-in portal bell, expand **Academic standing updates**, then choose **View academic standing**. The detail verifies the protected determination and shows its retained codes, names and inclusive dates, including past and future periods. Program labels are current. A closed pursuit is identified as historical. An empty determination means that no periods are recorded; it does not imply good standing. This notice does not change registration eligibility, student activity, grades, charges or graduation.
+
+**Back to standing updates** returns to the same notification page. Opening a detail marks its displayed revision read; read notices remain until **Delete update** physically removes the personal notice and read timestamp. Only the latest notice for each pursuit is kept. A later genuine standing change can create another notice, but retrying an already accepted confirmation, reopening a record or replaying its history cannot restore a deleted notice.
+
+Notification access is strictly limited to the account linked to the canonical person when the change was accepted. Staff or advisor duties do not grant access to another person's notifications, and replacing the linked account does not transfer old notices. A genuine later decision can notify the new current account. Staff reasons, policy references, proposal calculations and raw events never appear in notification responses or storage. The detail uses the existing owner standing view rather than a second editable record.
+
+Publication, standing projection, protected event and required audit share one transaction, with final owner/source/reference checks. The portable ULID table `sis_standing_updates` holds only routing, operation, version, status and timestamp references. Deletion preserves standing decisions, corrections and minimal administrative audit. No historical backfill, separate journal, external message delivery, report or background worker is introduced. See [notification controls and privacy](workspace-notifications.md#private-standing-updates).
+
 ## Reporting
 
 In Report Studio, choose **Academic standing periods**. Report access requires `sis:reporting:run`, `sis:student:read` and `sis:standing:manage`. Authorized report authors can select retained standing names/codes, dates, current student names/IDs and the relevant pursuit/program. The ordinary report configuration, private sharing, live/static captures and expiry controls apply.

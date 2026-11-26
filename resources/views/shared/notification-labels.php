@@ -5,6 +5,40 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'standing_updates' => trans_html('Academic standing updates'),
+    'standing_loading' => trans_html('Loading academic standing updates…'),
+    'standing_help' => trans_html(
+        'Confirmed academic standing changes appear here. Delete a notice when it is no longer needed.'
+    ),
+    'standing_empty' => trans_html('There are no academic standing updates.'),
+    'standing_include' => trans_html('Show read updates'),
+    'standing_refresh' => trans_html('Refresh standing updates'),
+    'standing_pages' => trans_html('Academic standing update pages'),
+    'standing_previous' => trans_html('Previous updates'),
+    'standing_more' => trans_html('More updates'),
+    'standing_recorded' => trans_html('Academic standing updated'),
+    'standing_corrected' => trans_html('Historical academic standing corrected'),
+    'standing_mark' => trans_html('Mark as read'),
+    'standing_delete' => trans_html('Delete update'),
+    'standing_loaded' => trans_html('Standing updates loaded. Program labels are current.'),
+    'standing_failed' => trans_html('Standing updates could not load. Reopen this section to try again.'),
+    'standing_denied' => trans_html('Standing updates are unavailable for this account.'),
+    'standing_changed' => trans_html('This update changed or is unavailable. Reopen the list.'),
+    'standing_new' => trans_html('New academic standing updates are available.'),
+    'standing_link' => trans_html('View academic standing'),
+    'standing_back' => trans_html('Back to standing updates'),
+    'standing_marked' => trans_html('Standing update marked as read.'),
+    'standing_deleted' => trans_html('Standing update deleted.'),
+    'standing_current' => trans_html('Recorded academic standing'),
+    'standing_current_help' => trans_html(
+        'These are the current recorded periods, including past and future periods. '
+        . 'Later corrections may have changed the notification outcome.'
+    ),
+    'standing_from' => trans_html('Effective from (inclusive)'),
+    'standing_through' => trans_html('Effective through (inclusive)'),
+    'standing_ongoing' => trans_html('No end date'),
+    'standing_closed' => trans_html('This is a historical program pursuit.'),
+    'standing_no_periods' => trans_html('No academic standing periods are recorded.'),
     "transcript_updates" => trans_html("Transcript updates"),
     "transcript_loading" => trans_html("Loading transcript updates…"),
     "transcript_help" => trans_html("Transcript preparation and recorded delivery updates appear here."),

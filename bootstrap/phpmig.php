@@ -3,7 +3,7 @@
 declare(strict_types=1);
 
 use Codefy\Framework\Proxy\Codefy;
-use Qubus\Expressive\Migration\Adapter\DbalMigrationAdapter;
+use Infrastructure\Persistence\DatabaseMigrationAdapter;
 use Qubus\Support\Container\ObjectStorageMap;
 
 use function Codefy\Framework\Helpers\database_path;
@@ -18,7 +18,7 @@ $objectmap = new ObjectStorageMap();
 $objectmap['connection'] = fn () => Codefy::$PHP->getDbConnection();
 
 $objectmap['phpmig.adapter'] = function ($c) {
-    return new DbalMigrationAdapter(connection: $c['connection'], tableName: 'migration');
+    return new DatabaseMigrationAdapter(connection: $c['connection'], tableName: 'migration');
 };
 
 $objectmap['sis.history_codec'] = fn () => Codefy::$PHP->make(\Infrastructure\EventSourcing\ProtectedEventCodec::class);

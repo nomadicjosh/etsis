@@ -51,6 +51,7 @@ final readonly class StudentStandingService
         private StudentStandingLedger $ledger,
         private StandingProposalService $proposals,
         private \Domain\Student\Repository\StandingProposalTermRepository $proposalTerms,
+        private StandingNotifications $notifications,
     ) {
     }
 
@@ -303,6 +304,7 @@ final readonly class StudentStandingService
                 [$event],
             );
             $this->records->project($student, $pursuit, $next->rows);
+            $notification = $this->notifications->record($s, $p, $operation, $root->playhead() + 1);
             $this->audit->record(
                 $actor,
                 $p->status === "closed" ? "student.standing_corrected" : "student.standing_recorded",
@@ -335,6 +337,7 @@ final readonly class StudentStandingService
                 throw new CorruptHistoryException();
             }
             $root->accept($verified);
+            $this->notifications->verify($notification);
             return $root->receipt($operation, $actor, $intent) ?? throw new CorruptHistoryException();
         });
     }
@@ -466,12 +469,32 @@ final readonly class StudentStandingService
     }
 
     /** Minimal owner/advisor presentation; staff narratives and policy references stay private. */
-    public function read(EntityId $student, EntityId $pursuit, bool $advisor = false): array
+    public function read(
+        EntityId $student,
+        EntityId $pursuit,
+        bool $advisor = false,
+        ?int $expectedVersion = null,
+        ?EntityId $expectedOperation = null,
+    ): array
     {
         $actor = $this->reader($student, $pursuit, $advisor);
         [, $p] = $this->scope($student, $pursuit);
         $this->programs->verify($p);
         $latest = $this->ledger->latest($student, $pursuit);
+        if (($expectedVersion === null) !== ($expectedOperation === null)) {
+            throw new \InvalidArgumentException(\Codefy\Framework\Helpers\trans_html(
+                'Use the complete standing notification reference.'
+            ));
+        }
+        if (
+            $expectedVersion !== null
+            && ($latest?->event->playhead() !== $expectedVersion
+            || ($latest?->event->payload()['operation_id'] ?? null) !== $expectedOperation->value)
+        ) {
+            throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans_html(
+                'The standing changed. Reopen the notification.'
+            ));
+        }
         $rows = $latest === null ? [] : new StandingPeriods($latest->event->payload()["rows"])->rows;
         $result = [
             "items" => array_map(

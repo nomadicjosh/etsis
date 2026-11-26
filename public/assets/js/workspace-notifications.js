@@ -15,7 +15,7 @@ window.createWorkspaceNotifications = function (ui) {
     const history = [], visible = new Map();
     let dialog = null, list = null, empty = null, audio = null, sequence = 0, lastSound = -Infinity;
     let disposed = false;
-    let announcements = null, registrationUpdates = null, advisingUpdates = null, academicUpdates = null, transcriptUpdates = null, importUpdates = null;
+    let announcements = null, registrationUpdates = null, advisingUpdates = null, academicUpdates = null, transcriptUpdates = null, standingUpdates = null, importUpdates = null;
     let persistentUnread = 0, importTimer = null, importLoading = false, importStopped = false, identityKnown = false;
     let refreshAgain = false;
     let activeSound = null, pendingSound = null, decodedSound = null, soundGeneration = 0;
@@ -134,7 +134,7 @@ window.createWorkspaceNotifications = function (ui) {
         importLoading = true;
         try {
             let count = 0;
-            const endpoints = ['/portal/api/academic-updates/', '/portal/api/transcript-updates/', ...(importLabels.notices ? ['/sis/imports/notices/'] : [])];
+            const endpoints = ['/portal/api/academic-updates/', '/portal/api/transcript-updates/', '/portal/api/standing-updates/', ...(importLabels.notices ? ['/sis/imports/notices/'] : [])];
             for (const endpoint of endpoints) {
                 try {
                     const result = await request(endpoint);
@@ -237,6 +237,7 @@ window.createWorkspaceNotifications = function (ui) {
         advisingUpdates?.destroy(); advisingUpdates = null;
         academicUpdates?.destroy(); academicUpdates = null;
         transcriptUpdates?.destroy(); transcriptUpdates = null;
+        standingUpdates?.destroy(); standingUpdates = null;
         importUpdates?.destroy(); importUpdates = null;
         const previous = dialog;
         dialog = list = empty = null;
@@ -311,6 +312,19 @@ window.createWorkspaceNotifications = function (ui) {
                 });
                 currentDialog.querySelector('.workspace-notification-dialog-body').prepend(transcriptSection);
                 const academicBody = node('div', { class: 'campus-announcements-body' });
+                const standingBody = node('div', { class: 'campus-announcements-body' });
+                const standingSection = node('details', { class: 'campus-announcements' },
+                    node('summary', {}, glyph('award'), text('standing_updates')), standingBody);
+                standingSection.addEventListener('toggle', () => {
+                    if (dialog !== currentDialog) return;
+                    standingUpdates?.destroy(); standingUpdates = null;
+                    if (standingSection.open) {
+                        standingUpdates = window.createStudentUpdates({ node, request, labels, notify,
+                            kind: 'standing', notificationsOnly: true, changed: refreshPrivateCounts });
+                        standingUpdates.mount(standingBody);
+                    }
+                });
+                currentDialog.querySelector('.workspace-notification-dialog-body').prepend(standingSection);
                 const academicSection = node('details', { class: 'campus-announcements' },
                     node('summary', {}, glyph('mortarboard'), text('academic_updates', 'Academic updates')), academicBody);
                 academicSection.addEventListener('toggle', () => {

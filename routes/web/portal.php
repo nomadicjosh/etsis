@@ -22,6 +22,14 @@ return static function (Psr7Router $router): void {
     $router->post('/portal/api/website-forms/{page}/{form}/submit/', [$websiteForms, 'submit'])
         ->name('portal.website-forms.submit');
 
+    $standingUpdates = \Application\Http\Controller\StandingUpdatesController::class;
+    $router->get('/portal/api/standing-updates/', [$standingUpdates, 'page'])->name('portal.standing-updates');
+    $router->get('/portal/api/standing-updates/{id}/', [$standingUpdates, 'detail'])
+        ->name('portal.standing-updates.detail');
+    $router->post('/portal/api/standing-updates/{id}/read/', [$standingUpdates, 'read'])
+        ->name('portal.standing-updates.read');
+    $router->post('/portal/api/standing-updates/{id}/delete/', [$standingUpdates, 'delete'])
+        ->name('portal.standing-updates.delete');
     $transcriptUpdates = \Application\Http\Controller\TranscriptUpdatesController::class;
     $router->get('/portal/api/transcript-updates/', [$transcriptUpdates, 'page'])
         ->name('portal.transcript-updates');

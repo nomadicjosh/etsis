@@ -1892,251 +1892,251 @@ msgstr ""
 msgid "Record the current term using verified registered credits and the reviewed policy. This action does not backdate a census, replace an earlier determination or change registrations or charges."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:8
+#: resources/views/shared/notification-labels.php:174
 msgid "Campus announcements"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:10
+#: resources/views/shared/notification-labels.php:176
 msgid "After approval, campus news appears in the notification bell for signed-in applicants, students and staff. Publication times control its availability. Public website news is separate."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:13
+#: resources/views/shared/notification-labels.php:179
 msgid "This announcement changed or is unavailable. Refresh the list."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:14
+#: resources/views/shared/notification-labels.php:180
 msgid "Announcements could not load. Use Refresh announcements to try again."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:15
+#: resources/views/shared/notification-labels.php:181
 msgid "Loading campus announcements…"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:16
+#: resources/views/shared/notification-labels.php:182
 msgid "New campus announcements are available."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:17
+#: resources/views/shared/notification-labels.php:183
 msgid "Unread"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:18
+#: resources/views/shared/notification-labels.php:184
 msgid "Read"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:19
+#: resources/views/shared/notification-labels.php:185
 msgid "Announcement pages"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:20
+#: resources/views/shared/notification-labels.php:186
 msgid "Previous announcements"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:21
+#: resources/views/shared/notification-labels.php:187
 msgid "More announcements"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:22
+#: resources/views/shared/notification-labels.php:188
 msgid "There are no matching campus announcements."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:23
+#: resources/views/shared/notification-labels.php:189
 msgid "Campus announcements loaded. Reading state is saved to your account."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:24
+#: resources/views/shared/notification-labels.php:21 resources/views/shared/notification-labels.php:53 resources/views/shared/notification-labels.php:88 resources/views/shared/notification-labels.php:138 resources/views/shared/notification-labels.php:162 resources/views/shared/notification-labels.php:190
 msgid "Mark as read"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:25
+#: resources/views/shared/notification-labels.php:191
 msgid "Marked as read. This is not a policy acknowledgement."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:26
+#: resources/views/shared/notification-labels.php:192
 msgid "Back to list"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:27
+#: resources/views/shared/notification-labels.php:193
 msgid "Refresh announcements"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:29
+#: resources/views/shared/notification-labels.php:195
 msgid "Published campus news is available to signed-in applicants, students and staff. Open an announcement before marking its current version as read."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:32
+#: resources/views/shared/notification-labels.php:198
 msgid "Show read items"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:33
+#: resources/views/shared/notification-labels.php:199
 msgid "Notifications"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:34
+#: resources/views/shared/notification-labels.php:200
 msgid "Recent workspace notifications"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:35
+#: resources/views/shared/notification-labels.php:201
 msgid "Workspace notification"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:36
+#: resources/views/shared/notification-labels.php:202
 msgid "Close notifications"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:37
+#: resources/views/shared/notification-labels.php:203
 msgid "Dismiss notification"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:38
+#: resources/views/shared/notification-labels.php:204
 msgid "Clear recent notifications"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:39
+#: resources/views/shared/notification-labels.php:205
 msgid "There are no notifications from this workspace session."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:41
+#: resources/views/shared/notification-labels.php:207
 msgid "Recent action feedback stays only in this page. Reloading or signing out clears it. Recorded decisions and background job status remain in their own workspaces."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:44
+#: resources/views/shared/notification-labels.php:210
 msgid "Play notification sounds"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:45
+#: resources/views/shared/notification-labels.php:211
 msgid "Notification sound"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:46
+#: resources/views/shared/notification-labels.php:212
 msgid "Choose a sound, then test it. Changing this choice does not play audio."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:47
+#: resources/views/shared/notification-labels.php:213
 msgid "Short tone"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:48
+#: resources/views/shared/notification-labels.php:214
 msgid "Message"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:49
+#: resources/views/shared/notification-labels.php:215
 msgid "Warm success"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:50
+#: resources/views/shared/notification-labels.php:216
 msgid "Bird"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:51
+#: resources/views/shared/notification-labels.php:217
 msgid "Piano"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:52
+#: resources/views/shared/notification-labels.php:218
 msgid "Preparing sound…"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:53
+#: resources/views/shared/notification-labels.php:219
 msgid "Sound preview played."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:54
+#: resources/views/shared/notification-labels.php:220
 msgid "Keep notifications on screen until dismissed"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:56
+#: resources/views/shared/notification-labels.php:222
 msgid "Only these display and sound preferences are saved in this browser. Notification messages and campus records are never saved here."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:59
+#: resources/views/shared/notification-labels.php:225
 msgid "Test notification sound"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:60
+#: resources/views/shared/notification-labels.php:226
 msgid "Sound is unavailable. Visual notifications will still appear."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:61
+#: resources/views/shared/notification-labels.php:227
 msgid "Completed"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:62
+#: resources/views/shared/notification-labels.php:228
 msgid "Update"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:63
+#: resources/views/shared/notification-labels.php:229
 msgid "Needs attention"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:64
+#: resources/views/shared/notification-labels.php:230
 msgid "Export queued. Its download will be available after preparation finishes."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:65
+#: resources/views/shared/notification-labels.php:231
 msgid "Your report export is ready. Open the export controls to download it."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:66
+#: resources/views/shared/notification-labels.php:232
 msgid "The report export could not finish. Review its status before trying again."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:67
+#: resources/views/shared/notification-labels.php:233
 msgid "Report export cancelled."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:68
+#: resources/views/shared/notification-labels.php:234
 msgid "Delivery processing finished. Review confirmed sends and closed outcomes."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:69
+#: resources/views/shared/notification-labels.php:235
 msgid "Recipients queued. No messages have been sent."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:70
+#: resources/views/shared/notification-labels.php:236
 msgid "Background delivery confirmed. You can leave this screen."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:71
+#: resources/views/shared/notification-labels.php:237
 msgid "Delivery needs review. Unconfirmed messages will not be retried automatically."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:72
+#: resources/views/shared/notification-labels.php:238
 msgid "Delivery stopped. Review access, recipients and institutional mail settings."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:73
+#: resources/views/shared/notification-labels.php:239
 msgid "Your contact information is up to date."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:74
+#: resources/views/shared/notification-labels.php:240
 msgid "Application submitted. Here’s to your next chapter."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:76
+#: resources/views/shared/notification-labels.php:242
 msgid "Your section was changed. The original course charges were reversed and replacement charges applied together."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:79
+#: resources/views/shared/notification-labels.php:245
 msgid "Your course was removed. Its course charge was reversed if present. Any account credit is reviewed separately for a cash refund."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:83
+#: resources/views/shared/notification-labels.php:249
 msgid "Your course stays on your record with grade {grade} and zero earned credits. Its course charge is retained."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:85
+#: resources/views/shared/notification-labels.php:251
 msgid "{count} course sections registered together."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:86
+#: resources/views/shared/notification-labels.php:252
 msgid "You’re registered. Your semester is taking shape."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:87
+#: resources/views/shared/notification-labels.php:253
 msgid "Your request is with the registrar. Follow its progress below."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:88
+#: resources/views/shared/notification-labels.php:254
 msgid "Transcript request cancelled."
 msgstr ""
 
@@ -3235,91 +3235,91 @@ msgstr ""
 msgid "This rule does not change earned credits or decide which work counts toward a degree."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:149
 msgid "Registration updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:150
 msgid "Loading registration updates…"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:152
 msgid "Waitlist registrations and staff removals appear here. Delete an update when you no longer need it."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:154
 msgid "There are no matching registration updates."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:14 resources/views/shared/notification-labels.php:46 resources/views/shared/notification-labels.php:81 resources/views/shared/notification-labels.php:130 resources/views/shared/notification-labels.php:155
 msgid "Show read updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:156
 msgid "Refresh registration updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:157
 msgid "Registration update pages"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:17 resources/views/shared/notification-labels.php:49 resources/views/shared/notification-labels.php:84 resources/views/shared/notification-labels.php:133 resources/views/shared/notification-labels.php:158
 msgid "Previous updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:18 resources/views/shared/notification-labels.php:50 resources/views/shared/notification-labels.php:85 resources/views/shared/notification-labels.php:134 resources/views/shared/notification-labels.php:159
 msgid "More updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:160
 msgid "Registered from waitlist"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:161
 msgid "Waitlist request removed"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:22 resources/views/shared/notification-labels.php:54 resources/views/shared/notification-labels.php:89 resources/views/shared/notification-labels.php:139 resources/views/shared/notification-labels.php:163
 msgid "Delete update"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:164
 msgid "Registration updates loaded. Course, section and term labels are current."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:165
 msgid "Registration updates could not load. Use Refresh to try again."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:166
 msgid "Registration updates are unavailable for this account."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:143 resources/views/shared/notification-labels.php:167
 msgid "This update changed or is unavailable. Refresh the list."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:168
 msgid "New registration updates are available."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:169
 msgid "View your registration"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:170
 msgid "Registration update marked as read."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:171
 msgid "Registration update deleted."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:172
 msgid "Delete announcement"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php
+#: resources/views/shared/notification-labels.php:173
 msgid "Delete notification"
 msgstr ""
 
@@ -4695,73 +4695,73 @@ msgstr ""
 msgid "Provide prerequisite equivalents or explicitly choose none."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:8
+#: resources/views/shared/notification-labels.php:123
 msgid "Advising updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:9
+#: resources/views/shared/notification-labels.php:124
 msgid "Loading advising updates…"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:11
+#: resources/views/shared/notification-labels.php:126
 msgid ""
 "New and resolved advising follow-up appears here. Open a check-in to review "
 "it or delete the notice when it is no longer needed."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:14
+#: resources/views/shared/notification-labels.php:129
 msgid "There are no matching advising updates."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:16
+#: resources/views/shared/notification-labels.php:131
 msgid "Refresh advising updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:17
+#: resources/views/shared/notification-labels.php:132
 msgid "Advising update pages"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:20
+#: resources/views/shared/notification-labels.php:135
 msgid "New advising follow-up"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:21
+#: resources/views/shared/notification-labels.php:136
 msgid "Advising follow-up closed"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:22
+#: resources/views/shared/notification-labels.php:137
 msgid "Advising follow-up cancelled"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:25
+#: resources/views/shared/notification-labels.php:140
 msgid "Advising updates loaded. Program labels are current."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:26
+#: resources/views/shared/notification-labels.php:141
 msgid "Advising updates could not load. Use Refresh to try again."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:27
+#: resources/views/shared/notification-labels.php:142
 msgid "Advising updates are unavailable for this account."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:29
+#: resources/views/shared/notification-labels.php:144
 msgid "New advising updates are available."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:30
+#: resources/views/shared/notification-labels.php:145
 msgid "View check-in"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:31
+#: resources/views/shared/notification-labels.php:146
 msgid "Back to advising updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:32
+#: resources/views/shared/notification-labels.php:147
 msgid "Advising update marked as read."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:33
+#: resources/views/shared/notification-labels.php:148
 msgid "Advising update deleted."
 msgstr ""
 
@@ -5714,15 +5714,15 @@ msgstr ""
 msgid "The proposed standing definition changed or was retired. Review the published GPA policy."
 msgstr ""
 
-#: src/Domain/Student/Service/StudentStandingService.php:321
+#: src/Domain/Student/Service/StudentStandingService.php:332 src/Domain/Student/Service/StudentStandingService.php:451
 msgid "The standing proposal source changed. Calculate and review it again."
 msgstr ""
 
-#: src/Domain/Student/Service/StudentStandingService.php:388
+#: src/Domain/Student/Service/StudentStandingService.php:430
 msgid "Calculate a fresh standing proposal before reviewing."
 msgstr ""
 
-#: src/Domain/Student/Service/StudentStandingService.php:395
+#: src/Domain/Student/Service/StudentStandingService.php:437
 msgid "A current GPA proposal must be recorded as a new standing period."
 msgstr ""
 
@@ -6010,7 +6010,7 @@ msgstr ""
 msgid "The applicable standing policy uses cumulative GPA. Clear the selected proposal term."
 msgstr ""
 
-#: src/Domain/Student/Service/StudentStandingService.php:394
+#: src/Domain/Student/Service/StudentStandingService.php:400
 msgid "Use a search of up to eighty characters."
 msgstr ""
 
@@ -7770,135 +7770,135 @@ msgstr ""
 msgid "Choose a valid import page."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:8
+#: resources/views/shared/notification-labels.php:76
 msgid "These notifications are unavailable. Reopen this section to try again."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:9
+#: resources/views/shared/notification-labels.php:77
 msgid "Academic updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:10
+#: resources/views/shared/notification-labels.php:78
 msgid "Loading academic updates…"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:11
+#: resources/views/shared/notification-labels.php:79
 msgid "Posted final grades and approved corrections appear here."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:12
+#: resources/views/shared/notification-labels.php:80
 msgid "There are no academic updates."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:14
+#: resources/views/shared/notification-labels.php:82
 msgid "Refresh academic updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:15
+#: resources/views/shared/notification-labels.php:83
 msgid "Academic update pages"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:18
+#: resources/views/shared/notification-labels.php:86
 msgid "Final grade available"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:19
+#: resources/views/shared/notification-labels.php:87
 msgid "Final grade updated"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:22
+#: resources/views/shared/notification-labels.php:90
 msgid "Academic updates loaded."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:23
+#: resources/views/shared/notification-labels.php:91
 msgid "Academic updates could not load. Reopen this section to try again."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:24
+#: resources/views/shared/notification-labels.php:92
 msgid "Academic updates are unavailable for this account."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:25
+#: resources/views/shared/notification-labels.php:26 resources/views/shared/notification-labels.php:58 resources/views/shared/notification-labels.php:93
 msgid "This update changed or is unavailable. Reopen the list."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:26
+#: resources/views/shared/notification-labels.php:94
 msgid "New academic updates are available."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:27
+#: resources/views/shared/notification-labels.php:95
 msgid "View academic record"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:28
+#: resources/views/shared/notification-labels.php:96
 msgid "Back to academic updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:29
+#: resources/views/shared/notification-labels.php:97
 msgid "Academic update marked as read."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:30
+#: resources/views/shared/notification-labels.php:98
 msgid "Academic update deleted."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:31
+#: resources/views/shared/notification-labels.php:99
 msgid "Current final grade"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:32
+#: resources/views/shared/notification-labels.php:100
 msgid "Academic term"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:33
+#: resources/views/shared/notification-labels.php:101
 msgid "Completed academic credits"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:34
+#: resources/views/shared/notification-labels.php:102
 msgid "No current final grade"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:35
+#: resources/views/shared/notification-labels.php:104
 msgid "This is the current verified academic record. Later corrections may have changed the original notification outcome."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:40
+#: resources/views/shared/notification-labels.php:108
 msgid "Notification preferences"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:41
+#: resources/views/shared/notification-labels.php:109
 msgid "Manage notification preferences"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:42
+#: resources/views/shared/notification-labels.php:110
 msgid "Loading notification preferences…"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:43
+#: resources/views/shared/notification-labels.php:111
 msgid "Save notification preferences"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:44
+#: resources/views/shared/notification-labels.php:112
 msgid "Close without saving"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:45
+#: resources/views/shared/notification-labels.php:113
 msgid "Saving notification preferences…"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:46
+#: resources/views/shared/notification-labels.php:114
 msgid "Notification preferences saved."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:47
+#: resources/views/shared/notification-labels.php:115
 msgid "Preferences changed elsewhere. Close and reopen this editor before saving."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:48
+#: resources/views/shared/notification-labels.php:117
 msgid "Notification preferences are unavailable. Close and reopen this editor to try again."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:51
+#: resources/views/shared/notification-labels.php:120
 msgid "These display and sound preferences belong to this person and follow their sign-in between browsers. Previewing a sound saves nothing."
 msgstr ""
 
@@ -7948,99 +7948,99 @@ msgstr ""
 msgid "Choose valid notification display and sound preferences."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:8
+#: resources/views/shared/notification-labels.php:42
 msgid "Transcript updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:9
+#: resources/views/shared/notification-labels.php:43
 msgid "Loading transcript updates…"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:10
+#: resources/views/shared/notification-labels.php:44
 msgid "Transcript preparation and recorded delivery updates appear here."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:11
+#: resources/views/shared/notification-labels.php:45
 msgid "There are no transcript updates."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:13
+#: resources/views/shared/notification-labels.php:47
 msgid "Refresh transcript updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:14
+#: resources/views/shared/notification-labels.php:48
 msgid "Transcript update pages"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:17
+#: resources/views/shared/notification-labels.php:51
 msgid "Transcript prepared"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:18
+#: resources/views/shared/notification-labels.php:52
 msgid "Transcript delivery recorded"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:21
+#: resources/views/shared/notification-labels.php:55
 msgid "Transcript updates loaded."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:22
+#: resources/views/shared/notification-labels.php:56
 msgid "Transcript updates are unavailable. Reopen this section to try again."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:23
+#: resources/views/shared/notification-labels.php:57
 msgid "Transcript updates are unavailable for this account."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:25
+#: resources/views/shared/notification-labels.php:59
 msgid "New transcript updates are available."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:26
+#: resources/views/shared/notification-labels.php:60
 msgid "View transcript request"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:27
+#: resources/views/shared/notification-labels.php:61
 msgid "Back to transcript updates"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:28
+#: resources/views/shared/notification-labels.php:62
 msgid "Transcript update marked as read."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:29
+#: resources/views/shared/notification-labels.php:63
 msgid "Transcript update deleted."
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:30
+#: resources/views/shared/notification-labels.php:64
 msgid "Requested"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:31
+#: resources/views/shared/notification-labels.php:65
 msgid "Delivery method"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:32
+#: resources/views/shared/notification-labels.php:66
 msgid "Current status"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:33
+#: resources/views/shared/notification-labels.php:67
 msgid "Current transcript request"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:34
+#: resources/views/shared/notification-labels.php:68
 msgid "Open transcript requests"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:35
+#: resources/views/shared/notification-labels.php:69
 msgid "Registrar pickup"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:36
+#: resources/views/shared/notification-labels.php:70
 msgid "Electronic"
 msgstr ""
 
-#: resources/views/shared/notification-labels.php:37
+#: resources/views/shared/notification-labels.php:72
 msgid "Preparation is separate from delivery. The registrar controls document release; this update provides status only."
 msgstr ""
 
@@ -10016,4 +10016,137 @@ msgstr ""
 
 #: resources/views/backend/workspace/navigation-tools.phtml:55
 msgid "Layout saved for larger screens. Mobile navigation keeps full labels."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:8
+msgid "Academic standing updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:9
+msgid "Loading academic standing updates…"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:11
+msgid "Confirmed academic standing changes appear here. Delete a notice when it is no longer needed."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:13
+msgid "There are no academic standing updates."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:15
+msgid "Refresh standing updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:16
+msgid "Academic standing update pages"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:19
+msgid "Academic standing updated"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:20
+msgid "Historical academic standing corrected"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:23
+msgid "Standing updates loaded. Program labels are current."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:24
+msgid "Standing updates could not load. Reopen this section to try again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:25
+msgid "Standing updates are unavailable for this account."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:27
+msgid "New academic standing updates are available."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:28
+msgid "View academic standing"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:29
+msgid "Back to standing updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:30
+msgid "Standing update marked as read."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:31
+msgid "Standing update deleted."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:32
+msgid "Recorded academic standing"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:34
+msgid "These are the current recorded periods, including past and future periods. Later corrections may have changed the notification outcome."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:37
+msgid "Effective from (inclusive)"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:38
+msgid "Effective through (inclusive)"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:39
+msgid "No end date"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:40
+msgid "This is a historical program pursuit."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:41
+msgid "No academic standing periods are recorded."
+msgstr ""
+
+#: src/Application/Http/Controller/StandingUpdatesController.php:32
+msgid "Choose whether to include read standing notifications."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingUpdatesService.php:59
+msgid "Use the complete standing notification cursor."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingUpdatesService.php:64
+msgid "Use a valid standing notification cursor."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingUpdatesService.php:78
+#: src/Domain/Student/Service/StandingUpdatesService.php:96
+msgid "Standing notifications changed. Reopen the list."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingUpdatesService.php:115
+msgid "The standing notification changed before completion."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingUpdatesService.php:164
+msgid "Reload the current standing notification."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingNotifications.php:52
+msgid "The standing notification was not saved."
+msgstr ""
+
+#: src/Domain/Student/Service/StandingNotifications.php:70
+msgid "The standing notification or owner changed. Review again."
+msgstr ""
+
+#: src/Domain/Student/Service/StudentStandingService.php:486
+msgid "Use the complete standing notification reference."
+msgstr ""
+
+#: src/Domain/Student/Service/StudentStandingService.php:495
+msgid "The standing changed. Reopen the notification."
 msgstr ""

@@ -69,6 +69,7 @@ try {
                 'check-maintenance',
                 'check-notification-preferences',
                 'check-transcript-updates',
+                'check-standing-updates',
                 'check-transcript-worklist',
                 'check-profile-requests',
                 'check-portal',
@@ -385,6 +386,11 @@ try {
             $httpSis = $worklistFixture->transcripts->sis;
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/TranscriptWorklistBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-standing-updates') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/StandingUpdatesBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-transcript-updates') {
             $kernel->bootstrap();
