@@ -57,6 +57,7 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
         <link rel="stylesheet" href="/assets/css/site-navigation.css">
         <link rel="stylesheet" href="/assets/css/website-blocks.css">
         <script defer src="/assets/js/website-blocks.js"></script>
+        <script defer src="/assets/js/website-forms.js"></script>
         <script defer src="/assets/vendor/bootstrap.bundle.min.js"></script>
         <script defer src="/assets/js/site-navigation.js"></script>
         <script defer src="/assets/js/review-guidance.js"></script>

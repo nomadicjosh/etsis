@@ -9,15 +9,19 @@
          checks conflict with expanded inline/alternative template control blocks. -->
     <rule ref="Generic.WhiteSpace.ScopeIndent">
         <exclude-pattern>*/resources/views/*.phtml</exclude-pattern>
+        <exclude-pattern>*/resources/blocks/*/view.php</exclude-pattern>
     </rule>
     <rule ref="Squiz.ControlStructures.ControlSignature.SpaceAfterCloseParenthesis">
         <exclude-pattern>*/resources/views/*.phtml</exclude-pattern>
+        <exclude-pattern>*/resources/blocks/*/view.php</exclude-pattern>
     </rule>
     <rule ref="Squiz.ControlStructures.ControlSignature.SpaceAfterKeyword">
         <exclude-pattern>*/resources/views/*.phtml</exclude-pattern>
+        <exclude-pattern>*/resources/blocks/*/view.php</exclude-pattern>
     </rule>
     <rule ref="PSR12.ControlStructures.ControlStructureSpacing.CloseParenthesisIndent">
         <exclude-pattern>*/resources/views/*.phtml</exclude-pattern>
+        <exclude-pattern>*/resources/blocks/*/view.php</exclude-pattern>
     </rule>
     <rule ref="PSR1.Classes.ClassDeclaration.MissingNamespace">
         <exclude-pattern>database/migrations/*</exclude-pattern>

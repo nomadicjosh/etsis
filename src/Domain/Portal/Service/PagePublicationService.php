@@ -27,6 +27,8 @@ final readonly class PagePublicationService
         private AuditTrail $audit,
         private Clock $clock,
         private ReviewProof $proofs,
+        private \Domain\WebsiteForms\Service\WebsiteFormRoutingService $formRouting,
+        private \Domain\WebsiteForms\Service\NewsletterService $newsletters,
     ) {
     }
 
@@ -215,6 +217,18 @@ final readonly class PagePublicationService
         };
         if (!in_array($context['status'], $allowed, true) || $context['source']['translations'] === []) {
             self::invalid('Choose an action available for this saved page.');
+        }
+        if (in_array($action, ['submit', 'approve'], true)) {
+            foreach ($context['source']['translations'] as $translation) {
+                $forms = \Domain\WebsiteForms\Service\WebsiteFormCatalog::definitions(
+                    $context['source'],
+                    $translation['locale']
+                );
+                foreach ($forms as $form) {
+                    $this->formRouting->validateDepartment($form->facts['department_id']);
+                    $this->newsletters->validateBinding($form->facts['newsletter']);
+                }
+            }
         }
         if ($action === 'approve') {
             $window->requireFuture($this->clock->now());

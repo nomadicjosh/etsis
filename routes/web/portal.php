@@ -16,6 +16,12 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $websiteForms = \Application\Http\Controller\WebsiteFormController::class;
+    $router->get('/portal/api/website-forms/{page}/{form}/prepare/', [$websiteForms, 'prepare'])
+        ->name('portal.website-forms.prepare');
+    $router->post('/portal/api/website-forms/{page}/{form}/submit/', [$websiteForms, 'submit'])
+        ->name('portal.website-forms.submit');
+
     $transcriptUpdates = \Application\Http\Controller\TranscriptUpdatesController::class;
     $router->get('/portal/api/transcript-updates/', [$transcriptUpdates, 'page'])
         ->name('portal.transcript-updates');

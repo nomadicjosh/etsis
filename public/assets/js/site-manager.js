@@ -46,6 +46,7 @@
         if (!response.ok) {
             if ([401, 403].includes(response.status)) {
                 generation++; dirty = false; clearReview(); root.replaceChildren();
+                window.dispatchEvent(new Event('site:access-denied'));
                 window.initializeSiteDropdowns?.(root);
                 message(t('access'), 'danger');
             }
@@ -433,6 +434,21 @@
         node('div', { class: 'site-builder' }, node('section', { class: 'site-card' }, node('h2', { class: 'h5' }, t('structure')),
             node('p', { class: 'form-text' }, t('structure_help')), addActions, historyControls, treeRoot, extras), editor), preview);
         renderTree(); renderEditor();
+    }
+    if (root.dataset.mode === 'newsletters') {
+        const newsletters = window.createWebsiteNewsletters({ root, request, node, button, inspect, message, labels });
+        void task(() => newsletters.load());
+        return;
+    }
+    if (root.dataset.mode === 'form-access') {
+        const access = window.createWebsiteFormAccess({ root, request, node, button, message, labels });
+        void task(() => access.load());
+        return;
+    }
+    if (root.dataset.mode === 'form-inbox') {
+        const inbox = window.createWebsiteFormInbox({ root, request, node, button, inspect, message, labels });
+        void task(() => inbox.load());
+        return;
     }
     if (root.dataset.mode !== 'settings') void task(() => root.dataset.mode === 'menus' ? loadMenu() : pageDirectory());
 })();

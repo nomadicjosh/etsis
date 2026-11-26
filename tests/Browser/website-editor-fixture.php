@@ -19,6 +19,7 @@ $websiteConfig["theme"]["folder"] = dirname(__DIR__) . "/Support";
 $websiteConfig["theme"]["active_theme"] = "PageBuilderTheme";
 $websiteConfig["theme"]["parents"] = [];
 $websiteConfig["router"]["use_router"] = false;
+\Vihzhuo\Extensions::registerBlock('regular-form', $root . '/resources/blocks/forms/form');
 new \Application\Service\CodefyPageBuilder($websiteConfig);
 global $phpb_db;
 $phpb_db->query(
@@ -71,6 +72,17 @@ $record->setTranslations([
         "meta_description" => "",
     ],
 ]);
+if (($_GET['forms'] ?? '') === '1') {
+    require __DIR__ . '/website-form-data.php';
+    $data = $record->getBuilderData();
+    $data['html'][0] .= '[block slug="regular-form" id="IDcontact"]';
+    $data['components'][0][] = ['tagName' => 'phpb-block',
+        'attributes' => ['slug' => 'regular-form', 'id' => 'IDcontact']];
+    $data['blocks']['en']['IDcontact'] = ['slug' => 'regular-form', 'settings' => ['attributes' => [
+        'website-definition' => json_encode($websiteForm, JSON_THROW_ON_ERROR),
+    ]]];
+    $record->setData(['data' => $data], false);
+}
 $request = new \Qubus\Http\ServerRequest(
     uri: "http://127.0.0.1:8127/fixture/website-editor/",
     method: $_SERVER["REQUEST_METHOD"],

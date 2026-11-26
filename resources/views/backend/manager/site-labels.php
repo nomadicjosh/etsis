@@ -2,9 +2,113 @@
 
 declare(strict_types=1);
 
+use function Codefy\Framework\Helpers\trans;
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'newsletter_add' => trans('Add connection'),
+    'newsletter_edit' => trans('Edit connection'),
+    'newsletter_name' => trans('Connection name'),
+    'newsletter_provider' => trans('Service'),
+    'newsletter_url' => trans('HTTPS service URL'),
+    'newsletter_list' => trans('List, audience or segment reference'),
+    'newsletter_secret' => trans('API key, password or signing secret'),
+    'newsletter_username' => trans('Mautic username (Basic authentication only)'),
+    'newsletter_idempotent_receiver' => trans('The webhook receiver honors Idempotency-Key'),
+    'newsletter_connection_enabled' => trans('Enable this connection'),
+    'newsletter_sendy' => trans('Sendy'),
+    'newsletter_mailchimp' => trans('Mailchimp'),
+    'newsletter_mautic' => trans('Mautic'),
+    'newsletter_webhook' => trans('Signed webhook'),
+    'newsletter_enabled' => trans('Server-side newsletter delivery is enabled.'),
+    'newsletter_disabled' => trans('Newsletter delivery is disabled in server configuration. '
+        . 'Connections and forms can be prepared without sending contacts.'),
+    'newsletter_active' => trans('Enabled'),
+    'newsletter_paused' => trans('Paused'),
+    'newsletter_empty' => trans('No newsletter connections have been configured.'),
+    'newsletter_more' => trans('More connections'),
+    'newsletter_first' => trans('First connections'),
+    'newsletter_destination_help' => trans('Use the Sendy or Mautic installation root, Mailchimp '
+        . 'server root, or the full webhook URL. Other hosts must be '
+            . 'allowed in server configuration.'),
+    'newsletter_immutable' => trans('Provider and destination are fixed. Create a new connection for '
+        . 'another list or endpoint.'),
+    'newsletter_secret_keep' => trans('Leave credentials blank to keep the current secret. Stored '
+        . 'credentials are never displayed.'),
+    'newsletter_secret_help' => trans('Credentials are encrypted on the server. For Mautic use an '
+        . 'OAuth access token, or supply a username and password for Basic authentication.'),
+    'newsletter_save' => trans('Save connection'),
+    'newsletter_saving' => trans('Saving connection…'),
+    'newsletter_saved' => trans('Newsletter connection saved.'),
+    'newsletter_back' => trans('Back to connections'),
+    'newsletter_discard' => trans('Discard unsaved connection changes?'),
+    'newsletter_delivery' => trans('Newsletter delivery'),
+    'newsletter_state_queued' => trans('Queued'),
+    'newsletter_state_sending' => trans('Delivering'),
+    'newsletter_state_retry' => trans('Waiting to retry'),
+    'newsletter_state_review' => trans('Needs review'),
+    'newsletter_state_blocked' => trans('Delivery blocked'),
+    'newsletter_state_completed' => trans('Sent to service'),
+    'newsletter_issue_none' => trans('Waiting for server processing.'),
+    'newsletter_issue_accepted' => trans('The provider accepted the subscription request.'),
+    'newsletter_issue_pending' => trans('Email confirmation is pending at the provider.'),
+    'newsletter_issue_already_member' => trans('The contact is already a member.'),
+    'newsletter_issue_suppressed' => trans('The provider prevents this contact from being subscribed.'),
+    'newsletter_issue_retry' => trans('A temporary failure will be retried within the delivery limit.'),
+    'newsletter_issue_rejected' => trans('Check the connection credentials and destination before retrying.'),
+    'newsletter_issue_uncertain' => trans('Delivery could not be confirmed. Review the provider '
+        . 'before explicitly retrying.'),
+    'newsletter_issue_disabled' => trans('Enable newsletter delivery and the selected connection before retrying.'),
+    'newsletter_issue_changed' => trans('The configured destination differs from the retained form. '
+        . 'Review its connection.'),
+    'newsletter_issue_unreadable' => trans('The retained subscription could not be verified.'),
+    'newsletter_issue_interrupted' => trans('Processing was interrupted. Review the provider before retrying.'),
+    'newsletter_retry' => trans('Queue subscription retry'),
+    'newsletter_retry_help' => trans('Check the provider first if delivery is uncertain. This queues '
+        . 'the same subscription for server processing.'),
+    'newsletter_retry_confirm' => trans('Confirm subscription retry'),
+    'newsletter_retried' => trans('Subscription retry queued.'),
+    'newsletter_back_inquiry' => trans('Back to inquiry'),
+
+    'form_access_title' => trans('Reply access'),
+    'form_department_members' => trans('Department inbox members'),
+    'form_form_members' => trans('Individual form access'),
+    'form_access_help' => trans('First grant website form read permission in Access management. Then '
+        . 'add the account to a department inbox or to individual forms. A form grant never bypasses its department.'),
+    'form_choose_department' => trans('Choose a department'),
+    'form_choose_page' => trans('Choose a website page'),
+    'form_choose_form' => trans('Choose a form'),
+    'form_choose_account' => trans('Choose an enabled account with read permission'),
+    'form_search' => trans('Search'),
+    'form_next' => trans('Next results'),
+    'form_add_access' => trans('Grant access'),
+    'form_remove_access' => trans('Remove access'),
+    'form_members' => trans('Current members'),
+    'form_no_members' => trans('No accounts have been assigned.'),
+    'form_choose_scope' => trans('Select a department or form to manage access.'),
+    'form_access_saved' => trans('Reply access updated.'),
+    'form_route_department' => trans('Department replies are restricted to its inbox members.'),
+    'form_route_form' => trans('No department: assign access to this form individually.'),
+    'form_account_help' => trans('Only enabled accounts with website form read permission appear. '
+        . 'Revoking that permission immediately blocks access.'),
+    'form_unknown_account' => trans('Account'),
+    'form_more_members' => trans('More members'),
+    'form_first_members' => trans('First members'),
+
+    'form_loading' => trans('Loading website inquiries…'),
+    'form_filter' => trans('Inquiry status'), 'form_all' => trans('All inquiries'),
+    'form_open' => trans('Open'), 'form_closed' => trans('Closed'),
+    'form_open_item' => trans('Read inquiry'), 'form_refresh' => trans('Refresh inbox'),
+    'form_more' => trans('Older inquiries'), 'form_first' => trans('Newest inquiries'),
+    'form_empty' => trans('There are no matching website inquiries.'),
+    'form_yes' => trans('Yes'), 'form_no' => trans('No'), 'form_detail' => trans('Website inquiry'),
+    'form_close_item' => trans('Mark closed'), 'form_reopen_item' => trans('Reopen inquiry'),
+    'form_delete' => trans('Delete inquiry'), 'form_confirm_delete' => trans('Permanently delete inquiry'),
+    'form_delete_help' => trans('This permanently deletes the message and its answers. A short-lived '
+        . 'retry receipt contains no answers.'),
+    'form_back' => trans('Back to inquiry'), 'form_updated' => trans('Inquiry status updated.'),
+    'form_deleted' => trans('Inquiry deleted.'),
+
     'back_pages' => trans_html('Back to pages'),
     'inspect_design' => trans_html('Inspect saved design'),
     'remove_page' => trans_html('Remove page'),

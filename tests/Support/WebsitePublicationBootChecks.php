@@ -17,8 +17,10 @@ $api = static function (string $path, array $data, int $status = 200) use ($teac
     return json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
 };
 $read = static function (string $path, int $status = 200) use ($app, $get): array {
+    parse_str((string) parse_url($path, PHP_URL_QUERY), $query);
     $response = $app->router->match(
-        $get->withUri(new \Laminas\Diactoros\Uri("https://campus.example.invalid" . $path)),
+        $get->withUri(new \Laminas\Diactoros\Uri("https://campus.example.invalid" . $path))
+            ->withQueryParams($query),
     );
     if (
         $response->getStatusCode() !== $status ||
@@ -129,6 +131,7 @@ foreach (["campus-harbor", "campus-quad", "campus-horizon"] as $themeSlug) {
 if ($historyBefore !== $sis->sql->rows("sis_history_events")) {
     throw new RuntimeException("Website rendering wrote academic history.");
 }
+require __DIR__ . '/WebsiteFormBootChecks.php';
 $sis->access->grants = ["sis:portal:publish"];
 $sis->access->grants[] = "vihzhuo:manage";
 $manager = new \Application\Service\WebsiteManager();

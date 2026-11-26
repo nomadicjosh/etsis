@@ -45,6 +45,12 @@ Native block discovery uses `view.php` or `view.html`; `.phtml` is the applicati
 A page already open in the designer must be reopened to load the changed block definitions. Configure and approve the saved page using the normal review workflow after editing it.
 
 
+## Website forms and submissions
+
+Add **Website form**, select it on the canvas and use **Settings → Edit website form** for the independent website form designer. It supports typed fields, choices, required/help text, limits, conditions, drag/drop and keyboard ordering, duplication and an inactive public preview. Save the page and complete its ordinary publication review before intake opens.
+
+See [Website forms and reply access](website-forms.md) for optional department routing, explicit department/form memberships, separate read/manage permissions, the encrypted staff inbox and permanent submission deletion. These contact/inquiry forms are separate from the admissions Form Library and do not create academic history or admission applications.
+
 ## Accessible accordion and carousel blocks
 
 **Accordion** and **Carousel** remain dynamic PHP blocks: select the block and use **Settings → Number of items (1–20)** to change their structure. Edit headings, answers and slide content in their nested HTML child blocks. Existing relative child IDs stay the same, so already saved heading/body/slide content is retained. Each rendered accordion uses separate DOM IDs for its headers and panels; two accordions on one page cannot open each other's answers. All answers start collapsed with matching button state. Tab reaches each heading, and Enter or Space toggles it. Opening another answer closes the earlier answer in that same accordion only. Keep interactive links and controls in the answer, rather than inside the heading button.

@@ -20,6 +20,7 @@ use function Codefy\Framework\Helpers\trans_html;
         <link href="<?= phpb_e(phpb_theme_asset('css/style.css')) ?>" rel="stylesheet">
         <link href="/assets/css/website-blocks.css" rel="stylesheet">
         <script defer src="/assets/js/website-blocks.js"></script>
+        <script defer src="/assets/js/website-forms.js"></script>
     </head>
     <body class="d-flex flex-column h-100">
         <a class="website-skip-link" href="#website-main"><?= trans_html('Skip to main content') ?></a>

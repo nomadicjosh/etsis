@@ -1,0 +1,25 @@
+.website-form-designer { width: min(72rem, calc(100vw - 2rem)); max-height: calc(100dvh - 2rem); padding: 0; border: 1px solid #c9d6e2; border-radius: .75rem; color: #17344e; background: #f3f6f9; }
+.website-form-designer::backdrop { background: rgb(15 35 55 / 55%); }
+.website-form-designer header { position: sticky; top: 0; z-index: 2; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem; padding: 1rem; background: #fff; border-bottom: 1px solid #c9d6e2; }
+.website-form-designer header h2 { margin: 0; font-size: 1.25rem; }
+.website-form-designer main { padding: 1rem; }
+.website-form-designer .wf-card { padding: 1rem; margin-block: 1rem; border: 1px solid #c9d6e2; border-radius: .5rem; background: #fff; }
+.website-form-designer .wf-toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; }
+.website-form-designer .wf-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+.website-form-designer .wf-setting { min-width: 0; margin-bottom: 1rem; }
+.website-form-designer label { display: block; font-weight: 600; overflow-wrap: anywhere; }
+.website-form-designer .btn { min-height: 2.75rem; white-space: normal; }
+.website-form-designer .btn:focus-visible, .website-form-designer input:focus-visible, .website-form-designer select:focus-visible, .website-form-designer textarea:focus-visible { outline: 3px solid #24536b; outline-offset: 2px; }
+.website-form-designer .wf-grip { cursor: grab; }
+.website-form-designer .wf-ghost { opacity: .45; }
+.website-form-designer [hidden] { display: none !important; }
+@media (max-width: 640px) { .website-form-designer .wf-grid { grid-template-columns: 1fr; } }
+
+.website-form-designer .btn-primary { color: #fff; background: #24536b; border-color: #24536b; }
+.website-form-designer .btn-outline-secondary { color: #24536b; border-color: #24536b; background: #fff; }
+.website-form-designer .btn-outline-secondary:hover { color: #fff; background: #24536b; }
+
+.website-form-designer .form-control, .website-form-designer .form-select { color: #17344e; background-color: #fff; border-color: #a9bacb; opacity: 1; }
+.website-form-designer .form-control::placeholder { color: #52677b; opacity: 1; }
+
+.website-form-designer .form-control:focus, .website-form-designer .form-select:focus { color: #17344e; background-color: #fff; }

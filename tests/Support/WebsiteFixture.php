@@ -47,7 +47,51 @@ final class WebsiteFixture
             $s->transactions,
             $audit ?? $s->audit,
             $s->clock,
-            new ReviewProof($s->dropCipher, $s->clock)
+            new ReviewProof($s->dropCipher, $s->clock),
+            $this->formRouting(),
+            $this->newsletters()
+        );
+    }
+
+    public function newsletterPolicy(): \Domain\WebsiteForms\Service\NewsletterPolicy
+    {
+        return new class implements \Domain\WebsiteForms\Service\NewsletterPolicy {
+            public function enabled(): bool
+            {
+                return true;
+            }
+            public function permitsHost(string $host): bool
+            {
+                return true;
+            }
+        };
+    }
+
+    public function newsletters(): \Domain\WebsiteForms\Service\NewsletterService
+    {
+        $s = $this->sis;
+        return new \Domain\WebsiteForms\Service\NewsletterService(
+            new \Infrastructure\Persistence\Repository\SqlNewsletterRepository($s->sql),
+            $this->newsletterPolicy(),
+            $s->dropCipher,
+            $s->access,
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql),
+            $s->transactions,
+            $s->audit,
+            $s->clock
+        );
+    }
+
+    public function formRouting(): \Domain\WebsiteForms\Service\WebsiteFormRoutingService
+    {
+        $s = $this->sis;
+        return new \Domain\WebsiteForms\Service\WebsiteFormRoutingService(
+            new \Infrastructure\Persistence\Repository\SqlWebsiteFormRoutingRepository($s->sql),
+            new \Infrastructure\Persistence\Repository\SqlClassificationRepository($s->sql),
+            new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql),
+            $s->access,
+            $s->transactions,
+            $s->audit
         );
     }
 

@@ -22,6 +22,25 @@ use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
     /** @var Psr7Router&Mappable $router */
+    $websiteForms = \Application\Http\Controller\WebsiteFormController::class;
+    $newsletters = \Application\Http\Controller\NewsletterController::class;
+    $router->get('/sis/website/newsletters/view/', [$newsletters, 'screen']);
+    $router->get('/sis/website/newsletters/', [$newsletters, 'listing']);
+    $router->post('/sis/website/newsletters/', [$newsletters, 'save']);
+    $router->get('/sis/website/newsletters/{id}/', [$newsletters, 'show']);
+    $formAccess = \Application\Http\Controller\WebsiteFormAccessController::class;
+    $router->get('/sis/website/form-access/view/', [$formAccess, 'screen']);
+    $router->get('/sis/website/form-access/choices/', [$formAccess, 'choices']);
+    $router->get('/sis/website/form-access/forms/', [$formAccess, 'forms']);
+    $router->get('/sis/website/form-access/members/', [$formAccess, 'members']);
+    $router->post('/sis/website/form-access/members/', [$formAccess, 'assign']);
+    $router->post('/sis/website/form-preview/', [$websiteForms, 'preview']);
+    $router->get('/sis/website/form-inbox/view/', [$websiteForms, 'screen']);
+    $router->get('/sis/website/form-inbox/', [$websiteForms, 'listing']);
+    $router->get('/sis/website/form-inbox/{id}/', [$websiteForms, 'show']);
+    $router->post('/sis/website/form-inbox/{id}/newsletter/retry/', [$websiteForms, 'retryNewsletter']);
+    $router->post('/sis/website/form-inbox/{id}/', [$websiteForms, 'change']);
+
     $notificationPreferences = \Application\Http\Controller\NotificationPreferencesController::class;
     $router->get('/sis/people/{id}/notification-preferences/', [$notificationPreferences, 'view'])
         ->name('sis.people.notification-preferences');

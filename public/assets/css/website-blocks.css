@@ -32,3 +32,13 @@
         transition: none !important;
     }
 }
+
+.website-inquiry { max-width: 52rem; background: #fff; color: #16324f; }
+.website-inquiry .form-label { overflow-wrap: anywhere; }
+.website-inquiry .website-form-fields { min-width: 0; }
+.website-inquiry .form-check-label { min-height: 2.75rem; padding-block: .25rem; }
+.website-inquiry .btn { min-height: 2.75rem; white-space: normal; }
+.website-inquiry [hidden] { display: none !important; }
+.website-form-trap { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.website-form-field textarea { resize: vertical; }
+.website-required { font-size: .875em; }

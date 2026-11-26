@@ -43,6 +43,26 @@ $viewApp = \Codefy\Framework\Helpers\get_fresh_bootstrap();
 $viewApp->delegate(\Qubus\Config\ConfigContainer::class, static fn () => $viewConfig);
 $viewApp->delegate('codefy.config', static fn () => $viewConfig);
 
+if ($path === '/sis/website/newsletters/' && ($_GET['choices'] ?? '') === '1') {
+    header('Cache-Control: private, no-store');
+    header('Content-Type: application/json');
+    echo json_encode(['items' => [], 'next_after' => null, 'delivery_enabled' => false], JSON_THROW_ON_ERROR);
+    return;
+}
+
+if ($path === '/sis/website/form-preview/') {
+    $body = json_decode($_POST['_workspace_json'] ?? '{}', true, 32, JSON_THROW_ON_ERROR);
+    $definition = new \Domain\WebsiteForms\ValueObject\WebsiteFormDefinition($body['definition']);
+    $loader = new \Qubus\View\Native\NativeLoader(['framework' => $root . '/resources/views']);
+    header('Cache-Control: private, no-store');
+    header('Content-Type: application/json');
+    echo json_encode(['html' => $loader->render('framework::frontend/website/form', [
+        'definition' => $definition->facts, 'instance' => 'fictional-preview', 'endpoint' => '',
+        'locale' => 'en', 'preview' => true,
+    ])], JSON_THROW_ON_ERROR);
+    return;
+}
+
 if ($path === '/fixture/website-blocks/') {
     require __DIR__ . '/website-blocks-fixture.php';
     return;
@@ -118,7 +138,8 @@ if ($path === '/fixture/website-manager/') {
     $loader = new \Qubus\View\Native\NativeLoader(['framework' => $root . '/resources/views']);
     header('Cache-Control: private, no-store');
     echo $loader->render('framework::backend/manager/site', [
-        'mode' => ($_GET['mode'] ?? '') === 'pages' ? 'pages' : 'menus',
+        'mode' => in_array($_GET['mode'] ?? '', ['pages', 'form-inbox', 'form-access', 'newsletters'], true)
+            ? $_GET['mode'] : 'menus',
         'csrfMarkup' => '<input type="hidden" name="csrf_token" value="fictional-test-token">',
     ]);
     return;

@@ -125,6 +125,8 @@ final readonly class WorkspaceService
         "sis:transcript:manage",
         "sis:transcript:policy",
         "vihzhuo:manage",
+        "sis:website:forms:read",
+        "sis:website:forms:integrations",
         "sis:degree-audit:assign",
         "sis:degree-audit:adjust",
     ];

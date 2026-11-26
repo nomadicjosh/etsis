@@ -296,6 +296,18 @@ $client = [
                             <span>Page builder</span>
                         </a>
                     <?php endif; ?>
+                    <?php if ($can('sis:website:forms:read')) : ?>
+                        <a class="workspace-nav-link" href="/sis/website/form-inbox/view/">
+                            <i class="bi bi-inbox" aria-hidden="true"></i>
+                            <span><?= \Codefy\Framework\Helpers\trans_html('Website replies') ?></span>
+                        </a>
+                    <?php endif; ?>
+                    <?php if ($can('sis:website:forms:integrations')) : ?>
+                        <a class="workspace-nav-link" href="/sis/website/newsletters/view/">
+                            <i class="bi bi-envelope-plus" aria-hidden="true"></i>
+                            <span><?= \Codefy\Framework\Helpers\trans_html('Newsletter connections') ?></span>
+                        </a>
+                    <?php endif; ?>
                 </nav>
                 <div class="sidebar-footer">
                     <span class="status-dot" aria-hidden="true"></span> One connected campus

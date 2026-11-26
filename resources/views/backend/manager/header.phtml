@@ -33,22 +33,43 @@ use function Codefy\Framework\Helpers\trans_html;
                     aria-hidden="true"></i><?= trans_html(
                         "Staff workspace",
                     ) ?></a>
-                <a class="btn <?= in_array($mode, ["pages", "page"], true)
-                    ? "btn-primary"
-                    : "btn-light" ?>" href="<?= $esc($managerUrl) ?>"
-                    <?= in_array($mode, ["pages", "page"], true)
-                        ? 'aria-current="page"'
-                        : "" ?>><?= trans_html("Website pages") ?></a>
-                <a class="btn <?= $mode === "menus"
-                    ? "btn-primary"
-                    : "btn-light" ?>" href="<?= $esc($managerUrl) ?>?route=menus"
-                    <?= $mode === "menus"
-                        ? 'aria-current="page"'
-                        : "" ?>><?= trans_html("Website menus") ?></a>
-                <a class="btn <?= $mode === 'settings' ? 'btn-primary' : 'btn-light' ?>"
-                    href="<?= $esc($managerUrl) ?>?route=settings"
-                    <?= $mode === 'settings' ? 'aria-current="page"' : '' ?>>
-                    <?= trans_html('Website settings') ?>
+                <?php if (!($replyOnly ?? false)) : ?>
+                    <a class="btn <?= in_array($mode, ["pages", "page"], true)
+                        ? "btn-primary"
+                        : "btn-light" ?>" href="<?= $esc($managerUrl) ?>"
+                        <?= in_array($mode, ["pages", "page"], true)
+                            ? 'aria-current="page"'
+                            : "" ?>><?= trans_html("Website pages") ?></a>
+                    <a class="btn <?= $mode === "menus"
+                        ? "btn-primary"
+                        : "btn-light" ?>" href="<?= $esc($managerUrl) ?>?route=menus"
+                        <?= $mode === "menus"
+                            ? 'aria-current="page"'
+                            : "" ?>><?= trans_html("Website menus") ?></a>
+                    <a class="btn <?= $mode === 'settings' ? 'btn-primary' : 'btn-light' ?>"
+                        href="<?= $esc($managerUrl) ?>?route=settings"
+                        <?= $mode === 'settings' ? 'aria-current="page"' : '' ?>>
+                        <?= trans_html('Website settings') ?>
+                    </a>
+                <?php endif; ?>
+                <a class="btn <?= $mode === 'form-inbox' ? 'btn-primary' : 'btn-light' ?>"
+                    href="/sis/website/form-inbox/view/"
+                    <?= $mode === 'form-inbox' ? 'aria-current="page"' : '' ?>>
+                    <?= trans_html('Form inbox') ?>
                 </a>
+                <?php if ($canAdminister ?? true) : ?>
+                    <a class="btn <?= $mode === 'form-access' ? 'btn-primary' : 'btn-light' ?>"
+                        href="/sis/website/form-access/view/"
+                        <?= $mode === 'form-access' ? 'aria-current="page"' : '' ?>>
+                        <?= trans_html('Reply access') ?>
+                    </a>
+                <?php endif; ?>
+                <?php if (($canManageNewsletters ?? !($replyOnly ?? false)) || $mode === 'newsletters') : ?>
+                    <a class="btn <?= $mode === 'newsletters' ? 'btn-primary' : 'btn-light' ?>"
+                        href="/sis/website/newsletters/view/"
+                        <?= $mode === 'newsletters' ? 'aria-current="page"' : '' ?>>
+                        <?= trans_html('Newsletter connections') ?>
+                    </a>
+                <?php endif; ?>
             </nav>
         </header>

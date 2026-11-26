@@ -6,7 +6,8 @@ use function Codefy\Framework\Helpers\trans_html;
 use function Codefy\Framework\Helpers\trans_attr;
 use function Codefy\Framework\Helpers\config;
 
-$mode = in_array($mode ?? 'pages', ['pages', 'menus', 'settings'], true) ? $mode ?? 'pages' : 'pages';
+$mode = in_array($mode ?? 'pages', ['pages', 'menus', 'settings', 'form-inbox', 'form-access', 'newsletters'], true)
+    ? $mode ?? 'pages' : 'pages';
 $esc = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $labels = require __DIR__ . "/site-labels.php";
 $settings = [
@@ -19,11 +20,17 @@ $settings = [
 ];
 $managerUrl = rtrim((string) $settings['manager_url'], '/') . '/';
 $pageTitle = match ($mode) {
+    'newsletters' => trans_html('Newsletter connections'),
+    'form-access' => trans_html('Website form access'),
+    'form-inbox' => trans_html('Website form inbox'),
     'menus' => trans_html('Website menus'),
     'settings' => trans_html('Website settings'),
     default => trans_html('Website pages'),
 };
 $heading = match ($mode) {
+    'newsletters' => trans_html('Connect forms to newsletter and lead lists'),
+    'form-access' => trans_html('Choose who can review website replies'),
+    'form-inbox' => trans_html('Review website inquiries'),
     'menus' => trans_html('Build a clear path through your website'),
     'settings' => trans_html('Configure your website languages'),
     default => trans_html('From saved draft to approved page'),
@@ -33,7 +40,15 @@ $heading = match ($mode) {
         <main id="site-main" class="site-container container-fluid py-4 py-lg-5" tabindex="-1">
             <p class="site-eyebrow"><?= trans_html("CAMPUS WEBSITE") ?></p>
             <h1><?= $heading ?></h1>
-            <p class="text-secondary site-intro"><?= $mode === "menus"
+            <p class="text-secondary site-intro"><?= $mode === 'newsletters'
+                ? trans_html('Configure a destination, map it in a website form and collect optional '
+                    . 'subscription consent. Delivery runs on the server.')
+                : (in_array($mode, ['form-inbox', 'form-access', 'newsletters'], true)
+                ? trans_html(
+                    'Department members need read permission. Forms without a department require explicit access '
+                    . 'to each form. Manage permission also allows closing and deleting replies.'
+                )
+                : ($mode === "menus"
                 ? trans_html(
                     "Arrange links into clear dropdown menus. Save your draft, inspect the structure "
                     . "and publish when ready.",
@@ -41,7 +56,7 @@ $heading = match ($mode) {
                 : trans_html(
                     "Design pages in the page builder, hand them over for review and choose "
                     . "when approved content becomes public.",
-                ) ?></p>
+                ))) ?></p>
             <div id="site-status" role="status" aria-live="polite"></div>
             <div id="site-manager" data-mode="<?= $mode ?>">
                 <?php if ($mode === 'settings'): ?>
@@ -103,6 +118,9 @@ $heading = match ($mode) {
         <script src="/assets/vendor/bootstrap.bundle.min.js"></script>
         <script src="/assets/vendor/sortable.min.js"></script>
         <script src="/assets/js/site-navigation.js"></script>
+        <script src="/assets/js/website-form-inbox.js"></script>
+        <script src="/assets/js/website-form-access.js"></script>
+        <script src="/assets/js/website-newsletters.js"></script>
         <script src="/assets/js/site-manager.js"></script>
     </body>
 </html>

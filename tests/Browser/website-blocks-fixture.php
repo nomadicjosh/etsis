@@ -49,6 +49,13 @@ foreach (['one', 'two'] as $name) {
         ],
     ];
 }
+if (($_GET['forms'] ?? '') === '1') {
+    require __DIR__ . '/website-form-data.php';
+    \Vihzhuo\Extensions::registerBlock('regular-form', $root . '/resources/blocks/forms/form');
+    $blocks['IDcontact'] = ['slug' => 'regular-form', 'settings' => ['attributes' => [
+        'website-definition' => json_encode($websiteForm, JSON_THROW_ON_ERROR),
+    ]]];
+}
 $page = new \Vihzhuo\Page();
 $page->setData(['id' => 1, 'layout' => 'page-template', 'data' => ['blocks' => ['en' => $blocks]]]);
 $page->setTranslations(['en' => ['meta_title' => 'Fictional interactive blocks', 'meta_description' => '']]);
@@ -58,6 +65,9 @@ foreach (['one', 'two'] as $name) {
     $body .= '<section aria-label="Questions ' . $name . '" class="mb-4">'
     . $renderer->renderBlock('accordion', 'IDquestions-' . $name) . '</section>';
     $body .= $renderer->renderBlock('carousel', 'IDhighlights-' . $name);
+}
+if (($_GET['forms'] ?? '') === '1') {
+    $body .= $renderer->renderBlock('regular-form', 'IDcontact');
 }
 $body .= '</div>';
 $layout = new \Vihzhuo\ThemeLayout($theme, 'page-template');

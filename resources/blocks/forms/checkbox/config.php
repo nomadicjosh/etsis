@@ -1,23 +1,30 @@
 <?php
 
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans;
+
 return [
-    'category' => 'Forms',
-    'title' => 'Checkbox',
+    'category' => trans('Forms'),
+    'title' => trans('Checkbox'),
     'icon' => 'fa fa-square-check',
     'settings' => [
+        'checkbox-name' => ['type' => 'text', 'label' => trans('Field name'), 'value' => 'confirmation'],
+        'checkbox-help' => ['type' => 'text', 'label' => trans('Help text'), 'value' => ''],
+
         'checkbox-label' => [
             'type' => 'text',
-            'label' => 'Label',
-            'value' => 'Checkbox Label',
+            'label' => trans('Label'),
+            'value' => trans('Confirmation'),
         ],
         'checkbox-value' => [
             'type' => 'text',
-            'label' => 'Checkbox Value',
+            'label' => trans('Checkbox Value'),
             'value' => '0',
         ],
         'checkbox-required' => [
             'type' => 'yes_no',
-            'label' => 'Required?',
+            'label' => trans('Required?'),
             'value' => '0',
         ],
     ],

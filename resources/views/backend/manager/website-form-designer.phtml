@@ -1,0 +1,64 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans;
+
+?>
+<link rel="stylesheet" href="/assets/css/website-form-designer.css">
+<link rel="stylesheet" href="/assets/css/website-blocks.css">
+<script id="website-form-designer-config" type="application/json"><?= json_encode([
+    'csrf_header' => $header, 'csrf' => $token,
+    'starter' => \Domain\WebsiteForms\ValueObject\WebsiteFormDefinition::starter(),
+    'labels' => [
+        'newsletter' => trans('Newsletter subscription (optional)'),
+        'no_newsletter' => trans('No newsletter connection'),
+            'saved_newsletter' => trans('Saved newsletter connection'),
+        'newsletter_help' => trans('Map a required email and a separate optional consent checkbox. '
+            . 'Only selected contact fields are sent by the server after consent.'),
+        'newsletter_connection' => trans('Newsletter connection'), 'newsletter_email' => trans('Email field'),
+        'newsletter_name' => trans('Name field (optional)'), 'newsletter_consent' => trans('Newsletter consent field'),
+        'newsletter_no_name' => trans('Do not send a name'), 'newsletter_choose' => trans('Choose a field'),
+        'newsletter_add_consent' => trans('Add newsletter consent checkbox'),
+        'newsletter_consent_label' => trans('I would like to receive news and updates by email.'),
+        'newsletter_consent_help' => trans('Optional. You can unsubscribe using the links in those emails.'),
+        'newsletter_refresh' => trans('Refresh connections'), 'newsletter_more' => trans('More connections'),
+        'newsletter_configure' => trans('Configure newsletter connections'),
+        'newsletter_paused' => trans('Server delivery is disabled. This connection will queue '
+            . 'subscriptions until enabled.'),
+        'department' => trans('Replies department (optional)'),
+        'no_department' => trans('No department — use individual form access'),
+        'saved_department' => trans('Saved department'),
+        'department_help' => trans('Department members also need website form read permission. '
+            . 'Changing this choice routes new replies; earlier replies keep their original department.'),
+        'search_departments' => trans('Search departments'), 'search' => trans('Search'),
+        'next_departments' => trans('Next departments'),
+        'edit' => trans('Edit website form'), 'save' => trans('Use this form design'),
+        'close' => trans('Close form designer'), 'discard' => trans('Discard your unsaved form changes?'),
+        'key' => trans('Form key'), 'key_help' => trans('Use a unique key for each form on this page.'),
+        'title' => trans('Form title'), 'intro' => trans('Introduction'),
+        'submit_label' => trans('Submit button label'), 'success_message' => trans('Confirmation message'),
+        'fields' => trans('Form fields'), 'add' => trans('Add field'), 'type' => trans('Field type'),
+        'name' => trans('Field key'), 'label' => trans('Label'), 'help' => trans('Help text'),
+        'required' => trans('Required'), 'options' => trans('Choices: value | label, one per line'),
+        'up' => trans('Move field up'), 'down' => trans('Move field down'), 'remove' => trans('Remove field'),
+        'duplicate' => trans('Duplicate field'), 'grip' => trans('Drag to reorder field'),
+        'condition' => trans('Show when an earlier field equals'), 'always' => trans('Always show'),
+        'equals' => trans('Required earlier answer'), 'yes' => trans('Checked'), 'no' => trans('Unchecked'),
+        'min_length' => trans('Minimum characters'), 'max_length' => trans('Maximum characters'),
+        'min' => trans('Minimum value or date'), 'max' => trans('Maximum value or date'),
+        'preview' => trans('Preview form'), 'back' => trans('Back to form fields'),
+        'loading' => trans('Preparing preview…'),
+            'failed' => trans('The form could not be previewed. Review its fields and try again.'),
+        'invalid' => trans('Give every field a unique key and label. Choices and conditions must be '
+            . 'valid; conditions can only use earlier fields.'),
+        'limit' => trans('A website form supports up to forty fields.'),
+        'saved' => trans('Form design updated. Save the page, then review publication.'),
+        'text' => trans('Short answer'), 'textarea' => trans('Long answer'), 'email' => trans('Email address'),
+        'tel' => trans('Telephone'), 'url' => trans('Web address'), 'number' => trans('Whole number'),
+        'date' => trans('Date'), 'checkbox' => trans('Confirmation'), 'select' => trans('Dropdown choice'),
+        'radio' => trans('Single choice'), 'multi_select' => trans('Multiple choices'),
+    ],
+], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?></script>
+<script src="/assets/vendor/sortable.min.js"></script>
+<script src="/assets/js/website-form-designer.js"></script>

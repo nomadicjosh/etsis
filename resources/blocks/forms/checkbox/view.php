@@ -1,14 +1,36 @@
 <?php
 
-use Qubus\Support\DataType;
+declare(strict_types=1);
 
-$random = new DataType()->string->random(type: 'alpha', length: 8);
-//phpcs:disable
+use Application\View\WebsiteFormControls;
+
+use function Codefy\Framework\Helpers\trans_html;
+
+$id = WebsiteFormControls::id('confirmation');
+$name = WebsiteFormControls::name($block->setting('checkbox-name'), 'confirmation');
+$required = $block->setting('checkbox-required') === '1';
+$label = trim($block->setting('checkbox-label')) ?: trans_html('Confirmation');
+$help = $block->setting('checkbox-help');
 ?>
-
-<div class="form-check">
-    <input class="form-check-input" type="checkbox" value="<?=$block->setting('checkbox-value');?>" id="<?=$random;?>"<?=$block->setting('input-required') ? ' required' : '';?>>
-    <label class="form-check-label" for="<?=$random;?>">
-        <?=$block->setting('checkbox-label');?><?=$block->setting('checkbox-required') ? '<span class="form-label-required">*</span>' : '';?>
-    </label>
+<div class="website-form-field mb-3">
+    <div class="form-check">
+        <input
+            class="form-check-input"
+            type="checkbox"
+            name="<?= phpb_e($name) ?>"
+            value="<?= $block->setting('checkbox-value') ?>"
+            id="<?= $id ?>"
+            <?= $required ? 'required' : '' ?>
+            <?= $help !== '' ? 'aria-describedby="' . $id . '-help"' : '' ?>
+        >
+        <label class="form-check-label" for="<?= $id ?>">
+            <?= $label ?>
+            <?php if ($required) : ?>
+                <span class="website-required"><?= trans_html('(required)') ?></span>
+            <?php endif; ?>
+        </label>
+    </div>
+    <?php if ($help !== '') : ?>
+        <p class="form-text" id="<?= $id ?>-help"><?= $help ?></p>
+    <?php endif; ?>
 </div>

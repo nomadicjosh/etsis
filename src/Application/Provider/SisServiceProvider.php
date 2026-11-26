@@ -391,6 +391,16 @@ final class SisServiceProvider extends CodefyServiceProvider
             \Domain\Communications\Service\MailTransport::class =>
                 \Infrastructure\Communications\ConfiguredMailTransport::class,
             \Domain\Portal\Service\ContentMarkup::class => \Infrastructure\Portal\SymfonyContentMarkup::class,
+            \Domain\WebsiteForms\Repository\NewsletterRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlNewsletterRepository::class,
+            \Domain\WebsiteForms\Service\NewsletterPolicy::class =>
+                \Infrastructure\WebsiteForms\ConfiguredNewsletterPolicy::class,
+            \Domain\WebsiteForms\Service\NewsletterGateway::class =>
+                \Infrastructure\WebsiteForms\RestNewsletterGateway::class,
+            \Domain\WebsiteForms\Repository\WebsiteFormInboxRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlWebsiteFormInboxRepository::class,
+            \Domain\WebsiteForms\Repository\WebsiteFormRoutingRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlWebsiteFormRoutingRepository::class,
             \Domain\Portal\Repository\PagePublicationRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlPagePublicationRepository::class,
             \Domain\Portal\Repository\NavigationRepository::class =>

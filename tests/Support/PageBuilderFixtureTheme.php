@@ -9,6 +9,9 @@ final class PageBuilderFixtureTheme extends \Vihzhuo\Theme
 {
     protected function attemptExtensionBlockRegistration(string $slug, string $path): void
     {
-        // Only the fictional theme's editable and dynamic blocks belong to this fixture.
+        // Allow only the native managed form alongside the fictional theme blocks.
+        if ($slug === 'regular-form') {
+            parent::attemptExtensionBlockRegistration($slug, $path);
+        }
     }
 }

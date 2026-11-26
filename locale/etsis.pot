@@ -8787,3 +8787,955 @@ msgstr ""
 #: resources/blocks/carousel/view.php:56
 msgid "Next slide"
 msgstr ""
+
+#: resources/blocks/forms/checkbox/config.php:8
+#: resources/blocks/forms/form/config.php:10
+#: resources/blocks/forms/input/config.php:8
+#: resources/blocks/forms/textarea/config.php:8
+msgid "Forms"
+msgstr ""
+
+#: resources/blocks/forms/checkbox/config.php:9
+msgid "Checkbox"
+msgstr ""
+
+#: resources/blocks/forms/checkbox/config.php:12
+#: resources/blocks/forms/textarea/config.php:12
+msgid "Field name"
+msgstr ""
+
+#: resources/blocks/forms/checkbox/config.php:13
+#: resources/blocks/forms/input/config.php:12
+#: resources/blocks/forms/textarea/config.php:13
+#: resources/views/backend/manager/website-form-designer.phtml:27
+msgid "Help text"
+msgstr ""
+
+#: resources/blocks/forms/checkbox/config.php:17
+#: resources/blocks/forms/input/config.php:17
+#: resources/blocks/forms/textarea/config.php:20
+#: resources/views/backend/manager/website-form-designer.phtml:27
+msgid "Label"
+msgstr ""
+
+#: resources/blocks/forms/checkbox/config.php:18
+#: resources/blocks/forms/checkbox/view.php:12
+#: resources/views/backend/manager/website-form-designer.phtml:44
+msgid "Confirmation"
+msgstr ""
+
+#: resources/blocks/forms/checkbox/config.php:22
+msgid "Checkbox Value"
+msgstr ""
+
+#: resources/blocks/forms/checkbox/config.php:27
+#: resources/blocks/forms/input/config.php:45
+#: resources/blocks/forms/textarea/config.php:25
+msgid "Required?"
+msgstr ""
+
+#: resources/blocks/forms/checkbox/view.php:29
+#: resources/blocks/forms/input/view.php:23
+#: resources/blocks/forms/textarea/view.php:21
+#: resources/views/frontend/website/form.phtml:50
+#: resources/views/frontend/website/form.phtml:78
+#: resources/views/frontend/website/form.phtml:83
+msgid "(required)"
+msgstr ""
+
+#: resources/blocks/forms/form/config.php:11
+msgid "Website form"
+msgstr ""
+
+#: resources/blocks/forms/form/config.php:17
+msgid "Form design"
+msgstr ""
+
+#: resources/blocks/forms/form/view.php:24
+msgid "This website form is not available yet."
+msgstr ""
+
+#: resources/blocks/forms/input/config.php:9
+msgid "Input"
+msgstr ""
+
+#: resources/blocks/forms/input/config.php:13
+#: resources/views/backend/manager/website-form-designer.phtml:33
+msgid "Maximum characters"
+msgstr ""
+
+#: resources/blocks/forms/input/config.php:18
+msgid "Field label"
+msgstr ""
+
+#: resources/blocks/forms/input/config.php:22
+msgid "Input Type"
+msgstr ""
+
+#: resources/blocks/forms/input/config.php:24
+msgid "Text"
+msgstr ""
+
+#: resources/blocks/forms/input/config.php:27
+msgid "Hidden"
+msgstr ""
+
+#: resources/blocks/forms/input/config.php:28
+msgid "Number"
+msgstr ""
+
+#: resources/blocks/forms/input/config.php:29
+#: resources/views/backend/manager/website-form-designer.phtml:43
+msgid "Telephone"
+msgstr ""
+
+#: resources/blocks/forms/input/config.php:35
+msgid "Field Name"
+msgstr ""
+
+#: resources/blocks/forms/input/config.php:40
+msgid "ID prefix (optional)"
+msgstr ""
+
+#: resources/blocks/forms/input/config.php:50
+#: resources/blocks/forms/textarea/config.php:30
+msgid "Placeholder"
+msgstr ""
+
+#: resources/blocks/forms/input/view.php:13
+msgid "Text field"
+msgstr ""
+
+#: resources/blocks/forms/textarea/config.php:9
+msgid "Textarea"
+msgstr ""
+
+#: resources/blocks/forms/textarea/config.php:14
+msgid "Visible rows (1–20)"
+msgstr ""
+
+#: resources/blocks/forms/textarea/config.php:15
+msgid "Maximum characters (up to 20,000)"
+msgstr ""
+
+#: resources/blocks/forms/textarea/config.php:21
+#: resources/blocks/forms/textarea/view.php:12
+#: resources/views/backend/manager/website-form-designer.phtml:42
+msgid "Long answer"
+msgstr ""
+
+#: resources/views/backend/manager/header.phtml:56
+msgid "Form inbox"
+msgstr ""
+
+#: resources/views/backend/manager/header.phtml:60
+#: resources/views/backend/manager/site-labels.php:9
+msgid "Reply access"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:10
+msgid "Department inbox members"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:11
+msgid "Individual form access"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:12
+msgid "First grant website form read permission in Access management. Then add the account to a department inbox or to individual forms. A form grant never bypasses its department."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:14
+msgid "Choose a department"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:16
+msgid "Choose a form"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:17
+msgid "Choose an enabled account with read permission"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:18
+#: resources/views/backend/manager/website-form-designer.phtml:19
+msgid "Search"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:19
+msgid "Next results"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:20
+msgid "Grant access"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:21
+msgid "Remove access"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:22
+msgid "Current members"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:23
+msgid "No accounts have been assigned."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:24
+msgid "Select a department or form to manage access."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:25
+msgid "Reply access updated."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:26
+msgid "Department replies are restricted to its inbox members."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:27
+msgid "No department: assign access to this form individually."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:28
+msgid "Only enabled accounts with website form read permission appear. Revoking that permission immediately blocks access."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:30
+msgid "Account"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:31
+msgid "More members"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:32
+msgid "First members"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:34
+msgid "Loading website inquiries…"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:35
+msgid "Inquiry status"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:35
+msgid "All inquiries"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:36
+msgid "Open"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:36
+msgid "Closed"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:37
+msgid "Read inquiry"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:37
+msgid "Refresh inbox"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:38
+msgid "Older inquiries"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:38
+msgid "Newest inquiries"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:39
+msgid "There are no matching website inquiries."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:40
+msgid "Website inquiry"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:41
+msgid "Mark closed"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:41
+msgid "Reopen inquiry"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:42
+msgid "Delete inquiry"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:42
+msgid "Permanently delete inquiry"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:43
+msgid "This permanently deletes the message and its answers. A short-lived retry receipt contains no answers."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:45
+msgid "Back to inquiry"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:45
+msgid "Inquiry status updated."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:46
+msgid "Inquiry deleted."
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:22
+msgid "Website form access"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:23
+msgid "Website form inbox"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:29
+msgid "Choose who can review website replies"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:30
+msgid "Review website inquiries"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:41
+msgid "Department members need read permission. Forms without a department require explicit access to each form. Manage permission also allows closing and deleting replies."
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:14
+msgid "Replies department (optional)"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:15
+msgid "No department — use individual form access"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:16
+msgid "Saved department"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:17
+msgid "Department members also need website form read permission. Changing this choice routes new replies; earlier replies keep their original department."
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:19
+msgid "Search departments"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:20
+msgid "Next departments"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:21
+msgid "Edit website form"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:21
+msgid "Use this form design"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:22
+msgid "Close form designer"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:22
+msgid "Discard your unsaved form changes?"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:23
+msgid "Form key"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:23
+msgid "Use a unique key for each form on this page."
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:24
+msgid "Form title"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:24
+msgid "Introduction"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:25
+msgid "Submit button label"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:25
+msgid "Confirmation message"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:26
+msgid "Form fields"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:26
+msgid "Add field"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:26
+msgid "Field type"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:27
+msgid "Field key"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:28
+msgid "Choices: value | label, one per line"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:29
+msgid "Move field up"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:29
+msgid "Move field down"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:29
+msgid "Remove field"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:30
+msgid "Duplicate field"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:30
+msgid "Drag to reorder field"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:31
+msgid "Show when an earlier field equals"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:31
+msgid "Always show"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:32
+msgid "Required earlier answer"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:32
+msgid "Checked"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:32
+msgid "Unchecked"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:33
+msgid "Minimum characters"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:34
+msgid "Minimum value or date"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:34
+msgid "Maximum value or date"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:35
+msgid "Preview form"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:35
+msgid "Back to form fields"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:36
+msgid "Preparing preview…"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:37
+msgid "The form could not be previewed. Review its fields and try again."
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:38
+msgid "Give every field a unique key and label. Choices and conditions must be valid; conditions can only use earlier fields."
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:40
+msgid "A website form supports up to forty fields."
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:41
+msgid "Form design updated. Save the page, then review publication."
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:42
+msgid "Short answer"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:43
+msgid "Web address"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:43
+msgid "Whole number"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:44
+msgid "Date"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:44
+msgid "Dropdown choice"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:45
+msgid "Single choice"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:45
+msgid "Multiple choices"
+msgstr ""
+
+#: resources/views/backend/workspace/index.phtml:302
+msgid "Website replies"
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:10
+msgid "Preparing the form…"
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:10
+msgid "The form is ready."
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:11
+msgid "Sending your message…"
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:11
+#: src/Domain/WebsiteForms/ValueObject/WebsiteFormDefinition.php:176
+msgid "This field is required."
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:12
+#: src/Domain/WebsiteForms/ValueObject/WebsiteFormDefinition.php:211
+msgid "Enter a valid answer within the stated limits."
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:13
+msgid "Your message could not be confirmed. Try again to check the original submission."
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:14
+msgid "Try again"
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:14
+msgid "This form is unavailable. Please try again later."
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:15
+msgid "Form preview. Submitting is disabled in the designer."
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:38
+msgid "Check your answers"
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:92
+msgid "Choose an option"
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:109
+msgid "Leave this field blank"
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:118
+msgid "Reload form"
+msgstr ""
+
+#: resources/views/frontend/website/form.phtml:120
+msgid "Enable JavaScript to use this form."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/WebsiteFormCatalog.php:50
+msgid "This page exceeds the supported website-form nesting limit."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/WebsiteFormCatalog.php:61
+#: src/Domain/WebsiteForms/Service/WebsiteFormCatalog.php:90
+msgid "Configure each website form before publishing this page."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/WebsiteFormCatalog.php:74
+msgid "Use up to twenty website forms with unique keys on each translated page."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/WebsiteFormRoutingService.php:69
+msgid "Choose an active department for website replies."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/WebsiteFormRoutingService.php:174
+msgid "Choose an enabled account with website form read permission first."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/WebsiteFormSubmissionService.php:82
+msgid "This form could not be submitted. Refresh the page and try again."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/WebsiteFormSubmissionService.php:99
+msgid "This submission was already used with different answers."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/WebsiteFormSubmissionService.php:109
+msgid "This form expired. Refresh the page before submitting."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/WebsiteFormSubmissionService.php:114
+msgid "Too many messages were submitted. Please try again later."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/WebsiteFormSubmissionService.php:119
+msgid "This form changed. Refresh the page before submitting."
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteFormDefinition.php:21
+msgid "Contact us"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteFormDefinition.php:22
+msgid "Send message"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteFormDefinition.php:23
+msgid "Thank you. Your message has been received."
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteFormDefinition.php:25
+msgid "Your name"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteFormDefinition.php:155
+msgid "Use the current website form."
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteFormDefinition.php:166
+msgid "Refresh the form before answering this question."
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteFormDefinition.php:245
+msgid "Use a named website form with 1–40 unique labelled fields, valid limits and earlier-field conditions."
+msgstr ""
+
+#: resources/views/backend/manager/header.phtml:71
+#: resources/views/backend/manager/site.phtml:23
+#: resources/views/backend/workspace/index.phtml:308
+msgid "Newsletter connections"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:9
+msgid "Add connection"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:10
+msgid "Edit connection"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:11
+msgid "Connection name"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:12
+msgid "Service"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:13
+msgid "HTTPS service URL"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:14
+msgid "List, audience or segment reference"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:15
+msgid "API key, password or signing secret"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:16
+msgid "Mautic username (Basic authentication only)"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:17
+msgid "The webhook receiver honors Idempotency-Key"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:18
+msgid "Enable this connection"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:19
+msgid "Sendy"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:20
+msgid "Mailchimp"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:21
+msgid "Mautic"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:22
+msgid "Signed webhook"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:23
+msgid "Server-side newsletter delivery is enabled."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:24
+msgid "Newsletter delivery is disabled in server configuration. Connections and forms can be prepared without sending contacts."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:26
+msgid "Enabled"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:27
+msgid "Paused"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:28
+msgid "No newsletter connections have been configured."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:29
+#: resources/views/backend/manager/website-form-designer.phtml:25
+msgid "More connections"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:30
+msgid "First connections"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:31
+msgid "Use the Sendy or Mautic installation root, Mailchimp server root, or the full webhook URL. Other hosts must be allowed in server configuration."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:34
+msgid "Provider and destination are fixed. Create a new connection for another list or endpoint."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:36
+msgid "Leave credentials blank to keep the current secret. Stored credentials are never displayed."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:38
+msgid "Credentials are encrypted on the server. For Mautic use an OAuth access token, or supply a username and password for Basic authentication."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:40
+msgid "Save connection"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:41
+msgid "Saving connection…"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:42
+msgid "Newsletter connection saved."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:43
+msgid "Back to connections"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:44
+msgid "Discard unsaved connection changes?"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:45
+msgid "Newsletter delivery"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:47
+msgid "Delivering"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:48
+msgid "Waiting to retry"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:49
+msgid "Needs review"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:50
+msgid "Delivery blocked"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:51
+msgid "Sent to service"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:52
+msgid "Waiting for server processing."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:53
+msgid "The provider accepted the subscription request."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:54
+msgid "Email confirmation is pending at the provider."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:55
+msgid "The contact is already a member."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:56
+msgid "The provider prevents this contact from being subscribed."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:57
+msgid "A temporary failure will be retried within the delivery limit."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:58
+msgid "Check the connection credentials and destination before retrying."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:59
+msgid "Delivery could not be confirmed. Review the provider before explicitly retrying."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:61
+msgid "Enable newsletter delivery and the selected connection before retrying."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:62
+msgid "The configured destination differs from the retained form. Review its connection."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:64
+msgid "The retained subscription could not be verified."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:65
+msgid "Processing was interrupted. Review the provider before retrying."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:66
+msgid "Queue subscription retry"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:67
+msgid "Check the provider first if delivery is uncertain. This queues the same subscription for server processing."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:69
+msgid "Confirm subscription retry"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:70
+msgid "Subscription retry queued."
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:31
+msgid "Connect forms to newsletter and lead lists"
+msgstr ""
+
+#: resources/views/backend/manager/site.phtml:44
+msgid "Configure a destination, map it in a website form and collect optional subscription consent. Delivery runs on the server."
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:14
+msgid "Newsletter subscription (optional)"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:15
+msgid "No newsletter connection"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:16
+msgid "Saved newsletter connection"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:17
+msgid "Map a required email and a separate optional consent checkbox. Only selected contact fields are sent by the server after consent."
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:19
+msgid "Newsletter connection"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:19
+msgid "Email field"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:20
+msgid "Name field (optional)"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:20
+msgid "Newsletter consent field"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:21
+msgid "Do not send a name"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:21
+msgid "Choose a field"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:22
+msgid "Add newsletter consent checkbox"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:23
+msgid "I would like to receive news and updates by email."
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:24
+msgid "Optional. You can unsubscribe using the links in those emails."
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:25
+msgid "Refresh connections"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:26
+msgid "Configure newsletter connections"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:27
+msgid "Server delivery is disabled. This connection will queue subscriptions until enabled."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/NewsletterService.php:134
+msgid "Allow this host in server configuration. Create a new connection to change its provider or destination."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/NewsletterService.php:140
+msgid "Confirm that this webhook receiver deduplicates requests using Idempotency-Key."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/NewsletterService.php:204
+msgid "Choose an enabled newsletter connection and review this form again."
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/NewsletterConnection.php:63
+msgid "Choose a supported provider, HTTPS destination, list reference and valid server credentials."
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteFormDefinition.php:176
+msgid "Map an unconditional required email and a separate optional newsletter consent checkbox."
+msgstr ""

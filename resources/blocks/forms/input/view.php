@@ -1,19 +1,40 @@
 <?php
 
-use Qubus\Support\DataType;
+declare(strict_types=1);
 
-$random = new DataType()->string->random(type: 'alpha', length: 8);
-//phpcs:disable
+use Application\View\WebsiteFormControls;
+
+use function Codefy\Framework\Helpers\trans_html;
+
+$id = WebsiteFormControls::id($block->setting('input-id'));
+$type = WebsiteFormControls::inputType($block->setting('input-field-type'));
+$name = WebsiteFormControls::name($block->setting('input-field-name'), 'text');
+$required = $block->setting('input-required') === '1';
+$label = trim($block->setting('input-label-text')) ?: trans_html('Text field');
+$help = $block->setting('input-help');
+$maximum = WebsiteFormControls::length($block->setting('input-max-length'), 4000);
 ?>
-<div class="form-floating mb-3">
-    <input
-        type="<?=$block->setting('input-field-type');?>"
-        name="<?=$block->setting('input-field-name');?>"
-        class="form-control"
-        id="<?=$block->setting('input-id') ?: $random;?>"<?=$block->setting('input-required') ? ' required' : '';?>
-        <?=$block->setting('input-placeholder') ? 'placeholder="'.$block->setting('input-placeholder').'"' : '';?>
-    >
-    <label for="<?=$block->setting('input-id') ?: $random;?>" class="form-label">
-        <?=$block->setting('input-label-text');?><?=$block->setting('input-required') ? '<span class="form-label-required">*</span>' : '';?>
-    </label>
-</div>
+<?php if ($type === 'hidden') : ?>
+    <input type="hidden" name="<?= phpb_e($name) ?>" id="<?= $id ?>">
+<?php else : ?>
+    <div class="website-form-field mb-3">
+        <label for="<?= $id ?>" class="form-label">
+            <?= $label ?>
+            <?= $required ? trans_html('(required)') : '' ?>
+        </label>
+        <input
+            type="<?= $type ?>"
+            name="<?= phpb_e($name) ?>"
+            class="form-control"
+            id="<?= $id ?>"
+            placeholder="<?= $block->setting('input-placeholder') ?>"
+            <?= $required ? 'required' : '' ?>
+            <?= $help !== '' ? 'aria-describedby="' . $id . '-help"' : '' ?>
+            <?= $maximum !== null && in_array($type, ['text', 'email', 'password', 'tel', 'url'], true)
+                ? 'maxlength="' . $maximum . '"' : '' ?>
+        >
+        <?php if ($help !== '') : ?>
+            <p class="form-text" id="<?= $id ?>-help"><?= $help ?></p>
+        <?php endif; ?>
+    </div>
+<?php endif; ?>

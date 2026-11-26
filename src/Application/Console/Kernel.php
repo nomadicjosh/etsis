@@ -77,6 +77,8 @@ final class Kernel extends ConsoleKernel
         }
         $schedule->command('sis:admissions:documents --apply --limit=1')->everyMinute()->onlyOneInstance();
         $schedule->command('sis:reports:prune --apply --limit=50')->hourly()->onlyOneInstance();
+        $schedule->command('sis:website-forms:subscribe --apply --limit=1')->everyMinute()->onlyOneInstance();
+        $schedule->command('sis:website-forms:prune --apply --limit=100')->hourly()->onlyOneInstance();
         $schedule->command('sis:reports:export --apply --limit=1')->everyMinute()->onlyOneInstance();
         // $schedule->command('queue:run')->everyMinute()->onlyOneInstance();
     }

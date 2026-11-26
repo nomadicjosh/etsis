@@ -1,0 +1,121 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_html;
+use function Codefy\Framework\Helpers\trans;
+
+$esc = static fn (mixed $value): string => htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
+$labels = [
+        'loading' => trans('Preparing the form…'), 'ready' => trans('The form is ready.'),
+        'sending' => trans('Sending your message…'), 'required' => trans('This field is required.'),
+        'invalid' => trans('Enter a valid answer within the stated limits.'),
+        'failed' => trans('Your message could not be confirmed. Try again to check the original submission.'),
+        'retry' => trans('Try again'), 'unavailable' => trans('This form is unavailable. Please try again later.'),
+        'preview' => trans('Form preview. Submitting is disabled in the designer.'),
+    ];
+?>
+<form
+    id="<?= $esc($instance) ?>"
+    class="website-inquiry card border p-4 my-4"
+    method="post"
+    action="<?= $esc($endpoint . 'submit/') ?>"
+    aria-labelledby="<?= $esc($instance) ?>-title"
+    data-website-form
+    data-endpoint="<?= $esc($endpoint) ?>"
+    data-locale="<?= $esc($locale) ?>"
+    data-preview="<?= $preview ? '1' : '0' ?>"
+    data-definition="<?= $esc(json_encode($definition, JSON_THROW_ON_ERROR)) ?>"
+    data-labels="<?= $esc(json_encode($labels, JSON_THROW_ON_ERROR)) ?>"
+    novalidate
+>
+    <h2 id="<?= $esc($instance) ?>-title"><?= $esc($definition['title']) ?></h2>
+    <?php if ($definition['intro'] !== ''): ?>
+        <p><?= $esc($definition['intro']) ?></p>
+    <?php endif; ?>
+    <div role="status" aria-live="polite" data-form-status></div>
+    <div class="alert alert-danger" tabindex="-1" data-form-errors hidden>
+        <h3 class="h5"><?= trans_html('Check your answers') ?></h3>
+        <ul class="mb-0"></ul>
+    </div>
+    <fieldset class="website-form-fields" disabled>
+        <legend class="visually-hidden"><?= $esc($definition['title']) ?></legend>
+        <?php foreach ($definition['fields'] as $field): ?>
+            <?php $id = $instance . '-' . $field['name']; ?>
+            <div class="website-form-field mb-4" data-question="<?= $esc($field['name']) ?>">
+                <?php if (in_array($field['type'], ['radio', 'multi_select'], true)): ?>
+                    <fieldset>
+                        <legend class="form-label fs-6">
+                            <?= $esc($field['label']) ?>
+                            <?= $field['required'] ? trans_html('(required)') : '' ?>
+                        </legend>
+                        <?php foreach ($field['options'] as $position => $option): ?>
+                            <div class="form-check mb-2">
+                                <input
+                                    class="form-check-input"
+                                    type="<?= $field['type'] === 'radio' ? 'radio' : 'checkbox' ?>"
+                                    name="<?= $esc($field['name'] . ($field['type'] === 'multi_select' ? '[]' : '')) ?>"
+                                    id="<?= $esc($id) ?>-<?= $position ?>"
+                                    value="<?= $esc($option['value']) ?>"
+                                    aria-describedby="<?= $esc($id) ?>-help <?= $esc($id) ?>-error"
+                                >
+                                <label class="form-check-label" for="<?= $esc($id) ?>-<?= $position ?>">
+                                    <?= $esc($option['label']) ?>
+                                </label>
+                            </div>
+                        <?php endforeach; ?>
+                    </fieldset>
+                <?php elseif ($field['type'] === 'checkbox'): ?>
+                    <div class="form-check">
+                        <input
+                            class="form-check-input"
+                            type="checkbox"
+                            name="<?= $esc($field['name']) ?>"
+                            id="<?= $esc($id) ?>"
+                            aria-describedby="<?= $esc($id) ?>-help <?= $esc($id) ?>-error"
+                        >
+                        <label class="form-check-label" for="<?= $esc($id) ?>">
+                            <?= $esc($field['label']) ?> <?= $field['required'] ? trans_html('(required)') : '' ?>
+                        </label>
+                    </div>
+                <?php else: ?>
+                    <label class="form-label" for="<?= $esc($id) ?>">
+                        <?= $esc($field['label']) ?> <?= $field['required'] ? trans_html('(required)') : '' ?>
+                    </label>
+                    <?php if ($field['type'] === 'textarea'): ?>
+                        <textarea class="form-control" name="<?= $esc($field['name']) ?>" id="<?= $esc($id) ?>"
+                            rows="5" maxlength="<?= $field['max_length'] ?? 20000 ?>"
+                            aria-describedby="<?= $esc($id) ?>-help <?= $esc($id) ?>-error"></textarea>
+                    <?php elseif ($field['type'] === 'select'): ?>
+                        <select class="form-select" name="<?= $esc($field['name']) ?>" id="<?= $esc($id) ?>"
+                            aria-describedby="<?= $esc($id) ?>-help <?= $esc($id) ?>-error">
+                            <option value=""><?= trans_html('Choose an option') ?></option>
+                            <?php foreach ($field['options'] as $option): ?>
+                                <option value="<?= $esc($option['value']) ?>"><?= $esc($option['label']) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    <?php else: ?>
+                        <input class="form-control" type="<?= $esc($field['type']) ?>"
+                            name="<?= $esc($field['name']) ?>" id="<?= $esc($id) ?>"
+                            <?= $field['type'] === 'number' ? 'step="1"' : '' ?>
+                            aria-describedby="<?= $esc($id) ?>-help <?= $esc($id) ?>-error">
+                    <?php endif; ?>
+                <?php endif; ?>
+                <p class="form-text mb-1" id="<?= $esc($id) ?>-help"><?= $esc($field['help']) ?></p>
+                <p class="invalid-feedback d-block mb-0" id="<?= $esc($id) ?>-error" data-field-error hidden></p>
+            </div>
+        <?php endforeach; ?>
+        <div class="website-form-trap" aria-hidden="true">
+            <label><?= trans_html('Leave this field blank') ?>
+                <input name="website_url" tabindex="-1" autocomplete="off" type="text">
+            </label>
+        </div>
+    </fieldset>
+    <button class="btn btn-primary align-self-start" type="submit" disabled>
+        <?= $esc($definition['submit_label']) ?>
+    </button>
+    <button class="btn btn-outline-secondary mt-2 align-self-start" type="button" data-form-reload hidden>
+        <?= trans_html('Reload form') ?>
+    </button>
+    <noscript><p class="mt-3"><?= trans_html('Enable JavaScript to use this form.') ?></p></noscript>
+</form>

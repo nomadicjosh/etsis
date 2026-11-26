@@ -1,19 +1,37 @@
 <?php
 
-use Qubus\Support\DataType;
+declare(strict_types=1);
 
-$random = new DataType()->string->random(type: 'alpha', length: 8);
-//phpcs:disable
+use Application\View\WebsiteFormControls;
+
+use function Codefy\Framework\Helpers\trans_html;
+
+$id = WebsiteFormControls::id('message');
+$name = WebsiteFormControls::name($block->setting('textarea-name'), 'message');
+$required = $block->setting('textarea-required') === '1';
+$label = trim($block->setting('textarea-label')) ?: trans_html('Long answer');
+$help = $block->setting('textarea-help');
+$rows = WebsiteFormControls::length($block->setting('textarea-rows'), 20) ?? 4;
+$maximum = WebsiteFormControls::length($block->setting('textarea-max-length'), 20000) ?? 4000;
 ?>
-
-<div class="form-floating mb-3">
+<div class="website-form-field mb-3">
+    <label for="<?= $id ?>" class="form-label">
+        <?= $label ?>
+        <?php if ($required) : ?>
+            <span class="website-required"><?= trans_html('(required)') ?></span>
+        <?php endif; ?>
+    </label>
     <textarea
         class="form-control"
-        style="height: 100px"
-        id="<?=$random;?>"<?=$block->setting('textarea-required') ? ' required' : '';?>
-        <?=$block->setting('textarea-placeholder') ? 'placeholder="'.$block->setting('textarea-placeholder').'"' : '';?>
+        name="<?= phpb_e($name) ?>"
+        id="<?= $id ?>"
+        rows="<?= $rows ?>"
+        maxlength="<?= $maximum ?>"
+        placeholder="<?= $block->setting('textarea-placeholder') ?>"
+        <?= $required ? 'required' : '' ?>
+        <?= $help !== '' ? 'aria-describedby="' . $id . '-help"' : '' ?>
     ></textarea>
-    <label for="<?=$random;?>" class="form-label">
-        <?=$block->setting('textarea-label');?><?=$block->setting('textarea-required') ? '<span class="form-label-required">*</span>' : '';?>
-    </label>
+    <?php if ($help !== '') : ?>
+        <p class="form-text" id="<?= $id ?>-help"><?= $help ?></p>
+    <?php endif; ?>
 </div>

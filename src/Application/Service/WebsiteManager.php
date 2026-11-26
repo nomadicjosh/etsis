@@ -28,6 +28,12 @@ final class WebsiteManager extends \Vihzhuo\Modules\WebsiteManager\WebsiteManage
                 'settingsAction' => phpb_url('website_manager', ['route' => 'settings', 'action' => 'update']),
             ]);
         }
+        if ($route === 'form-inbox') {
+            \Codefy\Framework\Proxy\Codefy::$PHP->make(
+                \Domain\WebsiteForms\Service\WebsiteFormInboxService::class
+            )->page();
+            return view('framework::backend/manager/site', ['mode' => 'form-inbox']);
+        }
         if ($route === 'menus') {
             \Codefy\Framework\Proxy\Codefy::$PHP->make(\Domain\Portal\Service\NavigationService::class)->get('primary');
             return view('framework::backend/manager/site', ['mode' => 'menus']);
