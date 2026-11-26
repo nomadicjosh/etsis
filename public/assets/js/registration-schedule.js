@@ -234,7 +234,7 @@ window.createRegistrationSchedule = function (ui) {
             node(
                 "p",
                 {},
-                `Section ${review.section.code} · ${review.section.credits_milli / 1000} credits · ${review.section.seats_remaining} seats remaining`,
+                `Section ${review.section.code} · ${(student.credits_milli ?? review.section.credits_milli) / 1000} credits · ${review.section.seats_remaining} seats remaining`,
             ),
             node(
                 "p",
@@ -426,8 +426,9 @@ window.createRegistrationPlanReview = function (ui) {
         commitUrl,
         onComplete,
         onRevise,
+        creditChoices = {},
     }) {
-        const command = { student_id: student, section_ids: [...sections] };
+        const command = { student_id: student, section_ids: [...sections], credit_choices: creditChoices };
         const body = open("Review schedule");
         body.append(
             node("p", { role: "status" }, "Checking eligibility, meetings and charges…"),
@@ -450,13 +451,20 @@ window.createRegistrationPlanReview = function (ui) {
             true,
         );
         confirm.disabled = !review.can_confirm;
+        const controls = new Map();
+        for (const row of review.sections) {
+            const control = window.createRegistrationCreditInput(ui, row.section,
+                creditChoices[row.section.id] ?? row.student.credits_milli, () => { confirm.disabled = true; });
+            if (control) { controls.set(row.section.id, control); body.append(control.card); }
+        }
+        const choices = () => Object.fromEntries([...controls].map(([id, control]) => [id, control.read()]));
         body.append(
             node(
                 "div",
                 { class: "d-flex flex-wrap gap-2 my-3" },
                 confirm,
                 button("Refresh schedule review", () =>
-                    reviewPlan({ student, sections, reviewUrl, commitUrl, onComplete, onRevise }),
+                    reviewPlan({ student, sections, reviewUrl, commitUrl, onComplete, onRevise, creditChoices: choices() }),
                 ),
                 button("Revise selection", onRevise),
             ),
@@ -522,8 +530,9 @@ window.createSectionChange = function (ui) {
             const list = node(
                 "div",
                 { class: "d-grid gap-2", "aria-label": "Replacement sections" },
-                page.items.map((item) =>
-                    node(
+                page.items.map((item) => {
+                    const credit = window.createRegistrationCreditInput(ui, item, null, () => {});
+                    return node(
                         "div",
                         { class: "border rounded p-3" },
                         node(
@@ -531,9 +540,10 @@ window.createSectionChange = function (ui) {
                             { class: "mb-2" },
                             `${item.code} · Capacity ${item.capacity} · Section fee ${money(item.fee_minor, item.currency)}`,
                         ),
-                        button(`Review ${item.code}`, () => review(item.id)),
-                    ),
-                ),
+                        credit?.card || null,
+                        button(`Review ${item.code}`, () => review(item.id, credit?.read() ?? null)),
+                    );
+                }),
             );
             body.replaceChildren(
                 node(
@@ -562,7 +572,7 @@ window.createSectionChange = function (ui) {
             if (after) body.append(button("First page", () => choose()));
             if (onBack) body.append(button("Back", onBack));
         }
-        async function review(to) {
+        async function review(to, creditsMilli = null) {
             const body = open("Review section change");
             body.append(
                 node(
@@ -572,7 +582,7 @@ window.createSectionChange = function (ui) {
                 ),
                 button("Choose another section", () => choose()),
             );
-            const command = { ...selection, to_section_id: to };
+            const command = { ...selection, to_section_id: to, credits_milli: creditsMilli };
             const result = await request(`${baseUrl}review/`, "POST", command);
             if (!body.isConnected || !isCurrent()) return;
             let completed = false;
@@ -630,7 +640,7 @@ window.createSectionChange = function (ui) {
                     "div",
                     { class: "d-flex flex-wrap gap-2 my-3" },
                     confirm,
-                    button("Refresh review", () => review(to)),
+                    button("Refresh review", () => review(to, creditsMilli)),
                     button("Choose another section", () => choose()),
                 ),
                 node(
@@ -642,4 +652,41 @@ window.createSectionChange = function (ui) {
         }
         await choose();
     };
+};
+
+/* Shared exact academic-credit choice. Drafts live only in the current private task. */
+window.createRegistrationCreditInput = function ({ node }, section, value, changed, suffix = '') {
+    if (!section.student_selectable_credits || !section.credit_policy) return null;
+    const configNode = document.getElementById('workspace-config') || document.getElementById('campus-config');
+    const labels = configNode ? JSON.parse(configNode.textContent).credit_policy_labels || {} : {};
+    const text = (key, fallback) => labels[key] || fallback;
+    const policy = section.credit_policy;
+    const sequence = (window.createRegistrationCreditInput.sequence || 0) + 1;
+    window.createRegistrationCreditInput.sequence = sequence;
+    const id = `registration-credits-${section.id || section.section_id}-${sequence}`;
+    const helpId = `${id}-help`;
+    const input = node('input', { id, name: 'credits_milli', type: 'number', class: 'form-control', required: true,
+        min: String(policy.minimum_milli / 1000), max: String(policy.maximum_milli / 1000),
+        step: String(policy.increment_milli / 1000), value: String((value ?? section.credits_milli) / 1000),
+        'aria-describedby': helpId });
+    input.addEventListener('input', changed);
+    const card = node('fieldset', { class: 'record-form-section bg-white mb-3', 'data-credit-choice': '' },
+        node('legend', { class: 'h6' }, text('student_choice', 'Academic credits for this registration')),
+        node('label', { for: id, class: 'form-label' }, suffix || section.code || section.section_code || ''), input,
+        node('p', { id: helpId, class: 'form-text' }, text('range_help',
+            'Allowed: {min}–{max} academic credits, in increments of {step}.')
+            .replace('{min}', policy.minimum_milli / 1000).replace('{max}', policy.maximum_milli / 1000)
+            .replace('{step}', policy.increment_milli / 1000)),
+        node('p', { class: 'form-text' }, text('choice_review',
+            'Choose credits, then refresh the review to calculate fees before confirming. Editing credits requires a new review.')));
+    return { card, read() {
+        if (!input.reportValidity() || !/^\d+(?:\.\d{1,3})?$/.test(input.value))
+            throw new Error(text('invalid', 'Use a nonnegative credit value with up to three decimal places, at most 999.999.'));
+        const [whole, fraction = ''] = input.value.split('.');
+        const milli = Number(whole) * 1000 + Number(fraction.padEnd(3, '0'));
+        if (milli < policy.minimum_milli || milli > policy.maximum_milli ||
+            (milli - policy.minimum_milli) % policy.increment_milli !== 0)
+            throw new Error(text('invalid', 'Use a nonnegative credit value with up to three decimal places, at most 999.999.'));
+        return milli;
+    } };
 };

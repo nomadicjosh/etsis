@@ -14,6 +14,7 @@ function review(options = {}) {
                 course_code: `COURSE.${i + 1}`,
                 course_title: "Fictional <b>course</b>",
                 credits_milli: 3000,
+                ...(options.variable ? { student_selectable_credits: true, credit_policy: { minimum_milli: 1000, maximum_milli: 6000, increment_milli: 500 } } : {}),
                 seats_remaining: 12,
                 term_starts_on: "2026-08-01",
                 term_ends_on: "2026-12-18",
@@ -230,4 +231,27 @@ test("a stale review leaves a path back to the unchanged selection without confi
     await page.getByRole("button", { name: "Revise selection", exact: true }).click();
     await expect(page.locator("#drawer-body")).toContainText("2 of 10 sections selected");
     expect(f.calls.some((c) => c.path.endsWith("/commit/"))).toBe(false);
+});
+
+
+test('student chooses different exact quantities per planned section and edits invalidate confirmation', async ({ page }) => {
+    const f = await mock(page, { variable: true });
+    await page.goto('/portal/student/registration/');
+    for (const add of await page.getByRole('button', { name: 'Add to schedule', exact: true }).all()) await add.click();
+    await page.getByRole('button', { name: 'Review schedule', exact: true }).click();
+    await page.getByLabel('SEC.1', { exact: true }).fill('1.5');
+    await page.getByLabel('SEC.2', { exact: true }).fill('4.5');
+    await expect(page.getByRole('button', { name: 'Confirm schedule', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Refresh schedule review', exact: true }).click();
+    await expect(page.getByLabel('SEC.1', { exact: true })).toHaveValue('1.5');
+    await expect(page.getByLabel('SEC.2', { exact: true })).toHaveValue('4.5');
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect((await new AxeBuilder({ page }).include('#campus-dialog-body').withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze()).violations).toEqual([]);
+    await page.screenshot({ path: '/tmp/etsis-student-credits-phone.png', fullPage: true });
+    await page.getByRole('button', { name: 'Confirm schedule', exact: true }).click();
+    expect(f.calls.find(call => call.path.endsWith('/commit/')).data.credit_choices).toEqual({ [a]: 1500, [b]: 4500 });
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
 });

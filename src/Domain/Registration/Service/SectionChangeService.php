@@ -67,6 +67,16 @@ final readonly class SectionChangeService
         $rows = $this->search->page($section->courseId, $section->termId, $from, trim($search), $after);
         $more = count($rows) > 20;
         $rows = array_slice($rows, 0, 20);
+        foreach ($rows as &$row) {
+            $offering = $this->repository->section(new EntityId($row["id"]));
+            if ($offering->studentSelectableCredits) {
+                $course = $this->repository->courseForSection($offering);
+                $row += ["student_selectable_credits" => true,
+                    "credit_policy" => $course->creditPolicy?->describe(),
+                    "credits_milli" => $course->registrationCreditsMilli()];
+            }
+        }
+        unset($row);
         $this->sameActor($student, $byStaff, $actor);
         return [
             "items" => $rows,
@@ -187,6 +197,7 @@ final readonly class SectionChangeService
                 $byStaff,
                 budget: $budget,
                 chargeQuote: $fresh,
+                creditsMilli: $selection->creditsMilli,
             );
             if ($this->drops->dependencies($selection->student, [$selection->from->value], $budget)->blocked()) {
                 throw new ConcurrentModificationException(
@@ -279,7 +290,11 @@ final readonly class SectionChangeService
             $selection->student,
             $section->termId,
             $section->fee,
-            $course->registrationCreditsMilli(),
+            \Domain\Registration\ValueObject\SelectedRegistrationCredits::choose(
+                $section,
+                $course,
+                $selection->creditsMilli
+            )?->milli ?? $course->registrationCreditsMilli(),
             $budget,
         );
     }
@@ -317,6 +332,7 @@ final readonly class SectionChangeService
             $byStaff,
             $budget,
             $quote,
+            $selection->creditsMilli,
         );
         if ($quote === null || $target["students"][0]["enrollment_id"] !== null) {
             throw new ValidationException([

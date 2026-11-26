@@ -120,13 +120,28 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
         return $row === null ? null : new EntityId($row["publication_id"]);
     }
 
+    public function enrollmentCredits(EntityId $enrollment): ?int
+    {
+        $row = $this->sql->rows('sis_enrollment_section_versions', ['id' => $enrollment->value], 1)[0] ?? [];
+        $value = $row['selected_credits_milli'] ?? null;
+        if ($value === null) {
+            return null;
+        }
+        $milli = filter_var($value, FILTER_VALIDATE_INT);
+        if ($milli === false || $milli < 0 || $milli > 999999) {
+            throw new CorruptHistoryException();
+        }
+        return $milli;
+    }
+
     public function retainEnrollmentVersion(
         EntityId $enrollment,
         ?EntityId $publication,
+        ?int $creditsMilli = null,
     ): void {
         $old = $this->enrollmentVersion($enrollment);
         if ($old !== null) {
-            if ($old->value !== $publication?->value) {
+            if ($old->value !== $publication?->value || $this->enrollmentCredits($enrollment) !== $creditsMilli) {
                 throw new CorruptHistoryException();
             }
             return;
@@ -135,6 +150,7 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
             $this->sql->insert("sis_enrollment_section_versions", [
                 "id" => $enrollment->value,
                 "publication_id" => $publication->value,
+                "selected_credits_milli" => $creditsMilli,
             ]);
         }
     }
@@ -221,6 +237,13 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
             if ($row['credits_milli'] !== null) {
                 $facts['credits_milli'] = $this->integer($row['credits_milli']);
             }
+            if ($row['student_selectable_credits'] !== null) {
+                $value = $this->integer($row['student_selectable_credits']);
+                if (!in_array($value, [0, 1], true)) {
+                    throw new CorruptHistoryException();
+                }
+                $facts['student_selectable_credits'] = (bool) $value;
+            }
             if ($row['continuing_education'] !== null) {
                 $facts['continuing_education'] =
                 ContinuingEducationUnits::stored($row['continuing_education'])->describe();
@@ -292,10 +315,15 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 "schema_version" =>
                     $definition->classifications === null ? 1 : 2,
             ] + array_diff_key($definition->definition->data, [
-                'web_registration' => true, 'contact_hours' => true,
+                'web_registration' => true, 'contact_hours' => true, 'student_selectable_credits' => true,
             'continuing_education' => true, 'eligible_program_ids' => true, 'require_program_campus' => true,
             ]) +
-                ['require_program_campus' => array_key_exists('require_program_campus', $definition->definition->data)
+                ['student_selectable_credits' => array_key_exists(
+                    'student_selectable_credits',
+                    $definition->definition->data
+                )
+                    ? (int) $definition->definition->data['student_selectable_credits'] : null,
+                'require_program_campus' => array_key_exists('require_program_campus', $definition->definition->data)
                     ? (int) $definition->definition->data['require_program_campus'] : null,
                 'eligible_program_ids' => array_key_exists('eligible_program_ids', $definition->definition->data)
                     ? json_encode($definition->definition->data['eligible_program_ids'], JSON_THROW_ON_ERROR) : null,

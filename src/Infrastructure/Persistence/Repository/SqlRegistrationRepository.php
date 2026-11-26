@@ -146,6 +146,9 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
         )[0] ?? throw new \Domain\Shared\Exception\RecordNotFoundException("Section not found.");
 
         $classes = $this->sql->current("sis_section_classifications", $id->value) ?? [];
+        if (!in_array($r['student_selectable_credits'], [0, 1, '0', '1'], true)) {
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+        }
         return new Section(
             $id,
             new EntityId($r["course_id"]),
@@ -167,6 +170,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             $r['offering_credits_milli'] === null ? null : (int) $r['offering_credits_milli'],
             \Domain\Registration\ValueObject\OfferingCeuChoice::stored($r['continuing_education']),
             new SqlSectionProgramPolicyRepository($this->sql)->current($id),
+            (bool) $r['student_selectable_credits'],
         );
     }
 
@@ -362,6 +366,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 "minimum_enrollment" => $section->minimumEnrollment,
                 "active" => (int) $section->active,
                 "web_registration" => (int) $section->webRegistration,
+                "student_selectable_credits" => (int) $section->studentSelectableCredits,
                 "fee_minor" => $section->fee->minor,
                 "currency" => $section->fee->currency,
             ]);

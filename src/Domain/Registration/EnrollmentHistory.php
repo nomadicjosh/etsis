@@ -16,6 +16,7 @@ use Domain\Shared\EventSourcing\CorruptHistoryException;
 final class EnrollmentHistory extends EventSourcedAggregate
 {
     /** @var array<string,mixed>|null */
+    private ?\Domain\Registration\ValueObject\SelectedRegistrationCredits $creditChoice = null;
     private ?array $facts = null;
     /** @var array<string,mixed>|null */
     private ?array $source = null;
@@ -95,6 +96,15 @@ final class EnrollmentHistory extends EventSourcedAggregate
             throw new CorruptHistoryException();
         }
         $this->eligibilityEvidence($event->metadata(), $p);
+        if (array_key_exists("student_credit_choice", $event->metadata())) {
+            if ($p["provenance"] !== "registered") {
+                throw new CorruptHistoryException();
+            }
+            $this->creditChoice = \Domain\Registration\ValueObject\SelectedRegistrationCredits::from(
+                $event->metaParam("student_credit_choice")
+            );
+            $this->creditChoice->routing($p["source"]["course_version_id"], $this->sectionVersion);
+        }
         $this->facts = $p["enrollment"];
         $this->source = $p["source"];
         $this->provenance = $p["provenance"];
@@ -218,6 +228,10 @@ final class EnrollmentHistory extends EventSourcedAggregate
                 array_flip(["opens_at", "closes_at", "course_limit"]),
             );
         }
+    }
+    public function creditChoice(): ?\Domain\Registration\ValueObject\SelectedRegistrationCredits
+    {
+        return $this->creditChoice;
     }
     public function whenEnrollmentWasClosed(EnrollmentWasClosed $event): void
     {

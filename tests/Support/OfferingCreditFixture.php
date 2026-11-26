@@ -94,12 +94,13 @@ final class OfferingCreditFixture
         return $version;
     }
 
-    public function choose(?int $credits): void
+    public function choose(?int $credits, bool $studentSelectable = false): void
     {
         $this->editor->sectionCredits(
             $this->section->id,
             $credits,
-            $this->editor->creditSettings('sections', $this->section->id)['revision']
+            $this->editor->creditSettings('sections', $this->section->id)['revision'],
+            $studentSelectable
         );
     }
 

@@ -226,6 +226,7 @@ final readonly class CampusPortalController
                 $f->id("operation_id"),
                 $f->text("revision", 64),
                 $f->text("review_token", 8192),
+                $f->optionalInteger("credits_milli"),
             ) + ["status" => "registered"],
         );
     }
@@ -256,7 +257,11 @@ final readonly class CampusPortalController
     {
         $f = FormInput::from($request);
         return new JsonResponse(
-            $this->service->reviewRegistration($f->id("student_id"), $f->id("section_id")),
+            $this->service->reviewRegistration(
+                $f->id("student_id"),
+                $f->id("section_id"),
+                $f->optionalInteger("credits_milli"),
+            ),
         );
     }
 

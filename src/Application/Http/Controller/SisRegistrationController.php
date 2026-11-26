@@ -93,7 +93,7 @@ final readonly class SisRegistrationController
             new \Domain\Registration\ValueObject\RegistrationBatchSelection(
                 $f->id("section_id"),
                 $f->id("student_id"),
-            ),
+            )->withCreditChoices(\Application\Http\RegistrationPlanInput::credits($request)),
             $f->text("revision", 64),
             $f->text("review_token", 8192),
             $f->boolean("by_staff"),
@@ -115,7 +115,7 @@ final readonly class SisRegistrationController
                 new \Domain\Registration\ValueObject\RegistrationBatchSelection(
                     $f->id("section_id"),
                     $f->id("student_id"),
-                ),
+                )->withCreditChoices(\Application\Http\RegistrationPlanInput::credits($request)),
                 $f->boolean("by_staff"),
             ),
         );

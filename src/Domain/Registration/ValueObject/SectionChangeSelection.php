@@ -9,8 +9,13 @@ use Domain\Shared\ValueObject\EntityId;
 
 final readonly class SectionChangeSelection
 {
-    public function __construct(public EntityId $student, public EntityId $from, public EntityId $to)
-    {
+    public function __construct(
+        public EntityId $student,
+        public EntityId $from,
+        public EntityId $to,
+        public ?int $creditsMilli = null,
+    ) {
+        RequestedCreditChoices::validate($creditsMilli === null ? [] : [$to->value => $creditsMilli], [$to]);
         if ($from->value === $to->value) {
             throw new ValidationException([
                 ["field" => "to_section_id", "message" => "Choose another section."],
@@ -35,6 +40,7 @@ final readonly class SectionChangeSelection
                     $this->to->value,
                     $revision,
                     $byStaff,
+                    ...($this->creditsMilli === null ? [] : [$this->creditsMilli]),
                 ],
                 JSON_THROW_ON_ERROR,
             ),

@@ -7,6 +7,13 @@ use function Codefy\Framework\Helpers\trans_html;
 return [
     'course_title' => trans_html('Course credit policy'),
     'section_title' => trans_html('Offering credits'),
+    'allow_choice' => trans_html('Allow each student to choose credits within the published range'),
+    'original_choice' => trans_html('Originally selected academic credits'),
+    'student_choice' => trans_html('Academic credits for this registration'),
+    'choice_review' => trans_html(
+        'Choose credits, then refresh the review to calculate fees before confirming. '
+        . 'Editing credits requires a new review.',
+    ),
     'back' => trans_html('Back to record'),
     'loading' => trans_html('Loading credit settings…'),
     'default' => trans_html('Default academic credits'),
@@ -17,7 +24,7 @@ return [
     'maximum' => trans_html('Maximum academic credits'),
     'increment' => trans_html('Credit increment'),
     'inherit' => trans_html('Use the retained course default'),
-    'section_value' => trans_html('Fixed credits for this offering'),
+    'section_value' => trans_html('Default credits for this offering'),
     'range_help' => trans_html('Allowed: {min}–{max} academic credits, in increments of {step}.'),
     'fixed_help' => trans_html('The retained course allows {value} academic credits.'),
     'precision' => trans_html('Use up to three decimal places. These are academic credits; CEUs are separate.'),
@@ -26,8 +33,8 @@ return [
         . 'Existing publications, student attempts and charges retain their accepted facts.',
     ),
     'section_help' => trans_html(
-        'Choose one fixed offering value within its selected course policy. Publish and select the offering '
-        . 'before new registrations use it. Students cannot choose individual credit values in this stage.',
+        'Set the offering’s default credits and whether students may choose within its published course range. '
+        . 'Publish and select the offering before new registrations use these rules.',
     ),
     'save' => trans_html('Save credit draft'),
     'saved' => trans_html('Credit draft saved. Review its publication before using it for new registrations.'),

@@ -38,8 +38,13 @@ final readonly class SisCreditPolicyController
                 $f->integer('increment_milli', 0, 999999),
             ), $revision);
         } else {
-            $this->catalog->sectionCredits($key, $f->requiredBoolean('use_default') ? null
-                : $f->integer('offering_credits_milli', 0, 999999), $revision);
+            $this->catalog->sectionCredits(
+                $key,
+                $f->requiredBoolean('use_default') ? null
+                : $f->integer('offering_credits_milli', 0, 999999),
+                $revision,
+                $f->boolean('student_selectable')
+            );
         }
         return new JsonResponse($this->catalog->creditSettings($kind, $key));
     }

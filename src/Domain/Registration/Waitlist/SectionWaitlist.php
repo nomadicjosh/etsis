@@ -40,6 +40,13 @@ final class SectionWaitlist extends EventSourcedAggregate
     {
         try {
             $keys = $policy ? self::POLICY_FIELDS : self::PLACE_FIELDS;
+            if (!$policy && array_key_exists('student_credit_choice', $p)) {
+                $keys[] = 'student_credit_choice';
+                if ($p['action'] !== 'requested' || !is_array($p['student_credit_choice'])) {
+                    throw new CorruptHistoryException();
+                }
+                \Domain\Registration\ValueObject\SelectedRegistrationCredits::from($p['student_credit_choice']);
+            }
             if (!$policy && array_key_exists('priority_bypass', $p)) {
                 $keys[] = 'priority_bypass';
                 $bypass = $p['priority_bypass'];
@@ -193,7 +200,10 @@ final class SectionWaitlist extends EventSourcedAggregate
                 "policy_position" => $p["policy_position"],
                 "status" => "active",
                 "enrollment_id" => null,
-            ];
+            ] + (isset($p["student_credit_choice"]) ? [
+                "student_credit_choice" => \Domain\Registration\ValueObject\SelectedRegistrationCredits::from(
+                    $p["student_credit_choice"]
+                )->values()] : []);
             return;
         }
         $entry = $this->entries[$p["entry_id"]] ?? throw new CorruptHistoryException();

@@ -62,6 +62,7 @@ final readonly class PublishedSectionDefinition
         $d = $this->definition->data;
         return ($d['eligible_program_ids'] ?? []) === $section->programPolicy->programIds &&
         ($d['require_program_campus'] ?? false) === $section->programPolicy->requireCampus &&
+        ($d['student_selectable_credits'] ?? false) === $section->studentSelectableCredits &&
         $this->section->value === $section->id->value &&
         $d["course_id"] === $section->courseId->value &&
         $d["term_id"] === $section->termId->value &&

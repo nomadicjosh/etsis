@@ -77,10 +77,20 @@ final readonly class CatalogEditor
         return $result;
     }
 
-    public function sectionCredits(EntityId $section, ?int $creditsMilli, string $revision): void
-    {
+    public function sectionCredits(
+        EntityId $section,
+        ?int $creditsMilli,
+        string $revision,
+        bool $studentSelectable = false
+    ): void {
         $actor = $this->access->requirePermission('sis:catalog:manage');
-        $this->transactions->run(function () use ($section, $creditsMilli, $revision, $actor): void {
+        $this->transactions->run(function () use (
+            $section,
+            $creditsMilli,
+            $revision,
+            $actor,
+            $studentSelectable,
+        ): void {
             $this->repository->lock('sections', $section);
             $row = $this->repository->get('sections', $section);
             $this->repository->lock('courses', new EntityId($row['course_id']));
@@ -90,8 +100,18 @@ final readonly class CatalogEditor
                 throw new ConcurrentModificationException('The section or its course policy changed. Reload credits.');
             }
             $policy = \Domain\Catalog\ValueObject\CreditPolicy::fromArray($current['credit_policy']);
+            if (
+                $studentSelectable && ($policy->minimumMilli === $policy->maximumMilli
+                || $current['course_version_id'] === null)
+            ) {
+                throw new \Domain\Shared\Exception\ValidationException([['field' => 'student_selectable',
+                    'message' => \Codefy\Framework\Helpers\trans(
+                        'Select a published variable-credit course policy before enabling student credit choices.'
+                    )]]);
+            }
             $policy->requireChoice($creditsMilli ?? $current['credits_milli'], 'offering_credits_milli');
-            $this->repository->save('sections', $section, ['offering_credits_milli' => $creditsMilli]);
+            $this->repository->save('sections', $section, ['offering_credits_milli' => $creditsMilli,
+                'student_selectable_credits' => (int) $studentSelectable]);
             $expected = $this->sectionCreditContext($section, $this->repository->get('sections', $section));
             $this->audit->record($actor, 'catalog.section_credits.updated', $section);
             $this->sameActor($actor);
@@ -110,6 +130,7 @@ final readonly class CatalogEditor
         $course = $this->registration->courseForSection($this->registration->section($section));
         $policy = $course->creditPolicy ?? \Domain\Catalog\ValueObject\CreditPolicy::fixed($course->creditsMilli);
         return ['credits_milli' => $course->creditsMilli, 'credit_policy' => $policy->describe(),
+            'student_selectable' => (bool) $row['student_selectable_credits'],
             'offering_credits_milli' => $row['offering_credits_milli'] === null
                 ? null : (int) $row['offering_credits_milli'],
             'course_version_id' => $course->publicationVersionId?->value,

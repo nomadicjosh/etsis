@@ -117,6 +117,7 @@ final readonly class SisWaitlistController
                 $student === null,
                 $f->requiredNullableId("entry_id"),
                 $this->reason($request),
+                $f->optionalInteger("credits_milli"),
             ),
         );
     }
@@ -136,6 +137,7 @@ final readonly class SisWaitlistController
                 $f->text("revision", 64),
                 $f->text("review_token", 8192),
                 $this->reason($request),
+                $f->optionalInteger("credits_milli"),
             ),
         );
     }

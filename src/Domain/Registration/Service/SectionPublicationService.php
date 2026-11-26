@@ -1181,7 +1181,16 @@ final readonly class SectionPublicationService
             $credits = $row['offering_credits_milli'] === null ? $default : (int) $row['offering_credits_milli'];
             $policy->requireChoice($credits);
             $data['credits_milli'] = $credits;
-        } elseif ($row['offering_credits_milli'] !== null) {
+            if ((bool) ($row['student_selectable_credits'] ?? false)) {
+                if ($policy->minimumMilli === $policy->maximumMilli) {
+                    throw new \Domain\Shared\Exception\ValidationException([['field' => 'student_selectable',
+                        'message' => \Codefy\Framework\Helpers\trans(
+                            'A student-selectable offering requires a retained variable-credit course policy.'
+                        )]]);
+                }
+                $data['student_selectable_credits'] = true;
+            }
+        } elseif ($row['offering_credits_milli'] !== null || (bool) ($row['student_selectable_credits'] ?? false)) {
             throw new ConcurrentModificationException(
                 'Publish the chosen offering credits before selecting this version.',
             );

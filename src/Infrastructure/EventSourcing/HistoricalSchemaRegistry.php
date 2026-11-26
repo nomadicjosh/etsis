@@ -682,6 +682,9 @@ final readonly class HistoricalSchemaRegistry
                     $payload,
                     $class === \Domain\Registration\Waitlist\WaitlistPolicyWasSet::class,
                 );
+                if (array_key_exists('student_credit_choice', $payload)) {
+                    $definition['fields'][] = 'student_credit_choice';
+                }
                 if (array_key_exists('priority_bypass', $payload)) {
                     $definition['fields'][] = 'priority_bypass';
                 }
@@ -1239,6 +1242,33 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'student_credit_choice') {
+                    if (!is_array($value)) {
+                        throw new CorruptHistoryException();
+                    }
+                    $choice = \Domain\Registration\ValueObject\SelectedRegistrationCredits::from($value);
+                    if (
+                        $class === \Domain\Registration\Event\EnrollmentWasEstablished::class
+                        && $payload['provenance'] === 'registered'
+                    ) {
+                        $choice->routing(
+                            $payload['source']['course_version_id'],
+                            $metadata['section_version_id'] ?? null
+                        );
+                    } elseif (
+                        $class === \Domain\AcademicRecord\Event\InstitutionalCreditWasEstablished::class
+                        && $payload['provenance'] === 'registration'
+                    ) {
+                        $choice->routing(
+                            $payload['credit']['course_version_id'],
+                            $metadata['section_version_id'] ?? null,
+                            $payload['credit']['attempted_milli']
+                        );
+                    } else {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'standing_proposal_evidence') {
                     if ($class !== \Domain\Student\Event\StudentStandingWasRecorded::class || !is_array($value)) {
                         throw new CorruptHistoryException();

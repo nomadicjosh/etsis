@@ -41,7 +41,7 @@ window.createWorkspaceCreditPolicy = function (ui) {
                 text(key, fallback)), input));
             return input;
         };
-        let mode, defaultValue, minimum, maximum, increment, inherit, choice;
+        let mode, defaultValue, minimum, maximum, increment, inherit, choice, studentSelectable;
         if (isCourse) {
             defaultValue = number('default', 'Default academic credits', saved.credits_milli);
             mode = node('select', { id: 'credit-policy-mode', name: 'credit_policy', class: 'form-select' },
@@ -68,7 +68,13 @@ window.createWorkspaceCreditPolicy = function (ui) {
             fields.append(node('div', { class: 'form-check mb-3' }, inherit,
                 node('label', { for: inherit.id, class: 'form-check-label' }, unbound
                     ? text('draft_inherit', 'Use the course draft default') : text('inherit', 'Use the retained course default'))));
-            choice = number('section_value', 'Fixed credits for this offering', saved.offering_credits_milli ?? saved.credits_milli);
+            studentSelectable = node('input', { id: 'credit-policy-student-selectable', type: 'checkbox',
+                class: 'form-check-input', checked: !!saved.student_selectable,
+                disabled: !saved.student_selectable && (unbound || policy.minimum_milli === policy.maximum_milli) });
+            fields.append(node('div', { class: 'form-check mb-3' }, studentSelectable,
+                node('label', { for: studentSelectable.id, class: 'form-check-label' },
+                    text('allow_choice', 'Allow each student to choose credits within the published range'))));
+            choice = number('section_value', 'Default credits for this offering', saved.offering_credits_milli ?? saved.credits_milli);
             const update = () => { choice.disabled = inherit.checked; };
             inherit.addEventListener('change', update); update();
         }
@@ -80,7 +86,7 @@ window.createWorkspaceCreditPolicy = function (ui) {
         publish.hidden = true;
         form.append(fields, node('p', { class: 'form-text' }, isCourse ? text('course_help',
             'Save a draft default and permitted credit range together, then publish the course definition. Existing publications, student attempts and charges retain their accepted facts.')
-            : text('section_help', 'Choose one fixed offering value within its selected course policy. Publish and select the offering before new registrations use it. Students cannot choose individual credit values in this stage.')),
+            : text('section_help', 'Set the offering’s default credits and whether students may choose within its published course range. Publish and select the offering before new registrations use these rules.')),
         save, status, publish);
         form.addEventListener('input', () => { publish.hidden = true; status.textContent = ''; });
         form.addEventListener('submit', event => {
@@ -92,7 +98,8 @@ window.createWorkspaceCreditPolicy = function (ui) {
                     minimum_milli: mode.value === 'fixed' ? amount : milli(minimum),
                     maximum_milli: mode.value === 'fixed' ? amount : milli(maximum),
                     increment_milli: mode.value === 'fixed' ? 0 : milli(increment) }
-                    : { use_default: inherit.checked, offering_credits_milli: inherit.checked ? null : milli(choice) };
+                    : { use_default: inherit.checked, offering_credits_milli: inherit.checked ? null : milli(choice),
+                        student_selectable: studentSelectable.checked };
                 fields.disabled = true;
                 try {
                     const result = await request(`/sis/ui/catalog/${kind}/${id}/credits/`, 'POST', { ...data, revision: saved.revision });

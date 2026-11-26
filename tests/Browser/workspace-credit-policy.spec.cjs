@@ -80,12 +80,12 @@ test('course range saves exact values and leads to publication with narrow and e
 test('offering choice and inherited default save without losing the record return', async ({ page }) => {
     const f = await fixture(page, 'sections');
     await expect(page.locator('#drawer-body')).toContainText('Allowed: 1–6 academic credits, in increments of 0.5.');
-    await expect(page.getByLabel('Fixed credits for this offering')).toBeDisabled();
+    await expect(page.getByLabel('Default credits for this offering')).toBeDisabled();
     await page.getByLabel('Use the retained course default').uncheck();
-    await page.getByLabel('Fixed credits for this offering').fill('2.5');
+    await page.getByLabel('Default credits for this offering').fill('2.5');
     await page.getByRole('button', { name: 'Save credit draft', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Review publication', exact: true })).toBeVisible();
-    expect(f.calls[0].data).toEqual({ revision: 'a'.repeat(64), use_default: false, offering_credits_milli: 2500 });
+    expect(f.calls[0].data).toEqual({ revision: 'a'.repeat(64), use_default: false, offering_credits_milli: 2500, student_selectable: false });
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);
     await page.screenshot({ path: '/tmp/etsis-credit-policy-section-mobile.png', fullPage: true });
@@ -93,7 +93,7 @@ test('offering choice and inherited default save without losing the record retur
     await expect(page.getByRole('button', { name: 'Review publication', exact: true })).toBeHidden();
     await page.getByRole('button', { name: 'Save credit draft', exact: true }).click();
     await expect(page.getByRole('button', { name: 'Review publication', exact: true })).toBeVisible();
-    expect(f.calls[1].data).toEqual({ revision: 'b'.repeat(64), use_default: true, offering_credits_milli: null });
+    expect(f.calls[1].data).toEqual({ revision: 'b'.repeat(64), use_default: true, offering_credits_milli: null, student_selectable: false });
     await page.getByRole('button', { name: 'Back to record', exact: true }).click();
     await expect(page.locator('#drawer-title')).toHaveText('MATH.101.A');
     expect(f.errors).toEqual([]);
@@ -133,4 +133,19 @@ test('an unbound section labels its draft policy without claiming a retained pub
     await expect(page.getByLabel('Use the retained course default')).toHaveCount(0);
     await page.getByRole('button', { name: 'Back to record', exact: true }).click();
     await expect(page.locator('#drawer-title')).toHaveText('MATH.101.A');
+});
+
+
+test('section opts into individual credit choices only under a retained range', async ({ page }) => {
+    const f = await fixture(page, 'sections');
+    const choice = page.getByLabel('Allow each student to choose credits within the published range');
+    await choice.focus();
+    await page.keyboard.press('Space');
+    await expect(choice).toBeChecked();
+    await page.getByRole('button', { name: 'Save credit draft', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Review publication', exact: true })).toBeVisible();
+    expect(f.calls[0].data.student_selectable).toBe(true);
+    await page.setViewportSize({ width: 320, height: 812 });
+    await accessible(page);
+    expect(f.errors).toEqual([]);
 });

@@ -77,6 +77,7 @@ final readonly class SisRegistrationBatchController
             }
             $ids[] = new EntityId($id);
         }
-        return new RegistrationBatchSelection(FormInput::from($request)->id('section_id'), ...$ids);
+        return new RegistrationBatchSelection(FormInput::from($request)->id('section_id'), ...$ids)
+            ->withCreditChoices(\Application\Http\RegistrationPlanInput::credits($request));
     }
 }

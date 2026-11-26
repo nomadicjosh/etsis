@@ -1458,6 +1458,8 @@ window.createWorkspaceCatalog = function (ui) {
             ],
             ["Term", `${definition.term_code}: ${definition.term_starts_on} through ${definition.term_ends_on}`],
             ["Capacity", definition.capacity],
+            ...(definition.student_selectable_credits ? [[ui.creditLabels?.student_choice || 'Academic credits for this registration',
+                ui.creditLabels?.allow_choice || 'Allow each student to choose credits within the published range']] : []),
             [ui.creditLabels?.section_title || 'Offering credits', definition.credits_milli === undefined
                 ? ui.creditLabels?.unrecorded || 'Not recorded in this publication' : definition.credits_milli / 1000],
             [ui.ceuLabels?.section_title || "Offered CEUs", window.continuingEducationText(definition.continuing_education, ui.ceuLabels)],
@@ -2088,7 +2090,8 @@ window.createWorkspaceCatalog = function (ui) {
     function credits(kind, row, back) {
         return window.createWorkspaceCreditPolicy({ node, request, task, openDrawer, labels: ui.creditLabels,
             saved: result => { row.credits_milli = result.offering_credits_milli ?? result.credits_milli;
-                row.offering_credits_milli = result.offering_credits_milli; },
+                row.offering_credits_milli = result.offering_credits_milli;
+                row.student_selectable_credits = result.student_selectable; },
         }).open(kind, row.id, back, () => kind === 'courses' ? publications(row.id, null, [], back, undefined, ui.creditLabels?.back || 'Back to record')
             : sectionPublications(row.id, null, [], null, back));
     }

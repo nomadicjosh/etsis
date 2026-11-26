@@ -7103,3 +7103,67 @@ msgid ""
 "This student class schedule exceeds the bounded appointment check. Ask the "
 "records office to review it; no partial check was used."
 msgstr ""
+
+msgid "Allow each student to choose credits within the published range"
+msgstr ""
+
+msgid "Academic credits for this registration"
+msgstr ""
+
+msgid ""
+"Choose credits, then refresh the review to calculate fees before confirming. "
+"Editing credits requires a new review."
+msgstr ""
+
+msgid "Default credits for this offering"
+msgstr ""
+
+msgid ""
+"Set the offering’s default credits and whether students may choose within "
+"its published course range. Publish and select the offering before new "
+"registrations use these rules."
+msgstr ""
+
+msgid "Choose a bounded set of exact academic credit quantities."
+msgstr ""
+
+msgid ""
+"Select a published variable-credit course policy before enabling student "
+"credit choices."
+msgstr ""
+
+msgid ""
+"Keep the requested waitlist credits or withdraw and submit a new request."
+msgstr ""
+
+msgid "The section credit policy changed during registration."
+msgstr ""
+
+msgid ""
+"A student-selectable offering requires a retained variable-credit course "
+"policy."
+msgstr ""
+
+msgid "Choose exact academic credits only for records in this selection."
+msgstr ""
+
+msgid ""
+"This section uses one fixed offering quantity. Refresh its credit "
+"information."
+msgstr ""
+
+msgid ""
+"Choose academic credits under this section’s published variable-credit "
+"policy."
+msgstr ""
+
+msgid ""
+"This enrollment already has a different accepted credit choice. Review its "
+"academic record."
+msgstr ""
+
+msgid "The accepted waitlist request has no student credit choice."
+msgstr ""
+
+msgid "Originally selected academic credits"
+msgstr ""

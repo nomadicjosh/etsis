@@ -63,6 +63,9 @@ final readonly class WaitlistSeatGuard
                 "can_register" => $active === [] || $active[0]["student_id"] === $student->value || $inOrder,
                 "entry_id" => $mine["id"] ?? null,
                 "rank" => $index === false ? null : $index + 1,
+                ...(isset($mine["student_credit_choice"]) ? [
+                    "credits_milli" => $mine["student_credit_choice"]["credits_milli"],
+                ] : []),
             ] + (!$coordinated || $active === [] ? [] : [
                 'queue_version' => $root->playhead(),
                 'selected_predecessors' => $active !== [] && $inOrder
@@ -119,6 +122,7 @@ final readonly class WaitlistSeatGuard
             $bypass?->entry->value ?? $first["id"] ?? null,
             $budget,
             $bypass,
+            $mine["student_credit_choice"]["credits_milli"] ?? null,
         );
     }
     public function complete(WaitlistClaim $claim, Enrollment $enrollment, EntityId $actor): void

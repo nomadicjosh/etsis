@@ -11,6 +11,7 @@ use Domain\Registration\Repository\RegistrationRepository;
 use Domain\Registration\Service\RegistrationWindowService;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
@@ -205,6 +206,15 @@ final readonly class WaitlistService
             "waiting_count" => count($root->active()),
             "entry_id" => $mine["id"] ?? null,
             "rank" => $rank,
+            ...(isset($mine["student_credit_choice"]) ? [
+                "credits_milli" => $mine["student_credit_choice"]["credits_milli"],
+            ] : []),
+            ...(!$s->studentSelectableCredits ? [] : [
+                'student_selectable_credits' => true,
+                'credit_policy' => $course->creditPolicy?->describe(),
+                'credits_milli' => $mine === null ? $course->registrationCreditsMilli()
+                    : ($mine['student_credit_choice']['credits_milli'] ?? null),
+            ]),
             "seats_remaining" => max(0, $s->capacity - $this->registration->sectionCount($section)),
         ];
     }
@@ -235,6 +245,9 @@ final readonly class WaitlistService
                 "current_name" => $person->givenName . " " . $person->familyName,
                 "current_institutional_id" => $person->institutionalId->value,
                 "accepted_position" => $entry["position"],
+                ...(isset($entry["student_credit_choice"]) ? [
+                    "credits_milli" => $entry["student_credit_choice"]["credits_milli"],
+                ] : []),
                 "rank" => array_search($entry["id"], array_column($active, "id"), true) + 1,
             ];
         }
@@ -279,6 +292,9 @@ final readonly class WaitlistService
                 "section_code" => $s->code,
                 "course_code" => $course->code,
                 "status" => $entry["status"],
+                ...(isset($entry["student_credit_choice"]) ? [
+                    "credits_milli" => $entry["student_credit_choice"]["credits_milli"],
+                ] : []),
                 "rank" =>
                     $entry["status"] === "active"
                         ? array_search($entry["id"], array_column($root->active(), "id"), true) + 1
@@ -295,6 +311,7 @@ final readonly class WaitlistService
         bool $staff,
         ?EntityId $expectedEntry,
         #[\SensitiveParameter] ?string $reason = null,
+        ?int $creditsMilli = null,
     ): array {
         $actor = $this->authorize($student, $staff);
         $this->action($action, $staff);
@@ -308,10 +325,12 @@ final readonly class WaitlistService
             $expectedEntry,
             $reason,
             $actor,
+            $creditsMilli,
         ): array {
             $this->lock($student, $section);
             $this->authorize($student, $staff, $actor);
-            $root = $this->ledger->load($section, WaitlistLedger::budget());
+            $budget = WaitlistLedger::budget();
+            $root = $this->ledger->load($section, $budget);
             if (
                 ($action === "requested") !== ($expectedEntry === null) ||
                 ($expectedEntry !== null &&
@@ -330,6 +349,8 @@ final readonly class WaitlistService
                 $root,
                 $staff,
                 $reason,
+                $budget,
+                $creditsMilli,
             );
             $this->authorize($student, $staff, $actor);
             return [
@@ -338,6 +359,9 @@ final readonly class WaitlistService
                 "revision" => $revision,
                 "action" => $action,
                 "reason" => $reason,
+                ...(isset($payload["student_credit_choice"]) ? [
+                    "credits_milli" => $payload["student_credit_choice"]["credits_milli"],
+                ] : []),
                 "review_token" => $this->proofs->issue(
                     "waitlist",
                     $staff ? "staff" : "owner",
@@ -358,6 +382,7 @@ final readonly class WaitlistService
         string $revision,
         #[\SensitiveParameter] string $token,
         #[\SensitiveParameter] ?string $reason = null,
+        ?int $creditsMilli = null,
     ): array {
         $actor = $this->authorize($student, $staff);
         $this->action($action, $staff);
@@ -373,6 +398,7 @@ final readonly class WaitlistService
             $token,
             $reason,
             $actor,
+            $creditsMilli,
         ): array {
             $this->lock($student, $section);
             $this->authorize($student, $staff, $actor);
@@ -401,6 +427,17 @@ final readonly class WaitlistService
                     "policy_position" => $entry["policy_position"],
                     "enrollment_id" => null,
                 ];
+                if ($action === 'requested' && isset($entry['student_credit_choice'])) {
+                    $choice = \Domain\Registration\ValueObject\SelectedRegistrationCredits::from(
+                        $entry['student_credit_choice']
+                    );
+                    \Domain\Registration\ValueObject\SelectedRegistrationCredits::retry($choice, $creditsMilli);
+                    $payload['student_credit_choice'] = $choice->values();
+                } elseif ($action === 'requested' && $creditsMilli !== null) {
+                    throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+                        'The accepted waitlist request has no student credit choice.'
+                    ));
+                }
                 $this->sameReceipt($accepted, $actor, SectionWaitlist::intent($payload, $reason));
                 $this->authorize($student, $staff, $actor);
                 return $this->result($operation, $accepted);
@@ -413,6 +450,8 @@ final readonly class WaitlistService
                 $root,
                 $staff,
                 $reason,
+                $budget,
+                $creditsMilli,
             );
             if (!hash_equals($revision, $current)) {
                 throw new ConcurrentModificationException(
@@ -439,6 +478,8 @@ final readonly class WaitlistService
                 $fresh,
                 $staff,
                 $reason,
+                $budget,
+                $creditsMilli,
             );
             if (!hash_equals($revision, $current)) {
                 throw new ConcurrentModificationException(
@@ -473,16 +514,33 @@ final readonly class WaitlistService
         SectionWaitlist $root,
         bool $staff,
         string $reason,
+        HistoryReadBudget $budget,
+        ?int $creditsMilli = null,
     ): array {
         $s = $this->admissions->student($student);
         $entry = $root->forStudent($student->value);
         $setup = null;
+        $choice = null;
         if ($action === "requested") {
             $this->activity->verify($s);
             $this->programs->verify($s);
             $offering = $this->registration->section($section);
             $this->registration->lockCourse($offering->courseId);
             $course = $this->registration->courseForSection($offering);
+            if (!$offering->studentSelectableCredits && $creditsMilli !== null) {
+                throw new ValidationException([['field' => 'credits_milli', 'message' =>
+                    \Codefy\Framework\Helpers\trans(
+                        'This section uses one fixed offering quantity. Refresh its credit information.'
+                    )]]);
+            }
+            $choice = \Domain\Registration\ValueObject\SelectedRegistrationCredits::choose(
+                $offering,
+                $course,
+                $creditsMilli
+            );
+            if ($choice !== null) {
+                $this->ledger->verifyCreditChoice($choice, $offering, $course, $budget);
+            }
             $window = $this->windows->checked(
                 $offering->termId,
                 $this->registration->window($offering->termId),
@@ -540,6 +598,9 @@ final readonly class WaitlistService
             "policy_position" => $entry["policy_position"],
             "enrollment_id" => null,
         ];
+        if ($choice !== null) {
+            $payload["student_credit_choice"] = $choice->values();
+        }
         return [
             $payload,
             WaitlistPolicy::hash([$section->value, $payload, $setup, $staff, $reason]),

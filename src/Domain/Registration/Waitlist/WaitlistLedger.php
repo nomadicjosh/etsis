@@ -82,6 +82,22 @@ final readonly class WaitlistLedger
         }
         return $root;
     }
+    /** The coordinator owns current authorization and the student/section/course locks. */
+    public function verifyCreditChoice(
+        \Domain\Registration\ValueObject\SelectedRegistrationCredits $choice,
+        \Domain\Registration\Section $section,
+        \Domain\Catalog\Course $course,
+        HistoryReadBudget $budget,
+    ): void {
+        \Domain\Registration\Service\RegistrationCreditEvidence::selected(
+            $choice,
+            $section,
+            $course,
+            $this->history,
+            $budget
+        );
+    }
+
     public function append(
         EntityId $section,
         SectionWaitlist $root,

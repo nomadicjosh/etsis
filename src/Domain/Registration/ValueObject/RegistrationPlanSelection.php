@@ -8,13 +8,14 @@ use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 
 /** A bounded working selection, not an academic aggregate or a seat reservation. */
-final readonly class RegistrationPlanSelection
+final class RegistrationPlanSelection
 {
     public const int LIMIT = 10;
     /** @var list<EntityId> */
-    public array $sections;
+    public readonly array $sections;
+    private array $creditChoices = [];
 
-    public function __construct(public EntityId $student, EntityId ...$sections)
+    public function __construct(public readonly EntityId $student, EntityId ...$sections)
     {
         if (count($sections) < 1 || count($sections) > self::LIMIT) {
             self::invalid();
@@ -28,6 +29,23 @@ final readonly class RegistrationPlanSelection
         }
         ksort($distinct, SORT_STRING);
         $this->sections = array_values($distinct);
+    }
+
+    public function withCreditChoices(array $choices): self
+    {
+        $copy = clone $this;
+        $copy->creditChoices = RequestedCreditChoices::validate($choices, $this->sections);
+        return $copy;
+    }
+
+    public function creditChoices(): array
+    {
+        return $this->creditChoices;
+    }
+
+    public function creditsMilli(EntityId $id): ?int
+    {
+        return $this->creditChoices[$id->value] ?? null;
     }
 
     public function requestHash(string $revision, bool $byStaff): string
@@ -44,6 +62,7 @@ final readonly class RegistrationPlanSelection
                     array_map(static fn(EntityId $id): string => $id->value, $this->sections),
                     $revision,
                     $byStaff,
+                    ...($this->creditChoices === [] ? [] : [$this->creditChoices]),
                 ],
                 JSON_THROW_ON_ERROR,
             ),

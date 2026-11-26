@@ -69,6 +69,7 @@ final readonly class InstitutionalCreditLedger
         EntityId $actor,
         EntityId $assignment,
         ?EntityId $sectionVersion = null,
+        ?\Domain\Registration\ValueObject\SelectedRegistrationCredits $creditChoice = null,
     ): void {
         $this->transactions->run(function () use (
             $enrollment,
@@ -76,6 +77,7 @@ final readonly class InstitutionalCreditLedger
             $actor,
             $assignment,
             $sectionVersion,
+            $creditChoice,
         ): void {
             $this->actor($actor);
             $id = EntityId::generate();
@@ -88,7 +90,7 @@ final readonly class InstitutionalCreditLedger
                 "credit_type" => "institutional",
                 "course_code" => $course->code,
                 "course_title" => $course->publishedTranscriptTitle ?? $course->title,
-                "attempted_milli" => $course->registrationCreditsMilli(),
+                "attempted_milli" => $creditChoice?->milli ?? $course->registrationCreditsMilli(),
                 "completed_milli" => 0,
                 "grade_points_milli" => 0,
                 "grade_id" => null,
@@ -102,6 +104,31 @@ final readonly class InstitutionalCreditLedger
             $metadata = ["__aggregate_type" => "academic_credit"];
             if ($sectionVersion !== null) {
                 $metadata["section_version_id"] = $sectionVersion->value;
+            }
+            if ($creditChoice !== null) {
+                $creditChoice->routing($course->publicationVersionId?->value, $sectionVersion?->value);
+                $metadata["student_credit_choice"] = $creditChoice->values();
+                \Domain\Registration\Service\RegistrationCreditEvidence::verify(
+                    $creditChoice,
+                    $enrollment->sectionId,
+                    $course->id,
+                    $this->versions,
+                    $this->history,
+                    new HistoryReadBudget()
+                );
+            }
+            $enrollmentFact = $this->history->latest(new StreamReference(
+                new \Domain\Registration\ValueObject\EnrollmentHistoryId($enrollment->id->value),
+                'enrollment'
+            ));
+            $enrollmentChoice = $enrollmentFact?->event->metadata()['student_credit_choice'] ?? null;
+            if (
+                $enrollmentFact === null || $enrollmentFact->event->playhead() !== 1
+                || ($enrollmentChoice === null ? null :
+                    \Domain\Registration\ValueObject\SelectedRegistrationCredits::from($enrollmentChoice)->values())
+                    !== $creditChoice?->values()
+            ) {
+                throw new CorruptHistoryException();
             }
             $event = InstitutionalCreditWasEstablished::occur(
                 new AcademicCreditId($id->value),
@@ -1714,9 +1741,20 @@ final readonly class InstitutionalCreditLedger
         }
         if (
             $this->versions->enrollmentVersion(new EntityId($c["source_id"]))?->value !==
-            $root->sectionVersion()
+            $root->sectionVersion() ||
+            $this->versions->enrollmentCredits(new EntityId($c["source_id"])) !== $root->creditChoice()?->milli
         ) {
             throw new CorruptHistoryException();
+        }
+        if ($root->creditChoice() !== null) {
+            \Domain\Registration\Service\RegistrationCreditEvidence::verify(
+                $root->creditChoice(),
+                new EntityId($root->section()),
+                new EntityId($root->registrationCourseId() ?? throw new CorruptHistoryException()),
+                $this->versions,
+                $this->history,
+                $budget
+            );
         }
         $posting = $this->records->postingTerm($id);
         if (

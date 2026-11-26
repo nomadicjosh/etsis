@@ -27,6 +27,7 @@ use Domain\Shared\EventSourcing\CorruptHistoryException;
 final class AcademicCredit extends EventSourcedAggregate
 {
     /** @var array<string,mixed>|null */
+    private ?\Domain\Registration\ValueObject\SelectedRegistrationCredits $creditChoice = null;
     private ?array $credit = null;
     private ?array $earnedCeus = null;
     private array $ceuDecisions = [];
@@ -103,6 +104,19 @@ final class AcademicCredit extends EventSourcedAggregate
             $this->registeredCredits = array_intersect_key(
                 $p["credit"],
                 array_flip(["course_code", "course_title", "attempted_milli"]),
+            );
+        }
+        if (array_key_exists("student_credit_choice", $event->metadata())) {
+            if ($p["provenance"] !== "registration") {
+                throw new CorruptHistoryException();
+            }
+            $this->creditChoice = \Domain\Registration\ValueObject\SelectedRegistrationCredits::from(
+                $event->metaParam("student_credit_choice")
+            );
+            $this->creditChoice->routing(
+                $p["credit"]["course_version_id"],
+                $this->sectionVersion,
+                $p["credit"]["attempted_milli"]
             );
         }
         $this->originalRegisteredCredits = $this->registeredCredits;
@@ -330,6 +344,10 @@ final class AcademicCredit extends EventSourcedAggregate
         return $this->registeredCredits;
     }
 
+    public function creditChoice(): ?\Domain\Registration\ValueObject\SelectedRegistrationCredits
+    {
+        return $this->creditChoice;
+    }
     public function originalRegisteredCredits(): ?array
     {
         return $this->originalRegisteredCredits;

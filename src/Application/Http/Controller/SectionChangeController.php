@@ -69,6 +69,7 @@ final readonly class SectionChangeController
             $f->id("student_id"),
             $f->id("from_section_id"),
             $f->id("to_section_id"),
+            $f->optionalInteger("credits_milli"),
         );
     }
 

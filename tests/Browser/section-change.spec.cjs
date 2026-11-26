@@ -106,7 +106,9 @@ async function mock(page, options = {}) {
             result = {
                 from_code: "MATH.101.A",
                 grace_ends_on: "2026-08-15",
-                items: [{ id: to, code: "MATH.101.B", capacity: 20, fee_minor: 1500, currency: "USD" }],
+                items: [{ id: to, code: "MATH.101.B", capacity: 20, fee_minor: 1500, currency: "USD",
+                    ...(options.variable ? { student_selectable_credits: true, credits_milli: 3000,
+                        credit_policy: { minimum_milli: 1000, maximum_milli: 6000, increment_milli: 500 } } : {}) }],
                 next_after: null,
             };
         else if (path.includes("/section-changes/review/")) {
@@ -139,6 +141,7 @@ async function start(page, staff, options = {}) {
         await page.getByRole("button", { name: "Alex Example", exact: true }).click();
     } else await page.goto("/portal/student/registration/");
     await page.getByRole("button", { name: "Change section", exact: true }).first().click();
+    if (options.variable) await page.getByLabel("MATH.101.B", { exact: true }).fill("2.5");
     await page.getByRole("button", { name: "Review MATH.101.B", exact: true }).click();
     return f;
 }
@@ -203,5 +206,14 @@ test("closing a student review ignores its late response", async ({ page }) => {
     await expect(page.locator("#campus-dialog")).toBeHidden();
     await expect(page.getByRole("button", { name: "Confirm section change", exact: true })).toHaveCount(0);
     expect(f.calls.filter((c) => c.path.endsWith("/section-changes/commit/"))).toHaveLength(0);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('replacement section carries its explicitly selected academic credits to review and confirmation', async ({ page }) => {
+    const f = await start(page, true, { variable: true });
+    await page.getByRole('button', { name: 'Confirm section change', exact: true }).click();
+    const calls = f.calls.filter(call => call.path.endsWith('/section-changes/review/') || call.path.endsWith('/section-changes/commit/'));
+    expect(calls.map(call => call.data.credits_milli)).toEqual([2500, 2500]);
     expect(f.errors).toEqual([]);
 });

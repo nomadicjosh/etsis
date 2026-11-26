@@ -54,6 +54,7 @@ final readonly class EnrollmentLedger
         ?\Domain\Registration\RegistrationWindow $window = null,
         ?array $graduateEvidence = null,
         ?array $campusEvidence = null,
+        ?\Domain\Registration\ValueObject\SelectedRegistrationCredits $creditChoice = null,
     ): void {
         $this->actor($actor);
         if (
@@ -66,6 +67,15 @@ final readonly class EnrollmentLedger
         $this->verifyCourse($course, $budget ?? new HistoryReadBudget(), $courseRead);
         $selected = $this->verifyOffering($section, $course);
         $this->verifyCompletionAnchor($prerequisites, $selected);
+        if (
+            \Domain\Registration\ValueObject\SelectedRegistrationCredits::choose(
+                $section,
+                $course,
+                $creditChoice?->milli
+            )?->values() !== $creditChoice?->values()
+        ) {
+            throw new CorruptHistoryException();
+        }
         if (
             $schedule->blocked() ||
             $schedule->facts["student_id"] !== $enrollment->studentId->value ||
@@ -142,6 +152,9 @@ final readonly class EnrollmentLedger
         }
         if ($selected !== null) {
             $metadata["section_version_id"] = $selected->publication->value;
+        }
+        if ($creditChoice !== null) {
+            $metadata["student_credit_choice"] = $creditChoice->values();
         }
         $seat = $this->nextSeat($section, 1);
         $event = EnrollmentWasEstablished::occur(
@@ -493,6 +506,7 @@ final readonly class EnrollmentLedger
             "prerequisites" => $root->prerequisiteSummary(),
             "schedule" => $root->scheduleSummary(),
             "registration_window" => $root->registrationWindowSummary(),
+            ...($root->creditChoice() === null ? [] : ["selected_credits_milli" => $root->creditChoice()->milli]),
             "student_id" => $f["student_id"],
             "section_id" => $f["section_id"],
             "section_code" => $s["section_code"],
@@ -565,6 +579,24 @@ final readonly class EnrollmentLedger
             }
             return $root;
         }
+        if (
+            $root->sectionVersion() !== null
+            && ($this->versions->find(new EntityId($root->sectionVersion()))
+                ?->definition->data["student_selectable_credits"] ?? false)
+            && $root->creditChoice() === null
+        ) {
+            throw new CorruptHistoryException();
+        }
+        if ($root->creditChoice() !== null) {
+            RegistrationCreditEvidence::verify(
+                $root->creditChoice(),
+                new EntityId($f["section_id"]),
+                new EntityId($root->source()["course_id"]),
+                $this->versions,
+                $this->history,
+                $budget
+            );
+        }
         $seat = $root->seat() ?? throw new CorruptHistoryException();
         if (
             $m === null ||
@@ -578,7 +610,7 @@ final readonly class EnrollmentLedger
         }
         if (
             $this->versions->enrollmentVersion($id)?->value !==
-            $root->sectionVersion()
+            $root->sectionVersion() || $this->versions->enrollmentCredits($id) !== $root->creditChoice()?->milli
         ) {
             throw new CorruptHistoryException();
         }
@@ -745,6 +777,7 @@ final readonly class EnrollmentLedger
             $root->sectionVersion() === null
                 ? null
                 : new EntityId($root->sectionVersion()),
+            $root->creditChoice()?->milli,
         );
         $last = $root->decisions();
         $this->records->index($last[count($last) - 1]);

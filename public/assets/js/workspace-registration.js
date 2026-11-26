@@ -12,6 +12,9 @@ window.createWorkspaceRegistration = function (ui) {
         openDrawer,
         refreshDirectory,
     } = ui;
+    const configNode = document.getElementById('workspace-config');
+    const creditLabels = configNode ? JSON.parse(configNode.textContent).credit_policy_labels || {} : {};
+    const creditText = (key, fallback) => creditLabels[key] || fallback;
     const openRegistration = (title, eyebrow) => {
         const body = node("div", { class: "registration-workbench" });
         openDrawer(title, eyebrow).append(body);
@@ -432,7 +435,9 @@ window.createWorkspaceRegistration = function (ui) {
         if (!body.isConnected) return;
         let generation = 0,
             confirmation = null;
+        let creditControl = null, creditChoices = {};
         async function reviewSelection(section) {
+            if (creditControl) creditChoices = { [student]: creditControl.read() };
             const source = body,
                 turn = ++generation;
             if (confirmation) confirmation.disabled = true;
@@ -440,6 +445,7 @@ window.createWorkspaceRegistration = function (ui) {
                 student_id: student,
                 section_id: section,
                 by_staff: true,
+                credit_choices: creditChoices,
             });
             if (!source.isConnected || turn !== generation) return;
             const panel = openRegistration(
@@ -454,6 +460,7 @@ window.createWorkspaceRegistration = function (ui) {
                         student_id: student,
                         section_id: section,
                         by_staff: true,
+                        credit_choices: creditChoices,
                         operation_id: reviewed.operation_id,
                         revision: reviewed.revision,
                         review_token: reviewed.review_token,
@@ -466,7 +473,10 @@ window.createWorkspaceRegistration = function (ui) {
             );
             confirmation = confirm;
             confirm.disabled = !schedule.canConfirm(reviewed);
+            creditControl = reviewed.students[0]?.enrollment_id ? null : window.createRegistrationCreditInput(ui, reviewed.section,
+                creditChoices[student] ?? reviewed.students[0]?.credits_milli, () => { confirm.disabled = true; });
             panel.append(
+                creditControl?.card || null,
                 schedule.registration(reviewed, money),
                 ui.graduate && reviewed.students[0]?.readiness?.some(check => check.code.startsWith('graduate_'))
                     ? button(ui.graduateLabels.open_approvals, () => ui.graduate.open(student, section,
@@ -735,13 +745,15 @@ window.createWorkspaceRegistration = function (ui) {
         async function confirmation(reviewed, payload) {
             const section = reviewed.section;
             const body = openRegistration("Review group registration", "CONFIRM THE SELECTION");
+            const creditControls = new Map();
             body.append(
                 button("Change selection", selection, "btn-link"),
                 ...(back ? [button(backLabel, back, 'btn-link')] : []),
                 node("h3", {}, section.code),
                 recordSummary([
                     ["Course", `${section.course_code} · ${section.course_title}`],
-                    ["Credits", Number(section.credits_milli) / 1000],
+                    [section.student_selectable_credits ? creditText("default", "Default academic credits") : "Credits",
+                        Number(section.credits_milli) / 1000],
                     ["Seats remaining", section.seats_remaining],
                     [
                         "Section fee",
@@ -907,6 +919,13 @@ window.createWorkspaceRegistration = function (ui) {
             );
             body.append(schedule.guidance(reviewed, false, body));
             submit.disabled = !schedule.canConfirm(reviewed);
+            for (const student of reviewed.students) {
+                if (student.enrollment_id) continue;
+                const credit = window.createRegistrationCreditInput(ui, section,
+                    payload.credit_choices?.[student.id] ?? student.credits_milli,
+                    () => { submit.disabled = true; }, `${student.given_name} ${student.family_name}`);
+                if (credit) { creditControls.set(student.id, credit); body.append(credit.card); }
+            }
             if (reviewed.students.some((student) => student.schedule?.blocked)) {
                 submit.disabled = true;
                 body.append(
@@ -937,6 +956,8 @@ window.createWorkspaceRegistration = function (ui) {
                     },
                     submit,
                     button("Refresh review", async () => {
+                        if (creditControls.size) payload = { ...payload, credit_choices: Object.fromEntries(
+                            [...creditControls].map(([id, credit]) => [id, credit.read()])) };
                         submit.disabled = true;
                         const next = await groupRequest(body,
                             "/sis/registration-batches/review/",
@@ -1013,6 +1034,8 @@ window.createWorkspaceRegistration = function (ui) {
                     `Timetable at acceptance: ${schedule.text(record.schedule)}.`,
                 ),
             );
+            if (record.selected_credits_milli != null) panel.append(node('p', { class: 'form-text' },
+                `${creditText('original_choice', 'Originally selected academic credits')}: ${record.selected_credits_milli / 1000}`));
             const registrationWindow = record.registration_window;
             if (registrationWindow?.opens_at)
                 panel.append(

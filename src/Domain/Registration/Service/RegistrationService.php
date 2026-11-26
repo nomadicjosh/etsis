@@ -61,6 +61,7 @@ final readonly class RegistrationService
         ?CoRequisitePlan $corequisitePlan = null,
         ?\Domain\Registration\Waitlist\WaitlistBypass $waitlistBypass = null,
         ?\Domain\Shared\EventSourcing\HistoryReadBudget $waitlistBudget = null,
+        ?int $creditsMilli = null,
     ): Enrollment {
         $actor = $this->access->authenticatedUserId();
         $initialStudent = $this->admissions->student($studentId);
@@ -82,6 +83,7 @@ final readonly class RegistrationService
             $corequisitePlan,
             $waitlistBypass,
             $waitlistBudget,
+            $creditsMilli,
         ): Enrollment {
             // Eligibility locks follow student, person, section and course order.
             $this->repository->lockStudent($studentId);
@@ -106,7 +108,11 @@ final readonly class RegistrationService
             $existing = $this->repository->enrollment($studentId, $sectionId);
             if ($existing !== null) {
                 if ($existing->status->isEnrolled()) {
-                    $this->enrollments->verifyExisting($existing, $section);
+                    $original = $this->enrollments->verifyExisting($existing, $section);
+                    \Domain\Registration\ValueObject\SelectedRegistrationCredits::retry(
+                        $original->creditChoice(),
+                        $creditsMilli
+                    );
                     $this->verifyAccess(
                         $actor,
                         $student,
@@ -129,6 +135,15 @@ final readonly class RegistrationService
                 $waitlistBypass,
                 $waitlistBudget,
             );
+            if ($waitlistClaim->creditsMilli !== null) {
+                if ($creditsMilli !== null && $creditsMilli !== $waitlistClaim->creditsMilli) {
+                    throw new \Domain\Shared\Exception\ValidationException([["field" => "credits_milli", "message" =>
+                        \Codefy\Framework\Helpers\trans(
+                            'Keep the requested waitlist credits or withdraw and submit a new request.'
+                        )]]);
+                }
+                $creditsMilli = $waitlistClaim->creditsMilli;
+            }
             $course = $this->repository->courseForSection($section);
             if ($section->offeringCreditsMilli !== null && $section->publicationVersionId === null) {
                 throw new DomainException('Publish and select the section offering credits before registration.');
@@ -141,6 +156,12 @@ final readonly class RegistrationService
                     'Select a published course definition for this credit range before registration.',
                 );
             }
+            $creditChoice = \Domain\Registration\ValueObject\SelectedRegistrationCredits::choose(
+                $section,
+                $course,
+                $creditsMilli
+            );
+            $quantity = $creditChoice?->milli ?? $course->registrationCreditsMilli();
             $window = $this->windows->checked($section->termId, $this->repository->window($section->termId));
             $courseRead ??= new RegistrationCourseRead();
             if (
@@ -259,6 +280,7 @@ final readonly class RegistrationService
                 $window,
                 $graduateEvidence,
                 $campusEvidence,
+                $creditChoice,
             );
             $this->credits->open(
                 $enrollment,
@@ -266,13 +288,14 @@ final readonly class RegistrationService
                 $actor,
                 $assignment,
                 $section->publicationVersionId,
+                $creditChoice,
             );
             $this->billing->charge(
                 $studentId,
                 $section->termId,
                 $enrollment->id,
                 $section->fee,
-                $course->registrationCreditsMilli(),
+                $quantity,
                 new EventContext(
                     $actor,
                     $now,
@@ -326,6 +349,11 @@ final readonly class RegistrationService
                 }
             }
             $freshSection = $this->repository->section($sectionId);
+            if ($freshSection->studentSelectableCredits !== $section->studentSelectableCredits) {
+                throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+                    'The section credit policy changed during registration.'
+                ));
+            }
             if (
                 $freshSection->programPolicy->programIds !== $section->programPolicy->programIds
                 || $freshSection->programPolicy->requireCampus !== $section->programPolicy->requireCampus

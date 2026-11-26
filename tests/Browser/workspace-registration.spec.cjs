@@ -1,7 +1,7 @@
 const { test, expect } = require("@playwright/test");
 const AxeBuilder = require("@axe-core/playwright").default;
 
-async function fixture(page, completedInitially = false, missingPrerequisites = false) {
+async function fixture(page, completedInitially = false, missingPrerequisites = false, variable = false) {
     const id = (suffix) => `01K000000000000000000000${suffix}`;
     const section = id("81"),
         first = id("82"),
@@ -72,6 +72,7 @@ async function fixture(page, completedInitially = false, missingPrerequisites = 
                     course_title: "Algebra <script>fictional</script>",
                     prerequisite_courses: [{ code: "PRE.101", title: "Fictional preparation <img>" }],
                     credits_milli: 3000,
+                    ...(variable ? { student_selectable_credits: true, credit_policy: { minimum_milli: 1000, maximum_milli: 6000, increment_milli: 500 } } : {}),
                     seats_remaining: 1,
                     fee_minor: 1250,
                     currency: "USD",
@@ -79,6 +80,7 @@ async function fixture(page, completedInitially = false, missingPrerequisites = 
                 },
                 students: data.student_ids.map((student) => ({
                     id: student,
+                    ...(variable && student === second ? { credits_milli: data.credit_choices?.[student] ?? null } : {}),
                     given_name: student === first ? "Alex" : "Jamie",
                     family_name: "Example",
                     institutional_id: student === first ? "S-EXAMPLE-1" : "S-EXAMPLE-2",
@@ -307,5 +309,26 @@ test('group registration guide opens proposed charge details without committing 
     expect(f.sent.length).toBe(count);
     expect(f.sent.some(item => item.path.endsWith('/commit/'))).toBe(false);
     await accessible(page);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('variable group credits require refreshing review and retain exact input for interrupted confirmation', async ({ page }) => {
+    const f = await fixture(page, false, false, true);
+    await review(page, f);
+    const input = page.getByLabel('Jamie Example', { exact: true });
+    await input.fill('2.5');
+    await expect(page.getByRole('button', { name: 'Confirm group registration', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Refresh review', exact: true }).click();
+    await expect(input).toHaveValue('2.5');
+    expect(f.sent.filter(call => call.path.endsWith('/review/')).at(-1).data.credit_choices).toEqual({ [f.second]: 2500 });
+    await page.setViewportSize({ width: 320, height: 812 });
+    await accessible(page);
+    await page.getByRole('button', { name: 'Confirm group registration', exact: true }).click();
+    await expect(page.locator('#drawer-error')).toContainText('Fictional interrupted response');
+    await page.getByRole('button', { name: 'Confirm group registration', exact: true }).click();
+    const commits = f.sent.filter(call => call.path.endsWith('/commit/'));
+    expect(commits[0].data.credit_choices).toEqual({ [f.second]: 2500 });
+    expect(commits[0].data).toEqual(commits[1].data);
     expect(f.errors).toEqual([]);
 });

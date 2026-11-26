@@ -90,7 +90,13 @@ final readonly class SqlWaitlistRepository implements WaitlistRepository
             return;
         }
         unset($entry["changed_at"]);
-        $data = ["section_id" => $section->value] + $entry;
+        $choice = $entry['student_credit_choice'] ?? null;
+        unset($entry['student_credit_choice']);
+        $data = ["section_id" => $section->value] + $entry + [
+            'encrypted_credit_choice' => $choice === null ? null : $this->cipher->seal(
+                json_encode($choice, JSON_THROW_ON_ERROR)
+            ),
+        ];
         if ($entry["status"] === "active") {
             $this->sql->insert("sis_waitlist_entries", $data);
         } elseif (
@@ -144,6 +150,17 @@ final readonly class SqlWaitlistRepository implements WaitlistRepository
             }
             if ($row["enrollment_id"] !== null) {
                 new EntityId($row["enrollment_id"]);
+            }
+            $encrypted = $row['encrypted_credit_choice'];
+            unset($row['encrypted_credit_choice']);
+            if ($encrypted !== null) {
+                if (!is_string($encrypted) || strlen($encrypted) > 4096) {
+                    throw new CorruptHistoryException();
+                }
+                $choice = json_decode($this->cipher->open($encrypted), true, 8, JSON_THROW_ON_ERROR);
+                $row['student_credit_choice'] = \Domain\Registration\ValueObject\SelectedRegistrationCredits::from(
+                    $choice
+                )->values();
             }
             return $row;
         } catch (\Throwable) {

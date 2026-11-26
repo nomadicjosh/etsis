@@ -161,7 +161,7 @@ test("staff queue removal reviews the selected accepted request and keeps curren
     expect(calls.at(-1).data.reason).toBe("Fictional registrar review.");
     expect(errors).toEqual([]);
 });
-async function ownerFixture(page) {
+async function ownerFixture(page, variable = false) {
     const calls = [],
         errors = [];
     let active = false,
@@ -251,6 +251,7 @@ async function ownerFixture(page) {
                 section_id: section,
                 section_code: "HIST 101.A",
                 course_code: "HIST 101",
+                ...(variable ? { student_selectable_credits: true, credits_milli: 3000, credit_policy: { minimum_milli: 1000, maximum_milli: 6000, increment_milli: 500 } } : {}),
                 policy: { ...defaults(), enabled: true },
                 waiting_count: active ? 1 : 0,
                 entry_id: active ? entry : null,
@@ -475,7 +476,12 @@ test('selected waitlist support check preserves the queue page and is private an
     await page.getByRole('button', { name: 'Check waitlist request history', exact: true }).click();
     expect(calls.some(c => c.path.includes('/history-checks/') && c.path.endsWith('/run/'))).toBe(false);
     const run = page.getByRole('button', { name: 'Run history check', exact: true });
-    await run.focus(); await page.keyboard.press('Enter');
+    await expect(page.locator('#record-drawer')).toHaveClass(/\bshow\b/);
+    await expect(page.locator('#record-drawer')).not.toHaveClass(/\bshowing\b/);
+    await run.scrollIntoViewIfNeeded();
+    await run.focus();
+    await expect(run).toBeFocused();
+    await page.keyboard.press('Enter');
     const result = page.getByRole('region', { name: 'Current check result', exact: true });
     await expect(result).toContainText('Retained requests checked: 1');
     await expect(result).toContainText('maximum 200');
@@ -532,4 +538,19 @@ test('returning from a pending waitlist check discards its detached response', a
     await expect(page.locator('#drawer-title')).toHaveText('Section waitlist');
     await expect(page.getByRole('region', { name: 'Current check result', exact: true })).toHaveCount(0);
     expect(errors).toEqual([]);
+});
+
+
+test('student reviews an exact waitlist credit request before confirming', async ({ page }) => {
+    const f = await ownerFixture(page, true);
+    await page.goto('/portal/student/registration/');
+    await page.getByRole('button', { name: 'Waitlist options', exact: true }).click();
+    await page.getByRole('button', { name: 'View waitlist options', exact: true }).click();
+    await page.locator('[data-credit-choice] input').fill('2.5');
+    await page.getByRole('button', { name: 'Join section waitlist', exact: true }).click();
+    await expect(page.locator('#campus-dialog-body')).toContainText('Academic credits for this registration: 2.5');
+    await page.getByRole('button', { name: 'Confirm waitlist change', exact: true }).click();
+    const calls = f.calls.filter(call => call.path.endsWith('/review/') || call.path.endsWith('/confirm/'));
+    expect(calls.map(call => call.data.credits_milli)).toEqual([2500, 2500]);
+    expect(f.errors).toEqual([]);
 });

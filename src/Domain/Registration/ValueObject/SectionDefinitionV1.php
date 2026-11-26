@@ -32,10 +32,10 @@ final readonly class SectionDefinitionV1
     public function __construct(public array $data)
     {
         if (
-            count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 7 ||
+            count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 8 ||
             array_diff(array_keys($data), [...self::FIELDS, 'web_registration', 'minimum_enrollment',
                 'contact_hours', 'credits_milli', 'continuing_education', 'eligible_program_ids',
-                'require_program_campus']) !== [] ||
+                'require_program_campus', 'student_selectable_credits']) !== [] ||
             array_diff(self::FIELDS, array_keys($data)) !== [] ||
             (array_key_exists('web_registration', $data) && !is_bool($data['web_registration']))
         ) {
@@ -51,6 +51,12 @@ final readonly class SectionDefinitionV1
         }
         if (array_key_exists('require_program_campus', $data) && !is_bool($data['require_program_campus'])) {
             throw new InvalidArgumentException('Retain an explicit program campus eligibility choice.');
+        }
+        if (
+            array_key_exists('student_selectable_credits', $data)
+            && (!is_bool($data['student_selectable_credits']) || !isset($data['credits_milli']))
+        ) {
+            throw new InvalidArgumentException('Retain an explicit student credit-selection mode and default.');
         }
         if (
             array_key_exists('credits_milli', $data) && (!is_int($data['credits_milli'])

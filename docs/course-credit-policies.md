@@ -1,8 +1,8 @@
 # Course credit policies and offering credits
 
-A course defines a default number of academic credits and either a fixed value or a permitted range. A course section chooses **one fixed offering value** within its selected course policy. For example, a course can allow 1–6 credits in 0.5-credit increments, defaulting to 3; one section can offer 2.5 credits and another 4.
+A course defines a default number of academic credits and either a fixed value or a permitted range. Each section explicitly chooses whether everyone receives one fixed offering quantity or each student may choose within the retained range. For example, a course can allow 1–6 credits in 0.5-credit increments, defaulting to 3. A fixed section can offer 2.5 credits to everyone; a student-selectable section can register one student for 1.5 credits and another for 4.5.
 
-Every new student registering in that section receives its selected offering quantity. Student-selected academic credit quantities within a section remain open. Separate continuing education units (CEUs) can now be declared on courses and offerings as described below; earned institutional CEU decisions and separate CEU transcripts are available through the [earned-CEU workflow](earned-ceu-records.md). Broader closed/transfer CEU resolution remains open. Academic credits are never converted to or labelled as CEUs. Contact hours remain a separate institutional calculation.
+A course range alone does not enable student choice: the section must explicitly allow it in a published, selected offering. Separate continuing education units (CEUs) can now be declared on courses and offerings as described below; earned institutional CEU decisions and separate CEU transcripts are available through the [earned-CEU workflow](earned-ceu-records.md). Broader closed/transfer CEU resolution remains open. Academic credits are never converted to or labelled as CEUs. Contact hours remain a separate institutional calculation.
 
 ## Configure and publish a course
 
@@ -14,29 +14,46 @@ Every new student registering in that section receives its selected offering qua
 
 The ordinary editor cannot save a default outside its saved range. Cloning copies a range and validates the proposed default; a fixed-credit clone uses its proposed fixed default. Today's course policy does not change a section already bound to an earlier publication.
 
-## Choose and publish an offering value
+## Configure fixed or student-selected offering credits
 
 1. Open **Academic catalog → Sections → a section → Offering credits**. The drawer shows the selected course policy.
-2. Keep **Use the retained course default** checked, or clear it and enter **Fixed credits for this offering**. In the example above, 2.5 is allowed; 2.25 is not.
-3. Choose **Save credit draft**, then **Review publication**. Review the saved quantity with the offering's dates, classifications, capacity, teaching assignment and fee.
-4. Publish and select the offering through the existing reviewed workflow. Offering-plan activation uses the same retained quantity and policy checks.
-5. Changing a selected quantity requires a new publication and a reviewed **future offering amendment**. New registrations stop while the draft and selected offering disagree. Earlier students keep their accepted references.
+2. Keep **Use the retained course default** checked, or clear it and enter **Default credits for this offering**. In the example above, 2.5 is allowed; 2.25 is not.
+3. For individual choices, check **Allow each student to choose credits within the published range**. This requires a selected published variable-credit course policy. Leave it clear for one fixed offering quantity. The default pre-fills the registration control; it does not silently select credits for a new registration.
+4. Choose **Save credit draft**, then **Review publication**. Review the saved quantity with the offering's dates, classifications, capacity, teaching assignment and fee.
+5. Publish and select the offering through the existing reviewed workflow. Offering-plan activation uses the same retained quantity and policy checks.
+6. Changing a selected quantity or choice mode requires a new publication and a reviewed **future offering amendment**. New registrations stop while the draft and selected offering disagree. Earlier students keep their accepted references.
 
 Both editors provide **Back to record**. An unbound section explicitly labels its draft policy and default; choose a publication before publishing the offering. Failed saves retain entries; lost access clears the form. Stale revisions require reloading. Drafts and publication proofs stay in page memory.
 
-## Registration, billing and academic history
+## Select credits during registration
 
-Individual/grouped registration, schedules, section changes and waitlist entry share the offering quantity. Reviews show that value; per-credit pricing multiplies it by the retained rate with exact currency rounding. Flat charges retain their existing meaning. New academic attempts record the offering quantity as attempted credits, and verified registration load uses the accepted registration quantity. Completed credits still follow academic award/grade decisions. The course default remains separate catalog metadata.
+Individual staff and student registration reviews show **Academic credits for this registration** when the section allows individual choices. Enter an allowed quantity, then refresh the review. The review shows the applicable fees. Any further credit edit disables confirmation until another review is completed. Fixed sections use their one required value and show no credit-choice input.
 
-Course discovery shows the offering value. A student's enrollment shows the quantity retained with that student's offering, even after a draft edit or future-only amendment. Changing a policy or offering does not recalculate earlier charges, awards, corrected registered quantities or retained load determinations. Use separately authorized [registered-credit corrections](registered-credit-corrections.md), academic corrections and financial reviews when existing facts need correction. A correction is not the student-selected-credit workflow.
+Grouped registration provides a separate quantity for every new student. Schedule registration provides one for every variable-credit section. Existing active enrollments keep their original facts. Replacement-section selection asks for the target section’s credits before reviewing the coupled drop, charge reversal and registration. A replacement may deliberately have a different quantity; it does not copy an earlier attempt’s credits implicitly.
 
-## Retention and validation
+Waitlist requests retain their chosen quantity at acceptance. Joining and confirmation require the current credit draft to match its selected published offering. Later ordinary registration, consecutive group allocation and independently reviewed priority bypass use that requested quantity. Withdrawing and submitting a new request changes the requested quantity and creates a new accepted queue position. A later offering must still permit the requested quantity; allocation stops for review instead of substituting its default. Joining reserves neither a seat nor a price.
+
+## Billing, academic records and load
+
+Per-credit pricing multiplies each accepted quantity by the retained rate with exact currency rounding. Flat charges retain their existing meaning. New academic attempts record the chosen quantity as attempted credits, and verified registration load uses the accepted registration quantity. Completed credits still follow academic award/grade decisions. The course and offering defaults remain separate catalog metadata.
+
+Course discovery shows the offering value. A student's enrollment shows that student's original accepted quantity, even after a draft edit or future-only amendment. Changing a policy or offering does not recalculate earlier charges, awards, corrected registered quantities or retained load determinations. Use separately authorized [registered-credit corrections](registered-credit-corrections.md), academic corrections and financial reviews when existing facts need correction. A correction is not the student-selected-credit workflow.
+
+## Preserve original credit choices
+
+A new student-selected registration retains its exact credits, permitted range and original course/section publication references in the existing protected enrollment and academic-credit establishment events. Waitlist acceptance retains the request’s own original evidence in the existing protected queue stream. Bounded replay checks these references against the retained publications. A later catalog edit, offering amendment, registered-credit correction or award correction cannot rewrite the original choice. Accepted operation retries keep the original result; reusing a receipt with a different explicit choice is rejected.
+
+The enrollment-to-offering projection also retains the original selected quantity for student display. It is checked against protected history. The waitlist’s operational choice copy is encrypted. Missing older choice evidence remains absent; no choice or policy is inferred or backfilled. These additions share the existing authoritative event table and add no report, event type, permission or parallel journal.
+
+Migration **20261125000010_AddSisStudentCreditChoices** adds a fixed-default current section mode, a nullable retained-publication mode, a nullable original enrollment choice and an encrypted nullable waitlist choice. It supports the five SQL compiler dialects, is retry-safe and refuses destructive rollback. Configured PostgreSQL preservation checks cover all original values, including journal/support bytes, excluding only the expected new columns and migration ledger row.
+
+## Earlier credit-policy deployment and validation
 
 New course publications retain `credit_policy`; new section publications retain `credits_milli`. Both use the existing protected streams in `sis_history_events`, expected versions, idempotent receipts, required audit and final source/authority checks. Earlier publications without those fields remain unrecorded. No policy, quantity or event is backfilled.
 
 Migration **20261123000003_AddSisOfferingCreditPolicies** adds four nullable columns to existing draft/publication tables. It is retry-safe and refuses destructive rollback. Five SQL compiler dialects and populated SQLite preservation are tested. On the configured development MariaDB database, all original values across these tables and all journal/support bytes matched before and after. Earlier new fields stayed null, and independent journal/support checksums matched.
 
-Focused tests cover precision, immutable binding, unpublished choices, stale reviews, offering-plan activation, future amendments, pricing/attempt/load quantities, clone rollback, tampered projections, audit/source/authority rollback and real private provider/CSRF routes. Five browser workflows cover exact editing, publication/record returns, failure/access handling, detached responses, draft/retained labels, narrow screens, enlarged text and WCAG scans. Existing publication, registration, billing, waitlist, correction and portal regressions pass in bounded sequential batches. Student-selected quantities, CEUs, populated multi-engine qualification and broader historical reconciliation remain open.
+Focused tests cover precision, immutable binding, unpublished choices, stale reviews, offering-plan activation, future amendments, pricing/attempt/load quantities, clone rollback, tampered projections, audit/source/authority rollback and real private provider/CSRF routes. Five browser workflows cover exact editing, publication/record returns, failure/access handling, detached responses, draft/retained labels, narrow screens, enlarged text and WCAG scans. Existing publication, registration, billing, waitlist, correction and portal regressions pass in bounded sequential batches. Student-selected academic quantities are now implemented as described above. Broader closed/transfer CEU workflows, populated multi-engine qualification and broader historical reconciliation remain open.
 
 ## Separate continuing education units
 

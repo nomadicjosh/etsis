@@ -88,8 +88,11 @@ final readonly class RegistrationBatchService
         bool $byStaff,
         \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
         ?\Domain\Finance\ValueObject\RegistrationChargeQuote &$quote,
+        ?int $creditsMilli = null,
     ): array {
-        $selection = new RegistrationBatchSelection($to, $student);
+        $selection = new RegistrationBatchSelection($to, $student)->withCreditChoices(
+            $creditsMilli === null ? [] : [$student->value => $creditsMilli]
+        );
         $actor = $this->authorize($selection, $byStaff);
         $old = $this->repository->enrollment($student, $from);
         $source = $this->repository->section($from);
@@ -139,6 +142,7 @@ final readonly class RegistrationBatchService
             $course->publicationVersionId?->value !== $expected["course_version_id"] ||
             $current->capacity !== $expected["capacity"] ||
             $current->minimumEnrollment !== $expected["minimum_enrollment"] ||
+            $current->studentSelectableCredits !== ($expected["student_selectable_credits"] ?? false) ||
             $current->webRegistration !== $expected["web_registration"] ||
             $course->code !== $expected["course_code"] ||
             $course->title !== $expected["course_title"] ||
@@ -154,8 +158,13 @@ final readonly class RegistrationBatchService
             $student,
             $current->termId,
             $current->fee,
-            $course->registrationCreditsMilli(),
+            $quote->creditsMilli,
             $budget,
+        );
+        \Domain\Registration\ValueObject\SelectedRegistrationCredits::choose(
+            $current,
+            $course,
+            $quote->creditsMilli
         );
         if ($fresh->definitionFingerprint() !== $quote->definitionFingerprint()) {
             throw new ConcurrentModificationException(
@@ -279,7 +288,7 @@ final readonly class RegistrationBatchService
                     $selection->student,
                     $current->termId,
                     $current->fee,
-                    $course->registrationCreditsMilli(),
+                    $quotes[$section->value]->creditsMilli,
                     $budget,
                 );
                 if ($quote->definitionFingerprint() !== $quotes[$section->value]->definitionFingerprint()) {
@@ -295,6 +304,7 @@ final readonly class RegistrationBatchService
                     chargeQuote: $quote,
                     courseRead: $courseRead,
                     corequisitePlan: $corequisitePlan,
+                    creditsMilli: $selection->creditsMilli($section),
                 );
                 if ($enrollment->id->value !== $corequisitePlan->sections[$section->value]['enrollment_id']) {
                     throw new ConcurrentModificationException('A coordinated registration changed before completion.');
@@ -430,7 +440,11 @@ final readonly class RegistrationBatchService
         foreach ($selection->sections as $section) {
             $childQuotes = [];
             $child = $this->context(
-                new RegistrationBatchSelection($section, $selection->student),
+                new RegistrationBatchSelection($section, $selection->student)->withCreditChoices(
+                    $selection->creditsMilli($section) === null ? [] : [
+                        $selection->student->value => $selection->creditsMilli($section)
+                    ]
+                ),
                 $budget,
                 $byStaff,
                 $childQuotes,
@@ -679,6 +693,7 @@ final readonly class RegistrationBatchService
                         chargeQuote: $quotes[$row["id"]] ?? null,
                         courseRead: $courseRead,
                         waitlistBudget: $waitlistBudget,
+                        creditsMilli: $selection->creditsMilli(new EntityId($row["id"])),
                     );
                 } catch (DomainException) {
                     throw new ValidationException([
@@ -755,6 +770,19 @@ final readonly class RegistrationBatchService
             }
             if ($created > 0) {
                 $this->registration->verifyCourseSelection($selection->section, $budget, $courseRead);
+                if ($context['section']['student_selectable_credits'] ?? false) {
+                    foreach ($context['students'] as $row) {
+                        if ($row['enrollment_id'] === null) {
+                            $this->verifyReviewedSection(
+                                new EntityId($row['id']),
+                                $selection->section,
+                                $context['section'],
+                                $quotes[$row['id']],
+                                $budget
+                            );
+                        }
+                    }
+                }
             }
             $this->actor($actor, $selection, $byStaff);
             $this->reviews->validate(
@@ -938,13 +966,38 @@ final readonly class RegistrationBatchService
             $enrollment === null
             ? $this->schedules->evaluate($id, $section->id, $scheduleRead, $replacingSection)
             : null;
+            $originalCredits = $enrollment === null ? null : $this->versions->enrollmentCredits($enrollment->id);
+            $quantity = $originalCredits ?? $course->registrationCreditsMilli();
+            $creditProblem = null;
+            $requestedCredits = $selection->creditsMilli($id) ?? $waitlistStatuses[$id->value]['credits_milli'] ?? null;
+            if ($enrollment === null && $reinstating === null) {
+                try {
+                    $choice = \Domain\Registration\ValueObject\SelectedRegistrationCredits::choose(
+                        $section,
+                        $course,
+                        $requestedCredits
+                    );
+                    $quantity = $choice?->milli ?? $quantity;
+                    if (
+                        isset($waitlistStatuses[$id->value]['credits_milli']) &&
+                        $requestedCredits !== $waitlistStatuses[$id->value]['credits_milli']
+                    ) {
+                        throw new ValidationException([['field' => 'credits_milli', 'message' =>
+                            \Codefy\Framework\Helpers\trans(
+                                'Keep the requested waitlist credits or withdraw and submit a new request.'
+                            )]]);
+                    }
+                } catch (ValidationException $error) {
+                    $creditProblem = $error->errors[0]['message'];
+                }
+            }
             $quote =
-            $enrollment === null && $reinstating === null
+            $enrollment === null && $reinstating === null && $creditProblem === null
             ? $this->billing->registrationQuote(
                 $id,
                 $section->termId,
                 $section->fee,
-                $course->registrationCreditsMilli(),
+                $quantity,
                 $budget,
                 $rules,
             )
@@ -956,7 +1009,7 @@ final readonly class RegistrationBatchService
                 "currency" => $section->fee->currency,
                 "total_minor" => 0,
                 "items" => [],
-                "problems" => [],
+                "problems" => $creditProblem === null ? [] : [$creditProblem],
             ];
             $now = $this->clock->now();
             $restriction = $this->repository->blockingRestriction($student->personId, $now, $byStaff);
@@ -1054,7 +1107,10 @@ final readonly class RegistrationBatchService
                     ],
                 ];
             }
-            $students[] = [
+            $students[] = (($section->studentSelectableCredits || $originalCredits !== null)
+                && $reinstating === null ? [
+                "credits_milli" => $creditProblem === null ? $quantity : $requestedCredits,
+            ] : []) + [
                 'waitlist' => $waitlist,
                 "charges" => $charges,
                 "pricing_revision" => $quote?->fingerprint(),
@@ -1102,7 +1158,10 @@ final readonly class RegistrationBatchService
         }
         return [
             "by_staff" => $byStaff,
-            "section" => [
+            "section" => ($section->studentSelectableCredits ? [
+                "student_selectable_credits" => true,
+                "credit_policy" => $course->creditPolicy?->describe(),
+            ] : []) + [
                 "id" => $section->id->value,
                 "code" => $section->code,
                 "term_id" => $section->termId->value,

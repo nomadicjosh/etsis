@@ -402,7 +402,9 @@
             el(
                 'p',
                 {},
-                `Section ${course.section_code} · ${Number(course.credits_milli) / 1000} credits`,
+                `Section ${course.section_code} · ${course.student_selectable_credits
+                    ? `${course.credit_policy.minimum_milli / 1000}–${course.credit_policy.maximum_milli / 1000}`
+                    : Number(course.credits_milli) / 1000} credits`,
             ),
             el('p', {}, `${ceuLabels.section_title || 'Offered CEUs'}: ${ceuText(course.continuing_education)}`),
             course.course_number ? el('p', {}, `Course number ${course.course_number}`) : null,
@@ -2166,7 +2168,9 @@
         const confirmation = el('button', { class: 'btn campus-button', type: 'submit', disabled: true }, 'Confirm registration');
         let serial = 0, reviewedStudent = '', reviewed = null, dialogGeneration = 0;
         const presenter = window.createRegistrationSchedule({ node: el });
+        let creditControl = null, creditsMilli = null;
         async function checkSchedule() {
+            if (creditControl) creditsMilli = creditControl.read();
             const turn = ++serial, selected = student.value;
             reviewedStudent = '';
             reviewed = null;
@@ -2176,11 +2180,15 @@
                 schedulePanel.replaceChildren(el('p', { role: 'status' }, 'Choose a student record to review registration.'));
                 return;
             }
-            const result = await request('/portal/api/registration/review/', 'POST', { student_id: selected, section_id: course.id });
+            const result = await request('/portal/api/registration/review/', 'POST', { student_id: selected, section_id: course.id, credits_milli: creditsMilli });
             if (!form.isConnected || turn !== serial || student.value !== selected || pageLeaving || dialogGeneration !== portalDialogGeneration) return;
             reviewedStudent = selected;
             reviewed = result;
-            schedulePanel.replaceChildren(presenter.registration(result, amount));
+            creditControl = result.students[0]?.enrollment_id ? null : window.createRegistrationCreditInput({ node: el }, result.section,
+                creditsMilli ?? result.students[0]?.credits_milli, () => {
+                    ++serial; reviewed = null; confirmation.disabled = true;
+                });
+            schedulePanel.replaceChildren(...[creditControl?.card, presenter.registration(result, amount)].filter(Boolean));
             if (graduateRegistration && result.students[0]?.readiness?.some(check => check.code.startsWith('graduate_')))
                 schedulePanel.append(button(config.graduate_registration_labels.open_approvals,
                     () => graduateRegistration.open(selected, course.id, () => confirmRegistration(course, selected), result.students[0].assignment_id)));
@@ -2201,6 +2209,7 @@
                     await request('/portal/api/register/', 'POST', {
                         student_id: student.value,
                         section_id: course.id,
+                        credits_milli: creditsMilli,
                         operation_id: reviewed.operation_id,
                         revision: reviewed.revision,
                         review_token: reviewed.review_token,

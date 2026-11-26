@@ -32,6 +32,7 @@ final readonly class Section
         public ?int $offeringCreditsMilli = null,
         public OfferingCeuChoice $continuingEducation = new OfferingCeuChoice(),
         public SectionProgramPolicy $programPolicy = new SectionProgramPolicy(),
+        public bool $studentSelectableCredits = false,
     ) {
         if ($offeringCreditsMilli !== null && ($offeringCreditsMilli < 0 || $offeringCreditsMilli > 999999)) {
             throw new InvalidArgumentException('Use nonnegative academic-credit thousandths.');

@@ -3,6 +3,9 @@ window.createSectionWaitlist = function (ui) {
     "use strict";
     const { node, request, table } = ui;
     const portal = !!ui.portal;
+    const configNode = document.getElementById("workspace-config") || document.getElementById("campus-config");
+    const creditLabels = configNode ? JSON.parse(configNode.textContent).credit_policy_labels || {} : {};
+    const creditLabel = (key, fallback) => creditLabels[key] || fallback;
     const render = (body, ...content) => body.replaceChildren(...content.filter(item => item != null));
     const bypassText = (key, fallback) => ui.bypassLabels?.[key] || fallback;
     const allocationDefaults = {
@@ -212,6 +215,10 @@ window.createSectionWaitlist = function (ui) {
                     : `${result.policy.enabled ? "Waitlisting is allowed for this section." : "New waitlist requests are disabled for this section."} ${result.waiting_count} requests are waiting.`,
             ),
         );
+        const credit = !result.entry_id ? window.createRegistrationCreditInput(ui, result, null, () => {}) : null;
+        if (credit) body.append(credit.card);
+        if (result.entry_id && result.credits_milli != null) body.append(node('p', {},
+            `${result.credits_milli / 1000} ${creditLabel('student_choice', 'Academic credits for this registration')}`));
         if (result.entry_id)
             body.append(
                 action("Withdraw waitlist request", () =>
@@ -243,6 +250,9 @@ window.createSectionWaitlist = function (ui) {
                             "requested",
                             () => place(student, section, back, owner),
                             owner,
+                            null,
+                            null,
+                            credit?.read() ?? null,
                         ),
                     true,
                 ),
@@ -288,11 +298,13 @@ window.createSectionWaitlist = function (ui) {
         owner = false,
         reason = null,
         entry = null,
+        creditsMilli = null,
     ) {
         const review = await send(body, `${base}review/`, "POST", {
             student_id: student,
             action: actionName,
             entry_id: entry,
+            credits_milli: creditsMilli,
             ...(reason ? { reason } : {}),
         });
         if (!body.isConnected) return;
@@ -319,6 +331,8 @@ window.createSectionWaitlist = function (ui) {
                     : "This closes the selected waiting request and preserves its history.",
             ),
             reason ? node("p", {}, reason) : null,
+            creditsMilli === null ? null : node("p", {},
+                `${creditLabel("student_choice", "Academic credits for this registration")}: ${creditsMilli / 1000}`),
             error,
             action(
                 "Confirm waitlist change",
@@ -327,6 +341,7 @@ window.createSectionWaitlist = function (ui) {
                         await send(body, `${base}confirm/`, "POST", {
                             ...review,
                             student_id: student,
+                            credits_milli: creditsMilli,
                         });
                         if (!body.isConnected) return;
                         render(body,
@@ -550,7 +565,7 @@ window.createSectionWaitlist = function (ui) {
                     `${reviewed.student.given_name} ${reviewed.student.family_name} · ${reviewed.student.institutional_id}`],
                 [bypassText('section', 'Section'), reviewed.section.code],
                 [bypassText('course', 'Course'), `${reviewed.section.course_code} — ${reviewed.section.course_title}`],
-                [bypassText('credits', 'Academic credits'), String(reviewed.section.credits_milli / 1000)],
+                [bypassText('credits', 'Academic credits'), String((reviewed.student.credits_milli ?? reviewed.section.credits_milli) / 1000)],
                 [bypassText('earlier', 'Earlier waiting requests'), String(reviewed.earlier_requests)],
                 [bypassText('seats', 'Available seats'), String(reviewed.section.seats_remaining)],
                 [bypassText('reason', 'Reason'), reviewed.reason],
@@ -690,6 +705,8 @@ window.createSectionWaitlist = function (ui) {
                                   registered: "Completed by registration",
                               }[item.status],
                     ),
+                    item.credits_milli == null ? null : node("p", {},
+                        `${creditLabel("student_choice", "Academic credits for this registration")}: ${item.credits_milli / 1000}`),
                     item.status === "active"
                         ? action("Waitlist options", () =>
                               place(

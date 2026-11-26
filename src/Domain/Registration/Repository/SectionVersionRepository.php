@@ -19,7 +19,12 @@ interface SectionVersionRepository
     ): void;
     public function select(PublishedSectionDefinition $definition): void;
     public function enrollmentVersion(EntityId $enrollment): ?EntityId;
-    public function retainEnrollmentVersion(EntityId $enrollment, ?EntityId $publication): void;
+    public function enrollmentCredits(EntityId $enrollment): ?int;
+    public function retainEnrollmentVersion(
+        EntityId $enrollment,
+        ?EntityId $publication,
+        ?int $creditsMilli = null,
+    ): void;
     public function find(EntityId $publication): ?PublishedSectionDefinition;
     /** Projection-only display read; missing current projection never falls back to an older version.
      * @return array{status: string, latest: ?PublishedSectionDefinition}

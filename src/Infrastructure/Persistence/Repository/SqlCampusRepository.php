@@ -163,6 +163,8 @@ final readonly class SqlCampusRepository implements CampusRepository
                 " AS " .
                 $q("description") .
                 ', offered.' . $q('continuing_education') . ' AS ' . $q('continuing_education') .
+                ', offered.' . $q('student_selectable_credits') . ' AS ' . $q('student_selectable_credits') .
+                ', offered_course.' . $q('credit_policy') . ' AS ' . $q('credit_policy') .
                 ', ' . $courseNumber . ' AS ' . $q('course_number') .
                 ', ' . $numberRecorded . ' AS ' . $q('course_number_recorded') .
                 ", pcs." . $q("code") . " AS " . $q("subject_code") .
@@ -214,6 +216,8 @@ final readonly class SqlCampusRepository implements CampusRepository
                     ' = s.' . $q('id') .
                 ' LEFT JOIN ' . $q('sis_section_versions') . ' offered ON offered.' . $q('id') .
                     ' = choice.' . $q('publication_id') .
+                ' LEFT JOIN ' . $q('sis_course_versions') . ' offered_course ON offered_course.' . $q('id') .
+                    ' = offered.' . $q('course_version_id') .
                 " WHERE " .
                 implode(" AND ", $where) .
                 " ORDER BY s." .
@@ -223,6 +227,17 @@ final readonly class SqlCampusRepository implements CampusRepository
             25,
         );
         foreach ($rows as &$row) {
+            if ((int) $row['student_selectable_credits'] === 1) {
+                $row['student_selectable_credits'] = true;
+                $row['credit_policy'] = \Domain\Catalog\ValueObject\CreditPolicy::stored(
+                    $row['credit_policy']
+                )?->describe();
+                if ($row['credit_policy'] === null) {
+                    throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+                }
+            } else {
+                unset($row['student_selectable_credits'], $row['credit_policy']);
+            }
             $row['continuing_education'] = \Domain\Catalog\ValueObject\ContinuingEducationUnits::stored(
                 $row['continuing_education'],
             )?->describe();
@@ -449,7 +464,7 @@ final readonly class SqlCampusRepository implements CampusRepository
                 " AS " .
                 $q("title") .
                 ", " .
-                'COALESCE(accepted.' . $q('credits_milli') . ', ' .
+                'COALESCE(ev.' . $q('selected_credits_milli') . ', accepted.' . $q('credits_milli') . ', ' .
                     $course->value("credits_milli", "c." . $q("credits_milli")) . ')' .
                 " AS " .
                 $q("credits_milli") .
