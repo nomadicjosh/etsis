@@ -15,8 +15,11 @@ use Qubus\View\Native\NativeLoader;
 
 final readonly class CampusEventController
 {
-    public function __construct(private PublicEventService $events, private CampusRenderer $renderer)
-    {
+    public function __construct(
+        private PublicEventService $events,
+        private CampusRenderer $renderer,
+        private \Application\Service\PublicEventFeedSettings $feed,
+    ) {
     }
 
     public function page(ServerRequest $request): ResponseInterface
@@ -38,7 +41,7 @@ final readonly class CampusEventController
     {
         $f = new FormInput($request->getQueryParams());
         $search = $f->search('search', 80);
-        return ['calendar' => $this->events->calendar(
+        return ['publicEventFeedUrl' => $this->feed->visibleUrl(), 'calendar' => $this->events->calendar(
             $f->optionalText('date', 10),
             $f->optionalText('view', 10) ?? 'month',
             $search

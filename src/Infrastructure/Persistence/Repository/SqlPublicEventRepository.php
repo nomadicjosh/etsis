@@ -132,11 +132,27 @@ final readonly class SqlPublicEventRepository implements PublicEventRepository
         );
     }
 
-    private function publishedSelect(): string
+    public function calendarFeed(TimeSlot $window, int $limit): array
+    {
+        $q = $this->sql->quote(...);
+        $utc = new \DateTimeZone('UTC');
+        return $this->publicRows(
+            $this->publishedSelect(true) . ' AND p.' . $q('starts_at') . ' < ? AND p.' . $q('ends_at') . ' > ?',
+            ['approved', $window->endsAt->setTimezone($utc)->format('Y-m-d H:i:s'),
+                $window->startsAt->setTimezone($utc)->format('Y-m-d H:i:s')],
+            $limit,
+            true,
+        );
+    }
+
+    private function publishedSelect(bool $feed = false): string
     {
         $q = $this->sql->quote(...);
         $columns = ['p.id', 'p.event_id', 'p.starts_at', 'p.ends_at', 'e.title', 'e.description',
             'e.timezone', 'e.room_label', 'e.building_label'];
+        if ($feed) {
+            array_push($columns, 'p.occurrence_id', 'e.version', 'e.published_at');
+        }
         $columns = array_map(static function (string $column) use ($q): string {
             [$alias, $field] = explode('.', $column);
             return $alias . '.' . $q($field);
@@ -158,13 +174,21 @@ final readonly class SqlPublicEventRepository implements PublicEventRepository
     /** @param list<string> $params
      * @return list<array<string,mixed>>
      */
-    private function publicRows(string $query, array $params, int $limit): array
+    private function publicRows(string $query, array $params, int $limit, bool $feed = false): array
     {
         $q = $this->sql->quote(...);
         $rows = $this->sql->fetch($query . ' ORDER BY p.' . $q('starts_at') . ', p.' . $q('id'), $params, $limit);
-        return array_map(static function (array $row): array {
+        return array_map(static function (array $row) use ($feed): array {
             foreach (['starts_at', 'ends_at'] as $field) {
                 $row[$field] = str_replace(' ', 'T', $row[$field]) . 'Z';
+            }
+            if ($feed) {
+                $row['uid'] = hash('sha256', $row['event_id'] . ':' . $row['occurrence_id']);
+                $row['version'] = (int) $row['version'];
+                return array_intersect_key($row, array_flip([
+                    'uid', 'version', 'published_at', 'starts_at', 'ends_at',
+                    'title', 'description', 'room_label', 'building_label',
+                ]));
             }
             return $row + ['status' => 'published'];
         }, $rows);

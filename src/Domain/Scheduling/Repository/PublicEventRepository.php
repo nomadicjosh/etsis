@@ -27,6 +27,11 @@ interface PublicEventRepository
      */
     public function calendar(TimeSlot $window, string $search, int $limit): array;
 
+    /** Public-only feed values, including a stable opaque meeting identity and publication metadata.
+     * @return list<array<string,mixed>>
+     */
+    public function calendarFeed(TimeSlot $window, int $limit): array;
+
     /** All matching public times for one booking, probing one beyond its 366-meeting bound.
      * @return list<array<string,mixed>>
      */

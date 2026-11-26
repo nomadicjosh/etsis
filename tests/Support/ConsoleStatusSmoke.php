@@ -70,6 +70,7 @@ try {
                 'check-notification-preferences',
                 'check-transcript-updates',
                 'check-standing-updates',
+                'check-public-event-feed',
                 'check-transcript-worklist',
                 'check-profile-requests',
                 'check-portal',
@@ -386,6 +387,11 @@ try {
             $httpSis = $worklistFixture->transcripts->sis;
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/TranscriptWorklistBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-public-event-feed') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/PublicEventFeedBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-standing-updates') {
             $kernel->bootstrap();

@@ -8,6 +8,9 @@ return [
     'name' => env('PORTAL_NAME', 'etsis'),
     'theme' => env('PORTAL_THEME', 'campus-harbor'),
     'tagline' => 'Your next chapter starts here.',
+    'public_event_feed' => [
+        'enabled' => env('PORTAL_PUBLIC_EVENT_FEED_ENABLED', false),
+    ],
     'payments' => [
         'enabled' => env('PORTAL_PAYMENTS_ENABLED', false),
         'live' => env('PORTAL_PAYMENTS_LIVE', false),

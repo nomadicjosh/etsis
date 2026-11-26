@@ -31,6 +31,8 @@ function publicEventsFixture(array $query): array
             $item['title'], $item['room_label'], $item['building_label'],
         ]), $query['search']) !== false)));
     return ['calendar' => $period->summarize($items, ['published']) + ['today' => '2026-08-10'],
+        'publicEventFeedUrl' => ($query['feed'] ?? '') === 'on'
+            ? 'http://127.0.0.1:8127/portal/events/calendar.ics' : null,
         'calendarDate' => $query['date'] ?? '2026-08-10', 'search' => $query['search'] ?? '',
         'selectedDay' => $query['day'] ?? null, 'dailyPage' => (int) ($query['page'] ?? 0)];
 }

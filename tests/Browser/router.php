@@ -109,7 +109,10 @@ if ($path === '/fixture/website-page-settings/') {
     echo $loader->render('framework::backend/manager/page-settings', [
         'page' => isset($_GET['create']) ? null : $record, 'submitted' => [],
         'languageOptions' => ['en' => 'English', 'es' => 'Español'],
-        'layoutOptions' => [['slug' => 'portal', 'title' => 'Campus portal'], ['slug' => 'page-template', 'title' => 'Website page']],
+        'layoutOptions' => [
+            ['slug' => 'portal', 'title' => 'Campus portal'],
+            ['slug' => 'page-template', 'title' => 'Website page'],
+        ],
         'csrfMarkup' => '<input type="hidden" name="csrf_token" value="fictional-test-token">',
     ]);
     return;
@@ -119,7 +122,8 @@ if (str_starts_with($path, '/fixture/builder-assets/')) {
     $assetRoot = realpath($root . '/vendor/nomadicjosh/vihzhuo/dist');
     $asset = realpath($assetRoot . '/' . substr($path, strlen('/fixture/builder-assets/')));
     if (!$asset || !is_file($asset) || !str_starts_with($asset, $assetRoot . '/')) {
-        http_response_code(404); return;
+        http_response_code(404);
+        return;
     }
     $extension = pathinfo($asset, PATHINFO_EXTENSION);
     header('Content-Type: ' . match ($extension) {
@@ -142,6 +146,19 @@ if ($path === '/fixture/website-manager/') {
             ? $_GET['mode'] : 'menus',
         'csrfMarkup' => '<input type="hidden" name="csrf_token" value="fictional-test-token">',
     ]);
+    return;
+}
+
+if ($path === '/portal/events/calendar.ics') {
+    header('Content-Type: text/calendar; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="campus-events.ics"');
+    header('Cache-Control: private, no-store');
+    $at = ['uid' => hash('sha256', 'fictional public meeting'), 'version' => 1,
+        'published_at' => '2026-08-01T10:00:00Z', 'starts_at' => '2026-08-10T18:00:00Z',
+        'ends_at' => '2026-08-10T19:00:00Z', 'calendar_day' => '2026-08-10',
+        'title' => 'Fictional public open house', 'description' => 'Explicit public invitation.',
+        'room_label' => 'Online event', 'building_label' => 'Joining details provided by the organizer'];
+    echo new \Application\View\PublicEventCalendar()->render([$at], 'http://127.0.0.1:8127' . $path);
     return;
 }
 
@@ -326,7 +343,9 @@ echo $loader->render('framework::backend/workspace/index', [
     'permissions' => match ($path) {
         '/admin/admissions-only-fixture/' => ['sis:admissions:manage'],
         '/admin/form-editor-fixture/' => ['sis:forms:manage'],
-        '/admin/academic-support-fixture/' => ['sis:student:read', 'sis:gradebook:amend', 'sis:audit:read', 'sis:history:verify'],
+        '/admin/academic-support-fixture/' => [
+            'sis:student:read', 'sis:gradebook:amend', 'sis:audit:read', 'sis:history:verify',
+        ],
         '/admin/grade-amend-fixture/' => ['sis:student:read', 'sis:gradebook:amend'],
         '/admin/closed-grade-fixture/' => ['sis:student:read', 'sis:gradebook:amend', 'sis:gradebook:closed'],
         '/admin/student-read-fixture/' => ['sis:student:read'],

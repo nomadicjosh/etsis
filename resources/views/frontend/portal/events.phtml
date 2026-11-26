@@ -8,6 +8,11 @@
             'selectedDay' => $selectedDay, 'dailyPage' => $dailyPage,
         ]); ?>
     </div>
+    <?php if (($publicEventFeedUrl ?? null) !== null): ?>
+        <?php $this->insert('framework::frontend/portal/components/event-feed', [
+            'publicEventFeedUrl' => $publicEventFeedUrl,
+        ]); ?>
+    <?php endif; ?>
     <p class="campus-muted mt-4">
         This calendar includes explicitly published public events. Your classes appear in My timetable.
     </p>

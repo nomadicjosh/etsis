@@ -10150,3 +10150,43 @@ msgstr ""
 #: src/Domain/Student/Service/StudentStandingService.php:495
 msgid "The standing changed. Reopen the notification."
 msgstr ""
+
+#: src/Application/View/PublicEventCalendar.php:41
+msgid "Public campus events"
+msgstr ""
+
+#: src/Application/Http/Controller/CampusEventFeedController.php:32
+msgid "The public calendar feed is not enabled."
+msgstr ""
+
+#: src/Application/Http/Controller/CampusEventFeedController.php:49
+msgid "The public calendar feed is unavailable. Try again later."
+msgstr ""
+
+#: src/Domain/Scheduling/Service/PublicEventService.php:203
+msgid "The public calendar feed exceeds its event limit."
+msgstr ""
+
+#: resources/views/frontend/portal/components/event-feed.phtml:9
+msgid "Follow the public calendar"
+msgstr ""
+
+#: resources/views/frontend/portal/components/event-feed.phtml:13
+msgid "This feed includes all public events from the past seven days and next 90 days, independently of the date and search above."
+msgstr ""
+
+#: resources/views/frontend/portal/components/event-feed.phtml:19
+msgid "Download a calendar snapshot, or add the feed address to your calendar app using its subscribe-by-URL option."
+msgstr ""
+
+#: resources/views/frontend/portal/components/event-feed.phtml:22
+msgid "Public calendar feed address"
+msgstr ""
+
+#: resources/views/frontend/portal/components/event-feed.phtml:33
+msgid "Download public calendar (.ics)"
+msgstr ""
+
+#: resources/views/frontend/portal/components/event-feed.phtml:37
+msgid "A downloaded copy does not update. Subscribed calendars refresh on their own schedule and may retain older copies. Check this page for current availability. Private classes, bookings and joining credentials are never included."
+msgstr ""

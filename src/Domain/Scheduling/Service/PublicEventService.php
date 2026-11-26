@@ -188,6 +188,28 @@ final readonly class PublicEventService
         return $this->events->calendar(new TimeSlot($now, $now->modify('+31 days')), '', 3);
     }
 
+    /** Complete rolling public feed: seven previous days and ninety upcoming civil days.
+     * @return list<array<string,mixed>>
+     */
+    public function calendarFeed(): array
+    {
+        $today = $this->clock->now()->setTime(0, 0);
+        $rows = $this->events->calendarFeed(
+            new TimeSlot($today->modify('-7 days'), $today->modify('+90 days')),
+            501,
+        );
+        if (count($rows) > 500) {
+            throw new ValidationException([['field' => 'calendar', 'message' =>
+                \Codefy\Framework\Helpers\trans_html('The public calendar feed exceeds its event limit.')]]);
+        }
+        foreach ($rows as &$row) {
+            $row['calendar_day'] = new DateTimeImmutable($row['starts_at'])
+                ->setTimezone($today->getTimezone())->format('Y-m-d');
+        }
+        unset($row);
+        return $rows;
+    }
+
     /** Public, bounded read. No accounts, academic publications or journal streams are read.
      * @return array<string,mixed>
      */

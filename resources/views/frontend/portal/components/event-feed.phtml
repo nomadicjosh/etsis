@@ -1,0 +1,42 @@
+<?php
+
+use function Codefy\Framework\Helpers\trans_html;
+
+?>
+<section class="border rounded bg-white p-3 p-md-4 mt-4" aria-labelledby="public-event-feed-heading">
+    <h2 class="h4" id="public-event-feed-heading">
+        <i class="bi bi-calendar-plus" aria-hidden="true"></i>
+        <?= trans_html('Follow the public calendar') ?>
+    </h2>
+    <p class="campus-muted">
+        <?= trans_html(
+            'This feed includes all public events from the past seven days and next 90 days, '
+            . 'independently of the date and search above.'
+        ) ?>
+    </p>
+    <p>
+        <?= trans_html(
+            'Download a calendar snapshot, or add the feed address to your calendar app using its subscribe-by-URL option.'
+        ) ?>
+    </p>
+    <label class="form-label" for="public-event-feed-address"><?= trans_html('Public calendar feed address') ?></label>
+    <textarea
+        class="form-control mb-3"
+        id="public-event-feed-address"
+        rows="3"
+        readonly
+        spellcheck="false"
+        aria-describedby="public-event-feed-help"
+    ><?= $this->esc($publicEventFeedUrl) ?></textarea>
+    <a class="btn campus-button-outline" href="<?= $this->esc($publicEventFeedUrl) ?>">
+        <i class="bi bi-download" aria-hidden="true"></i>
+        <?= trans_html('Download public calendar (.ics)') ?>
+    </a>
+    <p class="form-text mt-3 mb-0" id="public-event-feed-help">
+        <?= trans_html(
+            'A downloaded copy does not update. Subscribed calendars refresh on their own schedule '
+            . 'and may retain older copies. Check this page for current availability. '
+            . 'Private classes, bookings and joining credentials are never included.'
+        ) ?>
+    </p>
+</section>
