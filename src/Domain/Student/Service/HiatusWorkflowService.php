@@ -15,6 +15,8 @@ use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\Service\ReviewProof;
+use Domain\Shared\EventSourcing\HistoryReadBudget;
+use Domain\Registration\Service\RegistrationBilling;
 use Domain\Shared\ValueObject\DateRange;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Student\Enum\HiatusCode;
@@ -41,6 +43,7 @@ final readonly class HiatusWorkflowService
         private \Domain\Registration\Service\DropPolicyService $dropPolicies,
         private StudentActivityLedger $activity,
         private ReviewProof $reviews,
+        private RegistrationBilling $billing,
     ) {
     }
 
@@ -60,7 +63,7 @@ final readonly class HiatusWorkflowService
             $actor,
         ): array {
             $this->lock($student, $routing);
-            $context = $this->context($student, $code, $dates, $routing);
+            $context = $this->context($student, $code, $dates, $routing, new HistoryReadBudget());
             $proposal = $this->policy->for($code);
             $now = $context["effective_now"];
             $this->authorize($actor);
@@ -143,11 +146,13 @@ final readonly class HiatusWorkflowService
                 $impact->revision,
             );
             $this->authorize($actor);
+            $budget = new HistoryReadBudget();
             $context = $this->context(
                 $hiatus->studentId,
                 $hiatus->code,
                 $hiatus->dates,
                 $routing,
+                $budget,
             );
             if (!hash_equals($this->revision($context), $impact->revision)) {
                 throw new ConcurrentModificationException(
@@ -168,6 +173,7 @@ final readonly class HiatusWorkflowService
             }
             $courses = array_column($context["courses"], null, "section_id");
             $changes = [];
+            $creditQuotes = [];
             foreach ($impact->sections as $section) {
                 $row = $courses[$section->value] ?? null;
                 if ($row === null || !$row["eligible"]) {
@@ -178,6 +184,21 @@ final readonly class HiatusWorkflowService
                                 "Only reviewed, ungraded enrollments valid on the effective date can be changed.",
                         ],
                     ]);
+                }
+                if (isset($row['withdrawal_credit'])) {
+                    $quote = $this->billing->withdrawalCreditQuote(
+                        $hiatus->studentId,
+                        new EntityId($row['term_id']),
+                        new EntityId($row['id']),
+                        $row['drop_policy']['credit_basis_points'],
+                        $budget,
+                    );
+                    if (!hash_equals($row['withdrawal_credit_revision'], $quote->fingerprint())) {
+                        throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+                            'The registration charges changed. Review again.',
+                        ));
+                    }
+                    $creditQuotes[] = $quote->after();
                 }
                 $changes[] = [
                     "enrollment_id" => $row["id"],
@@ -208,7 +229,7 @@ final readonly class HiatusWorkflowService
             $dependencyRead = $sectionIds === [] ? null : $this->drops->dependencies(
                 $hiatus->studentId,
                 $sectionIds,
-                new \Domain\Shared\EventSourcing\HistoryReadBudget(),
+                $budget,
             );
             if ($dependencyRead?->blocked()) {
                 throw new ValidationException([['field' => 'sections',
@@ -234,7 +255,13 @@ final readonly class HiatusWorkflowService
                     $context["starts_on"],
                     $sectionIds,
                     $dependencyRead,
+                    $budget,
                 );
+                if (($dropped['withdrawal_credit'] ?? null) !== ($row['withdrawal_credit'] ?? null)) {
+                    throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+                        'The registration charges changed. Review again.',
+                    ));
+                }
                 $result["course_changes"][$index]["course_charge"] =
                     $dropped["course_charge"];
                 $result["course_changes"][$index]["drop_operation_id"] =
@@ -295,13 +322,34 @@ final readonly class HiatusWorkflowService
                 $dependencyRead !== null && $this->drops->dependencies(
                     $hiatus->studentId,
                     $sectionIds,
-                    new \Domain\Shared\EventSourcing\HistoryReadBudget(),
+                    $budget,
                 )->revision() !== $dependencyRead->revision()
             ) {
                 throw new ConcurrentModificationException('Co-requisite support changed. Review this plan again.');
             }
             if ($context['corequisite_policy'] !== $this->drops->dependencyPolicy()) {
                 throw new ConcurrentModificationException('Registration policy changed. Review this plan again.');
+            }
+            foreach ($creditQuotes as $quote) {
+                $this->billing->verifyWithdrawalCredit($quote, $budget);
+            }
+            foreach ($impact->sections as $section) {
+                $row = $courses[$section->value];
+                if (
+                    array_key_exists('credit_basis_points', $row['drop_policy']) &&
+                    $this->dropPolicies->outcome(
+                        new EntityId($row['term_id']),
+                        $context['starts_on'],
+                        $hiatus->studentId,
+                        new EntityId($row['id']),
+                        $section,
+                        $budget
+                    ) !== $row['drop_policy']
+                ) {
+                    throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+                        'The withdrawal policy changed before completion.',
+                    ));
+                }
             }
             $this->authorize($actor);
             return ["id" => $hiatus->id->value, "impact" => $result];
@@ -375,6 +423,7 @@ final readonly class HiatusWorkflowService
         HiatusCode $code,
         DateRange $dates,
         array $routing,
+        HistoryReadBudget $budget,
     ): array {
         $student = $this->admissions->student($studentId);
         $activityVersion = $this->activity->verify($student);
@@ -393,7 +442,6 @@ final readonly class HiatusWorkflowService
         }
         $effective = $dates->start->format("Y-m-d");
         $now = $this->clock->now();
-        $budget = new \Domain\Shared\EventSourcing\HistoryReadBudget();
         foreach ($rows as &$row) {
             $registered = new DateTimeImmutable(
                 $row["registered_at"],
@@ -429,6 +477,17 @@ final readonly class HiatusWorkflowService
                 new EntityId($row["section_id"]),
                 $budget,
             );
+            if ($row['eligible'] && ($row['drop_policy']['credit_basis_points'] ?? 0) > 0) {
+                $quote = $this->billing->withdrawalCreditQuote(
+                    $studentId,
+                    new EntityId($row['term_id']),
+                    new EntityId($row['id']),
+                    $row['drop_policy']['credit_basis_points'],
+                    $budget,
+                );
+                $row['withdrawal_credit'] = $quote->summary();
+                $row['withdrawal_credit_revision'] = $quote->fingerprint();
+            }
             $row["proposed_status"] = $row["drop_policy"]["delete_records"]
             ? "D"
             : "W";

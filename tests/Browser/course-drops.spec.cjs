@@ -12,6 +12,7 @@ async function fixture(page, late = false) {
     page.on('pageerror', error => errors.push(error.message));
     const plan = { student_id: student, section_id: section, enrollment_id: enrollment, version: 0,
         has_earned_ceus: late,
+        ...(late ? { withdrawal_credit: { basis_points: 5000, minor: 5001, currency: 'USD', charge_count: 1 } } : {}),
         operation_id: operation, revision: 'a'.repeat(64), effective_on: '2026-08-10',
         section_code: 'MATH.101.A', given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL',
         outcome: { delete_records: !late, grade_code: late ? 'D' : null, counts_gpa: late, term_code: '26/FA', grace_ends_on: '2026-08-15' } };
@@ -30,6 +31,7 @@ async function fixture(page, late = false) {
                 review_token: 'fictional-drop-plan-proof', student: { given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL' }, courses: [
                     { ...plan, section_code: 'CHEM.101.A', outcome: { ...plan.outcome, delete_records: true } },
                     { ...plan, section_id: second, section_code: 'CHEM.101L.A', has_earned_ceus: true,
+                        withdrawal_credit: { basis_points: 5000, minor: 5001, currency: 'USD', charge_count: 1 },
                         outcome: { ...plan.outcome, delete_records: false, grade_code: 'W' } },
                 ] };
             else if (path.endsWith('/commit/')) { status = 500; result = { error: 'Fictional interrupted confirmation. Check saved drops.' }; }
@@ -41,7 +43,7 @@ async function fixture(page, late = false) {
         } else if (path.includes('/course-drops/') || path.includes('/drop-receipts/')) result = receipt;
         else if (path.endsWith('/drop-policy/review/')) result = { definition: { grace_ends_on: '2026-08-15', timezone: 'America/Los_Angeles', windows: data.windows }, review_token: 'fictional-review' };
         else if (path.endsWith('/drop-policy/commit/')) result = { publication_id: operation, version: 0 };
-        else if (path.endsWith('/drop-policy/')) result = data ? { status: 'saved' } : { term: { code: '26/FA', add_drop_ends_on: '2026-08-15' }, version: -1, default_policy: true, windows: [{ through: null, grade_code: 'W' }] };
+        else if (path.endsWith('/drop-policy/')) result = data ? { status: 'saved' } : { term: { code: '26/FA', add_drop_ends_on: '2026-08-15' }, can_manage_credits: true, version: -1, default_policy: true, windows: [{ through: null, grade_code: 'W' }] };
         else if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/data/students/') result = { items: [{ id: student, given_name: 'Alex', family_name: 'Example', institutional_id: 'S-FICTIONAL', active: 1 }], next_after: null };
         else if (path === '/sis/ui/data/terms/') result = { items: [{ id: term, code: '26/FA', starts_on: '2026-08-01', ends_on: '2026-12-20', add_drop_ends_on: '2026-08-15' }], next_after: null };
@@ -86,13 +88,19 @@ test('catalog staff build dated grade periods in a responsive term policy editor
     await page.getByRole('button', { name: 'Add grade period' }).click();
     await page.getByLabel('Through date (inclusive)').fill('2026-09-01');
     await page.getByLabel('Catalog grade code').first().fill('D');
-    await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
+    await page.getByLabel('Account credit (% of original registration charges)').first().fill('50.25');
+    await page.getByLabel('Account credit (% of original registration charges)').last().fill('0');
+    await page.setViewportSize({ width: 320, height: 812 }); await accessible(page);
     await page.getByLabel('Reason for policy change').fill('Fictional institutional approval');
     await page.getByRole('button', { name: 'Review policy', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('Completed drops');
+    await expect(page.locator('#drawer-body')).toContainText('50.25% registration-charge account credit');
+    await page.getByRole('button', { name: 'Revise', exact: true }).click();
+    await expect(page.getByLabel('Account credit (% of original registration charges)').first()).toHaveValue('50.25');
+    await page.getByRole('button', { name: 'Review policy', exact: true }).click();
     await page.getByRole('button', { name: 'Publish policy', exact: true }).click();
     await expect(page.locator('#workspace-status')).toContainText('Term drop policy published');
-    expect(f.sent.find(r => r.path.endsWith('/drop-policy/review/'))?.data).toEqual({ reason: 'Fictional institutional approval', version: -1, windows: [{ through: '2026-09-01', grade_code: 'D' }, { through: null, grade_code: 'W' }] });
+    expect(f.sent.find(r => r.path.endsWith('/drop-policy/review/'))?.data).toEqual({ reason: 'Fictional institutional approval', version: -1, windows: [{ through: '2026-09-01', grade_code: 'D', credit_basis_points: 5025 }, { through: null, grade_code: 'W', credit_basis_points: 0 }] });
     expect(f.errors).toEqual([]);
 });
 
@@ -104,12 +112,15 @@ for (const late of [false, true]) test(`student reviews ${late ? 'late D with re
     if (late) {
         await expect(page.locator('#campus-dialog')).toContainText('course charge stays payable');
         await expect(page.locator('#campus-dialog')).toContainText('preserves the independently recorded CEUs');
+        await expect(page.locator('#campus-dialog')).toContainText('Scheduled account credit: $50.01');
+        await expect(page.locator('#campus-dialog')).toContainText('does not issue a cash refund');
     }
     await page.setViewportSize({ width: 375, height: 812 }); await accessible(page);
     await page.getByRole('button', { name: 'Confirm drop / withdrawal', exact: true }).click();
     await expect(page.locator('#campus-dialog-error')).toContainText('interrupted');
     await page.getByRole('button', { name: 'Check saved drop' }).click();
     await expect(page.locator('#campus-notice')).toContainText(late ? 'grade D' : 'course was removed');
+    if (late) await expect(page.locator('#campus-notice')).toContainText('$50.01');
     expect(f.sent.filter(r => r.path === '/portal/api/drop/')).toHaveLength(1);
     expect(f.sent.every(r => r.csrf === 'fictional-test-token')).toBe(true);
     expect(f.errors).toEqual([]);
@@ -137,6 +148,7 @@ for (const owner of [false, true]) test(`${owner ? 'student' : 'staff'} selects 
     await expect(body).toContainText('Reverse the original course charge');
     await expect(body).toContainText('grade W');
     await expect(body).toContainText('preserves the independently recorded CEUs');
+    await expect(body).toContainText('Scheduled account credit: $50.01');
     await expect(body.locator('b')).toHaveCount(0);
     await page.getByRole('button', { name: 'Change selection', exact: true }).click();
     await expect(page.getByRole('checkbox', { name: /CHEM.101 ·/ })).toBeChecked();
@@ -164,7 +176,10 @@ test('staff see that a late withdrawal preserves separately recorded CEUs', asyn
     await page.getByRole('button', { name: 'Alex Example', exact: true }).click();
     await page.getByRole('button', { name: 'Drop / withdraw', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('preserves the independently recorded CEUs');
+    await expect(page.locator('#drawer-body')).toContainText('Scheduled account credit: $50.01');
+    await expect(page.locator('#drawer-body')).toContainText('does not issue a cash refund');
     await page.setViewportSize({ width: 320, height: 812 });
+    await page.addStyleTag({ content: 'html { font-size: 200%; }' });
     await accessible(page);
     expect(f.errors).toEqual([]);
 });

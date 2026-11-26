@@ -75,6 +75,8 @@ final class StudentAccount extends EventSourcedAggregate
     private array $reversedWith = [];
     /** @var array<string,array{actor:string,hash:string,result:LinkedEntryResult}> */
     private array $chargeCreditReceipts = [];
+    /** @var array<string,string> Credit operation to its retained enrollment source. */
+    private array $withdrawalCredits = [];
 
     /** @var array<string,RefundAllocation> Explicit recorded funding; never inferred from balances. */
     private array $refundAllocations = [];
@@ -96,6 +98,16 @@ final class StudentAccount extends EventSourcedAggregate
             $ids[] = $enrollment->value;
         }
         return array_map(static fn(string $id): EntityId => new EntityId($id), $ids);
+    }
+
+    public function hasWithdrawalCredits(EntityId $enrollment): bool
+    {
+        foreach ($this->withdrawalCredits as $operation => $source) {
+            if ($source === $enrollment->value && !isset($this->reversedOperations[$operation])) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /** @return array{registration_price?:array{enrollment_id:string,rule_id:string,name:string,credits_milli:int,rate_minor:int,currency:string,rounding:string}} */
@@ -633,6 +645,7 @@ final class StudentAccount extends EventSourcedAggregate
         Money $amount,
         EntityId $actor,
         string $hash,
+        ?\Domain\Finance\ValueObject\WithdrawalCreditBasis $withdrawal = null,
     ): array {
         if (($accepted = $this->chargeCreditResult($operation, $actor, $hash)) !== null) {
             return $accepted;
@@ -656,7 +669,8 @@ final class StudentAccount extends EventSourcedAggregate
                     "actor_id" => $actor->value,
                     "review_hash" => $hash,
                 ],
-                [Metadata::AGGREGATE_TYPE => "student_account"],
+                [Metadata::AGGREGATE_TYPE => "student_account"] +
+                    ($withdrawal === null ? [] : ['withdrawal_credit' => $withdrawal->facts]),
             ),
         );
         return $this->chargeCreditReceipts[$operation->value]["result"];
@@ -668,6 +682,22 @@ final class StudentAccount extends EventSourcedAggregate
         $source = new EntityId($p["source_operation_id"]);
         $amount = new Money($p["minor"], $p["currency"]);
         $balance = $this->creditBalance($source, $amount);
+        if (($facts = $event->metaParam('withdrawal_credit', null)) !== null) {
+            $basis = new \Domain\Finance\ValueObject\WithdrawalCreditBasis($facts);
+            $sources = array_map(
+                static fn (EntityId $id): string => $id->value,
+                $this->courseCharges(new EntityId($facts['enrollment_id']))
+            );
+            if (
+                !in_array($source->value, $sources, true) ||
+                $facts['original_minor'] !== $this->operations[$source->value]['minor'] ||
+                $facts['credited_before_minor'] !== $this->chargeCreditSummary($source->value)['credited_minor'] ||
+                $basis->amount() !== $amount->minor
+            ) {
+                throw new DomainException('Withdrawal credits must match their original registration-charge evidence.');
+            }
+            $this->withdrawalCredits[$p['operation_id']] = $facts['enrollment_id'];
+        }
         if (
             isset($this->operations[$p["operation_id"]]) ||
             isset($this->paymentDetailsReceipts[$p["operation_id"]])

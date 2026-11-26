@@ -2,6 +2,10 @@
 window.createWorkspaceHiatus = function (ui) {
     "use strict";
     const { node, request, task, table, badge, buildForm, formData, flow, openDrawer } = ui;
+    const creditNotice = summary => summary && node('p', { class: 'alert alert-info mt-2' }, summary.minor > 0
+        ? (ui.creditLabels?.review || 'Scheduled account credit: {amount}. This reduces registration charges; it does not issue a cash refund.')
+            .replace('{amount}', ui.money(summary.minor, summary.currency))
+        : (ui.creditLabels?.none || 'No additional registration-charge credit is due under this schedule.'));
     const button = (label, callback, style = "btn-outline-primary", settled = () => {}) =>
         node(
             "button",
@@ -313,13 +317,13 @@ window.createWorkspaceHiatus = function (ui) {
                 course.section_code,
                 course.course_title,
                 course.term_code,
-                course.drop_policy
+                node('div', {}, course.drop_policy
                     ? course.drop_policy.delete_records
                         ? "Remove course · reverse course charge"
                         : `Retain course · grade ${course.drop_policy.grade_code} · keep charge`
                     : course.proposed_status === "D"
                       ? "Remove course · reverse course charge"
-                      : "Withdraw (W)",
+                      : "Withdraw (W)", creditNotice(course.withdrawal_credit)),
                 node(
                     "div",
                     {},

@@ -494,6 +494,8 @@ The [reviewed registrar reinstatement](registration-history.md#reinstate-a-track
 
 Pending grade requests or a consequential academic correction after the withdrawal block restoration, as do unknown original registration/course sources, removed attempts, amended offerings or changed pursuit ownership. This decision cannot silently discard a later grade/source correction, move work to another pursuit, or reverse a posting-term/quantity correction. Review those cases separately. A rejected/cancelled grade request that left the original academic facts unchanged does not itself replace the withdrawal decision.
 
+An active [withdrawal-policy account credit](withdrawal-credit-schedules.md#resolve-a-withdrawal-credit-before-reinstatement) also blocks a fresh reinstatement. Finance must deliberately resolve it before the registrar reviews restoration; academic reinstatement does not mutate money or reassess an earlier withdrawal receipt.
+
 Academic and enrollment events, projections, current seat/queue effects and the required audit commit together in the existing journal transaction. Both roots replay through the framework's same protected store. Accepted retries verify their linked original academic decision and return the original versions even after a later withdrawal; new real withdrawal/reinstatement cycles advance those versions while preserving all earlier decisions. Student/teaching/history readers see the restored current ungraded record; frozen issued documents retain the earlier result. Tuition, charges, credits, payments and refunds are unchanged and require their separate finance workflows if an adjustment is needed.
 
 

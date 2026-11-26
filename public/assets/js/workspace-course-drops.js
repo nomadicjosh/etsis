@@ -2,6 +2,15 @@
 window.createWorkspaceCourseDrops = function (ui) {
     "use strict";
     const { node, request, task, openDrawer, notify, buildForm, formData } = ui;
+    const creditLabels = ui.creditLabels || {};
+    const creditText = (key, fallback) => creditLabels[key] || fallback;
+    const rateText = row => Object.hasOwn(row, 'credit_basis_points') ? ' · ' +
+        creditText('period', '{rate}% registration-charge account credit').replace('{rate}',
+            new Intl.NumberFormat(undefined, { maximumFractionDigits: 2 }).format(row.credit_basis_points / 100)) : '';
+    const creditNotice = summary => summary && node('p', { class: 'alert alert-info' }, summary.minor > 0
+        ? creditText('review', 'Scheduled account credit: {amount}. This reduces registration charges; it does not issue a cash refund.')
+            .replace('{amount}', ui.money(summary.minor, summary.currency))
+        : creditText('none', 'No additional registration-charge credit is due under this schedule.'));
     const button = (label, run, primary = false) =>
         node(
             "button",
@@ -52,6 +61,7 @@ window.createWorkspaceCourseDrops = function (ui) {
         );
         if (plan.has_earned_ceus === true) body.append(node('p', { class: 'alert alert-info' },
             ui.ceuLabels?.withdrawal_preserves || 'This academic withdrawal preserves the independently recorded CEUs. Any CEU correction or revocation requires a separate reviewed decision.'));
+        if (plan.withdrawal_credit) body.append(creditNotice(plan.withdrawal_credit));
         const command = Object.fromEntries(
             [
                 "student_id",
@@ -68,9 +78,12 @@ window.createWorkspaceCourseDrops = function (ui) {
             if (finished || !body.isConnected) return;
             finished = true;
             notify(
-                receipt.academic_records_removed
+                (receipt.academic_records_removed
                     ? "Course removed. Its course charge was reversed if present; cash refunds require a separate review."
-                    : `Course withdrawn with grade ${receipt.grade_code}. Course charge retained.`,
+                    : `Course withdrawn with grade ${receipt.grade_code}. Course charge retained.`) +
+                (receipt.withdrawal_credit?.minor > 0 ? ' ' + creditText('saved',
+                    'Registration-charge account credit recorded: {amount}. No cash refund was issued.')
+                    .replace('{amount}', ui.money(receipt.withdrawal_credit.minor, receipt.withdrawal_credit.currency)) : ''),
             );
             await back();
         };
@@ -138,7 +151,7 @@ window.createWorkspaceCourseDrops = function (ui) {
                         node(
                             "li",
                             {},
-                            `${w.through ? `Through ${w.through}` : "All later dates"}: ${w.grade_code}`,
+                            `${w.through ? `Through ${w.through}` : "All later dates"}: ${w.grade_code}${rateText(w)}`,
                         ),
                     ),
                 ),
@@ -161,7 +174,7 @@ window.createWorkspaceCourseDrops = function (ui) {
                 node(
                     "section",
                     {
-                        class: "border rounded-3 p-3 mb-3",
+                        class: "border rounded-3 bg-white p-3 mb-3",
                         "aria-label": "Current published policy",
                     },
                     node("h4", {}, `Published revision ${data.version + 1}`),
@@ -205,6 +218,8 @@ window.createWorkspaceCourseDrops = function (ui) {
             node("div", { class: "mb-3" }, node("label", { for: deadline.id, class: "form-label" }, "Section drop/add deadline"), deadline),
         );
         let windows = data.windows.map((w) => ({ ...w }));
+        body.append(node('p', { class: 'form-text' }, creditText('help', 'Optional. Applies only to charges linked to this registration. Earlier charge credits count toward the scheduled reduction. Separate term fees and cash refunds require their own decisions.')),
+            node('p', { class: 'form-text' }, creditText('authority', 'Publishing or replacing a policy with account credits also requires finance posting permission.')));
         const periods = node("div");
         const status = node("p", { role: "status", "aria-live": "polite" });
         const reason = node("textarea", {
@@ -241,6 +256,14 @@ window.createWorkspaceCourseDrops = function (ui) {
                     .namedItem("grade_code")
                     .value.trim()
                     .toUpperCase(),
+                ...(() => {
+                    const raw = form.elements.namedItem('withdrawal_percent').value.trim();
+                    if (raw === '') return {};
+                    if (!/^\d{1,3}(?:\.\d{1,2})?$/.test(raw) || Number(raw) > 100) throw new Error(
+                        creditText('invalid', 'Use a percentage from 0 to 100 with at most two decimal places, or leave it blank.'));
+                    const [whole, fraction = ''] = raw.split('.');
+                    return { credit_basis_points: Number(whole) * 100 + Number(fraction.padEnd(2, '0')) };
+                })(),
             }));
         async function render() {
             periods.replaceChildren();
@@ -254,6 +277,12 @@ window.createWorkspaceCourseDrops = function (ui) {
                     ["grade_code", "Catalog grade code"],
                 ];
                 const form = await buildForm(fields, window);
+                const creditId = `withdrawal-percent-${index}`;
+                form.append(node('div', { class: 'mb-3' }, node('label', { for: creditId, class: 'form-label' },
+                    creditText('rate', 'Account credit (% of original registration charges)')),
+                node('input', { type: 'number', id: creditId, name: 'withdrawal_percent', class: 'form-control',
+                    min: '0', max: '100', step: '0.01', inputmode: 'decimal', disabled: !data.can_manage_credits,
+                    value: Object.hasOwn(window, 'credit_basis_points') ? String(window.credit_basis_points / 100) : '' })));
                 form.addEventListener("submit", (e) => e.preventDefault());
                 forms.push(form);
                 const block = node(
@@ -336,7 +365,7 @@ window.createWorkspaceCourseDrops = function (ui) {
                                         node(
                                             "li",
                                             {},
-                                            `${w.through ? `Through ${w.through}` : "All later dates"}: ${w.grade_code}`,
+                                            `${w.through ? `Through ${w.through}` : "All later dates"}: ${w.grade_code}${rateText(w)}`,
                                         ),
                                 ),
                             ),
@@ -454,6 +483,7 @@ window.createWorkspaceCourseDrops = function (ui) {
         const editor = Array.from(body.childNodes);
     }
     const plans = window.createRegistrationDrops({ node, request, task, ceuLabels: ui.ceuLabels,
+        creditLabels, money: ui.money,
         open: title => openDrawer(title, 'REGISTRATION'), prefix: '/sis/drop-plans/' });
     return { review, policy, plan: plans.start };
 };

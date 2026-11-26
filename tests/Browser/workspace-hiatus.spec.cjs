@@ -37,7 +37,7 @@ async function fixture(page, interrupted = false) {
             effective_now: true, review_token: 'fictional-hiatus-review', revision: 'f'.repeat(64), operation_id: hiatus, today: '2026-11-07', timezone: 'America/Los_Angeles',
             defaults: { deactivate: data.code === 'W', section_ids: data.code === 'W' ? [section] : [] },
             courses: [
-                { section_id: section, section_code: 'MATH.101.A', course_title: 'Algebra', term_code: '26/FA', eligible: true, reason: '', proposed_status: 'W', drop_policy: { delete_records: false, grade_code: 'W' } },
+                { section_id: section, section_code: 'MATH.101.A', course_title: 'Algebra', term_code: '26/FA', eligible: true, reason: '', proposed_status: 'W', drop_policy: { delete_records: false, grade_code: 'W' }, withdrawal_credit: { basis_points: 5000, minor: 5001, currency: 'USD', charge_count: 1 } },
                 { section_id: graded, section_code: 'ENG.101.A', course_title: 'Writing', term_code: '26/FA', eligible: false, reason: 'Final grade posted — keep; use the grade-change review process.', proposed_status: 'W' },
             ],
         };
@@ -90,6 +90,7 @@ test('registrar reviews proposed withdrawal effects and preserves encrypted amen
     await expect(page.getByLabel('Apply to MATH.101.A', { exact: true })).toBeChecked();
     await expect(page.getByLabel('Apply to ENG.101.A', { exact: true })).toBeDisabled();
     await expect(page.locator('#drawer-body')).toContainText('Early drops reverse their original course charges; late drops keep them');
+    await expect(page.locator('#drawer-body')).toContainText('Scheduled account credit: $50.01');
     expect(f.sent.some(item => item.path.endsWith('/commit/'))).toBe(false);
     await page.setViewportSize({ width: 375, height: 812 });
     await accessible(page);

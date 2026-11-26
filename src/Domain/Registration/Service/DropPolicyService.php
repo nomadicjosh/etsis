@@ -64,6 +64,7 @@ final readonly class DropPolicyService
                 $this->calendar($term, $section, $section === null ? null : $own['grace_ends_on'], false),
             ),
             'grading' => array_map(fn(array $w): ?array => $this->policies->grade($w['grade_code']), $windows),
+            'can_manage_credits' => $this->canManageCredits($actor),
         ];
         if ($section !== null) {
             $result += ['section' => ['id' => $section->value, 'code' => $calendar['section_code']],
@@ -120,7 +121,11 @@ final readonly class DropPolicyService
                 );
             }
             $inputs = $this->inputs($term, $windows->windows, $section, $grace, $inherit);
-            $this->authorize($actor);
+            $creditSource = $this->creditSource($term, $section, $state);
+            $this->authorize($actor, $this->financial(
+                $inputs['definition']['windows'],
+                [...($state['row']['windows'] ?? []), ...$creditSource['windows']]
+            ));
             $data = [
                 "kind" => "term-drop-policy-review",
                 "term_id" => $term->value,
@@ -131,6 +136,7 @@ final readonly class DropPolicyService
                 "previous_publication_id" =>
                     $state["event"]["publication_id"] ?? null,
                 "previous_policy" => $state["row"],
+                'credit_source' => $creditSource,
                 "inputs" => $inputs,
                 "reason" => trim($reason),
                 "reviewed_at" => $this->clock->now()->format(DATE_ATOM),
@@ -199,7 +205,11 @@ final readonly class DropPolicyService
             ) {
                 throw new CorruptHistoryException();
             }
-            $this->authorize($actor);
+            $financial = $this->financial(
+                $data['inputs']['definition']['windows'],
+                [...($data['previous_policy']['windows'] ?? []), ...($data['credit_source']['windows'] ?? [])]
+            );
+            $this->authorize($actor, $financial);
             $hash = hash("sha256", json_encode($data, JSON_THROW_ON_ERROR));
             $old = $root->operation($data["operation_id"]);
             if ($old !== null) {
@@ -222,6 +232,8 @@ final readonly class DropPolicyService
                 $age > 1200 ||
                 $current["head"] !== $data["head"] ||
                 $current["row"] !== $data["previous_policy"] ||
+                (isset($data['credit_source']) &&
+                    $this->creditSource($term, $section, $current) !== $data['credit_source']) ||
                 $this->inputs(
                     $term,
                     $data["inputs"]["definition"]["windows"],
@@ -267,7 +279,7 @@ final readonly class DropPolicyService
                 ["__aggregate_type" => $section === null ? "term_drop_policy" : "section_drop_policy"],
             )->withPlayhead($root->playhead() + 1);
             $root->acceptHistorical($event);
-            $this->authorize($actor);
+            $this->authorize($actor, $financial);
             $this->history->append(
                 $this->stream($term, $section),
                 $op,
@@ -289,12 +301,14 @@ final readonly class DropPolicyService
                 "registration.drop_policy_published",
                 $section ?? $term,
             );
-            $this->authorize($actor);
+            $this->authorize($actor, $financial);
             $after = $this->current($term, $section);
             $completedAge = $this->clock->now()->getTimestamp() -
                 new DateTimeImmutable($data['reviewed_at'])->getTimestamp();
             if (
                 !$this->same($after['event'], $root->current()) ||
+                ($section !== null && ($data['credit_source']['scope'] ?? null) === 'term' &&
+                    $this->creditSource($term, null, $this->current($term)) !== $data['credit_source']) ||
                 $this->inputs(
                     $term,
                     $definition['windows'],
@@ -407,6 +421,13 @@ final readonly class DropPolicyService
             ];
         }
         $code = new DropWindows($policy["windows"])->gradeOn($effective);
+        $credit = new DropWindows($policy['windows'])->creditOn($effective);
+        if (($credit ?? 0) > 0 && $published === null) {
+            throw new ValidationException([['field' => 'policy', 'message' =>
+                \Codefy\Framework\Helpers\trans(
+                    'Publish and approve the withdrawal credit schedule before using it.',
+                )]]);
+        }
         $grade =
         $student !== null && $enrollment !== null && $section !== null
         ? $this->credits->dropGrade(
@@ -433,7 +454,7 @@ final readonly class DropPolicyService
             "points_milli" => (int) $grade["points_milli"],
             "counts_gpa" => (bool) $grade["counts_gpa"],
             "policy_version" => $policy["version"],
-        ];
+        ] + ($credit === null ? [] : ['credit_basis_points' => $credit]);
     }
 
     /** @return array{row:?array,event:?array,head:int} */
@@ -592,11 +613,38 @@ final readonly class DropPolicyService
         return true;
     }
 
-    private function authorize(EntityId $actor): void
+    private function creditSource(EntityId $term, ?EntityId $section, array $state): array
+    {
+        $parent = $section !== null && ($state['event'] === null || $state['event']['definition']['uses_term_policy']);
+        $source = $parent ? $this->current($term) : $state;
+        return ['scope' => $parent || $section === null ? 'term' : 'section',
+            'publication_id' => $source['event']['publication_id'] ?? null,
+            'windows' => $source['row']['windows'] ?? []];
+    }
+
+    private function financial(array $proposed, array $previous): bool
+    {
+        return array_any(
+            [...$proposed, ...$previous],
+            static fn (array $row): bool => ($row['credit_basis_points'] ?? 0) > 0
+        );
+    }
+
+    private function canManageCredits(EntityId $actor): bool
+    {
+        try {
+            return $this->access->requirePermission('sis:finance:post')->value === $actor->value;
+        } catch (AccessDeniedException) {
+            return false;
+        }
+    }
+
+    private function authorize(EntityId $actor, bool $financial = false): void
     {
         if (
             $this->access->requirePermission("sis:catalog:manage")->value !==
-            $actor->value
+            $actor->value || $this->access->authenticatedUserId()->value !== $actor->value ||
+            ($financial && !$this->canManageCredits($actor))
         ) {
             throw new AccessDeniedException("Access denied.");
         }

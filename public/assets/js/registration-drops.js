@@ -2,6 +2,10 @@
 window.createRegistrationDrops = function (ui) {
     "use strict";
     const { node, request, task, open, prefix } = ui;
+    const creditNotice = summary => summary && node('p', { class: 'alert alert-info' }, summary.minor > 0
+        ? (ui.creditLabels?.review || 'Scheduled account credit: {amount}. This reduces registration charges; it does not issue a cash refund.')
+            .replace('{amount}', ui.money(summary.minor, summary.currency))
+        : (ui.creditLabels?.none || 'No additional registration-charge credit is due under this schedule.'));
     const active = ui.active || (body => body.isConnected && !!body.closest('.show,.showing'));
     const button = (label, run, style = 'btn-outline-primary') => node('button', {
         type: 'button', class: `btn ${style}`, onclick: event => task(run, event.currentTarget),
@@ -97,6 +101,7 @@ window.createRegistrationDrops = function (ui) {
                     node('p', {}, row.outcome.delete_records
                         ? 'Remove the current enrollment and academic credit. Reverse the original course charge if present.'
                         : `Keep the attempted course with grade ${row.outcome.grade_code} and no earned credit. Keep its charge. GPA: ${row.outcome.counts_gpa ? 'included' : 'excluded'}.`),
+                    ...(row.withdrawal_credit ? [creditNotice(row.withdrawal_credit)] : []),
                     ...(row.has_earned_ceus === true ? [node('p', { class: 'alert alert-info' },
                         ui.ceuLabels?.withdrawal_preserves || 'This academic withdrawal preserves the independently recorded CEUs. Any CEU correction or revocation requires a separate reviewed decision.')] : []))),
                 node('p', { class: 'form-text' }, 'Reviews expire after 20 minutes. Any account credit is considered separately for a refund; other institutional fees stay unchanged.'),

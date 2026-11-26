@@ -99,6 +99,18 @@ final class HiatusFixture
             $f->dropPolicies,
             $f->activityLedger(),
             new \Domain\Shared\Service\ReviewProof($this->cipher, $f->clock),
+            new \Infrastructure\Persistence\EventSourcedRegistrationBilling(
+                $f->accounts,
+                $f->sql,
+                new \Infrastructure\Persistence\Repository\EventSourcedBillingRuleRepository(
+                    $f->sql,
+                    EventStoreFixture::framework($f->connection->queryBuilder()),
+                    $f->transactions,
+                    EventStoreFixture::financialWriter($f->connection->queryBuilder()),
+                ),
+                $f->admissions,
+                $f->primaryProgramLedger(),
+            ),
         );
     }
 }

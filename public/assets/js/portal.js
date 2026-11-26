@@ -9,6 +9,12 @@
         ? JSON.parse(one('#campus-config').textContent)
         : {};
     const ceuLabels = one('#campus-ceu-config') ? JSON.parse(one('#campus-ceu-config').textContent) : {};
+    const withdrawalLabels = one('#campus-withdrawal-credit-config')
+        ? JSON.parse(one('#campus-withdrawal-credit-config').textContent) : {};
+    const withdrawalNotice = summary => summary && el('p', { class: 'alert alert-info' }, summary.minor > 0
+        ? (withdrawalLabels.review || 'Scheduled account credit: {amount}. This reduces registration charges; it does not issue a cash refund.')
+            .replace('{amount}', amount(summary.minor, summary.currency))
+        : (withdrawalLabels.none || 'No additional registration-charge credit is due under this schedule.'));
     const ceuText = value => window.continuingEducationText(value, ceuLabels);
     const earnedCeuText = value => window.earnedCeuText(value, ceuLabels);
     const notificationLabels = one('#campus-notification-config')
@@ -1921,7 +1927,8 @@
         });
     }
 
-    const dropPlans = window.createRegistrationDrops({ node: el, request, task, ceuLabels: config.ceu_labels,
+    const dropPlans = window.createRegistrationDrops({ node: el, request, task, ceuLabels,
+        creditLabels: withdrawalLabels, money: amount,
         prefix: '/portal/api/drop-plan/',
         open: title => { const body = el('div'); dialog(title, body); return body; } });
     async function registration(container) {
@@ -1967,9 +1974,12 @@
                                                 if (finished) return;
                                                 finished = true;
                                                 bootstrap.Modal.getInstance(one('#campus-dialog')).hide();
-                                                notice(receipt.academic_records_removed
+                                                notice((receipt.academic_records_removed
                                                     ? feedbackText('course_removed', 'Your course was removed. Its course charge was reversed if present. Any account credit is reviewed separately for a cash refund.')
-                                                    : feedbackText('course_withdrawn', 'Your course stays on your record with grade {grade} and zero earned credits. Its course charge is retained.').replace('{grade}', receipt.grade_code));
+                                                    : feedbackText('course_withdrawn', 'Your course stays on your record with grade {grade} and zero earned credits. Its course charge is retained.').replace('{grade}', receipt.grade_code)) +
+                                                    (receipt.withdrawal_credit?.minor > 0 ? ' ' +
+                                                        (withdrawalLabels.saved || 'Registration-charge account credit recorded: {amount}. No cash refund was issued.')
+                                                            .replace('{amount}', amount(receipt.withdrawal_credit.minor, receipt.withdrawal_credit.currency)) : ''));
                                                 await renderService();
                                             };
                                             dialog('Review your registration change',
@@ -1977,8 +1987,9 @@
                                                 el('p', {}, plan.outcome.delete_records
                                                     ? 'Your enrollment and academic credit will be removed. The original course charge will be reversed if present. This may leave an account credit; cash refunds require a separate review. Other institutional fees are unchanged.'
                                                     : `Your course stays on your academic record with grade ${plan.outcome.grade_code} and zero earned credits. The original course charge stays payable. GPA treatment: ${plan.outcome.counts_gpa ? 'counts toward GPA under the catalog grade definition' : 'excluded from GPA'}.`),
+                                                withdrawalNotice(plan.withdrawal_credit),
                                                 plan.has_earned_ceus === true ? el('p', { class: 'alert alert-info' },
-                                                    config.ceu_labels?.withdrawal_preserves || 'This academic withdrawal preserves the independently recorded CEUs. Any CEU correction or revocation requires a separate reviewed decision.') : null,
+                                                    ceuLabels.withdrawal_preserves || 'This academic withdrawal preserves the independently recorded CEUs. Any CEU correction or revocation requires a separate reviewed decision.') : null,
                                                 plan.corequisites?.warning ? el('div', { role: 'status', class: plan.corequisites.blocked ? 'alert alert-danger' : 'alert alert-warning' },
                                                     el('p', {}, plan.corequisites.blocked ? 'This drop leaves a required co-requisite unsupported. Review the linked courses together.' :
                                                         'This drop leaves a co-requisite unsupported. Institutional policy permits proceeding with this warning.'),

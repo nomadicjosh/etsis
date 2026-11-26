@@ -1472,6 +1472,16 @@ final readonly class HistoricalSchemaRegistry
                     }
                     continue;
                 }
+                if ($name === 'withdrawal_credit') {
+                    if ($class !== \Domain\Finance\Event\AccountChargeWasCredited::class || !is_array($value)) {
+                        throw new CorruptHistoryException();
+                    }
+                    $basis = new \Domain\Finance\ValueObject\WithdrawalCreditBasis($value);
+                    if ($basis->amount() !== $payload['minor']) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'charge_source') {
                     if ($class !== \Domain\Finance\Event\AccountEntryWasPosted::class || !is_string($value)) {
                         throw new CorruptHistoryException();

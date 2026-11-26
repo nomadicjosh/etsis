@@ -10,6 +10,33 @@ use Domain\Shared\EventSourcing\EventContext;
 
 interface RegistrationBilling extends \Domain\Finance\Service\TermFeeBilling
 {
+    public function withdrawalCreditQuote(
+        EntityId $student,
+        EntityId $term,
+        EntityId $enrollment,
+        int $basisPoints,
+        \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
+    ): \Domain\Finance\ValueObject\WithdrawalCreditQuote;
+
+    public function applyWithdrawalCredit(
+        \Domain\Finance\ValueObject\WithdrawalCreditQuote $quote,
+        EventContext $context,
+        array $policyReference,
+        \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
+    ): \Domain\Finance\ValueObject\WithdrawalCreditQuote;
+
+    public function verifyWithdrawalCredit(
+        \Domain\Finance\ValueObject\WithdrawalCreditQuote $expected,
+        \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
+    ): void;
+
+    public function hasWithdrawalCredits(
+        EntityId $student,
+        EntityId $term,
+        EntityId $enrollment,
+        \Domain\Shared\EventSourcing\HistoryReadBudget $budget,
+    ): bool;
+
     /** @param list<\Domain\Finance\BillingRule>|null $rules Shared verified rule view for one selected group. */
     public function registrationQuote(
         EntityId $student,

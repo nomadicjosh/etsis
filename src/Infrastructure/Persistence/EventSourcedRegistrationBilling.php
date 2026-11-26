@@ -22,9 +22,167 @@ use Domain\Registration\Service\RegistrationBilling;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Shared\EventSourcing\EventContext;
 use Qubus\Exception\Data\TypeException;
+use Domain\Finance\ValueObject\WithdrawalCreditQuote;
+use Domain\Finance\ValueObject\WithdrawalCreditBasis;
+use Domain\Shared\Exception\ConcurrentModificationException;
+use Domain\Shared\Exception\ValidationException;
+use Infrastructure\Projection\SqlAccountBalanceProjection;
+
+use function Codefy\Framework\Helpers\trans;
 
 final readonly class EventSourcedRegistrationBilling implements RegistrationBilling, TermFeeBilling
 {
+    public function withdrawalCreditQuote(
+        EntityId $student,
+        EntityId $term,
+        EntityId $enrollment,
+        int $basisPoints,
+        HistoryReadBudget $budget,
+    ): WithdrawalCreditQuote {
+        $row = $this->sql->rows('sis_student_accounts', ['student_id' => $student->value,
+            'term_id' => $term->value], 1)[0] ?? null;
+        $id = $row === null ? null : new AccountId($row['id']);
+        $account = $id === null ? null : $this->accounts->get($id, $budget);
+        if (
+            $account !== null && ($account->studentId()->value !== $student->value ||
+            $account->termId()->value !== $term->value || $account->balance()->currency !== $row['currency'])
+        ) {
+            throw new CorruptHistoryException();
+        }
+        if ($account !== null) {
+            new SqlAccountBalanceProjection($this->sql)->verify($account);
+        }
+        $charges = [];
+        foreach ($account?->courseCharges($enrollment) ?? [] as $source) {
+            $entry = $account->entry($source) ?? throw new CorruptHistoryException();
+            if ($entry['type'] !== EntryType::Charge->value) {
+                throw new CorruptHistoryException();
+            }
+            if ($entry['reversed']) {
+                continue;
+            }
+            $charges[$source->value] = ['source_id' => $source->value, 'original_minor' => $entry['minor'],
+                'credited_minor' => $entry['credited_minor'], 'minor' => max(
+                    0,
+                    WithdrawalCreditBasis::target($entry['minor'], $basisPoints) -
+                    $entry['credited_minor']
+                )];
+        }
+        ksort($charges);
+        $quote = new WithdrawalCreditQuote(
+            $student,
+            $term,
+            $enrollment,
+            $basisPoints,
+            $id,
+            $account?->playhead() ?? 0,
+            $account?->balance()->currency,
+            array_values($charges),
+        );
+        $minor = $quote->summary()['minor'];
+        if (
+            $minor > Money::MAX_MINOR ||
+            ($account !== null && $account->balance()->minor - $minor < -Money::MAX_MINOR)
+        ) {
+            throw new ValidationException([['field' => 'withdrawal_credit',
+                'message' => trans('This withdrawal credit exceeds the supported account limit.')]]);
+        }
+        return $quote;
+    }
+
+    public function applyWithdrawalCredit(
+        WithdrawalCreditQuote $quote,
+        EventContext $context,
+        array $policyReference,
+        HistoryReadBudget $budget,
+    ): WithdrawalCreditQuote {
+        $actor = $context->actor ?? throw new \LogicException('A withdrawal credit actor is required.');
+        $operation = $context->correlation ?? throw new \LogicException('A withdrawal operation is required.');
+        $fresh = $this->withdrawalCreditQuote(
+            $quote->student,
+            $quote->term,
+            $quote->enrollment,
+            $quote->basisPoints,
+            $budget
+        );
+        if (!hash_equals($quote->fingerprint(), $fresh->fingerprint())) {
+            throw new ConcurrentModificationException(
+                trans('The registration charges changed. Review the withdrawal again.'),
+            );
+        }
+        $quote = $fresh;
+        if ($quote->account === null || $quote->summary()['minor'] === 0) {
+            return $quote->after();
+        }
+        $account = $this->accounts->get($quote->account, $budget);
+        if ($account->playhead() !== $quote->position) {
+            throw new ConcurrentModificationException(trans(
+                'The account changed. Review again.',
+            ));
+        }
+        foreach ($quote->charges as $row) {
+            if ($row['minor'] === 0) {
+                continue;
+            }
+            $basis = new WithdrawalCreditBasis([
+                'enrollment_id' => $quote->enrollment->value, 'drop_operation_id' => $operation->value,
+                'policy_reference' => $policyReference, 'basis_points' => $quote->basisPoints,
+                'original_minor' => $row['original_minor'], 'credited_before_minor' => $row['credited_minor'],
+                'effective_on' => $context->effectiveAt?->format('Y-m-d') ?? throw new \LogicException(),
+            ]);
+            $hash = hash('sha256', json_encode([$quote->fingerprint(), $operation->value,
+                $row['source_id'], $basis->facts], JSON_THROW_ON_ERROR));
+            $account->creditCharge(
+                new EntityId($row['source_id']),
+                EntityId::generate(),
+                new Money($row['minor'], $quote->currency),
+                $actor,
+                $hash,
+                $basis
+            );
+        }
+        $this->accounts->save($account, $context);
+        return $quote->after();
+    }
+
+    public function verifyWithdrawalCredit(
+        WithdrawalCreditQuote $expected,
+        HistoryReadBudget $budget,
+    ): void {
+        $current = $this->withdrawalCreditQuote(
+            $expected->student,
+            $expected->term,
+            $expected->enrollment,
+            $expected->basisPoints,
+            $budget
+        );
+        if (!hash_equals($expected->fingerprint(), $current->fingerprint())) {
+            throw new CorruptHistoryException();
+        }
+    }
+
+    public function hasWithdrawalCredits(
+        EntityId $student,
+        EntityId $term,
+        EntityId $enrollment,
+        HistoryReadBudget $budget,
+    ): bool {
+        $row = $this->sql->rows('sis_student_accounts', ['student_id' => $student->value,
+            'term_id' => $term->value], 1)[0] ?? null;
+        if ($row === null) {
+            return false;
+        }
+        $account = $this->accounts->get(new AccountId($row['id']), $budget);
+        if (
+            $account->studentId()->value !== $student->value || $account->termId()->value !== $term->value ||
+            $account->balance()->currency !== $row['currency']
+        ) {
+            throw new CorruptHistoryException();
+        }
+        new SqlAccountBalanceProjection($this->sql)->verify($account);
+        return $account->hasWithdrawalCredits($enrollment);
+    }
+
     public function __construct(
         private AccountRepository $accounts,
         private SqlRecords $sql,
@@ -90,7 +248,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
             throw new \LogicException("Registration pricing must match its accepted section and student.");
         }
         if ($quote->summary()["problems"] !== []) {
-            throw new \Domain\Shared\Exception\ValidationException([
+            throw new ValidationException([
                 [
                     "field" => "students",
                     "message" => "Resolve the registration pricing shown in the review before confirming.",
@@ -174,7 +332,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         $actor = $context->actor ?? throw new \LogicException("A billing actor is required.");
         $facts = $quote->facts();
         if ($facts["problems"] !== []) {
-            throw new \Domain\Shared\Exception\ValidationException([
+            throw new ValidationException([
                 [
                     "field" => "students",
                     "message" => "Resolve the billing configuration shown in the review before confirming.",

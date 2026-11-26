@@ -92,6 +92,7 @@ final readonly class CourseDropService
                     $row,
                     array_flip([
                         'section_id', 'section_code', 'effective_on', 'outcome', 'corequisites', 'has_earned_ceus',
+                        'withdrawal_credit',
                     ])
                 ), $context['courses'])];
             return $visible + ['operation_id' => $operation->value, 'revision' => $revision,
@@ -157,6 +158,24 @@ final readonly class CourseDropService
             }
             $removed = $withdrawn = 0;
             $items = [];
+            $creditQuotes = [];
+            foreach ($context['courses'] as $course) {
+                if (($course['outcome']['credit_basis_points'] ?? 0) > 0) {
+                    $quote = $this->billing->withdrawalCreditQuote(
+                        $selection->student,
+                        new EntityId($course['outcome']['policy_reference']['term_id']),
+                        new EntityId($course['enrollment_id']),
+                        $course['outcome']['credit_basis_points'],
+                        $budget,
+                    );
+                    if (!hash_equals($course['withdrawal_credit_revision'], $quote->fingerprint())) {
+                        throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+                            'The registration charges changed. Review again.',
+                        ));
+                    }
+                    $creditQuotes[] = $quote->after();
+                }
+            }
             foreach ($context['courses'] as $course) {
                 $child = $this->commit(
                     $selection->student,
@@ -185,6 +204,26 @@ final readonly class CourseDropService
                 $this->clock->now()->format(DATE_ATOM)
             );
             $this->audit->record($actor, 'registration.drop_plan_completed', $operation);
+            foreach ($creditQuotes as $quote) {
+                $this->billing->verifyWithdrawalCredit($quote, $budget);
+            }
+            foreach ($context['courses'] as $course) {
+                if (
+                    array_key_exists('credit_basis_points', $course['outcome']) &&
+                    $this->policy->outcome(
+                        new EntityId($course['outcome']['policy_reference']['term_id']),
+                        $course['effective_on'],
+                        $selection->student,
+                        new EntityId($course['enrollment_id']),
+                        new EntityId($course['section_id']),
+                        $budget,
+                    ) !== $course['outcome']
+                ) {
+                    throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+                        'The withdrawal policy changed before completion.',
+                    ));
+                }
+            }
             $after = $this->dependencies(
                 $selection->student,
                 array_map(static fn(EntityId $id): string => $id->value, $selection->sections),
@@ -534,6 +573,35 @@ final readonly class CourseDropService
                         reason: 'Course charge reversed by an accepted early drop.'
                     )
                 );
+            $withdrawal = null;
+            if (!$context['outcome']['delete_records'] && ($context['outcome']['credit_basis_points'] ?? 0) > 0) {
+                $quote = $this->billing->withdrawalCreditQuote(
+                    $student,
+                    $current->termId,
+                    $current->id,
+                    $context['outcome']['credit_basis_points'],
+                    $budget
+                );
+                if (!hash_equals($context['withdrawal_credit_revision'], $quote->fingerprint())) {
+                    throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+                        'The registration charges changed. Review again.',
+                    ));
+                }
+                $withdrawal = $this->billing->applyWithdrawalCredit(
+                    $quote,
+                    new EventContext(
+                        $actor,
+                        $when,
+                        $operation,
+                        $current->id,
+                        reason: \Codefy\Framework\Helpers\trans(
+                            'Registration-charge credit under the accepted withdrawal policy.',
+                        )
+                    ),
+                    $context['outcome']['policy_reference'],
+                    $budget
+                );
+            }
             $result = [
                 "operation_id" => $operation->value,
                 "student_id" => $student->value,
@@ -553,7 +621,7 @@ final readonly class CourseDropService
                 "term_id" => $closed->termId->value,
                 "registered_at" => $closed->registeredAt->format(DATE_ATOM),
                 "status_at" => $closed->statusAt->format(DATE_ATOM),
-            ];
+            ] + ($withdrawal === null ? [] : ['withdrawal_credit' => $context['withdrawal_credit']]);
             $this->drops->record(
                 $operation,
                 $student,
@@ -575,6 +643,19 @@ final readonly class CourseDropService
                 $context["outcome"]["delete_records"] ? "registration.removed" : "registration.withdrawn",
                 $enrollment,
             );
+            if ($withdrawal !== null) {
+                $this->billing->verifyWithdrawalCredit($withdrawal, $budget);
+            }
+            if (array_key_exists('credit_basis_points', $context['outcome'])) {
+                if (
+                    $this->policy->outcome($current->termId, $effective, $student, $enrollment, $section, $budget)
+                    !== $context['outcome']
+                ) {
+                    throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+                        'The withdrawal policy changed before completion.',
+                    ));
+                }
+            }
             // Shared multi-drop checks run once more at the outer completion boundary.
             if ($dependencyRead === null) {
                 $after = $this->dependencies($student, $dropping, $budget, $replacement);
@@ -639,8 +720,16 @@ final readonly class CourseDropService
         string $effective,
         array $dropping = [],
         ?\Domain\Registration\ValueObject\CoRequisiteDropDecision $dependencyRead = null,
+        ?HistoryReadBudget $budget = null,
     ): array {
-        $r = $this->review($student, $section, $effective, dropping: $dropping, dependencyRead: $dependencyRead);
+        $r = $this->review(
+            $student,
+            $section,
+            $effective,
+            budget: $budget,
+            dropping: $dropping,
+            dependencyRead: $dependencyRead
+        );
         return $this->commit(
             $student,
             $section,
@@ -650,6 +739,7 @@ final readonly class CourseDropService
             $r["revision"],
             $effective,
             true,
+            budget: $budget,
             dropping: $dropping,
             dependencyRead: $dependencyRead,
         );
@@ -747,6 +837,14 @@ final readonly class CourseDropService
         [, $academic] = $this->credits->decisionRecord($student, $section, $e->id, budget: $budget);
         $ceuAward = $academic->earnedCeus();
         $outcome = $this->policy->outcome($e->termId, $effective, $e->studentId, $e->id, $e->sectionId, $budget);
+        $creditQuote = !$outcome['delete_records'] && ($outcome['credit_basis_points'] ?? 0) > 0
+        ? $this->billing->withdrawalCreditQuote(
+            $student,
+            $e->termId,
+            $e->id,
+            $outcome['credit_basis_points'],
+            $budget
+        ) : null;
         if ($outcome['delete_records'] && isset($ceuAward['earned_milli'])) {
             throw new ValidationException([['field' => 'enrollment_id', 'message' =>
                 \Codefy\Framework\Helpers\trans('Resolve the recorded CEU award before removing this attempt.')]]);
@@ -764,6 +862,8 @@ final readonly class CourseDropService
             "effective_on" => $effective,
             "timezone" => $now->getTimezone()->getName(),
             "credit" => $credit,
+            ...($creditQuote === null ? [] : ['withdrawal_credit' => $creditQuote->summary(),
+                'withdrawal_credit_revision' => $creditQuote->fingerprint()]),
             ...($ceuAward !== null ? ['has_earned_ceus' => isset($ceuAward['earned_milli'])] : []),
             "corequisites" => ($dependencyRead ?? $this->dependencies(
                 $student,

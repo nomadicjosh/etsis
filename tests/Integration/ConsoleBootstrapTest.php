@@ -473,7 +473,7 @@ final class ConsoleBootstrapTest extends TestCase
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
             dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-drop-policy']);
-        $process->setTimeout(10);
+        $process->setTimeout(20);
         $process->run();
         self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
     }

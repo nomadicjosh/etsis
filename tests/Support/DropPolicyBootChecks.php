@@ -194,3 +194,62 @@ if (
         "A malformed policy history cursor was accepted.",
     );
 }
+
+// One finance-approved schedule, then owner review/confirmation through real providers.
+$creditOwner = $sis->user();
+$creditStudent = $sis->student($creditOwner);
+$creditSection = $sis->section(20, 10001);
+$sis->service->register($creditStudent->id, $creditSection->id, true);
+$creditPolicyInput = ['version' => 0,
+    'windows' => [['through' => null, 'grade_code' => 'W', 'credit_basis_points' => 5000]],
+    'reason' => 'Fictional finance-approved withdrawal schedule.'];
+$sis->access->staff = false;
+$sis->access->grants = ['sis:catalog:manage'];
+if ($teachingPost($policyBase . 'review/', $creditPolicyInput)->getStatusCode() !== 403) {
+    throw new RuntimeException('Catalog authority alone approved a withdrawal credit.');
+}
+$sis->access->staff = true;
+$creditPolicyResponse = $teachingPost($policyBase . 'review/', $creditPolicyInput);
+$creditPolicyReview = json_decode((string) $creditPolicyResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $creditPolicyResponse->getStatusCode() !== 200 || $teachingPost($policyBase . 'commit/', [
+    'review_token' => $creditPolicyReview['review_token'],
+    ])->getStatusCode() !== 200
+) {
+    throw new RuntimeException('Finance-approved policy failed its provider confirmation.');
+}
+$sis->clock->time = new DateTimeImmutable('2026-08-20T12:00:00-07:00');
+$sis->access->actor = $creditOwner;
+$sis->access->staff = false;
+$sis->access->grants = [];
+$creditInput = ['student_id' => $creditStudent->id->value, 'section_id' => $creditSection->id->value];
+$creditReviewResponse = $teachingPost('/portal/api/drop-review/', $creditInput);
+$creditReview = json_decode((string) $creditReviewResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $creditReviewResponse->getStatusCode() !== 200 ||
+    ($creditReview['withdrawal_credit']['minor'] ?? null) !== 5001 ||
+    !str_contains($creditReviewResponse->getHeaderLine('Cache-Control'), 'no-store') ||
+    $creditReviewResponse->hasHeader('phpdebugbar-id')
+) {
+    throw new RuntimeException('Owner withdrawal-credit review failed its private provider contract.');
+}
+$creditInput += array_intersect_key($creditReview, array_flip([
+    'enrollment_id', 'version', 'operation_id', 'revision', 'effective_on',
+]));
+$creditReceiptResponse = $teachingPost('/portal/api/drop/', $creditInput);
+$creditReceipt = json_decode((string) $creditReceiptResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$creditEvents = $sis->financialEvents();
+$creditRetry = $teachingPost('/portal/api/drop/', $creditInput);
+if (
+    $creditReceiptResponse->getStatusCode() !== 200 ||
+    ($creditReceipt['withdrawal_credit']['minor'] ?? null) !== 5001 ||
+    ($creditReceipt['cash_refund_issued'] ?? null) !== false ||
+    (string) $creditRetry->getBody() !== (string) $creditReceiptResponse->getBody() ||
+    $sis->financialEvents() !== $creditEvents
+) {
+    throw new RuntimeException('Owner withdrawal credit lost its exact original result or posted twice.');
+}
+$sis->access->actor = $sis->user();
+if (!in_array($teachingPost('/portal/api/drop-review/', $creditInput)->getStatusCode(), [403, 404], true)) {
+    throw new RuntimeException('Another owner accessed the withdrawal-credit review.');
+}

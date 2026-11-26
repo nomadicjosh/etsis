@@ -212,6 +212,7 @@ final readonly class EnrollmentReinstatementService
             );
             $this->waitlists->complete($claim, $restored, $actor);
             $this->audit->record($actor, "registration.reinstated", $enrollment);
+            $this->registration->assertReinstatementFinances($student, $restored->termId, $enrollment, $budget);
             $this->registration->verifyCompletion(
                 $student,
                 $section,
@@ -278,6 +279,7 @@ final readonly class EnrollmentReinstatementService
                 "Choose the current, effective withdrawn attempt.",
             );
         }
+        $this->registration->assertReinstatementFinances($student, $current->termId, $enrollment, $budget);
         $offering = $this->records->section($section);
         $course = $this->records->courseForSection($offering);
         $basis = $this->enrollments->reinstatementBasis($current, $offering, $course, $budget);

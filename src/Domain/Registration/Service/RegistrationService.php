@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\Registration\Service;
 
+use Domain\Shared\EventSourcing\HistoryReadBudget;
 use DomainException;
 use Domain\Admissions\Repository\AdmissionsRepository;
 use Domain\Audit\Repository\AuditTrail;
@@ -17,6 +18,7 @@ use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\RecordNotFoundException;
+use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Security\StudentAccess;
 use Domain\Shared\Service\Clock;
@@ -721,6 +723,21 @@ final readonly class RegistrationService
     public function drop(EntityId $studentId, EntityId $sectionId): Enrollment
     {
         return $this->drops->drop($studentId, $sectionId);
+    }
+
+    /** Internal coordinator guard; caller authorizes and holds the student lock. No monetary mutation. */
+    public function assertReinstatementFinances(
+        EntityId $student,
+        EntityId $term,
+        EntityId $enrollment,
+        HistoryReadBudget $budget,
+    ): void {
+        if ($this->billing->hasWithdrawalCredits($student, $term, $enrollment, $budget)) {
+            throw new ValidationException([['field' => 'enrollment_id', 'message' =>
+                \Codefy\Framework\Helpers\trans(
+                    'Finance must resolve the active withdrawal-policy credit before this attempt can be reinstated.',
+                )]]);
+        }
     }
 
     /** @return array<string, mixed> */

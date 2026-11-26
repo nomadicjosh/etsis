@@ -10290,3 +10290,73 @@ msgstr ""
 #: resources/views/shared/ceu-labels.php
 msgid "This attempt needs registrar review: a retained offered CEU declaration, consistent attempt records and no pending grade correction are required. Removed or unknown attempts need separate resolution."
 msgstr ""
+
+#: resources/views/shared/withdrawal-credit-labels.php:8
+msgid "Account credit (% of original registration charges)"
+msgstr ""
+
+#: resources/views/shared/withdrawal-credit-labels.php:10
+msgid "Optional. Applies only to charges linked to this registration. Earlier charge credits count toward the scheduled reduction. Separate term fees and cash refunds require their own decisions."
+msgstr ""
+
+#: resources/views/shared/withdrawal-credit-labels.php:13
+msgid "Publishing or replacing a policy with account credits also requires finance posting permission."
+msgstr ""
+
+#: resources/views/shared/withdrawal-credit-labels.php:14
+msgid "Use a percentage from 0 to 100 with at most two decimal places, or leave it blank."
+msgstr ""
+
+#: resources/views/shared/withdrawal-credit-labels.php:15
+msgid "{rate}% registration-charge account credit"
+msgstr ""
+
+#: resources/views/shared/withdrawal-credit-labels.php:16
+msgid "Scheduled account credit: {amount}. This reduces registration charges; it does not issue a cash refund."
+msgstr ""
+
+#: resources/views/shared/withdrawal-credit-labels.php:17
+msgid "No additional registration-charge credit is due under this schedule."
+msgstr ""
+
+#: resources/views/shared/withdrawal-credit-labels.php:18
+msgid "Registration-charge account credit recorded: {amount}. No cash refund was issued."
+msgstr ""
+
+#: src/Domain/Registration/Service/CourseDropService.php:173
+#: src/Domain/Registration/Service/CourseDropService.php:585
+msgid "The registration charges changed. Review again."
+msgstr ""
+
+#: src/Domain/Registration/Service/CourseDropService.php:221
+#: src/Domain/Registration/Service/CourseDropService.php:653
+msgid "The withdrawal policy changed before completion."
+msgstr ""
+
+#: src/Domain/Registration/Service/CourseDropService.php:596
+msgid "Registration-charge credit under the accepted withdrawal policy."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationService.php:738
+msgid "Finance must resolve the active withdrawal-policy credit before this attempt can be reinstated."
+msgstr ""
+
+#: src/Domain/Registration/Service/DropPolicyService.php:427
+msgid "Publish and approve the withdrawal credit schedule before using it."
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/DropWindows.php:96
+msgid "Use 1–12 ordered periods with valid grade codes, a final open period and optional account credits from 0 to 100 percent."
+msgstr ""
+
+#: src/Infrastructure/Persistence/EventSourcedRegistrationBilling.php:78
+msgid "This withdrawal credit exceeds the supported account limit."
+msgstr ""
+
+#: src/Infrastructure/Persistence/EventSourcedRegistrationBilling.php:100
+msgid "The registration charges changed. Review the withdrawal again."
+msgstr ""
+
+#: src/Infrastructure/Persistence/EventSourcedRegistrationBilling.php:110
+msgid "The account changed. Review again."
+msgstr ""

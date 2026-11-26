@@ -197,6 +197,38 @@ final class RegistrationPricingTest extends TestCase
         );
     }
 
+    public function testWithdrawalScheduleCreditsEachOriginalRegistrationChargeAndExcludesFlatTermFees(): void
+    {
+        $f = new SisFixture();
+        $student = $f->student();
+        $this->rate($f, 10001);
+        $this->rules($f)->define(
+            EntityId::generate(),
+            $f->term,
+            null,
+            'Fictional flat fee',
+            'fee',
+            new Money(5000, 'USD'),
+            'Fictional approved flat term fee.'
+        );
+        $section = $f->section(fee: 1001);
+        $f->service->register($student->id, $section->id);
+        $f->legacyGrade(new \Domain\Gradebook\GradeDefinition(EntityId::generate(), 'W', 0, false, false));
+        $f->publishDropPolicy($f->term, -1, new \Domain\Registration\ValueObject\DropWindows([
+            ['through' => null, 'grade_code' => 'W', 'credit_basis_points' => 5000],
+        ]));
+        $id = $this->account($f, $student->id);
+        self::assertSame(36004, $f->accounts->get($id)->balance()->minor);
+        $f->clock->time = new \DateTimeImmutable('2026-08-20T12:00:00-07:00');
+        $receipt = $this->drop($f, $student->id, $section->id);
+        self::assertSame(
+            ['basis_points' => 5000, 'minor' => 15503, 'currency' => 'USD', 'charge_count' => 2],
+            $receipt['withdrawal_credit']
+        );
+        self::assertSame(20501, $f->accounts->get($id)->balance()->minor);
+        self::assertFalse($receipt['cash_refund_issued']);
+    }
+
     public function testProgramScopesAndTermBatchesDoNotRetrospectivelyBillRegistrations(): void
     {
         $f = new SisFixture();
