@@ -13,6 +13,7 @@
             <file>tests/Integration/GraduateWorkflowRecoveryTest.php</file>
             <file>tests/Integration/AdvisingWorkflowRecoveryTest.php</file>
             <file>tests/Integration/AdvisingBookingGuardRecoveryTest.php</file>
+            <file>tests/Integration/VariableCreditRecoveryTest.php</file>
         </testsuite>
     </testsuites>
 </phpunit>

@@ -283,6 +283,8 @@ final class WorkflowRecoveryFixture
         $facts = ['journal' => EventStoreFixture::historyDigest($this->sis->sql)];
         foreach (
             ['sis_history_streams', 'sis_history_operations', 'sis_registration_streams',
+            'sis_courses', 'sis_sections', 'sis_course_versions', 'sis_section_versions',
+            'sis_section_course_versions', 'sis_section_offering_versions',
             'sis_registration_decisions', 'sis_enrollments', 'sis_academic_credits', 'sis_academic_credit_streams',
             'sis_credit_posting_terms', 'sis_credit_course_versions', 'sis_enrollment_section_versions',
             'sis_work_pursuit_scopes', 'sis_student_activity', 'sis_primary_program_streams',

@@ -1,6 +1,6 @@
 # Workflow recovery qualification
 
-Implemented November 24, 2026. The focused recovery suite exercises real registration, publication, academic, waitlist, billing, drop and recorded-refund services across separate PHP processes. It terminates a worker with a POSIX kill signal before commit or after commit but before its reply. The default tests use disposable fictional SQLite databases. The original ten recovery/contention cases passed on isolated MariaDB; the [native PostgreSQL runner](native-workflow-qualification.md) now qualifies thirty selected cases, including admissions, matriculation, academic approvals, transfer recovery and coordinated FIFO waitlists. It copies installed schema definitions and seeds only fictional rows. Neither mode uses configured application records as fixtures.
+Implemented November 24, 2026. The focused recovery suite exercises real registration, publication, academic, waitlist, billing, drop and recorded-refund services across separate PHP processes. It terminates a worker with a POSIX kill signal before commit or after commit but before its reply. The default tests use disposable fictional SQLite databases. The original ten recovery/contention cases passed on isolated MariaDB; the [native PostgreSQL runner](native-workflow-qualification.md) records 79 selected cases across separate qualification runs, including admissions, matriculation, academic approvals, transfer recovery and coordinated FIFO waitlists. It copies installed schema definitions and seeds only fictional rows. Neither mode uses configured application records as fixtures.
 
 The separate [independent journal checkpoint workflow](history-checkpoint-recovery.md) now detects an older valid restored journal inventory and qualifies mixed event-key recovery. It supplements these process-loss checks; full database, projection and encrypted-artifact backup/restore acceptance remains open.
 
@@ -28,6 +28,10 @@ The connected [native workflow guide](native-workflow-qualification.md#admission
 Initial final grades remain unchanged while an independent correction request is pending. Approval of a grade or combined academic-unit correction survives process loss without partial request/credit/history updates. Competing officers cannot apply one correction twice; termination of the first allows the second to proceed. Grade/unit corrections preserve original registered quantities, accepted offering references and financial facts. Transfer amendments preserve their accepted course/grade/unit facts; an original retry after a subsequent void cannot restore the earlier award.
 
 These cases use the existing worker/private pipes, ordinary services and fingerprint comparisons. Expected stale-version conflicts have a fixed rejected protocol result; corrupt/storage/unexpected failures still fail the worker. This does not change application behavior, issue a credential, repair projections, send messages or perform external cash movement.
+
+## Variable-credit recovery
+
+The [selected variable-credit cases](native-workflow-qualification.md#variable-credit-group-recovery) cover group process loss and lost replies, competing final-seat quantities, and allocation from retained variable-credit waitlist requests. Exact academic/load and price quantities, original offering references and later drops/amendments remain separate retained facts. Run `tests/Integration/VariableCreditRecoveryTest.php` in SQLite, or its three documented two-case filters in the private native environment. The existing two-worker and short-deadline bounds apply. No installed application record is used as a fixture.
 
 ## Registration, payment, early drop and refund
 

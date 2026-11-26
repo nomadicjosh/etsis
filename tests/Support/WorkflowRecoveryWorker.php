@@ -156,7 +156,7 @@ try {
             ),
             'register' => ['id' => $fixture->courseRegistrationService($audit)->register(
                 new EntityId($command['student']),
-                new EntityId($command['section']), true
+                new EntityId($command['section']), true, creditsMilli: $command['credits_milli'] ?? null
             )->id->value],
             'confirm_registration' => $fixture->registrationBatches(
                 audit: $audit,
@@ -164,7 +164,8 @@ try {
             )->commit(
                 new EntityId($command['review']['operation_id']),
                 new RegistrationBatchSelection(new EntityId($command['section']),
-                    ...array_map(static fn (string $id): EntityId => new EntityId($id), $command['students'])),
+                    ...array_map(static fn (string $id): EntityId => new EntityId($id), $command['students']))
+                    ->withCreditChoices($command['credit_choices'] ?? []),
                 $command['review']['revision'],
                 $command['review']['review_token'],
                 true

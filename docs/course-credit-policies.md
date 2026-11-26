@@ -47,6 +47,10 @@ The enrollment-to-offering projection also retains the original selected quantit
 
 Migration **20261125000010_AddSisStudentCreditChoices** adds a fixed-default current section mode, a nullable retained-publication mode, a nullable original enrollment choice and an encrypted nullable waitlist choice. It supports the five SQL compiler dialects, is retry-safe and refuses destructive rollback. Configured PostgreSQL preservation checks cover all original values, including journal/support bytes, excluding only the expected new columns and migration ledger row.
 
+## Variable-credit recovery qualification
+
+The [bounded SQLite/PostgreSQL recovery checks](native-workflow-qualification.md#variable-credit-group-recovery) now cover interrupted groups and lost replies, competing final-seat credit choices, and original requested quantities during FIFO waitlist allocation. They verify exact prices and academic/load inputs, original receipts after future offering amendments and early drops, and unchanged configured-application records. Larger cohorts, long histories, other engines and institution-led release acceptance remain separate qualification work.
+
 ## Earlier credit-policy deployment and validation
 
 New course publications retain `credit_policy`; new section publications retain `credits_milli`. Both use the existing protected streams in `sis_history_events`, expected versions, idempotent receipts, required audit and final source/authority checks. Earlier publications without those fields remain unrecorded. No policy, quantity or event is backfilled.
