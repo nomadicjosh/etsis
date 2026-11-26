@@ -229,3 +229,41 @@ if (
         "Registration authority implicitly granted academic reference management.",
     );
 }
+
+$sis->access->staff = true;
+$sis->access->grants = [];
+$defaultPath = '/sis/terms/' . $sis->term->value . '/reporting-default/';
+$readDefault = static fn() => $app->router->match($get->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $defaultPath)
+));
+$response = $readDefault();
+$empty = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $response->getStatusCode() !== 200 || $empty['reporting_group'] !== null ||
+    !str_contains($response->getHeaderLine('Cache-Control'), 'no-store') || $response->hasHeader('phpdebugbar-id')
+) {
+    throw new RuntimeException('The private term reporting default did not resolve.');
+}
+$beforeDefaults = $sis->sql->rows('sis_history_events');
+$command = ['reporting_group_id' => $groupRow['id'], 'revision' => $empty['revision']];
+$response = $teachingPost($defaultPath, $command);
+$saved = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $response->getStatusCode() !== 200 || $saved['reporting_group']['id'] !== $groupRow['id'] ||
+    $teachingPost($defaultPath, $command)->getStatusCode() !== 409 ||
+    $teachingPost($defaultPath, ['revision' => $saved['revision']])->getStatusCode() !== 422 ||
+    $teachingPost($defaultPath, [
+        'reporting_group_id' => $methodRow['id'], 'revision' => $saved['revision'],
+    ])->getStatusCode() !== 422 ||
+    $teachingPost($defaultPath, [
+        'reporting_group_id' => null, 'revision' => $saved['revision'],
+    ])->getStatusCode() !== 200 ||
+    $sis->sql->rows('sis_history_events') !== $beforeDefaults
+) {
+    throw new RuntimeException('Term defaults bypassed explicit choices, source checks or historical isolation.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:registration:manage'];
+if ($readDefault()->getStatusCode() !== 403 || $teachingPost($defaultPath, $command)->getStatusCode() !== 403) {
+    throw new RuntimeException('Registration duty acquired term default setup.');
+}

@@ -1141,6 +1141,8 @@ return static function (Psr7Router $router): void {
     $router->post('/sis/programs/{id}/website-catalog/review/', [$discovery, 'review']);
     $router->post('/sis/programs/{id}/website-catalog/commit/', [$discovery, 'commit']);
     $classificationController = \Application\Http\Controller\SisClassificationController::class;
+    $router->get('/sis/terms/{id}/reporting-default/', [$classificationController, 'termDefault']);
+    $router->post('/sis/terms/{id}/reporting-default/', [$classificationController, 'saveTermDefault']);
     $router->post("/sis/catalog/classifications/{kind}/page/", [$classificationController, "page"]);
     $router->post("/sis/catalog/classifications/{kind}/save/", [$classificationController, "save"]);
     $router->get("/sis/sections/{id}/classifications/", [$classificationController, "section"]);

@@ -7167,3 +7167,55 @@ msgstr ""
 
 msgid "Originally selected academic credits"
 msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Reporting-group default"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Loading term default…"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "No term default"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "This is a preset for section drafts. Staff must copy it into a section and save their choice before publication. Changing or clearing this default leaves existing sections and student history unchanged."
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "This reporting group is retired. Choose an active group before using the preset on another section."
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Back to term default"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Clear term default"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Save term default"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Term default saved. Existing section choices are unchanged."
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Copy term default"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Copying fills this draft only. Save section setup, then review publication. Later term-default changes do not update this choice."
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Term default copied into this draft."
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "ACADEMIC TERM"
+msgstr ""

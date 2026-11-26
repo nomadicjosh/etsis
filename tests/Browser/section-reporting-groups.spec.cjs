@@ -3,7 +3,7 @@ const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
 const { recordAction } = require('./support/workspace-actions.cjs');
 const id = n => String(n).padStart(26, '0');
-async function fixture(page, { stale = false, delay = null } = {}) {
+async function fixture(page, { stale = false, delay = null, preset = null, staleDefault = false } = {}) {
     const section = id(1), course = id(2), term = id(3), calls = [], errors = [];
     let choices = { instructional_method: null, campus: null, reporting_group: null }, revision = 'draft-0';
     const groups = [
@@ -12,6 +12,8 @@ async function fixture(page, { stale = false, delay = null } = {}) {
         { id: id(12), kind: 'reporting_group', code: 'ALT-2026', title: 'Alternative reporting group', active: true, revision: 'ref-2' },
     ];
     const method = { id: id(20), kind: 'instructional_method', code: 'LEC', title: 'Lecture', active: true, revision: 'ref-method' };
+    let defaultGroup = preset === null ? null : groups[preset], defaultRevision = 'term-default-0';
+    const termRow = { id: term, code: '26/SHORT-A', name: 'Fictional short term', starts_on: '2026-08-01', ends_on: '2026-08-31', add_drop_ends_on: '2026-08-15' };
     const row = { id: section, code: 'ENG.101.A', course_id: course, term_id: term, course_code: 'ENG.101',
         course_title: 'Fictional Literature', term_code: '26/SHORT-A', capacity: 20, minimum_enrollment: 0,
         faculty_user_id: null, active: true, web_registration: true, fee_minor: 0, currency: 'USD', delivery_mode: 'online' };
@@ -25,7 +27,15 @@ async function fixture(page, { stale = false, delay = null } = {}) {
         calls.push({ path, data, csrf: route.request().headers()['x-csrf-token'] });
         let result = { items: [], next_after: null };
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
-        else if (path.startsWith('/sis/ui/data/')) result.items = path.includes('/sections/') ? [row] : [];
+        else if (path.startsWith('/sis/ui/data/')) result.items = path.includes('/sections/') ? [row] : path.includes('/terms/') ? [termRow] : [];
+        else if (path.endsWith('/reporting-default/')) {
+            if (data) {
+                if (staleDefault) return route.fulfill({ status: 409, json: { error: 'Reload the term reporting-group default before saving.' } });
+                defaultGroup = groups.find(group => group.id === data.reporting_group_id) || null;
+                defaultRevision = 'term-default-1';
+            }
+            result = { term: termRow, reporting_group: defaultGroup, revision: defaultRevision };
+        }
         else if (path.startsWith('/sis/catalog/classifications/')) {
             const kind = path.split('/')[4];
             if (path.endsWith('/save/')) {
@@ -57,7 +67,7 @@ async function fixture(page, { stale = false, delay = null } = {}) {
     await page.goto('/admin/');
     await page.locator('.workspace-nav-link[data-workspace="courses"]').click();
     await page.getByRole('link', { name: 'Sections', exact: true }).click();
-    return { calls, errors, section };
+    return { calls, errors, section, changePreset: n => { defaultGroup = groups[n]; } };
 }
 async function openSetup(page) {
     await page.getByRole('button', { name: 'ENG.101.A', exact: true }).click();
@@ -142,5 +152,71 @@ test('closing a pending section classification read prevents a late reporting-gr
     const finished = page.waitForResponse(response => response.url().endsWith('/classifications/'));
     release(); await finished;
     await expect(page.getByRole('button', { name: 'Choose reporting group', exact: true })).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('term default setup preserves picker drafts, saves explicitly and returns to the term record', async ({ page }) => {
+    const f = await fixture(page);
+    await page.getByRole('link', { name: 'Terms', exact: true }).click();
+    await page.getByRole('button', { name: '26/SHORT-A', exact: true }).click();
+    await page.getByRole('button', { name: 'Reporting-group default', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Save term default', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Choose reporting group', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose FA-2026', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose reporting group', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to term default', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('FA-2026 — Fictional fall <script>group</script>');
+    expect(f.calls.filter(call => call.path.endsWith('/reporting-default/') && call.data)).toHaveLength(0);
+    const save = page.getByRole('button', { name: 'Save term default', exact: true });
+    await save.focus(); await page.keyboard.press('Enter');
+    await expect(page.getByRole('status').filter({ hasText: 'Term default saved.' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Back to record', exact: true }).locator('.bi-arrow-left')).toHaveCount(1);
+    expect(f.calls.find(call => call.path.endsWith('/reporting-default/') && call.data)).toMatchObject({
+        data: { reporting_group_id: id(11), revision: 'term-default-0' }, csrf: 'fictional-test-token' });
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(axe.violations.map(item => item.id)).toEqual([]);
+    await page.screenshot({ path: '/tmp/etsis-term-reporting-default-phone.png' });
+    await page.getByRole('button', { name: 'Clear term default', exact: true }).click();
+    await page.getByRole('button', { name: 'Save term default', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('No term default');
+    await page.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Registration window');
+    expect(f.errors).toEqual([]);
+});
+
+test('copying rechecks the current preset and preserves other draft choices until explicit save', async ({ page }) => {
+    const f = await fixture(page, { preset: 1 });
+    await openSetup(page);
+    await page.getByRole('button', { name: 'Choose instructional method', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose LEC', exact: true }).click();
+    f.changePreset(2);
+    await page.getByRole('button', { name: 'Copy term default', exact: true }).click();
+    await expect(page.getByRole('region', { name: 'Reporting group', exact: true })).toContainText('ALT-2026 — Alternative reporting group');
+    await expect(page.locator('#drawer-body')).toContainText('LEC — Lecture');
+    expect(f.calls.filter(call => call.path.endsWith('/classifications/') && call.data)).toHaveLength(0);
+    await page.getByRole('button', { name: 'Save section setup', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Section setup saved.' })).toBeVisible();
+    expect(f.calls.find(call => call.path.endsWith('/classifications/') && call.data).data).toMatchObject({
+        instructional_method_id: id(20), reporting_group_id: id(12) });
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('a retired preset cannot be copied and a stale term edit keeps the proposed draft', async ({ page }) => {
+    const f = await fixture(page, { preset: 0, staleDefault: true });
+    await openSetup(page);
+    await expect(page.getByRole('button', { name: 'Copy term default', exact: true })).toBeDisabled();
+    await expect(page.locator('#drawer-body')).toContainText('This reporting group is retired.');
+    await page.getByRole('button', { name: 'Close record', exact: true }).click();
+    await page.getByRole('link', { name: 'Terms', exact: true }).click();
+    await page.getByRole('button', { name: '26/SHORT-A', exact: true }).click();
+    await page.getByRole('button', { name: 'Reporting-group default', exact: true }).click();
+    await page.getByRole('button', { name: 'Clear term default', exact: true }).click();
+    await page.getByRole('button', { name: 'Save term default', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('No term default');
+    await expect(page.getByRole('button', { name: 'Save term default', exact: true })).toBeEnabled();
     expect(f.errors).toEqual([]);
 });

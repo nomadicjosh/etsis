@@ -272,6 +272,42 @@ window.createWorkspaceClassifications = function (ui) {
         body.append(form, button(groupText(kind, "back_groups", `Back to ${category.plural.toLowerCase()}`), back));
     }
 
+    async function termDefault(id, back) {
+        const loading = openDrawer(reportingText('term_default', 'Reporting-group default'), reportingText('term_context', 'ACADEMIC TERM'));
+        loading.append(node('p', { role: 'status' }, reportingText('loading_default', 'Loading term default…')));
+        let current = await request(`/sis/terms/${id}/reporting-default/`);
+        if (!loading.isConnected) return;
+        let choice = current.reporting_group;
+        let saved = false;
+        function render() {
+            const body = openDrawer(reportingText('term_default', 'Reporting-group default'), current.term.code);
+            const changed = choice?.id !== current.reporting_group?.id;
+            const card = node('section', { class: 'surface p-3 mb-3', 'aria-label': reportingText('term_default', 'Reporting-group default') },
+                node('h3', { class: 'h5' }, reportingText('term_default', 'Reporting-group default')),
+                node('p', { class: 'text-break' }, choice ? `${choice.code} — ${choice.title}` : reportingText('no_default', 'No term default')),
+                node('p', { class: 'form-text' }, reportingText('default_help', 'This is a preset for section drafts. Staff must copy it into a section and save their choice before publication. Changing or clearing this default leaves existing sections and student history unchanged.')));
+            if (choice && !choice.active) card.append(node('p', { role: 'status', class: 'alert alert-warning' },
+                reportingText('default_retired', 'This reporting group is retired. Choose an active group before using the preset on another section.')));
+            const controls = node('div', { class: 'd-flex flex-wrap gap-2' },
+                button(reportingText('choose_group', 'Choose reporting group'), () => library('reporting_group', '', null, [],
+                    row => { choice = row; saved = false; render(); }, render, reportingText('back_default', 'Back to term default'))));
+            if (choice) controls.append(button(reportingText('clear_default', 'Clear term default'), () => { choice = null; saved = false; render(); }));
+            card.append(controls);
+            const save = button(reportingText('save_default', 'Save term default'), async () => {
+                const result = await request(`/sis/terms/${id}/reporting-default/`, 'POST', {
+                    reporting_group_id: choice?.id ?? null, revision: current.revision,
+                });
+                if (!body.isConnected) return;
+                current = result; choice = result.reporting_group; saved = true; render();
+            }, 'btn-primary');
+            save.disabled = !changed;
+            const returnButton = button(reportingText('back_record', 'Back to record'), back);
+            if (saved) body.append(node('p', { role: 'status', class: 'alert alert-success' }, reportingText('default_saved', 'Term default saved. Existing section choices are unchanged.')));
+            body.append(card, node('div', { class: 'd-flex flex-wrap gap-2' }, save, returnButton));
+        }
+        render();
+    }
+
     async function assignment(target, id, saved = false) {
         const isSection = target === "section";
         const categoryKeys = isSection
@@ -282,6 +318,10 @@ window.createWorkspaceClassifications = function (ui) {
         loading.append(node("p", { role: "status", class: "form-text" }, "Loading current classifications…"));
         const current = await request(path);
         if (!loading.isConnected) return;
+        let termPreset = isSection && current.section.term_id
+            ? await request(`/sis/terms/${current.section.term_id}/reporting-default/`) : null;
+        if (!loading.isConnected) return;
+        let copiedPreset = false;
         const choices = { ...current.classifications };
         function render() {
             const changed =
@@ -339,6 +379,30 @@ window.createWorkspaceClassifications = function (ui) {
                     ),
                     controls,
                 );
+                if (kind === 'reporting_group' && termPreset) {
+                    const preset = termPreset.reporting_group;
+                    const copy = button(reportingText('use_default', 'Copy term default'), async () => {
+                        const fresh = await request(`/sis/terms/${current.section.term_id}/reporting-default/`);
+                        if (!body.isConnected) return;
+                        termPreset = fresh;
+                        if (fresh.reporting_group?.active) {
+                            const { id, code, title } = fresh.reporting_group;
+                            choices.reporting_group = { id, code, title };
+                            copiedPreset = true;
+                        }
+                        render();
+                    });
+                    copy.prepend(node('i', { class: 'bi bi-copy', 'aria-hidden': 'true' }));
+                    copy.disabled = !preset?.active;
+                    card.insertBefore(node('p', { class: 'form-text text-break' },
+                        reportingText('term_default', 'Reporting-group default'), ': ',
+                        preset ? `${preset.code} — ${preset.title}` : reportingText('no_default', 'No term default')), controls);
+                    card.insertBefore(node('p', { class: 'form-text' }, reportingText('copy_help', 'Copying fills this draft only. Save section setup, then review publication. Later term-default changes do not update this choice.')), controls);
+                    if (preset && !preset.active) card.insertBefore(node('p', { class: 'form-text' },
+                        reportingText('default_retired', 'This reporting group is retired. Choose an active group before using the preset on another section.')), controls);
+                    if (copiedPreset) card.insertBefore(node('p', { role: 'status', class: 'text-success' }, reportingText('default_copied', 'Term default copied into this draft.')), controls);
+                    controls.append(copy);
+                }
                 controls.append(
                     button(
                         groupText(kind, "choose_group", `Choose ${category.singular.toLowerCase()}`),
@@ -348,6 +412,7 @@ window.createWorkspaceClassifications = function (ui) {
                             null,
                             [],
                             (row) => {
+                                if (kind === 'reporting_group') copiedPreset = false;
                                 choices[kind] = {
                                     id: row.id,
                                     code: row.code,
@@ -367,6 +432,7 @@ window.createWorkspaceClassifications = function (ui) {
                         button(
                             groupText(kind, "clear_group", `Clear ${category.singular.toLowerCase()}`),
                             () => {
+                                if (kind === 'reporting_group') copiedPreset = false;
                                 choices[kind] = null;
                                 render();
                             },
@@ -431,5 +497,5 @@ window.createWorkspaceClassifications = function (ui) {
     }
     const course = (id, saved = false) => assignment("course", id, saved);
     const section = (id, saved = false) => assignment("section", id, saved);
-    return { library, course, section };
+    return { library, course, section, termDefault };
 };

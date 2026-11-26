@@ -37,7 +37,7 @@ final readonly class SectionClassificationService
         $values = $this->sections->current($section)->describe();
         $this->authorize($actor);
         return [
-            "section" => ["id" => $section->value, "code" => $row["code"]],
+            "section" => ["id" => $section->value, "code" => $row["code"], "term_id" => $row["term_id"]],
             "classifications" => $values,
             "revision" => $this->revision($values),
         ];

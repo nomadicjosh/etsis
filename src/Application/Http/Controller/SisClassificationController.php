@@ -18,6 +18,7 @@ final readonly class SisClassificationController
     public function __construct(
         private ClassificationService $service,
         private \Domain\Registration\Service\SectionClassificationService $sections,
+        private \Domain\Catalog\Service\TermReportingDefaultService $termDefaults,
     ) {
     }
 
@@ -87,6 +88,21 @@ final readonly class SisClassificationController
     public function section(string $id): ResponseInterface
     {
         return new JsonResponse($this->sections->show(new EntityId($id)));
+    }
+
+    public function termDefault(string $id): ResponseInterface
+    {
+        return new JsonResponse($this->termDefaults->show(new EntityId($id)));
+    }
+
+    public function saveTermDefault(ServerRequest $request, string $id): ResponseInterface
+    {
+        $input = FormInput::from($request);
+        return new JsonResponse($this->termDefaults->save(
+            new EntityId($id),
+            $input->requiredNullableId('reporting_group_id'),
+            $input->text('revision', 64),
+        ));
     }
 
     public function assignSection(

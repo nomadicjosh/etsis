@@ -2474,6 +2474,8 @@ window.createWorkspaceOperations = function (ui) {
         if (sectionName === "billing") await billing(body, row);
         if (sectionName === "campaigns") await campaign(body, row, origin);
         if (sectionName === "terms" && can("sis:catalog:manage")) {
+            body.append(button(ui.reportingLabels?.term_default || "Reporting-group default",
+                () => ui.classifications().termDefault(row.id, () => openRecord(sectionName, row))));
             body.append(button("Drop / withdrawal policy", () => ui.courseDrops().policy(row, () => openRecord(sectionName, row))));
             const panel = section("Registration window");
             body.append(panel);
