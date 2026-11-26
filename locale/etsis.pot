@@ -7219,3 +7219,127 @@ msgstr ""
 #: resources/views/backend/workspace/section-reporting-labels.php
 msgid "ACADEMIC TERM"
 msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Reporting hierarchy"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Loading reporting hierarchy…"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Choose an optional parent reporting group. Paths can contain up to eight groups. Saving preserves existing section publications and student records; publish a new section version to retain a changed path."
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Saved hierarchy"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Parent reporting group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "No parent; this is a root group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Choose parent group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Back to reporting hierarchy"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Clear parent group"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Save reporting hierarchy"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Reporting hierarchy saved. Earlier publications and student records are unchanged."
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Reporting hierarchy was not recorded"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "No reporting group selected"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Retained root reporting group reference"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Retained root reporting group code"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Retained root reporting group name"
+msgstr ""
+
+#: resources/views/backend/workspace/section-reporting-labels.php
+msgid "Reporting hierarchy recorded in accepted offering"
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlReportingHierarchyRepository.php
+msgid "Reload the reporting hierarchy before saving."
+msgstr ""
+
+#: src/Domain/Catalog/Service/ReportingHierarchyService.php
+msgid "The reporting hierarchy changed before saving completed."
+msgstr ""
+
+#: src/Domain/Catalog/Service/ReportingHierarchyService.php
+msgid "Choose a reporting group."
+msgstr ""
+
+#: src/Domain/Catalog/Service/ReportingHierarchyService.php
+msgid "Choose an active reporting group."
+msgstr ""
+
+#: src/Domain/Catalog/Service/ReportingHierarchyService.php
+msgid "Use at most 500 reporting hierarchy entries."
+msgstr ""
+
+#: src/Domain/Catalog/Service/ReportingHierarchyService.php
+msgid "Use an acyclic reporting hierarchy with at most eight groups in each path."
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlReportingHierarchyRepository.php
+msgid "The reporting hierarchy exceeds the bounded setup limit."
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/SectionClassifications.php
+msgid "An unrecorded reporting group must stay unknown."
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/SectionClassifications.php
+msgid "Use a complete reporting hierarchy of at most eight groups."
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/SectionClassifications.php
+msgid "Use unique reporting groups in the retained hierarchy."
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/SectionClassifications.php
+msgid "Use only the retained section classification fields."
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/SectionClassifications.php
+msgid "Use a complete retained reporting hierarchy."
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/SectionClassifications.php
+msgid "Use complete reporting-group definitions in the hierarchy."
+msgstr ""
+
+#: src/Domain/Catalog/Service/ReportingHierarchyReader.php
+msgid "Reporting hierarchy changed. Reload the section before continuing."
+msgstr ""

@@ -389,6 +389,30 @@ final class AcademicReportSchema
                         "retained_offering",
                         "reporting_group_id",
                     ),
+                    'retained_reporting_root_id' => $field(
+                        'Retained root reporting group reference',
+                        'string',
+                        'retained_offering',
+                        'reporting_root_id',
+                    ),
+                    'retained_reporting_root_code' => $field(
+                        'Retained root reporting group code',
+                        'string',
+                        'retained_offering',
+                        'reporting_root_code',
+                    ),
+                    'retained_reporting_root_title' => $field(
+                        'Retained root reporting group name',
+                        'string',
+                        'retained_offering',
+                        'reporting_root_title',
+                    ),
+                    'retained_reporting_hierarchy_recorded' => $field(
+                        'Reporting hierarchy recorded in accepted offering',
+                        'boolean',
+                        'retained_offering',
+                        'reporting_hierarchy_recorded',
+                    ),
                     "retained_reporting_group_code" => $field(
                         "Retained reporting group code",
                         "string",

@@ -33,6 +33,14 @@ final readonly class SqlClassificationRepository implements ClassificationReposi
         $this->sql->lock("sis_catalog_classifications", $id->value, "id");
     }
 
+    public function peek(EntityId $id): array
+    {
+        $row = $this->sql->rows('sis_catalog_classifications', ['id' => $id->value], 1)[0]
+        ?? throw new \Domain\Shared\Exception\RecordNotFoundException('Classification not found.');
+        $row['active'] = (bool) $row['active'];
+        return $this->withSchools([$row])[0];
+    }
+
     public function page(ClassificationKind $kind, string $search, ?EntityId $after): array
     {
         $q = $this->sql->quote(...);

@@ -1,9 +1,10 @@
 'use strict';
 const { test, expect } = require('@playwright/test');
 const AxeBuilder = require('@axe-core/playwright').default;
-const { recordAction } = require('./support/workspace-actions.cjs');
+const { recordAction, workspaceTool } = require('./support/workspace-actions.cjs');
 const id = n => String(n).padStart(26, '0');
-async function fixture(page, { stale = false, delay = null, preset = null, staleDefault = false } = {}) {
+async function fixture(page, { stale = false, delay = null, preset = null, staleDefault = false,
+    hierarchyParent = null, staleHierarchy = false, hierarchyDelay = null } = {}) {
     const section = id(1), course = id(2), term = id(3), calls = [], errors = [];
     let choices = { instructional_method: null, campus: null, reporting_group: null }, revision = 'draft-0';
     const groups = [
@@ -13,6 +14,10 @@ async function fixture(page, { stale = false, delay = null, preset = null, stale
     ];
     const method = { id: id(20), kind: 'instructional_method', code: 'LEC', title: 'Lecture', active: true, revision: 'ref-method' };
     let defaultGroup = preset === null ? null : groups[preset], defaultRevision = 'term-default-0';
+    const parents = new Map(hierarchyParent === null ? [] : [[id(11), groups[hierarchyParent]]]);
+    let hierarchyRevision = 'hierarchy-0';
+    const classSnapshot = () => ({ ...choices, reporting_group_ancestors: choices.reporting_group && parents.has(choices.reporting_group.id)
+        ? [parents.get(choices.reporting_group.id)] : [] });
     const termRow = { id: term, code: '26/SHORT-A', name: 'Fictional short term', starts_on: '2026-08-01', ends_on: '2026-08-31', add_drop_ends_on: '2026-08-15' };
     const row = { id: section, code: 'ENG.101.A', course_id: course, term_id: term, course_code: 'ENG.101',
         course_title: 'Fictional Literature', term_code: '26/SHORT-A', capacity: 20, minimum_enrollment: 0,
@@ -28,6 +33,18 @@ async function fixture(page, { stale = false, delay = null, preset = null, stale
         let result = { items: [], next_after: null };
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path.startsWith('/sis/ui/data/')) result.items = path.includes('/sections/') ? [row] : path.includes('/terms/') ? [termRow] : [];
+        else if (path.endsWith('/hierarchy/')) {
+            const group = groups.find(group => group.id === path.split('/')[4]);
+            if (data) {
+                if (staleHierarchy) return route.fulfill({ status: 409, json: { error: 'Reload the reporting hierarchy before saving.' } });
+                if (data.parent_id === group.id) return route.fulfill({ status: 422, json: { error: 'Use an acyclic reporting hierarchy.' } });
+                const selected = groups.find(group => group.id === data.parent_id);
+                if (selected) parents.set(group.id, selected); else parents.delete(group.id);
+                hierarchyRevision = 'hierarchy-1';
+            } else if (hierarchyDelay) await hierarchyDelay();
+            const parent = parents.get(group.id) || null;
+            result = { group, parent, path: [group, ...(parent ? [parent] : [])], revision: hierarchyRevision };
+        }
         else if (path.endsWith('/reporting-default/')) {
             if (data) {
                 if (staleDefault) return route.fulfill({ status: 409, json: { error: 'Reload the term reporting-group default before saving.' } });
@@ -54,14 +71,14 @@ async function fixture(page, { stale = false, delay = null, preset = null, stale
                 revision = 'draft-1'; result = { status: 'saved' };
             } else {
                 if (delay) await delay();
-                result = { section: row, classifications: choices, revision };
+                result = { section: row, classifications: classSnapshot(), revision };
             }
         } else if (path.endsWith('/publication/setup/')) result = { section: row, term: { code: row.term_code, starts_on: '2026-08-01', ends_on: '2026-08-31' },
-            course_definition: { definition: { code: 'ENG.101', title: 'Fictional Literature' } }, classifications: choices,
+            course_definition: { definition: { code: 'ENG.101', title: 'Fictional Literature' } }, classifications: classSnapshot(),
             latest: null, publication_status: 'unpublished', selected_offering: null, faculty_label: 'Not assigned', has_student_records: false };
         else if (path.endsWith('/publication/page/')) result = { items: [], next_cursor: null };
         else if (path.endsWith('/publication/review/')) result = { definition: { ...definition, instruction_starts_on: data.instruction_starts_on, instruction_ends_on: data.instruction_ends_on },
-            classifications: choices, expected_version: 0, reason: data.reason, review_token: 'fictional-publication-proof', faculty_label: 'Not assigned' };
+            classifications: classSnapshot(), expected_version: 0, reason: data.reason, review_token: 'fictional-publication-proof', faculty_label: 'Not assigned' };
         await route.fulfill({ json: result, headers: { 'Cache-Control': 'private, no-store' } });
     });
     await page.goto('/admin/');
@@ -218,5 +235,85 @@ test('a retired preset cannot be copied and a stale term edit keeps the proposed
     await page.getByRole('button', { name: 'Save term default', exact: true }).click();
     await expect(page.locator('#drawer-body')).toContainText('No term default');
     await expect(page.getByRole('button', { name: 'Save term default', exact: true })).toBeEnabled();
+    expect(f.errors).toEqual([]);
+});
+
+async function openHierarchy(page) {
+    await workspaceTool(page, 'Reporting groups');
+    await page.getByRole('article', { name: 'Reporting group FA-2026', exact: true })
+        .getByRole('button', { name: 'Reporting hierarchy', exact: true }).click();
+}
+
+test('hierarchy setup preserves picker drafts, saves explicitly and supports narrow keyboard controls', async ({ page }) => {
+    const f = await fixture(page);
+    await openHierarchy(page);
+    await expect(page.getByRole('button', { name: 'Save reporting hierarchy', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Choose parent group', exact: true }).click();
+    await page.getByRole('button', { name: 'More classifications', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose ALT-2026', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose parent group', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to reporting hierarchy', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('ALT-2026 — Alternative reporting group');
+    expect(f.calls.filter(call => call.path.endsWith('/hierarchy/') && call.data)).toHaveLength(0);
+    const save = page.getByRole('button', { name: 'Save reporting hierarchy', exact: true });
+    await save.focus(); await page.keyboard.press('Enter');
+    await expect(page.getByRole('status').filter({ hasText: 'Reporting hierarchy saved.' })).toBeVisible();
+    expect(f.calls.find(call => call.path.endsWith('/hierarchy/') && call.data)).toMatchObject({
+        data: { parent_id: id(12), revision: 'hierarchy-0' }, csrf: 'fictional-test-token' });
+    await expect(page.getByRole('button', { name: 'Back to reporting groups', exact: true }).locator('.bi-arrow-left')).toHaveCount(1);
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.evaluate(() => { document.documentElement.style.fontSize = '200%'; });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    const axe = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
+    expect(axe.violations.map(item => item.id)).toEqual([]);
+    await page.getByRole('button', { name: 'Clear parent group', exact: true }).scrollIntoViewIfNeeded();
+    await page.screenshot({ path: '/tmp/etsis-reporting-hierarchy-phone.png' });
+    await page.getByRole('button', { name: 'Clear parent group', exact: true }).click();
+    await page.getByRole('button', { name: 'Save reporting hierarchy', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('No parent; this is a root group');
+    await page.getByRole('button', { name: 'Back to reporting groups', exact: true }).click();
+    await expect(page.getByRole('article', { name: 'Reporting group FA-2026', exact: true })).toBeVisible();
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+for (const failure of ['stale', 'cycle']) test(`a ${failure} hierarchy save preserves the proposed parent`, async ({ page }) => {
+    const f = await fixture(page, { staleHierarchy: failure === 'stale' });
+    await openHierarchy(page);
+    await page.getByRole('button', { name: 'Choose parent group', exact: true }).click();
+    await page.getByRole('button', { name: 'Choose FA-2026', exact: true }).click();
+    await page.getByRole('button', { name: 'Save reporting hierarchy', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Save reporting hierarchy', exact: true })).toBeEnabled();
+    await expect(page.locator('#drawer-body')).toContainText('FA-2026 — Fictional fall <script>group</script>');
+    expect(f.calls.filter(call => call.path.endsWith('/hierarchy/') && call.data)).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
+
+test('section setup and publication review display the copied groups full hierarchy', async ({ page }) => {
+    const f = await fixture(page, { preset: 1, hierarchyParent: 2 });
+    await openSetup(page);
+    await page.getByRole('button', { name: 'Copy term default', exact: true }).click();
+    await page.getByRole('button', { name: 'Save section setup', exact: true }).click();
+    await expect(page.getByRole('status').filter({ hasText: 'Section setup saved.' })).toBeVisible();
+    await expect(page.getByRole('region', { name: 'Reporting group', exact: true })).toContainText('Alternative reporting group → FA-2026');
+    await page.getByRole('button', { name: 'Review publication', exact: true }).click();
+    await page.getByLabel('Reason for section publication').fill('Fictional complete hierarchy review');
+    await page.getByRole('button', { name: 'Review section publication', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Reporting hierarchy');
+    await expect(page.locator('#drawer-body')).toContainText('Alternative reporting group → FA-2026');
+    expect(await page.locator('#drawer-body script').count()).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('closing a pending hierarchy read discards the late private drawer response', async ({ page }) => {
+    let requested, release;
+    const pending = new Promise(resolve => { requested = resolve; });
+    const held = new Promise(resolve => { release = resolve; });
+    const f = await fixture(page, { hierarchyDelay: async () => { requested(); await held; } });
+    await openHierarchy(page); await pending;
+    await page.getByRole('button', { name: 'Close record', exact: true }).click();
+    const finished = page.waitForResponse(response => response.url().endsWith('/hierarchy/'));
+    release(); await finished;
+    await expect(page.getByRole('button', { name: 'Choose parent group', exact: true })).toHaveCount(0);
     expect(f.errors).toEqual([]);
 });

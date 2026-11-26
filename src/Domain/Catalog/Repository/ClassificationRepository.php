@@ -13,6 +13,9 @@ interface ClassificationRepository
 {
     /** @return array<string, mixed> */
     public function get(EntityId $id): array;
+    /** Nonlocking snapshot used only to collect an ordered set of reference locks.
+     * @return array<string,mixed> */
+    public function peek(EntityId $id): array;
     public function lock(EntityId $id): void;
     /** @return list<array<string, mixed>> */
     public function page(ClassificationKind $kind, string $search, ?EntityId $after): array;

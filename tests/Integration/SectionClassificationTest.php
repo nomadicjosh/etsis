@@ -211,7 +211,8 @@ final class SectionClassificationTest extends TestCase
             "Fictional East Campus",
         );
         self::assertSame(
-            ["instructional_method" => null, "campus" => null, "reporting_group" => null],
+            ["instructional_method" => null, "campus" => null,
+                "reporting_group" => null, 'reporting_group_ancestors' => []],
             $this->sections($c)->show($section)["classifications"],
         );
         $this->assign($c, $section, $method, $campus);
@@ -959,7 +960,16 @@ final class SectionClassificationTest extends TestCase
         }
     }
 
-    public function testEarlierTwoFieldPublicationsRetainAnUnknownReportingGroup(): void
+    public static function earlierClassifications(): array
+    {
+        return [
+            'group unknown' => [['instructional_method' => null, 'campus' => null]],
+            'hierarchy unknown' => [['instructional_method' => null, 'campus' => null, 'reporting_group' => null]],
+        ];
+    }
+
+    #[\PHPUnit\Framework\Attributes\DataProvider('earlierClassifications')]
+    public function testEarlierPublicationsRetainUnknownRelationships(array $oldClasses): void
     {
         $c = $this->fixture();
         $f = $c->sis;
@@ -971,7 +981,6 @@ final class SectionClassificationTest extends TestCase
             new \Domain\Registration\ValueObject\SectionPublicationId($section->value),
             'section_publication'
         );
-        $oldClasses = ['instructional_method' => null, 'campus' => null];
         $event = \Domain\Registration\Event\SectionDefinitionWasPublished::occur(
             $stream->aggregateId,
             ['version_id' => $operation->value, 'previous_version_id' => null, 'definition' => $review['definition']],
@@ -992,7 +1001,11 @@ final class SectionClassificationTest extends TestCase
             );
         });
         $old = $service->cacheVersion($section, $operation);
-        self::assertFalse($old->classifications->reportingGroupRecorded);
+        self::assertSame(
+            array_key_exists('reporting_group', $oldClasses),
+            $old->classifications->reportingGroupRecorded,
+        );
+        self::assertNull($old->classifications->reportingAncestors);
         self::assertSame($oldClasses, $old->classifications->describe());
         $source = new SqlSectionVersionRepository($f->sql);
         self::assertSame($old->fingerprint(), $source->find($operation)->fingerprint());

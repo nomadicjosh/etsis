@@ -203,7 +203,10 @@ final readonly class SectionPublicationService
             ];
             return $review + [
                 "review_token" => $this->cipher->seal(
-                    json_encode($review, JSON_THROW_ON_ERROR),
+                    json_encode(
+                        $review,
+                        JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_LINE_TERMINATORS,
+                    ),
                 ),
                 "faculty_label" => $this->facultyLabel($row),
             ];

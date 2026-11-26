@@ -39,9 +39,26 @@ final readonly class SqlSectionClassificationRepository implements SectionClassi
             }
         }
         $ids = array_unique($ids);
+        $groups = [];
+        $reader = new \Domain\Catalog\Service\ReportingHierarchyReader(
+            new SqlReportingHierarchyRepository($this->sql),
+            $this->references,
+        );
+        foreach ($ids as $id) {
+            if ($this->references->peek(new EntityId($id))['kind'] === 'reporting_group') {
+                $groups[] = new EntityId($id);
+                foreach ($reader->snapshot(new EntityId($id)) as $ancestor) {
+                    $ids[] = $ancestor['id'];
+                }
+            }
+        }
+        $ids = array_unique($ids);
         sort($ids, SORT_STRING);
         foreach ($ids as $id) {
             $this->references->lock(new EntityId($id));
+        }
+        foreach ($groups as $group) {
+            $reader->path($group, array_values($ids));
         }
     }
 
@@ -69,7 +86,19 @@ final readonly class SqlSectionClassificationRepository implements SectionClassi
                 array_flip(["id", "code", "title"]),
             );
         }
+        $group = $values['reporting_group'];
+        $values['reporting_group_ancestors'] = $group === null
+        ? [] : $this->reportingAncestors(new EntityId($group['id']));
         return SectionClassifications::fromArray($values);
+    }
+
+    public function reportingAncestors(EntityId $group): array
+    {
+        $reader = new \Domain\Catalog\Service\ReportingHierarchyReader(
+            new SqlReportingHierarchyRepository($this->sql),
+            $this->references,
+        );
+        return array_slice($reader->path($group), 1);
     }
 
     public function assign(

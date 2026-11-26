@@ -338,6 +338,15 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
             $row = ["id" => $definition->publication->value,
                 "reporting_group_recorded" => (int) $definition->classifications->reportingGroupRecorded];
             $classes = $definition->classifications->describe();
+            $ancestors = $classes['reporting_group_ancestors'] ?? null;
+            $row['reporting_group_ancestors'] = $ancestors === null
+            ? null : json_encode($ancestors, JSON_THROW_ON_ERROR);
+            $row['reporting_hierarchy_recorded'] = (int) ($ancestors !== null);
+            $root = $definition->classifications->reportingRoot()?->describe();
+            foreach (['id', 'code', 'title'] as $field) {
+                $row['reporting_root_' . $field] = $root[$field] ?? null;
+            }
+            unset($classes['reporting_group_ancestors']);
             foreach ($classes as $kind => $value) {
                 foreach (["id", "code", "title"] as $field) {
                     $row[$kind . "_" . $field] = $value[$field] ?? null;
@@ -390,9 +399,34 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 ];
             }
         }
-        return \Domain\Registration\ValueObject\SectionClassifications::fromArray(
-            $values,
-        );
+        $hierarchyRecorded = $this->integer($row['reporting_hierarchy_recorded']);
+        if (!in_array($hierarchyRecorded, [0, 1], true)) {
+            throw new CorruptHistoryException();
+        }
+        if ($hierarchyRecorded === 1) {
+            if (
+                !is_string($row['reporting_group_ancestors']) || strlen($row['reporting_group_ancestors']) > 32768 ||
+                !str_starts_with(ltrim($row['reporting_group_ancestors']), '[')
+            ) {
+                throw new CorruptHistoryException();
+            }
+            $values['reporting_group_ancestors'] = json_decode(
+                $row['reporting_group_ancestors'],
+                true,
+                16,
+                JSON_THROW_ON_ERROR,
+            );
+        } elseif ($row['reporting_group_ancestors'] !== null) {
+            throw new CorruptHistoryException();
+        }
+        $result = \Domain\Registration\ValueObject\SectionClassifications::fromArray($values);
+        $root = $result->reportingRoot()?->describe();
+        foreach (['id', 'code', 'title'] as $field) {
+            if ($row['reporting_root_' . $field] !== ($root[$field] ?? null)) {
+                throw new CorruptHistoryException();
+            }
+        }
+        return $result;
     }
 
     private function integer(mixed $value): int

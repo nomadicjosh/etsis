@@ -19,6 +19,7 @@ final readonly class SisClassificationController
         private ClassificationService $service,
         private \Domain\Registration\Service\SectionClassificationService $sections,
         private \Domain\Catalog\Service\TermReportingDefaultService $termDefaults,
+        private \Domain\Catalog\Service\ReportingHierarchyService $hierarchy,
     ) {
     }
 
@@ -101,6 +102,21 @@ final readonly class SisClassificationController
         return new JsonResponse($this->termDefaults->save(
             new EntityId($id),
             $input->requiredNullableId('reporting_group_id'),
+            $input->text('revision', 64),
+        ));
+    }
+
+    public function reportingHierarchy(string $id): ResponseInterface
+    {
+        return new JsonResponse($this->hierarchy->show(new EntityId($id)));
+    }
+
+    public function saveReportingHierarchy(ServerRequest $request, string $id): ResponseInterface
+    {
+        $input = FormInput::from($request);
+        return new JsonResponse($this->hierarchy->save(
+            new EntityId($id),
+            $input->requiredNullableId('parent_id'),
             $input->text('revision', 64),
         ));
     }

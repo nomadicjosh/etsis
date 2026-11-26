@@ -16,6 +16,8 @@ interface SectionClassificationRepository
         array $additional = [],
     ): void;
     public function current(EntityId $section): SectionClassifications;
+    /** @return list<array{id: string,code: string,title: string}> Nearest parent first. */
+    public function reportingAncestors(EntityId $group): array;
     public function assign(
         EntityId $section,
         SectionClassifications $values,

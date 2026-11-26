@@ -2,8 +2,11 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__) . "/Support/CatalogWorkflowFixture.php";
+namespace Tests\Integration;
 
+use CatalogWorkflowFixture;
+use Closure;
+use EventStoreFixture;
 use Domain\Catalog\Course;
 use Domain\Catalog\Service\OfferingService;
 use Domain\Catalog\ValueObject\OfferingPlan;
@@ -14,6 +17,9 @@ use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\ValueObject\EntityId;
 use PHPUnit\Framework\TestCase;
+use InvalidArgumentException;
+use RuntimeException;
+use SisFixture;
 
 final class OfferingPublicationTest extends TestCase
 {
@@ -27,6 +33,7 @@ final class OfferingPublicationTest extends TestCase
 
     protected function setUp(): void
     {
+        require_once dirname(__DIR__) . "/Support/CatalogWorkflowFixture.php";
         $this->c = $c = new CatalogWorkflowFixture();
         $f = $c->sis;
         $source = $c->plan()->sections[0];
@@ -406,25 +413,10 @@ final class OfferingPublicationTest extends TestCase
         $review = $this->review();
         $student = $f->student();
         $section = $this->plan->sections[0];
-        $enrollment = new \Domain\Registration\Enrollment(
-            EntityId::generate(),
-            $student->id,
-            $section->id,
-            $f->term,
-            \Domain\Registration\Enum\RegistrationStatus::StaffRegistered,
-            $f->clock->now(),
-            $f->clock->now(),
-        );
-        $f->sql->insert(
-            "sis_enrollments",
-            \Domain\Registration\ValueObject\EnrollmentFacts::fromEnrollment($enrollment)->facts,
-        );
-        $f->academicCredits()->open(
-            $enrollment,
-            $f->registration->course($section->courseId),
-            $f->access->actor,
-            $f->workPursuits()->activePursuit($student->id),
-        );
+        // Model an earlier active, unbound offering with genuinely accepted student history.
+        $f->sql->update('sis_sections', ['active' => 1], ['id' => $section->id->value]);
+        $f->service->register($student->id, $section->id, byStaff: true);
+        $f->sql->update('sis_sections', ['active' => 0], ['id' => $section->id->value]);
         $before = $this->digest("sis_history_events");
         try {
             $this->service->publish($this->id, $review["review_token"]);
@@ -547,8 +539,11 @@ final class OfferingPublicationTest extends TestCase
         $binding = $this->c->bindings()->review($first, $this->version, "Earlier binding");
         $this->c->bindings()->commit($first, $binding["review_token"]);
         // An independently selected publication must agree with the plan's activation choice.
-        $f->sql->update("sis_sections", ["web_registration" => (int) $this->plan->sections[0]->webRegistration],
-            ["id" => $first->value]);
+        $f->sql->update(
+            "sis_sections",
+            ["web_registration" => (int) $this->plan->sections[0]->webRegistration],
+            ["id" => $first->value]
+        );
         $sections = $this->c->sectionPublications();
         $review = $sections->review($first, "2026-09-01", "2026-11-30", "Earlier section publication");
         $publication = $sections->publish($first, $review["review_token"]);

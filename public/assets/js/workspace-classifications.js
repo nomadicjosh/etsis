@@ -217,6 +217,9 @@ window.createWorkspaceClassifications = function (ui) {
                         "btn-primary",
                     ),
                 );
+            if (kind === 'reporting_group' && !choose) actions.append(button(
+                reportingText('hierarchy', 'Reporting hierarchy'), () => hierarchy(row.id, refresh), 'btn-outline-secondary',
+            ));
             body.append(card);
         });
         if (back) body.append(button(backLabel, back));
@@ -270,6 +273,47 @@ window.createWorkspaceClassifications = function (ui) {
             }, save);
         });
         body.append(form, button(groupText(kind, "back_groups", `Back to ${category.plural.toLowerCase()}`), back));
+    }
+
+    async function hierarchy(id, back) {
+        const title = reportingText('hierarchy', 'Reporting hierarchy');
+        const loading = openDrawer(title, reportingText('group', 'Reporting group'));
+        loading.append(node('p', { role: 'status' }, reportingText('loading_hierarchy', 'Loading reporting hierarchy…')));
+        let current = await request(`/sis/catalog/reporting-groups/${id}/hierarchy/`);
+        if (!loading.isConnected) return;
+        let parent = current.parent;
+        let saved = false;
+        function render() {
+            const body = openDrawer(title, current.group.code);
+            const changed = parent?.id !== current.parent?.id;
+            const card = node('section', { class: 'surface p-3 mb-3', 'aria-label': title },
+                node('h3', { class: 'h5 text-break' }, `${current.group.code} — ${current.group.title}`),
+                node('p', { class: 'form-text' }, reportingText('hierarchy_help', 'Choose an optional parent reporting group. Paths can contain up to eight groups. Saving preserves existing section publications and student records; publish a new section version to retain a changed path.')),
+                node('h4', { class: 'h6' }, reportingText('saved_hierarchy', 'Saved hierarchy')),
+                node('p', { class: 'text-break' }, current.path.slice().reverse().map(group => `${group.code} — ${group.title}`).join(' → ')),
+                node('h4', { class: 'h6' }, reportingText('parent_group', 'Parent reporting group')),
+                node('p', { class: 'text-break' }, parent ? `${parent.code} — ${parent.title}` : reportingText('no_parent', 'No parent; this is a root group')));
+            const controls = node('div', { class: 'd-flex flex-wrap gap-2' }, button(
+                reportingText('choose_parent', 'Choose parent group'), () => library('reporting_group', '', null, [],
+                    row => { parent = row; saved = false; render(); }, render, reportingText('back_hierarchy', 'Back to reporting hierarchy'))));
+            if (parent) controls.append(button(reportingText('clear_parent', 'Clear parent group'), () => {
+                parent = null; saved = false; render();
+            }));
+            card.append(controls);
+            const save = button(reportingText('save_hierarchy', 'Save reporting hierarchy'), async () => {
+                const result = await request(`/sis/catalog/reporting-groups/${id}/hierarchy/`, 'POST', {
+                    parent_id: parent?.id ?? null, revision: current.revision,
+                });
+                if (!body.isConnected) return;
+                current = result; parent = result.parent; saved = true; render();
+            }, 'btn-primary');
+            save.disabled = !changed;
+            if (saved) body.append(node('p', { role: 'status', class: 'alert alert-success' },
+                reportingText('hierarchy_saved', 'Reporting hierarchy saved. Earlier publications and student records are unchanged.')));
+            body.append(card, node('div', { class: 'd-flex flex-wrap gap-2' }, save,
+                button(reportingText('back_groups', 'Back to reporting groups'), back)));
+        }
+        render();
     }
 
     async function termDefault(id, back) {
@@ -403,6 +447,12 @@ window.createWorkspaceClassifications = function (ui) {
                     if (copiedPreset) card.insertBefore(node('p', { role: 'status', class: 'text-success' }, reportingText('default_copied', 'Term default copied into this draft.')), controls);
                     controls.append(copy);
                 }
+                if (kind === 'reporting_group' && value && value.id === current.classifications.reporting_group?.id &&
+                    Array.isArray(current.classifications.reporting_group_ancestors)) {
+                    const path = [value, ...current.classifications.reporting_group_ancestors].reverse();
+                    card.insertBefore(node('p', { class: 'form-text text-break' },
+                        reportingText('hierarchy', 'Reporting hierarchy'), ': ', path.map(group => `${group.code} — ${group.title}`).join(' → ')), controls);
+                }
                 controls.append(
                     button(
                         groupText(kind, "choose_group", `Choose ${category.singular.toLowerCase()}`),
@@ -497,5 +547,5 @@ window.createWorkspaceClassifications = function (ui) {
     }
     const course = (id, saved = false) => assignment("course", id, saved);
     const section = (id, saved = false) => assignment("section", id, saved);
-    return { library, course, section, termDefault };
+    return { library, course, section, termDefault, hierarchy };
 };

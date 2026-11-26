@@ -96,6 +96,8 @@ final readonly class SectionClassificationService
                             array_flip(["id", "code", "title"]),
                         );
             }
+            $values['reporting_group_ancestors'] = $ids['reporting_group'] === null
+                ? [] : $this->sections->reportingAncestors($ids['reporting_group']);
             $this->sections->assign(
                 $section,
                 SectionClassifications::fromArray($values),

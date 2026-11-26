@@ -69,6 +69,22 @@ Term setup requires **sis:catalog:manage**, uses private/no-store responses and 
 
 Apply **20261125000011_CreateSisTermReportingDefaults** before using the controls. It adds one empty table keyed by the existing term ULID, with a nullable reporting-group reference and revision counter. It seeds no choices and changes no earlier term, section, publication or academic fact. Schema compilation covers MySQL, PostgreSQL, SQLite, SQL Server and Oracle; the configured PostgreSQL migration and before/after preservation checks are recorded in the handoff. Populated multi-engine write-contention qualification remains separate.
 
+### Reporting-group hierarchies
+
+Implemented November 25, 2026. A reporting group can have one optional parent. For example, **2026 — Reporting year** can contain **2026-FA — Fall reporting**, which can contain **2026-FA-A — First short session**. A group without a parent is a root. These are explicit reporting relationships; they do not infer academic-year membership, instructional dates, billing periods or census assignments.
+
+1. Open **Academic catalog → Curriculum → Reporting groups** and choose **Reporting hierarchy** on a group.
+2. Review the **Saved hierarchy**, then **Choose parent group**. Search, paging and returning from the shared picker preserve the proposed parent. Choose an active group or **Clear parent group** to make this group a root.
+3. **Save reporting hierarchy** commits the configuration and required audit together. Cycles, self-parenting and paths longer than eight groups are refused. Moving a group validates its existing descendants as well. Setup supports at most 500 saved hierarchy entries, including explicit roots; larger configuration needs a separate bounded setup workflow. Existing retired-parent links can remain or be cleared; a retired group cannot become a newly chosen direct parent. Retirement does not automatically cascade through descendants.
+4. Open **Sections → a section → Section classifications** to see the current path. Saving a new group choice resolves its current ancestors; **Review publication** displays the complete path. Publishing retains the leaf and each ancestor's exact identity, code and name in the existing protected section event.
+5. For a selected offering, publish the changed path and use the existing reviewed future-registration amendment when that new definition should apply. A parent-only change does not switch the selected offering; registrations continue to retain its original path until a matching new publication is deliberately selected.
+
+Changing a parent or label never relabels accepted publications or student records. Publication reviews reject changed paths. Accepted publication retries return the original result after later configuration changes. Earlier publications without hierarchy evidence remain **unknown**, even when their leaf group was recorded; today's parents are never attached to them retrospectively. New explicit blanks, root-only groups and multi-level paths remain distinct.
+
+Hierarchy configuration requires **sis:catalog:manage**, private/no-store responses, browser CSRF and the displayed revision. A shared database guard serializes topology changes; nonlocking path collection precedes ordered reference locks, and a changed path is rechecked before following another reference. The revision rejects changes away and back, and final source/actor/topology checks roll back failed saves or required audits. Ordinary group label editing remains in the reference library. Hierarchy setup is audited CRUD; publication history remains in the single authoritative journal.
+
+Apply **20261125000012_AddSisReportingHierarchy** before using the workflow. It adds an empty relationship table, one technical lock/revision row, and nullable retained ancestor/root columns with an earlier-unknown flag. It seeds no hierarchy choices and changes no historical event. Verified publication caches reconstruct these fields from genuine recorded metadata and reject malformed paths or mismatched root labels. The maximum eight-group Unicode path is supported without increasing existing review-token limits; compact proof serialization leaves decoded facts and event hashes unchanged.
+
 ### Current and retained reporting fields
 
 The existing Report Studio **Sections, teaching & enrollment counts** source exposes **Current reporting group reference/code/name** from current section setup. The existing academic-credit source exposes **Retained reporting group reference/code/name** from each institutional credit's accepted offering, plus **Reporting group choice recorded in accepted offering**. These extend existing student-related sources; no additional report template or dataset is created.
@@ -79,6 +95,10 @@ The existing Report Studio **Sections, teaching & enrollment counts** source exp
 | New publication explicitly without a group | Yes | Empty |
 | Earlier classification snapshot without this relationship | No | Empty; earlier choice is unknown |
 | No retained classification snapshot or no institutional offering link | Empty | Empty; no choice is inferred |
+
+The same academic-credit source also provides **Retained root reporting group reference/code/name** and **Reporting hierarchy recorded in accepted offering**. Group by the root reference to combine accepted child groups under one retained reporting period. Use distinct student references for headcounts. Retained labels can differ after a rename; adding a label as another grouping column splits those versions. Count distinct students at root-reference grain when one combined root count is required. A student may have several credit rows under one root. Never sum a headcount separately calculated for each child group. Current hierarchy changes do not move accepted credit rows between roots.
+
+For new known root-only groups, the root is the selected group itself. An explicit blank has the hierarchy-recorded flag set and empty root fields. Earlier publications with no hierarchy metadata have flag **No** and empty root fields; a missing retained offering has empty fields/flag. Use the flag to distinguish unknown history from an explicit blank. These extend the existing student-related credit source and shared report/save/static/export pipeline; no report template or dataset is added.
 
 Use stable group references when combining short sessions. Credits remain credit rows; use distinct student references for headcounts and review the chosen dataset grain. A student's multiple credits can belong to the same group. Transfer work and earlier unknown facts are not assigned a group from today's setup. Current reference edits can change current section-report labels while accepted academic-credit labels remain unchanged.
 

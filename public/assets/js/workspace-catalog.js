@@ -1489,6 +1489,14 @@ window.createWorkspaceCatalog = function (ui) {
             definition.require_program_campus === undefined ? ui.programEligibilityLabels.campus_unknown
                 : ui.programEligibilityLabels[definition.require_program_campus ? 'campus_enabled' : 'campus_disabled']]);
         if (facultyLabel !== null) fields.push(["Faculty", facultyLabel]);
+        if (classifications) {
+            const ancestors = classifications.reporting_group_ancestors;
+            const path = classifications.reporting_group ? [classifications.reporting_group, ...(ancestors || [])].reverse() : [];
+            fields.push([ui.reportingLabels?.hierarchy || 'Reporting hierarchy', ancestors === undefined
+                ? ui.reportingLabels?.hierarchy_unknown || 'Reporting hierarchy was not recorded'
+                : path.length ? path.map(group => `${group.code} — ${group.title}`).join(' → ')
+                    : ui.reportingLabels?.no_reporting_path || 'No reporting group selected']);
+        }
         for (const [key, label] of [["instructional_method", "Instructional method"], ["campus", "Campus/site"], ["reporting_group", ui.reportingLabels?.group || "Reporting group"]]) {
             const value = classifications?.[key];
             fields.push([label, classifications === null || !Object.hasOwn(classifications, key) ? "Not recorded in this publication" : value ? `${value.code} — ${value.title}` : "Not specified"]);

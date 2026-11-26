@@ -267,3 +267,45 @@ $sis->access->grants = ['sis:registration:manage'];
 if ($readDefault()->getStatusCode() !== 403 || $teachingPost($defaultPath, $command)->getStatusCode() !== 403) {
     throw new RuntimeException('Registration duty acquired term default setup.');
 }
+
+$sis->access->staff = true;
+$sis->access->grants = [];
+$rootResponse = $teachingPost('/sis/catalog/classifications/reporting_group/save/', [
+    'id' => null, 'code' => 'YEAR', 'title' => 'Fictional reporting year', 'active' => true, 'revision' => null,
+]);
+$rootGroup = json_decode((string) $rootResponse->getBody(), true, flags: JSON_THROW_ON_ERROR);
+$hierarchyPath = '/sis/catalog/reporting-groups/' . $groupRow['id'] . '/hierarchy/';
+$readHierarchy = static fn() => $app->router->match($get->withUri(
+    new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $hierarchyPath)
+));
+$response = $readHierarchy();
+$emptyHierarchy = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $response->getStatusCode() !== 200 || $emptyHierarchy['parent'] !== null ||
+    !str_contains($response->getHeaderLine('Cache-Control'), 'no-store') || $response->hasHeader('phpdebugbar-id')
+) {
+    throw new RuntimeException('Private reporting hierarchy setup did not resolve.');
+}
+$command = ['parent_id' => $rootGroup['id'], 'revision' => $emptyHierarchy['revision']];
+$events = $sis->sql->rows('sis_history_events');
+$response = $teachingPost($hierarchyPath, $command);
+$savedHierarchy = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $response->getStatusCode() !== 200 || count($savedHierarchy['path']) !== 2 ||
+    $teachingPost($hierarchyPath, $command)->getStatusCode() !== 409 ||
+    $teachingPost($hierarchyPath, ['revision' => $savedHierarchy['revision']])->getStatusCode() !== 422 ||
+    $teachingPost($hierarchyPath, [
+        'parent_id' => $groupRow['id'], 'revision' => $savedHierarchy['revision'],
+    ])->getStatusCode() !== 422 ||
+    $teachingPost($hierarchyPath, [
+        'parent_id' => $methodRow['id'], 'revision' => $savedHierarchy['revision'],
+    ])->getStatusCode() !== 422 ||
+    $sis->sql->rows('sis_history_events') !== $events
+) {
+    throw new RuntimeException('Hierarchy setup lost its typed, stale-edit or academic isolation boundaries.');
+}
+$sis->access->staff = false;
+$sis->access->grants = ['sis:registration:manage'];
+if ($readHierarchy()->getStatusCode() !== 403 || $teachingPost($hierarchyPath, $command)->getStatusCode() !== 403) {
+    throw new RuntimeException('Registration duty acquired reporting hierarchy setup.');
+}

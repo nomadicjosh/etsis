@@ -5,6 +5,32 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    "hierarchy" => trans_html("Reporting hierarchy"),
+    "loading_hierarchy" => trans_html("Loading reporting hierarchy…"),
+    "hierarchy_help" => trans_html(
+        "Choose an optional parent reporting group. Paths can contain up to eight groups. "
+        . "Saving preserves existing section publications and student records; "
+        . "publish a new section version to retain a changed path.",
+    ),
+    "saved_hierarchy" => trans_html("Saved hierarchy"),
+    "parent_group" => trans_html("Parent reporting group"),
+    "no_parent" => trans_html("No parent; this is a root group"),
+    "choose_parent" => trans_html("Choose parent group"),
+    "back_hierarchy" => trans_html("Back to reporting hierarchy"),
+    "clear_parent" => trans_html("Clear parent group"),
+    "save_hierarchy" => trans_html("Save reporting hierarchy"),
+    "hierarchy_saved" => trans_html(
+        "Reporting hierarchy saved. Earlier publications and student records are unchanged.",
+    ),
+    "hierarchy_unknown" => trans_html("Reporting hierarchy was not recorded"),
+    "no_reporting_path" => trans_html("No reporting group selected"),
+    "retained_reporting_root_id" => trans_html("Retained root reporting group reference"),
+    "retained_reporting_root_code" => trans_html("Retained root reporting group code"),
+    "retained_reporting_root_title" => trans_html("Retained root reporting group name"),
+    "retained_reporting_hierarchy_recorded" => trans_html(
+        "Reporting hierarchy recorded in accepted offering",
+    ),
+
     'term_context' => trans_html('ACADEMIC TERM'),
     'term_default' => trans_html('Reporting-group default'),
     'loading_default' => trans_html('Loading term default…'),
