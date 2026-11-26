@@ -241,3 +241,7 @@ This foundation covers current person creation, names, privacy, identifiers, per
 ### Staff support observations
 
 **More → Check profile history** connects the existing selected profile verifier to the [shared support panel](event-history-foundation.md#contextual-staff-history-checks). It requires independent history-check and audit duties plus person-management authority, preserves super-account safeguards and runs only on deliberate request with a fixed allowance. Results contain statuses/components/counts and a minimal attributed support reference; profile values and credentials remain hidden. Receipt history follows current canonical routing. This does not replace the detailed profile-change screen, repair data, create accounts or certify a complete archive.
+
+## Import new people
+
+Use **Import data → Import people** for create-only CSV intake. [The import guide](catalog-imports.md#import-people) explains mapping, required email uniqueness, server processing, progress and completion notifications. Both import and person-management permission are required. Every accepted row uses the ordinary protected canonical person/account creation path and awaits private password setup. The import never merges an existing person, creates a second person on a role change, imports historical academic facts or assigns student/employment capabilities.

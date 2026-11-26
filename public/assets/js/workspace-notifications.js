@@ -1,7 +1,7 @@
 /* Bounded, page-local action feedback. Browser storage contains preferences only. */
 window.createWorkspaceNotifications = function (ui) {
     'use strict';
-    const { node, stack, trigger, bootstrap, labels = {}, request } = ui;
+    const { node, stack, trigger, bootstrap, labels = {}, importLabels = {}, request } = ui;
     const text = (key, fallback) => labels[key] || fallback;
     const preferenceKey = 'etsis.workspace.notification-preferences';
     const sounds = Object.freeze({
@@ -27,7 +27,8 @@ window.createWorkspaceNotifications = function (ui) {
     const history = [], visible = new Map();
     let dialog = null, list = null, empty = null, audio = null, sequence = 0, lastSound = -Infinity;
     let disposed = false;
-    let announcements = null, registrationUpdates = null, advisingUpdates = null;
+    let announcements = null, registrationUpdates = null, advisingUpdates = null, importUpdates = null;
+    let importUnread = 0, importTimer = null, importLoading = false, importStopped = false;
     let activeSound = null, pendingSound = null, decodedSound = null, soundGeneration = 0;
     const icons = { success: 'check-circle', info: 'info-circle', warning: 'exclamation-triangle' };
     const titles = { success: 'Completed', info: 'Update', warning: 'Needs attention' };
@@ -115,7 +116,29 @@ window.createWorkspaceNotifications = function (ui) {
         const previous = audio; audio = null;
         if (previous && previous.state !== 'closed') Promise.resolve(previous.close()).catch(() => {});
     }
-    function onVisibilityChange() { if (document.hidden) stopSound(); }
+    function onVisibilityChange() {
+        if (document.hidden) { stopSound(); clearTimeout(importTimer); }
+        else refreshImports();
+    }
+    function updateBadge() {
+        const count = history.length + importUnread;
+        if (badge) { badge.textContent = String(count); badge.hidden = !count; }
+    }
+    async function refreshImports() {
+        clearTimeout(importTimer);
+        if (!request || !importLabels.notices || disposed || importStopped || document.hidden || importLoading) return;
+        importLoading = true;
+        try {
+            const result = await request('/sis/imports/notices/');
+            if (!disposed && !importStopped && Array.isArray(result.items)) {
+                importUnread = result.items.length; updateBadge();
+            }
+        } catch (_) { /* Existing private notifications remain available when the server recovers. */ }
+        finally {
+            importLoading = false;
+            if (!disposed && !importStopped && !document.hidden) importTimer = setTimeout(refreshImports, 60000);
+        }
+    }
     function unlockSound() {
         if (!preferences.sound || audio || disposed) return;
         try {
@@ -161,7 +184,7 @@ window.createWorkspaceNotifications = function (ui) {
         item.instance.show();
     }
     function renderHistory() {
-        if (badge) { badge.textContent = String(history.length); badge.hidden = !history.length; }
+        updateBadge();
         if (!list) return;
         empty.hidden = history.length > 0;
         list.replaceChildren(...history.map(item => node('li', { class: 'workspace-notification-entry' },
@@ -202,6 +225,7 @@ window.createWorkspaceNotifications = function (ui) {
         announcements?.destroy(); announcements = null;
         registrationUpdates?.destroy(); registrationUpdates = null;
         advisingUpdates?.destroy(); advisingUpdates = null;
+        importUpdates?.destroy(); importUpdates = null;
         const previous = dialog;
         dialog = list = empty = null;
         previous.close(); previous.remove();
@@ -295,6 +319,20 @@ window.createWorkspaceNotifications = function (ui) {
                 }
             });
             currentDialog.querySelector('.workspace-notification-dialog-body').prepend(section);
+            if (window.createImportUpdates && importLabels.notices) {
+                const importBody = node('div', { class: 'campus-announcements-body' });
+                const importSection = node('details', { class: 'campus-announcements' },
+                    node('summary', {}, glyph('cloud-check'), importLabels.notices), importBody);
+                importSection.addEventListener('toggle', () => {
+                    if (dialog !== currentDialog) return;
+                    importUpdates?.destroy(); importUpdates = null;
+                    if (importSection.open) {
+                        importUpdates = window.createImportUpdates({ node, request, labels: importLabels, changed: refreshImports });
+                        importUpdates.mount(importBody);
+                    }
+                });
+                currentDialog.querySelector('.workspace-notification-dialog-body').prepend(importSection);
+            }
             if (window.createStudentUpdates) {
                 const updatesBody = node('div', { class: 'campus-announcements-body' });
                 const updatesSection = node('details', { class: 'campus-announcements' },
@@ -335,9 +373,10 @@ window.createWorkspaceNotifications = function (ui) {
         stopSound();
         if (close) closeHistory();
     }
-    function onPageHide() { clear(); stopSound(); }
+    function onPageShow() { importStopped = false; refreshImports(); }
+    function onPageHide() { importStopped = true; clearTimeout(importTimer); clear(); stopSound(); }
     function destroy() {
-        clear(); disposed = true; stopSound(); observer.disconnect();
+        clearTimeout(importTimer); clear(); disposed = true; stopSound(); observer.disconnect();
         trigger.removeEventListener('click', openHistory);
         document.removeEventListener('shown.bs.offcanvas', mount);
         document.removeEventListener('hidden.bs.offcanvas', mount);
@@ -347,8 +386,10 @@ window.createWorkspaceNotifications = function (ui) {
         window.removeEventListener('pointerdown', unlockSound);
         window.removeEventListener('keydown', unlockSound);
         window.removeEventListener('pagehide', onPageHide);
+        window.removeEventListener('pageshow', onPageShow);
         document.removeEventListener('visibilitychange', onVisibilityChange);
     }
+    refreshImports();
     trigger.addEventListener('click', openHistory);
     for (const event of ['shown.bs.offcanvas', 'hidden.bs.offcanvas', 'shown.bs.modal', 'hidden.bs.modal'])
         document.addEventListener(event, mount);
@@ -356,6 +397,7 @@ window.createWorkspaceNotifications = function (ui) {
     window.addEventListener('pointerdown', unlockSound);
     window.addEventListener('keydown', unlockSound);
     window.addEventListener('pagehide', onPageHide);
+    window.addEventListener('pageshow', onPageShow);
     document.addEventListener('visibilitychange', onVisibilityChange);
     renderHistory();
     return { notify, clear, destroy };

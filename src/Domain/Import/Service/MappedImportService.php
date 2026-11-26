@@ -25,6 +25,19 @@ use PDOException;
 /** Reviewed draft imports and external identity reconciliation; publication remains a separate decision. */
 final readonly class MappedImportService
 {
+    public function forAccess(StudentAccess $access): self
+    {
+        return new self(
+            $this->mapper,
+            $this->repository,
+            $this->operations,
+            $access,
+            $this->transactions,
+            $this->audit,
+            $this->cipher,
+            $this->clock
+        );
+    }
     public function __construct(
         private CatalogCsvMapper $mapper,
         private CatalogImportRepository $repository,
@@ -536,7 +549,7 @@ final readonly class MappedImportService
      * @return array<string,array{action:string,course_id:?string}> */
     private function choices(array $rows, array $choices): array
     {
-        if (!array_is_list($choices) || count($choices) > 1000) {
+        if (!array_is_list($choices) || count($choices) > 5000) {
             throw new InvalidArgumentException("Choose a bounded list of row actions.");
         }
         $known = [];

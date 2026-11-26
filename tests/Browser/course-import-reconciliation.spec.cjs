@@ -77,16 +77,12 @@ test('course import reviews matches and exclusions with bounded rows, safe rende
     await expect(page.locator('#workspace-alert')).toContainText('Fictional temporary interruption.');
     await expect(page.locator('#import-commit')).toBeEnabled();
     await page.locator('#import-commit').click();
-    await expect(page.locator('#import-summary')).toContainText('Inactive drafts created: 27 · Courses linked: 1');
+    await expect(page.locator('#import-summary')).toContainText('Rows queued for server processing: 30');
     await expect(page.getByRole('link', { name: 'Review course drafts', exact: false })).toBeHidden();
     const commits = calls.filter(call => call.path === '/sis/imports/commit/');
     expect(commits).toHaveLength(2);
     expect(commits[0].body).toEqual(commits[1].body);
-    expect(commits[0].body.mapping.course_number).toBe(4);
-    expect(commits[0].body.choices).toEqual([
-        { external_id: '1', action: 'link', course_id: id(1) },
-        { external_id: '__proto__', action: 'skip', course_id: null },
-    ]);
+    expect(Object.keys(commits[0].body)).toEqual(['review_token']);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(calls.filter(call => call.method === 'POST').every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(errors).toEqual([]);

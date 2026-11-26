@@ -31,6 +31,24 @@ use Qubus\ValueObjects\Web\EmailAddress;
 
 final readonly class PersonRegistrationService
 {
+    /** Explicit command scope for server workers; never changes the session or container binding. */
+    public function forAccess(\Domain\Shared\Security\StudentAccess $access): self
+    {
+        return new self(
+            $this->people,
+            $this->links,
+            $this->users,
+            $this->profiles,
+            $this->setups,
+            $access,
+            $this->transactions,
+            $this->audit,
+            $this->clock,
+            $this->cipher,
+            $this->baseUrl,
+            $this->minimumPasswordLength
+        );
+    }
     public function __construct(
         private AdmissionsRepository $people,
         private PersonAccountRepository $links,

@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Application\Http\Controller;
 
 use Domain\Import\Service\MappedImportService;
+use Domain\Import\Service\ImportQueueService;
+use Application\Http\FormInput;
 use Domain\Import\Enum\CatalogImportTarget;
 use InvalidArgumentException;
 use Laminas\Diactoros\Response\JsonResponse;
@@ -13,7 +15,7 @@ use Qubus\Http\ServerRequest;
 
 final readonly class SisMappedImportController
 {
-    public function __construct(private MappedImportService $service)
+    public function __construct(private MappedImportService $service, private ImportQueueService $queue)
     {
     }
 
@@ -22,35 +24,20 @@ final readonly class SisMappedImportController
         $data = $this->data($request);
 
         return new JsonResponse(
-            $this->service->preview(
+            $this->queue->stage($data['target'] ?? 'course', $data, $this->service->preview(
                 $data["source"],
                 $data["csv"],
                 $data["mapping"],
                 $data["delimiter"] ?? ",",
                 $data["choices"] ?? [],
                 CatalogImportTarget::from($data["target"] ?? "course"),
-            ),
+            )),
         );
     }
 
     public function commit(#[\SensitiveParameter] ServerRequest $request): ResponseInterface
     {
-        $data = $this->data($request);
-        if (!is_string($data["review_token"] ?? null)) {
-            throw new InvalidArgumentException("Review the import before continuing.");
-        }
-
-        return new JsonResponse(
-            $this->service->commit(
-                $data["source"],
-                $data["csv"],
-                $data["mapping"],
-                $data["review_token"],
-                $data["delimiter"] ?? ",",
-                $data["choices"] ?? [],
-                CatalogImportTarget::from($data["target"] ?? "course"),
-            ),
-        );
+        return new JsonResponse($this->queue->submit(FormInput::from($request)->text('review_token', 4096)));
     }
 
     /** @return array<string, mixed> */
@@ -75,6 +62,8 @@ final readonly class SisMappedImportController
             }
         }
 
-        return $data;
+        return array_intersect_key($data, array_flip([
+            "source", "csv", "mapping", "delimiter", "choices", "target",
+        ]));
     }
 }

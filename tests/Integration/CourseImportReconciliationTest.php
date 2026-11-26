@@ -460,11 +460,11 @@ final class CourseImportReconciliationTest extends TestCase
         );
     }
 
-    public function testThousandRecordReviewIsBoundedAndDoesNotWriteDraftsOrOperationalReceipts(): void
+    public function testFiveThousandRecordReviewIsBoundedAndDoesNotWriteDraftsOrOperationalReceipts(): void
     {
         $f = new SisFixture();
         $rows = [];
-        for ($i = 0; $i < 1000; ++$i) {
+        for ($i = 0; $i < 5000; ++$i) {
             $rows[] =
             "source-" .
             $i .
@@ -481,8 +481,8 @@ final class CourseImportReconciliationTest extends TestCase
             self::MAPPING,
         );
         self::assertTrue($review["ready"]);
-        self::assertCount(1000, $review["plan"]);
-        self::assertSame(1000, $review["summary"]["create"]);
+        self::assertCount(5000, $review["plan"]);
+        self::assertSame(5000, $review["summary"]["create"]);
         self::assertSame([], $f->sql->rows("sis_courses"));
         self::assertSame([], $f->sql->rows("sis_catalog_operations"));
         $rows[] = "last,SUBJ.LAST,Too many,3";

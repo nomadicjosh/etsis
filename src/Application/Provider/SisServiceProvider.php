@@ -181,6 +181,13 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlTermReportingDefaultRepository::class,
             \Domain\Catalog\Repository\ReportingHierarchyRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlReportingHierarchyRepository::class,
+            \Domain\Import\Repository\ImportQueueRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlImportQueueRepository::class,
+            \Domain\Import\Service\ImportBatchProcessor::class =>
+                \Infrastructure\Import\ReviewedImportBatchProcessor::class,
+            \Domain\Import\Repository\PersonImportRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlPersonImportRepository::class,
+            \Domain\Import\Service\PersonCsvMapper::class => \Infrastructure\Import\LeaguePersonCsvMapper::class,
             \Domain\Registration\Repository\DropPolicyRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlDropPolicyRepository::class,
             \Domain\Transfer\Repository\TransferAwardRepository::class =>

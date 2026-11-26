@@ -1,7 +1,7 @@
 /* One reviewed catalog-import workflow. CSV and approvals remain only in page memory. */
 window.createWorkspaceImports = function (ui) {
     "use strict";
-    const { node, table, request, notify, number, task, can, subjects, classifications, recordSummary } = ui;
+    const { node, table, request, notify, number, task, can, subjects, classifications, recordSummary, jobs, labels: importLabels = {} } = ui;
     const one = (selector) => document.querySelector(selector);
     const all = (selector) => [...document.querySelectorAll(selector)];
     const target = () => one("#import-target").value;
@@ -27,13 +27,13 @@ window.createWorkspaceImports = function (ui) {
     function destination() {
         one("#import-sample").href = `/assets/examples/${reference() ? "catalog-references" : plural()}.csv`;
         one("#import-description").textContent =
-            `Start with a ${name().toLowerCase()} CSV. UTF-8, up to 1 MB and 1,000 rows.`;
+            `Start with a ${name().toLowerCase()} CSV. UTF-8, up to 2 MB and 5,000 rows.`;
         one("#import-boundary").textContent = reference()
             ? "Create active reference entries or explicitly link matching active entries. Existing entries are never overwritten or reactivated. Historical publications keep their original labels."
             : program()
               ? "Create working program definitions or explicitly link matching existing programs. Imports do not publish an academic year, replace student cohorts or assign application forms. Existing program details and publications are preserved."
               : "New courses are inactive drafts. Approve matching course links explicitly, or leave rows out. Existing courses and historical publications are preserved.";
-        one("#import-commit-label").textContent = `Import ${plural()}`;
+        one("#import-commit-label").textContent = importLabels.catalog_queue;
         one("#import-reference-subjects").hidden = !course();
         ["program-fields", "campus", "award"].forEach((kind) => {
             one(`#import-reference-${kind}`).hidden = !program();
@@ -52,6 +52,7 @@ window.createWorkspaceImports = function (ui) {
         one("#import-reference-open").hidden = !reference() || !can("sis:catalog:manage");
         one("#import-reference-open").textContent = `Review ${plural()}`;
     }
+    let latestJob = null;
     let state,
         busy = false,
         page = 0,
@@ -350,8 +351,8 @@ window.createWorkspaceImports = function (ui) {
     }
     action("#import-inspect", async () => {
         const file = one("#import-file").files[0];
-        if (!file || file.size > 1048576 || !file.name.toLowerCase().endsWith(".csv"))
-            throw new Error("Choose a CSV file up to 1 MB.");
+        if (!file || file.size > 2097152 || !file.name.toLowerCase().endsWith(".csv"))
+            throw new Error("Choose a CSV file up to 2 MB.");
         if (!one("#import-source").reportValidity()) return;
         reset();
         state.csv = await file.text();
@@ -536,20 +537,20 @@ window.createWorkspaceImports = function (ui) {
         if (!state.preview?.review_token || pending()) return;
         try {
             const result = await request("/sis/imports/commit/", "POST", {
-                ...state.reviewedRequest,
                 review_token: state.preview.review_token,
             });
-            one("#import-summary").textContent =
-                `${reference() ? "Reference entries" : program() ? "Working programs" : "Inactive drafts"} created: ${number(result.imported)} · ${reference() ? name() + " entries" : program() ? "Programs" : "Courses"} linked: ${number(result.linked)} · Prior imports: ${number(result.skipped)} · Left out: ${number(result.omitted)}. Existing catalog details and publications were preserved.`;
+            latestJob = result.id;
+            one("#import-summary").textContent = importLabels.queued_summary.replace("{total}", number(result.total));
             reset();
             one("#import-file").value = "";
             step(4);
-            notify(`${name()} import complete.`);
+            notify(importLabels.queued_help, { tone: "info" });
         } catch (error) {
             if ([409, 422].includes(error.status)) state.preview.review_token = null;
             throw error;
         }
     });
+    action("#import-job-progress", () => latestJob ? jobs.detail(latestJob) : jobs.activity());
     action("#import-again", () => {
         reset();
         one("#import-file").value = "";
@@ -585,6 +586,9 @@ window.createWorkspaceImports = function (ui) {
         step(1);
         synchronize();
     });
+    one("#import-people").hidden = !can("sis:person:manage");
+    action("#import-people", () => jobs.people());
+    action("#import-activity", () => jobs.activity());
     destination();
     synchronize();
     return { clear: reset };

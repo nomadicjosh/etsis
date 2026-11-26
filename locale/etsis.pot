@@ -7375,3 +7375,397 @@ msgstr ""
 #: resources/views/shared/coursework-category-labels.php
 msgid "Maximum bonus-only percentage points (optional)"
 msgstr ""
+
+#: src/Infrastructure/Import/LeagueCatalogCsvMapper.php:29
+msgid "Choose a UTF-8 CSV file up to 2 MB."
+msgstr ""
+
+#: src/Infrastructure/Import/LeagueCatalogCsvMapper.php:88
+msgid "Import up to 5,000 rows at a time."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:8
+#: resources/views/backend/workspace/imports.phtml:15
+msgid "Import activity"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:9
+#: resources/views/backend/workspace/imports.phtml:14
+msgid "Import people"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:10
+msgid "New-person intake"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:12
+msgid "Upload a UTF-8 CSV up to 2 MB with up to 5,000 people. Each new person gets a linked account awaiting private password setup. Existing emails must be corrected; this import never merges people or assigns student or employment status."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:17
+msgid "Imports run on the server. You can close this browser after queuing. A private notification appears when processing finishes."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:21
+msgid "Columns separated by"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:22
+msgid "Comma"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:23
+msgid "Semicolon"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:24
+msgid "Tab"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:25
+msgid "Reason for creating these people"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:26
+msgid "Read columns"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:27
+msgid "Match person fields"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:31
+msgid "Choose a column"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:32
+msgid "Review people"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:33
+msgid "Queue import"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:34
+msgid "Back to setup"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:35
+msgid "Back to import activity"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:36
+msgid "Loading import activity…"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:37
+msgid "Refresh"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:40
+msgid "No imports have been queued by this account."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:41
+msgid "Rows"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:42
+msgid "Destination"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:44
+msgid "Processed"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:45
+msgid "Created"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:46
+msgid "Linked"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:47
+msgid "Previously imported"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:48
+msgid "Left out"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:49
+msgid "Queued"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:50
+msgid "Processing"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:53
+msgid "View progress"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:54
+msgid "Import progress"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:55
+msgid "Record"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:57
+msgid "Review"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:58
+msgid "Ready to create"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:60
+msgid "Correct the highlighted rows in your file and review it again."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:63
+msgid "Your import is queued on the server. You can leave this screen. Check Import activity or your notification drawer for completion."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:67
+msgid "Processing stopped. The first {processed} of {total} data records were processed. No later records were imported. Resolve the remaining records before reviewing a new file; do not repeat already processed people."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:72
+msgid "The submitting account no longer has the required access."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:75
+msgid "Records changed after the review. Review the remaining records using their current values."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:77
+msgid "The server processing window expired."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:79
+msgid "The private source could not be verified."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:82
+msgid "The server could not finish this batch. Review the remaining records and server configuration."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:84
+msgid "Import updates"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:86
+msgid "Completed and stopped imports appear here. Deleting a notice permanently removes it; the import result remains in Import activity."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:92
+msgid "There are no matching import updates."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:93
+msgid "Import updates loaded."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:95
+msgid "Import updates could not load. Use Refresh to try again."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:98
+msgid "Rows queued for server processing: {total}. Completion will appear in your notification drawer."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:100
+msgid "Choose a UTF-8 CSV up to 2 MB."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:101
+msgid "Showing {from}–{to} of {total} records."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:102
+msgid "Sample people CSV"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:103
+msgid "Queue catalog import"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:104
+msgid "Import pages"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:105
+msgid "Import notification pages"
+msgstr ""
+
+#: src/Application/Http/Controller/SisPersonImportController.php:32
+msgid "Choose the person field mapping."
+msgstr ""
+
+#: src/Application/Http/Controller/SisPersonImportController.php:39
+#: src/Infrastructure/Import/LeaguePersonCsvMapper.php:76
+msgid "Choose valid CSV columns for all three person fields."
+msgstr ""
+
+#: src/Application/Http/Controller/SisPersonImportController.php:52
+#: src/Domain/Import/Service/PersonImportService.php:434
+msgid "Provide an import reason up to 500 characters."
+msgstr ""
+
+#: src/Application/Http/Controller/SisPersonImportController.php:58
+#: src/Infrastructure/Import/LeaguePersonCsvMapper.php:28
+msgid "Choose a UTF-8 people CSV up to 2 MB."
+msgstr ""
+
+#: src/Domain/Import/Service/ImportQueueService.php:56
+msgid "Use between one and 5,000 records per import."
+msgstr ""
+
+#: src/Domain/Import/Service/ImportQueueService.php:80
+msgid "This reviewed import is too large. Split the source file."
+msgstr ""
+
+#: src/Domain/Import/Service/ImportQueueService.php:141
+msgid "The import review changed before saving completed."
+msgstr ""
+
+#: src/Domain/Import/Service/ImportQueueService.php:178
+msgid "Review the import again before queuing it."
+msgstr ""
+
+#: src/Domain/Import/Service/ImportQueueService.php:191
+msgid "This import review belongs to another request."
+msgstr ""
+
+#: src/Domain/Import/Service/ImportQueueService.php:199
+msgid "The import review expired. Review the file again."
+msgstr ""
+
+#: src/Domain/Import/Service/ImportQueueService.php:216
+msgid "The private import source is unavailable. Review the file again."
+msgstr ""
+
+#: src/Domain/Import/Service/ImportQueueService.php:240
+msgid "The import queue changed before submission completed."
+msgstr ""
+
+#: src/Domain/Import/Service/ImportQueueService.php:276
+#: src/Domain/Import/Service/ImportQueueService.php:304
+#: src/Domain/Import/Service/ImportQueueService.php:317
+msgid "The notification owner changed."
+msgstr ""
+
+#: src/Domain/Import/Service/ImportQueueService.php:328
+msgid "This import is unavailable to this account."
+msgstr ""
+
+#: src/Domain/Import/Service/ImportQueueService.php:345
+msgid "Choose an available import destination."
+msgstr ""
+
+#: src/Domain/Import/Service/ImportQueueService.php:355
+msgid "The import authority changed."
+msgstr ""
+
+#: src/Domain/Import/Service/PersonImportService.php:69
+msgid "Use at most ten people per processing batch."
+msgstr ""
+
+#: src/Domain/Import/Service/PersonImportService.php:135
+msgid "This email appears more than once in the file."
+msgstr ""
+
+#: src/Domain/Import/Service/PersonImportService.php:140
+msgid "An account already uses this email. Use its existing person record."
+msgstr ""
+
+#: src/Domain/Import/Service/PersonImportService.php:217
+#: src/Domain/Import/ValueObject/PersonImportRow.php:76
+msgid "Review the people import again."
+msgstr ""
+
+#: src/Domain/Import/Service/PersonImportService.php:222
+msgid "This people-import review belongs to another account."
+msgstr ""
+
+#: src/Domain/Import/Service/PersonImportService.php:273
+#: src/Domain/Import/Service/PersonImportService.php:313
+msgid "A new person or account changed. Review the import again."
+msgstr ""
+
+#: src/Domain/Import/Service/PersonImportService.php:326
+msgid "The people-import receipt changed before saving completed."
+msgstr ""
+
+#: src/Domain/Import/Service/PersonImportService.php:342
+msgid "People changed during confirmation. Review the import again."
+msgstr ""
+
+#: src/Domain/Import/Service/PersonImportService.php:362
+msgid "This people-import receipt belongs to another request."
+msgstr ""
+
+#: src/Domain/Import/Service/PersonImportService.php:407
+msgid "The people-import authority changed."
+msgstr ""
+
+#: src/Domain/Import/Service/PersonImportService.php:418
+msgid "The people-import review expired. Review the file again."
+msgstr ""
+
+#: src/Domain/Import/ValueObject/PersonImportRow.php:28
+msgid "Use at most 5,000 people per import."
+msgstr ""
+
+#: src/Domain/Import/ValueObject/PersonImportRow.php:40
+msgid "Use printable given and family names up to 191 characters."
+msgstr ""
+
+#: src/Domain/Import/ValueObject/PersonImportRow.php:50
+msgid "A valid email address is required for each person."
+msgstr ""
+
+#: src/Infrastructure/Import/ImportCommandAccess.php:29
+msgid "The import account can no longer sign in."
+msgstr ""
+
+#: src/Infrastructure/Import/ImportCommandAccess.php:41
+msgid "The import account no longer has the required permission."
+msgstr ""
+
+#: src/Infrastructure/Import/LeaguePersonCsvMapper.php:41
+msgid "Use 1–40 distinct CSV column headers."
+msgstr ""
+
+#: src/Infrastructure/Import/LeaguePersonCsvMapper.php:53
+msgid "Use printable CSV column headers up to 120 characters."
+msgstr ""
+
+#: src/Infrastructure/Import/LeaguePersonCsvMapper.php:64
+#: src/Infrastructure/Import/LeaguePersonCsvMapper.php:84
+msgid "Map each required person field to a distinct CSV column."
+msgstr ""
+
+#: src/Infrastructure/Import/LeaguePersonCsvMapper.php:99
+msgid "Use at most 5,000 people with the same column count as the header."
+msgstr ""
+
+#: src/Infrastructure/Import/LeaguePersonCsvMapper.php:111
+msgid "Include at least one person after the CSV header."
+msgstr ""
+
+#: src/Infrastructure/Import/ReviewedImportBatchProcessor.php:121
+msgid "The import source changed after review. Resolve the remaining records."
+msgstr ""
+
+#: resources/views/backend/workspace/imports.phtml:225
+msgid "Import queued"
+msgstr ""
+
+#: src/Application/Http/Controller/SisImportQueueController.php:67
+msgid "Choose a valid import page."
+msgstr ""

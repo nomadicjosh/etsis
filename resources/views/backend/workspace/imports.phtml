@@ -10,15 +10,25 @@ use function Codefy\Framework\Helpers\trans_html;
             <h1 id="imports-heading"><?= trans_html('Import data'); ?><span class="brand-dot">.</span></h1>
             <p><?= trans_html('Map CSV columns, review each row, and confirm the import.'); ?></p>
         </div>
-        <a id="import-sample" class="btn btn-outline-secondary" href="/assets/examples/courses.csv" download>
-            <i class="bi bi-download" aria-hidden="true"></i> Sample CSV
-        </a>
+        <div class="d-flex flex-wrap gap-2">
+            <button id="import-people" class="btn btn-outline-secondary" type="button" hidden>
+                <i class="bi bi-person-plus" aria-hidden="true"></i>
+                <?= trans_html('Import people'); ?>
+            </button>
+            <button id="import-activity" class="btn btn-outline-secondary" type="button">
+                <i class="bi bi-clock-history" aria-hidden="true"></i>
+                <?= trans_html('Import activity'); ?>
+            </button>
+            <a id="import-sample" class="btn btn-outline-secondary" href="/assets/examples/courses.csv" download>
+                <i class="bi bi-download" aria-hidden="true"></i> Sample CSV
+            </a>
+        </div>
     </div>
     <ol class="import-steps" aria-label="Import progress">
         <li class="active" data-import-step="1" aria-current="step"><span>1</span> Choose a file</li>
         <li data-import-step="2"><span>2</span> Match your fields</li>
         <li data-import-step="3"><span>3</span> Review & import</li>
-        <li data-import-step="4"><span>4</span> All set</li>
+        <li data-import-step="4"><span>4</span> <?= trans_html('Queued'); ?></li>
     </ol>
     <div class="surface import-surface">
         <div data-import-panel="1">
@@ -30,7 +40,7 @@ use function Codefy\Framework\Helpers\trans_html;
                 </div>
             </div>
             <p class="muted-text" id="import-description">
-                Start with a course catalog CSV. UTF-8, up to 1 MB and 1,000 rows.
+                Start with a course catalog CSV. UTF-8, up to 2 MB and 5,000 rows.
             </p>
             <fieldset class="record-form-section import-setup">
                 <legend><?= trans_html('Destination & source'); ?></legend>
@@ -218,15 +228,19 @@ use function Codefy\Framework\Helpers\trans_html;
         <div data-import-panel="4" hidden>
             <span class="completion-mark" aria-hidden="true"><i class="bi bi-check2"></i></span>
             <p class="eyebrow"><?= trans_html('CONFIRMED'); ?></p>
-            <h2><?= trans_html('Import complete'); ?></h2>
+            <h2><?= trans_html('Import queued'); ?></h2>
             <p id="import-summary"></p>
             <div class="d-flex flex-wrap gap-2 justify-content-center">
+                <button id="import-job-progress" class="btn btn-primary" type="button">
+                    <i class="bi bi-clock-history" aria-hidden="true"></i>
+                    <?= trans_html('View progress'); ?>
+                </button>
                 <button class="btn btn-outline-secondary" type="button" id="import-again">Import another file</button>
-                <button id="import-reference-open" class="btn btn-primary" type="button" hidden>
+                <button id="import-reference-open" class="btn btn-outline-secondary" type="button" hidden>
                     Review references
                 </button>
                 <a
-                    class="btn btn-primary"
+                    class="btn btn-outline-secondary"
                     id="import-draft-link"
                     href="/admin/workspace/courses/"
                     data-workspace="courses">

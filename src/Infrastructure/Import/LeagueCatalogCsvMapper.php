@@ -10,6 +10,8 @@ use Domain\Import\Service\CatalogCsvMapper;
 use InvalidArgumentException;
 use League\Csv\Reader;
 
+use function Codefy\Framework\Helpers\trans;
+
 final readonly class LeagueCatalogCsvMapper implements CatalogCsvMapper
 {
     public function prepare(
@@ -19,12 +21,12 @@ final readonly class LeagueCatalogCsvMapper implements CatalogCsvMapper
         CatalogImportTarget $target = CatalogImportTarget::Course,
     ): array {
         if (
-            strlen($csv) > 1048576 ||
+            strlen($csv) > 2097152 ||
             !mb_check_encoding($csv, "UTF-8") ||
             str_contains($csv, "\0") ||
             !in_array($delimiter, [",", ";", "\t"], true)
         ) {
-            throw new InvalidArgumentException("Choose a UTF-8 CSV file up to 1 MB.");
+            throw new InvalidArgumentException(trans("Choose a UTF-8 CSV file up to 2 MB."));
         }
         $reader = Reader::fromString($csv)->setDelimiter($delimiter)->setEscape("");
         $header = $this->values($reader->nth(0));
@@ -82,8 +84,8 @@ final readonly class LeagueCatalogCsvMapper implements CatalogCsvMapper
             if ($offset === 0) {
                 continue;
             }
-            if (++$count > 1000) {
-                throw new InvalidArgumentException("Import up to 1,000 rows at a time.");
+            if (++$count > 5000) {
+                throw new InvalidArgumentException(trans("Import up to 5,000 rows at a time."));
             }
             if (count($samples) < 5) {
                 $samples[] = $row;

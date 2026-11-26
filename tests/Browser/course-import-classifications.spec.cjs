@@ -76,12 +76,9 @@ test('optional course classifications can be mapped, fixed in the catalog drawer
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await accessible();
     await page.locator('#import-commit').click();
-    await expect(page.locator('#import-summary')).toContainText('Inactive drafts created: 1');
+    await expect(page.locator('#import-summary')).toContainText('Rows queued for server processing: 1');
     const commit = calls.find(call => call.path === '/sis/imports/commit/').body;
-    expect(commit.csv).toBe(source);
-    expect(commit.mapping).toEqual({ external_id: 0, code: 1, title: 2, credits: 3,
-        subject_code: 4, department_code: 5, academic_level_code: 6, course_level_code: 7 });
-    expect(commit.choices).toEqual([]);
+    expect(Object.keys(commit)).toEqual(['review_token']);
     expect(errors).toEqual([]);
     expect(calls.filter(call => call.method === 'POST').every(call => call.csrf === 'fictional-test-token')).toBe(true);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);

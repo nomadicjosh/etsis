@@ -15,7 +15,6 @@ use Psr\Http\Server\RequestHandlerInterface;
 final readonly class WorkspaceJsonBodyMiddleware implements MiddlewareInterface
 {
     private const int MAX_JSON_BYTES = 2097152;
-    private const int MAX_FORM_BYTES = self::MAX_JSON_BYTES * 3 + 16;
 
     public function process(ServerRequestInterface $request, RequestHandlerInterface $handler): ResponseInterface
     {
@@ -23,20 +22,25 @@ final readonly class WorkspaceJsonBodyMiddleware implements MiddlewareInterface
             return $handler->handle($request);
         }
         $type = strtolower(trim(explode(';', $request->getHeaderLine('Content-Type'))[0]));
+        // CSV escaping and explicit row choices can exceed the two-MiB source-file allowance.
+        $importPaths = ['/sis/imports/preview/', '/sis/imports/people/preview/'];
+        $maximum = in_array($request->getUri()->getPath(), $importPaths, true)
+        ? 8 * 1024 * 1024 : self::MAX_JSON_BYTES;
+        $formMaximum = $maximum * 3 + 16;
         $raw = null;
         if ($type === 'application/json') {
-            $raw = $this->readBounded($request->getBody(), self::MAX_JSON_BYTES);
+            $raw = $this->readBounded($request->getBody(), $maximum);
         } elseif ($type === 'application/x-www-form-urlencoded') {
             // A single form string avoids the router's eager, scalar-incompatible JSON parser.
             // Decode from the stream for PUT/PATCH/DELETE too; PHP only populates $_POST for POST.
             $stream = $request->getBody();
             $position = $stream->isSeekable() ? $stream->tell() : null;
-            $encoded = $this->readBounded($stream, self::MAX_FORM_BYTES);
+            $encoded = $this->readBounded($stream, $formMaximum);
             if ($position !== null) {
                 $stream->seek($position);
             }
             if (preg_match('/^_workspace_json(?:=|%5b|\[)/i', $encoded) === 1) {
-                if (strlen($encoded) > self::MAX_FORM_BYTES) {
+                if (strlen($encoded) > $formMaximum) {
                     throw new InvalidArgumentException('The request exceeds the permitted size.');
                 }
                 parse_str($encoded, $envelope);
@@ -47,7 +51,7 @@ final readonly class WorkspaceJsonBodyMiddleware implements MiddlewareInterface
             }
         }
         if ($raw !== null) {
-            if (strlen($raw) > self::MAX_JSON_BYTES) {
+            if (strlen($raw) > $maximum) {
                 throw new InvalidArgumentException('The request exceeds the permitted size.');
             }
             try {

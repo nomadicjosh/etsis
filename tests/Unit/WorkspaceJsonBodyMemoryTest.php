@@ -125,4 +125,18 @@ final class WorkspaceJsonBodyMemoryTest extends TestCase
             }
         }
     }
+    public function testImportPreviewAllowsCsvEnvelopeOverheadWithoutRaisingOtherRouteLimits(): void
+    {
+        $json = json_encode(['csv' => str_repeat('a', 2097152)], JSON_THROW_ON_ERROR);
+        $handler = $this->createMock(RequestHandlerInterface::class);
+        $handler->expects(self::once())->method('handle')->willReturnCallback(
+            static function ($request): JsonResponse {
+                self::assertSame(2097152, strlen($request->getParsedBody()['csv']));
+                return new JsonResponse(['ok' => true]);
+            }
+        );
+        $request = new ServerRequest([], [], '/sis/imports/people/preview/', 'POST')
+            ->withBody($this->body($json))->withHeader('Content-Type', 'application/json');
+        self::assertSame(200, new WorkspaceJsonBodyMiddleware()->process($request, $handler)->getStatusCode());
+    }
 }

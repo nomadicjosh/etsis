@@ -189,9 +189,59 @@ return static function (Psr7Router $router): void {
         ->name('sis.forms.submit');
     $router->map(['GET'], '/sis/form-submissions/{id}/', [SisFormBuilderController::class, 'submission'])
         ->name('sis.forms.submission');
-    $router->map(['POST'], '/sis/imports/preview/', [SisMappedImportController::class, 'preview'])
+    $router->map(
+        ['GET'],
+        '/sis/imports/jobs/',
+        [\Application\Http\Controller\SisImportQueueController::class, 'page']
+    )
+        ->name('sis.import.jobs');
+    $router->map(
+        ['GET'],
+        '/sis/imports/jobs/{id}/',
+        [\Application\Http\Controller\SisImportQueueController::class, 'status']
+    )
+        ->name('sis.import.status');
+    $router->map(
+        ['GET'],
+        '/sis/imports/notices/',
+        [\Application\Http\Controller\SisImportQueueController::class, 'notices']
+    )
+        ->name('sis.import.notices');
+    $router->map(
+        ['POST'],
+        '/sis/imports/notices/read/',
+        [\Application\Http\Controller\SisImportQueueController::class, 'read']
+    )
+        ->name('sis.import.read');
+    $router->map(
+        ['POST'],
+        '/sis/imports/notices/remove/',
+        [\Application\Http\Controller\SisImportQueueController::class, 'remove']
+    )
+        ->name('sis.import.remove');
+    $router->map(
+        ['POST'],
+        '/sis/imports/preview/',
+        [SisMappedImportController::class, 'preview']
+    )
         ->name('sis.import.preview');
-    $router->map(['POST'], '/sis/imports/commit/', [SisMappedImportController::class, 'commit'])
+    $router->map(
+        ['POST'],
+        '/sis/imports/people/preview/',
+        [\Application\Http\Controller\SisPersonImportController::class, 'preview']
+    )
+        ->name('sis.import.people.preview');
+    $router->map(
+        ['POST'],
+        '/sis/imports/people/commit/',
+        [\Application\Http\Controller\SisPersonImportController::class, 'commit']
+    )
+        ->name('sis.import.people.commit');
+    $router->map(
+        ['POST'],
+        '/sis/imports/commit/',
+        [SisMappedImportController::class, 'commit']
+    )
         ->name('sis.import.commit');
     $router->map(['POST'], '/sis/rules/', [SisRulesController::class, 'save'])
         ->name('sis.rules.save');

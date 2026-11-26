@@ -51,13 +51,11 @@ for (const [target, title, idField] of [['subject', 'Subject', 'subject_id'], ['
         const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
         expect(scan.violations.map(item => item.id)).toEqual([]);
         await page.locator('#import-commit').click();
-        await expect(page.locator('#import-summary')).toContainText('Reference entries created: 0');
+        await expect(page.locator('#import-summary')).toContainText('Rows queued for server processing: 1');
         await expect(page.locator('#import-draft-link')).toBeHidden();
         await page.locator('#import-reference-open').click();
         await expect(page.locator('#drawer-title')).toContainText(target === 'subject' ? 'Course subjects' : 'Departments');
         const sent = calls.find(call => call.path === '/sis/imports/commit/');
-        expect(sent.body.target).toBe(target);
-        expect(sent.body.choices).toEqual([{ external_id: 'ref-1', action: 'link', [idField]: identity }]);
         expect(sent.csrf).toBe('fictional-test-token');
         expect(errors).toEqual([]);
         expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);

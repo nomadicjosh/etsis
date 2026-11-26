@@ -76,6 +76,7 @@ $client = [
     "credit_policy_labels" => require __DIR__ . "/credit-policy-labels.php",
     "waitlist_bypass_labels" => require __DIR__ . "/waitlist-bypass-labels.php",
     "waitlist_allocation_labels" => require __DIR__ . "/waitlist-allocation-labels.php",
+    "import_labels" => require dirname(__DIR__, 2) . "/shared/import-labels.php",
     "notification_labels" => require dirname(__DIR__, 2) . "/shared/notification-labels.php",
     "program_discovery_labels" => require __DIR__ . "/program-discovery-labels.php",
 ];
@@ -164,6 +165,7 @@ $client = [
         <script defer src="/assets/js/workspace-hr-setup.js"></script>
         <script defer src="/assets/js/workspace-positions.js"></script>
         <script defer src="/assets/js/workspace-restrictions.js"></script>
+        <script defer src="/assets/js/workspace-import-jobs.js"></script>
         <script defer src="/assets/js/workspace-imports.js"></script>
         <script defer src="/assets/js/workspace-advising.js"></script>
         <script id="advising-appointment-labels" type="application/json"><?= json_encode(

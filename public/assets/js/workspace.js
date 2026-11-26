@@ -95,7 +95,7 @@
     surfaces = window.createWorkspaceSurfaces({node, task, bootstrap});
     const notifications = window.createWorkspaceNotifications({
         node, stack: $one('#workspace-status'), trigger: $one('#workspace-notifications-open'), bootstrap,
-        labels: config.notification_labels, request,
+        labels: config.notification_labels, importLabels: config.import_labels, request,
     });
 
     async function send(path, method = 'GET', data, accept = 'application/json') {
@@ -325,7 +325,8 @@
     const positionStudio = window.createWorkspacePositions({ historyChecks: () => historyChecks, historyCheckLabels: config.history_check_labels, node, request, task, can, openDrawer, recordSummary, actionMenu, badge,
         flow: operations.flow, amounts: hrSetup.amounts, openEmployee: id => employmentStudio.employee(id), notify });
     const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, recordSummary, actionMenu, buildForm, formData, notify, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId), closeDrawer: () => drawer.hide() });
-    const importStudio = window.createWorkspaceImports({ node, table, request, notify, number, task, can, recordSummary, subjects: () => catalogStudio.subjects(), classifications: kind => classificationStudio.library(kind) });
+    const importJobs = window.createWorkspaceImportJobs({ node, request, task, openDrawer, can, notify, table, labels: config.import_labels });
+    const importStudio = window.createWorkspaceImports({ jobs: importJobs, labels: config.import_labels, node, table, request, notify, number, task, can, recordSummary, subjects: () => catalogStudio.subjects(), classifications: kind => classificationStudio.library(kind) });
     const transcriptStudio = window.createWorkspaceTranscripts({ ceuLabels: config.ceu_labels, standingLabels: config.transcript_standing_labels, node, request, requestHtml, requestFile, task, can, recordSummary, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const financeReviewStudio = window.createWorkspaceFinanceReviews({ node, request, task, table, badge, money, recordSummary, actionMenu,
         buildForm, formData, openDrawer, account: (id, back, label) => operations.openAccount(id, back, label) });
