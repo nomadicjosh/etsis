@@ -7343,3 +7343,35 @@ msgstr ""
 #: src/Domain/Catalog/Service/ReportingHierarchyReader.php
 msgid "Reporting hierarchy changed. Reload the section before continuing."
 msgstr ""
+
+#: resources/views/shared/coursework-category-labels.php
+msgid "Leave blank for no additional limit. Zero excludes bonus-only contributions. Apply after drops and excusals, before category weighting and the category cap. Bonus marks on regular assignments and recorded scores remain unchanged."
+msgstr ""
+
+#: resources/views/shared/coursework-category-labels.php
+msgid "Use 0 to 100 percentage points with at most two decimal places, or leave blank."
+msgstr ""
+
+#: resources/views/shared/coursework-category-labels.php
+msgid "Bonus-only contribution limit: {limit} percentage points."
+msgstr ""
+
+#: resources/views/shared/coursework-category-labels.php
+msgid "Recorded contribution: {raw}; counted before the category cap: {applied} percentage points."
+msgstr ""
+
+#: resources/views/shared/coursework-category-labels.php
+msgid "Graded regular work is required before this contribution can be calculated."
+msgstr ""
+
+#: resources/views/shared/coursework-category-labels.php
+msgid "Categories with a bonus-only contribution limit: {count}."
+msgstr ""
+
+#: src/Domain/Gradebook/ValueObject/GradebookCalculation.php
+msgid "Use a bonus-only limit from 0 to 100 percentage points, or leave it blank."
+msgstr ""
+
+#: resources/views/shared/coursework-category-labels.php
+msgid "Maximum bonus-only percentage points (optional)"
+msgstr ""

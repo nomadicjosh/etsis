@@ -182,10 +182,11 @@ final readonly class CourseworkGradeEvidence implements JsonSerializable
     public function summary(): array
     {
         $score = BigRational::of($this->facts["exact_percent"]);
-        $caps = $protected = 0;
+        $caps = $protected = $bonusLimits = 0;
         foreach ($this->facts['categories'] as $category) {
             $caps += ($category['cap_at_hundred'] ?? false) ? 1 : 0;
             $protected += count($category['protected_assignments'] ?? []);
+            $bonusLimits += array_key_exists('bonus_only_cap_hundredths', $category) ? 1 : 0;
         }
         return [
             "score_display" => self::formatPercent($score),
@@ -208,8 +209,9 @@ final readonly class CourseworkGradeEvidence implements JsonSerializable
             "assignment_count" => count($this->facts["scores"]),
             "revision" => $this->revision(),
             "grade_id" => $this->facts["grade_id"],
-            ...($caps > 0 || $protected > 0) ? [
-                'category_rules' => ['capped_categories' => $caps, 'protected_assignments' => $protected],
+            ...($caps > 0 || $protected > 0 || $bonusLimits > 0) ? [
+                'category_rules' => ['capped_categories' => $caps, 'protected_assignments' => $protected]
+                    + ($bonusLimits > 0 ? ['bonus_limit_categories' => $bonusLimits] : []),
             ] : [],
         ];
     }

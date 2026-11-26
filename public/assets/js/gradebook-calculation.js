@@ -26,8 +26,10 @@ window.createGradebookCalculation = function (ui) {
             ? summary.score_display
             : `${summary.score_display} raw · ${summary.grading_display} for grade comparison`;
         const rules = summary.category_rules;
-        return rules ? `${score} · ${t('summary').replace('{caps}', rules.capped_categories)
+        const summaryText = rules ? `${score} · ${t('summary').replace('{caps}', rules.capped_categories)
             .replace('{protected}', rules.protected_assignments)}` : score;
+        return rules?.bonus_limit_categories ? `${summaryText} ${t('summary_bonus_limits')
+            .replace('{count}', rules.bonus_limit_categories)}` : summaryText;
     }
     function policyEditor(setup) {
         const policy = setup.grade_policy;
@@ -203,7 +205,7 @@ window.createGradebookCalculation = function (ui) {
                 ? node(
                       "p",
                       { class: "small" },
-                      summary.categories?.some(category => category.cap_at_hundred)
+                      summary.categories?.some(category => category.cap_at_hundred || category.bonus_only_cap_hundredths !== undefined)
                           ? t('bonus_caps')
                           : `${Number(summary.bonus_earned_hundredths || 0) / 100} bonus points in counted work. Possible points remain the denominator, so this running average can exceed 100%. Official grades are recorded separately.`,
                   )
@@ -291,6 +293,11 @@ window.createGradebookCalculation = function (ui) {
                                           t(category.capped ? 'cap_used' : 'cap_ready'),
                                           category.raw_percent_hundredths == null ? ''
                                               : ` ${t('raw_average')}: ${percent(category.raw_percent_hundredths)}.`) : null,
+                                      category.bonus_only_cap_hundredths !== undefined ? node('p', { class: 'small mb-0 mt-1' },
+                                          t('bonus_limit_feedback').replace('{limit}', (category.bonus_only_cap_hundredths / 100).toFixed(2)),
+                                          category.bonus_only_raw_percent_hundredths == null ? ` ${t('bonus_limit_awaiting')}`
+                                              : ` ${t('bonus_limit_applied').replace('{raw}', (category.bonus_only_raw_percent_hundredths / 100).toFixed(2))
+                                                  .replace('{applied}', (category.bonus_only_applied_percent_hundredths / 100).toFixed(2))}`) : null,
                                       category.protected_assignments ? node('p', { class: 'small mb-0 mt-1' },
                                           `${t('protected_count')}: ${category.protected_assignments}.`) : null,
                                       category.excused
@@ -544,6 +551,14 @@ window.createGradebookCalculation = function (ui) {
                 'aria-label': `${t('cap')}: ${value.title || t('rules')}` });
             const capLabel = node('label', { for: cap.id, class: 'form-check-label' }, t('cap'));
             cap.addEventListener('change', changed);
+            const bonusLimit = node('input', {
+                id: `${key}-bonus-limit`, type: 'number', class: 'form-control', min: '0', max: '100', step: '0.01',
+                value: value.bonus_only_cap_hundredths === undefined ? '' : (value.bonus_only_cap_hundredths / 100).toFixed(2),
+                'aria-label': `${t('bonus_limit')}: ${value.title || t('rules')}`,
+                'aria-describedby': `${key}-bonus-help ${key}-bonus-error`,
+            });
+            const bonusError = node('div', { id: `${key}-bonus-error`, class: 'invalid-feedback', role: 'alert', hidden: true }, t('bonus_limit_error'));
+            bonusLimit.addEventListener('input', changed);
             const row = node(
                 "div",
                 { class: "border rounded p-3 bg-white" },
@@ -573,8 +588,12 @@ window.createGradebookCalculation = function (ui) {
                 ),
                 node('div', { class: 'form-check mt-3' }, cap, capLabel),
                 node('p', { id: `${key}-cap-help`, class: 'form-text mb-0' }, t('cap_help')),
+                node('div', { class: 'mt-3' },
+                    node('label', { for: bonusLimit.id, class: 'form-label' }, t('bonus_limit')),
+                    bonusLimit, bonusError,
+                    node('p', { id: `${key}-bonus-help`, class: 'form-text mb-0' }, t('bonus_limit_help'))),
             );
-            const entry = { key, title, weight, drop, dropError, remove, row, cap,
+            const entry = { key, title, weight, drop, dropError, remove, row, cap, bonusLimit, bonusError,
                 protected: new Set(value.protected_assignments || []) };
             categories.push(entry);
             value.assignments.forEach((id) => {
@@ -654,7 +673,13 @@ window.createGradebookCalculation = function (ui) {
                     .map((a) => a.id),
                 ...(c.cap.checked ? { cap_at_hundred: true } : {}),
                 ...(c.protected.size ? { protected_assignments: [...c.protected].sort() } : {}),
+                ...(c.bonusLimit.value.trim() === '' ? {} : { bonus_only_cap_hundredths: parseBonusLimit(c.bonusLimit.value) }),
             }));
+        }
+        function parseBonusLimit(value) {
+            const text = value.trim();
+            return /^\d{1,3}(?:\.\d{1,2})?$/.test(text) && Number(text) <= 100
+                ? Math.round(Number(text) * 100) : NaN;
         }
         function setEnabled(value) {
             if (enabled === value) return;
@@ -677,6 +702,12 @@ window.createGradebookCalculation = function (ui) {
                 category.drop.setAttribute("class", `form-control${valid ? "" : " is-invalid"}`);
                 category.drop.setCustomValidity(valid ? "" : "Use a whole number from 0 to 499.");
                 category.dropError.hidden = valid;
+                const bonusValid = category.bonusLimit.value.trim() === '' ||
+                    Number.isInteger(parseBonusLimit(category.bonusLimit.value));
+                category.bonusLimit.setAttribute('aria-invalid', String(!bonusValid));
+                category.bonusLimit.classList.toggle('is-invalid', !bonusValid);
+                category.bonusLimit.setCustomValidity(bonusValid ? '' : t('bonus_limit_error'));
+                category.bonusError.hidden = bonusValid;
             });
             const titles = values.map((c) => c.title.toLocaleLowerCase());
             return (
@@ -692,7 +723,8 @@ window.createGradebookCalculation = function (ui) {
                         c.weight_hundredths <= 10000 &&
                         Number.isInteger(c.drop_lowest) &&
                         c.drop_lowest >= 0 &&
-                        c.drop_lowest <= 499,
+                        c.drop_lowest <= 499 &&
+                        (c.bonus_only_cap_hundredths === undefined || Number.isInteger(c.bonus_only_cap_hundredths)),
                 ) &&
                 values.reduce((sum, c) => sum + c.weight_hundredths, 0) === 10000
             );

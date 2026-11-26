@@ -137,6 +137,111 @@ final class CourseworkGradeTest extends TestCase
         }
     }
 
+    public function testAcceptedBonusLimitsRetainExplicitZeroAfterLaterSetupAndOwnerFeedbackChanges(): void
+    {
+        $fixture = [$f, $book, $student, $section] = $this->categoryFixture();
+        $setup = $book->calculationSetup($section->id);
+        $categories = $setup['categories'];
+        $categories[0]['bonus_only_cap_hundredths'] = 0;
+        $book->saveCalculation($section->id, 'category', [], $setup['revision'], $categories);
+        $finance = $f->financialEvents();
+        $review = $this->review($fixture);
+        self::assertSame('B', $review['grade']['code']);
+        self::assertSame(1, $review['coursework_summary']['category_rules']['bonus_limit_categories']);
+        $receipt = $book->commitFinalGrade($student->id, $section->id, $review['review_token']);
+        $credit = new EntityId($f->sql->rows('sis_academic_credits')[0]['id']);
+        $evidence = $this->evidence($f, $credit);
+        $facts = $evidence->facts;
+        self::assertSame(0, $facts['categories'][0]['bonus_only_cap_hundredths']);
+        self::assertSame('92', $facts['exact_percent']);
+        $evidence->verifyCalculation();
+        $categories[0]['bonus_only_cap_hundredths'] = 500;
+        $book->saveCalculation(
+            $section->id,
+            'category',
+            [],
+            $book->calculationSetup($section->id)['revision'],
+            $categories,
+        );
+        self::assertSame('B', $book->gradeChoices($student->id, $section->id)['current_grade_code']);
+        self::assertSame(9700, $book->summary($student->id, $section->id)['percent_hundredths']);
+        $f->clock->time = $f->clock->time->modify('+1 day');
+        self::assertSame($receipt, $book->commitFinalGrade($student->id, $section->id, $review['review_token']));
+        self::assertSame($facts, $this->evidence($f, $credit)->facts);
+        $this->evidence($f, $credit)->verifyCalculation();
+        self::assertSame($finance, $f->financialEvents());
+        $decisions = array_values(array_filter(
+            $book->gradeHistory($student->id, $section->id)['items'],
+            static fn(array $row): bool => $row['action'] === 'grade_decided'
+        ));
+        self::assertSame(1, $decisions[0]['coursework_summary']['category_rules']['bonus_limit_categories']);
+        $f->access->staff = false;
+        $f->access->grants = [];
+        $f->access->actor = $f->admissions->person($student->personId)->ownerUserId;
+        $feedback = $book->summary($student->id, $section->id);
+        self::assertSame(9700, $feedback['percent_hundredths']);
+        self::assertSame(500, $feedback['categories'][0]['bonus_only_applied_percent_hundredths']);
+        $f->access->actor = $f->user();
+        $this->expectException(AccessDeniedException::class);
+        $book->summary($student->id, $section->id);
+    }
+
+    public function testChangingOnlyTheBonusLimitInvalidatesAnUnacceptedReviewEvenForTheSameLetter(): void
+    {
+        $fixture = [$f, $book, $student, $section] = $this->categoryFixture();
+        $setup = $book->calculationSetup($section->id);
+        $categories = $setup['categories'];
+        $categories[0]['bonus_only_cap_hundredths'] = 500;
+        $book->saveCalculation($section->id, 'category', [], $setup['revision'], $categories);
+        $review = $this->review($fixture);
+        self::assertSame('A', $review['grade']['code']);
+        $categories[0]['bonus_only_cap_hundredths'] = 600;
+        $book->saveCalculation(
+            $section->id,
+            'category',
+            [],
+            $book->calculationSetup($section->id)['revision'],
+            $categories,
+        );
+        self::assertSame('A', $book->gradeChoices($student->id, $section->id)['coursework']['grade_code']);
+        $before = EventStoreFixture::historyDigest($f->sql);
+        try {
+            $book->commitFinalGrade($student->id, $section->id, $review['review_token']);
+            self::fail('The same letter concealed a changed bonus policy.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, EventStoreFixture::historyDigest($f->sql));
+        }
+    }
+
+    public function testBonusLimitDriftDuringTheRequiredAuditRollsBackTheEntireGradeDecision(): void
+    {
+        $fixture = [$f, $book, $student, $section] = $this->categoryFixture();
+        $setup = $book->calculationSetup($section->id);
+        $categories = $setup['categories'];
+        $categories[0]['bonus_only_cap_hundredths'] = 500;
+        $book->saveCalculation($section->id, 'category', [], $setup['revision'], $categories);
+        $review = $this->review($fixture);
+        $tables = [
+            'sis_academic_credits', 'sis_history_events', 'sis_history_operations', 'sis_gradebook_calculations',
+        ];
+        $before = array_map($f->sql->rows(...), $tables);
+        $audit = $this->createStub(AuditTrail::class);
+        $audit->method('record')->willReturnCallback(function () use ($f, $section, $categories): void {
+            $categories[0]['bonus_only_cap_hundredths'] = 600;
+            $f->sql->update(
+                'sis_gradebook_calculations',
+                ['categories' => json_encode($categories, JSON_THROW_ON_ERROR)],
+                ['id' => $section->id->value]
+            );
+        });
+        try {
+            $f->academicCredits($audit)->commit($student->id, $section->id, $review['review_token']);
+            self::fail('A bonus limit changed during final audit.');
+        } catch (ConcurrentModificationException) {
+            self::assertSame($before, array_map($f->sql->rows(...), $tables));
+        }
+    }
+
     private function scale(): array
     {
         return [

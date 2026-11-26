@@ -5,6 +5,21 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'bonus_limit' => trans_html('Maximum bonus-only percentage points (optional)'),
+    'bonus_limit_help' => trans_html(
+        'Leave blank for no additional limit. Zero excludes bonus-only contributions. '
+        . 'Apply after drops and excusals, before category weighting and the category cap. '
+        . 'Bonus marks on regular assignments and recorded scores remain unchanged.'
+    ),
+    'bonus_limit_error' => trans_html(
+        'Use 0 to 100 percentage points with at most two decimal places, or leave blank.'
+    ),
+    'bonus_limit_feedback' => trans_html('Bonus-only contribution limit: {limit} percentage points.'),
+    'bonus_limit_applied' => trans_html(
+        'Recorded contribution: {raw}; counted before the category cap: {applied} percentage points.'
+    ),
+    'bonus_limit_awaiting' => trans_html('Graded regular work is required before this contribution can be calculated.'),
+    'summary_bonus_limits' => trans_html('Categories with a bonus-only contribution limit: {count}.'),
     'cap' => trans_html('Cap category average at 100%'),
     'cap_help' => trans_html(
         'Apply this cap after drops, excusals and bonus points, before the category weight. '

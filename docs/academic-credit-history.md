@@ -252,6 +252,24 @@ No migration is required: existing assignment/score/calculation fields already r
 
 Fictional checks cover all three calculation modes, independent bonus weights, pending/zero/excused work, absent regular denominators, category drops, type conversion and saved-score limits, owner/staff separation, stale revisions, audit/actor rollback, unchanged official facts and oversized-book paging. Actual private routes exercise framework CSRF, provider wiring, assignment creation, score limits, worksheets and owner feedback. JavaScript checks exercise the type selector, separate weight totals, keyboard labels and shared presentation. Full browser/screen-reader and production-load acceptance remain open.
 
+### Limit bonus-only contributions within a category
+
+Implemented November 25, 2026. In **Teaching → a section → Gradebook setup → Category weights**, each category has an optional **Maximum bonus-only percentage points** field. It limits how much bonus-only assignments can add to that category's average. It does not change saved marks or their assignment score ceilings.
+
+- **Blank** keeps the existing behavior: all eligible bonus-only earned points contribute when the category has graded regular work.
+- **0** explicitly counts no bonus-only contribution in that category.
+- **0.01–100.00** sets the maximum additional percentage points, with at most two decimal places. Limits in other categories remain independent.
+
+For example, **90/100** regular points and **20** bonus-only points ordinarily produce **110%**. A **5.00** limit produces **95%**, retaining all 20 recorded bonus points. If that category supplies 40% of the grade, regular work at 80% plus a five-point bonus contribution gives an 85% category result; an independent 60% category at 100% produces a 94% overall average.
+
+The calculation first applies regular-work drops/protection and excusals. It divides included bonus-only earned points by the remaining **graded regular possible points**, limits that additional percentage, then adds it to the regular result. The optional **Cap category average at 100%** runs next, followed by category weighting/normalization and the separate final-grade comparison policy. Fractional point allowances stay exact for grade comparison; display rounding does not determine the grade. With 50 graded regular possible points, a five-percentage-point limit permits 2.5 bonus points, rather than five raw points.
+
+Bonus marks above the base maximum on a regular assignment are outside this rule. For example, a regular assignment's 110/100 result stays 110% when the bonus-only limit is zero; the independent category or final-grade cap can still apply. Ungraded optional work creates no missing-required-work penalty. A category with no graded regular denominator still has no calculated average and visibly unapplied bonus work; a limit, including zero, never hides that missing evidence. Fully excused and zero-weight categories retain their existing treatment.
+
+Staff and private student feedback show the configured limit, recorded bonus-only percentage-point contribution and the amount counted **before** the independent whole-category cap. Raw marks remain visible. Setup preserves the limit through assignment search, paging, rejected saves and reopening. Invalid/out-of-range values block saving with an accessible error; blank clearing and explicit zero remain distinct.
+
+New suggested final-grade decisions retain the exact optional limit and original scores in their existing protected coursework evidence. Later working-policy changes can update the working average, while posted grades and original accepted retries retain their original values. A changed limit invalidates an unaccepted review even if it suggests the same letter grade. Final source/authority/audit checks remain atomic. Curated grade review/history counts identify categories with limits without exposing full historical score arrays. Earlier evidence without the optional key remains unchanged and is verified under its original unrestricted rule. No migration, new event type, report, grant or automatic grade decision is introduced.
+
 ### Excuse assignment work for one student
 
 Use **My teaching → Section → Grade & attendance → Assignment scores → Enter score**. Check **Excuse this assignment** and save. The currently entered mark remains recorded, including zero or a bonus mark, but the work is omitted from the student's running average and grading coverage. To include it again, uncheck the option and save. A blank mark remains distinct from a recorded zero; checking the option does not turn either into a zero or erase it. Clearing the mark field explicitly still clears the mark, while the excusal flag remains a separate choice.

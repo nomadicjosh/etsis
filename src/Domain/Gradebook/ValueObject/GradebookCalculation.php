@@ -24,7 +24,8 @@ final readonly class GradebookCalculation
 
     /** @param array<string, int> $weights Hundredths of a percent, keyed by assignment ULID.
      * @param list<array{title:string, weight_hundredths:int, assignments:list<string>, drop_lowest?:int,
-     * protected_assignments?:list<string>, cap_at_hundred?:bool}> $categories
+     * protected_assignments?:list<string>, cap_at_hundred?:bool, bonus_only_cap_hundredths?:int}> $categories
+     * Bonus-only caps use hundredths of a percentage point, independently of recorded assignment points.
      * @param list<string> $bonusAssignments Derived from the selected assignments, never client settings.
      */
     public function __construct(
@@ -80,6 +81,7 @@ final readonly class GradebookCalculation
                     "drop_lowest",
                     'protected_assignments',
                     'cap_at_hundred',
+                    'bonus_only_cap_hundredths',
                 ]) !== [] ||
                 !is_string($category["title"] ?? null) ||
                 !is_int($category["weight_hundredths"] ?? null) ||
@@ -134,6 +136,16 @@ final readonly class GradebookCalculation
             }
             if (array_key_exists('cap_at_hundred', $category) && !is_bool($category['cap_at_hundred'])) {
                 self::invalid(trans('Choose whether to cap this category at 100%.'), 'categories');
+            }
+            if (
+                array_key_exists('bonus_only_cap_hundredths', $category) &&
+                (!is_int($category['bonus_only_cap_hundredths']) || $category['bonus_only_cap_hundredths'] < 0 ||
+                    $category['bonus_only_cap_hundredths'] > 10000)
+            ) {
+                self::invalid(
+                    trans('Use a bonus-only limit from 0 to 100 percentage points, or leave it blank.'),
+                    'categories',
+                );
             }
             $protected = array_key_exists('protected_assignments', $category) ? $category['protected_assignments'] : [];
             if (
@@ -379,6 +391,7 @@ final readonly class GradebookCalculation
             $earned = 0;
             $graded = 0;
             $bonusEarned = 0;
+            $bonusOnlyEarned = 0;
             $categoryBonus = false;
             $excused = 0;
             $regularAssignments = 0;
@@ -407,6 +420,7 @@ final readonly class GradebookCalculation
                 if ($score["possible_hundredths"] === 0) {
                     ++$bonusOnly;
                     $bonusPending += $score["earned_hundredths"] === null ? 1 : 0;
+                    $bonusOnlyEarned += $score['earned_hundredths'] ?? 0;
                 }
                 if ($score["earned_hundredths"] !== null) {
                     $gradedPossible += $score["possible_hundredths"];
@@ -417,7 +431,23 @@ final readonly class GradebookCalculation
             }
             $fullyExcused = ($regularAssignments > 0 && $regularExcused === $regularAssignments) ||
             ($category["assignments"] !== [] && $excused === count($category["assignments"]));
+            $bonusCap = $category['bonus_only_cap_hundredths'] ?? null;
+            $countedExact = null;
+            $bonusApplied = null;
+            $bonusLimited = false;
+            if ($bonusCap !== null && $gradedPossible > 0) {
+                $allowed = BigRational::ofFraction($gradedPossible * $bonusCap, 10000);
+                $bonusLimited = BigRational::of($bonusOnlyEarned)->compareTo($allowed) > 0;
+                $bonusApplied = $bonusLimited ? $allowed : BigRational::of($bonusOnlyEarned);
+                $countedExact = $bonusApplied->plus($earned - $bonusOnlyEarned);
+            }
+            $categoryCapped = ($category['cap_at_hundred'] ?? false) && $gradedPossible > 0 &&
+            ($countedExact === null ? $earned > $gradedPossible : $countedExact->compareTo($gradedPossible) > 0);
             $countedEarned = ($category['cap_at_hundred'] ?? false) ? min($earned, $gradedPossible) : $earned;
+            if ($countedExact !== null) {
+                $countedExact = $categoryCapped ? BigRational::of($gradedPossible) : $countedExact;
+                $countedEarned = $countedExact->toFloat();
+            }
             if ($weight > 0) {
                 $excusedTotal += $excused;
                 $bonusOnlyTotal += $bonusOnly;
@@ -436,7 +466,9 @@ final readonly class GradebookCalculation
                 if ($gradedPossible > 0) {
                     $activeWeight += $weight;
                     $contribution = $includeExact
-                    ? $contribution->plus(BigRational::ofFraction($weight * $countedEarned, $gradedPossible))
+                    ? $contribution->plus($countedExact === null
+                        ? BigRational::ofFraction($weight * $countedEarned, $gradedPossible)
+                        : $countedExact->multipliedBy($weight)->dividedBy($gradedPossible))
                     : $contribution + $weight * ($countedEarned / $gradedPossible);
                 } elseif (!$fullyExcused) {
                     ++$awaiting;
@@ -446,12 +478,22 @@ final readonly class GradebookCalculation
             $items[] = [
                 "title" => $category["title"],
                 "weight_hundredths" => $weight,
-                ...self::percentage($gradedPossible === 0 ? null : $countedEarned / $gradedPossible),
+                ...self::percentage($gradedPossible === 0 ? null : ($countedExact === null
+                    ? $countedEarned / $gradedPossible : $countedExact->dividedBy($gradedPossible))),
+                ...$bonusCap !== null ? [
+                    'bonus_only_cap_hundredths' => $bonusCap,
+                    'bonus_only_raw_percent_hundredths' => self::percentage($gradedPossible === 0
+                        ? null : BigRational::ofFraction($bonusOnlyEarned, $gradedPossible))['percent_hundredths'],
+                    'bonus_only_applied_percent_hundredths' => self::percentage(
+                        $bonusApplied?->dividedBy($gradedPossible),
+                    )['percent_hundredths'],
+                    'bonus_only_limited' => $bonusLimited,
+                ] : [],
                 ...array_key_exists('cap_at_hundred', $category) ? [
                     'cap_at_hundred' => $category['cap_at_hundred'],
                     'raw_percent_hundredths' => $gradedPossible === 0
                         ? null : (int) round($earned / $gradedPossible * 10000),
-                    'capped' => $category['cap_at_hundred'] && $gradedPossible > 0 && $earned > $gradedPossible,
+                    'capped' => $categoryCapped,
                 ] : [],
                 ...isset($category['protected_assignments']) ? [
                     'protected_assignments' => count($category['protected_assignments']),

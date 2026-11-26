@@ -11,20 +11,45 @@ test('student coursework explains protected assignments and the category cap', a
     await page.route('**/portal/api/students/*/sections/*/scores/', route => route.fulfill({ json: {
         summary: { mode: 'category', percent_hundredths: 10000, coverage_hundredths: 10000,
             pending: 0, excused: 0, excluded: 0, dropped: 0, bonus_enabled: true,
-            categories: [{ title: 'Fictional coursework', percent_hundredths: 10000, raw_percent_hundredths: 15000,
+            categories: [{ title: 'Fictional coursework', percent_hundredths: 10000, raw_percent_hundredths: 17000,
                 cap_at_hundred: true, capped: true, protected_assignments: 1, weight_hundredths: 10000,
-                assignments: 1, graded: 1, coverage_hundredths: 10000 }] },
+                bonus_only_cap_hundredths: 500, bonus_only_raw_percent_hundredths: 2000,
+                bonus_only_applied_percent_hundredths: 500, bonus_only_limited: true,
+                assignments: 2, graded: 2, coverage_hundredths: 10000 }] },
         items: [{ title: 'Fictional exam', earned_hundredths: 1500, possible_hundredths: 1000,
             bonus_hundredths: 500, category_title: 'Fictional coursework', category_weight_hundredths: 10000,
-            drop_protected: true }],
+            drop_protected: true }, { title: 'Fictional optional bonus', earned_hundredths: 200, possible_hundredths: 0,
+            bonus_hundredths: 200, bonus_only: true, category_title: 'Fictional coursework', category_weight_hundredths: 10000 }],
     } }));
     await page.goto('/portal/student/grades/');
     await page.getByRole('button', { name: 'MATH.101 · MATH.101.01: assignment scores', exact: true }).click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toContainText('Category average capped at 100% before weighting.');
-    await expect(dialog).toContainText('Uncapped category average: 150.00%.');
+    await expect(dialog).toContainText('Uncapped category average: 170.00%.');
+    await expect(dialog).toContainText('Bonus-only contribution limit: 5.00 percentage points.');
+    await expect(dialog).toContainText('Recorded contribution: 20.00; counted before the category cap: 5.00 percentage points.');
     await expect(dialog).toContainText('Protected from automatic drops');
     await expect(dialog).toContainText('Recorded bonus points are shown before category caps.');
+    expect((await new AxeBuilder({ page }).include('#campus-dialog').analyze()).violations).toEqual([]);
+});
+
+for (const awaiting of [false, true]) test(`student coursework explains an explicit zero bonus limit${awaiting ? ' before regular grading' : ''}`, async ({ page }) => {
+    await mockServices(page);
+    await page.route('**/portal/api/students/*/sections/*/scores/', route => route.fulfill({ json: {
+        summary: { mode: 'category', percent_hundredths: awaiting ? null : 9000, coverage_hundredths: awaiting ? 0 : 10000,
+            pending: awaiting ? 1 : 0, excused: 0, excluded: 0, dropped: 0, bonus_enabled: true,
+            categories: [{ title: 'Fictional coursework', percent_hundredths: awaiting ? null : 9000, weight_hundredths: 10000,
+                bonus_only_cap_hundredths: 0, bonus_only_raw_percent_hundredths: awaiting ? null : 1000,
+                bonus_only_applied_percent_hundredths: awaiting ? null : 0, bonus_only_limited: !awaiting,
+                assignments: 2, graded: awaiting ? 1 : 2, coverage_hundredths: awaiting ? 0 : 10000 }] }, items: [],
+    } }));
+    await page.goto('/portal/student/grades/');
+    await page.getByRole('button', { name: 'MATH.101 · MATH.101.01: assignment scores', exact: true }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toContainText('Bonus-only contribution limit: 0.00 percentage points.');
+    await expect(dialog).toContainText(awaiting ? 'Graded regular work is required before this contribution can be calculated.'
+        : 'Recorded contribution: 10.00; counted before the category cap: 0.00 percentage points.');
+    await expect(dialog.getByRole('spinbutton')).toHaveCount(0);
     expect((await new AxeBuilder({ page }).include('#campus-dialog').analyze()).violations).toEqual([]);
 });
 

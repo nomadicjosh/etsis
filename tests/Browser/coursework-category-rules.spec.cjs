@@ -43,11 +43,14 @@ test('category rules survive search, paging, a rejected save and reopening', asy
     const f = await fixture(page, { reject: true, many: true });
     const cap = page.getByLabel('Cap category average at 100%: Coursework', { exact: true });
     const protect = page.getByLabel('Protect from automatic drops: Fictional exam', { exact: true });
+    const bonusLimit = page.getByLabel('Maximum bonus-only percentage points (optional): Coursework', { exact: true });
+    await bonusLimit.fill('5.25');
     await cap.check(); await protect.check();
     await expect(page.getByLabel('Protect from automatic drops: Fictional bonus', { exact: true })).toBeDisabled();
     await page.locator('#drawer-body').getByRole('button', { name: 'Next', exact: true }).click();
     await page.locator('#drawer-body').getByRole('button', { name: 'Previous', exact: true }).click();
     await expect(protect).toBeChecked();
+    await expect(bonusLimit).toHaveValue('5.25');
     await page.getByLabel('Find assignments', { exact: true }).fill('quiz');
     await page.getByLabel('Find assignments', { exact: true }).fill('');
     await expect(protect).toBeChecked();
@@ -57,10 +60,11 @@ test('category rules survive search, paging, a rejected save and reopening', asy
     expect(f.calls).toHaveLength(2);
     expect(f.calls[0].data).toEqual(f.calls[1].data);
     expect(f.calls[1].csrf).toBe('fictional-test-token');
-    expect(f.calls[1].data.categories[0]).toMatchObject({ cap_at_hundred: true, protected_assignments: [id(2)] });
+    expect(f.calls[1].data.categories[0]).toMatchObject({ cap_at_hundred: true, protected_assignments: [id(2)], bonus_only_cap_hundredths: 525 });
     await expect(page.getByRole('button', { name: 'Gradebook setup', exact: true })).toBeVisible();
     await page.getByRole('button', { name: 'Gradebook setup', exact: true }).click();
     await expect(cap).toBeChecked(); await expect(protect).toBeChecked();
+    await expect(bonusLimit).toHaveValue('5.25');
     expect(f.errors).toEqual([]);
 });
 
@@ -84,13 +88,51 @@ test('category controls support keyboard and enlarged phone reflow', async ({ pa
     await page.setViewportSize({ width: 320, height: 1000 });
     await page.addStyleTag({ content: 'html { font-size: 32px; }' });
     const cap = page.getByLabel('Cap category average at 100%: Coursework', { exact: true });
+    const bonusLimit = page.getByLabel('Maximum bonus-only percentage points (optional): Coursework', { exact: true });
+    await bonusLimit.fill('5.55');
+    await bonusLimit.focus(); await page.keyboard.press('ArrowUp');
+    await expect(bonusLimit).toHaveValue('5.56');
     await cap.focus(); await page.keyboard.press('Space'); await expect(cap).toBeChecked();
     const protect = page.getByLabel('Protect from automatic drops: Fictional exam', { exact: true });
     await protect.focus(); await page.keyboard.press('Space'); await expect(protect).toBeChecked();
     expect(await page.locator('#drawer-body').evaluate(el => el.scrollWidth <= el.clientWidth + 1)).toBe(true);
     expect((await new AxeBuilder({ page }).include('#record-drawer').analyze()).violations).toEqual([]);
-    await cap.scrollIntoViewIfNeeded();
+    await bonusLimit.scrollIntoViewIfNeeded();
     await page.screenshot({ path: '/tmp/etsis-category-rules-phone.png' });
     expect(await page.evaluate(() => JSON.stringify({ ...localStorage, ...sessionStorage }))).not.toContain('Fictional exam');
+    expect(f.errors).toEqual([]);
+});
+
+test('a blank bonus limit stays absent while zero saves an explicit disabled contribution', async ({ page }) => {
+    const f = await fixture(page);
+    const limit = page.getByLabel('Maximum bonus-only percentage points (optional): Coursework', { exact: true });
+    await expect(limit).toHaveValue('');
+    await limit.fill('0');
+    await page.getByRole('button', { name: 'Save setup', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Gradebook setup', exact: true })).toBeVisible();
+    expect(f.calls[0].data.categories[0].bonus_only_cap_hundredths).toBe(0);
+    await page.getByRole('button', { name: 'Gradebook setup', exact: true }).click();
+    await expect(limit).toHaveValue('0.00');
+    await limit.fill('');
+    await page.getByRole('button', { name: 'Save setup', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Gradebook setup', exact: true })).toBeVisible();
+    expect(f.calls[1].data.categories[0]).not.toHaveProperty('bonus_only_cap_hundredths');
+    expect(f.errors).toEqual([]);
+});
+
+test('invalid bonus limits block saving and expose an accessible error without changing the draft', async ({ page }) => {
+    const f = await fixture(page);
+    const limit = page.getByLabel('Maximum bonus-only percentage points (optional): Coursework', { exact: true });
+    const save = page.getByRole('button', { name: 'Save setup', exact: true });
+    for (const value of ['-1', '100.01', '5.555']) {
+        await limit.fill(value);
+        await expect(save).toBeDisabled();
+        await expect(limit).toHaveAttribute('aria-invalid', 'true');
+        await expect(page.getByRole('alert').filter({ hasText: 'Use 0 to 100 percentage points' })).toBeVisible();
+    }
+    expect(f.calls).toHaveLength(0);
+    await limit.fill('5.55');
+    await expect(save).toBeEnabled();
+    await expect(limit).toHaveAttribute('aria-invalid', 'false');
     expect(f.errors).toEqual([]);
 });
