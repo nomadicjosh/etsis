@@ -509,3 +509,9 @@ Apply `20261123000007_ExpandSisHistoryCheckSubjects` with normal migrations. The
 ### Controlled student-account projection reconstruction
 
 The separate [account projection recovery guide](account-projection-recovery.md) describes bounded encrypted staging with original read rows, fresh comparison, deliberate maintenance-only atomic promotion, protected original-result retries and explicit artifact deletion. `sis:history:verify` remains read-only. Reconstruction uses the same deterministic balance/posting calculations and the existing protected journal, without business event replay side effects. Other projection rebuilds, native contention and complete restore acceptance remain open.
+
+## Selected retained transcript artifact verification
+
+Use `ddev codex sis:history:verify --transcript-document='<sis_transcript_documents.id>' --json` to check one retained encrypted PDF/HTML, its request reference and available release/delivery evidence. This exclusive selector accepts no replay options: it shares the original artifact reader and evaluates no current grade/catalog policy. Bounded ordinary SELECTs, captured-row rechecks and fixed private results keep it read-only, including with writes prohibited. It creates no support receipt, audit, business event or replacement document.
+
+The [transcript recovery guide](transcript-recovery.md) explains results, earlier unrecorded confirmations, size/time bounds and the exercised isolated database/application-key/event-key recovery scenario. Artifact consistency and protected-journal recovery are separate checks; neither alone proves historical issuance, archive completeness or institution-led restore acceptance.

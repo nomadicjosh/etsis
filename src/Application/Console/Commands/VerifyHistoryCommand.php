@@ -13,6 +13,7 @@ use Domain\Shared\ValueObject\EntityId;
 use Domain\Finance\Repository\AccountProjectionVerifier;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Person\Repository\PersonProjectionVerifier;
+use Domain\Transcript\Service\TranscriptArtifactVerifier;
 use Domain\HumanResources\Repository\EmploymentProjectionVerifier;
 use Domain\Shared\EventSourcing\HistoricalIntegrityVerifier;
 use Domain\Shared\EventSourcing\HistoryVerificationFailedException;
@@ -26,6 +27,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
     protected string $name = "sis:history:verify";
     protected string $description = "Verify protected chains, references and retry receipts in read-only batches.";
     protected array $options = [
+        ['transcript-document', null, 'required',
+            'Check one retained encrypted transcript PDF/HTML and delivery evidence; no replay options.'],
         ['graduate-policy', null, 'none', 'Compare institutional graduate policy history and its counter; no cursor.'],
         ['graduate-approvals', null, 'required',
             'Check one pursuit’s retained graduate approvals and references; no cursor.'],
@@ -77,6 +80,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 throw new InvalidArgumentException();
             }
             $account = $this->getOptions('account');
+            $transcript = $this->getOptions('transcript-document');
             $student = $this->getOptions('student');
             $credit = $this->getOptions('credit');
             $person = $this->getOptions('person');
@@ -98,12 +102,21 @@ final class VerifyHistoryCommand extends ConsoleCommand
             ];
             $graduatePolicy = $this->getOptions('graduate-policy') === true;
             $graduateApprovals = $this->getOptions('graduate-approvals');
-            $subjects = [$account, $student, $credit, $person, $ssn, $application, $standing, $load,
+            $subjects = [$account, $student, $credit, $person, $ssn, $application, $standing, $load, $transcript,
                 $advisors, $requirements, $progress, $waitlist,
                 ...array_values($employment), ...array_values($catalog),
                 $graduatePolicy ? \Domain\Registration\GraduateRegistrationPolicy::ID : null, $graduateApprovals];
             if (count(array_filter($subjects, static fn(mixed $id): bool => $id !== null)) > 1) {
                 throw new InvalidArgumentException();
+            }
+            if ($transcript !== null) {
+                if (
+                    !is_string($transcript) || $cursor !== null ||
+                    $this->input->hasParameterOption(['--events', '--streams'])
+                ) {
+                    throw new InvalidArgumentException();
+                }
+                return $this->transcript(new EntityId($transcript), $json);
             }
             if ($ssn !== null) {
                 if (
@@ -206,7 +219,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
                     . '--position=POSITION_ULID, --time-entry=ENTRY_ULID, '
                     . '--course=COURSE_ULID, --section=SECTION_ULID, --graduate-policy '
                     . 'or --graduate-approvals=PURSUIT_ULID '
-                    . 'with --events and optional --json. Use --ssn-person=PERSON_ULID with --events=1..500.',
+                    . 'with --events and optional --json. Use --ssn-person=PERSON_ULID with --events=1..500. '
+                    . 'Use --transcript-document=DOCUMENT_ULID with optional --json and no replay options.',
                 self::INVALID,
             );
         } catch (HistoryVerificationFailedException $exception) {
@@ -307,6 +321,27 @@ final class VerifyHistoryCommand extends ConsoleCommand
         return match ($result->status) {
             'verified' => self::SUCCESS,
             'history_gaps', 'observed_empty', 'changed', 'limited' => 3,
+            default => self::FAILURE,
+        };
+    }
+
+    private function transcript(EntityId $document, bool $json): int
+    {
+        $result = $this->codefy->make(TranscriptArtifactVerifier::class)->verify($document);
+        if ($json) {
+            $this->output->writeln(json_encode($result, JSON_THROW_ON_ERROR), OutputInterface::OUTPUT_RAW);
+        } else {
+            $this->terminalRaw('Retained transcript artifact: ' . $result['status'] . '.');
+            if ($result['issues'] !== []) {
+                $this->terminalRaw('Components requiring review: ' . implode(', ', $result['issues']) . '.');
+            }
+            $this->terminalRaw('No records changed. This authenticates the selected retained PDF/HTML and available '
+                . 'release/delivery evidence. It does not re-evaluate current grades, establish archive completeness, '
+                . 'independently prove historical issuance or infer unrecorded confirmations.');
+        }
+        return match ($result['status']) {
+            'verified' => self::SUCCESS,
+            'changed', 'limited' => 3,
             default => self::FAILURE,
         };
     }

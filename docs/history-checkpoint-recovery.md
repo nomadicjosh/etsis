@@ -51,6 +51,8 @@ Plain output uses fixed operator messages. JSON returns only outcome, checkpoint
 
 An ordinary `sis:history:verify` can succeed on an older internally consistent database. The independent checkpoint adds evidence that its complete protected inventory differs from the expected backup boundary. A fresh checkpoint created after restoring cannot establish that the restore matches a previously retained state. Losing the independent checkpoint/key requires a separate recovery decision; silently replacing them destroys that comparison evidence.
 
+Journal checkpoints cover the journal, heads and operation receipts. They do not fingerprint retained transcript rows. Use the separate [selected transcript-artifact check and combined database/key recovery exercise](transcript-recovery.md) for expected issued originals. An intact journal checkpoint can coexist with a missing or damaged encrypted document; both checks and the remaining restore acceptance are required.
+
 ## Event-key rotation and recovery
 
 The existing [event keyring](event-history-foundation.md#encryption-and-key-rotation) supports a new active key while retaining older key identifiers/bytes. This workflow does not re-encrypt history or retire keys.
@@ -70,4 +72,4 @@ Capture fingerprints the inventory before and after complete authentication and 
 
 The fingerprint includes all persisted columns of the three protected tables, normalizing scalar PDO representations while preserving ciphertext and nulls. A schema/envelope rewrite can intentionally change it. Cross-driver restores or future formats require explicit reconciliation rather than accepting a mismatched digest automatically. No schema migration, event conversion or key retirement is part of this feature.
 
-Focused tests use disposable complete SQLite database copies and real journal services, with read-only restored connections. A native MariaDB session restricted to read-only transactions also captured and matched the configured twenty-event inventory without changing its checksum; its temporary artifacts were removed. This qualifies those bounded journal checks, not all PDO engines, Windows/private-filesystem behavior, encrypted-artifact restoration, full database/projection recovery or production load.
+Focused tests use disposable complete SQLite database copies and real journal services, with read-only restored connections. A native MariaDB session restricted to read-only transactions also captured and matched the configured twenty-event inventory without changing its checksum; its temporary artifacts were removed. These journal checks do not qualify all PDO engines, Windows/private-filesystem behavior, full database/projection recovery or production load. The later [selected transcript recovery exercise](transcript-recovery.md#exercise-database-and-key-recovery-together) qualifies one encrypted database-artifact scenario; separate file stores and wider restoration/custody acceptance remain open.

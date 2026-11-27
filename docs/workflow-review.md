@@ -1232,6 +1232,8 @@ Deployment developers register additional supported layouts through `TranscriptL
 
 The existing **4 MiB PDF** limit remains. Accessible HTML is capped at **1 MiB** and the combined encoded artifact at **6 MiB** before encryption, bounding memory and fitting the existing protected storage. An invalid or excessive result saves no partial document. The configured development database was inspected before this alpha format change: there were no prepared documents or delivery records to convert, and the twenty recorded historical events were untouched. No schema migration, parallel journal, inferred old HTML, permission grant or new recovery workflow is introduced.
 
+Operators can now use the [selected transcript-artifact diagnostic and isolated restore workflow](transcript-recovery.md) to check the retained original PDF/HTML and available delivery/release evidence without rendering, current-grade replay or audit writes. This is separate from normal staff access and does not certify a complete restore or independently prove historical issuance.
+
 ### Institutional transcript release checks
 
 In **Transcripts → Transcript setup**, authorized administrators can define up to twelve checks. Give each a short title, optional staff instructions, and choose **Preparation**, **Delivery** or **Both steps**. For example, preparation may require reviewing the student's release authorization, while delivery may require verifying the recipient's identity. Checks are manual institutional confirmations; a registration hold or account balance does not automatically become a transcript block.

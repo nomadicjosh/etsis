@@ -569,6 +569,9 @@ try {
         } elseif (($argv[1] ?? '') === 'check-history-anchor') {
             require __DIR__ . '/HistoryAnchorBootChecks.php';
             $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-transcript-artifacts') {
+            require __DIR__ . '/TranscriptArtifactBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-degree-trials') {
             require __DIR__ . '/DraftDegreeAuditBootChecks.php';
             $status = 0;
