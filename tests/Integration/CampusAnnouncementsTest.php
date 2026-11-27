@@ -82,6 +82,22 @@ final class CampusAnnouncementsTest extends TestCase
         }
     }
 
+    public function testPublicationTimeOrdersTheFeedAndCursorInsteadOfEarlierDraftCreationOrder(): void
+    {
+        $c = new CampusFixture();
+        $firstDraft = $this->draft($c);
+        $secondDraft = $this->draft($c);
+        $c->publish($secondDraft, true, 0);
+        $c->sis->clock->time = $c->sis->clock->time->modify('+1 hour');
+        $c->publish($firstDraft, true, 0);
+        $service = $this->service($c);
+        $before = $c->sis->sql->rows('sis_history_events');
+        self::assertSame([$firstDraft->value, $secondDraft->value], array_column($service->page(false)['items'], 'id'));
+        self::assertSame([$secondDraft->value], array_column($service->page(false, $firstDraft)['items'], 'id'));
+        self::assertNotNull($service->page(false)['items'][0]['recorded_at']);
+        self::assertSame($before, $c->sis->sql->rows('sis_history_events'));
+    }
+
     public function testReadsBelongOnlyToTheSignedInAccountAndRetriesPreserveTheOriginalTimestamp(): void
     {
         $c = new CampusFixture();

@@ -37,14 +37,12 @@ async function fixture(page, { portal = false, count = 1, status = 'ready', deli
     const trigger = page.locator(portal ? '#campus-notifications-open' : '#workspace-notifications-open');
     await trigger.click();
     const dialog = page.locator('.workspace-notification-dialog');
-    const disclosure = dialog.locator('summary').filter({ hasText: 'Transcript updates' });
-    const section = disclosure.locator('..');
-    return { ...base, trigger, dialog, disclosure, section, calls, deny: () => { denied = true; }, stale: () => { stale = true; } };
+    const section = dialog.locator('.notification-feed');
+    return { ...base, trigger, dialog, section, calls, deny: () => { denied = true; }, stale: () => { stale = true; } };
 }
 for (const portal of [false, true]) test(`${portal ? 'portal' : 'workspace'} transcript notice opens minimized status and deletes permanently without granting a document`, async ({ page }) => {
     const f = await fixture(page, { portal });
     expect(f.calls.some(call => /updates\/[^/]+\//.test(call.path))).toBe(false);
-    await f.disclosure.click();
     await expect(f.section).toContainText('Transcript prepared');
     await expect(f.section.getByRole('button', { name: 'Mark as read', exact: true })).toHaveCount(0);
     await expect(f.section.getByLabel('Show read updates', { exact: true })).toBeHidden();
@@ -56,36 +54,33 @@ for (const portal of [false, true]) test(`${portal ? 'portal' : 'workspace'} tra
         .toHaveAttribute('href', '/portal/student/transcripts/');
     expect(f.calls.filter(call => call.method === 'POST')).toEqual([{ path: `/portal/api/transcript-updates/${id(100)}/read/`, method: 'POST' }]);
     await expect(f.section.locator('iframe, object, embed')).toHaveCount(0);
-    await f.section.getByRole('button', { name: 'Back to transcript updates', exact: true }).click();
+    await f.section.getByRole('button', { name: 'Back to notifications', exact: true }).click();
     await expect(f.section).toContainText('Transcript prepared');
-    await expect(f.section.getByRole('button', { name: 'Delete update', exact: true })).toBeFocused();
-    await f.section.getByRole('button', { name: 'Delete update', exact: true }).click();
-    await expect(f.section).toContainText('There are no transcript updates.');
+    await expect(f.section.getByRole('button', { name: 'View transcript request', exact: true })).toBeFocused();
+    await f.section.getByRole('button', { name: 'Delete notification', exact: true }).click();
+    await expect(f.section).toContainText('You have no notifications.');
     await page.keyboard.press('Escape'); await page.reload();
-    await f.trigger.click(); await f.disclosure.click();
-    await expect(f.section).toContainText('There are no transcript updates.');
+    await f.trigger.click(); await expect(f.section).toContainText('You have no notifications.');
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
 
 test('transcript notices page both ways and stale revisions preserve the current list', async ({ page }) => {
     const f = await fixture(page, { count: 25 });
-    await f.disclosure.click();
     await expect(f.section.locator('[data-update-id]')).toHaveCount(20);
-    await f.section.getByRole('button', { name: 'More updates', exact: true }).click();
+    await f.section.getByRole('button', { name: 'Older notifications', exact: true }).click();
     await expect(f.section.locator('[data-update-id]')).toHaveCount(5);
-    await f.section.getByRole('button', { name: 'Previous updates', exact: true }).click();
+    await f.section.getByRole('button', { name: 'Previous notifications', exact: true }).click();
     await expect(f.section.locator('[data-update-id]')).toHaveCount(20);
     f.stale();
-    await f.section.getByRole('button', { name: 'Delete update', exact: true }).first().click();
-    await expect(f.section).toContainText('These notifications are unavailable. Reopen this section to try again.');
+    await f.section.getByRole('button', { name: 'Delete notification', exact: true }).first().click();
+    await expect(f.section).toContainText('This notification changed or is unavailable. Refresh to try again.');
     await expect(f.section.locator('[data-update-id]')).toHaveCount(20);
     expect(f.errors).toEqual([]);
 });
 
 test('closing transcript details rejects a late response before any later read mutation', async ({ page }) => {
-    const f = await fixture(page); await f.disclosure.click();
-    let release, arrive;
+    const f = await fixture(page); let release, arrive;
     const gate = new Promise(resolve => { release = resolve; });
     const requested = new Promise(resolve => { arrive = resolve; });
     await page.route(`**/portal/api/transcript-updates/${id(100)}/`, async route => {
@@ -100,7 +95,7 @@ test('closing transcript details rejects a late response before any later read m
 });
 
 test('private transcript details support keyboard return, phone reflow and access-loss cleanup', async ({ page }) => {
-    const f = await fixture(page, { portal: true, status: 'fulfilled', delivery: 'electronic' }); await f.disclosure.press('Enter');
+    const f = await fixture(page, { portal: true, status: 'fulfilled', delivery: 'electronic' }); await expect(f.section).toBeVisible();
     await expect(f.section).toContainText('Transcript delivery recorded');
     await f.section.getByRole('button', { name: 'View transcript request', exact: true }).press('Enter');
     await expect(f.section.getByRole('heading', { name: 'Current transcript request', exact: true })).toBeFocused();
@@ -112,8 +107,9 @@ test('private transcript details support keyboard return, phone reflow and acces
     await f.section.getByRole('heading', { name: 'Current transcript request', exact: true }).scrollIntoViewIfNeeded();
     await page.screenshot({ path: '/tmp/etsis-transcript-notices-phone.png' });
     f.deny();
-    await f.section.getByRole('button', { name: 'Delete update', exact: true }).click();
-    await expect(f.dialog).toHaveCount(0);
+    await f.section.getByRole('button', { name: 'Delete notification', exact: true }).click();
+    await expect(f.dialog).toBeVisible();
+    await expect(f.dialog.getByText('Notifications are unavailable for this account.', { exact: true })).toBeFocused();
     await expect(page.locator('body')).not.toContainText('Current transcript request');
     expect(f.errors).toEqual([]);
 });

@@ -544,6 +544,18 @@ final readonly class EnrollmentLedger
             "history_version" => $root->playhead(),
         ] + ($root->corequisites() === null ? [] : ["corequisites" => $root->corequisites()]);
     }
+    /** Minimal protected source for private notices; no notification is created by replay. */
+    public function notificationFacts(EntityId $id, EntityId $student, HistoryReadBudget $budget): array
+    {
+        $root = $this->load($id, $budget);
+        $facts = $root->facts() ?? throw new CorruptHistoryException();
+        if ($facts['student_id'] !== $student->value || $root->notificationStatus() === null) {
+            throw new CorruptHistoryException();
+        }
+        return ['facts' => $facts, 'decision_id' => $root->decision(),
+            'revision' => $root->playhead(), 'status' => $root->notificationStatus()];
+    }
+
     private function load(
         EntityId $id,
         ?HistoryReadBudget $budget = null,

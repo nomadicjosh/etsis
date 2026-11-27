@@ -30,7 +30,7 @@ test('deleting recent feedback removes its message and toast and keeps a usable 
     await dialog(page).getByRole('button', { name: 'Delete notification', exact: true }).click();
     await expect(dialog(page).locator('.workspace-notification-entry')).toHaveCount(0);
     await expect(page.locator('.workspace-notification-toast')).toHaveCount(0);
-    await expect(dialog(page).getByRole('button', { name: 'Close notifications', exact: true })).toBeFocused();
+    await expect(dialog(page).getByText('Notification deleted.', { exact: true })).toBeFocused();
     await page.keyboard.press('Escape');
     await trigger(page).click();
     await expect(dialog(page)).not.toContainText('Fictional removable feedback.');
@@ -51,8 +51,8 @@ test('bounded Bootstrap toasts retain literal messages without moving keyboard f
     await expect(dialog(page).locator('.workspace-notification-entry')).toHaveCount(20);
     await expect(dialog(page)).toContainText('Fictional notice 30');
     await expect(dialog(page)).not.toContainText('Fictional notice 10');
-    await page.getByRole('button', { name: 'Clear recent notifications', exact: true }).click();
-    await expect(dialog(page)).toContainText('There are no notifications from this workspace session.');
+    await page.evaluate(() => window.testNotifications.clear(false));
+    await expect(dialog(page)).toContainText('You have no notifications.');
     await expect(page.locator('.workspace-notification-toast')).toHaveCount(0);
     await page.keyboard.press('Escape');
     await expect(trigger(page)).toBeFocused();

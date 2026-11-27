@@ -113,6 +113,21 @@ final readonly class SqlImportQueueRepository implements ImportQueueRepository
         ?EntityId $after = null,
     ): array {
         $q = $this->sql->quote(...);
+        $parameters = [$owner->value];
+        $cursor = '';
+        if ($after !== null) {
+            $previous = $this->sql->rows('sis_import_notices', [
+                'id' => $after->value, 'owner_user_id' => $owner->value,
+            ], 1)[0] ?? null;
+            if ($previous === null) {
+                throw new \Domain\Shared\Exception\ConcurrentModificationException(
+                    \Codefy\Framework\Helpers\trans('Import notifications changed. Refresh the list.'),
+                );
+            }
+            $date = $q('recorded_at');
+            $cursor = ' AND (' . $date . ' < ? OR (' . $date . ' = ? AND ' . $q('id') . ' < ?))';
+            array_push($parameters, $previous['recorded_at'], $previous['recorded_at'], $after->value);
+        }
         return $this->sql->fetch(
             "SELECT * FROM " .
                 $q("sis_import_notices") .
@@ -120,11 +135,11 @@ final readonly class SqlImportQueueRepository implements ImportQueueRepository
                 $q("owner_user_id") .
                 " = ?" .
                 ($unread ? " AND " . $q("read_at") . " IS NULL" : "") .
-                ($after === null ? "" : " AND " . $q("id") . " < ?") .
+                $cursor .
                 " ORDER BY " .
-                $q("id") .
+                $q('recorded_at') . ' DESC, ' . $q("id") .
                 " DESC",
-            [$owner->value, ...$after === null ? [] : [$after->value]],
+            $parameters,
             21,
         );
     }

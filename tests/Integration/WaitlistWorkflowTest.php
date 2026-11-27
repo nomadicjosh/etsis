@@ -299,6 +299,7 @@ final class WaitlistWorkflowTest extends TestCase
             $s->windowPolicies(),
             $s->waitlistGuard($audit),
             $s->graduateGate(),
+            $s->enrollmentNotifications(),
         );
         try {
             $service->register($student->id, $section->id, true);

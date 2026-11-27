@@ -46,6 +46,7 @@ final readonly class EnrollmentReinstatementService
         private AuditTrail $audit,
         private Clock $clock,
         private ReviewProof $proofs,
+        private EnrollmentNotifications $notifications,
     ) {
     }
     public function review(
@@ -211,6 +212,7 @@ final readonly class EnrollmentReinstatementService
                 $budget,
             );
             $this->waitlists->complete($claim, $restored, $actor);
+            $notification = $this->notifications->record($restored, $budget);
             $this->audit->record($actor, "registration.reinstated", $enrollment);
             $this->registration->assertReinstatementFinances($student, $restored->termId, $enrollment, $budget);
             $this->registration->verifyCompletion(
@@ -246,6 +248,7 @@ final readonly class EnrollmentReinstatementService
                 $operation,
                 $intent,
             );
+            $this->notifications->verify($notification, $budget);
             return [
                 "operation_id" => $operation->value,
                 "enrollment_id" => $enrollment->value,

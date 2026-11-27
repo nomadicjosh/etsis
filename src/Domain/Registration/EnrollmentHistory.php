@@ -25,6 +25,7 @@ final class EnrollmentHistory extends EventSourcedAggregate
     /** @var list<array<string,mixed>> */
     private array $decisions = [];
     private ?string $decision = null;
+    private ?string $notificationStatus = null;
     private ?string $provenance = null;
     private ?string $sectionVersion = null;
     private ?\Domain\Registration\ValueObject\PrerequisiteDecision $prerequisites = null;
@@ -92,6 +93,7 @@ final class EnrollmentHistory extends EventSourcedAggregate
     public function whenEnrollmentWasEstablished(EnrollmentWasEstablished $event): void
     {
         $p = $event->payload();
+        $this->notificationStatus = $p['provenance'] === 'registered' ? 'registered' : null;
         if ($this->facts !== null || $p["enrollment"]["id"] !== (string) $this->aggregateId()) {
             throw new CorruptHistoryException();
         }
@@ -236,6 +238,7 @@ final class EnrollmentHistory extends EventSourcedAggregate
     public function whenEnrollmentWasClosed(EnrollmentWasClosed $event): void
     {
         $p = $event->payload();
+        $this->notificationStatus = $p['policy']['remove_current'] ? 'dropped' : 'withdrawn';
         if (
             $this->facts === null ||
             !in_array($this->facts["status"], ["A", "N"], true) ||
@@ -273,6 +276,7 @@ final class EnrollmentHistory extends EventSourcedAggregate
         \Domain\Registration\Event\EnrollmentWasReinstated $event,
     ): void {
         $p = $event->payload();
+        $this->notificationStatus = 'reinstated';
         if (
             !$this->canReinstate() ||
             $p["previous_decision_id"] !== $this->decision ||
@@ -361,6 +365,11 @@ final class EnrollmentHistory extends EventSourcedAggregate
     public function decision(): ?string
     {
         return $this->decision;
+    }
+
+    public function notificationStatus(): ?string
+    {
+        return $this->notificationStatus;
     }
     public function provenance(): ?string
     {

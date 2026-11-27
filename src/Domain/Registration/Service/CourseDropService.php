@@ -44,6 +44,7 @@ final readonly class CourseDropService
         private \Domain\Registration\Repository\RegistrationBatchRepository $plans,
         private \Domain\Shared\Service\ReviewProof $proofs,
         private CoRequisiteService $corequisites,
+        private EnrollmentNotifications $notifications,
     ) {
     }
 
@@ -622,6 +623,7 @@ final readonly class CourseDropService
                 "registered_at" => $closed->registeredAt->format(DATE_ATOM),
                 "status_at" => $closed->statusAt->format(DATE_ATOM),
             ] + ($withdrawal === null ? [] : ['withdrawal_credit' => $context['withdrawal_credit']]);
+            $notification = $this->notifications->record($closed, $budget);
             $this->drops->record(
                 $operation,
                 $student,
@@ -678,6 +680,7 @@ final readonly class CourseDropService
             ) {
                 throw new ConcurrentModificationException('The student link or drop date changed. Review again.');
             }
+            $this->notifications->verify($notification, $budget);
             return $result;
         });
     }

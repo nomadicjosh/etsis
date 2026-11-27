@@ -16,17 +16,17 @@ Editing approved news returns it to draft. Its revised wording requires fresh ap
 
 ## Read and return
 
-Open the header bell, then expand **Campus announcements**. The list loads on demand, twenty items per page, newest content identities first. Use **More announcements** and **Previous announcements** to navigate the live list; close and reopen the section to reload it. There is no background polling. New publication or read changes can move items between pages; reopen from the beginning for the current list.
+Open the header bell and find campus announcements in [your combined account list](account-notifications.md). Use **Read announcement** for full content, **Older notifications** or **Previous notifications** for twenty-item pages, and **Refresh notifications** for the current list. Publication time determines announcement order; an earlier unknown date is not invented. Publication/read changes can move live items between refreshed pages.
 
-Open a title to read the full announcement and automatically mark that displayed revision read. **Back to list** returns to the accepted page. Read and unread notices stay listed until deleted. Reopening the panel or signing in again reads persisted state from the server. Another account has its own state, even if it has registrar or publishing permissions.
+Opening an announcement automatically marks only its displayed revision read. **Back to notifications** returns to the originating page. Read notices remain listed until deleted. Another account keeps its own reading state, even with registrar or publishing duties. The bell refreshes bounded unread counts periodically; opening or refreshing the list loads only small authorized metadata pages.
 
-The reader preserves approved formatting and useful links using the existing server sanitizer and local DOMPurify renderer. Plain text retains literal angle brackets. The drawer/dialog keeps keyboard focus, visible errors and narrow-screen reflow; closing the disclosure or panel discards its private page contents and ignores late responses.
+The reader preserves approved formatting and useful links using the existing server sanitizer and local DOMPurify renderer. Plain text retains literal angle brackets. The drawer/dialog keeps keyboard focus, visible errors and narrow-screen reflow; closing the selected reader or panel discards its private page contents and ignores late responses.
 
 Read state means that this account opened the displayed revision. It is **not a policy acknowledgement, proof of understanding, required acceptance or legal delivery receipt**. A stale request cannot hide a later publication. Repeat requests for the same available revision retain the original read timestamp without another audit entry. Each account/content pair keeps one current revision and read timestamp, not a historical acknowledgement ledger.
 
 ## Delete an announcement from your drawer
 
-Use **Delete announcement** beside a list item or inside its opened detail. The server physically deletes this account's read metadata and hides the displayed publication. Reopening and reloading do not restore it. Other accounts and the underlying published campus news remain unchanged; deleting a personal notification does not archive institutional content.
+Use **Delete notification** beside a list item or inside its opened detail. The server physically deletes this account's read metadata and hides the displayed publication. Reopening and reloading do not restore it. Other accounts and the underlying published campus news remain unchanged; deleting a personal notification does not archive institutional content.
 
 Because an announcement is shared news rather than a separate copy for each reader, the server retains one minimal account/content/revision suppression marker. It has no wording, read timestamp or revision history. This prevents the same publication from immediately being delivered again. A later reviewed republication has a higher revision and can appear as a new unread announcement. Retrying deletion of the earlier revision never hides that newer revision. There is no notification trash/archive or undo screen.
 

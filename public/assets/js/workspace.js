@@ -95,12 +95,13 @@
     surfaces = window.createWorkspaceSurfaces({node, task, bootstrap});
     const notifications = window.createWorkspaceNotifications({
         node, stack: $one('#workspace-status'), trigger: $one('#workspace-notifications-open'), bootstrap,
-        labels: config.notification_labels, importLabels: config.import_labels, request,
+        labels: config.notification_labels, importLabels: config.import_labels,
+        request: (path, method, data) => request(path, method, data, true),
     });
 
     void notifications.loadPreferences();
 
-    async function send(path, method = 'GET', data, accept = 'application/json') {
+    async function send(path, method = 'GET', data, accept = 'application/json', notificationSource = false) {
         const multipart = typeof FormData !== 'undefined' && data instanceof FormData;
         const response = await fetch(path, {
             method, credentials: 'same-origin', cache: 'no-store', redirect: 'error',
@@ -109,7 +110,7 @@
             headers: { Accept: accept, ...(method === 'GET' ? {} : { ...(!multipart ? { 'Content-Type': 'application/x-www-form-urlencoded;charset=UTF-8' } : {}), 'X-CSRF-Token': csrf() }) },
             body: method === 'GET' ? undefined : multipart ? data : new URLSearchParams({ _workspace_json: JSON.stringify(data || {}) }).toString(),
         });
-        if ([401, 403].includes(response.status)) notifications.clear();
+        if (response.status === 401 || (response.status === 403 && notificationSource !== true)) notifications.clear();
         if (response.status === 401) {
             if (!signInPending) {
                 signInPending = true;
@@ -121,8 +122,8 @@
         }
         return response;
     }
-    async function request(path, method = 'GET', data) {
-        return jsonResponse(await send(path, method, data));
+    async function request(path, method = 'GET', data, notificationSource = false) {
+        return jsonResponse(await send(path, method, data, 'application/json', notificationSource));
     }
     async function requestHtml(path, data) {
         const response = await send(path, 'POST', data, 'text/html');

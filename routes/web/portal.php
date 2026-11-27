@@ -64,6 +64,10 @@ return static function (Psr7Router $router): void {
     $router->get('/portal/api/advising-updates/', [$advisingUpdates, 'page']);
     $router->post('/portal/api/advising-updates/{id}/read/', [$advisingUpdates, 'read']);
     $router->post('/portal/api/advising-updates/{id}/delete/', [$advisingUpdates, 'delete']);
+    $enrollmentUpdates = \Application\Http\Controller\EnrollmentUpdatesController::class;
+    $router->get('/portal/api/enrollment-updates/', [$enrollmentUpdates, 'page']);
+    $router->post('/portal/api/enrollment-updates/{id}/read/', [$enrollmentUpdates, 'read']);
+    $router->post('/portal/api/enrollment-updates/{id}/delete/', [$enrollmentUpdates, 'delete']);
     $registrationUpdates = \Application\Http\Controller\RegistrationUpdatesController::class;
     $router->get('/portal/api/registration-updates/', [$registrationUpdates, 'page']);
     $router->post('/portal/api/registration-updates/{id}/read/', [$registrationUpdates, 'read']);

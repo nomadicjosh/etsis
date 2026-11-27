@@ -171,6 +171,7 @@ final class SisFixture
             $this->windowPolicies(),
             $this->waitlistGuard($audit),
             $this->graduateGate(),
+            $this->enrollmentNotifications(),
         );
     }
 
@@ -665,6 +666,17 @@ final class SisFixture
             $this->registration,
         );
     }
+    public function enrollmentNotifications(): \Domain\Registration\Service\EnrollmentNotifications
+    {
+        return new \Domain\Registration\Service\EnrollmentNotifications(
+            new \Infrastructure\Persistence\Repository\SqlEnrollmentUpdatesRepository($this->sql),
+            new \Infrastructure\Persistence\Repository\SqlEnrollmentHistoryRepository($this->sql),
+            $this->admissions,
+            $this->enrollmentLedger(),
+            $this->clock,
+        );
+    }
+
     public function enrollmentLedger(): \Domain\Registration\Service\EnrollmentLedger
     {
         $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
@@ -1435,6 +1447,7 @@ final class SisFixture
             new \Infrastructure\Persistence\Repository\SqlRegistrationBatchRepository($this->sql),
             new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
             $this->corequisites(),
+            $this->enrollmentNotifications(),
         );
     }
 
@@ -2205,6 +2218,7 @@ final class SisFixture
             $audit ?? $this->audit,
             $this->clock,
             new \Domain\Shared\Service\ReviewProof($this->dropCipher, $this->clock),
+            $this->enrollmentNotifications(),
         );
     }
     public function waitlistLedger(): \Domain\Registration\Waitlist\WaitlistLedger

@@ -10855,3 +10855,143 @@ msgstr ""
 #: src/Domain/Reporting/ValueObject/ReportQuery.php
 msgid "Use another monetary field in the same currency and units instead of a constant."
 msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Updates for your account appear together here. Open an update to review it, or delete it when it is no longer needed."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Your notifications"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "You have no notifications."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Loading your notifications..."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Your notifications are up to date."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Some notifications could not load. Refresh to try again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "This notification changed or is unavailable. Refresh to try again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Notifications are unavailable for this account."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Notification deleted."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Refresh notifications"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Previous notifications"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Older notifications"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Notification pages"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Back to notifications"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Read announcement"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Academic record"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Transcript"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Academic standing"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Waitlist"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Course registration"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Advising"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Campus announcement"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Action feedback"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Import result"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Course registration accepted"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Course dropped"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Course withdrawal recorded"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php
+msgid "Course registration reinstated"
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlAnnouncementRepository.php
+msgid "Announcements changed. Refresh your notifications."
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlImportQueueRepository.php
+msgid "Import notifications changed. Refresh the list."
+msgstr ""
+
+#: src/Application/Http/Controller/EnrollmentUpdatesController.php
+msgid "Choose whether to include read course-registration notifications."
+msgstr ""
+
+#: src/Domain/Registration/Service/EnrollmentNotifications.php
+msgid "The registration notification or its owner changed. Review again."
+msgstr ""
+
+#: src/Domain/Registration/Service/EnrollmentUpdatesService.php
+msgid "Use the complete course-registration notification cursor."
+msgstr ""
+
+#: src/Domain/Registration/Service/EnrollmentUpdatesService.php
+msgid "Course-registration notifications changed. Refresh the list."
+msgstr ""
+
+#: src/Domain/Registration/Service/EnrollmentUpdatesService.php
+msgid "Reload the current course-registration notification."
+msgstr ""

@@ -1,7 +1,7 @@
 /* Owner-only editorial announcements. Content and reading state never enter browser storage. */
 window.createCampusAnnouncements = function (ui) {
     'use strict';
-    const { node, request, labels = {}, notify, notificationsOnly = false } = ui;
+    const { node, request, labels = {}, notify, notificationsOnly = false, initialItem = null, backToFeed = null, changed = () => {} } = ui;
     const text = (key, fallback) => labels[key] || fallback;
     const icon = name => node('i', { class: `bi bi-${name}`, 'aria-hidden': 'true' });
     let root, content, status, include, refresh, serial = 0, disposed = false;
@@ -65,6 +65,8 @@ window.createCampusAnnouncements = function (ui) {
         try {
             await request(`/portal/api/announcements/${encodeURIComponent(item.id)}/delete/`, 'POST', { revision: item.revision });
             if (!active(turn)) return;
+            changed();
+            if (backToFeed) { await backToFeed(true); return; }
             await load(cursor, previous);
             if (!disposed && root?.isConnected) status.focus();
         } catch (error) { failed(turn, error); }
@@ -82,7 +84,7 @@ window.createCampusAnnouncements = function (ui) {
             if (notificationsOnly && result.unread) {
                 await request(`/portal/api/announcements/${encodeURIComponent(id)}/read/`, 'POST', { revision: result.revision });
                 if (!active(turn)) return;
-                result.unread = false;
+                result.unread = false; changed();
             }
             const heading = node('h3', { class: 'h5 text-break', tabindex: '-1' }, result.title);
             const message = node('div', { class: 'campus-announcement-content' },
@@ -103,9 +105,11 @@ window.createCampusAnnouncements = function (ui) {
             });
             mark.hidden = notificationsOnly || !result.unread;
             const back = button('announcement_back', 'Back to list', 'arrow-left', async () => {
+                if (backToFeed) return backToFeed();
                 await load(cursor, previous);
                 if (!disposed && root.isConnected) status.focus();
             });
+            back.hidden = !!backToFeed;
             content.replaceChildren(heading, message, readStatus,
                 node('div', { class: 'd-flex flex-wrap gap-2' }, mark,
                     button('announcement_delete', 'Delete announcement', 'trash', () => remove(result)), back));
@@ -128,7 +132,7 @@ window.createCampusAnnouncements = function (ui) {
             node('label', { for: include.id, class: 'form-check-label' },
                 text('announcement_include', 'Show read items'))), refresh, status, content);
         if (notificationsOnly) { refresh.hidden = true; include.parentElement.hidden = true; root.querySelector(':scope > p.form-text')?.remove(); }
-        void load();
+        if (initialItem) void detail(initialItem.id); else void load();
     }
     function destroy() {
         disposed = true; ++serial; seen.clear();

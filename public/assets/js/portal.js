@@ -21,8 +21,10 @@
         ? JSON.parse(one('#campus-notification-config').textContent) : {};
     const notifications = one('#campus-notifications-open') ? window.createWorkspaceNotifications({
         node: el, stack: one('#campus-notice'), trigger: one('#campus-notifications-open'),
-        bootstrap: window.bootstrap, labels: notificationLabels, request,
+        bootstrap: window.bootstrap, labels: notificationLabels,
+        request: (path, method, data) => request(path, method, data, undefined, true),
     }) : null;
+    void notifications?.loadPreferences();
     const feedbackText = (key, fallback) => notificationLabels[key] || fallback;
     let me = null;
     let addToRegistrationPlan = null;
@@ -84,7 +86,7 @@
         return element;
     }
 
-    async function request(path, method = 'GET', data, signal) {
+    async function request(path, method = 'GET', data, signal, notificationSource = false) {
         const multipart = typeof FormData !== 'undefined' && data instanceof FormData;
         const token = one('#campus-csrf input')?.value;
         const response = await fetch(path, {
@@ -109,7 +111,7 @@
                           _workspace_json: JSON.stringify(data || {}),
                       }).toString(),
         });
-        if ([401, 403].includes(response.status)) notifications?.clear();
+        if (response.status === 401 || (response.status === 403 && notificationSource !== true)) notifications?.clear();
         if (response.status === 401) {
             if (!pageLeaving) {
                 pageLeaving = true;
@@ -495,7 +497,6 @@
         const result = await request('/portal/api/me/');
         if (pageLeaving) throw new Error('This page is closing.');
         me = result;
-        void notifications?.loadPreferences();
         return me;
     }
 
@@ -2719,7 +2720,6 @@
             if (pageLeaving) return;
             me = { person: { id: context.person_id }, applications: context.items };
         } else if (!['timetable', 'bookings', 'admissionsupdates'].includes(config.section)) await refreshMe();
-        else if (config.section === 'admissionsupdates') void notifications?.loadPreferences();
         const restoreFocus = container.contains(document.activeElement);
         const content = el('div');
         const actions = {

@@ -52,6 +52,7 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
             <script defer src="/assets/js/student-updates.js"></script>
             <script defer src="/assets/js/campus-announcements.js"></script>
             <script defer src="/assets/js/person-notification-preferences.js"></script>
+            <script defer src="/assets/js/notification-feed.js"></script>
             <script defer src="/assets/js/workspace-notifications.js"></script>
         <?php endif; ?>
         <link rel="stylesheet" href="/assets/css/site-navigation.css">

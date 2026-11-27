@@ -49,7 +49,7 @@ test('portal notifications clear after access denial and page leave without chan
     await expect(page.locator('#campus-error')).toContainText('additional access');
     await expect(page.locator('#campus-notice .toast')).toHaveCount(0);
     await trigger(page).click();
-    await expect(dialog(page)).toContainText('There are no notifications from this page.');
+    await expect(dialog(page)).toContainText('You have no notifications.');
     await page.keyboard.press('Escape');
     await page.evaluate(() => window.testNotifications.notify('Fictional private feedback.'));
     await page.evaluate(() => dispatchEvent(new PageTransitionEvent('pagehide')));

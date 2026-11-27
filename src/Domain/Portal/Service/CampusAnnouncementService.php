@@ -42,6 +42,7 @@ final readonly class CampusAnnouncementService
         $rows = array_slice($rows, 0, 20);
         $items = array_map(static fn (array $row): array => [
             'id' => $row['id'], 'title' => $row['title'], 'revision' => (int) $row['revision'],
+            'recorded_at' => $row['recorded_at'] ?? null,
             'unread' => $row['read_revision'] === null || (int) $row['read_revision'] !== (int) $row['revision'],
         ], $rows);
         $this->owner($owner);

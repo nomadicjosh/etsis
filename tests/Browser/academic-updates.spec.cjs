@@ -24,7 +24,7 @@ for (const portal of [false, true]) test(`${portal ? 'student' : 'workspace'} op
     });
     if (portal) await page.goto('/portal/student/profile/');
     await page.locator(portal ? '#campus-notifications-open' : '#workspace-notifications-open').click();
-    await page.getByText('Academic updates', { exact: true }).click();
+
     await expect(page.getByText('Final grade available', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Mark as read', exact: true })).toHaveCount(0);
     await expect(page.getByLabel('Show read updates', { exact: true })).toBeHidden();
@@ -35,8 +35,8 @@ for (const portal of [false, true]) test(`${portal ? 'student' : 'workspace'} op
     await page.setViewportSize({ width: 320, height: 812 });
     const scan = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21aa', 'wcag22aa']).analyze();
     expect(scan.violations.map(v => v.id)).toEqual([]);
-    await page.getByRole('button', { name: 'Delete update', exact: true }).click();
-    await expect(page.getByText('There are no academic updates.', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Delete notification', exact: true }).click();
+    await expect(page.getByText('You have no notifications.', { exact: true })).toBeVisible();
     expect(calls.some(path => path.endsWith('/read/'))).toBe(true);
     expect(calls.some(path => path.endsWith('/delete/'))).toBe(true);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
@@ -60,7 +60,7 @@ test('closing academic notifications rejects late detail and sends no later read
             recorded_at: '2026-11-25T12:00:00.000000Z' }], next: null } });
     });
     await page.locator('#workspace-notifications-open').click();
-    await page.getByText('Academic updates', { exact: true }).click();
+
     await page.getByRole('button', { name: 'View academic record', exact: true }).click();
     await requested; await page.keyboard.press('Escape'); release();
     await page.waitForTimeout(50);

@@ -48,6 +48,7 @@ final readonly class RegistrationService
         private RegistrationWindowService $windows,
         private \Domain\Registration\Waitlist\WaitlistSeatGuard $waitlists,
         private GraduateRegistrationGate $graduate,
+        private EnrollmentNotifications $notifications,
     ) {
     }
 
@@ -307,6 +308,7 @@ final readonly class RegistrationService
                 ),
                 $chargeQuote,
             );
+            $notification = $waitlistClaim->entry === null ? $this->notifications->record($enrollment, $budget) : null;
             $this->audit->record(
                 $actor,
                 "registration.created",
@@ -428,6 +430,9 @@ final readonly class RegistrationService
                 $person->ownerUserId,
                 $byStaff,
             );
+            if ($notification !== null) {
+                $this->notifications->verify($notification, $budget);
+            }
             return $enrollment;
         });
     }

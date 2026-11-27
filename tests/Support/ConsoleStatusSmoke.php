@@ -72,6 +72,7 @@ try {
                 'check-notification-preferences',
                 'check-transcript-updates',
                 'check-standing-updates',
+                'check-enrollment-updates',
                 'check-admission-notices',
                 'check-public-event-feed',
                 'check-timetable-export',
@@ -426,6 +427,11 @@ try {
                 static fn() => $admissionNotices->campus->cipher
             );
             require __DIR__ . '/AdmissionNoticesBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-enrollment-updates') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/EnrollmentUpdatesBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-standing-updates') {
             $kernel->bootstrap();

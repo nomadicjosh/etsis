@@ -42,6 +42,14 @@ Course-group [sending-institution eligibility](degree-audit-builder.md#sending-i
 
 ## Sources and evidence
 
+[Private course-registration notices](account-notifications.md#course-registration-notices) now accompany
+new accepted registration, drop, withdrawal and reinstatement commands in their existing transaction.
+They retain only disposable account-pinned source references and read metadata. Notification reading
+verifies the exact protected source; personal deletion leaves enrollment, academic, financial and
+journal facts intact. Replay and original accepted retries create no notice, and earlier registrations
+receive no inferred notification history. The combined bell is a current private view, not an academic
+history, transcript or reporting source.
+
 [Per-requirement prerequisite sources](course-publication.md#coursework-source-for-each-prerequisite-requirement) now let numbered requirements inherit the course default or explicitly accept institutional, transfer or either work. Counts, grade minima and source must qualify on actual same-source evidence. New course/registration facts retain optional aligned source lists and separate course/source support where needed; earlier absent fields stay absent. Nullable draft/version columns and retained source comparisons are extended in place without rewriting protected events, award origins or degree-allocation policies.
 
 [Reviewed waitlist bypasses](registration-history.md#review-a-waitlist-priority-bypass) now retain an explicit institutional reason and the actual earlier accepted queue references with the genuine registered outcome. Ordinary FIFO decisions preserve their earlier shapes. Existing earlier requests remain active; student enrollment, academic credit, financial posting, queue completion and audit are atomic. Restricted paged decision history exposes only authorized curated evidence, while owner outcomes stay neutral. No earlier exception is inferred, no event is converted and existing projection shapes remain unchanged.

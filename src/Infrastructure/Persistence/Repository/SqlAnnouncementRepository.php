@@ -28,18 +28,28 @@ final readonly class SqlAnnouncementRepository implements AnnouncementRepository
             $where[] = '(r.' . $q('revision') . ' IS NULL OR r.' . $q('revision') . ' <> p.' . $q('version') . ')';
         }
         if ($after !== null) {
-            $where[] = 'p.' . $q('id') . ' < ?';
-            $parameters[] = $after->value;
+            if (!$this->available($after)) {
+                throw new \Domain\Shared\Exception\ConcurrentModificationException(
+                    \Codefy\Framework\Helpers\trans('Announcements changed. Refresh your notifications.'),
+                );
+            }
+            $audience = $this->sql->rows('sis_portal_audiences', ['post_id' => $after->value], 1)[0] ?? null;
+            $cutoff = $audience['published_at'] ?? '';
+            $date = 'COALESCE(a.' . $q('published_at') . ", '')";
+            $where[] = '(' . $date . ' < ? OR (' . $date . ' = ? AND p.' . $q('id') . ' < ?))';
+            array_push($parameters, $cutoff, $cutoff, $after->value);
         }
         return $this->sql->fetch(
             'SELECT p.' . $q('id') . ', p.' . $q('title') . ', p.' . $q('version') . ' AS ' . $q('revision')
             . ', r.' . $q('revision') . ' AS ' . $q('read_revision')
+            . ', a.' . $q('published_at') . ' AS ' . $q('recorded_at')
             . ' FROM ' . $q('sis_portal_posts') . ' p JOIN ' . $q('sis_portal_audiences') . ' a ON a.'
             . $q('post_id') . ' = p.' . $q('id') . ' LEFT JOIN ' . $q('sis_announcement_reads') . ' r ON r.'
             . $q('post_id') . ' = p.' . $q('id') . ' AND r.' . $q('owner_user_id') . ' = ?'
             . ' LEFT JOIN ' . $q('sis_announcement_dismissals') . ' d ON d.' . $q('post_id')
             . ' = p.' . $q('id') . ' AND d.' . $q('owner_user_id') . ' = ?'
-            . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY p.' . $q('id') . ' DESC',
+            . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY COALESCE(a.' . $q('published_at')
+            . ", '') DESC, p." . $q('id') . ' DESC',
             $parameters,
             21,
         );

@@ -12,6 +12,7 @@ async function fixture(page, staff = false) {
         checkin_id: checkin.id, revision: checkin.status === 'closed' ? 2 : 0, status: checkin.status === 'closed' ? 'closed' : 'open',
         program_code: 'ARTS.UG', program_title: 'Fictional arts program', recorded_at: '2026-08-10T12:00:00.000000Z', unread: true});
     let items = [notice()];
+    await page.route('**/portal/api/**', route => route.fulfill({ json: { items: [], next: null } }));
     page.on('pageerror', error => errors.push(error.message));
     await page.route('**/sis/**', route => route.fulfill({json: {cards: [], intake: [], pipeline: [], queue: [], items: []}}));
     await page.route('**/portal/api/**', async route => {
@@ -45,9 +46,8 @@ async function fixture(page, staff = false) {
     const trigger = page.getByRole('button', {name: staff ? 'Recent workspace notifications' : 'Recent notifications', exact: true});
     await trigger.click();
     const dialog = page.getByRole('dialog', {name: staff ? 'Recent workspace notifications' : 'Recent notifications', exact: true});
-    const disclosure = dialog.locator('summary').filter({hasText: 'Advising updates'});
-    const section = disclosure.locator('..');
-    return {trigger, dialog, disclosure, section, calls, errors, deny: () => {denied = true;},
+    const section = dialog.locator('.notification-feed');
+    return {trigger, dialog, section, calls, errors, deny: () => {denied = true;},
         conflict: () => {conflict = true;}, resolve: () => {
             checkin.status = 'closed'; checkin.version = 2; checkin.resolution = 'Fictional advisor outcome.';
             checkin.resolved_at = '2026-08-10T14:00:00Z'; items = [notice()];
@@ -56,8 +56,7 @@ async function fixture(page, staff = false) {
 
 for (const staff of [false, true]) test(`${staff ? 'workspace' : 'portal'} opens exact advising follow-up lazily, responds and returns to notices`, async ({page}) => {
     const f = await fixture(page, staff);
-    expect(f.calls.filter(call => call.path.includes('advising-updates'))).toEqual([]);
-    await f.disclosure.click();
+    expect(f.calls.filter(call => call.path.includes('advising-updates') && call.data !== null)).toEqual([]);
     await expect(f.section).toContainText('New advising follow-up');
     expect(f.calls.some(call => call.path.includes('/checkins/'))).toBe(false);
     await f.section.getByRole('button', {name: 'View check-in', exact: true}).click();
@@ -67,12 +66,12 @@ for (const staff of [false, true]) test(`${staff ? 'workspace' : 'portal'} opens
     await f.section.getByLabel('Your response', {exact: true}).fill('Fictional student follow-up response.');
     await f.section.getByRole('button', {name: 'Send response', exact: true}).click();
     await expect(f.section).toContainText('Fictional student follow-up response.');
-    await f.section.getByRole('button', {name: 'Back to advising updates', exact: true}).click();
+    await f.section.getByRole('button', {name: 'Back to notifications', exact: true}).click();
     await expect(f.section).toContainText('New advising follow-up');
     await expect(f.section).toContainText('Read');
     await expect(f.section.locator('[data-update-id] button').first()).toBeFocused();
     f.resolve();
-    await f.disclosure.click(); await f.disclosure.click();
+    await page.getByRole('button', { name: 'Refresh notifications', exact: true }).click();
     await expect(f.section).toContainText('Advising follow-up closed');
     await f.section.getByRole('button', {name: 'View check-in', exact: true}).click();
     await expect(f.section).toContainText('Fictional advisor outcome.');
@@ -84,13 +83,11 @@ for (const staff of [false, true]) test(`${staff ? 'workspace' : 'portal'} opens
 
 test('personal advising deletion persists after reload and creates no replacement toast', async ({page}) => {
     const f = await fixture(page);
-    await f.disclosure.click();
-    await f.section.getByRole('button', {name: 'Delete update', exact: true}).click();
-    await expect(f.section).toContainText('Advising update deleted.');
+    await f.section.getByRole('button', {name: 'Delete notification', exact: true}).click();
+    await expect(f.section).toContainText('Notification deleted.');
     await page.keyboard.press('Escape');
     await page.reload();
-    await f.trigger.click(); await f.disclosure.click();
-    await expect(f.section).toContainText('There are no matching advising updates.');
+    await f.trigger.click(); await expect(f.section).toContainText('You have no notifications.');
     await expect(page.locator('.workspace-notification-history li')).toHaveCount(0);
     expect(f.calls.filter(call => call.path.endsWith('/delete/'))[0].data).toEqual({revision: 0});
     expect(f.errors).toEqual([]);
@@ -98,20 +95,19 @@ test('personal advising deletion persists after reload and creates no replacemen
 
 test('stale notices preserve the list and denied selected follow-up clears its private contents', async ({page}) => {
     const f = await fixture(page);
-    await f.disclosure.click();
     await expect(f.section).toContainText('New advising follow-up');
     f.conflict();
     await f.section.getByRole('button', {name: 'View check-in', exact: true}).click();
-    await expect(f.section).toContainText('These notifications are unavailable. Reopen this section to try again.');
+    await expect(f.section).toContainText('This notification changed or is unavailable. Refresh to try again.');
     await expect(f.section).toContainText('Fictional arts program');
     await page.reload();
     const fresh = await fixture(page);
-    await fresh.disclosure.click();
     await fresh.section.getByRole('button', {name: 'View check-in', exact: true}).click();
     await expect(fresh.section).toContainText('Fictional exact follow-up <img> wording.');
     fresh.deny();
     await fresh.section.getByRole('button', {name: 'Refresh check-ins', exact: true}).click();
-    await expect(fresh.dialog).not.toBeVisible();
+    await expect(fresh.dialog).toBeVisible();
+    await expect(fresh.dialog.getByText('Notifications are unavailable for this account.', { exact: true })).toBeFocused();
     await expect(page.locator('body')).not.toContainText('Fictional exact follow-up');
     await expect(page.locator('body')).not.toContainText('Fictional arts program');
     expect(fresh.errors).toEqual([]);
@@ -119,7 +115,6 @@ test('stale notices preserve the list and denied selected follow-up clears its p
 
 test('closing the notification drawer discards a delayed selected-check-in read', async ({page}) => {
     const f = await fixture(page);
-    await f.disclosure.click();
     let release;
     const held = new Promise(resolve => {release = resolve;});
     let arrived;
@@ -139,7 +134,7 @@ test('closing the notification drawer discards a delayed selected-check-in read'
 
 test('selected advising follow-up supports keyboard use and 320px enlarged-text accessibility', async ({page}) => {
     const f = await fixture(page);
-    await f.disclosure.press('Enter');
+    await expect(f.section).toBeVisible();
     await f.section.getByRole('button', {name: 'View check-in', exact: true}).press('Enter');
     await expect(f.section.getByLabel('Your response', {exact: true})).toBeVisible();
     await page.setViewportSize({width: 320, height: 812});

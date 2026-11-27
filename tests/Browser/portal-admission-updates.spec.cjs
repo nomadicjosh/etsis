@@ -22,7 +22,8 @@ test('applicants read their next steps and acknowledge an update without loading
             writes.push(JSON.parse(new URLSearchParams(request.postData()).get('_workspace_json')));
             read = true; json = { unread: false };
         } else if (path === '/portal/api/notification-preferences/') json = {};
-        else if (/^\/portal\/api\/(academic|standing|transcript)-updates\/$/.test(path)) json = { items: [], next: null };
+        else if (/^\/portal\/api\/(academic|standing|transcript|registration|advising|enrollment)-updates\/$/.test(path)) json = { items: [], next: null };
+        else if (path === '/portal/api/announcements/') json = { items: [], next_after: null };
         else throw new Error(`Unexpected request: ${path}`);
         await route.fulfill({ json, headers: { 'Cache-Control': 'private, no-store' } });
     });
@@ -121,21 +122,21 @@ async function verifyBell(page, workspace = false) {
     await expect(trigger.locator('[data-notification-count]')).toHaveText('31');
     await trigger.click();
     const bell = page.getByRole('dialog', { name, exact: true });
-    const section = bell.locator('details').filter({ has: page.locator('summary', { hasText: 'Admissions updates' }) });
-    await section.locator('summary').click();
+    const section = bell.locator('.notification-feed');
+
     await expect(section).toContainText('Fictional Arts');
     await expect(section.getByRole('link', { name: 'View admissions update' })).toHaveAttribute('href', `/portal/admissions-updates/?update=${notice}`);
     await expect(section.locator('input:visible,select:visible')).toHaveCount(0);
     expect(writes).toEqual([]);
-    await section.getByRole('button', { name: 'Delete update', exact: true }).click();
-    await expect(section).toContainText('Admission update deleted.');
+    await section.getByRole('button', { name: 'Delete notification', exact: true }).click();
+    await expect(section).toContainText('Notification deleted.');
     await expect(section.locator('[data-update-id]')).toHaveCount(0);
     expect(writes).toEqual([{ revision: 4 }]);
     await page.keyboard.press('Escape');
     await expect(trigger).toBeFocused();
     await page.reload();
-    await trigger.click(); await section.locator('summary').click();
-    await expect(section).toContainText('No admissions updates are available.');
+    await trigger.click();
+    await expect(section).toContainText('You have no notifications.');
     expect(errors).toEqual([]);
 }
 test('the portal bell offers an exact admissions link and persistent deletion without preferences or read writes',

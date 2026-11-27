@@ -64,11 +64,10 @@ test('persistent import notices support read filtering and permanent deletion', 
     await page.goto('/admin/');
     await page.locator('#workspace-notifications-open').click();
     await expect(page.locator('[data-notification-count]')).toHaveText('1');
-    await page.getByText('Import updates', { exact: true }).click();
     await expect(page.locator('.workspace-notification-dialog-body')).toContainText('32 / 32');
     await expect(page.getByRole('button', { name: 'Mark as read', exact: true })).toHaveCount(0);
     await page.getByRole('button', { name: 'Delete notification', exact: true }).click();
-    await expect(page.getByText('There are no matching import updates.', { exact: true })).toBeVisible();
+    await expect(page.getByText('You have no notifications.', { exact: true })).toBeVisible();
     expect(mutations).toEqual(['remove']);
 });
 

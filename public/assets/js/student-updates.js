@@ -1,6 +1,6 @@
 /* Private, account-pinned outcome notices. Loading and deletion are explicit; nothing is persisted in this browser. */
 'use strict';
-window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'registration', notificationsOnly = false, changed = () => {} }) => {
+window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'registration', notificationsOnly = false, changed = () => {}, initialItem = null, backToFeed = null }) => {
     if (!['registration', 'advising', 'academic', 'transcript', 'standing', 'admissions'].includes(kind)) throw new Error('Unsupported student update source.');
     const advising = kind === 'advising', academic = kind === 'academic', transcript = kind === 'transcript', standing = kind === 'standing';
     const admissions = kind === 'admissions';
@@ -47,10 +47,14 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
     let cursor = null, previous = [], baseline = false, newest = '';
     const seen = new Set();
     const active = turn => !disposed && root?.isConnected && turn === serial;
-    const button = (key, glyph, run) => node('button', {
-        type: 'button', class: `btn btn-sm ${glyph === 'trash' ? 'btn-outline-danger' : 'btn-outline-primary'}`,
-        onclick: event => { if (!busy) void run(event.currentTarget); },
-    }, icon(glyph), text(key));
+    const button = (key, glyph, run) => {
+        const control = node('button', {
+            type: 'button', class: `btn btn-sm ${glyph === 'trash' ? 'btn-outline-danger' : 'btn-outline-primary'}`,
+            onclick: event => { if (!busy) void run(event.currentTarget); },
+        }, icon(glyph), text(key));
+        if (backToFeed && key === 'registration_back') control.hidden = true;
+        return control;
+    };
     function controls(disabled) {
         busy = disabled;
         root?.querySelectorAll('button, input').forEach(control => { control.disabled = disabled; });
@@ -120,6 +124,7 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
         try {
             await request(`${endpoint}${encodeURIComponent(item.id)}/${action}/`, 'POST', { revision: item.revision });
             if (!active(turn)) return;
+            if (backToFeed && action === 'delete') { changed(); await backToFeed(true); return; }
             const loaded = await load(cursor, previous); changed();
             if (loaded && !disposed && root?.isConnected) {
                 status.textContent = text(action === 'delete' ? 'registration_deleted' : 'registration_marked');
@@ -137,6 +142,7 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
             await request(`${endpoint}${encodeURIComponent(item.id)}/read/`, 'POST', { revision: item.revision });
             if (!active(turn)) return;
             const back = button('registration_back', 'arrow-left', async () => {
+                if (backToFeed) return backToFeed();
                 const loaded = await load(cursor, previous);
                 if (loaded) (content.querySelector('button') || status).focus();
             });
@@ -168,7 +174,10 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
             if (!active(turn)) return;
             await request(`${endpoint}${encodeURIComponent(item.id)}/read/`, 'POST', { revision: item.revision });
             if (!active(turn)) return;
-            const back = button('registration_back', 'arrow-left', async () => { await load(cursor, previous); (content.querySelector('button') || status).focus(); });
+            const back = button('registration_back', 'arrow-left', async () => {
+                if (backToFeed) return backToFeed();
+                await load(cursor, previous); (content.querySelector('button') || status).focus();
+            });
             const title = node('h3', { class: 'h6 text-break', tabindex: '-1' }, `${result.course_code} · ${result.course_title}`);
             const facts = node('dl', { class: 'record-summary record-summary-paired' });
             for (const [key, value] of [['academic_grade', result.grade || text('academic_ungraded')],
@@ -192,6 +201,7 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
             await request(`${endpoint}${encodeURIComponent(item.id)}/read/`, 'POST', { revision: item.revision });
             if (!active(turn)) return;
             const back = button('registration_back', 'arrow-left', async () => {
+                if (backToFeed) return backToFeed();
                 const loaded = await load(cursor, previous);
                 if (loaded) (content.querySelector('button') || status).focus();
             });
@@ -218,7 +228,9 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
                 typeof value === 'string' && /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(value))) throw new Error('Invalid check-in reference.');
             await request(`${endpoint}${encodeURIComponent(item.id)}/read/`, 'POST', { revision: item.revision });
             if (!active(turn)) return;
+            changed();
             const back = button('registration_back', 'arrow-left', async () => {
+                if (backToFeed) return backToFeed();
                 const loaded = await load(cursor, previous);
                 if (loaded) {
                     const original = [...content.querySelectorAll('[data-update-id]')].find(card => card.dataset.updateId === item.id);
@@ -252,7 +264,12 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
             refresh.hidden = true; include.parentElement.hidden = true;
             root.querySelector(':scope > p.form-text')?.remove();
         }
-        void load();
+        if (initialItem) {
+            if (standing) void openStanding(initialItem);
+            else if (transcript) void openTranscriptRequest(initialItem);
+            else if (academic) void openAcademicRecord(initialItem);
+            else if (advising) void openCheckIn(initialItem);
+        } else void load();
     }
     function destroy() { disposed = true; ++serial; seen.clear(); root?.replaceChildren(); root = null; }
     return { mount, destroy };

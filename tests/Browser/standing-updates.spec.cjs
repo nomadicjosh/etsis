@@ -14,7 +14,7 @@ const detail = { program_code: 'ARTS.UG', program_title: row.program_title,
 async function open(page, portal) {
     if (portal) await page.goto('/portal/student/profile/');
     await page.locator(portal ? '#campus-notifications-open' : '#workspace-notifications-open').click();
-    await page.getByText('Academic standing updates', { exact: true }).click();
+
 }
 async function accessible(page) {
     const scan = await new AxeBuilder({ page }).include('.workspace-notification-dialog')
@@ -57,7 +57,7 @@ for (const portal of [false, true]) test(`${portal ? 'portal' : 'workspace'} ope
     if (portal) await expect(dialog).toContainText('This is a historical program pursuit.');
     await expect(dialog).not.toContainText('Never render staff evidence');
     await expect(dialog.locator('b')).toHaveCount(0);
-    const back = page.getByRole('button', { name: 'Back to standing updates', exact: true });
+    const back = page.getByRole('button', { name: 'Back to notifications', exact: true });
     await expect(back.locator('i.bi')).toHaveCount(1);
     await back.click();
     await expect(page.getByRole('button', { name: 'View academic standing', exact: true })).toBeVisible();
@@ -67,8 +67,8 @@ for (const portal of [false, true]) test(`${portal ? 'portal' : 'workspace'} ope
     await page.addStyleTag({ content: 'html { font-size: 200%; }' });
     await accessible(page);
     if (portal) await page.screenshot({ path: '/tmp/etsis-standing-phone.png' });
-    await page.getByRole('button', { name: 'Delete update', exact: true }).click();
-    await expect(dialog.getByText('There are no academic standing updates.', { exact: true })).toBeVisible();
+    await page.getByRole('button', { name: 'Delete notification', exact: true }).click();
+    await expect(dialog.getByText('You have no notifications.', { exact: true })).toBeVisible();
     expect(posts.some(path => path.endsWith('/read/'))).toBe(true);
     expect(posts.some(path => path.endsWith('/delete/'))).toBe(true);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
@@ -110,7 +110,8 @@ test('access denial clears standing notice metadata and withholds returned priva
     });
     await open(page, false);
     await page.getByRole('button', { name: 'View academic standing', exact: true }).click();
-    await expect(page.locator('.workspace-notification-dialog')).toHaveCount(0);
+    await expect(page.locator('.workspace-notification-dialog')).toBeVisible();
+    await expect(page.getByText('Notifications are unavailable for this account.', { exact: true })).toBeFocused();
     await expect(page.locator('[data-update-id]')).toHaveCount(0);
     await expect(page.locator('body')).not.toContainText('Forbidden private period');
     await expect(page.locator('body')).not.toContainText(row.program_title);
@@ -136,13 +137,13 @@ test('standing detail Back retains its bounded notification page and explains a 
     });
     await open(page, false);
     await expect(page.locator('[data-update-id]')).toHaveCount(20);
-    await page.getByRole('button', { name: 'More updates', exact: true }).click();
+    await page.getByRole('button', { name: 'Older notifications', exact: true }).click();
     await expect(page.locator('[data-update-id]')).toHaveCount(1);
     await page.getByRole('button', { name: 'View academic standing', exact: true }).click();
     await expect(page.getByText('No academic standing periods are recorded.', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: 'Back to standing updates', exact: true }).click();
+    await page.getByRole('button', { name: 'Back to notifications', exact: true }).click();
     await expect(page.locator('[data-update-id]')).toHaveAttribute('data-update-id', id(1));
-    await page.getByRole('button', { name: 'Previous updates', exact: true }).click();
+    await page.getByRole('button', { name: 'Previous notifications', exact: true }).click();
     await expect(page.locator('[data-update-id]')).toHaveCount(20);
     expect(f.errors).toEqual([]);
 });

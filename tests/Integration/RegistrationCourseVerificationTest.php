@@ -81,6 +81,7 @@ final class RegistrationCourseVerificationTest extends TestCase
             $s->windowPolicies(),
             $s->waitlistGuard($audit),
             $s->graduateGate(),
+            $s->enrollmentNotifications(),
         );
     }
 
