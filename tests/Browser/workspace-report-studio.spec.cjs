@@ -157,6 +157,8 @@ async function fixture(page, options = {}) {
         case_due_on: { label: 'Next casework due date', type: 'date', relation: 'casework' },
         case_reference: { label: 'Casework reference', type: 'string', relation: 'casework' },
     });
+    for (const field of Object.values(fields)) field.constant_calculation =
+        ['integer', 'double'].includes(field.type) && !['account', 'entry'].includes(field.relation);
     const dataset = options.curriculum ? {
         id: options.curriculum === 'catalog' ? 'catalog_components' : 'selected_components',
         label: options.curriculum === 'catalog' ? 'Current curriculum components' : 'Selected student curriculum',
@@ -1788,6 +1790,78 @@ async function customLabels(page) {
     await page.getByRole('button', { name: 'Add custom labels', exact: true }).click();
     await expect(page.locator('[data-report-label-editor] h2')).toBeFocused();
 }
+
+async function constantColumn(page) {
+    await page.getByRole('button', { name: 'Section headcounts, including empty sections', exact: true }).click();
+    await page.locator('[data-report-field="capacity"] input').check();
+    await page.getByRole('button', { name: /^Column 4 settings:/ }).click();
+    await page.getByRole('button', { name: 'Decimal constant', exact: true }).click();
+    await expect(page.getByLabel('Constant value', { exact: true })).toBeFocused();
+}
+
+test('decimal constants preserve keyboard edits, operator choice, duplicate columns and saved definitions', async ({ page }) => {
+    const f = await fixture(page);
+    await constantColumn(page);
+    await page.getByLabel('Constant value', { exact: true }).fill('2.500001');
+    const divide = page.getByRole('button', { name: 'Divide', exact: true });
+    await divide.focus();
+    await page.keyboard.press('Space');
+    await expect(divide).toHaveAttribute('aria-pressed', 'true');
+    await expect(page.getByLabel('Constant value', { exact: true })).toHaveValue('2.500001');
+    await page.getByRole('button', { name: 'Duplicate column', exact: true }).click();
+    await expect(page.getByLabel('Constant value', { exact: true })).toHaveValue('2.500001');
+    await page.getByLabel('Constant value', { exact: true }).fill('-0.5');
+    await page.getByLabel('Report name', { exact: true }).fill('Fictional planning calculation');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const columns = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns;
+    expect(columns[3].calculation).toEqual({ operator: '/', value: '2.500001' });
+    expect(columns[4].calculation).toEqual({ operator: '/', value: '-0.5' });
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: /^Column 4 settings:/ }).click();
+    await expect(page.getByLabel('Constant value', { exact: true })).toHaveValue('2.500001');
+    await page.getByRole('button', { name: /^Column 5 settings:/ }).click();
+    await expect(page.getByLabel('Constant value', { exact: true })).toHaveValue('-0.5');
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('incomplete decimal constants block preview and save while preserving drafts at phone size', async ({ page }) => {
+    const f = await fixture(page);
+    await constantColumn(page);
+    await page.getByLabel('Report name', { exact: true }).fill('Fictional incomplete calculation');
+    await page.getByLabel('Constant value', { exact: true }).fill('1e3');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    await expect(page.locator('.report-local-error')).toContainText('Complete each decimal constant');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    expect(f.calls.filter(call => /\/(preview|save)\/$/.test(call.path))).toEqual([]);
+    await page.getByRole('button', { name: /^Column 1 settings:/ }).click();
+    await page.getByRole('button', { name: /^Column 4 settings:/ }).click();
+    await expect(page.getByLabel('Constant value', { exact: true })).toHaveValue('1e3');
+    await page.getByLabel('Constant value', { exact: true }).fill('0');
+    await page.setViewportSize({ width: 320, height: 812 });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Remove calculation', exact: true }).click();
+    await expect(page.getByLabel('Constant value', { exact: true })).toHaveCount(0);
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns[3].calculation).toBeUndefined();
+    expect(f.errors).toEqual([]);
+});
+
+test('decimal constants can return to the existing field calculation without stale literal operands', async ({ page }) => {
+    const f = await fixture(page);
+    await constantColumn(page);
+    await page.getByLabel('Constant value', { exact: true }).fill('0.125');
+    await page.getByRole('button', { name: 'Multiply', exact: true }).click();
+    await page.getByRole('button', { name: 'Another field', exact: true }).click();
+    await page.getByRole('complementary', { name: 'Column settings', exact: true })
+        .getByRole('button', { name: 'Section capacity', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns[3].calculation)
+        .toEqual({ operator: '*', field: 'capacity' });
+    expect(f.errors).toEqual([]);
+});
 async function labelRule(page, label, field = 'capacity', value = '15') {
     const editor = page.locator('[data-report-label-editor]');
     await editor.locator('[aria-label^="Label rule "]').filter({ has: page.getByRole('button', { name: 'Edit rule', pressed: true }) })

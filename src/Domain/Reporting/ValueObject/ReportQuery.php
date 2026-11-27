@@ -93,16 +93,18 @@ final readonly class ReportQuery
                 self::invalid('Calendar grouping requires a date field and Day, Month or Year.');
             }
             $calc = $column["calculation"] ?? null;
-            if (
-                $calc !== null &&
-                (!is_array($calc) ||
-                    !in_array($calc["operator"] ?? null, ["+", "-", "*", "/"], true) ||
-                    !is_string($calc["field"] ?? null) ||
-                    !isset($schema["fields"][$calc["field"]]) ||
-                    !in_array($type, ["integer", "double"], true) ||
-                    !in_array($schema["fields"][$calc["field"]]["type"], ["integer", "double"], true))
-            ) {
-                self::invalid("Choose numeric fields and a valid calculation.");
+            if ($calc !== null) {
+                if (!is_array($calc)) {
+                    self::invalid("Choose numeric fields and a valid calculation.");
+                }
+                new ReportCalculation($calc);
+                if (
+                    !in_array($type, ['integer', 'double'], true) ||
+                    (isset($calc['field']) &&
+                        !in_array($schema['fields'][$calc['field']]['type'] ?? null, ['integer', 'double'], true))
+                ) {
+                    self::invalid("Choose numeric fields and a valid calculation.");
+                }
             }
             if (in_array($aggregate, ["sum", "avg"], true) && !in_array($type, ["integer", "double"], true)) {
                 self::invalid("Sum and average require a numeric field.");
@@ -204,7 +206,7 @@ final readonly class ReportQuery
         $totals = array_filter($columns, fn(array $c): bool =>
             in_array($c['aggregate'], ['sum', 'avg'], true) &&
             (($this->schema['fields'][$c['field']]['root_metric'] ?? false) ||
-                (isset($c['calculation']) &&
+                (isset($c['calculation']['field']) &&
                     ($this->schema['fields'][$c['calculation']['field']]['root_metric'] ?? false))));
         if ($totals === []) {
             return;
@@ -229,7 +231,7 @@ final readonly class ReportQuery
         }
         foreach ($columns as $column) {
             $relations[] = $this->schema['fields'][$column['field']]['relation'];
-            if (isset($column['calculation'])) {
+            if (isset($column['calculation']['field'])) {
                 $relations[] = $this->schema['fields'][$column['calculation']['field']]['relation'];
             }
             foreach (self::predicateGroups($column) as $group) {
@@ -261,9 +263,14 @@ final readonly class ReportQuery
                 continue; // The output is text, not a monetary amount.
             }
             $field = $this->schema['fields'][$column['field']];
-            $other = isset($column['calculation'])
+            $other = isset($column['calculation']['field'])
             ? $this->schema['fields'][$column['calculation']['field']] : null;
             $currency = $field['currency_field'] ?? $other['currency_field'] ?? null;
+            if ($currency !== null && isset($column['calculation']['value'])) {
+                self::invalid(\Codefy\Framework\Helpers\trans(
+                    'Use another monetary field in the same currency and units instead of a constant.',
+                ));
+            }
             if ($currency === null || in_array($column['aggregate'], ['count', 'count_distinct'], true)) {
                 continue;
             }
@@ -294,7 +301,7 @@ final readonly class ReportQuery
                 );
                 foreach ($columns as $c) {
                     $relations[] = $this->schema['fields'][$c['field']]['relation'];
-                    if (isset($c['calculation'])) {
+                    if (isset($c['calculation']['field'])) {
                         $relations[] = $this->schema['fields'][$c['calculation']['field']]['relation'];
                     }
                 }
@@ -592,7 +599,7 @@ final readonly class ReportQuery
     {
         $fields = array_column($this->definition["columns"], "field");
         foreach ($this->definition["columns"] as $column) {
-            if (isset($column["calculation"])) {
+            if (isset($column["calculation"]["field"])) {
                 $fields[] = $column["calculation"]["field"];
             }
         }

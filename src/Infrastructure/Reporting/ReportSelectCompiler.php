@@ -40,6 +40,7 @@ final readonly class ReportSelectCompiler
         };
         $aggregate = false;
         foreach ($d["columns"] as $i => $column) {
+            $rowParameters = [];
             $rowExpression = $expression($column["field"]);
             if (isset($column['date_bucket'])) {
                 $rowExpression = ReportCalendarSql::bucket(
@@ -51,7 +52,12 @@ final readonly class ReportSelectCompiler
                 );
             }
             if (isset($column["calculation"])) {
-                $other = $expression($column["calculation"]["field"]);
+                if (isset($column['calculation']['field'])) {
+                    $other = $expression($column['calculation']['field']);
+                } else {
+                    $other = 'CAST(? AS DECIMAL(24, 6))';
+                    $rowParameters[] = $column['calculation']['value'];
+                }
                 $op = $column["calculation"]["operator"];
                 $rowExpression =
                 "(" .
@@ -59,7 +65,6 @@ final readonly class ReportSelectCompiler
                 ($op === "/" ? " * 1.0 / NULLIF(" . $other . ", 0)" : " " . $op . " " . $other) .
                 ")";
             }
-            $rowParameters = [];
             if (isset($column['label_mapping'])) {
                 $rowExpression = 'CASE';
                 foreach ($column['label_mapping']['branches'] as $branch) {

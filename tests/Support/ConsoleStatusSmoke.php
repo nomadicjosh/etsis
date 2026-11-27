@@ -110,6 +110,7 @@ try {
                 'check-transfer-completion-report',
                 'check-institutional-dates',
                 'check-student-contacts',
+                'check-report-constants',
             ],
             true,
         )
@@ -600,6 +601,11 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/ReportExportBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-report-constants') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/ReportConstantBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-student-contacts') {
             $kernel->bootstrap();

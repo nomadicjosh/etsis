@@ -10783,3 +10783,75 @@ msgstr ""
 #: resources/blocks/alert/view.php:27
 msgid "Dismiss notice"
 msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Calculate a numeric column"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Calculation"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Calculate with"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Another field"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Decimal constant"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Choose the second numeric field:"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Constant value"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Use up to nine whole digits and six decimal places, with a dot for decimals. Missing inputs and division by zero remain blank. Calculations run before summaries."
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Monetary calculations require another amount in the same currency and units."
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Complete each decimal constant using up to nine whole digits and six decimal places, or remove its calculation."
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Add"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Subtract"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Multiply"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Divide"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php
+msgid "Remove calculation"
+msgstr ""
+
+#: src/Domain/Reporting/ValueObject/ReportCalculation.php
+msgid "Choose one numeric field or decimal constant and a valid operation."
+msgstr ""
+
+#: src/Domain/Reporting/ValueObject/ReportCalculation.php
+msgid "Enter a decimal constant with up to nine whole digits and six decimal places. Use a dot for decimals."
+msgstr ""
+
+#: src/Domain/Reporting/ValueObject/ReportQuery.php
+msgid "Use another monetary field in the same currency and units instead of a constant."
+msgstr ""

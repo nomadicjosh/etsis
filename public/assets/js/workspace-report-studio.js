@@ -924,6 +924,7 @@ window.createWorkspaceReportStudio = function (ui) {
             frozen = false,
             pending = null,
             frozenState = null;
+        const calculationOperators = new WeakMap();
         let selectedColumn = null,
             conditionalColumn = null,
             activeTab = "design",
@@ -964,7 +965,7 @@ window.createWorkspaceReportStudio = function (ui) {
         }
         definition.columns.forEach((c) => {
             connect(dataset.fields[c.field].relation);
-            if (c.calculation) connect(dataset.fields[c.calculation.field].relation);
+            if (c.calculation?.field) connect(dataset.fields[c.calculation.field].relation);
             conditionFields(c.conditions, id => connect(dataset.fields[id].relation));
             for (const branch of c.label_mapping?.branches || [])
                 conditionFields(branch.when, id => connect(dataset.fields[id].relation));
@@ -1663,7 +1664,7 @@ window.createWorkspaceReportStudio = function (ui) {
                 definition.columns.filter(
                     (column) =>
                         !branch.has(dataset.fields[column.field].relation) &&
-                        (!column.calculation || !branch.has(dataset.fields[column.calculation.field].relation)) &&
+                        (!column.calculation?.field || !branch.has(dataset.fields[column.calculation.field].relation)) &&
                         !hasConditionInBranch(column.conditions, branch) &&
                         !(column.label_mapping?.branches || []).some(rule => hasConditionInBranch(rule.when, branch)),
                 ),
@@ -1752,7 +1753,7 @@ window.createWorkspaceReportStudio = function (ui) {
                     "small",
                     {},
                     column.calculation
-                        ? `${dataset.fields[column.field].label} ${{ "+": "+", "-": "−", "*": "×", "/": "÷" }[column.calculation.operator]} ${dataset.fields[column.calculation.field].label}`
+                        ? `${dataset.fields[column.field].label} ${{ "+": "+", "-": "−", "*": "×", "/": "÷" }[column.calculation.operator]} ${column.calculation.field ? dataset.fields[column.calculation.field].label : column.calculation.value}`
                         : column.label_mapping ? ui.labelLabels.source
                             : `${relationLabel(dataset.fields[column.field].relation)} · ${dataset.fields[column.field].label}`,
                 );
@@ -1970,16 +1971,49 @@ window.createWorkspaceReportStudio = function (ui) {
                 }),
             );
             if (!column.label_mapping && ["integer", "double"].includes(field.type)) {
-                inspector.append(node("h3", {}, "Calculate with another field"));
+                const labels = ui.calculationLabels;
+                inspector.append(node('h3', {}, labels.title));
                 const operations = node("div", {
                     class: "report-calculation-operators",
                     role: "group",
-                    "aria-label": "Calculation",
+                    "aria-label": labels.operation,
                 });
+                const operands = node('div', { class: 'report-calculation-operators', role: 'group',
+                    'aria-label': labels.operand });
                 const candidates = node("div", { class: "report-calculation-fields" });
-                let operator = column.calculation?.operator || "-";
+                let operator = column.calculation?.operator || calculationOperators.get(column) || "-";
+                const constant = Object.hasOwn(column.calculation || {}, 'value');
+                for (const [mode, label] of [['field', labels.field], ['value', labels.constant]]) {
+                    if (mode === 'value' && !field.constant_calculation) continue;
+                    const choice = button(label, () => {
+                        calculationOperators.set(column, operator);
+                        if (mode === 'value') column.calculation = { operator, value: column.calculation?.value ?? '' };
+                        else if (constant) delete column.calculation;
+                        dirty();
+                        renderColumns();
+                        inspect(column);
+                        inspector.querySelector(mode === 'value' ? '[data-report-constant]' : '[data-report-operand="field"]')?.focus();
+                    }, 'report-choice-tile');
+                    choice.setAttribute('aria-pressed', String(constant === (mode === 'value')));
+                    choice.dataset.reportOperand = mode;
+                    operands.append(choice);
+                }
                 function numericFields() {
-                    candidates.replaceChildren(node("p", { class: "form-text" }, "Choose the second numeric field:"));
+                    if (constant) {
+                        const value = node('input', { type: 'text', class: 'form-control', inputmode: 'decimal',
+                            maxlength: 17, value: column.calculation.value, 'data-report-constant': '',
+                            'aria-describedby': 'report-constant-help' });
+                        value.addEventListener('input', () => {
+                            column.calculation.value = value.value;
+                            value.setAttribute('aria-invalid', String(!/^-?(?:0|[1-9][0-9]{0,8})(?:\.[0-9]{1,6})?$/.test(value.value)));
+                            dirty();
+                            renderColumns();
+                        });
+                        candidates.replaceChildren(labeled(labels.value, value),
+                            node('p', { id: 'report-constant-help', class: 'form-text' }, labels.help));
+                        return;
+                    }
+                    candidates.replaceChildren(node("p", { class: "form-text" }, labels.choose_field));
                     Object.entries(dataset.fields)
                         .filter(([, f]) => ["integer", "double"].includes(f.type))
                         .forEach(([id, f]) => {
@@ -2000,35 +2034,39 @@ window.createWorkspaceReportStudio = function (ui) {
                         });
                 }
                 [
-                    ["+", "Add"],
-                    ["-", "Subtract"],
-                    ["*", "Multiply"],
-                    ["/", "Divide"],
+                    ["+", labels.add],
+                    ["-", labels.subtract],
+                    ["*", labels.multiply],
+                    ["/", labels.divide],
                 ].forEach(([op, label]) => {
                     const choice = button(
                         label,
                         () => {
                             operator = op;
+                            calculationOperators.set(column, op);
                             if (column.calculation) {
                                 column.calculation.operator = op;
                                 dirty();
+                                renderColumns();
                             }
                             [...operations.children].forEach((b) =>
                                 b.setAttribute("aria-pressed", String(b === choice)),
                             );
-                            numericFields();
+                            // Keep the focused constant input and its caret while changing the operation.
                         },
                         "report-choice-tile",
                     );
                     choice.setAttribute("aria-pressed", String(operator === op));
                     operations.append(choice);
                 });
-                inspector.append(operations, candidates);
+                inspector.append(operations, operands, candidates);
+                if (!field.constant_calculation) inspector.append(node('p', { class: 'form-text' }, labels.money));
                 numericFields();
                 if (column.calculation)
                     inspector.append(
-                        button("Remove calculation", () => {
+                        button(labels.remove, () => {
                             delete column.calculation;
+                            calculationOperators.delete(column);
                             dirty();
                             renderColumns();
                             inspect(column);
@@ -2458,6 +2496,11 @@ window.createWorkspaceReportStudio = function (ui) {
         }
         function collect() {
             if (!definition.columns.length) throw new Error("Choose at least one field for your report.");
+            for (const column of definition.columns) {
+                if (Object.hasOwn(column.calculation || {}, 'value') &&
+                    !/^-?(?:0|[1-9][0-9]{0,8})(?:\.[0-9]{1,6})?$/.test(column.calculation.value))
+                    throw new Error(ui.calculationLabels.invalid);
+            }
             syncFilters();
             matchingLogic.normalize();
             matchingLogic.assertReady();

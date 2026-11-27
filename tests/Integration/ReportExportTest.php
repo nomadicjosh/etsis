@@ -162,6 +162,32 @@ final class ReportExportTest extends TestCase
         $service->download($report, $job);
     }
 
+    public function testDecimalConstantsUseTheCompleteEncryptedExportWithoutChangingFacts(): void
+    {
+        $s = new SisFixture();
+        $s->section(25, 0);
+        $definition = ['dataset' => 'sections', 'columns' => [
+            ['field' => 'capacity', 'label' => 'Fictional planning units', 'aggregate' => 'none',
+                'calculation' => ['operator' => '/', 'value' => '2']],
+            ['field' => 'capacity', 'label' => 'Unknown ratio', 'aggregate' => 'none',
+                'calculation' => ['operator' => '/', 'value' => '0']],
+        ]];
+        $report = $this->report($s, $definition);
+        $service = $this->service($s);
+        $job = EntityId::generate();
+        $before = $this->history($s);
+        $service->request($report, $job, 0);
+        self::assertSame(1, $service->work(true)['ready']);
+        $csv = implode('', $service->download($report, $job)->chunks);
+        self::assertSame(['12.5', ''], str_getcsv(explode("\n", trim($csv))[1], escape: ''));
+        self::assertStringNotContainsString('planning units', json_encode($s->sql->rows('sis_report_export_chunks')));
+        self::assertSame($before, $this->history($s));
+        $s->access->staff = false;
+        $s->access->grants = ['sis:reporting:run'];
+        $this->expectException(AccessDeniedException::class);
+        $service->download($report, $job);
+    }
+
     private function history(SisFixture $s): array
     {
         return array_map($s->sql->rows(...), ['sis_history_events', 'sis_history_streams', 'sis_history_operations']);

@@ -756,6 +756,46 @@ Authoring, preview, save, run, shared/static reads and CSV all use the same vali
 
 The existing forty-predicate/four-level allowance is shared across all column, row, join, related-record and summary conditions; output remains limited to sixteen columns. The compiler emits ordinary bound `CASE WHEN` expressions through the five framework identifier dialects, without raw SQL entry, a second query engine, domain events or a schema migration. SQLite fixtures cover populated behavior and the actual framework HTTP paths cover private saves/CSV and hidden-source denial. Native deployment/load acceptance on the other engines remains open. No live institutional data or history is changed by this feature.
 
+### Numeric calculations in existing reports
+
+In **Report Studio → Fields**, open a numeric column's settings. Under **Calculate a numeric
+column**, select Add, Subtract, Multiply or Divide. **Another field** uses a second authorized numeric
+field from the current source or an approved related record. **Decimal constant** uses a fixed value,
+for example dividing recorded credits by `3`. This changes report output only; it does not change
+registrations, credits, charges or institutional policies.
+
+Constants accept a minus sign, up to nine whole digits and up to six decimal places. Use a dot for
+decimals, such as `0.125` or `-2.5`. Exponents, thousands separators, leading zeros and expressions
+are not accepted. The API retains constants as decimal strings, for example
+`"calculation": {"operator": "/", "value": "3"}`; a field operand instead uses `"field": "completed"`.
+Choose exactly one operand. The server validates the complete calculation and binds the constant
+as a decimal parameter; there is no SQL entry or executable formula field.
+
+A calculation runs on each selected row **before** Sum, Average, Minimum, Maximum, Count or other
+summaries. Column conditions apply to those rows, while shared filters continue to test original
+source values. Summary filters use the calculated output's numeric type. Missing operands and
+zero divisors produce blank/NULL, preserving an unknown value rather than treating it as zero;
+counts omit those NULL values and an entirely unspecified Sum remains blank. Ordinary division
+preserves fractional results. Reporting quantities do not establish degree eligibility or earned credit.
+
+Monetary fields offer field operands only and still require matching currencies, units and compatible
+detail grain. Constants cannot convert currencies or mix currency amounts with minor units.
+Currency remains an explicit output dimension, and joins that repeat record quantities or money
+remain restricted. Custom text labels and numeric calculations are separate column choices.
+
+An unfinished or invalid constant stays in the editor until corrected or removed and blocks Preview
+and Save. Changing operations, duplicating a column, saving and reopening preserve the exact
+constant. Switching to **Another field** removes the literal operand; **Remove calculation** restores
+the original field values. Changes invalidate earlier previews. Keyboard controls and the constant
+input use the existing branded column inspector and work at narrow screen widths.
+
+Calculated columns use the same current field/source permissions, approved joins, versioned
+encrypted definitions, shared results, fixed static captures, private CSV and background complete
+exports as other columns. A static capture remains fixed when current source values change;
+dynamic results use current source values. Current authority is rechecked for reads and exports.
+No report type, template, grant, schema or academic/financial event is added. General nested and
+mixed expression trees remain future work.
+
 ### Custom labels in existing reports
 
 Custom labels extend the legacy `CASE` reporting use case within the existing student and student-related datasets. They add no report type, template, source or academic classification. Use them to display an institution-selected explanation for a report row, such as labelling sections by their current capacity. Original student, course, registration, grade and financial facts stay unchanged.

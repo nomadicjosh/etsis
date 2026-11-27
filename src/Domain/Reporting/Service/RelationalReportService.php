@@ -103,6 +103,8 @@ final readonly class RelationalReportService
                 $field,
                 array_flip(['label', 'type', 'relation', 'copy_group', 'choices']),
             );
+            $fields[$id]['constant_calculation'] = in_array($field['type'], ['integer', 'double'], true)
+            && !isset($field['currency_field']);
         }
         $relationships = [];
         foreach ($dataset['relationships'] as $id => $relation) {

@@ -1,5 +1,13 @@
 # Legacy SELECT reporting acceptance review
 
+[Numeric constants in existing report columns](workflow-review.md#numeric-calculations-in-existing-reports)
+now extend the bounded arithmetic contract. A numeric source field can be combined with another
+authorized numeric field or an explicit decimal constant. Operations run on rows before summaries;
+missing inputs and zero divisors remain unspecified. Monetary constants remain disallowed, with
+the existing currency, unit and repeated-row safeguards retained. The shared encrypted definition,
+dynamic/static/shared results and CSV/complete-export workflows apply. Arbitrary nested/mixed
+expression trees, independent fact pre-aggregation and the other acceptance gaps below remain open.
+
 This review uses the actual examples in `legacy/docs/sql-query`, the saved-query/SQL routers and module, the section-roster/transfer routers, and the reporting views in the legacy migrations. The legacy feature allowed SELECT reporting across related tables; it was substantially more capable than the original fixed student-list report. Read-only access must preserve analytical power. This document is an acceptance plan, not a claim that the replacement builder is complete.
 
 | Legacy source | Report and relationships | Required builder capabilities |
