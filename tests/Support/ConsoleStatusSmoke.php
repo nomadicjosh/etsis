@@ -107,6 +107,7 @@ try {
                 'check-report-exports',
                 'check-transfer-completion-report',
                 'check-institutional-dates',
+                'check-student-contacts',
             ],
             true,
         )
@@ -578,6 +579,11 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/ReportExportBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-student-contacts') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/StudentContactReportBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-institutional-dates') {
             $kernel->bootstrap();

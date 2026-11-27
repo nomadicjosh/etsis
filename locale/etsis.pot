@@ -10403,3 +10403,11 @@ msgstr ""
 #: src/Infrastructure/Reporting/AcademicReportSchema.php:769
 msgid "Institutional academic dates"
 msgstr ""
+
+#: src/Infrastructure/Reporting/StudentContactReportSchema.php:24
+msgid "Linked account contact"
+msgstr ""
+
+#: src/Infrastructure/Reporting/StudentContactReportSchema.php:27
+msgid "Current account email"
+msgstr ""

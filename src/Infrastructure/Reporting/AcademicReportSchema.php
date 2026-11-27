@@ -995,9 +995,10 @@ final class AcademicReportSchema
             'direct' => 'Direct staff entry', 'form' => 'Application form',
         ];
         $datasets['sections'] = SchedulingReportSchema::withSectionBookings($datasets['sections']);
-        return ProgramSitesReportSchema::extend(
+        $datasets = ProgramSitesReportSchema::extend(
             AdmissionCaseworkReportSchema::extend(FinancialReportSchema::extend($datasets))
                 + SchedulingReportSchema::datasets(),
         );
+        return StudentContactReportSchema::extend($datasets);
     }
 }
