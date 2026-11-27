@@ -64,6 +64,14 @@ if (($_GET['forms'] ?? '') === '1') {
     $blocks['IDcontact'] = ['slug' => 'regular-form', 'settings' => ['attributes' => [
         'website-definition' => json_encode($websiteForm, JSON_THROW_ON_ERROR),
     ]]];
+    if (($_GET['second-form'] ?? '') === '1') {
+        $otherForm = $websiteForm;
+        $otherForm['key'] = 'contact_alt';
+        $otherForm['title'] = 'Alternative contact';
+        $blocks['IDcontact-alt'] = ['slug' => 'regular-form', 'settings' => ['attributes' => [
+            'website-definition' => json_encode($otherForm, JSON_THROW_ON_ERROR),
+        ]]];
+    }
 }
 $page = new \Vihzhuo\Page();
 $page->setData(['id' => 1, 'layout' => 'page-template', 'data' => ['blocks' => ['en' => $blocks]]]);
@@ -81,6 +89,9 @@ foreach (array_keys($websiteEmbeds ?? []) as $slug) {
 }
 if (($_GET['forms'] ?? '') === '1') {
     $body .= $renderer->renderBlock('regular-form', 'IDcontact');
+    if (($_GET['second-form'] ?? '') === '1') {
+        $body .= $renderer->renderBlock('regular-form', 'IDcontact-alt');
+    }
 }
 $body .= '</div>';
 $layout = new \Vihzhuo\ThemeLayout($theme, 'page-template');

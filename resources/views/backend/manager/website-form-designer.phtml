@@ -10,7 +10,12 @@ use function Codefy\Framework\Helpers\trans;
 <script id="website-form-designer-config" type="application/json"><?= json_encode([
     'csrf_header' => $header, 'csrf' => $token,
     'starter' => \Domain\WebsiteForms\ValueObject\WebsiteFormDefinition::starter(),
+    'inputPurposes' => \Domain\WebsiteForms\ValueObject\WebsiteInputPurpose::choices(),
     'labels' => [
+        'input_purpose' => trans('Input purpose'), 'purpose_none' => trans('No personal input purpose'),
+        'purpose_help' => trans('Identify information about the visitor. Browsers may offer saved details; '
+            . 'this setting does not store answers in the browser.'),
+        'purpose_reset' => trans('Input purpose cleared because it does not apply to this field type.'),
         'newsletter' => trans('Newsletter subscription (optional)'),
         'no_newsletter' => trans('No newsletter connection'),
             'saved_newsletter' => trans('Saved newsletter connection'),

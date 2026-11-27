@@ -3,6 +3,9 @@
     'use strict';
     const config = JSON.parse(document.getElementById('website-form-designer-config').textContent);
     const labels = config.labels;
+    const inputPurposes = config.inputPurposes || [];
+    const purposeAllowed = field => field.input_purpose == null || inputPurposes.some(purpose =>
+        purpose.value === field.input_purpose && purpose.types.includes(field.type));
     const types = ['text', 'textarea', 'email', 'tel', 'url', 'number', 'date', 'checkbox', 'select', 'radio', 'multi_select'];
     const clone = value => JSON.parse(JSON.stringify(value));
     const node = (tag, attrs = {}, ...children) => {
@@ -53,12 +56,29 @@
             choice.value = String(field.show_when.value); parent.append(choice);
         } else setting(parent, 'equals', field.show_when.value, value => { field.show_when.value = value; }, { maxlength: 120 });
     }
+    function purposeSetting(parent, field, index) {
+        const choices = inputPurposes.filter(purpose => purpose.types.includes(field.type));
+        if (!choices.length) return;
+        const id = `wf-purpose-${index}`;
+        const picker = node('select', { id, class: 'form-select', 'aria-describedby': `${id}-help`,
+            onchange: event => {
+                if (event.target.value) field.input_purpose = event.target.value;
+                else delete field.input_purpose;
+                changed();
+            } }, node('option', { value: '' }, labels.purpose_none),
+            ...choices.map(purpose => node('option', { value: purpose.value }, purpose.label)));
+        picker.value = field.input_purpose || '';
+        parent.append(node('div', { class: 'wf-setting' },
+            node('label', { for: id }, labels.input_purpose), picker,
+            node('p', { class: 'form-text', id: `${id}-help` }, labels.purpose_help)));
+    }
     function valid() {
         if (!/^[a-z][a-z0-9_]{0,39}$/.test(draft.key) || !draft.title?.trim() || !draft.submit_label?.trim() || !draft.success_message?.trim()
             || !draft.fields.length || draft.fields.length > 40) return false;
         const names = new Set();
         for (const field of draft.fields) {
             if (!/^[a-z][a-z0-9_]{0,39}$/.test(field.name) || names.has(field.name) || !field.label?.trim()) return false;
+            if (!purposeAllowed(field)) return false;
             if (field.show_when && (!names.has(field.show_when.field) || field.show_when.value === '')) return false;
             if (['select', 'radio', 'multi_select'].includes(field.type) && (!field.options?.length || field.options.length > 30
                 || new Set(field.options.map(option => option.value)).size !== field.options.length
@@ -212,7 +232,10 @@
                 field.min = field.max = field.min_length = field.max_length = null;
                 field.options = ['select', 'radio', 'multi_select'].includes(field.type)
                     ? field.options?.length ? field.options : [{ value: 'one', label: '1' }, { value: 'two', label: '2' }] : [];
-                changed(); render(); listFocus(index);
+                const purposeReset = !purposeAllowed(field);
+                if (purposeReset) delete field.input_purpose;
+                changed(); render(); dialog.querySelector(`#wf-type-${index}`)?.focus();
+                if (purposeReset) dialog.querySelector('[data-designer-status]').textContent = labels.purpose_reset;
             } }, ...types.map(type => node('option', { value: type }, labels[type])));
             typePicker.value = field.type;
             grid.append(node('div', { class: 'wf-setting' }, node('label', { for: typePicker.id }, labels.type), typePicker));
@@ -225,6 +248,7 @@
             }, { maxlength: 40 });
             setting(grid, 'label', field.label, value => { field.label = value; heading.textContent = value || labels.type; }, { maxlength: 120 });
             setting(grid, 'help', field.help, value => { field.help = value; }, { maxlength: 300, lines: 2 });
+            purposeSetting(grid, field, index);
             const required = node('input', { type: 'checkbox', checked: field.required, onchange: event => { field.required = event.target.checked; changed(); } });
             grid.append(node('label', { class: 'form-check-label wf-setting' }, required, ` ${labels.required}`));
             if (['select', 'radio', 'multi_select'].includes(field.type)) setting(grid, 'options', (field.options || []).map(option => `${option.value} | ${option.label}`).join('\n'), value => {

@@ -14,6 +14,36 @@ Drag fields by their grip, use **Move field up/down** with a keyboard, duplicate
 
 The designer supports up to forty fields, thirty options per choice field, twenty forms per translated page and a 64-KiB definition. Website forms collect text and choices and support optional [newsletter/lead-list subscriptions](website-newsletters.md). File uploads, arbitrary PHP handlers and direct staff reply emails are not part of this workflow. The earlier raw form-action/nested-control design is not silently converted: configure an explicit website form before publishing it. Stored earlier designs are preserved for deliberate review.
 
+## Identify personal input purposes
+
+In the designer, each eligible field has an **Input purpose** dropdown. Choose the visitor's full/given/middle/family
+name, title/suffix/nickname, organization/job title, email, telephone, website or address component. The list follows
+the field type: use **Email address**, **Telephone** or **Web address** fields for those purposes, a **Long answer**
+for a full street address, and short answers or supported dropdown choices for locality/region/country names.
+Postal codes use a short answer so leading zeros are retained. New starter contact forms explicitly identify their
+name and email fields; earlier saved forms receive no inferred purpose based on their key or label.
+
+Choose **No personal input purpose** for a general message, inquiry topic, another person's information or a field
+that does not describe the visitor. This omits the explicit hint; it does not control the browser's own heuristics
+or saved-information settings. etSIS continues to keep working answers in page memory, with no new browser storage.
+Purposes identify fields for software without changing their visible labels, help, required state or answer rules.
+This supports [identifying input purpose](https://www.w3.org/WAI/WCAG22/Understanding/identify-input-purpose.html);
+it does not by itself establish complete accessibility conformance.
+
+Purpose choices are validated again by the server and retained with the saved form. Unsupported tokens,
+credentials/payment purposes and mismatched field types are rejected before publication. Changing a field's type
+clears an incompatible purpose, announces the change and keeps keyboard focus on the type selector. Duplication,
+keyboard ordering, preview and reopening preserve deliberate choices. Publish the saved page through its normal
+review before the revised form can accept inquiries; a purpose-only publication change invalidates unaccepted
+earlier tickets. Already accepted inquiries and their original-result retries retain the earlier definition.
+
+Preview and the public form use the same renderer. Each form instance supplies a separate
+[`section-*` autocomplete scope](https://html.spec.whatwg.org/multipage/form-control-infrastructure.html#autofill)
+to distinguish its visitor details from another form on the page. Browsers decide whether to offer autofill.
+Submission reads actual current control values even when autofill emits no input event, and still clears/excludes
+answers hidden by conditions. The honeypot keeps its existing explicit `autocomplete="off"` setting. No raw
+autocomplete strings, arbitrary attributes, new recipient routing or newsletter consent are accepted.
+
 ## Choose the department and permissions
 
 **Replies department (optional)** routes new submissions to an existing active institutional department, such as Admissions or Academic Advising. Department selection does not grant anyone access.

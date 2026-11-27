@@ -96,6 +96,12 @@ $preview = $api('/sis/website/form-preview/', ['definition' => $formDefinition])
 if (!str_contains($preview['html'], 'data-preview="1"') || !str_contains($preview['html'], 'disabled')) {
     throw new RuntimeException('The native form preview allowed submission.');
 }
+if (
+    !preg_match('/autocomplete="section-wf[a-f0-9]{24} name"/', $preview['html']) ||
+    !preg_match('/autocomplete="section-wf[a-f0-9]{24} email"/', $preview['html'])
+) {
+    throw new RuntimeException('The actual preview provider lost scoped visitor input purposes.');
+}
 $receiptCommand = new \Symfony\Component\Console\Tester\CommandTester(
     new \Application\Console\Commands\PruneWebsiteFormReceiptsCommand($app)
 );

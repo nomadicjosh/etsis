@@ -41,7 +41,12 @@ $labels = [
     <fieldset class="website-form-fields" disabled>
         <legend class="visually-hidden"><?= $esc($definition['title']) ?></legend>
         <?php foreach ($definition['fields'] as $field): ?>
-            <?php $id = $instance . '-' . $field['name']; ?>
+            <?php
+            $id = $instance . '-' . $field['name'];
+            $autocomplete = ($field['input_purpose'] ?? null) === null ? '' :
+                ' autocomplete="section-wf' . substr(hash('sha256', $instance), 0, 24) . ' ' .
+                $esc($field['input_purpose']) . '"';
+            ?>
             <div class="website-form-field mb-4" data-question="<?= $esc($field['name']) ?>">
                 <?php if (in_array($field['type'], ['radio', 'multi_select'], true)): ?>
                     <fieldset>
@@ -84,10 +89,12 @@ $labels = [
                     </label>
                     <?php if ($field['type'] === 'textarea'): ?>
                         <textarea class="form-control" name="<?= $esc($field['name']) ?>" id="<?= $esc($id) ?>"
+                            <?= $autocomplete ?>
                             rows="5" maxlength="<?= $field['max_length'] ?? 20000 ?>"
                             aria-describedby="<?= $esc($id) ?>-help <?= $esc($id) ?>-error"></textarea>
                     <?php elseif ($field['type'] === 'select'): ?>
                         <select class="form-select" name="<?= $esc($field['name']) ?>" id="<?= $esc($id) ?>"
+                            <?= $autocomplete ?>
                             aria-describedby="<?= $esc($id) ?>-help <?= $esc($id) ?>-error">
                             <option value=""><?= trans_html('Choose an option') ?></option>
                             <?php foreach ($field['options'] as $option): ?>
@@ -97,6 +104,7 @@ $labels = [
                     <?php else: ?>
                         <input class="form-control" type="<?= $esc($field['type']) ?>"
                             name="<?= $esc($field['name']) ?>" id="<?= $esc($id) ?>"
+                            <?= $autocomplete ?>
                             <?= $field['type'] === 'number' ? 'step="1"' : '' ?>
                             aria-describedby="<?= $esc($id) ?>-help <?= $esc($id) ?>-error">
                     <?php endif; ?>

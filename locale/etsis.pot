@@ -10411,3 +10411,91 @@ msgstr ""
 #: src/Infrastructure/Reporting/StudentContactReportSchema.php:27
 msgid "Current account email"
 msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:33
+msgid "Full name"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:35
+msgid "Title or honorific"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:35
+msgid "Name suffix"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:36
+msgid "Nickname"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:36
+msgid "Organization"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:37
+msgid "Job title"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:38
+msgid "Telephone number"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:38
+msgid "Website address"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:39
+msgid "Street address"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:39
+msgid "Address line 1"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:40
+msgid "Address line 2"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:40
+msgid "Address line 3"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:41
+msgid "State, province or region"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:41
+msgid "City or town"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:42
+msgid "District or locality"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:42
+msgid "Neighborhood"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:43
+msgid "Country name"
+msgstr ""
+
+#: src/Domain/WebsiteForms/ValueObject/WebsiteInputPurpose.php:43
+msgid "Postal code"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:15
+msgid "Input purpose"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:15
+msgid "No personal input purpose"
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:16
+msgid "Identify information about the visitor. Browsers may offer saved details; this setting does not store answers in the browser."
+msgstr ""
+
+#: resources/views/backend/manager/website-form-designer.phtml:18
+msgid "Input purpose cleared because it does not apply to this field type."
+msgstr ""

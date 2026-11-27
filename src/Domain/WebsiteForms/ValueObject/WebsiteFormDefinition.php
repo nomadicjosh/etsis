@@ -22,8 +22,10 @@ final readonly class WebsiteFormDefinition
             'submit_label' => trans_html('Send message'),
             'success_message' => trans_html('Thank you. Your message has been received.'),
             'fields' => [
-                ['name' => 'name', 'type' => 'text', 'label' => trans_html('Your name'), 'required' => true],
-                ['name' => 'email', 'type' => 'email', 'label' => trans_html('Email address'), 'required' => true],
+                ['name' => 'name', 'type' => 'text', 'label' => trans_html('Your name'), 'required' => true,
+                    'input_purpose' => 'name'],
+                ['name' => 'email', 'type' => 'email', 'label' => trans_html('Email address'), 'required' => true,
+                    'input_purpose' => 'email'],
                 ['name' => 'message', 'type' => 'textarea', 'label' => trans_html('Message'), 'required' => true],
             ]];
     }
@@ -56,12 +58,15 @@ final readonly class WebsiteFormDefinition
         foreach ($facts['fields'] as $field) {
             if (
                 !is_array($field) || array_diff(array_keys($field), ['name', 'type', 'label', 'required',
-                    'help', 'options', 'min_length', 'max_length', 'min', 'max', 'show_when'])
+                    'help', 'options', 'min_length', 'max_length', 'min', 'max', 'show_when', 'input_purpose'])
                 || !is_string($field['name'] ?? null) || !self::key($field['name'])
                 || isset($known[$field['name']]) || !in_array($field['type'] ?? null, self::TYPES, true)
                 || !self::text($field['label'] ?? null, 120, true) || !is_bool($field['required'] ?? null)
                 || !self::text($field['help'] ?? '', 300)
             ) {
+                self::invalid();
+            }
+            if (!WebsiteInputPurpose::allows($field['type'], $field['input_purpose'] ?? null)) {
                 self::invalid();
             }
             $field += ['help' => '', 'options' => [], 'min_length' => null, 'max_length' => null,
@@ -242,7 +247,8 @@ final readonly class WebsiteFormDefinition
                 }
             }
             if (!$valid) {
-                $errors[] = ['field' => $key, 'message' => trans_html('Enter a valid answer within the stated limits.')];
+                $errors[] = ['field' => $key,
+                    'message' => trans_html('Enter a valid answer within the stated limits.')];
             } else {
                 $clean[$key] = $value;
             }
