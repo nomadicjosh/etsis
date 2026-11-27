@@ -64,12 +64,16 @@ final class EventStoreFixture
 
     public static function history(Database $db): SqlHistoricalEventStore
     {
+        $sql = new SqlRecords($db);
         return new SqlHistoricalEventStore(
-            new SqlRecords($db),
+            $sql,
             new DatabaseUnitOfWork($db),
             new SystemClock(),
             new ProtectedEventCodec(self::config($db)),
-            new HistoricalSchemaRegistry()
+            new HistoricalSchemaRegistry(),
+            projection: $sql->tableExists('sis_academic_date_index')
+                ? new \Infrastructure\Projection\SqlAcademicDateProjection($sql, new ProtectedEventCodec(self::config($db)))
+                : null,
         );
     }
 
@@ -88,6 +92,10 @@ final class EventStoreFixture
             new SystemClock(),
             new ProtectedEventCodec(self::config($db)),
             $schemas,
+            projection: new SqlRecords($db)->tableExists('sis_academic_date_index')
+                ? new \Infrastructure\Projection\SqlAcademicDateProjection(new SqlRecords($db),
+                    new ProtectedEventCodec(self::config($db)))
+                : null,
         );
         return new PdoTransactionalEventStore($history, $transactions, $schemas);
     }

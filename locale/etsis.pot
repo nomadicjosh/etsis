@@ -10379,3 +10379,27 @@ msgstr ""
 #: src/Infrastructure/Reporting/AcademicReportSchema.php:749
 msgid "Transfer completion dates"
 msgstr ""
+
+
+#: src/Infrastructure/Projection/SqlAcademicDateProjection.php:65
+msgid "Academic dates need operator reconciliation before this record can change."
+msgstr ""
+
+#: src/Infrastructure/Reporting/AcademicDateReportSql.php:50
+msgid "Institutional academic dates need reconciliation before this report can run. No partial result was returned. Ask a system administrator to verify the academic date index."
+msgstr ""
+
+#: src/Infrastructure/Reporting/AcademicReportSchema.php:524
+#: src/Infrastructure/Reporting/AcademicReportSchema.php:795
+msgid "Recorded institutional completion date"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AcademicReportSchema.php:530
+#: src/Infrastructure/Reporting/AcademicReportSchema.php:801
+msgid "Recorded institutional source start date"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AcademicReportSchema.php:768
+#: src/Infrastructure/Reporting/AcademicReportSchema.php:769
+msgid "Institutional academic dates"
+msgstr ""

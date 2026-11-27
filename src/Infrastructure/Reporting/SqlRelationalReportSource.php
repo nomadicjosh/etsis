@@ -21,6 +21,9 @@ final readonly class SqlRelationalReportSource implements RelationalReportSource
      * Ordinary live pages call it independently. */
     public function assertReady(ReportQuery $query): void
     {
+        if ($query->usesProjection('academic_dates')) {
+            new AcademicDateReportSql($this->sql)->requireReady();
+        }
         if ($query->schema['curriculum_components'] ?? false) {
             new CurriculumReportSql($this->sql)->requireReady();
         }

@@ -591,7 +591,8 @@ final class SisFixture
                 new \Infrastructure\EventSourcing\ProtectedEventCodec(
                     EventStoreFixture::config($this->connection->queryBuilder())
                 ),
-                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+                projection: $this->journalProjection(),
             )
         );
     }
@@ -613,6 +614,7 @@ final class SisFixture
                 EventStoreFixture::config($this->connection->queryBuilder()),
             ),
             new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            projection: $this->journalProjection(),
         );
         return new \Domain\Gradebook\Service\GradingScaleService(
             new \Infrastructure\Persistence\Repository\SqlGradingScaleRepository($this->sql),
@@ -624,6 +626,16 @@ final class SisFixture
             $this->clock,
         );
     }
+    private function journalProjection(): \Infrastructure\Projection\SqlAcademicDateProjection
+    {
+        return new \Infrastructure\Projection\SqlAcademicDateProjection(
+            $this->sql,
+            new \Infrastructure\EventSourcing\ProtectedEventCodec(
+                EventStoreFixture::config($this->connection->queryBuilder()),
+            ),
+        );
+    }
+
     public function financialEvents(): array
     {
         return $this->sql->fetch(
@@ -663,6 +675,7 @@ final class SisFixture
                 EventStoreFixture::config($this->connection->queryBuilder()),
             ),
             new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            projection: $this->journalProjection(),
         );
         return new \Domain\Registration\Service\EnrollmentLedger(
             new \Infrastructure\Persistence\Repository\SqlEnrollmentHistoryRepository($this->sql),
@@ -924,6 +937,7 @@ final class SisFixture
                 EventStoreFixture::config($this->connection->queryBuilder()),
             ),
             new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            projection: $this->journalProjection(),
         );
         return new \Domain\AcademicRecord\Service\InstitutionalCreditLedger(
             new \Infrastructure\Persistence\Repository\SqlAcademicCreditRepository($this->sql),
@@ -959,6 +973,7 @@ final class SisFixture
                 $this->clock,
                 new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
                 new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+                projection: $this->journalProjection(),
             ),
             $this->transactions,
             $this->access,
@@ -1086,6 +1101,7 @@ final class SisFixture
                 $this->clock,
                 new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
                 new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+                projection: $this->journalProjection(),
             ),
             $this->transactions,
             $this->access,
@@ -1105,6 +1121,7 @@ final class SisFixture
                 EventStoreFixture::config($this->connection->queryBuilder()),
             ),
             new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            projection: $this->journalProjection(),
         );
         return new \Domain\AcademicRecord\Service\AcademicCourseService(
             $this->academicCredits(),
@@ -1133,6 +1150,7 @@ final class SisFixture
                     EventStoreFixture::config($this->connection->queryBuilder()),
                 ),
                 new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+                projection: $this->journalProjection(),
             ),
             $this->access,
             $this->clock,
@@ -1202,6 +1220,7 @@ final class SisFixture
                     EventStoreFixture::config($this->connection->queryBuilder()),
                 ),
                 new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+                projection: $this->journalProjection(),
             ),
             $this->access,
             $this->clock,
@@ -1234,6 +1253,7 @@ final class SisFixture
                     EventStoreFixture::config($this->connection->queryBuilder()),
                 ),
                 new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+                projection: $this->journalProjection(),
             ),
             $this->access,
             $this->clock,
@@ -1304,6 +1324,7 @@ final class SisFixture
                 EventStoreFixture::config($this->connection->queryBuilder()),
             ),
             new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            projection: $this->journalProjection(),
         );
         return new \Domain\Transfer\Service\TransferCreditLedger(
             new \Infrastructure\Persistence\Repository\SqlTransferCreditRepository($this->sql),
@@ -1328,6 +1349,7 @@ final class SisFixture
             $this->clock,
             new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
             new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            projection: $this->journalProjection(),
         );
         return new \Domain\Catalog\Service\CoursePublicationService(
             new \Infrastructure\Persistence\Repository\SqlCatalogRevisionRepository($this->sql),
@@ -1541,6 +1563,7 @@ final class SisFixture
                 EventStoreFixture::config($this->connection->queryBuilder()),
             ),
             new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            projection: $this->journalProjection(),
         );
         return new \Domain\Admissions\Service\AdmissionDecisionLedger(
             $history,
@@ -1675,7 +1698,8 @@ final class SisFixture
             $this->transactions,
             $this->clock,
             new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
-            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            projection: $this->journalProjection(),
         ), $this->clock);
     }
     public function restrictionLedger(): \Domain\Student\Service\RestrictionLedger
@@ -1689,7 +1713,8 @@ final class SisFixture
                 new \Infrastructure\EventSourcing\ProtectedEventCodec(
                     EventStoreFixture::config($this->connection->queryBuilder())
                 ),
-                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+                projection: $this->journalProjection(),
             ),
             $this->clock
         );
@@ -1764,7 +1789,8 @@ final class SisFixture
                 new \Infrastructure\EventSourcing\ProtectedEventCodec(
                     EventStoreFixture::config($this->connection->queryBuilder())
                 ),
-                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+                projection: $this->journalProjection(),
             ),
             $audit ?? $this->audit,
             $this->clock
@@ -1804,7 +1830,8 @@ final class SisFixture
                 $this->transactions,
                 $this->clock,
                 new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
-                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+                new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+                projection: $this->journalProjection(),
             ),
             $this->clock
         );
@@ -1899,6 +1926,7 @@ final class SisFixture
             $this->clock,
             new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
             new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            projection: $this->journalProjection(),
         ), $this->clock);
     }
     public function registrationService(): \Domain\Person\Service\PersonRegistrationService
@@ -1923,7 +1951,8 @@ final class SisFixture
             $this->transactions,
             $this->clock,
             new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($db)),
-            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry()
+            new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            projection: $this->journalProjection(),
         );
         $users = new \Infrastructure\Persistence\Repository\EventSourcedUserRepository(
             EventStoreFixture::framework($db),
@@ -1963,6 +1992,7 @@ final class SisFixture
                     $this->clock,
                     new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($this->connection->queryBuilder())),
                     new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+                    projection: $this->journalProjection(),
                 ),
                 new \Infrastructure\Persistence\Repository\SqlProgramDefinitionRepository($this->sql),
             ),
@@ -2065,6 +2095,7 @@ final class SisFixture
             $this->clock,
             new \Infrastructure\EventSourcing\ProtectedEventCodec(EventStoreFixture::config($db)),
             new \Infrastructure\EventSourcing\HistoricalSchemaRegistry(),
+            projection: $this->journalProjection(),
         );
         return new \Domain\Admissions\Service\MatriculationService(
             $repository ?? $this->admissions,

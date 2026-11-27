@@ -37,6 +37,7 @@ final class SqlHistoricalEventStore implements HistoricalEventStore
         private readonly ProtectedEventCodec $codec,
         private readonly HistoricalSchemaRegistry $schemas,
         private readonly bool $convertingLegacy = false,
+        private readonly ?\Domain\Shared\EventSourcing\HistoricalProjection $projection = null,
     ) {
     }
 
@@ -112,6 +113,7 @@ final class SqlHistoricalEventStore implements HistoricalEventStore
                     throw new ConcurrentModificationException("The historical stream version changed.");
                 }
                 $first = $head["version"] + 1;
+                $previousHash = $head['head_hash'];
                 $ids = [];
                 foreach ($events as $index => $event) {
                     $row = [
@@ -177,6 +179,7 @@ final class SqlHistoricalEventStore implements HistoricalEventStore
                         "result" => $result,
                     ]),
                 ]);
+                $this->projection?->project($stream, $expectedVersion, $events, $previousHash, $head['head_hash']);
                 return $result;
             });
         } catch (PDOException $error) {

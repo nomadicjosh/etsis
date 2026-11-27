@@ -269,6 +269,19 @@ async function fixture(page, options = {}) {
             credit_transfer_completion: { label: 'Transfer completion dates', parent: 'academic_credit', many: false },
         });
     }
+    if (options.institutionalCompletion) {
+        Object.assign(fields, {
+            academic_credit_id: { label: 'Academic credit reference', type: 'string', relation: 'academic_credit' },
+            recorded_institutional_completed_on: { label: 'Recorded institutional completion date', type: 'date', relation: 'credit_institutional_dates' },
+            recorded_institutional_academic_on: { label: 'Recorded institutional source start date', type: 'date', relation: 'credit_institutional_dates' },
+        });
+        Object.assign(dataset.relationships, {
+            academic_credit: { label: 'Recorded academic credits', parent: 'student', many: true,
+                date_fields: { recorded_institutional_completed_on: 'Recorded institutional completion date',
+                    recorded_institutional_academic_on: 'Recorded institutional source start date' } },
+            credit_institutional_dates: { label: 'Institutional academic dates', parent: 'academic_credit', many: false },
+        });
+    }
     if (options.accounts) {
         for (const [key, label] of Object.entries({ tuition: 'Net tuition', fees: 'Net fees',
             manual_charges: 'Net staff-recorded charges', unclassified_charges: 'Net unclassified charges' }))
@@ -1307,6 +1320,41 @@ test('transfer completion dates keep corrected and original chronology through s
     await chooser.locator('summary').click();
     await expect(chooser.getByLabel('Recorded academic credits: date', { exact: true })).toHaveValue('recorded_transfer_completed_on');
     await chooser.getByLabel('Recorded academic credits: date', { exact: true }).selectOption('original_recorded_transfer_completed_on');
+    await chooser.getByRole('button', { name: 'Earliest', exact: true }).click();
+    await page.setViewportSize({ width: 320, height: 812 });
+    await accessible(page);
+    expect(await studio.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
+    expect(f.errors).toEqual([]);
+});
+
+test('institutional recorded dates keep explicit chronology through selection and saved calendar columns', async ({ page }) => {
+    const f = await fixture(page, { students: true, institutionalCompletion: true });
+    await page.getByRole('button', { name: 'Start report: Students & current primary program', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByRole('button', { name: 'Add Recorded academic credits', exact: true }).click();
+    await studio.getByRole('button', { name: 'Add Institutional academic dates', exact: true }).click();
+    const chooser = studio.locator('[data-record-selection="academic_credit"]');
+    await chooser.locator('summary').click();
+    await chooser.getByRole('button', { name: 'Latest', exact: true }).click();
+    await chooser.getByLabel('Recorded academic credits: date', { exact: true }).selectOption('recorded_institutional_completed_on');
+    await expect(chooser.getByLabel('Keep equal dates', { exact: true })).toBeChecked();
+    await studio.getByRole('checkbox', { name: 'Recorded institutional completion date', exact: true }).check();
+    await studio.getByRole('checkbox', { name: 'Recorded institutional source start date', exact: true }).check();
+    await studio.getByRole('button', { name: 'Column 5 settings: Each value', exact: true }).click();
+    const periods = studio.getByRole('group', { name: 'Calendar grouping', exact: true });
+    await periods.getByRole('button', { name: 'Month', exact: true }).click();
+    await studio.getByRole('button', { name: 'Done', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.record_selection.academic_credit).toEqual({ date_field: 'recorded_institutional_completed_on', direction: 'latest', ties: 'all' });
+    expect(query.columns.find(column => column.field === 'recorded_institutional_completed_on')).toMatchObject({ date_bucket: 'month' });
+    expect(query.columns.find(column => column.field === 'recorded_institutional_academic_on')).not.toHaveProperty('date_bucket');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional institutional chronology');
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
+    await studio.getByRole('button', { name: 'Edit', exact: true }).click();
+    await chooser.locator('summary').click();
+    await expect(chooser.getByLabel('Recorded academic credits: date', { exact: true })).toHaveValue('recorded_institutional_completed_on');
+    await chooser.getByLabel('Recorded academic credits: date', { exact: true }).selectOption('recorded_institutional_academic_on');
     await chooser.getByRole('button', { name: 'Earliest', exact: true }).click();
     await page.setViewportSize({ width: 320, height: 812 });
     await accessible(page);

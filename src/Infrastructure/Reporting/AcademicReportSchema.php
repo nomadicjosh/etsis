@@ -331,6 +331,9 @@ final class AcademicReportSchema
                 'transfer_completion' => $join('sis_transfer_awards', 'credit', 'source_id', 'id') + [
                     'source' => 'transfer_award',
                 ],
+                'institutional_dates' => $join('sis_academic_date_index', 'credit', 'id', 'id') + [
+                    'source' => 'institutional_dates', 'projection' => 'academic_dates',
+                ],
                 "course_binding" => $join("sis_credit_course_versions", "credit", "id", "id"),
                 "course_version" => $join("sis_course_versions", "course_binding", "course_version_id", "id"),
                 "retained_subject" => $join(
@@ -516,6 +519,18 @@ final class AcademicReportSchema
                         'date',
                         'transfer_completion',
                         'completed_on',
+                    ) + ['date_storage' => 'iso'],
+                    'institutional_completed_on' => $field(
+                        trans('Recorded institutional completion date'),
+                        'date',
+                        'institutional_dates',
+                        'completed_on'
+                    ) + ['date_storage' => 'iso'],
+                    'institutional_academic_on' => $field(
+                        trans('Recorded institutional source start date'),
+                        'date',
+                        'institutional_dates',
+                        'academic_on'
                     ) + ['date_storage' => 'iso'],
                     "attempted" => $field("Attempted credits", "double", "credit", "attempted_milli") + [
                         "scale" => 1000,
@@ -741,12 +756,17 @@ final class AcademicReportSchema
             'credit_transfer_completion' => $join('sis_transfer_awards', 'academic_credit', 'source_id', 'id') + [
                 'source' => 'transfer_award',
             ],
+            'credit_institutional_dates' => $join('sis_academic_date_index', 'academic_credit', 'id', 'id') + [
+                'source' => 'institutional_dates', 'projection' => 'academic_dates',
+            ],
         ];
         $academicRelations['academic_credit']['label'] = 'Recorded academic credits';
         $academicRelations['credit_term']['label'] = 'Recorded-credit terms';
         $academicRelations['credit_grade']['label'] = 'Recorded grades';
         $credits['relationships']['transfer_completion']['label'] = trans('Transfer completion dates');
         $academicRelations['credit_transfer_completion']['label'] = trans('Transfer completion dates');
+        $credits['relationships']['institutional_dates']['label'] = trans('Institutional academic dates');
+        $academicRelations['credit_institutional_dates']['label'] = trans('Institutional academic dates');
         $academicFields = [
             'academic_credit_id' => $field('Academic credit reference', 'string', 'academic_credit', 'id'),
             'recorded_course_code' => $field('Recorded course code', 'string', 'academic_credit', 'course_code'),
@@ -770,6 +790,18 @@ final class AcademicReportSchema
                 'date',
                 'credit_transfer_completion',
                 'completed_on',
+            ) + ['date_storage' => 'iso'],
+            'recorded_institutional_completed_on' => $field(
+                trans('Recorded institutional completion date'),
+                'date',
+                'credit_institutional_dates',
+                'completed_on'
+            ) + ['date_storage' => 'iso'],
+            'recorded_institutional_academic_on' => $field(
+                trans('Recorded institutional source start date'),
+                'date',
+                'credit_institutional_dates',
+                'academic_on'
             ) + ['date_storage' => 'iso'],
         ];
         $applications = [

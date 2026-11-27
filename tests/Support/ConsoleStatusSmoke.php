@@ -106,6 +106,7 @@ try {
                 'check-transfer-corrections',
                 'check-report-exports',
                 'check-transfer-completion-report',
+                'check-institutional-dates',
             ],
             true,
         )
@@ -577,6 +578,11 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/ReportExportBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-institutional-dates') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/InstitutionalDateBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-transfer-completion-report') {
             $kernel->bootstrap();

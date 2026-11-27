@@ -175,6 +175,7 @@ return [
         \Application\Console\Commands\MaintenanceCommand::class,
         \Application\Console\Commands\ConvertPostgresCommand::class,
         \Application\Console\Commands\VerifyHistoryCommand::class,
+        \Application\Console\Commands\ReconcileAcademicDatesCommand::class,
         \Application\Console\Commands\HistoryAnchorCommand::class,
         \Application\Console\Commands\RecoverAccountProjectionsCommand::class,
         \Application\Console\Commands\PruneLoginSessionsCommand::class,

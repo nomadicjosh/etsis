@@ -587,10 +587,9 @@ final readonly class ReportQuery
         return $result;
     }
 
-    /** @return list<string> */
-    public function permissions(): array
+    /** @return array{0:list<string>,1:list<string>} */
+    private function references(): array
     {
-        $permissions = $this->schema["permissions"];
         $fields = array_column($this->definition["columns"], "field");
         foreach ($this->definition["columns"] as $column) {
             if (isset($column["calculation"])) {
@@ -628,6 +627,14 @@ final readonly class ReportQuery
             $fields[] = $selection['date_field'];
         }
         $relations = array_merge($relations, array_keys($this->definition['record_selection'] ?? []));
+        return [$fields, $relations];
+    }
+
+    /** @return list<string> */
+    public function permissions(): array
+    {
+        $permissions = $this->schema["permissions"];
+        [$fields, $relations] = $this->references();
         foreach ($fields as $id) {
             $permissions = array_merge($permissions, $this->schema["fields"][$id]["permissions"]);
             $relations[] = $this->schema["fields"][$id]["relation"];
@@ -643,6 +650,25 @@ final readonly class ReportQuery
             $permissions = array_merge($permissions, $this->schema["relationships"][$id]["permissions"]);
         }
         return array_values(array_unique($permissions));
+    }
+
+    /** Internal read-model dependency checks reuse the exact hidden-field/ancestor permission traversal. */
+    public function usesProjection(string $projection): bool
+    {
+        [$fields, $relations] = $this->references();
+        foreach ($fields as $id) {
+            $relations[] = $this->schema['fields'][$id]['relation'];
+        }
+        foreach ($relations as $relation) {
+            while ($relation !== $this->schema['root']) {
+                $node = $this->schema['relationships'][$relation];
+                if (($node['projection'] ?? null) === $projection) {
+                    return true;
+                }
+                $relation = $node['parent'];
+            }
+        }
+        return false;
     }
 
     private static function invalid(string $message): never

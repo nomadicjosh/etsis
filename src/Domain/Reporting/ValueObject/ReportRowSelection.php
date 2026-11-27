@@ -33,7 +33,8 @@ final class ReportRowSelection
                 if (
                     $step === null ||
                     ($step["many"] ?? false) ||
-                    (isset($step['source']) && $step['source'] !== 'transfer_award') ||
+                    (isset($step['source']) &&
+                        !in_array($step['source'], ['transfer_award', 'institutional_dates'], true)) ||
                     count($path) >= 4
                 ) {
                     continue 2;

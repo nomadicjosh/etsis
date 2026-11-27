@@ -169,6 +169,10 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlCourseTextProjection::class,
             \Domain\Shared\EventSourcing\HistoricalEventStore::class =>
                 \Infrastructure\EventSourcing\SqlHistoricalEventStore::class,
+            \Domain\Shared\EventSourcing\HistoricalProjection::class =>
+                \Infrastructure\Projection\SqlAcademicDateProjection::class,
+            \Domain\AcademicRecord\Repository\AcademicDateReconciliation::class =>
+                \Infrastructure\Projection\SqlAcademicDateReconciliation::class,
             \Domain\AcademicCalendar\Repository\AcademicCalendarRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlAcademicCalendarRepository::class,
             \Domain\Catalog\Repository\OfferingTemplateRepository::class =>
@@ -453,6 +457,15 @@ final class SisServiceProvider extends CodefyServiceProvider
         foreach ($bindings as $port => $adapter) {
             $this->codefy->alias($port, $adapter);
         }
+        $this->codefy->delegate(\Infrastructure\EventSourcing\SqlHistoricalEventStore::class, fn () =>
+            new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
+                $this->codefy->make(\Infrastructure\Persistence\SqlRecords::class),
+                $this->codefy->make(\Domain\Shared\Persistence\UnitOfWork::class),
+                $this->codefy->make(\Domain\Shared\Service\Clock::class),
+                $this->codefy->make(\Infrastructure\EventSourcing\ProtectedEventCodec::class),
+                $this->codefy->make(\Infrastructure\EventSourcing\HistoricalSchemaRegistry::class),
+                projection: $this->codefy->make(\Domain\Shared\EventSourcing\HistoricalProjection::class),
+            ));
         $this->codefy->delegate(\Infrastructure\Operations\LocalAccountProjectionStageStorage::class, function () {
             return new \Infrastructure\Operations\LocalAccountProjectionStageStorage(
                 $this->codefy->make(\Domain\Communications\Service\MessageCipher::class),

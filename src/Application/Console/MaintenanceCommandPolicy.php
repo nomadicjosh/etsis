@@ -18,7 +18,7 @@ final class MaintenanceCommandPolicy
         }
         return in_array($input->getFirstArgument() ?? 'list', [
             'sis:maintenance', 'sis:history:verify', 'sis:history:anchor', 'sis:access:bootstrap',
-            'sis:database:postgres', 'sis:projections:account',
+            'sis:database:postgres', 'sis:projections:account', 'sis:projections:academic-dates',
             'list', 'help', 'route:list', 'schedule:list',
             'migrate', 'migrate:check', 'migrate:status', 'migrate:up', 'migrate:down', 'migrate:rollback',
         ], true);

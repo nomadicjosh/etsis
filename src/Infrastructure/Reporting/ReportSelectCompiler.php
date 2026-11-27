@@ -514,6 +514,14 @@ final readonly class ReportSelectCompiler
             ' AND ' . $column($parent, 'student_id') . ' = ' . $column($name, 'student_id') .
             ' AND ' . $column($parent, 'credit_type') . " = 'transfer'";
         }
+        if ($relation['source'] === 'institutional_dates') {
+            $parent = $relation['parent'];
+            return $column($parent, 'id') . ' = ' . $column($name, 'id') .
+            ' AND ' . $column($parent, 'student_id') . ' = ' . $column($name, 'student_id') .
+            ' AND ' . $column($parent, 'source_id') . ' = ' . $column($name, 'enrollment_id') .
+            ' AND ' . $column($parent, 'credit_type') . " = 'institutional'" .
+            ' AND ' . $column($name, 'removed') . ' = 0';
+        }
         if ($relation['source'] !== 'latest_registration_term') {
             throw new \LogicException('Unknown reporting relationship source.');
         }
