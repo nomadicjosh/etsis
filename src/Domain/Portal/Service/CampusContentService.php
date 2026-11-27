@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Domain\Portal\Service;
 
+use Domain\Portal\ValueObject\ContentAudience;
 use Domain\Audit\Repository\AuditTrail;
 use Domain\Portal\PortalPost;
 use Domain\Portal\Repository\CampusRepository;
@@ -18,6 +19,8 @@ use Domain\Shared\Exception\ConcurrentModificationException;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Service\Clock;
 use Domain\Shared\Service\ReviewProof;
+
+use function Codefy\Framework\Helpers\trans;
 
 final readonly class CampusContentService
 {
@@ -146,6 +149,7 @@ final readonly class CampusContentService
             $next = $post->transition($action, $window, $note);
             $audience = $this->campus->audience($id);
             $roles = $this->audiences->selected($id);
+            $programs = $this->audiences->selectedPrograms($id);
             $this->posts->save($next, $post->version);
             $result = [
                 "id" => $id->value,
@@ -177,6 +181,7 @@ final readonly class CampusContentService
                 $this->posts->get($id) != $next ||
                 $this->campus->audience($id) !== $audience ||
                 $this->audiences->selected($id) !== $roles ||
+                $this->audiences->selectedPrograms($id) !== $programs ||
                 $this->posts->receipt($operation) !== [
                     "post_id" => $id->value,
                     "actor_id" => $actor->value,
@@ -300,7 +305,8 @@ final readonly class CampusContentService
             "content_format" => $post->contentFormat,
             "content_html" =>
                 $post->contentFormat === "html" ? $this->markup->sanitize($post->content) : null,
-        ];
+        ] + ($this->campus->audience($post->id) === 'programs'
+            ? ['audience_programs' => $this->audiences->selectedPrograms($post->id)] : []);
     }
 
     private function revision(#[\SensitiveParameter] PortalPost $post): string
@@ -342,7 +348,7 @@ final readonly class CampusContentService
             !mb_check_encoding($search, 'UTF-8') || mb_strlen($search) > 80 ||
             preg_match('/[\x00-\x1F\x7F]/', $search)
         ) {
-            throw new ValidationException([['field' => 'search', 'message' => \Codefy\Framework\Helpers\trans(
+            throw new ValidationException([['field' => 'search', 'message' => trans(
                 'Search account role names using up to eighty characters.',
             )]]);
         }
@@ -358,11 +364,46 @@ final readonly class CampusContentService
         return ['items' => $roles, 'next_after' => $more ? end($roles)['id'] : null];
     }
 
-    private function roleDefinitions(\Domain\Portal\ValueObject\ContentAudience $selection): array
+    /** Program directory labels only; no student populations or membership counts. */
+    public function audiencePrograms(string $search, ?EntityId $after = null): array
+    {
+        $actor = $this->access->requirePermission('sis:portal:manage');
+        if (
+            !mb_check_encoding($search, 'UTF-8') || mb_strlen($search) > 80
+            || preg_match('/[\x00-\x1F\x7F]/', $search)
+        ) {
+            throw new ValidationException([['field' => 'search', 'message' => trans(
+                'Search program codes or titles using up to eighty characters.',
+            )]]);
+        }
+        $programs = $this->audiences->programs(trim($search), $after);
+        $more = count($programs) > 20;
+        $programs = array_slice($programs, 0, 20);
+        if (
+            $this->access->requirePermission('sis:portal:manage')->value !== $actor->value ||
+            $this->access->authenticatedUserId()->value !== $actor->value
+        ) {
+            throw new AccessDeniedException();
+        }
+        return ['items' => $programs, 'next_after' => $more ? end($programs)['id'] : null];
+    }
+
+    private function programDefinitions(ContentAudience $selection): array
+    {
+        $programs = $this->audiences->programDefinitions($selection->programs);
+        if (array_column($programs, 'id') !== $selection->programs) {
+            throw new ValidationException([['field' => 'audience_programs', 'message' => trans(
+                'Some selected programs are unavailable. Review the audience again.',
+            )]]);
+        }
+        return $programs;
+    }
+
+    private function roleDefinitions(ContentAudience $selection): array
     {
         $roles = $this->audiences->definitions($selection->roles);
         if (array_column($roles, 'id') !== $selection->roles) {
-            throw new ValidationException([['field' => 'audience_roles', 'message' => \Codefy\Framework\Helpers\trans(
+            throw new ValidationException([['field' => 'audience_roles', 'message' => trans(
                 'Some selected account roles are unavailable. Review the audience again.',
             )]]);
         }
@@ -372,19 +413,28 @@ final readonly class CampusContentService
     private function verifyAudience(PortalPost $post): void
     {
         $roles = $this->audiences->selected($post->id);
-        $selection = new \Domain\Portal\ValueObject\ContentAudience(
+        $programs = $this->audiences->selectedPrograms($post->id);
+        $selection = new ContentAudience(
             $this->campus->audience($post->id),
             $post->kind,
             array_column($roles, 'id'),
+            array_column($programs, 'id'),
         );
+        if ($this->programDefinitions($selection) !== $programs) {
+            throw new ConcurrentModificationException(trans(
+                'The selected programs changed. Save and review the audience again.',
+            ));
+        }
         if ($this->roleDefinitions($selection) !== $roles) {
-            throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+            throw new ConcurrentModificationException(trans(
                 'The selected account roles changed. Save and review the audience again.',
             ));
         }
     }
 
-    /** @param array<mixed> $audienceRoles */
+    /** @param array<mixed> $audienceRoles
+     * @param array<mixed> $audiencePrograms
+     */
     public function save(
         ?EntityId $id,
         string $kind,
@@ -395,6 +445,7 @@ final readonly class CampusContentService
         ?int $version,
         string $contentFormat = "plain",
         array $audienceRoles = [],
+        array $audiencePrograms = [],
     ): EntityId {
         $this->access->requirePermission("sis:portal:manage");
         if (
@@ -412,7 +463,7 @@ final readonly class CampusContentService
             }
         }
         PortalPost::requireWritableContent($content);
-        $selection = new \Domain\Portal\ValueObject\ContentAudience($audience, $kind, $audienceRoles);
+        $selection = new ContentAudience($audience, $kind, $audienceRoles, $audiencePrograms);
         return $this->transactions->run(function () use (
             $id,
             $kind,
@@ -426,6 +477,7 @@ final readonly class CampusContentService
         ): EntityId {
             $actor = $this->access->requirePermission("sis:portal:manage");
             $roles = $this->roleDefinitions($selection);
+            $programs = $this->programDefinitions($selection);
             if ($id === null) {
                 $post = $this->portal->create($kind, $code, $title, $content, $contentFormat);
                 $id = $post->id;
@@ -454,11 +506,13 @@ final readonly class CampusContentService
             }
             $this->campus->setAudience($id, $audience);
             $this->audiences->replace($id, $roles);
+            $this->audiences->replacePrograms($id, $programs);
             $this->authorize("edit", $post, $actor);
             $this->verifyAudience($post);
             if (
                 $this->posts->get($id) != $post || $this->campus->audience($id) !== $audience ||
-                $this->audiences->selected($id) !== $roles
+                $this->audiences->selected($id) !== $roles ||
+                $this->audiences->selectedPrograms($id) !== $programs
             ) {
                 throw new ConcurrentModificationException(
                     "Content changed while saving. Reopen it before editing.",

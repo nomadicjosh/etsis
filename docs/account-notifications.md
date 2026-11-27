@@ -83,3 +83,7 @@ role assignment controls access; other permissions or a student/faculty capabili
 you a recipient. A role change takes effect on the next server read or refresh. Your existing
 read/deletion state still applies to the same publication; no extra category or notification
 archive is added.
+
+### Program-scoped campus announcements
+
+The existing bell includes reviewed [program-targeted campus announcements](campus-announcements.md#selected-student-programs) when the signed-in account belongs to an active student with an active primary or secondary pursuit in any selected program. This is one shared notification list, with the same personal read/delete controls. Current membership, publication windows and enabled account links are checked by the server. Applications, closed pursuits and role permissions do not substitute for that program membership. Authoring choices stay in Campus content; this adds no notification category, recipient copies or preference setting.

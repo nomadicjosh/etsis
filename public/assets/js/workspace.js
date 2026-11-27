@@ -865,6 +865,7 @@
             if (section === 'portal') {
                 data.content_format = form.elements.content_format.value;
                 data.audience_roles = form.campusAudience.read(true);
+                data.audience_programs = form.campusAudience.readPrograms(true);
             }
             if (section === 'people' && !data.institutional_id) delete data.institutional_id;
             const saved = await request(definition.endpoint, 'POST', data);
@@ -1416,13 +1417,13 @@
         await operations.enhance(section, row, body, origin);
     }
 
-    async function campusContentForm(form, format = 'plain', selectedRoles = [], audienceMode = null) {
+    async function campusContentForm(form, format = 'plain', selectedRoles = [], audienceMode = null, selectedPrograms = []) {
         const code = form.elements.namedItem('code');
         const kind = form.elements.namedItem('kind');
         const content = form.elements.namedItem('content');
         const audience = form.elements.namedItem('audience');
         form.dataset.audienceMode = audienceMode || audience.value;
-        form.campusAudience = contentAudience.mount(form, selectedRoles);
+        form.campusAudience = contentAudience.mount(form, selectedRoles, selectedPrograms);
         const announcementHelp = node('p', { class: 'form-text', id: `${audience.id}-announcement-help` },
             config.notification_labels.announcement_publish_help);
         audience.after(announcementHelp);
@@ -1442,7 +1443,7 @@
         );
         form.elements.title.maxLength = 191;
         const update = () => {
-            announcementHelp.hidden = kind.value !== 'news' || !['campus', 'roles'].includes(audience.value);
+            announcementHelp.hidden = kind.value !== 'news' || !['campus', 'roles', 'programs'].includes(audience.value);
             form.querySelector(`label[for="${content.id}"]`).firstChild.textContent =
                 kind.value === 'link' ? 'HTTPS link ' : 'Content ';
             content.rows = kind.value === 'link' ? 3 : 12;
@@ -1477,7 +1478,7 @@
         if (!body.isConnected) return;
         form.elements.kind.disabled = true;
         form.elements.code.readOnly = true;
-        if (post.can_edit) { body.append(form); await campusContentForm(form, post.content_format, post.audience_roles || [], post.audience); }
+        if (post.can_edit) { body.append(form); await campusContentForm(form, post.content_format, post.audience_roles || [], post.audience, post.audience_programs || []); }
         if (!body.isConnected) return;
         form.append(
             node('p', { class: 'form-text' }, 'Saving an edit returns content to draft for review.'),
@@ -1494,6 +1495,7 @@
                         version: Number(post.version),
                         content_format: form.elements.content_format.value,
                         audience_roles: form.campusAudience.read(true),
+                        audience_programs: form.campusAudience.readPrograms(true),
                     });
                     if (!body.isConnected) return;
                     notify('Draft saved. Review it before publishing.');
@@ -1508,7 +1510,8 @@
             role: 'group',
             'aria-label': 'Content tasks',
         });
-        const draft = () => ({ ...formData(form, fields), audience_roles: form.campusAudience?.read() || [] });
+        const draft = () => ({ ...formData(form, fields), audience_roles: form.campusAudience?.read() || [],
+            audience_programs: form.campusAudience?.readPrograms() || [] });
         const baseline = JSON.stringify(draft());
         const changed = () => JSON.stringify(draft()) !== baseline;
         const hint = node('p', { class: 'form-text', role: 'status', hidden: true });

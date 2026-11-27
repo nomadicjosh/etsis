@@ -21,4 +21,18 @@ interface ContentAudienceRepository
 
     /** @param list<array{id:string,name:string}> $roles */
     public function replace(EntityId $post, array $roles): void;
+
+    /** @return list<array{id:string,name:string}> Program labels only, never student or pursuit lists. */
+    public function programs(string $search, ?EntityId $after = null): array;
+
+    /** @param list<string> $ids
+     * @return list<array{id:string,name:string}>
+     */
+    public function programDefinitions(array $ids): array;
+
+    /** @return list<array{id:string,name:string}> */
+    public function selectedPrograms(EntityId $post): array;
+
+    /** @param list<array{id:string,name:string}> $programs */
+    public function replacePrograms(EntityId $post, array $programs): void;
 }

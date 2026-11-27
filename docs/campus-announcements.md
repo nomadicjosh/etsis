@@ -1,10 +1,10 @@
 # Campus announcements
 
-Implemented November 23, 2026. Reviewed **campus news** now appears under **Campus announcements** in the notification bell on signed-in portal and staff pages. It uses the existing news content, author/publisher duties, approval receipts and publication windows. There is no separate announcement copy, recipient fan-out or second event store.
+Implemented November 23, 2026. Reviewed **campus news** appears in the shared notification bell on signed-in portal and staff pages. It uses the existing news content, author/publisher duties, approval receipts and publication windows. There is no separate announcement copy, recipient fan-out or second event store.
 
 ## Publish an announcement
 
-1. Open **Campus content**, create a **News update** and select **Signed-in campus** or **Selected account roles**. Signed-in campus includes applicants, students and staff; selected roles restrict reading to current role assignments, as described below.
+1. Open **Campus content**, create a **News update** and select **Signed-in campus**, **Selected account roles** or **Selected student programs**. Signed-in campus includes applicants, students and staff; the selected audiences use the current membership rules below.
 2. Save the draft and request review. A publisher with the existing content-management and publishing duties reviews and approves it. Authors with both duties can review their own saved drafts under the existing policy.
 3. Publish immediately or choose the existing publication start/end controls. Dates are evaluated on each server request: the start is inclusive and the end is exclusive. A scheduled announcement becomes available when readers next open or refresh the list. No publishing worker is required.
 
@@ -13,6 +13,22 @@ Public website news stays in the public news workflow and does not enter this pr
 Existing explicit campus publications remain their existing content facts. This reader creates no inferred historical approval, publication or read event for earlier records.
 
 Editing approved news returns it to draft. Its revised wording requires fresh approval before appearing again. Republishing creates a new content revision, so someone who read an earlier revision sees the revised announcement as unread. Archiving removes the item from this reader through the existing content workflow; it does not erase the original content or reading metadata.
+
+## Selected student programs
+
+Choose **Audience → Selected student programs** to address active students pursuing particular academic programs. **Find programs** searches program codes and titles; **Next programs** and **Previous programs** page through twenty labels. Select **one to ten programs**. The selector shows labels only, without student names, member counts, account grants or saved recipient lists.
+
+A reader must have an enabled sign-in account linked to the canonical person, an active student record, and an **active pursuit in any selected program**. Both primary and secondary pursuits qualify. A primary-program field alone, an application, an earlier closed pursuit or an account role does not qualify. Staff and Super accounts receive it only if they also meet this student/pursuit rule. These are current operational memberships, not a degree-progress or registration-eligibility certification.
+
+For example, selecting `ARTS-UG` addresses eligible students pursuing that broad program with any of its majors. It does not separately select English, History or a minor, and it does not restrict a catalog cohort. Selecting `ARTS-UG` and `SCI-UG` uses **either** program, rather than requiring both. Multiple matching pursuits still produce one announcement in the person's bell.
+
+Save the selected programs with the draft before requesting review. The publisher sees their saved codes/titles with the wording and publication window. The review proof binds the exact identities and labels. A missing or renamed program definition requires saving and reviewing the selection again before a new publication; an already published notice continues to match the same surviving program identity. A same-code/name replacement with a new identity does not adopt an earlier selection. Retained targets never widen into Signed-in campus when a program is removed.
+
+**Back to editor** restores the saved selection. Temporary switches between role/program/campus/public choices preserve each working selection in memory. Saving another audience clears the inactive target sets. Role and program audiences are separate choices; a role cannot substitute for a program, and their selections are not silently combined. Text pages and links cannot use program targeting; changing a new draft to either type requires an explicit new audience choice.
+
+The shared bell, campus-news reader, private content URL and announcement detail/read/delete paths all check current membership, before paging where applicable. Closing a pursuit, deactivating the student, disabling the account or changing its canonical person link removes access on a later read/refresh unless another active selected pursuit still qualifies. Existing read/deletion state belongs to the same account/publication; eligibility changes do not create a new historical notice or duplicate. Public news and public article routes exclude program-targeted news. No email, push, recipient fan-out, report, account grant or academic decision is created.
+
+Program directory labels require the existing content-management duty; approval keeps the independent publishing duty. Current student membership grants reading, not authoring or program-management authority. The new `20261127000002_CreateSisPortalAudiencePrograms` migration adds a ULID target table with a unique post/program pair and content foreign key. Program identity/name references remain after definition removal, so there is intentionally no program foreign key. Existing role targets, publications, academic/financial records, journals and receipts are preserved. Apply this migration before using the new authoring/reader code. Five-dialect schema compilation and populated SQLite workflows supplement read-only native PostgreSQL probes; remaining native-engine/concurrency acceptance stays open.
 
 ## Selected account roles
 
@@ -52,7 +68,7 @@ has been removed. Revising its targets returns the content to draft and needs fr
 
 This is a current audience for reviewed news, not a delivery list, legal acknowledgement or
 notification archive. It does not grant roles, send email, create recipient copies or infer
-academic status. Further program/department audiences and external delivery remain separate
+academic status. Further department/component audiences and external delivery remain separate
 roadmap work. The original public and signed-in campus audiences remain available.
 
 ## Read and return

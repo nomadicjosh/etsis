@@ -11231,3 +11231,71 @@ msgstr ""
 #: resources/views/backend/workspace/history-check-labels.php:29
 msgid "This meeting plan is unavailable. Reopen the section after your access or its records have been reviewed."
 msgstr ""
+
+#: src/Domain/Portal/ValueObject/ContentAudience.php:69
+msgid "Choose one to ten distinct programs for program-targeted news, or clear the programs for another audience."
+msgstr ""
+
+#: src/Domain/Portal/Service/CampusContentService.php:375
+msgid "Search program codes or titles using up to eighty characters."
+msgstr ""
+
+#: src/Domain/Portal/Service/CampusContentService.php:395
+msgid "Some selected programs are unavailable. Review the audience again."
+msgstr ""
+
+#: src/Domain/Portal/Service/CampusContentService.php:424
+msgid "The selected programs changed. Save and review the audience again."
+msgstr ""
+
+#: src/Application/Http/Controller/SisPortalEditorController.php:118
+msgid "Choose programs as a list of program references."
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:8
+msgid "Selected student programs"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:9
+msgid "Choose up to ten programs. Active students need an active pursuit in any selected program, including a secondary pursuit, and an enabled linked account. Applications, closed pursuits and account roles do not qualify. Current membership is checked when reading."
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:14
+msgid "Search program codes or titles"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:16
+msgid "Available programs"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:18
+msgid "Remove program: {program}"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:19
+msgid "Next programs"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:21
+msgid "Loading programs…"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:22
+msgid "Programs could not load. Use Find programs to try again."
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:24
+msgid "No programs selected."
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:25
+msgid "Select one to ten programs before saving."
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:26
+msgid "Audience programs need review"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:27
+msgid "Publish this saved news for active students with an active pursuit in any selected program and an enabled linked account. Other accounts cannot read it through the bell, campus news or a direct link."
+msgstr ""

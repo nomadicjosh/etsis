@@ -163,3 +163,76 @@ if (
 ) {
     throw new RuntimeException('Role removal left a private content bypass or changed business history.');
 }
+
+// Program audiences use canonical active student pursuits through the same private routes.
+$sis->access->staff = true;
+$program = $sis->sql->one('sis_programs', ['id' => $sis->program->value]);
+$directory = $request('/sis/portal/audience-programs/?search=' . rawurlencode($program['code']));
+$labels = json_decode((string) $directory->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $directory->getStatusCode() !== 200 || $labels['items'] !== [[
+    'id' => $program['id'], 'name' => $program['code'] . ' · ' . $program['title'],
+    ]]
+) {
+    throw new RuntimeException('The program directory lost its bounded label-only contract.');
+}
+$programPayload = ['kind' => 'news', 'code' => 'fictional-program-announcement',
+    'title' => 'Fictional program notice', 'content' => 'Fictional program-scoped wording.',
+    'audience' => 'programs', 'audience_programs' => [$program['id']], 'content_format' => 'plain'];
+foreach ([null, 'not-a-list', []] as $invalidPrograms) {
+    if (
+        $teachingPost('/sis/portal/editor/', [...$programPayload, 'audience_programs' => $invalidPrograms])
+        ->getStatusCode() !== 422
+    ) {
+        throw new RuntimeException('An untyped or empty program audience reached storage.');
+    }
+}
+$unsafe = $app->router->match($get->withMethod('POST')
+    ->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/portal/editor/'))
+    ->withHeader('Accept', 'application/json')->withParsedBody($programPayload));
+if ($unsafe->getStatusCode() !== 403) {
+    throw new RuntimeException('Program-targeted authoring bypassed framework CSRF.');
+}
+$saved = $teachingPost('/sis/portal/editor/', $programPayload);
+if ($saved->getStatusCode() !== 201) {
+    throw new RuntimeException('The program audience save route rejected its current contract.');
+}
+$programPost = new \Domain\Shared\ValueObject\EntityId(json_decode((string) $saved->getBody(), true)['id']);
+$review = $content->review($programPost, 'approve', $content->get($programPost)['revision'], $window, null);
+$content->confirm(
+    $programPost,
+    new \Domain\Shared\ValueObject\EntityId($review['operation_id']),
+    'approve',
+    $review['revision'],
+    $window,
+    null,
+    $review['review_token']
+);
+$programReader = $sis->user();
+$programStudent = $sis->student($programReader);
+$programFacts = $sis->sql->rows('sis_history_events');
+$sis->access->actor = $programReader;
+$sis->access->staff = false;
+$sis->access->grants = [];
+if (
+    $request('/sis/portal/audience-programs/')->getStatusCode() !== 403
+    || $request('/sis/portal/content/fictional-program-announcement/')->getStatusCode() !== 200
+    || $request($path . $programPost->value . '/')->getStatusCode() !== 200
+    || $teachingPost($path . $programPost->value . '/read/', ['revision' => 1])->getStatusCode() !== 200
+) {
+    throw new RuntimeException(
+        'Program authoring labels and private student reading lost their independent authority.'
+    );
+}
+// A fictional projection change exercises current membership; no historical closure is invented.
+$sis->sql->update('sis_student_programs', ['status' => 'closed'], ['student_id' => $programStudent->id->value]);
+$available = json_decode((string) $request($path . '?include_read=1')->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    in_array($programPost->value, array_column($available['items'], 'id'), true)
+    || $request($path . $programPost->value . '/')->getStatusCode() !== 404
+    || $request('/sis/portal/content/fictional-program-announcement/')->getStatusCode() !== 404
+    || $teachingPost($path . $programPost->value . '/delete/', ['revision' => 1])->getStatusCode() !== 404
+    || $programFacts !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Pursuit closure left a private reader bypass or altered protected history.');
+}

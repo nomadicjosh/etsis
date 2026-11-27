@@ -148,6 +148,7 @@ window.createCampusContentPublication = function (ui) {
                 action === "approve"
                     ? post.audience === "public"
                         ? "This content may be read without signing in once its publication window begins."
+                        : post.audience === 'programs' ? ui.audienceLabels.program_publish
                         : post.audience === 'roles' ? ui.audienceLabels.publish
                             : "Publish this saved content for signed-in campus users."
                     : action === "archive"

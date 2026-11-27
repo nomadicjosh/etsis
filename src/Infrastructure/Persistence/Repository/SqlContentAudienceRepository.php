@@ -74,4 +74,73 @@ final readonly class SqlContentAudienceRepository implements ContentAudienceRepo
                 'post_id' => $post->value, 'role_id' => $role['id'], 'role_name' => $role['name']]);
         }
     }
+
+    public function programs(string $search, ?EntityId $after = null): array
+    {
+        $q = $this->sql->quote(...);
+        $where = [];
+        $args = [];
+        if ($search !== '') {
+            $where[] = '(LOWER(' . $q('code') . ") LIKE ? ESCAPE '!' OR LOWER(" . $q('title') . ") LIKE ? ESCAPE '!')";
+            $value = '%' . strtr(mb_strtolower($search), ['!' => '!!', '%' => '!%', '_' => '!_']) . '%';
+            $args = [$value, $value];
+        }
+        if ($after !== null) {
+            $where[] = $q('id') . ' > ?';
+            $args[] = $after->value;
+        }
+        $rows = $this->sql->fetch('SELECT ' . $q('id') . ', ' . $q('code') . ', ' . $q('title') . ' FROM '
+            . $q('sis_programs') . ($where === [] ? '' : ' WHERE ' . implode(' AND ', $where))
+            . ' ORDER BY ' . $q('id') . ' ASC', $args, 21);
+        return array_map(self::programLabel(...), $rows);
+    }
+
+    public function programDefinitions(array $ids): array
+    {
+        if ($ids === []) {
+            return [];
+        }
+        if (count($ids) > 10) {
+            throw new \InvalidArgumentException('Use a bounded program selection.');
+        }
+        $q = $this->sql->quote(...);
+        $rows = $this->sql->fetch('SELECT ' . $q('id') . ', ' . $q('code') . ', ' . $q('title') . ' FROM '
+            . $q('sis_programs') . ' WHERE ' . $q('id') . ' IN ('
+            . implode(', ', array_fill(0, count($ids), '?')) . ') ORDER BY ' . $q('id') . ' ASC', $ids, 10);
+        return array_map(self::programLabel(...), $rows);
+    }
+
+    private static function programLabel(array $row): array
+    {
+        return ['id' => $row['id'], 'name' => $row['code'] . ' · ' . $row['title']];
+    }
+
+    public function selectedPrograms(EntityId $post): array
+    {
+        $q = $this->sql->quote(...);
+        $rows = $this->sql->fetch('SELECT ' . $q('program_id') . ' AS ' . $q('id') . ', '
+            . $q('program_name') . ' AS ' . $q('name') . ' FROM ' . $q('sis_portal_audience_programs')
+            . ' WHERE ' . $q('post_id') . ' = ? ORDER BY ' . $q('program_id') . ' ASC', [$post->value], 11);
+        if (count($rows) > 10) {
+            throw new \Domain\Shared\Exception\ConcurrentModificationException(
+                \Codefy\Framework\Helpers\trans('This audience needs review before publishing.'),
+            );
+        }
+        return $rows;
+    }
+
+    public function replacePrograms(EntityId $post, array $programs): void
+    {
+        if (count($programs) > 10) {
+            throw new \InvalidArgumentException('Use a bounded program selection.');
+        }
+        $this->sql->lock('sis_portal_posts', $post->value, 'id');
+        $q = $this->sql->quote(...);
+        $this->sql->execute('DELETE FROM ' . $q('sis_portal_audience_programs') . ' WHERE '
+            . $q('post_id') . ' = ?', [$post->value]);
+        foreach ($programs as $program) {
+            $this->sql->insert('sis_portal_audience_programs', ['id' => EntityId::generate()->value,
+                'post_id' => $post->value, 'program_id' => $program['id'], 'program_name' => $program['name']]);
+        }
+    }
 }

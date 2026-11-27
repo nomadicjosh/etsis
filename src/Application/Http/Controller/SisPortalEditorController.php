@@ -26,6 +26,15 @@ final readonly class SisPortalEditorController
         ));
     }
 
+    public function programs(ServerRequest $request): ResponseInterface
+    {
+        $f = new FormInput($request->getQueryParams());
+        return new JsonResponse($this->service->audiencePrograms(
+            $f->search('search', 80),
+            $f->optionalId('after'),
+        ));
+    }
+
     public function get(string $id): ResponseInterface
     {
         return new JsonResponse($this->service->get(new EntityId($id)));
@@ -103,6 +112,11 @@ final readonly class SisPortalEditorController
             throw new \Domain\Shared\Exception\ValidationException([['field' => 'audience_roles',
                 'message' => \Codefy\Framework\Helpers\trans('Choose account roles as a list of role references.')]]);
         }
+        $programs = is_array($data) && array_key_exists('audience_programs', $data) ? $data['audience_programs'] : [];
+        if (!is_array($programs)) {
+            throw new \Domain\Shared\Exception\ValidationException([['field' => 'audience_programs',
+                'message' => \Codefy\Framework\Helpers\trans('Choose programs as a list of program references.')]]);
+        }
         return new JsonResponse(
             [
                 "id" => $this->service->save(
@@ -115,6 +129,7 @@ final readonly class SisPortalEditorController
                     $f->optionalInteger("version"),
                     $f->optionalText("content_format", 8) ?? "plain",
                     $roles,
+                    $programs,
                 )->value,
                 "status" => "draft",
             ],
