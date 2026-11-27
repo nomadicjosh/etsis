@@ -11595,3 +11595,39 @@ msgstr ""
 #: src/Domain/User/Service/EmailVerificationService.php:347
 msgid "This verification link is unavailable. Sign in to the matching account or request a new link."
 msgstr ""
+
+#: resources/views/shared/notification-labels.php:32
+msgid "Registration window"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:33
+msgid "Course registration is open"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:34
+msgid "Find sections for this term"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:35
+msgid "Registration closes: {date}"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:36
+msgid "Review available sections and your registration readiness. Holds, prerequisites, section availability, course limits and fees still apply."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:40
+msgid "A verified published window appears automatically in active students’ notifications while it is open. This does not send email, reserve a seat or bypass registration eligibility."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationOpenService.php:106
+msgid "Use a complete registration-notice continuation."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationOpenService.php:167
+msgid "Use the displayed registration-notice revision."
+msgstr ""
+
+#: src/Application/Http/Controller/RegistrationOpenController.php:28
+msgid "Choose whether to include read registration notices."
+msgstr ""

@@ -15,6 +15,7 @@ window.createWorkspaceRegistration = function (ui) {
     const configNode = document.getElementById('workspace-config');
     const creditLabels = configNode ? JSON.parse(configNode.textContent).credit_policy_labels || {} : {};
     const creditText = (key, fallback) => creditLabels[key] || fallback;
+    const notificationLabels = configNode ? JSON.parse(configNode.textContent).notification_labels || {} : {};
     const openRegistration = (title, eyebrow) => {
         const body = node("div", { class: "registration-workbench" });
         openDrawer(title, eyebrow).append(body);
@@ -122,6 +123,7 @@ window.createWorkspaceRegistration = function (ui) {
             view++;
             body.replaceChildren(
                 node("h3", { class: "h5" }, saved.term.code),
+                node('p', { class: 'alert alert-info' }, notificationLabels.window_policy_help),
                 node(
                     "p",
                     { class: "form-text" },

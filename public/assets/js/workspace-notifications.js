@@ -138,6 +138,7 @@ window.createWorkspaceNotifications = function (ui) {
             const endpoints = ['admissions', 'academic', 'transcript', 'standing', 'registration', 'advising', 'enrollment']
                 .map(kind => `/portal/api/${kind}-updates/`);
             endpoints.push('/portal/api/announcements/');
+            endpoints.push('/portal/api/registration-open/');
             if (importLabels.notices) endpoints.push('/sis/imports/notices/');
             for (const endpoint of endpoints) {
                 try {

@@ -78,6 +78,18 @@ final readonly class RegistrationWindowService
         $this->authorize($actor);
         return $result;
     }
+    /** Internal minimized read; callers authorize their own audience before using the verified publication. */
+    public function publishedWindow(EntityId $term): ?array
+    {
+        $state = $this->state($term);
+        if ($state['head'] === null) {
+            return null;
+        }
+        return [
+            'definition' => $state['head']->event->payload()['definition'],
+            'reference' => $state['window']->reference,
+        ];
+    }
     public function review(
         EntityId $term,
         RegistrationWindow $window,

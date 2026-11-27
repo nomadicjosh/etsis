@@ -29,6 +29,18 @@ return [
     'feed_standing' => trans_html('Academic standing'),
     'feed_registration' => trans_html('Waitlist'),
     'feed_enrollment' => trans_html('Course registration'),
+    'feed_window' => trans_html('Registration window'),
+    'window_open' => trans_html('Course registration is open'),
+    'window_link' => trans_html('Find sections for this term'),
+    'window_closes' => trans_html('Registration closes: {date}'),
+    'window_help' => trans_html(
+        'Review available sections and your registration readiness. '
+        . 'Holds, prerequisites, section availability, course limits and fees still apply.'
+    ),
+    'window_policy_help' => trans_html(
+        'A verified published window appears automatically in active students’ notifications while it is open. '
+        . 'This does not send email, reserve a seat or bypass registration eligibility.'
+    ),
     'feed_advising' => trans_html('Advising'),
     'feed_announcement' => trans_html('Campus announcement'),
     'feed_feedback' => trans_html('Action feedback'),

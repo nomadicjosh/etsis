@@ -6,7 +6,7 @@ There are no empty category drawers to expand. Staff see their own personal noti
 staff duties, department membership or an advising relationship do not open another person's bell.
 
 The list combines accepted admissions, course-registration, waitlist, advising, final-grade,
-standing, transcript and import updates, available campus announcements and recent action feedback.
+standing, transcript and import updates, current registration openings, available campus announcements and recent action feedback.
 Each source keeps its existing account and source checks. A type with no available notices adds
 no heading or empty panel. Notification preferences remain under the person's workspace drawer
 or the portal's **Personal information** screen.
@@ -87,3 +87,18 @@ archive is added.
 ### Program-scoped campus announcements
 
 The existing bell includes reviewed [program-targeted campus announcements](campus-announcements.md#selected-student-programs) when the signed-in account belongs to an active student with an active primary or secondary pursuit in any selected program. This is one shared notification list, with the same personal read/delete controls. Current membership, publication windows and enabled account links are checked by the server. Applications, closed pursuits and role permissions do not substitute for that program membership. Authoring choices stay in Campus content; this adds no notification category, recipient copies or preference setting.
+
+
+## Registration is open
+
+A **Course registration is open** notice appears automatically in the existing bell for each currently open, verified published term registration window. It is available to an enabled account linked to a current active student with at least one active program pursuit. Multiple pursuits do not duplicate the same term notice. Staff, applications, role permissions and Super status do not substitute for that membership. A staff member who is also an active student sees their own available openings.
+
+The card shows the term label retained in the publication, the opening time and the closing deadline in the browser’s timezone. Its date in the combined list is the published window’s actual opening instant. Dates use exact UTC comparisons, including the opening and closing instant; the notice disappears after closing. Future windows, unapproved legacy setup and unavailable owner/student relationships stay silent. Publishing a changed policy provides a new revision; it can appear unread even if the earlier publication was read or deleted. An already open, genuinely published window can appear when this feature is installed or a student first qualifies: this is current availability, not a fabricated historical delivery.
+
+Use **Find sections for this term** to acknowledge the displayed revision and open **Course registration** with that term selected when it is present in the current term picker. A stale or unavailable publication stops acknowledgement and offers refresh instead of silently marking a newer notice. Ordinary modified-link navigation can open registration directly without acknowledging the notice. The notice never grants registration permission, reserves a seat, enrolls someone, approves a prerequisite or changes a charge. Holds, student activity, section web-registration choices, prerequisites, course limits, capacity and fee review still apply through normal registration readiness.
+
+Read notices stay in the combined list until deleted or the window is no longer current/open. **Delete notification** physically removes the personal read record and retains only a current-publication suppression marker, so the same shared window does not immediately reappear. It does not delete the term, publication or protected registration history. There is no notification archive or delivery history. Republished windows use their new identity/revision; old read/delete actions cannot suppress the new publication.
+
+The existing term registration-policy editor explains this automatic in-application behavior. It requires no new recipient queue, fan-out worker, email, push delivery or preference category. Available notices are evaluated on the bell’s ordinary refresh; the already open bell does not claim an instantaneous push. Query filtering applies enabled canonical ownership, active student/pursuit membership, open published windows and personal read/deletion state before the twenty-item page limit. A finite extra candidate detects another page, and every returned publication is checked against the protected journal and current projection. A changed or unavailable continuation requires refresh.
+
+Migration `20261127000005_CreateSisRegistrationOpenStates` adds current personal read and dismissal tables with ULID keys, owner/person/term uniqueness and cascade cleanup. It infers no prior reads or deliveries and changes no earlier event, enrollment, academic credit, balance or permission. Personal mutations use existing access/person/term locks, displayed publication revision, mandatory metadata audit and final owner/source/state checks; failures roll back state and audit together. Responses are private/no-store, browser mutations preserve framework CSRF, and debug collection stays suppressed. No browser storage holds notice data.

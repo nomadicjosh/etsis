@@ -2110,6 +2110,8 @@
             config.terms.map((item) => ({ id: item.id, label: item.code })),
             'All terms',
         );
+        const requestedRegistrationTerm = new URLSearchParams(location.search).get('term');
+        if (config.terms.some(item => item.id === requestedRegistrationTerm)) term.value = requestedRegistrationTerm;
         const query = control(form, 'q', 'Course code or title', 'search', {
             maxlength: 80,
             placeholder: 'Find a course',

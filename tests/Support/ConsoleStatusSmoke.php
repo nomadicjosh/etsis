@@ -54,6 +54,7 @@ try {
                 'check-withdrawn-ceus',
                 'check-website-publications',
                 'check-email-verification',
+                'check-registration-open',
                 'check-coursework-grade-policy',
                 'check-curriculum-components',
                 'check-enrollment-reinstatement',
@@ -268,6 +269,15 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/AnnouncementBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-registration-open') {
+            require_once __DIR__ . '/RegistrationOpenFixture.php';
+            $registrationOpenFixture = new \Tests\Support\RegistrationOpenFixture();
+            $httpSis = $registrationOpenFixture->sis;
+            $registrationOpenFixture->publish();
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/RegistrationOpenBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-program-discovery') {
             $kernel->bootstrap();

@@ -69,6 +69,12 @@ return static function (Psr7Router $router): void {
     $router->post('/portal/api/enrollment-updates/{id}/read/', [$enrollmentUpdates, 'read']);
     $router->post('/portal/api/enrollment-updates/{id}/delete/', [$enrollmentUpdates, 'delete']);
     $registrationUpdates = \Application\Http\Controller\RegistrationUpdatesController::class;
+    $registrationOpen = \Application\Http\Controller\RegistrationOpenController::class;
+    $router->get('/portal/api/registration-open/', [$registrationOpen, 'page'])->name('portal.registration-open.page');
+    $router->post('/portal/api/registration-open/{id}/read/', [$registrationOpen, 'read'])
+        ->name('portal.registration-open.read');
+    $router->post('/portal/api/registration-open/{id}/delete/', [$registrationOpen, 'delete'])
+        ->name('portal.registration-open.delete');
     $router->get('/portal/api/registration-updates/', [$registrationUpdates, 'page']);
     $router->post('/portal/api/registration-updates/{id}/read/', [$registrationUpdates, 'read']);
     $router->post('/portal/api/registration-updates/{id}/delete/', [$registrationUpdates, 'delete']);

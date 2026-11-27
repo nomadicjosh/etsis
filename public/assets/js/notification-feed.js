@@ -7,6 +7,7 @@ window.createNotificationFeed = ({ node, request, labels, importLabels = {}, not
     const definitions = ['admissions', 'academic', 'transcript', 'standing', 'registration', 'advising', 'enrollment']
         .map(kind => ({ kind, endpoint: `/portal/api/${kind}-updates/` }));
     definitions.push({ kind: 'announcement', endpoint: '/portal/api/announcements/' });
+    definitions.push({ kind: 'window', endpoint: '/portal/api/registration-open/' });
     if (importLabels.notices) definitions.push({ kind: 'import', endpoint: '/sis/imports/notices/' });
     let root, status, toolbar, content, paging, reader = null, disposed = false, serial = 0, busy = false;
     let sources = [], pages = [], pageIndex = 0, selected = null, unavailable = false;
@@ -109,15 +110,21 @@ window.createNotificationFeed = ({ node, request, labels, importLabels = {}, not
                 : kind === 'import' ? [String(item.target || '').replaceAll('_', ' '), `${item.processed} / ${item.total}`]
                 : [item.course_code, item.section_code, item.term_code, item.course_title];
             if (context.some(Boolean)) card.append(node('p', { class: 'text-break mb-2' }, context.filter(Boolean).join(' · ')));
+            if (kind === 'window') {
+                card.append(node('p', { class: 'text-break mb-2' }, text('window_help')));
+                if (Number.isFinite(Date.parse(item.closes_at))) card.append(node('p', { class: 'form-text mb-2' },
+                    text('window_closes').replace('{date}', new Date(item.closes_at).toLocaleString())));
+            }
             if (time(row) !== null) card.append(node('time', { class: 'form-text d-block mb-2',
                 datetime: new Date(time(row)).toISOString() }, new Date(time(row)).toLocaleString()));
             const actions = node('div', { class: 'd-flex flex-wrap gap-2' });
             if (!['feedback', 'import'].includes(kind)) {
                 const label = kind === 'announcement' ? text('feed_open_announcement') : text(`${kind}_link`);
-                if (['registration', 'enrollment', 'admissions'].includes(kind)) {
+                if (['registration', 'enrollment', 'admissions', 'window'].includes(kind)) {
                     actions.append(node('a', { class: 'btn btn-sm btn-outline-secondary',
                         href: kind === 'admissions' ? `/portal/admissions-updates/?update=${encodeURIComponent(item.id)}`
-                            : '/portal/student/registration/', onclick: event => {
+                            : kind === 'window' ? `/portal/student/registration/?term=${encodeURIComponent(item.id)}`
+                                : '/portal/student/registration/', onclick: event => {
                             if (event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button > 0) return;
                             event.preventDefault(); if (!busy) void open(row);
                         } }, icon('arrow-right'), label));
@@ -186,7 +193,7 @@ window.createNotificationFeed = ({ node, request, labels, importLabels = {}, not
         finally { if (active(turn)) controls(false); }
     }
     async function open(row) {
-        if (['registration', 'enrollment', 'admissions'].includes(row.kind)) {
+        if (['registration', 'enrollment', 'admissions', 'window'].includes(row.kind)) {
             const turn = ++serial; controls(true);
             try {
                 if (row.item.unread) await request(`${definitions.find(source => source.kind === row.kind).endpoint}${encodeURIComponent(row.item.id)}/read/`,
@@ -194,7 +201,9 @@ window.createNotificationFeed = ({ node, request, labels, importLabels = {}, not
                 if (!active(turn)) return;
                 changed();
                 window.location.assign(row.kind === 'admissions'
-                    ? `/portal/admissions-updates/?update=${encodeURIComponent(row.item.id)}` : '/portal/student/registration/');
+                    ? `/portal/admissions-updates/?update=${encodeURIComponent(row.item.id)}`
+                    : row.kind === 'window' ? `/portal/student/registration/?term=${encodeURIComponent(row.item.id)}`
+                        : '/portal/student/registration/');
             } catch (error) { if (active(turn)) fail(error); }
             finally { if (active(turn)) controls(false); }
             return;

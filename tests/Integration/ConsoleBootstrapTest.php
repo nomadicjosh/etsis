@@ -9,6 +9,15 @@ use Symfony\Component\Process\Process;
 
 final class ConsoleBootstrapTest extends TestCase
 {
+    public function testRegistrationOpeningNoticesUseActualOwnerProvidersPrivateRoutesAndCsrf(): void
+    {
+        $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-registration-open']);
+        $process->setTimeout(15);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testEmailVerificationUsesActualPrivateRoutesCsrfProvidersAndBoundedConsoleWorkers(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
