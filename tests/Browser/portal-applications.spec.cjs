@@ -22,14 +22,19 @@ async function fixture(page, { applications = [
     row(first, receipt, 'DIP.ART', 'Studio Arts', 'accepted'),
     row(second, otherReceipt, 'BS.SCI', 'Applied Science', 'matriculated'),
     row(direct, null, 'BA.HIST', 'History'),
-], answer = null, refresh = null, education = null, nextSteps = null, profileRequests = null } = {}) {
+], answer = null, refresh = null, education = null, nextSteps = null, profileRequests = null, verification = null } = {}) {
     const reads = [], writes = [], errors = [], overviewReads = [], statusReads = [];
     const me = { person: { id: person }, applications, students: [], contact: {}, accounts: [], news: [] };
     page.on('pageerror', error => errors.push(error.message));
     await page.route(/\/(?:portal\/api|sis\/(?:forms|form-submissions))\//, async route => {
         const req = route.request(), path = new URL(req.url()).pathname;
         let json = {};
+        if (path.startsWith('/portal/api/email-verification/') && verification) return verification(route);
         if (path === '/portal/api/me/') { overviewReads.push(path); json = me; }
+        else if (/^\/portal\/api\/(?:[a-z]+-updates|announcements)\/$/.test(path)) json = { items: [], next: null };
+        else if (path === '/portal/api/notification-preferences/') json = {
+            preferences: { sound: false, sound_id: 'tone', keep_visible: false }, revision: 0, person_id: person, own: true,
+        };
         else if (/^\/portal\/api\/applications\/[^/]+\/next-steps\/$/.test(path)) {
             if (nextSteps) return nextSteps(route);
             json = { office: '', next_step: '', items: [] };
@@ -73,7 +78,7 @@ async function fixture(page, { applications = [
         } else throw new Error(`Unexpected request: ${path}`);
         await route.fulfill({ json, headers: { 'Cache-Control': 'private, no-store' } });
     });
-    await page.goto('/portal/apply/');
+    await page.goto(`/portal/apply/${verification ? '?verify=1' : ''}`);
     await expect(page.getByRole('heading', { name: 'Make this path your own' })).toBeVisible();
     return { reads, writes, errors, overviewReads, statusReads };
 }
@@ -418,4 +423,48 @@ test('identity follow-up beside an application preserves new answers and sends o
     await page.setViewportSize({ width: 320, height: 1000 }); await accessible(page);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
+});
+
+
+test('optional email verification preserves an application draft across explicit confirmation in another tab', async ({ page, context }) => {
+    let verified = false;
+    const calls = [];
+    const verification = async route => {
+        const request = route.request();
+        const path = new URL(request.url()).pathname;
+        if (request.method() === 'POST') {
+            calls.push(JSON.parse(new URLSearchParams(request.postData()).get('_workspace_json')));
+            expect(request.headers()['x-csrf-token']).toBe('fictional-test-token');
+            verified = true;
+        }
+        await route.fulfill({ json: { verified, required: true, delivery_enabled: true,
+            destination_hint: 'f…@example.invalid', version: 1, state: verified ? 'verified' : 'sent', can_request: false } });
+    };
+    await context.route('**/portal/api/email-verification/**', verification);
+    const f = await fixture(page, { verification });
+    await openNewApplication(page);
+    const panel = page.getByRole('region', { name: 'Verify your sign-in email', exact: true });
+    const open = panel.getByRole('link', { name: 'Open email verification in a new tab', exact: true });
+    await expect(open).toHaveAttribute('target', '_blank');
+    const popup = page.waitForEvent('popup');
+    await open.click();
+    const confirmation = await popup;
+    const privateToken = 'b'.repeat(64);
+    await confirmation.goto('/portal/verify-email/#' + privateToken);
+    await confirmation.getByRole('button', { name: 'Confirm my email', exact: true }).click();
+    await expect(confirmation.getByRole('region', { name: 'Verify your sign-in email', exact: true }))
+        .toContainText('Your current sign-in email is verified.');
+    await page.bringToFront();
+    await panel.getByRole('button', { name: 'Refresh verification status', exact: true }).click();
+    await expect(panel).toContainText('Your current sign-in email is verified.');
+    await expect(page.getByRole('textbox', { name: 'New application note', exact: true }))
+        .toHaveValue('Unsaved fictional new answer.');
+    expect(calls).toEqual([{ token: privateToken }]);
+    await page.getByRole('button', { name: 'Review answers', exact: true }).click();
+    await page.getByRole('button', { name: 'Submit application', exact: true }).click();
+    await expect.poll(() => f.writes.length).toBe(1);
+    expect(f.writes[0].answers).toEqual({ new_note: 'Unsaved fictional new answer.' });
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+    await confirmation.close();
 });

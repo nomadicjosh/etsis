@@ -152,6 +152,15 @@ return static function (Psr7Router $router): void {
 
     /** @var Psr7Router&Mappable $router */
 
+    $verification = \Application\Http\Controller\EmailVerificationController::class;
+    $router->get('/portal/verify-email/', [$verification, 'page'])->name('portal.email_verification');
+    $router->get('/portal/api/email-verification/', [$verification, 'status'])
+        ->name('portal.email_verification.status');
+    $router->post('/portal/api/email-verification/request/', [$verification, 'request'])
+        ->name('portal.email_verification.request')->middleware(['rate.limiter']);
+    $router->post('/portal/api/email-verification/confirm/', [$verification, 'confirm'])
+        ->name('portal.email_verification.confirm')->middleware(['rate.limiter']);
+
     $moodle = \Application\Http\Controller\PortalMoodleController::class;
     $router->map(["GET"], "/portal/moodle/", [$moodle, "page"])->name("portal.moodle");
     $router->map(["POST"], "/portal/moodle/launch/", [$moodle, "launch"])->name("portal.moodle.launch");

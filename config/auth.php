@@ -45,6 +45,11 @@ return [
     'redirect_guests_to' => sprintf('/%s/', env(key: 'AUTH_LOGIN_ROUTE', default: 'login')),
 
     'password_min_length' => 26,
+    // Current sign-in email control for new owner application submissions; never an identity/admission decision.
+    'application_email_verification_required' => env(
+        key: 'SIS_APPLICATION_EMAIL_VERIFICATION_REQUIRED',
+        default: false
+    ),
 
     'username_min_length' => 6,
 

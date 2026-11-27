@@ -73,11 +73,14 @@ final class Kernel extends ConsoleKernel
     {
         if ($this->codefy->configContainer->getConfigKey('sis.mail_enabled', false) === true) {
             $schedule->command('sis:accounts:send-setup --apply')->everyMinute()->onlyOneInstance();
+            $schedule->command('sis:accounts:email-verification --send --apply --limit=10')
+                ->everyMinute()->onlyOneInstance();
             $schedule->command('sis:communications:send --apply --limit=10')->everyMinute()->onlyOneInstance();
         }
         $schedule->command('sis:admissions:documents --apply --limit=1')->everyMinute()->onlyOneInstance();
         $schedule->command('sis:reports:prune --apply --limit=50')->hourly()->onlyOneInstance();
         $schedule->command('sis:accounts:prune-setup --apply --limit=50')->hourly()->onlyOneInstance();
+        $schedule->command('sis:accounts:email-verification --prune --apply --limit=50')->hourly()->onlyOneInstance();
         $schedule->command('sis:website-forms:subscribe --apply --limit=1')->everyMinute()->onlyOneInstance();
         $schedule->command('sis:website-forms:prune --apply --limit=100')->hourly()->onlyOneInstance();
         $schedule->command('sis:reports:export --apply --limit=1')->everyMinute()->onlyOneInstance();

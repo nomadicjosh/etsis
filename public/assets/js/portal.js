@@ -682,6 +682,10 @@
             );
         });
         container.append(surface('Stay connected', form));
+        const verificationLabels = config.email_verification_labels;
+        container.append(surface(verificationLabels.title, el('p', {}, verificationLabels.help),
+            el('a', { class: 'btn campus-button-outline', href: '/portal/verify-email/', target: '_blank', rel: 'noopener' },
+                icon('envelope-check'), verificationLabels.open)));
         container.append(
             el(
                 'p',
@@ -823,6 +827,11 @@
     }
 
     function applications(container) {
+        if (config.signedIn && config.email_verification_required) {
+            const verification = el('div'); container.append(verification);
+            window.createEmailVerification({ request, labels: config.email_verification_labels })
+                .mount(verification, { inline: true, loginUrl: config.loginUrl });
+        }
         const saved = el('div'); let documentGuards = [];
         let identityUpdates = null;
         const refreshApplications = () => {

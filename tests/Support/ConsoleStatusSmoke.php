@@ -53,6 +53,7 @@ try {
                 'check-earned-ceus',
                 'check-withdrawn-ceus',
                 'check-website-publications',
+                'check-email-verification',
                 'check-coursework-grade-policy',
                 'check-curriculum-components',
                 'check-enrollment-reinstatement',
@@ -292,6 +293,14 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/StandingBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-email-verification') {
+            require_once __DIR__ . '/EmailVerificationFixture.php';
+            $emailFixture = new \Tests\Support\EmailVerificationFixture();
+            $httpSis = $emailFixture->sis;
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/EmailVerificationBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-website-publications') {
             $kernel->bootstrap();

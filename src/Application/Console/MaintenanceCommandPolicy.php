@@ -13,6 +13,12 @@ final class MaintenanceCommandPolicy
 
     public static function permits(InputInterface $input): bool
     {
+        if (
+            $input->getFirstArgument() === 'sis:accounts:email-verification'
+            && $input->hasParameterOption('--prune', true) && !$input->hasParameterOption('--send', true)
+        ) {
+            return true;
+        }
         if ($input->hasParameterOption(['--help', '-h'], true)) {
             return true;
         }

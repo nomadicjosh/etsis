@@ -34,7 +34,7 @@ The account form explains accepted domains before collecting details. Domain com
 
 Use real booleans and a list of domain strings. Explicit nulls, strings instead of booleans, unknown keys and invalid domain definitions stop public signup with a private temporary-unavailability response. They do not silently restore open signup or prevent existing sign-in. These are deployment settings, not an administrator drawer or a browser preference; deploy consistent configuration to every serving process and reload any retained configuration before testing changes. No existing account, person, event, role or email is converted or disabled.
 
-This policy controls eligibility to submit a public signup. It does not verify control of a mailbox, establish institutional identity, match or adopt an existing person, grant a role, create a student, or approve an application. The existing one-person/account transaction remains authoritative. Institutional identity matching, email verification and further distributed abuse acceptance remain separate work.
+This policy controls eligibility to submit a public signup. It does not verify control of a mailbox, establish institutional identity, match or adopt an existing person, grant a role, create a student, or approve an application. The existing one-person/account transaction remains authoritative. Optional [current-email verification before owner application submission](email-verification.md) is available separately. Institutional identity matching and further distributed abuse acceptance remain separate work.
 
 ### Signup responses and return paths
 

@@ -207,7 +207,8 @@ if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/lo
     $config->setConfigKey('portal', [
         'name' => 'Northstar', 'theme' => $theme, 'tagline' => 'Fictional campus fixture.',
     ]);
-    $config->setConfigKey('auth', ['login_route' => 'login', 'password_min_length' => 26, 'username_min_length' => 6]);
+    $config->setConfigKey('auth', ['login_route' => 'login', 'password_min_length' => 26, 'username_min_length' => 6,
+        'application_email_verification_required' => ($_GET['verify'] ?? '') === '1']);
     $gate = new class ($signedIn) implements \Codefy\Framework\Auth\Gate {
         public function __construct(private bool $signedIn)
         {
@@ -275,6 +276,8 @@ if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/lo
     } elseif ($path === '/portal/password-setup/') {
         $template = 'account-setup';
         $data += ['completed' => $_SERVER['REQUEST_METHOD'] === 'POST', 'error' => null];
+    } elseif ($path === '/portal/verify-email/') {
+        $template = 'email-verification';
     } elseif ($path === '/login/' || $path === '/register/') {
         $template = 'auth'; $data += ['mode' => $path === '/login/' ? 'login' : 'register',
             'continue' => true, 'signInFailed' => ($_GET['notice'] ?? '') === 'credentials',

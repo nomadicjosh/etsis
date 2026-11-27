@@ -18,6 +18,7 @@ final class MaintenanceCommandPolicyTest extends TestCase
             'sis:history:anchor --action=compare', 'sis:database:postgres --switch',
             'sis:projections:academic-dates --apply',
             'sis:accounts:prune-setup --apply --limit=50',
+            'sis:accounts:email-verification --prune --apply --limit=50',
             'migrate:status', 'migrate:up', 'migrate:rollback', 'schedule:list', 'route:list', 'sis:access:bootstrap',
             'sis:communications:send --help'] as $command
         ) {
@@ -25,6 +26,8 @@ final class MaintenanceCommandPolicyTest extends TestCase
         }
         foreach (
             ['sis:communications:send --apply', 'sis:accounts:send-setup --apply',
+            'sis:accounts:email-verification --send --apply',
+            'sis:accounts:email-verification --prune --send --apply',
             'sis:admissions:documents --apply', 'sis:reports:export --apply', 'sis:reports:prune --apply',
             'sis:moodle:sync', 'sis:moodle:provision', 'queue:run', 'schedule:run', 'migrate:fresh',
             'sis:comm:send --apply', 'sis:accounts:prune --apply', 'sis:communications:send -- --help'] as $command

@@ -33,6 +33,7 @@ final readonly class ApplicationSubmissionService
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private MessageCipher $cipher,
+        private \Domain\User\Service\OwnerEmailVerification $verification,
     ) {
     }
 
@@ -157,6 +158,10 @@ final readonly class ApplicationSubmissionService
                 $this->ledger->submissionReceipt($a, $submission, $actor);
                 return $id;
             }
+            $ownerSubmission = $this->authorization($person, $actor) === 'owner';
+            if ($ownerSubmission) {
+                $this->verification->requireForApplication($actor, $person);
+            }
             $this->lockCatalog($person, $program, $term, $actor);
             if ($form->academicLevelId !== null) {
                 $this->forms->lockLevel($form->academicLevelId);
@@ -206,6 +211,10 @@ final readonly class ApplicationSubmissionService
             );
             $this->audit->record($actor, "admissions.applied", $id);
             $this->audit->record($actor, "admissions.form_submitted", $id);
+            $this->recheck($person, $actor);
+            if ($ownerSubmission) {
+                $this->verification->requireForApplication($actor, $person);
+            }
             return $id;
         });
     }

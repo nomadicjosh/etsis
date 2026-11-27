@@ -24,6 +24,7 @@ use Qubus\ValueObjects\Web\EmailAddress;
 final class User extends EventSourcedAggregate implements AggregateRoot
 {
     private bool $signInEnabled = true;
+    private int $emailRevision = 0;
 
     private UserId $userId;
 
@@ -121,6 +122,11 @@ final class User extends EventSourcedAggregate implements AggregateRoot
     public function emailAddress(): EmailAddress
     {
         return $this->emailAddress;
+    }
+
+    public function emailRevision(): int
+    {
+        return $this->emailRevision;
     }
 
     public function role(): StringLiteral
@@ -235,6 +241,7 @@ final class User extends EventSourcedAggregate implements AggregateRoot
      */
     public function whenEmailAddressWasChanged(EmailAddressWasChanged $event): void
     {
+        $this->emailRevision++;
         $this->userId = $event->userId();
         $this->emailAddress = $event->emailAddress();
     }

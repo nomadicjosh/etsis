@@ -184,6 +184,7 @@ return [
         \Application\Console\Commands\ProcessAdmissionDocumentsCommand::class,
         \Application\Console\Commands\SendAccountSetupCommand::class,
         \Application\Console\Commands\PruneAccountSetupCommand::class,
+        \Application\Console\Commands\EmailVerificationCommand::class,
         \Application\Console\Commands\SendCampaignMessagesCommand::class,
         \Application\Console\Commands\BootstrapAccessCommand::class,
         \Application\Console\Commands\MoodleCheckCommand::class,

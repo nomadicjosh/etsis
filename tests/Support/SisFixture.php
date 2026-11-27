@@ -1500,6 +1500,7 @@ final class SisFixture
 
     public function applicationRevisionService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
+        ?\Domain\User\Service\OwnerEmailVerification $verification = null,
     ): \Domain\Admissions\Service\ApplicationRevisionService {
         return new \Domain\Admissions\Service\ApplicationRevisionService(
             $this->admissions,
@@ -1522,6 +1523,12 @@ final class SisFixture
             $audit ?? $this->audit,
             $this->dropCipher,
             $this->clock,
+            $verification ?? new class implements \Domain\User\Service\OwnerEmailVerification {
+                public function requireForApplication(EntityId $owner, EntityId $person): void
+                {
+                    // This fixture has not enabled the optional security policy.
+                }
+            },
         );
     }
     public function applicationRevisions(): \Domain\Admissions\Repository\ApplicationRevisionRepository
@@ -1543,6 +1550,7 @@ final class SisFixture
     public function submissionService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Admissions\Repository\AdmissionsRepository $repository = null,
+        ?\Domain\User\Service\OwnerEmailVerification $verification = null,
     ): \Domain\Admissions\Service\ApplicationSubmissionService {
         return new \Domain\Admissions\Service\ApplicationSubmissionService(
             $repository ?? $this->admissions,
@@ -1554,6 +1562,12 @@ final class SisFixture
             $this->transactions,
             $audit ?? $this->audit,
             $this->dropCipher,
+            $verification ?? new class implements \Domain\User\Service\OwnerEmailVerification {
+                public function requireForApplication(EntityId $owner, EntityId $person): void
+                {
+                    // This base fixture's institution has not enabled the optional security policy.
+                }
+            },
         );
     }
     /** Current-state fixture for an application predating tracked submission. */

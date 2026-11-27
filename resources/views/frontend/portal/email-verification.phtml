@@ -1,0 +1,27 @@
+<?php
+
+use function Codefy\Framework\Helpers\trans_html;
+
+$labels = require dirname(__DIR__, 2) . '/shared/email-verification-labels.php';
+?>
+<section class="campus-container campus-auth" aria-labelledby="email-verification-title">
+    <div class="campus-auth-intro">
+        <h1 id="email-verification-title"><?= trans_html('Your campus account') ?></h1>
+        <p class="campus-lead"><?= trans_html('Confirm the email used to sign in to your campus account.') ?></p>
+    </div>
+    <div class="campus-surface campus-auth-form">
+        <form id="email-verification-csrf" hidden>
+            <?= $csrfMarkup ?? csrf_field() ?>
+        </form>
+        <div id="email-verification" data-signed-in="<?= $signedIn ? '1' : '0' ?>">
+            <p role="status"><?= trans_html('Checking your email verification…') ?></p>
+        </div>
+        <noscript>
+            <p><?= $labels['javascript'] ?></p>
+        </noscript>
+    </div>
+</section>
+<script id="email-verification-config" type="application/json"><?= json_encode([
+    'labels' => $labels, 'login_url' => $loginUrl,
+    'csrf_header' => \Codefy\Framework\Helpers\config('csrf.header', 'X-CSRF-Token'),
+], JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR) ?></script>

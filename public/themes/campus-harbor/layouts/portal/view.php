@@ -36,7 +36,7 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
     <head>
         <meta charset="<?=Codefy::$PHP->configContainer->string('app.charset');?>" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="referrer" content="same-origin" />
+        <meta name="referrer" content="<?= $esc($referrerPolicy ?? 'same-origin') ?>" />
         <meta content="noindex,nofollow" name="robots">
         <title><?= $esc($title) ?> · <?= $esc($portalName) ?></title>
         <link rel="icon" href="/assets/images/workspace-mark.svg" type="image/svg+xml" />
@@ -63,6 +63,7 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
         <script defer src="/assets/js/site-navigation.js"></script>
         <script defer src="/assets/js/review-guidance.js"></script>
         <script defer src="/assets/js/application-form.js"></script>
+        <script defer src="/assets/js/email-verification.js"></script>
         <script defer src="/assets/js/application-revisions.js"></script>
         <script id="degree-eligibility-labels" type="application/json"><?= json_encode(
             require dirname(__DIR__, 5) . '/resources/views/shared/degree-eligibility-labels.php',

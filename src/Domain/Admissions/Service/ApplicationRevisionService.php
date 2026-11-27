@@ -46,6 +46,7 @@ final readonly class ApplicationRevisionService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private Clock $clock,
+        private \Domain\User\Service\OwnerEmailVerification $verification,
     ) {
     }
 
@@ -220,6 +221,9 @@ final readonly class ApplicationRevisionService
                 $this->sameActor($a, $actor, $mine, true);
                 return $receipt;
             }
+            if ($mine && $p['action'] === 'submit') {
+                $this->verification->requireForApplication($actor, $a->personId);
+            }
             $this->policy->lock();
             $state = $this->ledger->revisionState($a);
             $pending = $this->revisions->pending($a->id);
@@ -350,6 +354,9 @@ final readonly class ApplicationRevisionService
                 $a->id,
             );
             $this->sameActor($a, $actor, $mine, true);
+            if ($mine && $p['action'] === 'submit') {
+                $this->verification->requireForApplication($actor, $a->personId);
+            }
             return $result;
         });
     }

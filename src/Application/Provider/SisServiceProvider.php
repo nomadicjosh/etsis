@@ -46,6 +46,12 @@ final class SisServiceProvider extends CodefyServiceProvider
             \Domain\Audit\Repository\ActorDirectory::class => \Infrastructure\Persistence\SqlActorDirectory::class,
             \Domain\Person\Repository\AccountSetupRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlAccountSetupRepository::class,
+            \Domain\User\Repository\EmailVerificationRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlEmailVerificationRepository::class,
+            \Domain\User\Service\EmailVerificationPolicy::class =>
+                \Infrastructure\Security\ConfiguredEmailVerificationPolicy::class,
+            \Domain\User\Service\OwnerEmailVerification::class =>
+                \Domain\User\Service\EmailVerificationService::class,
             \Domain\Catalog\Repository\SpecializationPolicyRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlSpecializationPolicyRepository::class,
             \Domain\Catalog\Repository\ProgramSpecializationRepository::class =>

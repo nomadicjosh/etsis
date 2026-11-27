@@ -11443,3 +11443,155 @@ msgstr ""
 #: src/Domain/WebsiteForms/Service/WebsiteFormInboxService.php:307
 msgid "The inquiry or assignment changed. Reload it before saving."
 msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:8
+msgid "Verify your sign-in email"
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:9
+msgid "Confirm that you control the current sign-in email for this account. This does not verify your identity or decide admission."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:13
+msgid "The institution requires email verification before you submit or resubmit your own application."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:17
+msgid "Email verification is optional under the current application policy."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:18
+msgid "Checking your email verification…"
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:19
+msgid "Verification destination"
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:20
+msgid "Request a private verification link for your current sign-in email."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:21
+msgid "Your link is queued for background delivery. Check your email, then open the link while signed in to this account."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:25
+msgid "Delivery is in progress. Check your email for the private link."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:26
+msgid "The verification message was sent. Open its link while signed in to this account."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:27
+msgid "Delivery could not be confirmed. Check your email or explicitly request a new link after the cooldown."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:31
+msgid "The earlier link expired. Request a new link to continue."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:32
+msgid "Your current sign-in email is verified."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:33
+msgid "Email delivery is currently disabled. Contact the institution for help."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:34
+msgid "Wait at least one minute between new verification links, then refresh the status."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:35
+msgid "Send verification link"
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:36
+msgid "Refresh verification status"
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:37
+msgid "Confirm my email"
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:38
+msgid "Select Confirm my email to use the private link. Opening this page alone does not verify an address."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:42
+msgid "Links expire after 30 minutes. A new link replaces the earlier one."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:43
+msgid "Requesting your verification link…"
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:44
+msgid "Confirming your email…"
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:45
+msgid "Verification could not be completed. Refresh its status before trying again. Keep your application tab open."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:49
+msgid "This link is unavailable. Sign in to its matching account or request a new link."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:50
+msgid "Sign in, then reopen the private link from your email. The link is kept only in this page’s memory."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:54
+msgid "Continue to sign in"
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:55
+msgid "Open email verification in a new tab"
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:56
+msgid "Go to applications"
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:57
+msgid "Keep your original application tab open to preserve unsaved answers. Refresh verification there after confirming your email."
+msgstr ""
+
+#: resources/views/shared/email-verification-labels.php:61
+msgid "Enable JavaScript to use the private email link. It is never sent in a URL or saved in browser storage."
+msgstr ""
+
+#: resources/views/frontend/portal/email-verification.phtml:9
+msgid "Your campus account"
+msgstr ""
+
+#: resources/views/frontend/portal/email-verification.phtml:10
+msgid "Confirm the email used to sign in to your campus account."
+msgstr ""
+
+#: src/Domain/User/Service/EmailVerificationService.php:178
+msgid "Verify your current sign-in email before submitting your application."
+msgstr ""
+
+#: src/Domain/User/Service/EmailVerificationService.php:212
+msgid "Email verification is unavailable or a link was requested less than a minute ago."
+msgstr ""
+
+#: src/Domain/User/Service/EmailVerificationService.php:224
+msgid "Confirm your current campus sign-in email within 30 minutes:"
+msgstr ""
+
+#: src/Domain/User/Service/EmailVerificationService.php:225
+msgid "If you did not request this email, ignore it. Do not share this link."
+msgstr ""
+
+#: src/Domain/User/Service/EmailVerificationService.php:320
+msgid "Verify your campus email"
+msgstr ""
+
+#: src/Domain/User/Service/EmailVerificationService.php:347
+msgid "This verification link is unavailable. Sign in to the matching account or request a new link."
+msgstr ""

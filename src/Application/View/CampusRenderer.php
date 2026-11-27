@@ -44,7 +44,7 @@ final readonly class CampusRenderer
             !in_array(
                 $template,
                 ["home", "catalog", "news", "article", "workspace", "not-found", "auth",
-                    "moodle", "account-setup", "events", "programs", "program"],
+                    "moodle", "account-setup", "email-verification", "events", "programs", "program"],
                 true,
             )
         ) {
@@ -75,6 +75,10 @@ final readonly class CampusRenderer
             "loginUrl" => $this->loginUrl(),
             "passwordLength" => $this->config->integer("auth.password_min_length", 26),
             "usernameLength" => $this->config->integer("auth.username_min_length", 6),
+            'emailVerificationRequired' => $this->config->getConfigKey(
+                'auth.application_email_verification_required',
+                false
+            ) !== false,
         ];
         $loader = new NativeLoader(["framework" => $root . "/resources/views"]);
         $body = $loader->render("framework::frontend/portal/" . $template, $data);
@@ -98,11 +102,12 @@ final readonly class CampusRenderer
             "loginUrl" => $data["loginUrl"],
             "csrfMarkup" => $data["csrfMarkup"] ?? null,
             'siteNavigation' => $siteNavigation,
+            'referrerPolicy' => $template === 'email-verification' ? 'no-referrer' : 'same-origin',
         ]);
         return new HtmlResponse($html, 200, [
             "Cache-Control" => "private, no-store, max-age=0",
             "X-Content-Type-Options" => "nosniff",
-            "Referrer-Policy" => "same-origin",
+            "Referrer-Policy" => $template === 'email-verification' ? 'no-referrer' : 'same-origin',
             "Content-Security-Policy" =>
                 "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; " .
                 "img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; " .
