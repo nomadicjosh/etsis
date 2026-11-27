@@ -37,4 +37,15 @@ final readonly class AdmissionUpdatesController
             FormInput::from($request)->integer('revision', 1)
         ));
     }
+    public function detail(string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->detail(new EntityId($id)));
+    }
+    public function delete(ServerRequest $request, string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->delete(
+            new EntityId($id),
+            FormInput::from($request)->integer('revision', 1)
+        ));
+    }
 }

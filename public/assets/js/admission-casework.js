@@ -17,10 +17,10 @@
         return result;
     };
     let sequence = 0;
-    window.createAdmissionCasework = ({ node, request, task, notify }) => {
-        const button = (text, run, style = 'btn-outline-primary') => node('button', {
+    window.createAdmissionCasework = ({ node, request, task, notify, labels = {}, changed = () => {} }) => {
+        const button = (text, run, style = 'btn-outline-primary', glyph = null) => node('button', {
             type: 'button', class: `btn ${style}`, onclick: event => task(run, event.currentTarget),
-        }, text);
+        }, ...(glyph ? [node('i', { class: `bi bi-${glyph}`, 'aria-hidden': 'true' }), ` ${text}`] : [text]));
         const field = (form, name, label, value = '', type = 'text', maximum = 191) => {
             const id = `casework-${++sequence}`;
             const input = node(type === 'textarea' ? 'textarea' : 'input', { id, name, type: type === 'textarea' ? null : type,
@@ -434,87 +434,145 @@
             container.append(filters, status, paging, list); task(() => load(state));
         }
         function updates(target) {
+            const text = (key, fallback) => labels[key] || fallback;
             const container = node('div'); target.append(container);
             const filters = node('div', { class: 'd-flex flex-wrap gap-3 align-items-center mb-3' });
-            const includeRead = check(filters, 'admission_updates_read', 'Include read updates', false);
-            const status = node('p', { class: 'form-text', role: 'status', 'aria-atomic': 'true' });
-            const list = node('section', { 'aria-label': 'Admissions update list' });
-            const detail = node('section', { class: 'mt-4', hidden: true, 'aria-label': 'Admissions update details' });
+            const includeRead = check(filters, 'admission_updates_read', text('admissions_include', 'Include read updates'), false);
+            const status = node('p', { class: 'form-text', role: 'status', 'aria-atomic': 'true', tabindex: '-1' });
+            const list = node('section', { 'aria-label': text('admissions_list', 'Admissions update list') });
+            const detail = node('section', { class: 'mt-4', hidden: true, 'aria-label': text('admissions_details', 'Admissions update details') });
             let pageRequest = 0, detailRequest = 0, cursor = null, stack = [], loadedFilter = false, correctionDetail = null;
-            const refresh = button('Refresh updates', () => load()); filters.append(refresh);
+            const refresh = button(text('admissions_refresh', 'Refresh updates'), () => load()); filters.append(refresh);
+            function clearDetail() {
+                detailRequest++; detail.hidden = true; detail.replaceChildren(); correctionDetail = null;
+            }
             function closeDetail() {
                 if (!(correctionDetail?.beforeLeave() ?? true)) return;
-                detailRequest++; detail.hidden = true; detail.replaceChildren(); correctionDetail = null; refresh.focus();
+                clearDetail(); refresh.focus();
+            }
+            function denied(error) {
+                if (![401, 403].includes(error.status)) return false;
+                clearDetail(); list.replaceChildren();
+                status.textContent = text('admissions_denied', 'Admissions updates are unavailable for this account.');
+                status.focus(); return true;
             }
             async function open(item) {
                 if (!(correctionDetail?.beforeLeave() ?? true)) return;
                 correctionDetail = null;
                 const ticket = ++detailRequest;
-                const heading = node('h2', { class: 'h4', tabindex: '-1' }, `${item.program_code} · ${item.program_title} · ${item.term_code}`);
-                const progress = node('p', { role: 'status', class: 'form-text' }, 'Loading your next steps…');
+                const heading = node('h2', { class: 'h4 text-break', tabindex: '-1' }, `${item.program_code} · ${item.program_title} · ${item.term_code}`);
+                const progress = node('p', { role: 'status', class: 'form-text' }, text('admissions_guidance_loading', 'Loading your next steps…'));
                 const body = node('div');
-                detail.hidden = false; detail.replaceChildren(heading, button('Close update', closeDetail, 'btn-link'), progress, body); heading.focus();
+                detail.hidden = false; detail.replaceChildren(heading, button(text('admissions_close', 'Close update'), closeDetail, 'btn-link'), progress, body); heading.focus();
                 let loaded = false, acknowledged = false;
                 try {
-                    const data = await request(`/portal/api/applications/${item.application_id}/next-steps/`);
+                    const data = await request(`/portal/api/applications/${encodeURIComponent(item.application_id)}/next-steps/`);
                     if (ticket !== detailRequest || !container.isConnected) return;
                     guidance(body, data);
-                    body.append(node('a', { href: '/portal/apply/', class: 'btn btn-outline-primary mt-3' }, 'View application'));
+                    body.append(node('a', { href: '/portal/apply/', class: 'btn btn-outline-primary mt-3' }, text('admissions_application', 'View application')));
                     const historyArea = node('div'); body.append(historyArea);
                     const history = window.createApplicantApplicationHistory({ node, request, task }).mount(historyArea);
                     body.append(history.trigger(item.application_id, `${item.program_code} · ${item.term_code}`, () => heading.focus()));
                     const correctionArea = node('div'); body.append(correctionArea);
                     correctionDetail = window.createAdmissionChangeRequests({ node, request, task }).mount(correctionArea,
                         item.application_id, { label: `${item.program_code} · ${item.term_code}` });
-                    loaded = true; progress.textContent = 'Your current next steps are ready.';
-                    const result = await request(`/portal/api/admissions-updates/${item.id}/read/`, 'POST', { revision: item.revision });
+                    loaded = true; progress.textContent = text('admissions_guidance_ready', 'Your current next steps are ready.');
+                    const result = await request(`/portal/api/admissions-updates/${encodeURIComponent(item.id)}/read/`, 'POST', { revision: item.revision });
                     if (ticket !== detailRequest || !container.isConnected) return;
-                    acknowledged = true;
+                    acknowledged = true; changed();
                     await load(cursor, stack, true);
                     if (ticket !== detailRequest || !container.isConnected) return;
-                    progress.textContent = result.unread ? 'A newer update arrived. Refresh updates to review it.' : 'Update marked read.';
+                    progress.textContent = result.unread ? text('admissions_newer', 'A newer update arrived. Refresh updates to review it.')
+                        : text('admissions_marked', 'Update marked read.');
                 } catch (error) {
                     if (ticket !== detailRequest || !container.isConnected) return;
-                    progress.textContent = acknowledged ? 'Your read status was saved. Refresh updates to see the latest list.'
-                        : loaded ? 'Your next steps are ready, but we couldn’t confirm the read status. Try again.'
-                        : 'We couldn’t load your next steps. Try again.';
-                    body.append(button('Try again', () => open(item)));
+                    if (denied(error)) throw error;
+                    progress.textContent = acknowledged ? text('admissions_read_saved', 'Your read status was saved. Refresh updates to see the latest list.')
+                        : loaded ? text('admissions_read_failed', 'Your next steps are ready, but we couldn’t confirm the read status. Try again.')
+                        : text('admissions_guidance_failed', 'We couldn’t load your next steps. Try again.');
+                    body.append(button(text('admissions_retry', 'Try again'), () => open(item)));
                     throw error;
+                }
+            }
+            async function remove(item) {
+                if (!(correctionDetail?.beforeLeave() ?? true)) return;
+                const turn = ++pageRequest; detailRequest++;
+                let deleted = false;
+                container.querySelectorAll('button, input').forEach(control => { control.disabled = true; });
+                try {
+                    await request(`/portal/api/admissions-updates/${encodeURIComponent(item.id)}/delete/`, 'POST', { revision: item.revision });
+                    if (turn !== pageRequest || !container.isConnected) return;
+                    deleted = true; clearDetail(); list.replaceChildren(); changed();
+                    await load(cursor, stack);
+                    if (!container.isConnected) return;
+                    status.textContent = text('admissions_deleted', 'Admission update deleted.'); status.focus();
+                } catch (error) {
+                    if (!container.isConnected) return;
+                    if (!denied(error)) {
+                        status.textContent = deleted
+                            ? text('admissions_deleted_reload', 'Admission update deleted. Refresh updates to reload the remaining list.')
+                            : text('admissions_changed', 'This update changed or is unavailable. Refresh the list.');
+                        status.focus();
+                    }
+                    throw error;
+                } finally {
+                    if (container.isConnected) container.querySelectorAll('button, input').forEach(control => { control.disabled = false; });
                 }
             }
             async function load(after = null, previous = [], keepDetail = false) {
                 if (!keepDetail && !(correctionDetail?.beforeLeave() ?? true)) return;
                 if (after && includeRead.checked !== loadedFilter) return load();
                 const showRead = includeRead.checked, ticket = ++pageRequest;
-                if (!keepDetail) { detailRequest++; detail.hidden = true; detail.replaceChildren(); correctionDetail = null; }
-                status.textContent = 'Loading admissions updates…';
+                if (!keepDetail) clearDetail();
+                status.textContent = text('admissions_loading', 'Loading admissions updates…');
                 try {
                     const query = new URLSearchParams({ include_read: showRead ? '1' : '0' });
                     if (after) { query.set('after_at', after.at); query.set('after', after.id); }
                     const data = await request(`/portal/api/admissions-updates/?${query}`);
                     if (ticket !== pageRequest || !container.isConnected) return;
-                    if (showRead !== includeRead.checked) { status.textContent = 'Filters changed. Choose Refresh updates.'; return; }
+                    if (!Array.isArray(data.items) || data.items.length > 20) throw new Error('Invalid admissions update page.');
+                    if (showRead !== includeRead.checked) { status.textContent = text('admissions_filters_changed', 'Filters changed. Choose Refresh updates.'); return; }
                     cursor = after; stack = previous; loadedFilter = showRead;
-                    list.replaceChildren(...data.items.map(item => node('article', { class: 'border rounded p-3 mb-3' },
-                        node('h2', { class: 'h5' }, `${item.program_code} · ${item.program_title}`),
-                        node('p', { class: 'form-text' }, `${item.term_code} · ${item.unread ? 'Unread' : 'Read'}`),
-                        node('p', {}, 'Admissions updated your application.'),
-                        node('p', { class: 'form-text' }, `Updated: ${new Date(item.updated_at).toLocaleString()}`),
-                        button('Read update', () => open(item)))));
-                    if (!data.items.length) list.append(node('p', {}, showRead ? 'No admissions updates are available.' : 'You have no unread admissions updates.'));
-                    const pages = node('nav', { class: 'd-flex flex-wrap gap-2', 'aria-label': 'Admissions update pages' });
-                    if (stack.length) pages.append(button('Previous updates', () => { const earlier = [...stack]; return load(earlier.pop(), earlier); }));
-                    if (data.next) pages.append(button('Next updates', () => load(data.next, [...stack, cursor])));
-                    list.append(pages); status.textContent = `${data.unread_count} unread admissions updates`;
+                    list.replaceChildren(...data.items.map(item => node('article', { class: 'border rounded p-3 mb-3 text-start' },
+                        node('h2', { class: 'h5 text-break' }, `${item.program_code} · ${item.program_title}`),
+                        node('p', { class: 'form-text' }, `${item.term_code} · ${item.unread ? text('announcement_unread', 'Unread') : text('announcement_read', 'Read')}`),
+                        node('p', {}, text('admissions_updated', 'Admissions updated your application.')),
+                        node('p', { class: 'form-text' }, `${text('admissions_updated_on', 'Updated')}: ${new Date(item.updated_at).toLocaleString()}`),
+                        node('div', { class: 'd-flex flex-wrap gap-2' },
+                            button(text('admissions_open', 'Read update'), () => open(item)),
+                            button(text('admissions_delete', 'Delete update'), () => remove(item), 'btn-outline-danger', 'trash')))));
+                    if (!data.items.length) list.append(node('p', {}, showRead ? text('admissions_empty', 'No admissions updates are available.')
+                        : text('admissions_unread_empty', 'You have no unread admissions updates.')));
+                    const pages = node('nav', { class: 'd-flex flex-wrap gap-2', 'aria-label': text('admissions_pages', 'Admissions update pages') });
+                    if (stack.length) pages.append(button(text('admissions_previous', 'Previous updates'), () => { const earlier = [...stack]; return load(earlier.pop(), earlier); }));
+                    if (data.next) pages.append(button(text('admissions_more', 'Next updates'), () => load(data.next, [...stack, cursor])));
+                    list.append(pages); status.textContent = text('admissions_unread_total', '{count} unread admissions updates').replace('{count}', String(data.unread_count));
                 } catch (error) {
                     if (ticket !== pageRequest || !container.isConnected) return;
-                    status.textContent = 'Could not refresh admissions updates. Previous results are still shown.';
+                    if (!denied(error)) status.textContent = text('admissions_failed', 'Could not refresh admissions updates. Previous results are still shown.');
                     throw error;
                 }
             }
-            container.append(node('p', { class: 'form-text' }, 'Find updates from admissions and open an application to review your current next steps and offer.'),
+            async function start() {
+                await load();
+                const selected = new URLSearchParams(window.location?.search || '').get('update');
+                if (!selected || !/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(selected) || !container.isConnected) return;
+                const turn = ++detailRequest;
+                let item;
+                try {
+                    item = await request(`/portal/api/admissions-updates/${encodeURIComponent(selected)}/`);
+                    if (turn !== detailRequest || !container.isConnected) return;
+                    if (!item || item.id !== selected) throw new Error('Invalid selected admission update.');
+                } catch (error) {
+                    if (turn !== detailRequest || !container.isConnected) return;
+                    if (!denied(error)) status.textContent = text('admissions_changed', 'This update changed or is unavailable. Refresh the list.');
+                    status.focus(); throw error;
+                }
+                await open(item);
+            }
+            container.append(node('p', { class: 'form-text' }, text('admissions_help', 'Find updates from admissions and open an application to review your current next steps and offer.')),
                 filters, status, list, detail);
-            task(() => load());
+            task(start);
         }
         return { mount, applicant, queue, updates };
     };

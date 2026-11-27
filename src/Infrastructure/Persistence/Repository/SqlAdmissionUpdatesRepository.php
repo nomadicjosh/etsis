@@ -62,7 +62,8 @@ final readonly class SqlAdmissionUpdatesRepository implements AdmissionUpdatesRe
             static fn (string $field): string => 'n.' . $q($field),
             ['id', 'application_id', 'revision', 'read_revision', 'updated_at']
         );
-        return $this->sql->fetch('SELECT ' . implode(', ', $columns) . ', g.' . $q('code') . ' AS ' . $q('program_code')
+        return $this->sql->fetch('SELECT ' . implode(', ', $columns) . ', a.' . $q('person_id') . ', g.'
+            . $q('code') . ' AS ' . $q('program_code')
             . ', g.' . $q('title') . ' AS ' . $q('program_title') . ', t.' . $q('code') . ' AS ' . $q('term_code')
             . $this->from() . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY n.' . $q('updated_at')
             . ' DESC, n.' . $q('id') . ' DESC', $args, 21);
@@ -79,10 +80,12 @@ final readonly class SqlAdmissionUpdatesRepository implements AdmissionUpdatesRe
         $q = $this->sql->quote(...);
         $fields = array_map(
             static fn (string $field): string => 'n.' . $q($field),
-            ['id', 'application_id', 'revision', 'read_revision']
+            ['id', 'application_id', 'revision', 'read_revision', 'updated_at']
         );
         return $this->sql->fetch(
-            'SELECT ' . implode(', ', $fields) . $this->from()
+            'SELECT ' . implode(', ', $fields) . ', a.' . $q('person_id') . ', g.' . $q('code')
+            . ' AS ' . $q('program_code') . ', g.' . $q('title') . ' AS ' . $q('program_title')
+            . ', t.' . $q('code') . ' AS ' . $q('term_code') . $this->from()
             . ' WHERE ' . $this->ownerWhere() . ' AND n.' . $q('id') . ' = ?',
             [$owner->value, $owner->value, $notice->value],
             1
@@ -98,5 +101,14 @@ final readonly class SqlAdmissionUpdatesRepository implements AdmissionUpdatesRe
         $this->sql->execute('UPDATE ' . $q('sis_admission_updates') . ' SET ' . $q('read_revision') . ' = ? WHERE '
             . $q('id') . ' = ? AND ' . $q('owner_user_id') . ' = ? AND ' . $q('read_revision') . ' < ? AND '
             . $q('revision') . ' >= ?', [$revision, $notice->value, $owner->value, $revision, $revision]);
+    }
+    public function delete(EntityId $owner, EntityId $notice, int $revision): bool
+    {
+        $q = $this->sql->quote(...);
+        return $this->sql->execute(
+            'DELETE FROM ' . $q('sis_admission_updates') . ' WHERE ' .
+            $q('id') . ' = ? AND ' . $q('owner_user_id') . ' = ? AND ' . $q('revision') . ' = ?',
+            [$notice->value, $owner->value, $revision]
+        ) === 1;
     }
 }

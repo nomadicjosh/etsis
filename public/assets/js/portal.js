@@ -2719,6 +2719,7 @@
             if (pageLeaving) return;
             me = { person: { id: context.person_id }, applications: context.items };
         } else if (!['timetable', 'bookings', 'admissionsupdates'].includes(config.section)) await refreshMe();
+        else if (config.section === 'admissionsupdates') void notifications?.loadPreferences();
         const restoreFocus = container.contains(document.activeElement);
         const content = el('div');
         const actions = {
@@ -2733,7 +2734,8 @@
             accounts,
             updates,
             bookings: bookingUpdates,
-            admissionsupdates: content => window.createAdmissionCasework({ node: el, request, task, notify: notice }).updates(content),
+            admissionsupdates: content => window.createAdmissionCasework({ node: el, request, task, notify: notice,
+                labels: notificationLabels, changed: () => notifications?.refreshCounts?.() }).updates(content),
             timetable: content => {
                 const labels = JSON.parse(document.getElementById('advising-appointment-labels').textContent);
                 const academic = el('section', {}, el('p', { role: 'status' }, labels.class_loading));

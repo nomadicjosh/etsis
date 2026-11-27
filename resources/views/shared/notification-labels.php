@@ -5,6 +5,49 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'admissions_updates' => trans_html('Admissions updates'),
+    'admissions_loading' => trans_html('Loading admissions updates...'),
+    'admissions_help' => trans_html(
+        'Find updates from admissions and open an application to review your current next steps and offer.'
+    ),
+    'admissions_empty' => trans_html('No admissions updates are available.'),
+    'admissions_unread_empty' => trans_html('You have no unread admissions updates.'),
+    'admissions_include' => trans_html('Include read updates'),
+    'admissions_refresh' => trans_html('Refresh updates'),
+    'admissions_list' => trans_html('Admissions update list'),
+    'admissions_details' => trans_html('Admissions update details'),
+    'admissions_pages' => trans_html('Admissions update pages'),
+    'admissions_previous' => trans_html('Previous updates'),
+    'admissions_more' => trans_html('Next updates'),
+    'admissions_updated' => trans_html('Admissions updated your application.'),
+    'admissions_updated_on' => trans_html('Updated'),
+    'admissions_mark' => trans_html('Mark as read'),
+    'admissions_open' => trans_html('Read update'),
+    'admissions_delete' => trans_html('Delete update'),
+    'admissions_loaded' => trans_html('Admissions updates loaded. Program and term labels are current.'),
+    'admissions_failed' => trans_html('Could not refresh admissions updates. Previous results are still shown.'),
+    'admissions_denied' => trans_html('Admissions updates are unavailable for this account.'),
+    'admissions_changed' => trans_html('This update changed or is unavailable. Refresh the list.'),
+    'admissions_new' => trans_html('New admissions updates are available.'),
+    'admissions_link' => trans_html('View admissions update'),
+    'admissions_marked' => trans_html('Update marked read.'),
+    'admissions_deleted' => trans_html('Admission update deleted.'),
+    'admissions_deleted_reload' => trans_html(
+        'Admission update deleted. Refresh updates to reload the remaining list.'
+    ),
+    'admissions_close' => trans_html('Close update'),
+    'admissions_application' => trans_html('View application'),
+    'admissions_guidance_loading' => trans_html('Loading your next steps...'),
+    'admissions_guidance_ready' => trans_html('Your current next steps are ready.'),
+    'admissions_newer' => trans_html('A newer update arrived. Refresh updates to review it.'),
+    'admissions_read_saved' => trans_html('Your read status was saved. Refresh updates to see the latest list.'),
+    'admissions_read_failed' => trans_html(
+        'Your next steps are ready, but the read status could not be confirmed. Try again.'
+    ),
+    'admissions_guidance_failed' => trans_html('Your next steps could not be loaded. Try again.'),
+    'admissions_retry' => trans_html('Try again'),
+    'admissions_filters_changed' => trans_html('Filters changed. Choose Refresh updates.'),
+    'admissions_unread_total' => trans_html('{count} unread admissions updates'),
     'standing_updates' => trans_html('Academic standing updates'),
     'standing_loading' => trans_html('Loading academic standing updates…'),
     'standing_help' => trans_html(

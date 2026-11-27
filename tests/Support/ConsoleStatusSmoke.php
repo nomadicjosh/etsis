@@ -71,6 +71,7 @@ try {
                 'check-notification-preferences',
                 'check-transcript-updates',
                 'check-standing-updates',
+                'check-admission-notices',
                 'check-public-event-feed',
                 'check-timetable-export',
                 'check-transcript-worklist',
@@ -407,6 +408,19 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/PublicEventFeedBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-admission-notices') {
+            $kernel->bootstrap();
+            require_once __DIR__ . '/AdmissionCaseworkFixture.php';
+            require_once __DIR__ . '/CampusFixture.php';
+            $admissionNotices = new \Tests\Support\AdmissionCaseworkFixture();
+            $httpSis = $admissionNotices->campus->sis;
+            require __DIR__ . '/SisHttpFixture.php';
+            $app->delegate(
+                \Domain\Communications\Service\MessageCipher::class,
+                static fn() => $admissionNotices->campus->cipher
+            );
+            require __DIR__ . '/AdmissionNoticesBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-standing-updates') {
             $kernel->bootstrap();

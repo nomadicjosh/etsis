@@ -16,6 +16,7 @@ window.createWorkspaceNotifications = function (ui) {
     let dialog = null, list = null, empty = null, audio = null, sequence = 0, lastSound = -Infinity;
     let disposed = false;
     let announcements = null, registrationUpdates = null, advisingUpdates = null, academicUpdates = null, transcriptUpdates = null, standingUpdates = null, importUpdates = null;
+    let admissionUpdates = null;
     let persistentUnread = 0, importTimer = null, importLoading = false, importStopped = false, identityKnown = false;
     let refreshAgain = false;
     let activeSound = null, pendingSound = null, decodedSound = null, soundGeneration = 0;
@@ -134,11 +135,12 @@ window.createWorkspaceNotifications = function (ui) {
         importLoading = true;
         try {
             let count = 0;
-            const endpoints = ['/portal/api/academic-updates/', '/portal/api/transcript-updates/', '/portal/api/standing-updates/', ...(importLabels.notices ? ['/sis/imports/notices/'] : [])];
+            const endpoints = ['/portal/api/admissions-updates/', '/portal/api/academic-updates/', '/portal/api/transcript-updates/', '/portal/api/standing-updates/', ...(importLabels.notices ? ['/sis/imports/notices/'] : [])];
             for (const endpoint of endpoints) {
                 try {
                     const result = await request(endpoint);
-                    if (Array.isArray(result.items)) count += result.items.length;
+                    if (Array.isArray(result.items)) count += Number.isSafeInteger(result.unread_count) && result.unread_count >= 0
+                        ? result.unread_count : result.items.length;
                 } catch (_) { /* One unavailable source does not hide another source's notices. */ }
             }
             if (!disposed && !importStopped) { persistentUnread = count; updateBadge(); }
@@ -239,6 +241,7 @@ window.createWorkspaceNotifications = function (ui) {
         transcriptUpdates?.destroy(); transcriptUpdates = null;
         standingUpdates?.destroy(); standingUpdates = null;
         importUpdates?.destroy(); importUpdates = null;
+        admissionUpdates?.destroy(); admissionUpdates = null;
         const previous = dialog;
         dialog = list = empty = null;
         previous.close(); previous.remove();
@@ -298,6 +301,19 @@ window.createWorkspaceNotifications = function (ui) {
                 currentDialog.querySelector('.workspace-notification-dialog-body').prepend(importSection);
             }
             if (window.createStudentUpdates) {
+                const admissionsBody = node('div', { class: 'campus-announcements-body' });
+                const admissionsSection = node('details', { class: 'campus-announcements' },
+                    node('summary', {}, glyph('file-earmark-person'), text('admissions_updates', 'Admissions updates')), admissionsBody);
+                admissionsSection.addEventListener('toggle', () => {
+                    if (dialog !== currentDialog) return;
+                    admissionUpdates?.destroy(); admissionUpdates = null;
+                    if (admissionsSection.open) {
+                        admissionUpdates = window.createStudentUpdates({ node, request, labels, notify,
+                            kind: 'admissions', notificationsOnly: true, changed: refreshPrivateCounts });
+                        admissionUpdates.mount(admissionsBody);
+                    }
+                });
+                currentDialog.querySelector('.workspace-notification-dialog-body').prepend(admissionsSection);
                 const transcriptBody = node('div', { class: 'campus-announcements-body' });
                 const transcriptSection = node('details', { class: 'campus-announcements' },
                     node('summary', {}, glyph('file-earmark-text'), text('transcript_updates', 'Transcript updates')), transcriptBody);
@@ -408,6 +424,6 @@ window.createWorkspaceNotifications = function (ui) {
     document.addEventListener('hide.bs.offcanvas', stopSound);
     document.addEventListener('hide.bs.modal', stopSound);
     renderHistory();
-    return { notify, clear, destroy, applyPreferences, loadPreferences,
+    return { notify, clear, destroy, applyPreferences, loadPreferences, refreshCounts: refreshPrivateCounts,
         previewSound: (selection, canPlay) => sound(true, selection, canPlay), stopPreview: stopSound };
 };

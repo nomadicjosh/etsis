@@ -17,4 +17,5 @@ interface AdmissionUpdatesRepository
     public function owned(EntityId $owner, EntityId $notice): ?array;
     public function lock(EntityId $notice): void;
     public function markRead(EntityId $owner, EntityId $notice, int $revision): void;
+    public function delete(EntityId $owner, EntityId $notice, int $revision): bool;
 }

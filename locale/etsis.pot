@@ -10499,3 +10499,159 @@ msgstr ""
 #: resources/views/backend/manager/website-form-designer.phtml:18
 msgid "Input purpose cleared because it does not apply to this field type."
 msgstr ""
+
+#: resources/views/shared/notification-labels.php:8
+msgid "Admissions updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:9
+msgid "Loading admissions updates..."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:10
+msgid "Find updates from admissions and open an application to review your current next steps and offer."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:13
+msgid "No admissions updates are available."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:14
+msgid "You have no unread admissions updates."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:15
+msgid "Include read updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:16
+msgid "Refresh updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:17
+msgid "Admissions update list"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:18
+msgid "Admissions update details"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:19
+msgid "Admissions update pages"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:21
+msgid "Next updates"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:22
+msgid "Admissions updated your application."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:23
+msgid "Updated"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:25
+msgid "Read update"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:27
+msgid "Admissions updates loaded. Program and term labels are current."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:28
+msgid "Could not refresh admissions updates. Previous results are still shown."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:29
+msgid "Admissions updates are unavailable for this account."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:31
+msgid "New admissions updates are available."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:32
+msgid "View admissions update"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:33
+msgid "Update marked read."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:34
+msgid "Admission update deleted."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:35
+msgid "Admission update deleted. Refresh updates to reload the remaining list."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:38
+msgid "Close update"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:39
+msgid "View application"
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:40
+msgid "Loading your next steps..."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:41
+msgid "Your current next steps are ready."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:42
+msgid "A newer update arrived. Refresh updates to review it."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:43
+msgid "Your read status was saved. Refresh updates to see the latest list."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:44
+msgid "Your next steps are ready, but the read status could not be confirmed. Try again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:47
+msgid "Your next steps could not be loaded. Try again."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:49
+msgid "Filters changed. Choose Refresh updates."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:50
+msgid "{count} unread admissions updates"
+msgstr ""
+
+#: src/Domain/Admissions/Service/AdmissionUpdatesService.php:41
+msgid "Use the complete admission updates cursor."
+msgstr ""
+
+#: src/Domain/Admissions/Service/AdmissionUpdatesService.php:45
+msgid "Use a valid admission updates cursor."
+msgstr ""
+
+#: src/Domain/Admissions/Service/AdmissionUpdatesService.php:74
+msgid "The current account needs its own person record."
+msgstr ""
+
+#: src/Domain/Admissions/Service/AdmissionUpdatesService.php:91
+msgid "Reload the latest admission update."
+msgstr ""
+
+#: src/Domain/Admissions/Service/AdmissionUpdatesService.php:130
+msgid "Reload admission updates before changing one."
+msgstr ""
+
+#: src/Domain/Admissions/Service/AdmissionUpdatesService.php:141
+msgid "This account does not own the admission update."
+msgstr ""
+
+#: src/Domain/Admissions/Service/AdmissionUpdatesService.php:183
+msgid "The admission update changed before completion."
+msgstr ""

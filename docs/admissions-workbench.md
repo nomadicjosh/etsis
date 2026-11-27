@@ -109,11 +109,17 @@ Withdrawn applications are paused in the follow-up queue without changing their 
 
 Applicants can choose **Admissions updates** from their application toolbar or campus-services navigation. This page is available to a signed-in person before they have a student record. It loads only update metadata, without requesting the full student overview. Updates show the application program and entry term, the update time and whether they are unread. Use **Read update** to open the current next steps. **Include read updates** and explicit refresh let applicants revisit earlier guidance; lists contain twenty records per page.
 
+The shared workspace and signed-in portal bell also has an **Admissions updates** section. Expand it to see retained personal notices, choose **View admissions update** to open that exact notice's current guidance, application history and correction-request controls, or choose **Delete update**. The bell has no preference editor or read filter. Its visible-page count includes unread admissions notices, including those beyond the first page. Sound and display preferences remain under the person's workspace record or portal **Personal information**. Following a notice link still requires its current original owner; a copied, deleted or inaccessible link reveals no application content.
+
 Saving a change to applicant-visible office, next step or checklist guidance automatically creates an unread update for the application's current owner. Staff-only notes, internal tasks, assignments and working status stay silent unless an enforced checklist changes the applicant's generic readiness message. That message never identifies hidden tasks or their counts. The update and case save commit together. Existing cases receive no fabricated backfill; their next visible change creates the first update.
 
 Each application/owner pair has one reference with a public-update counter. Repeated changes coalesce into that reference, so it is an inbox of current guidance, not a timeline of earlier wording or an extra event journal. It contains no copied checklist, note or message body. Private case revisions do not advance its public counter. Changing the person account owner makes earlier-owner references inaccessible; staff authority cannot override current ownership.
 
 Loading the list does not mark updates read. After successfully opening guidance, the page submits an explicit, CSRF-protected read confirmation for the update it displayed. A delayed confirmation cannot hide a newer update, and repeating an older confirmation cannot undo a later read. Closing the viewer before guidance arrives prevents that detached request from confirming the update. Read-state changes require audit and commit atomically.
+
+**Delete update** physically removes the selected personal notice and its read counter from the database. It does not delete or change the application, working case, correction requests, earlier decisions, protected event history or required minimal administrative audit. There is no notification archive, trash or undo. On the separate updates page, use **Include read updates** to find a previously read notice for deletion. A stale delete cannot remove a newer public revision; refresh before trying again. Repeating an accepted delete is harmless. Retrying the original case save or changing private staff notes does not recreate it; a genuinely later applicant-visible update creates a fresh notice identifier. Account relinking does not transfer the earlier account's notice.
+
+Read and delete operations recheck the signed-in account, canonical person and current application under the same transaction as required audit. A failed audit or changed source rolls the operation back. Access loss clears private details; late responses cannot restore a closed viewer. Failed refreshes preserve drafts, and a successful deletion is still reported as saved if reloading the remaining list fails. No new schema or historical backfill is needed for these controls.
 
 These are in-portal updates. This workflow sends no email or push messages and does not start a background delivery job. Institutions should continue using their established delivery channels for time-sensitive communication.
 
@@ -253,7 +259,9 @@ Endpoints are:
 - Owner-only `GET /portal/api/applications/{application}/next-steps/`.
 - Signed-in page `GET /portal/admissions-updates/`.
 - Owner-only `GET /portal/api/admissions-updates/` with `include_read`, `after_at` and `after`.
+- Owner-only `GET /portal/api/admissions-updates/{id}/` returns notice metadata for an exact link; guidance remains a separate owner-authorized application read.
 - Owner-only `POST /portal/api/admissions-updates/{id}/read/` with the displayed `revision`.
+- Owner-only `POST /portal/api/admissions-updates/{id}/delete/` with the exact displayed `revision`; missing/foreign references return the same harmless deletion response.
 
 The additive schema compiles for the framework's five database dialects. Runtime checks cover fictional SQLite data and the configured MariaDB installation. Broader driver deployment acceptance remains separate.
 

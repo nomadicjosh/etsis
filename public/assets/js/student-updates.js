@@ -1,8 +1,9 @@
 /* Private, account-pinned outcome notices. Loading and deletion are explicit; nothing is persisted in this browser. */
 'use strict';
 window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'registration', notificationsOnly = false, changed = () => {} }) => {
-    if (!['registration', 'advising', 'academic', 'transcript', 'standing'].includes(kind)) throw new Error('Unsupported student update source.');
+    if (!['registration', 'advising', 'academic', 'transcript', 'standing', 'admissions'].includes(kind)) throw new Error('Unsupported student update source.');
     const advising = kind === 'advising', academic = kind === 'academic', transcript = kind === 'transcript', standing = kind === 'standing';
+    const admissions = kind === 'admissions';
     const endpoint = `/portal/api/${kind}-updates/`;
     const advisingDefaults = {
         advising_updates: 'Advising updates', advising_loading: 'Loading advising updates…',
@@ -81,19 +82,21 @@ window.createStudentUpdates = ({ node, request, labels = {}, notify, kind = 'reg
             baseline = true; cursor = after; previous = stack;
             const list = node('ul', { class: 'list-unstyled registration-updates-list' });
             for (const item of result.items) {
-                if (!(standing ? ['recorded', 'corrected'] : advising ? ['open', 'closed', 'cancelled'] : academic ? ['posted', 'corrected'] : transcript ? ['ready', 'fulfilled'] : ['registered', 'removed']).includes(item.status)) throw new Error('Invalid registration outcome.');
+                if (!admissions && !(standing ? ['recorded', 'corrected'] : advising ? ['open', 'closed', 'cancelled'] : academic ? ['posted', 'corrected'] : transcript ? ['ready', 'fulfilled'] : ['registered', 'removed']).includes(item.status)) throw new Error('Invalid registration outcome.');
                 const card = node('li', { class: 'registration-update-card border rounded mb-3 text-start' },
-                    node('h3', { class: 'h6' }, text(`registration_${item.status}`)),
-                    node('p', { class: 'fw-semibold text-break mb-1' }, transcript ? text(`transcript_${item.delivery}`) : advising || standing ? item.program_code : `${item.course_code} · ${item.section_code} · ${item.term_code}`),
-                    node('p', { class: 'text-break' }, transcript ? `${text('transcript_requested_on')} · ${String(item.requested_at).slice(0, 10)}` : advising || standing ? item.program_title : item.course_title),
-                    node('time', { class: 'form-text d-block mb-2', datetime: item.recorded_at },
-                        new Date(item.recorded_at).toLocaleString()),
+                    node('h3', { class: 'h6' }, text(admissions ? 'registration_updated' : `registration_${item.status}`)),
+                    node('p', { class: 'fw-semibold text-break mb-1' }, transcript ? text(`transcript_${item.delivery}`) : admissions ? `${item.program_code} · ${item.term_code}` : advising || standing ? item.program_code : `${item.course_code} · ${item.section_code} · ${item.term_code}`),
+                    node('p', { class: 'text-break' }, transcript ? `${text('transcript_requested_on')} · ${String(item.requested_at).slice(0, 10)}` : admissions || advising || standing ? item.program_title : item.course_title),
+                    node('time', { class: 'form-text d-block mb-2', datetime: admissions ? item.updated_at : item.recorded_at },
+                        new Date(admissions ? item.updated_at : item.recorded_at).toLocaleString()),
                     node('span', { class: 'badge text-bg-light border mb-2' }, text(item.unread ? 'announcement_unread' : 'announcement_read')));
                 card.dataset.updateId = item.id;
                 const actions = node('div', { class: 'd-flex flex-wrap gap-2' });
                 if (item.unread && !notificationsOnly) actions.append(button('registration_mark', 'check2', () => mutate(item, 'read')));
                 actions.append(button('registration_delete', 'trash', () => mutate(item, 'delete')),
-                    transcript ? button('registration_link', 'arrow-right', () => openTranscriptRequest(item))
+                    admissions ? node('a', { href: `/portal/admissions-updates/?update=${encodeURIComponent(item.id)}`,
+                        class: 'btn btn-outline-secondary btn-sm' }, icon('arrow-right'), text('registration_link'))
+                        : transcript ? button('registration_link', 'arrow-right', () => openTranscriptRequest(item))
                         : standing ? button('registration_link', 'arrow-right', () => openStanding(item))
                         : academic ? button('registration_link', 'arrow-right', () => openAcademicRecord(item))
                         : advising ? button('registration_link', 'arrow-right', () => openCheckIn(item))
