@@ -10,7 +10,7 @@ final class PageBuilderFixtureTheme extends \Vihzhuo\Theme
     protected function attemptExtensionBlockRegistration(string $slug, string $path): void
     {
         // Allow only these native blocks alongside the fictional theme blocks.
-        if (in_array($slug, ['regular-form', 'youtube', 'google-map', 'button'], true)) {
+        if (in_array($slug, ['regular-form', 'youtube', 'google-map', 'button', 'alert', 'alert-text'], true)) {
             parent::attemptExtensionBlockRegistration($slug, $path);
         }
     }

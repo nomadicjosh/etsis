@@ -67,8 +67,21 @@
 .website-button.btn:focus-visible { color: var(--bs-btn-hover-color); }
 .website-button.btn:active { color: var(--bs-btn-active-color); }
 .website-button.btn[aria-disabled="true"] { color: var(--bs-btn-disabled-color); }
-.website-button:focus-visible {
+.website-button:focus-visible,
+.website-notice .btn-close:focus-visible {
     outline: 3px solid #fff;
     outline-offset: 2px;
     box-shadow: 0 0 0 6px #16324f;
 }
+
+.website-notice { min-width: 0; }
+.website-notice-label, .website-notice-body { overflow-wrap: anywhere; }
+.website-notice-body > :last-child { margin-bottom: 0; }
+.website-notice a:not(.btn) {
+    color: var(--bs-alert-link-color);
+    text-decoration: underline;
+    text-underline-offset: .15em;
+}
+.website-notice a:not(.btn):focus-visible { outline: 2px solid currentColor; outline-offset: 3px; }
+.website-notice .btn-close { min-width: 2.75rem; min-height: 2.75rem; }
+.website-notice [hidden] { display: none !important; }

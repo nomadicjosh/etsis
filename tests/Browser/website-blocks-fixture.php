@@ -65,6 +65,15 @@ if (($_GET['buttons'] ?? '') === '1') {
         $blocks['IDbutton-' . $name] = ['slug' => 'button', 'settings' => ['attributes' => $attributes]];
     }
 }
+if (($_GET['notices'] ?? '') === '1') {
+    require __DIR__ . '/website-notice-data.php';
+    foreach (['alert', 'alert-text'] as $slug) {
+        \Vihzhuo\Extensions::registerBlock($slug, $root . '/resources/blocks/' . $slug);
+    }
+    foreach ($websiteNotices as $name => $data) {
+        $blocks['IDnotice-' . $name] = $data;
+    }
+}
 if (($_GET['forms'] ?? '') === '1') {
     require __DIR__ . '/website-form-data.php';
     \Vihzhuo\Extensions::registerBlock('regular-form', $root . '/resources/blocks/forms/form');
@@ -86,13 +95,19 @@ $page->setTranslations(['en' => ['meta_title' => 'Fictional interactive blocks',
 phpb_set_in_editmode(($_GET['edit'] ?? '') === '1');
 $renderer = new \Vihzhuo\Modules\GrapesJS\PageRenderer($theme, $page, phpb_in_editmode());
 $body = '<div class="container py-4"><h1 id="page-title">Fictional interactive information</h1>';
-foreach ((isset($websiteEmbeds) || isset($websiteButtons) ? [] : ['one', 'two']) as $name) {
+foreach ((isset($websiteEmbeds) || isset($websiteButtons) || isset($websiteNotices) ? [] : ['one', 'two']) as $name) {
     $body .= '<section aria-label="Questions ' . $name . '" class="mb-4">'
     . $renderer->renderBlock('accordion', 'IDquestions-' . $name) . '</section>';
     $body .= $renderer->renderBlock('carousel', 'IDhighlights-' . $name);
 }
 foreach (array_keys($websiteEmbeds ?? []) as $slug) {
     $body .= $renderer->renderBlock($slug, 'ID' . $slug);
+}
+if (isset($websiteNotices)) {
+    foreach (array_keys($websiteNotices) as $name) {
+        $body .= $renderer->renderBlock('alert', 'IDnotice-' . $name);
+    }
+    $body .= '<a href="#page-title" id="after-notices">After the fictional notices</a>';
 }
 if (isset($websiteButtons)) {
     $body .= '<form aria-label="Fictional button behavior" action="/fictional-submit/" method="post">';

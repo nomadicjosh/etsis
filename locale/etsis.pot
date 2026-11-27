@@ -10747,3 +10747,39 @@ msgstr ""
 #: resources/views/frontend/website/button.phtml:28
 msgid "Choose a valid link destination in Settings before publishing."
 msgstr ""
+
+#: src/Application/View/WebsiteNotice.php:24
+msgid "Information"
+msgstr ""
+
+#: src/Application/View/WebsiteNotice.php:25
+msgid "Notice"
+msgstr ""
+
+#: src/Application/View/WebsiteNotice.php:27
+msgid "Important"
+msgstr ""
+
+#: resources/blocks/alert/config.php:9
+msgid "Alert"
+msgstr ""
+
+#: resources/blocks/alert/config.php:14
+msgid "Notice label (up to 160 characters)"
+msgstr ""
+
+#: resources/blocks/alert/config.php:15
+msgid "Optional descriptive label"
+msgstr ""
+
+#: resources/blocks/alert/config.php:20
+msgid "Context"
+msgstr ""
+
+#: resources/blocks/alert/config.php:35
+msgid "Allow visitors to dismiss this notice"
+msgstr ""
+
+#: resources/blocks/alert/view.php:27
+msgid "Dismiss notice"
+msgstr ""
