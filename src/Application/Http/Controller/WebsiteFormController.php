@@ -14,6 +14,8 @@ use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 use Qubus\Http\ServerRequest;
 
+use function Codefy\Framework\Helpers\trans;
+
 final readonly class WebsiteFormController
 {
     public function __construct(
@@ -75,7 +77,11 @@ final readonly class WebsiteFormController
     public function listing(ServerRequest $request): ResponseInterface
     {
         $f = new FormInput($request->getQueryParams());
-        return new JsonResponse($this->inbox->page($f->optionalId('after'), $f->search('state', 8) ?: 'all'));
+        return new JsonResponse($this->inbox->page(
+            $f->optionalId('after'),
+            $f->search('state', 8) ?: 'all',
+            $f->search('scope', 12) ?: 'all'
+        ));
     }
 
     public function screen(): ResponseInterface
@@ -90,6 +96,36 @@ final readonly class WebsiteFormController
     public function show(string $id): ResponseInterface
     {
         return new JsonResponse($this->inbox->show(new EntityId($id)));
+    }
+
+    public function assignees(ServerRequest $request, string $id): ResponseInterface
+    {
+        $form = new FormInput($request->getQueryParams());
+        return new JsonResponse($this->inbox->assignees(
+            new EntityId($id),
+            $form->search('search', 80),
+            $form->optionalId('after')
+        ));
+    }
+
+    public function assign(ServerRequest $request, string $id): ResponseInterface
+    {
+        $body = $request->getParsedBody();
+        if (
+            !is_array($body) || !array_key_exists('assignee_id', $body)
+            || !array_key_exists('assignee_person_id', $body)
+        ) {
+            throw new \Domain\Shared\Exception\ValidationException([['field' => 'assignee_id',
+                'message' => trans('Choose an eligible colleague or explicitly clear the assignment.')]]);
+        }
+        $form = FormInput::from($request);
+        return new JsonResponse($this->inbox->assign(
+            new EntityId($id),
+            $form->integer('version', 0, 2147483646),
+            $form->integer('inquiry_version', 0, 2147483647),
+            $form->optionalId('assignee_id'),
+            $form->optionalId('assignee_person_id')
+        ));
     }
 
     public function retryNewsletter(ServerRequest $request, string $id): ResponseInterface

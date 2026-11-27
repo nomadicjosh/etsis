@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 $formStaff = $sis->access->staff;
 $formGrants = $sis->access->grants;
+$formWorkPerson = $sis->sql->rows('sis_persons', ['owner_user_id' => $sis->access->actor->value], 1)[0]['id']
+?? $sis->legacyPerson($sis->access->actor, 'Fictional', 'Website operator')->id->value;
 
 // Real providers, middleware and routes; fictional SQLite only, no installed page or inquiry writes.
 $formPage = $websiteFixture->draft('website-form');
@@ -85,7 +87,28 @@ $private = $read('/sis/website/form-inbox/' . $inquiry['id'] . '/');
 if ($private['answers'] !== $submission['answers']) {
     throw new RuntimeException('The website inbox lost its retained answers.');
 }
+$workPath = '/sis/website/form-inbox/' . $inquiry['id'] . '/assignment/';
+$formAssignmentGrants = $sis->access->grants;
+$sis->access->grants = ['sis:website:forms:read'];
+$api($workPath, ['version' => 0, 'inquiry_version' => 0,
+    'assignee_id' => $sis->access->actor->value, 'assignee_person_id' => $formWorkPerson], 403);
+$read('/sis/website/form-inbox/' . $inquiry['id'] . '/assignees/?search=Fictional', 403);
+$sis->access->grants = $formAssignmentGrants;
+$api($workPath, ['version' => 0, 'inquiry_version' => 0, 'assignee_id' => null], 422);
+$work = $api($workPath, ['version' => 0, 'inquiry_version' => 0,
+    'assignee_id' => $sis->access->actor->value, 'assignee_person_id' => $formWorkPerson]);
+if ($work['version'] !== 1 || count($read('/sis/website/form-inbox/?scope=mine')['items']) !== 1) {
+    throw new RuntimeException('Website inquiry assignment lost its actual owner or queue routing.');
+}
+$read('/sis/website/form-inbox/' . $inquiry['id'] . '/assignees/?search=Fictional');
+$api($workPath, ['version' => 0, 'inquiry_version' => 0,
+    'assignee_id' => null, 'assignee_person_id' => null], 409);
+$api($workPath, ['version' => 1, 'inquiry_version' => 0,
+    'assignee_id' => null, 'assignee_person_id' => null]);
 $api('/sis/website/form-inbox/' . $inquiry['id'] . '/', ['version' => 0, 'action' => 'delete']);
+if ($sis->sql->rows('sis_website_inquiry_assignments') !== []) {
+    throw new RuntimeException('Deleting an inquiry retained its current working assignment.');
+}
 if (
     $sis->sql->rows('sis_website_form_inbox') !== [] || $api($path, $submission) !== $first
     || $sis->sql->rows('sis_website_form_inbox') !== [] || $sis->sql->rows('sis_history_events') !== $before

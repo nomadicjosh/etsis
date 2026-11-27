@@ -33,13 +33,13 @@
         status.replaceChildren(node('div', { class: `alert alert-${kind}`, role: kind === 'danger' ? 'alert' : 'status' }, text));
     }
     function clearReview() { reviewBody.replaceChildren(); drawer.hide(); }
-    async function request(path, data = null) {
+    async function request(path, data = null, signal = undefined) {
         const headers = { Accept: 'application/json' };
         if (data !== null) {
             headers['Content-Type'] = 'application/x-www-form-urlencoded';
             headers[settings.csrf_header] = document.querySelector('#site-csrf input')?.value || '';
         }
-        const response = await fetch(path, { method: data === null ? 'GET' : 'POST', headers,
+        const response = await fetch(path, { method: data === null ? 'GET' : 'POST', headers, signal,
             body: data === null ? null : new URLSearchParams({ _workspace_json: JSON.stringify(data) }),
             credentials: 'same-origin', cache: 'no-store', redirect: 'error' });
         const result = await response.json();
@@ -446,7 +446,7 @@
         return;
     }
     if (root.dataset.mode === 'form-inbox') {
-        const inbox = window.createWebsiteFormInbox({ root, request, node, button, inspect, message, labels });
+        const inbox = window.createWebsiteFormInbox({ root, request, node, button, inspect, message, labels, close: clearReview });
         void task(() => inbox.load());
         return;
     }

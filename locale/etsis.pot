@@ -11339,3 +11339,107 @@ msgstr ""
 #: src/Application/View/AdvisingAppointmentCalendar.php:36
 msgid "My advising appointments"
 msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:111
+msgid "The inquiry could not be loaded. Refresh and try again."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:112
+msgid "Inquiry work"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:113
+msgid "All accessible inquiries"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:114
+msgid "My inquiries"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:116
+msgid "Previous inquiries"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:117
+msgid "Back to inbox"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:119
+msgid "Inquiry assignment"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:120
+msgid "Assign open work to an eligible colleague. Assignment never grants reply access. Closed inquiries keep their assignment until reopened or deleted."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:122
+msgid "Assignment action"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:123
+msgid "Choose an assignment action"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:124
+msgid "Claim this inquiry"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:125
+msgid "Delegate to a colleague"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:126
+msgid "Clear the assignment"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:128
+msgid "Saving inquiry assignment…"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:129
+msgid "Inquiry assignment saved."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:130
+msgid "The inquiry or assignment changed. Your selection is kept. Reload the inquiry, review the current assignment and save again."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:132
+msgid "The assignment could not be confirmed. Your selection is kept. Reload the inquiry to check its current assignment before trying again."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:134
+msgid "Reload inquiry"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:137
+msgid "Enter at least two characters to search eligible colleagues."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:139
+msgid "Colleagues could not be loaded. Search again."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:140
+msgid "No eligible colleagues match this inquiry and search."
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:141
+msgid "Select colleague"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:142
+msgid "Selected colleague"
+msgstr ""
+
+#: resources/views/backend/manager/site-labels.php:143
+msgid "Choose a colleague before saving."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/WebsiteFormInboxService.php:213
+msgid "Choose an enabled colleague with read and manage access to this inquiry."
+msgstr ""
+
+#: src/Domain/WebsiteForms/Service/WebsiteFormInboxService.php:307
+msgid "The inquiry or assignment changed. Reload it before saving."
+msgstr ""

@@ -38,6 +38,8 @@ return static function (Psr7Router $router): void {
     $router->get('/sis/website/form-inbox/view/', [$websiteForms, 'screen']);
     $router->get('/sis/website/form-inbox/', [$websiteForms, 'listing']);
     $router->get('/sis/website/form-inbox/{id}/', [$websiteForms, 'show']);
+    $router->get('/sis/website/form-inbox/{id}/assignees/', [$websiteForms, 'assignees']);
+    $router->post('/sis/website/form-inbox/{id}/assignment/', [$websiteForms, 'assign']);
     $router->post('/sis/website/form-inbox/{id}/newsletter/retry/', [$websiteForms, 'retryNewsletter']);
     $router->post('/sis/website/form-inbox/{id}/', [$websiteForms, 'change']);
 

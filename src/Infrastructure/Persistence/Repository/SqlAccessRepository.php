@@ -61,6 +61,13 @@ final readonly class SqlAccessRepository implements AccessRepository
 
     public function eligibleAccounts(array $permissions, string $search, ?EntityId $after = null): array
     {
+        [$statement, $parameters] = $this->eligibleAccountQuery($permissions, $search, $after);
+        return $this->sql->fetch($statement . ' ORDER BY u.' . $this->sql->quote('user_id') . ' ASC', $parameters, 21);
+    }
+
+    /** Internal composition point: trusted repositories add scope predicates before applying their page bound. */
+    public function eligibleAccountQuery(array $permissions, string $search, ?EntityId $after = null): array
+    {
         $q = $this->sql->quote(...);
         $user = 'u.' . $q('user_id');
         if ($permissions === [] || count($permissions) > 4) {
@@ -88,13 +95,13 @@ final readonly class SqlAccessRepository implements AccessRepository
             $where[] = $user . ' > ?';
             $args[] = $after->value;
         }
-        return $this->sql->fetch('SELECT ' . $user . ' AS ' . $q('id')
+        return ['SELECT ' . $user . ' AS ' . $q('id')
             . ', person.' . $q('id') . ' AS ' . $q('person_id')
             . ', person.' . $q('given_name')
             . ', person.' . $q('family_name') . ', i.' . $q('institutional_id') . ' FROM ' . $q('users')
             . ' u JOIN ' . $q('sis_persons') . ' person ON person.' . $q('owner_user_id') . ' = ' . $user
             . ' JOIN ' . $q('sis_person_identifiers') . ' i ON i.' . $q('person_id') . ' = person.' . $q('id')
-            . ' WHERE ' . implode(' AND ', $where) . ' ORDER BY ' . $user . ' ASC', $args, 21);
+            . ' WHERE ' . implode(' AND ', $where), $args];
     }
 
     public function anyoneCanManage(): bool

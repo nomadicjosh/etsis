@@ -75,7 +75,13 @@ final class WebsiteFormFixture
             $s->dropCipher,
             new \Infrastructure\Persistence\Repository\SqlAccessRepository($s->sql),
             $this->website->formRouting(),
-            $this->website->newsletters()
+            $this->website->newsletters(),
+            new \Infrastructure\Persistence\Repository\SqlPersonAccountRepository(
+                $s->sql,
+                $s->admissions,
+                new \Infrastructure\Identity\RandomInstitutionalIdGenerator()
+            ),
+            $s->clock,
         );
     }
 
