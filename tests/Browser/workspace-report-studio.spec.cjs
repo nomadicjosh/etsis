@@ -256,6 +256,19 @@ async function fixture(page, options = {}) {
         for (const key of ['balance', 'charges', 'payments', 'refunds']) fields[key].relation = 'account';
         fields.cutoff_utc = { label: 'Recorded cutoff UTC', type: 'datetime', relation: 'account' };
     }
+    if (options.transferCompletion) {
+        Object.assign(fields, {
+            academic_credit_id: { label: 'Academic credit reference', type: 'string', relation: 'academic_credit' },
+            recorded_transfer_completed_on: { label: 'Current transfer completion date', type: 'date', relation: 'credit_transfer_completion' },
+            original_recorded_transfer_completed_on: { label: 'Original transfer completion date', type: 'date', relation: 'credit_transfer_completion' },
+        });
+        Object.assign(dataset.relationships, {
+            academic_credit: { label: 'Recorded academic credits', parent: 'student', many: true,
+                date_fields: { recorded_transfer_completed_on: 'Current transfer completion date',
+                    original_recorded_transfer_completed_on: 'Original transfer completion date' } },
+            credit_transfer_completion: { label: 'Transfer completion dates', parent: 'academic_credit', many: false },
+        });
+    }
     if (options.accounts) {
         for (const [key, label] of Object.entries({ tuition: 'Net tuition', fees: 'Net fees',
             manual_charges: 'Net staff-recorded charges', unclassified_charges: 'Net unclassified charges' }))
@@ -326,7 +339,9 @@ async function fixture(page, options = {}) {
             const values = { tuition: 25, fees: 3, manual_charges: 2, unclassified_charges: 0, cutoff_utc: query.financial_as_of?.replace('T', ' ').replace('Z', ''), pursuit_id: id(92), component_row_id: id(93), component_code: 'ART', component_title: 'Retained <b>concentration</b>', component_kind: 'concentration', component_active: true, department_title: 'English <b>department</b>', school_title: 'Arts <college>', parent_major_code: 'ENG', academic_year_code: '2026-2027', pursuit_status: 'active', cohort_matches: true, checkin_id: id(95), due_on: '2026-11-25', followup_status: 'responded', attendance_id: id(94), held_on: '2026-11-21', attendance_status: 'absent', section_code: 'MATH.101.A', determined_on: '2026-11-21', classification_title: 'Full time', registered_credits: 6.25, determination_id: id(90), student_id: id(91), application_id: id(80), case_office:'Admissions <b>fictional</b>', case_work_status:'waiting', case_due_on:'2026-09-01', posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
                 latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
-                submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form' };
+                submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form',
+                academic_credit_id: id(96), recorded_transfer_completed_on: '2026-06-12',
+                original_recorded_transfer_completed_on: '2026-05-01' };
             const rows = options.curriculum || options.followups || options.attendance || options.load || options.postings || options.scheduling || options.students || options.applications || options.accounts ? [Object.fromEntries(query.columns.map((column, i) => [`c${i}`, column.date_bucket && values[column.field] != null
                     ? String(values[column.field]).slice(0, { day: 10, month: 7, year: 4 }[column.date_bucket])
                     : (options.attendance || options.followups) && column.aggregate.startsWith('count') ? 1 : values[column.field] ?? null]))]
@@ -1261,6 +1276,41 @@ test('latest related rows use compact controls, keep ties by default and survive
     expect(await studio.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     await studio.getByRole('button', { name: 'Preview', exact: true }).click();
     expect(f.calls.filter(c => c.path.endsWith('/preview/')).at(-1).data.definition.record_selection.registration.ties).toBe('one');
+    expect(f.errors).toEqual([]);
+});
+
+test('transfer completion dates keep corrected and original chronology through selection and saved calendar columns', async ({ page }) => {
+    const f = await fixture(page, { students: true, transferCompletion: true });
+    await page.getByRole('button', { name: 'Start report: Students & current primary program', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByRole('button', { name: 'Add Recorded academic credits', exact: true }).click();
+    await studio.getByRole('button', { name: 'Add Transfer completion dates', exact: true }).click();
+    const chooser = studio.locator('[data-record-selection="academic_credit"]');
+    await chooser.locator('summary').click();
+    await chooser.getByRole('button', { name: 'Latest', exact: true }).click();
+    await chooser.getByLabel('Recorded academic credits: date', { exact: true }).selectOption('recorded_transfer_completed_on');
+    await expect(chooser.getByLabel('Keep equal dates', { exact: true })).toBeChecked();
+    await studio.getByRole('checkbox', { name: 'Current transfer completion date', exact: true }).check();
+    await studio.getByRole('checkbox', { name: 'Original transfer completion date', exact: true }).check();
+    await studio.getByRole('button', { name: 'Column 5 settings: Each value', exact: true }).click();
+    const periods = studio.getByRole('group', { name: 'Calendar grouping', exact: true });
+    await periods.getByRole('button', { name: 'Month', exact: true }).click();
+    await studio.getByRole('button', { name: 'Done', exact: true }).click();
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.record_selection.academic_credit).toEqual({ date_field: 'recorded_transfer_completed_on', direction: 'latest', ties: 'all' });
+    expect(query.columns.find(column => column.field === 'recorded_transfer_completed_on')).toMatchObject({ date_bucket: 'month' });
+    expect(query.columns.find(column => column.field === 'original_recorded_transfer_completed_on')).not.toHaveProperty('date_bucket');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional transfer chronology');
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
+    await studio.getByRole('button', { name: 'Edit', exact: true }).click();
+    await chooser.locator('summary').click();
+    await expect(chooser.getByLabel('Recorded academic credits: date', { exact: true })).toHaveValue('recorded_transfer_completed_on');
+    await chooser.getByLabel('Recorded academic credits: date', { exact: true }).selectOption('original_recorded_transfer_completed_on');
+    await chooser.getByRole('button', { name: 'Earliest', exact: true }).click();
+    await page.setViewportSize({ width: 320, height: 812 });
+    await accessible(page);
+    expect(await studio.evaluate(el => el.scrollWidth <= el.clientWidth)).toBe(true);
     expect(f.errors).toEqual([]);
 });
 

@@ -777,6 +777,8 @@ Qualification uses populated fictional SQLite service/HTTP/export cases, five id
 
 ### Calendar period reports
 
+[Transfer completion dates](transfer-completion-reporting.md) now use these same controls in existing academic-credit/student/application sources. Choose current/corrected versus original award dates explicitly; missing/institutional dates stay unknown. The source distinguishes canonical ISO strings from native SQL DATE storage without converting recorded values.
+
 Date columns now have **Group dates** buttons in the existing column-settings panel: **Original value**, **Day**, **Month**, and **Year**. These work on approved date/timestamp fields from any authorized report source, including named relationship copies. Month results include the year (`2026-11`); different years are never combined into one November. Day results remain typed dates; month/year results are text, while counts remain integers. Minimum, maximum, distinct counts, summaries and sorting use the selected period. Row/join/matching conditions still inspect the original source value, so a precise time window is applied before grouping. Give the output column an appropriate label when changing periods.
 
 Choose **Applications by submission month** to count distinct applications using their genuine recorded submission dates. The starter excludes missing dates deliberately; the existing unknown-submission starter remains available. An unfiltered calendar report retains a blank group for earlier unknown dates. Submission dates follow their recorded business calendar, not a newly inferred UTC date or term chronology.
@@ -798,6 +800,8 @@ Focused acceptance covers 84 PHP tests (631 assertions), six single-worker brows
 Global student-read and gradebook-management source duties apply to catalog, hidden-field access, saved/shared/static results and exports; assigned faculty and student owners retain their scoped existing readers. An unsummarized saved live follow-up report can hand a deduplicated, revalidated shortlist to existing Communications, with independent messaging/person-directory permissions, minimal current recipient labels, blank content and separate audience/queue/background-delivery confirmations. Static captures remain fixed authorized artifacts under the existing retention/access contract and offer no live shortlist. No schema, event, automatic alert or parallel message queue is added.
 
 ### Latest and earliest related records
+
+The [transfer completion-date workflow](transfer-completion-reporting.md#select-the-latest-or-earliest-complete-record) adds current and original award dates as approved academic-credit descendant dates. It uses the exact transfer award/student/credit links in both the visible join and ranked candidates. Existing term-based date defaults and unrelated record selectors remain unchanged.
 
 On the **Fields** tab, connect a record such as **Registrations**, **Recorded academic credits** or **Person’s applications**. Its optional **Rows** disclosure offers **All**, **Latest** and **Earliest**. Choose an approved **Date** when selecting the latest or earliest records. The report keeps complete related rows, so a status, course, grade or application program comes from the selected record rather than an unrelated row beside a maximum date.
 

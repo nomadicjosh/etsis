@@ -9,6 +9,20 @@ use Symfony\Component\Process\Process;
 
 final class ConsoleBootstrapTest extends TestCase
 {
+    public function testTransferCompletionReportingUsesActualProvidersCsrfAndPrivateStudentGrants(): void
+    {
+        $process = new Process([
+            PHP_BINARY,
+            '-d',
+            'memory_limit=96M',
+            dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php',
+            'check-transfer-completion-report',
+        ]);
+        $process->setTimeout(15);
+        $process->run();
+        self::assertSame(0, $process->getExitCode(), $process->getErrorOutput());
+    }
+
     public function testPrivateTimetableExportUsesActualOwnerProvidersCsrfAndPrivateTransport(): void
     {
         $process = new Process([

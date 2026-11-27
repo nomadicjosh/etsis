@@ -21,7 +21,8 @@ final class ReportRowSelection
         foreach ($schema["fields"] as $id => $field) {
             if (
                 !in_array($field["type"], ["date", "datetime"], true) ||
-                isset($field["expression"]) || isset($field["scale"])
+                (isset($field['expression']) && $field['expression'] !== 'transfer_completion_date') ||
+                isset($field["scale"])
             ) {
                 continue;
             }
@@ -32,7 +33,7 @@ final class ReportRowSelection
                 if (
                     $step === null ||
                     ($step["many"] ?? false) ||
-                    isset($step["source"]) ||
+                    (isset($step['source']) && $step['source'] !== 'transfer_award') ||
                     count($path) >= 4
                 ) {
                     continue 2;

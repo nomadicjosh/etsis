@@ -105,6 +105,7 @@ try {
                 'check-degree-trials',
                 'check-transfer-corrections',
                 'check-report-exports',
+                'check-transfer-completion-report',
             ],
             true,
         )
@@ -576,6 +577,11 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/ReportExportBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-transfer-completion-report') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/TransferCompletionReportBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-report-retention') {
             require __DIR__ . '/ReportRetentionBootChecks.php';

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Infrastructure\Reporting;
 
+use function Codefy\Framework\Helpers\trans;
+
 final class AcademicReportSchema
 {
     /** @return array<string, array<string, mixed>> */
@@ -326,6 +328,9 @@ final class AcademicReportSchema
                 ...$personJoins,
                 "term" => $join("sis_terms", "credit", "term_id", "id"),
                 "grade" => $join("sis_grades", "credit", "grade_id", "id"),
+                'transfer_completion' => $join('sis_transfer_awards', 'credit', 'source_id', 'id') + [
+                    'source' => 'transfer_award',
+                ],
                 "course_binding" => $join("sis_credit_course_versions", "credit", "id", "id"),
                 "course_version" => $join("sis_course_versions", "course_binding", "course_version_id", "id"),
                 "retained_subject" => $join(
@@ -499,6 +504,19 @@ final class AcademicReportSchema
                         "expression" => "registration_label",
                     ],
                     "credit_type" => $field("Credit type", "string", "credit", "credit_type"),
+                    'credit_id' => $field(trans('Academic credit reference'), 'string', 'credit', 'id'),
+                    'transfer_completed_on' => $field(
+                        trans('Current transfer completion date'),
+                        'date',
+                        'transfer_completion',
+                        'completed_on',
+                    ) + ['expression' => 'transfer_completion_date', 'date_storage' => 'iso'],
+                    'original_transfer_completed_on' => $field(
+                        trans('Original transfer completion date'),
+                        'date',
+                        'transfer_completion',
+                        'completed_on',
+                    ) + ['date_storage' => 'iso'],
                     "attempted" => $field("Attempted credits", "double", "credit", "attempted_milli") + [
                         "scale" => 1000,
                     ],
@@ -720,10 +738,15 @@ final class AcademicReportSchema
             ],
             'credit_term' => $join('sis_terms', 'academic_credit', 'term_id', 'id'),
             'credit_grade' => $join('sis_grades', 'academic_credit', 'grade_id', 'id'),
+            'credit_transfer_completion' => $join('sis_transfer_awards', 'academic_credit', 'source_id', 'id') + [
+                'source' => 'transfer_award',
+            ],
         ];
         $academicRelations['academic_credit']['label'] = 'Recorded academic credits';
         $academicRelations['credit_term']['label'] = 'Recorded-credit terms';
         $academicRelations['credit_grade']['label'] = 'Recorded grades';
+        $credits['relationships']['transfer_completion']['label'] = trans('Transfer completion dates');
+        $academicRelations['credit_transfer_completion']['label'] = trans('Transfer completion dates');
         $academicFields = [
             'academic_credit_id' => $field('Academic credit reference', 'string', 'academic_credit', 'id'),
             'recorded_course_code' => $field('Recorded course code', 'string', 'academic_credit', 'course_code'),
@@ -736,6 +759,18 @@ final class AcademicReportSchema
             'recorded_term_code' => $field('Recorded-credit term', 'string', 'credit_term', 'code'),
             'recorded_term_starts_on' => $field('Recorded-credit term starts', 'date', 'credit_term', 'starts_on'),
             'recorded_grade_code' => $field('Recorded final grade', 'string', 'credit_grade', 'code'),
+            'recorded_transfer_completed_on' => $field(
+                trans('Current transfer completion date'),
+                'date',
+                'credit_transfer_completion',
+                'completed_on',
+            ) + ['expression' => 'transfer_completion_date', 'date_storage' => 'iso'],
+            'original_recorded_transfer_completed_on' => $field(
+                trans('Original transfer completion date'),
+                'date',
+                'credit_transfer_completion',
+                'completed_on',
+            ) + ['date_storage' => 'iso'],
         ];
         $applications = [
             'table' => 'sis_applications', 'root' => 'application',

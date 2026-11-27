@@ -15,6 +15,7 @@ final class ReportCalendarSql
         string $type,
         ReportDateBucket $bucket,
         string $driver,
+        bool $nativeDate = true,
     ): string {
         if (!in_array($type, ["date", "datetime"], true)) {
             throw new InvalidArgumentException("Calendar grouping requires a date field.");
@@ -22,9 +23,9 @@ final class ReportCalendarSql
         if (!in_array($driver, ["mysql", "pgsql", "sqlite", "sqlsrv", "oci"], true)) {
             throw new InvalidArgumentException("Calendar grouping is unavailable for this database driver.");
         }
-        // Date fields use native DATE columns. Datetime read models are canonical UTC ISO strings.
+        // Metadata distinguishes native DATE columns from canonical ISO date/datetime strings.
         // Explicit native-date formatting avoids server locale and session DateStyle dependencies.
-        if ($type === "date") {
+        if ($type === "date" && $nativeDate) {
             $expression = match ($driver) {
                 "mysql" => "DATE_FORMAT(" . $expression . ", '%Y-%m-%d')",
                 "pgsql", "oci" => "TO_CHAR(" . $expression . ", 'YYYY-MM-DD')",

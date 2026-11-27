@@ -47,6 +47,7 @@ final readonly class ReportSelectCompiler
                     $s['fields'][$column['field']]['type'],
                     ReportDateBucket::from($column['date_bucket']),
                     $this->sql->driver(),
+                    nativeDate: ($s['fields'][$column['field']]['date_storage'] ?? 'native') === 'native',
                 );
             }
             if (isset($column["calculation"])) {
@@ -294,6 +295,9 @@ final readonly class ReportSelectCompiler
             $name = "CASE " . $name . " WHEN 'A' THEN 'Registered' WHEN 'N' THEN 'Registered'"
             . " WHEN 'D' THEN 'Dropped' WHEN 'W' THEN 'Withdrawn' WHEN 'V' THEN 'Voided' ELSE 'Other' END";
         }
+        if (($field['expression'] ?? '') === 'transfer_completion_date') {
+            $name = 'COALESCE(' . $q($alias) . '.' . $q('corrected_completed_on') . ', ' . $name . ')';
+        }
         return isset($field['scale']) ? '(' . $name . ' / ' . (int) $field['scale'] . '.0)' : $name;
     }
 
@@ -350,19 +354,10 @@ final readonly class ReportSelectCompiler
             foreach ($path as $i => $step) {
                 $next = $schema["relationships"][$step];
                 $alias = $prefix . "_date_" . $i;
-                $from .=
-                " LEFT JOIN " .
-                $q($next["table"]) .
-                " " .
-                $q($alias) .
-                " ON " .
-                $q($aliases[$next["parent"]]) .
-                "." .
-                $q($next["left"]) .
-                " = " .
-                $q($alias) .
-                "." .
-                $q($next["right"]);
+                $from .= ' LEFT JOIN ' . $q($next['table']) . ' ' . $q($alias) . ' ON ' .
+                $this->relationshipCondition($alias, array_replace($next, [
+                        'parent' => $aliases[$next['parent']],
+                    ]));
                 $aliases[$step] = $alias;
             }
             $expression = function (string $id) use ($schema, $name, $row): string {
@@ -376,7 +371,7 @@ final readonly class ReportSelectCompiler
                 return $this->fieldExpression($field, $row);
             };
             $condition = $this->condition($filters, $expression, $parameters, $schema["fields"]);
-            $dateColumn = $q($aliases[$date["relation"]]) . "." . $q($date["column"]);
+            $dateColumn = $this->fieldExpression($date, $aliases[$date['relation']]);
             $where =
             $q($row) .
             "." .
@@ -511,6 +506,13 @@ final readonly class ReportSelectCompiler
         $column = static fn(string $alias, string $field): string => $q($alias) . '.' . $q($field);
         if (!isset($relation['source'])) {
             return $column($relation['parent'], $relation['left']) . ' = ' . $column($name, $relation['right']);
+        }
+        if ($relation['source'] === 'transfer_award') {
+            $parent = $relation['parent'];
+            return $column($parent, $relation['left']) . ' = ' . $column($name, $relation['right']) .
+            ' AND ' . $column($parent, 'id') . ' = ' . $column($name, 'credit_id') .
+            ' AND ' . $column($parent, 'student_id') . ' = ' . $column($name, 'student_id') .
+            ' AND ' . $column($parent, 'credit_type') . " = 'transfer'";
         }
         if ($relation['source'] !== 'latest_registration_term') {
             throw new \LogicException('Unknown reporting relationship source.');

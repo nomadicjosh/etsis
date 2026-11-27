@@ -10360,3 +10360,22 @@ msgstr ""
 #: src/Infrastructure/Persistence/EventSourcedRegistrationBilling.php:110
 msgid "The account changed. Review again."
 msgstr ""
+
+#: src/Infrastructure/Reporting/AcademicReportSchema.php:507
+msgid "Academic credit reference"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AcademicReportSchema.php:509
+#: src/Infrastructure/Reporting/AcademicReportSchema.php:763
+msgid "Current transfer completion date"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AcademicReportSchema.php:515
+#: src/Infrastructure/Reporting/AcademicReportSchema.php:769
+msgid "Original transfer completion date"
+msgstr ""
+
+#: src/Infrastructure/Reporting/AcademicReportSchema.php:748
+#: src/Infrastructure/Reporting/AcademicReportSchema.php:749
+msgid "Transfer completion dates"
+msgstr ""
