@@ -48,7 +48,7 @@ final class CampusPortalTest extends TestCase
             $c->publish($id, true, 0);
         }
         self::assertSame(['public-news'], array_column($c->service->publicData()['news'], 'code'));
-        self::assertCount(3, $c->repository->news(true));
+        self::assertCount(3, $c->repository->news($c->sis->access->actor));
         self::assertSame('Welcome', $c->service->article('public-news')['title']);
         try {
             $c->service->article('campus-news');

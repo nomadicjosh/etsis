@@ -57,7 +57,7 @@ final readonly class CampusService
         return [
             "terms" => $this->repository->terms(),
             "programs" => $this->repository->programs(),
-            "news" => $this->repository->news(false),
+            "news" => $this->repository->news(null),
         ];
     }
 
@@ -74,22 +74,26 @@ final readonly class CampusService
     /** @return list<array<string, mixed>> */
     public function news(bool $campus = false, ?EntityId $after = null): array
     {
-        if ($campus) {
-            $this->access->authenticatedUserId();
+        $owner = $campus ? $this->access->authenticatedUserId() : null;
+        $news = $this->repository->news($owner, $after);
+        if ($owner !== null && $this->access->authenticatedUserId()->value !== $owner->value) {
+            throw new AccessDeniedException();
         }
-        return $this->repository->news($campus, $after);
+        return $news;
     }
 
     /** @return array<string, mixed> */
     public function article(string $code, bool $campus = false): array
     {
-        if ($campus) {
-            $this->access->authenticatedUserId();
-        }
+        $owner = $campus ? $this->access->authenticatedUserId() : null;
         if (preg_match('/^[a-z0-9][a-z0-9-]{0,79}$/D', $code) !== 1) {
             throw new InvalidArgumentException("Invalid article.");
         }
-        return $this->repository->article($code, $campus);
+        $article = $this->repository->article($code, $owner);
+        if ($owner !== null && $this->access->authenticatedUserId()->value !== $owner->value) {
+            throw new AccessDeniedException();
+        }
+        return $article;
     }
 
     /** @return array<string, mixed> */
@@ -99,7 +103,7 @@ final readonly class CampusService
         $data = $this->repository->overview($user);
         $person = new EntityId($data["person"]["id"]);
         $data["contact"] = $this->contacts->view($person);
-        $data["news"] = $this->repository->news(true);
+        $data["news"] = $this->repository->news($user);
         $data["transcript_requests"] = $this->repository->transcriptRequests($user);
         $data["request_id"] = EntityId::generate()->value;
         $data["payment_id"] = EntityId::generate()->value;

@@ -252,16 +252,15 @@ final readonly class SqlCampusRepository implements CampusRepository
         return ["items" => $rows, "next_after" => $more ? $rows[23]["id"] : null];
     }
 
-    public function news(bool $campus, ?EntityId $after = null): array
+    public function news(?EntityId $owner, ?EntityId $after = null): array
     {
         $q = $this->sql->quote(...);
         $where = "p." . $q("status") . " = 'published' AND p." . $q("kind") . " = 'news'";
-        if (!$campus) {
-            $where .= " AND a." . $q("audience") . " = 'public'";
-        }
+        $audience = new \Infrastructure\Persistence\SqlContentAudience($this->sql)->predicate($owner);
+        $where .= ' AND ' . $audience['sql'];
         $visibility = \Infrastructure\Persistence\SqlPortalVisibility::window($this->sql, 'p', $this->clock->now());
         $where .= ' AND ' . $visibility['sql'];
-        $params = $visibility['parameters'];
+        $params = [...$audience['parameters'], ...$visibility['parameters']];
         if ($after !== null) {
             $where .= " AND p." . $q("id") . " < ?";
             $params[] = $after->value;
@@ -297,27 +296,22 @@ final readonly class SqlCampusRepository implements CampusRepository
         return array_map($this->newsContent(...), $rows);
     }
 
-    public function article(string $code, bool $campus): array
+    public function article(string $code, ?EntityId $owner): array
     {
         $q = $this->sql->quote(...);
         $visibility = \Infrastructure\Persistence\SqlPortalVisibility::window($this->sql, 'p', $this->clock->now());
+        $audience = new \Infrastructure\Persistence\SqlContentAudience($this->sql)->predicate($owner);
         $post = $this->sql->fetch(
-            'SELECT p.* FROM ' . $q('sis_portal_posts') . ' p WHERE p.' . $q('code') .
-                " = ? AND p." . $q('status') . " = 'published' AND p." . $q('kind') .
-                " = 'news' AND " . $visibility['sql'],
-            [$code, ...$visibility['parameters']],
+            'SELECT p.* FROM ' . $q('sis_portal_posts') . ' p LEFT JOIN ' . $q('sis_portal_audiences')
+            . ' a ON a.' . $q('post_id') . ' = p.' . $q('id') . ' WHERE p.' . $q('code')
+            . " = ? AND p." . $q('status') . " = 'published' AND p." . $q('kind')
+            . " = 'news' AND " . $visibility['sql'] . ' AND ' . $audience['sql'],
+            [$code, ...$visibility['parameters'], ...$audience['parameters']],
             1,
         )[0] ?? throw new RecordNotFoundException('Article not found.');
-        if (!$campus && $this->audience(new EntityId($post["id"])) !== "public") {
-            throw new RecordNotFoundException("Article not found.");
-        }
-        return $this->newsContent([
-            "id" => $post["id"],
-            "title" => $post["title"],
-            "content" => $post["content"],
-            "code" => $post["code"],
-            "content_format" => $post['content_format'],
-        ]);
+        return $this->newsContent(array_intersect_key($post, array_flip([
+            'id', 'title', 'content', 'code', 'content_format',
+        ])));
     }
 
     private function newsContent(array $row): array

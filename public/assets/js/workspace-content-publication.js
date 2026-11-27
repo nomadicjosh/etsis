@@ -133,7 +133,7 @@ window.createCampusContentPublication = function (ui) {
         body.append(
             button("Back to editor", () => edit(post.id), "btn-link mb-3"),
             recordSummary([
-                ["Audience", post.audience === "public" ? "Public website" : "Signed-in campus"],
+                ["Audience", ui.audience.summary(post)],
                 ["Current status", badge(visibility(post))],
             ]),
             node(
@@ -148,7 +148,8 @@ window.createCampusContentPublication = function (ui) {
                 action === "approve"
                     ? post.audience === "public"
                         ? "This content may be read without signing in once its publication window begins."
-                        : "Publish this saved content for signed-in campus users."
+                        : post.audience === 'roles' ? ui.audienceLabels.publish
+                            : "Publish this saved content for signed-in campus users."
                     : action === "archive"
                       ? "Remove this content from the portal. Its saved wording is retained."
                       : action === "submit"

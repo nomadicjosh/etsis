@@ -20,7 +20,7 @@ interface PortalRepository
     ): void;
     public function add(#[\SensitiveParameter] PortalPost $post): void;
     public function get(EntityId $id): PortalPost;
-    public function published(string $code): PortalPost;
+    public function published(string $code, EntityId $owner): PortalPost;
     public function save(#[\SensitiveParameter] PortalPost $post, int $expectedVersion): void;
     public function revise(#[\SensitiveParameter] PortalPost $post, int $expectedVersion): void;
 }

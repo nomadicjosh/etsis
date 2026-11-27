@@ -339,7 +339,8 @@
     const hiatusStudio = window.createWorkspaceHiatus({ creditLabels: config.withdrawal_credit_labels, money, node, request, task, table, badge, buildForm, formData, openDrawer, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const transferAwardStudio = window.createWorkspaceTransferAwards({ historyChecks: () => historyChecks, historyCheckLabels: config.history_check_labels, can, node, request, task, table, recordSummary, actionMenu, buildForm, formData, openDrawer, back: id => transferStudio.record('equivalencies', id) });
     const prerequisitePermissions = window.createWorkspacePrerequisitePermissions({ node, request, task, can, openDrawer });
-    const contentPublication = window.createCampusContentPublication({ node, request, task, openDrawer, recordSummary, badge,
+    const contentAudience = window.createCampusContentAudience({ node, request, task, labels: config.campus_audience_labels });
+    const contentPublication = window.createCampusContentPublication({ audience: contentAudience, audienceLabels: config.campus_audience_labels, node, request, task, openDrawer, recordSummary, badge,
         edit: editCampusContent, saved: async action => {
             notify({ approve: 'Publication approved.', submit: 'Draft submitted for review.', return: 'Draft returned to its author.', archive: 'Content archived.' }[action]);
             drawer.hide(); await loadDirectory();
@@ -861,7 +862,10 @@
         form.addEventListener('submit', event => { event.preventDefault(); task(async () => {
             if (!form.reportValidity()) return;
             const data = { ...formData(form, definition.fields), ...(operation ? { operation_id: operation } : {}) };
-            if (section === 'portal') data.content_format = form.elements.content_format.value;
+            if (section === 'portal') {
+                data.content_format = form.elements.content_format.value;
+                data.audience_roles = form.campusAudience.read(true);
+            }
             if (section === 'people' && !data.institutional_id) delete data.institutional_id;
             const saved = await request(definition.endpoint, 'POST', data);
             notify('Saved. One less thing on your list.');
@@ -1412,11 +1416,13 @@
         await operations.enhance(section, row, body, origin);
     }
 
-    async function campusContentForm(form, format = 'plain') {
+    async function campusContentForm(form, format = 'plain', selectedRoles = [], audienceMode = null) {
         const code = form.elements.namedItem('code');
         const kind = form.elements.namedItem('kind');
         const content = form.elements.namedItem('content');
         const audience = form.elements.namedItem('audience');
+        form.dataset.audienceMode = audienceMode || audience.value;
+        form.campusAudience = contentAudience.mount(form, selectedRoles);
         const announcementHelp = node('p', { class: 'form-text', id: `${audience.id}-announcement-help` },
             config.notification_labels.announcement_publish_help);
         audience.after(announcementHelp);
@@ -1436,7 +1442,7 @@
         );
         form.elements.title.maxLength = 191;
         const update = () => {
-            announcementHelp.hidden = kind.value !== 'news' || audience.value !== 'campus';
+            announcementHelp.hidden = kind.value !== 'news' || !['campus', 'roles'].includes(audience.value);
             form.querySelector(`label[for="${content.id}"]`).firstChild.textContent =
                 kind.value === 'link' ? 'HTTPS link ' : 'Content ';
             content.rows = kind.value === 'link' ? 3 : 12;
@@ -1471,7 +1477,7 @@
         if (!body.isConnected) return;
         form.elements.kind.disabled = true;
         form.elements.code.readOnly = true;
-        if (post.can_edit) { body.append(form); await campusContentForm(form, post.content_format); }
+        if (post.can_edit) { body.append(form); await campusContentForm(form, post.content_format, post.audience_roles || [], post.audience); }
         if (!body.isConnected) return;
         form.append(
             node('p', { class: 'form-text' }, 'Saving an edit returns content to draft for review.'),
@@ -1487,6 +1493,7 @@
                         id,
                         version: Number(post.version),
                         content_format: form.elements.content_format.value,
+                        audience_roles: form.campusAudience.read(true),
                     });
                     if (!body.isConnected) return;
                     notify('Draft saved. Review it before publishing.');
@@ -1501,8 +1508,9 @@
             role: 'group',
             'aria-label': 'Content tasks',
         });
-        const baseline = JSON.stringify(formData(form, fields));
-        const changed = () => JSON.stringify(formData(form, fields)) !== baseline;
+        const draft = () => ({ ...formData(form, fields), audience_roles: form.campusAudience?.read() || [] });
+        const baseline = JSON.stringify(draft());
+        const changed = () => JSON.stringify(draft()) !== baseline;
         const hint = node('p', { class: 'form-text', role: 'status', hidden: true });
         if (post.can_publish && can('sis:portal:publish') && post.status !== 'archived') {
             const review = node(
@@ -1551,7 +1559,7 @@
         body.replaceChildren(
             recordSummary([
                 ['Status', badge(post.visibility === 'pending' ? 'Awaiting review' : post.visibility)],
-                ['Audience', post.audience === 'public' ? 'Public website' : 'Signed-in campus'],
+                ['Audience', contentAudience.summary(post)],
             ]),
             actions,
             hint,

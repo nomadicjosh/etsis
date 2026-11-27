@@ -11071,3 +11071,103 @@ msgstr ""
 #: src/Domain/Reporting/ValueObject/ReportQuery.php:269
 msgid "Nested calculations require nonmonetary numeric fields."
 msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:8
+msgid "Selected account roles"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:9
+msgid "Choose up to ten roles. An account needs any selected role to read this news or see its announcement. Role assignments are checked when reading; permissions and person capabilities do not substitute for a role."
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:14
+msgid "Search account roles"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:15
+msgid "Find roles"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:16
+msgid "Available roles"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:17
+msgid "Selected roles"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:18
+msgid "Remove role: {role}"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:19
+msgid "Next roles"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:20
+msgid "Previous roles"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:21
+msgid "Loading account roles…"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:22
+msgid "Roles could not load. Use Find roles to try again."
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:23
+msgid "No account roles match this search."
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:24
+msgid "No roles selected."
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:25
+msgid "Select one to ten account roles before saving."
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:26
+msgid "Audience roles need review"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:27
+msgid "Public website"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:28
+msgid "Signed-in campus"
+msgstr ""
+
+#: resources/views/backend/workspace/campus-audience-labels.php:29
+msgid "Publish this saved news for accounts currently assigned any selected role. Other accounts cannot read it through the bell, campus news or a direct link."
+msgstr ""
+
+#: resources/views/shared/notification-labels.php:251
+msgid "After approval, news appears in the notification bell for its selected signed-in audience. Publication times control its availability. Public website news is separate."
+msgstr ""
+
+#: src/Domain/Portal/ValueObject/ContentAudience.php:45
+msgid "Choose one to ten distinct account roles for role-targeted news, or clear the roles for another audience."
+msgstr ""
+
+#: src/Domain/Portal/Service/CampusContentService.php:345
+msgid "Search account role names using up to eighty characters."
+msgstr ""
+
+#: src/Domain/Portal/Service/CampusContentService.php:365
+msgid "Some selected account roles are unavailable. Review the audience again."
+msgstr ""
+
+#: src/Domain/Portal/Service/CampusContentService.php:381
+msgid "The selected account roles changed. Save and review the audience again."
+msgstr ""
+
+#: src/Infrastructure/Persistence/Repository/SqlContentAudienceRepository.php:57
+msgid "This audience needs review before publishing."
+msgstr ""
+
+#: src/Application/Http/Controller/SisPortalEditorController.php:104
+msgid "Choose account roles as a list of role references."
+msgstr ""

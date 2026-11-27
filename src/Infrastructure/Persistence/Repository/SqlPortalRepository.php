@@ -73,7 +73,7 @@ final readonly class SqlPortalRepository implements PortalRepository
         return $this->hydrate($this->sql->one("sis_portal_posts", ["id" => $id->value]));
     }
 
-    public function published(string $code): PortalPost
+    public function published(string $code, EntityId $owner): PortalPost
     {
         $q = $this->sql->quote(...);
         $visibility = \Infrastructure\Persistence\SqlPortalVisibility::window(
@@ -81,17 +81,19 @@ final readonly class SqlPortalRepository implements PortalRepository
             "p",
             $this->clock->now(),
         );
+        $audience = new \Infrastructure\Persistence\SqlContentAudience($this->sql)->predicate($owner);
         $row =
         $this->sql->fetch(
             "SELECT p.* FROM " .
                     $q("sis_portal_posts") .
-                    " p WHERE p." .
+                    ' p LEFT JOIN ' . $q('sis_portal_audiences') . ' a ON a.' . $q('post_id')
+                    . ' = p.' . $q('id') . " WHERE p." .
                     $q("code") .
                     " = ? AND p." .
                     $q("status") .
                     " = 'published' AND " .
-                    $visibility["sql"],
-            [$code, ...$visibility["parameters"]],
+                    $visibility["sql"] . ' AND ' . $audience['sql'],
+            [$code, ...$visibility["parameters"], ...$audience['parameters']],
             1,
         )[0] ?? throw new \Domain\Shared\Exception\RecordNotFoundException("Content not found.");
         return $this->hydrate($row);

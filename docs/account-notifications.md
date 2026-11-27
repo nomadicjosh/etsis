@@ -73,3 +73,13 @@ answers in local storage or session storage. More pages require deliberate navig
 starts a fresh observed list, rather than an immutable archive. Source cursors and repeated/empty
 continuations are bounded. Independent assistive-technology and deployment/load acceptance remain
 part of release qualification.
+
+
+## Announcements for selected roles
+
+Publishers can restrict reviewed campus news to [selected account roles](campus-announcements.md#selected-account-roles).
+The combined bell includes only announcements currently available to your account. A matching
+role assignment controls access; other permissions or a student/faculty capability do not make
+you a recipient. A role change takes effect on the next server read or refresh. Your existing
+read/deletion state still applies to the same publication; no extra category or notification
+archive is added.

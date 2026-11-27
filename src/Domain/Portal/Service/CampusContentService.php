@@ -31,6 +31,7 @@ final readonly class CampusContentService
         private Clock $clock,
         private ReviewProof $proofs,
         private ContentMarkup $markup,
+        private \Domain\Portal\Repository\ContentAudienceRepository $audiences,
     ) {
     }
 
@@ -144,6 +145,7 @@ final readonly class CampusContentService
             $this->assess($post, $actor, $action, $window, $note);
             $next = $post->transition($action, $window, $note);
             $audience = $this->campus->audience($id);
+            $roles = $this->audiences->selected($id);
             $this->posts->save($next, $post->version);
             $result = [
                 "id" => $id->value,
@@ -168,9 +170,13 @@ final readonly class CampusContentService
                 $window->requireFuture($this->clock->now());
             }
             $this->proofs->validate($token, "campus-content", $action, $id, $actor, $operation, $intent);
+            if (in_array($action, ['approve', 'submit'], true)) {
+                $this->verifyAudience($next);
+            }
             if (
                 $this->posts->get($id) != $next ||
                 $this->campus->audience($id) !== $audience ||
+                $this->audiences->selected($id) !== $roles ||
                 $this->posts->receipt($operation) !== [
                     "post_id" => $id->value,
                     "actor_id" => $actor->value,
@@ -193,6 +199,9 @@ final readonly class CampusContentService
         PublicationWindow $window,
         ?string $note,
     ): void {
+        if (in_array($action, ['approve', 'submit'], true)) {
+            $this->verifyAudience($post);
+        }
         if ($action === "approve") {
             if ($post->status === "draft" && !$this->editable($post, $actor)) {
                 throw new AccessDeniedException();
@@ -284,6 +293,7 @@ final readonly class CampusContentService
             "status" => $post->status,
             "version" => $post->version,
             "audience" => $this->campus->audience($post->id),
+            "audience_roles" => $this->audiences->selected($post->id),
             "visible_from" => $post->visibleFrom,
             "visible_until" => $post->visibleUntil,
             "review_note" => $post->reviewNote,
@@ -324,6 +334,57 @@ final readonly class CampusContentService
         throw new ValidationException([["field" => "publication", "message" => $message]]);
     }
 
+    /** Role labels are authoring metadata; this endpoint exposes no grants or account membership. */
+    public function audienceRoles(string $search, ?EntityId $after = null): array
+    {
+        $actor = $this->access->requirePermission('sis:portal:manage');
+        if (
+            !mb_check_encoding($search, 'UTF-8') || mb_strlen($search) > 80 ||
+            preg_match('/[\x00-\x1F\x7F]/', $search)
+        ) {
+            throw new ValidationException([['field' => 'search', 'message' => \Codefy\Framework\Helpers\trans(
+                'Search account role names using up to eighty characters.',
+            )]]);
+        }
+        $roles = $this->audiences->roles(trim($search), $after);
+        $more = count($roles) > 20;
+        $roles = array_slice($roles, 0, 20);
+        if (
+            $this->access->requirePermission('sis:portal:manage')->value !== $actor->value ||
+            $this->access->authenticatedUserId()->value !== $actor->value
+        ) {
+            throw new AccessDeniedException();
+        }
+        return ['items' => $roles, 'next_after' => $more ? end($roles)['id'] : null];
+    }
+
+    private function roleDefinitions(\Domain\Portal\ValueObject\ContentAudience $selection): array
+    {
+        $roles = $this->audiences->definitions($selection->roles);
+        if (array_column($roles, 'id') !== $selection->roles) {
+            throw new ValidationException([['field' => 'audience_roles', 'message' => \Codefy\Framework\Helpers\trans(
+                'Some selected account roles are unavailable. Review the audience again.',
+            )]]);
+        }
+        return $roles;
+    }
+
+    private function verifyAudience(PortalPost $post): void
+    {
+        $roles = $this->audiences->selected($post->id);
+        $selection = new \Domain\Portal\ValueObject\ContentAudience(
+            $this->campus->audience($post->id),
+            $post->kind,
+            array_column($roles, 'id'),
+        );
+        if ($this->roleDefinitions($selection) !== $roles) {
+            throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+                'The selected account roles changed. Save and review the audience again.',
+            ));
+        }
+    }
+
+    /** @param array<mixed> $audienceRoles */
     public function save(
         ?EntityId $id,
         string $kind,
@@ -333,6 +394,7 @@ final readonly class CampusContentService
         string $audience,
         ?int $version,
         string $contentFormat = "plain",
+        array $audienceRoles = [],
     ): EntityId {
         $this->access->requirePermission("sis:portal:manage");
         if (
@@ -350,9 +412,7 @@ final readonly class CampusContentService
             }
         }
         PortalPost::requireWritableContent($content);
-        if (!in_array($audience, ["public", "campus"], true)) {
-            throw new InvalidArgumentException("Choose a public or campus audience.");
-        }
+        $selection = new \Domain\Portal\ValueObject\ContentAudience($audience, $kind, $audienceRoles);
         return $this->transactions->run(function () use (
             $id,
             $kind,
@@ -362,8 +422,10 @@ final readonly class CampusContentService
             $audience,
             $version,
             $contentFormat,
+            $selection,
         ): EntityId {
             $actor = $this->access->requirePermission("sis:portal:manage");
+            $roles = $this->roleDefinitions($selection);
             if ($id === null) {
                 $post = $this->portal->create($kind, $code, $title, $content, $contentFormat);
                 $id = $post->id;
@@ -391,8 +453,13 @@ final readonly class CampusContentService
                 $this->audit->record($actor, "portal.revised", $id);
             }
             $this->campus->setAudience($id, $audience);
+            $this->audiences->replace($id, $roles);
             $this->authorize("edit", $post, $actor);
-            if ($this->posts->get($id) != $post || $this->campus->audience($id) !== $audience) {
+            $this->verifyAudience($post);
+            if (
+                $this->posts->get($id) != $post || $this->campus->audience($id) !== $audience ||
+                $this->audiences->selected($id) !== $roles
+            ) {
                 throw new ConcurrentModificationException(
                     "Content changed while saving. Reopen it before editing.",
                 );

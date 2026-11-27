@@ -94,3 +94,72 @@ if (
 ) {
     throw new RuntimeException('Deleted announcements were resurrected or changed business history.');
 }
+
+// Role-targeted authoring, all private readers and the role-label directory use the same real providers.
+$sis->access->staff = true;
+$role = \Domain\Shared\ValueObject\EntityId::generate();
+$sis->sql->insert('sis_access_roles', ['id' => $role->value, 'name' => 'fictional_announcement_role',
+    'description' => 'Fictional role.', 'is_system' => 0]);
+$roles = $request('/sis/portal/audience-roles/?search=fictional_announcement_role');
+$roleRows = json_decode((string) $roles->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $roles->getStatusCode() !== 200 ||
+    $roleRows['items'] !== [['id' => $role->value, 'name' => 'fictional_announcement_role']]
+) {
+    throw new RuntimeException('The role directory lost its bounded label-only contract.');
+}
+$payload = ['kind' => 'news', 'code' => 'fictional-role-announcement', 'title' => 'Fictional role notice',
+    'content' => 'Fictional role-scoped wording.', 'audience' => 'roles', 'audience_roles' => [$role->value],
+    'content_format' => 'plain'];
+foreach ([null, 'not-a-list', []] as $invalidRoles) {
+    $invalidAudience = $teachingPost('/sis/portal/editor/', [...$payload, 'audience_roles' => $invalidRoles]);
+    if ($invalidAudience->getStatusCode() !== 422) {
+        throw new RuntimeException('An untyped or empty custom audience reached storage.');
+    }
+}
+$missing = $app->router->match($get->withMethod('POST')
+    ->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid/sis/portal/editor/'))
+    ->withHeader('Accept', 'application/json')->withParsedBody($payload));
+if ($missing->getStatusCode() !== 403) {
+    throw new RuntimeException('Role-targeted authoring bypassed CSRF.');
+}
+$saved = $teachingPost('/sis/portal/editor/', $payload);
+if ($saved->getStatusCode() !== 201) {
+    throw new RuntimeException('The role-targeted authoring route rejected its current contract.');
+}
+$rolePost = new \Domain\Shared\ValueObject\EntityId(json_decode((string) $saved->getBody(), true)['id']);
+$review = $content->review($rolePost, 'approve', $content->get($rolePost)['revision'], $window, null);
+$content->confirm(
+    $rolePost,
+    new \Domain\Shared\ValueObject\EntityId($review['operation_id']),
+    'approve',
+    $review['revision'],
+    $window,
+    null,
+    $review['review_token']
+);
+$roleReader = $sis->user();
+$sis->sql->insert('sis_access_user_roles', ['id' => \Domain\Shared\ValueObject\EntityId::generate()->value,
+    'role_id' => $role->value, 'user_id' => $roleReader->value]);
+$sis->access->actor = $roleReader;
+$sis->access->staff = false;
+$sis->access->grants = [];
+if (
+    $request('/sis/portal/audience-roles/')->getStatusCode() !== 403
+    || $request('/sis/portal/content/fictional-role-announcement/')->getStatusCode() !== 200
+    || $request($path . $rolePost->value . '/')->getStatusCode() !== 200
+    || $teachingPost($path . $rolePost->value . '/read/', ['revision' => 1])->getStatusCode() !== 200
+) {
+    throw new RuntimeException('Role labels and current private reading lost their independent authority.');
+}
+$sis->sql->execute('DELETE FROM sis_access_user_roles WHERE user_id = ?', [$roleReader->value]);
+$unmatched = json_decode((string) $request($path . '?include_read=1')->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    in_array($rolePost->value, array_column($unmatched['items'], 'id'), true)
+    || $request($path . $rolePost->value . '/')->getStatusCode() !== 404
+    || $request('/sis/portal/content/fictional-role-announcement/')->getStatusCode() !== 404
+    || $teachingPost($path . $rolePost->value . '/delete/', ['revision' => 1])->getStatusCode() !== 404
+    || $before !== $sis->sql->rows('sis_history_events')
+) {
+    throw new RuntimeException('Role removal left a private content bypass or changed business history.');
+}

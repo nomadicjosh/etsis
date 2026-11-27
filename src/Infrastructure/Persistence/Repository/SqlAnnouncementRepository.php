@@ -20,15 +20,16 @@ final readonly class SqlAnnouncementRepository implements AnnouncementRepository
     {
         $q = $this->sql->quote(...);
         $window = SqlPortalVisibility::window($this->sql, 'p', $this->clock->now());
+        $audience = new \Infrastructure\Persistence\SqlContentAudience($this->sql)->predicate($owner, true);
         $where = ["p." . $q('kind') . " = 'news'", "p." . $q('status') . " = 'published'",
-            "a." . $q('audience') . " = 'campus'", $window['sql']];
-        $parameters = [$owner->value, $owner->value, ...$window['parameters']];
+            $audience['sql'], $window['sql']];
+        $parameters = [$owner->value, $owner->value, ...$audience['parameters'], ...$window['parameters']];
         $where[] = '(d.' . $q('revision') . ' IS NULL OR d.' . $q('revision') . ' < p.' . $q('version') . ')';
         if ($unreadOnly) {
             $where[] = '(r.' . $q('revision') . ' IS NULL OR r.' . $q('revision') . ' <> p.' . $q('version') . ')';
         }
         if ($after !== null) {
-            if (!$this->available($after)) {
+            if (!$this->available($after, $owner)) {
                 throw new \Domain\Shared\Exception\ConcurrentModificationException(
                     \Codefy\Framework\Helpers\trans('Announcements changed. Refresh your notifications.'),
                 );
@@ -55,16 +56,17 @@ final readonly class SqlAnnouncementRepository implements AnnouncementRepository
         );
     }
 
-    public function available(EntityId $post): bool
+    public function available(EntityId $post, EntityId $owner): bool
     {
         $q = $this->sql->quote(...);
         $window = SqlPortalVisibility::window($this->sql, 'p', $this->clock->now());
+        $audience = new \Infrastructure\Persistence\SqlContentAudience($this->sql)->predicate($owner, true);
         return $this->sql->fetch(
             'SELECT p.' . $q('id') . ' FROM ' . $q('sis_portal_posts') . ' p JOIN '
             . $q('sis_portal_audiences') . ' a ON a.' . $q('post_id') . ' = p.' . $q('id')
             . ' WHERE p.' . $q('id') . ' = ? AND p.' . $q('kind') . " = 'news' AND p."
-            . $q('status') . " = 'published' AND a." . $q('audience') . " = 'campus' AND " . $window['sql'],
-            [$post->value, ...$window['parameters']],
+            . $q('status') . " = 'published' AND " . $audience['sql'] . ' AND ' . $window['sql'],
+            [$post->value, ...$audience['parameters'], ...$window['parameters']],
             1,
         ) !== [];
     }

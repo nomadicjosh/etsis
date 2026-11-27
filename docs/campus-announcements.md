@@ -4,7 +4,7 @@ Implemented November 23, 2026. Reviewed **campus news** now appears under **Camp
 
 ## Publish an announcement
 
-1. Open **Campus content**, create a **News update** and select **Signed-in campus**. This audience includes signed-in applicants, students and staff; it is not restricted to people who already have a student record.
+1. Open **Campus content**, create a **News update** and select **Signed-in campus** or **Selected account roles**. Signed-in campus includes applicants, students and staff; selected roles restrict reading to current role assignments, as described below.
 2. Save the draft and request review. A publisher with the existing content-management and publishing duties reviews and approves it. Authors with both duties can review their own saved drafts under the existing policy.
 3. Publish immediately or choose the existing publication start/end controls. Dates are evaluated on each server request: the start is inclusive and the end is exclusive. A scheduled announcement becomes available when readers next open or refresh the list. No publishing worker is required.
 
@@ -13,6 +13,47 @@ Public website news stays in the public news workflow and does not enter this pr
 Existing explicit campus publications remain their existing content facts. This reader creates no inferred historical approval, publication or read event for earlier records.
 
 Editing approved news returns it to draft. Its revised wording requires fresh approval before appearing again. Republishing creates a new content revision, so someone who read an earlier revision sees the revised announcement as unread. Archiving removes the item from this reader through the existing content workflow; it does not erase the original content or reading metadata.
+
+## Selected account roles
+
+Choose **Audience → Selected account roles** when a news update is intended for particular
+account roles. **Find roles** searches existing role names; **Next roles** and **Previous roles**
+page through twenty labels at a time. Select **one to ten roles**. Selecting a role again or using
+its remove button clears it. The selector exposes role labels only, without member lists, member
+counts or permission grants. Role setup and account assignments remain in **Roles & access**.
+
+An account must currently have **any one** of the selected roles. For example, selecting
+`registrar` and `admissions` makes the update available to accounts assigned either role. This
+checks actual account-role assignments; having a student/faculty capability, a related permission
+or the protected Super role does not substitute for a selected role. Super receives the notice
+only when one of its account's actual roles matches. Disabled accounts do not match.
+
+Save the draft before requesting review or publication. Changing the selection disables review
+until the revised draft is saved. The existing publisher reviews the saved role names alongside
+the wording and publication window; the review proof binds that exact selection. Missing or
+changed role definitions stop a new publication for review. **Back to editor** restores the saved
+selection, and unsaved toggling between audience choices preserves the working role selection.
+Saving Public website or Signed-in campus clears role targets from that draft. Text pages and
+website links do not offer role targeting; changing to one of those types requires choosing
+another audience explicitly.
+
+The bell, signed-in campus-news API, private content URL and announcement detail/read/delete
+endpoints apply the current role match. Filtering happens before paging. Removing a role
+assignment takes effect on the next server read or refresh; later assignment can make a still
+available announcement discoverable. Existing read/deletion state remains this account's own
+state for that publication. Public website news and public article routes exclude role-targeted
+news, including when someone happens to be signed in. The private announcement reader remains
+the normal way to open it from the bell.
+
+Selected role identities and labels remain attached to the saved content. Deleting a role does
+not turn the news into a campus-wide announcement, and creating a new role with the same name
+does not reuse its earlier identity. An authorized publisher can still archive news whose role
+has been removed. Revising its targets returns the content to draft and needs fresh approval.
+
+This is a current audience for reviewed news, not a delivery list, legal acknowledgement or
+notification archive. It does not grant roles, send email, create recipient copies or infer
+academic status. Further program/department audiences and external delivery remain separate
+roadmap work. The original public and signed-in campus audiences remain available.
 
 ## Read and return
 
@@ -34,7 +75,7 @@ Deletion requires the displayed revision, current signed-in ownership and CSRF. 
 
 ## Sound and temporary feedback
 
-Loading, reading, paging and reopening are silent. There is no refresh toolbar in the notification center and no duplicate action toast for reading or deleting a notice. Sound/display settings are under the person's workspace drawer or the portal's **Personal information** screen; see [notification preferences](workspace-notifications.md#sound-and-display-preferences).
+Loading, reading, paging and reopening are silent. Use the shared **Refresh notifications** control for current availability; reading or deleting a notice creates no duplicate action toast. Sound/display settings are under the person's workspace drawer or the portal's **Personal information** screen; see [notification preferences](workspace-notifications.md#sound-and-display-preferences).
 
 **Clear recent notifications** clears temporary action feedback only. Announcement content and account read state remain in their own workflow. No announcement content, identities, reading state or notification preferences enter browser storage.
 
@@ -53,4 +94,12 @@ Migration `20261123000002_CreateCampusAnnouncementReads` adds the owner/content 
 
 Migration `20261123000010_CreateCampusAnnouncementDismissals` adds the current-publication suppression table. Its unique account/content pair stores a single revision and ULID, with account/content foreign keys. No source publication or journal event is rewritten. The configured MariaDB now has migration 10; both new notification tables remain empty, and the twenty original protected event envelopes have the same SHA-256 aggregate as before migrations 9–10. Five-dialect compiler coverage supplements native MariaDB and SQLite checks without certifying every live driver.
 
-Fictional checks cover publication/read/delete sequencing, missing/changed audiences, scheduling boundaries, stale reads/deletions, account isolation, paging, safe formatting, mandatory-audit/final-validation rollback, real routes/providers/CSRF/private responses, notification sound integration and closed/denied readers. Browser audio uses injected contexts. [Waitlist registration/removal updates](registration-history.md#private-waitlist-outcome-updates) now provide one automatic domain trigger. Custom recipient audiences, further triggers and push/email delivery remain separate roadmap work. Personal notifications require no historical archive.
+Fictional checks cover publication/read/delete sequencing, missing/changed audiences, scheduling boundaries, stale reads/deletions, account isolation, paging, safe formatting, mandatory-audit/final-validation rollback, real routes/providers/CSRF/private responses, notification sound integration and closed/denied readers. Browser audio uses injected contexts. [Waitlist registration/removal updates](registration-history.md#private-waitlist-outcome-updates) now provide one automatic domain trigger. Further recipient audiences, automatic triggers and push/email delivery remain separate roadmap work. Personal notifications require no historical archive.
+
+
+Migration `20261127000001_CreateSisPortalAudienceRoles` adds only the selected-role reference table:
+ULID identities, a unique post/role pair, the retained role label and the existing content foreign key.
+It intentionally retains the role identity if that role is later removed; reader queries require a
+current role and enabled account. It changes no existing audience, role assignment, publication,
+personal read state or journal event. The configured PostgreSQL migration and fictional SQLite
+workflows supplement five-dialect schema compilation; broader live-driver acceptance remains open.

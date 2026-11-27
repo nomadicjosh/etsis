@@ -60,11 +60,14 @@ final readonly class PortalService
         return $post;
     }
 
-    /** Publishing explicitly shares institution content with all authenticated portal users. */
+    /** A content URL obeys the same current audience as the campus news and announcement readers. */
     public function published(string $code): PortalPost
     {
-        $this->access->authenticatedUserId();
-
-        return $this->repository->published($code);
+        $owner = $this->access->authenticatedUserId();
+        $post = $this->repository->published($code, $owner);
+        if ($this->access->authenticatedUserId()->value !== $owner->value) {
+            throw new \Domain\Shared\Exception\AccessDeniedException();
+        }
+        return $post;
     }
 }

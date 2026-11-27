@@ -1295,3 +1295,11 @@ h3 { font-size: .9rem; font-weight: 650; }
 .report-arithmetic-group .form-control, .report-arithmetic-group .form-select { min-width: 0; max-width: 100%; }
 .report-arithmetic-group .btn { white-space: normal; overflow-wrap: anywhere; }
 .report-arithmetic-preview { overflow-wrap: anywhere; margin: 0; padding: .6rem; border-radius: .4rem; background: #f2f6fb; color: #243750; }
+
+/* Selected role names remain readable within the content editor at narrow widths. */
+.campus-role-audience { margin-top: 1rem; min-width: 0; }
+.campus-role-audience legend { float: none; width: auto; padding: 0 .25rem; }
+.campus-role-audience input[type="search"] { flex: 1 1 12rem; min-width: 0; }
+.campus-role-audience .list-group-item { white-space: normal; overflow-wrap: anywhere; }
+.campus-role-audience .btn { white-space: normal; overflow-wrap: anywhere; }
+.campus-role-audience .campus-role-remove { width: 2.75rem; min-height: 2.75rem; flex: 0 0 2.75rem; }

@@ -314,6 +314,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlCampusRepository::class,
             \Domain\Portal\Repository\ProgramDiscoveryRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlProgramDiscoveryRepository::class,
+            \Domain\Portal\Repository\ContentAudienceRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlContentAudienceRepository::class,
             \Domain\Portal\Repository\AnnouncementRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlAnnouncementRepository::class,
             \Domain\Person\Repository\NotificationPreferencesRepository::class =>

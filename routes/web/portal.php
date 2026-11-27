@@ -362,6 +362,7 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["GET"], "/sis/transcript-requests/", [Portal::class, "transcriptQueue"])
         ->name("sis.transcript.queue");
+    $router->map(['GET'], '/sis/portal/audience-roles/', [Editor::class, 'roles'])->name('sis.portal.audience.roles');
     $router->map(["GET"], "/sis/portal/editor/{id}/", [Editor::class, "get"])->name("sis.portal.editor.get");
     $router->map(["POST"], "/sis/portal/editor/", [Editor::class, "save"])->name("sis.portal.editor.save");
 };

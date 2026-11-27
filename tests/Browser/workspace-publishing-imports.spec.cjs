@@ -94,7 +94,9 @@ async function content(page, { status = 'draft', audience = 'public', rejectRead
     const state = { calls: [], errors: [], rejectSave: false, stale: false,
         post: { id, kind: 'news', code: 'fictional-welcome', title: 'Fictional campus welcome <img>',
             content: 'Fictional campus news.\nThis text is only a test fixture. <script>Example</script>',
-            audience, status, content_format: 'plain', content_html: null, version: 2, revision: '2'.padStart(64, '0'), can_edit: !publisherOnly, can_publish: !writerOnly, visible_from: null, visible_until: null, review_note: null, visibility: status } };
+            audience, audience_roles: [], status, content_format: 'plain', content_html: null, version: 2, revision: '2'.padStart(64, '0'), can_edit: !publisherOnly, can_publish: !writerOnly, visible_from: null, visible_until: null, review_note: null, visibility: status } };
+    state.roles = Array.from({ length: 25 }, (_, n) => ({ id: String(n + 100).padStart(26, '0'), name: 'Fictional role ' + n }));
+    state.roleFailure = false;
     if (rich) Object.assign(state.post, {content_format:'html',
         content:'<h2>Retained headline</h2><p>A <strong>formatted</strong> update with <a href="https://example.invalid/news">a link</a>.</p><ul><li><p>Retained list item</p></li></ul><script>window.editorAttack=1</script><img src="https://example.invalid/tracker" onerror="window.editorAttack=1">'});
     let release;
@@ -104,10 +106,21 @@ async function content(page, { status = 'draft', audience = 'public', rejectRead
     await page.route('**/sis/**', async route => {
         const request = route.request(), path = new URL(request.url()).pathname;
         const raw = request.postData(), data = raw ? JSON.parse(new URLSearchParams(raw).get('_workspace_json')) : null;
-        state.calls.push({ path, data, csrf: request.headers()['x-csrf-token'] });
+        state.calls.push({ path, query: new URL(request.url()).search, data, csrf: request.headers()['x-csrf-token'] });
         let result = { items: [], next_after: null };
         if (path === '/sis/ui/metrics/') result = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path === '/sis/ui/data/portal/') result.items = [{ id, title: state.post.title, kind: state.post.kind, status: state.post.status }];
+        else if (path === '/sis/portal/audience-roles/') {
+            if (state.roleGate) await state.roleGate;
+            if (state.roleFailure) {
+                state.roleFailure = false;
+                return route.fulfill({ status: 503, json: { error: 'Fictional role directory unavailable.' } });
+            }
+            const parameters = new URL(request.url()).searchParams;
+            const rows = state.roles.filter(role => role.name.toLowerCase().includes((parameters.get('search') || '').toLowerCase())
+                && (!parameters.get('after') || role.id > parameters.get('after')));
+            result = { items: rows.slice(0, 20), next_after: rows.length > 20 ? rows[19].id : null };
+        }
         else if (path === `/sis/portal/editor/${id}/`) {
             if (delayed) await pending;
             if (rejectRead) return route.fulfill({ status: 403, json: { error: 'Access denied.' } });
@@ -118,7 +131,7 @@ async function content(page, { status = 'draft', audience = 'public', rejectRead
                 return route.fulfill({ status: 422, json: { error: 'Please correct the highlighted fields.',
                     errors: [{ field: 'title', message: 'Fictional title needs review.' }] } });
             }
-            state.post = { ...state.post, ...data, version: state.post.version + 1, status: 'draft' };
+            state.post = { ...state.post, ...data, audience_roles: (data.audience_roles || []).map(id => state.roles.find(role => role.id === id)), version: state.post.version + 1, status: 'draft' };
             state.post.revision = String(state.post.version).padStart(64, '0');
             state.post.content_html = state.post.content_format === 'html' ? state.post.content : null;
         } else if (path === `/sis/portal/posts/${id}/publication/review/`) {
@@ -217,7 +230,7 @@ test('new website links use the same structured editor and save a draft without 
     await expect(page.locator('#record-drawer')).not.toHaveClass(/show/u);
     expect(state.calls.find(call => call.path === '/sis/portal/editor/').data).toEqual({
         kind: 'link', code: 'fictional-link', title: 'Fictional campus link',
-        content: 'https://example.invalid/fictional-campus/', audience: 'campus', content_format: 'plain',
+        content: 'https://example.invalid/fictional-campus/', audience: 'campus', content_format: 'plain', audience_roles: [],
     });
     expect(state.publications()).toHaveLength(0);
     expect(state.errors).toEqual([]);
@@ -412,6 +425,8 @@ test('tiptap preserves retained HTML and literal plain text while rejecting unsa
     await expect(editor.locator('li')).toContainText('Retained list item');
     await expect(editor.locator('a')).toHaveAttribute('href','https://example.invalid/news');
     await expect(editor.locator('script,img,iframe')).toHaveCount(0);
+    // Wait for the final editor mount before setting the clipboard insertion point.
+    await expect(page.getByRole('button', { name: 'Save draft', exact: true })).toBeVisible();
     await editor.press('ControlOrMeta+End');
     await editor.evaluate(element=>{
         const clipboardData=new DataTransfer();
@@ -528,5 +543,143 @@ test('a delayed tiptap load cannot restore a closed content editor', async ({pag
     await expect(page.locator('.campus-news-editor')).toHaveCount(0);
     await expect(page.locator('#record-drawer')).not.toHaveClass(/show/u);
     expect(state.calls.some(c=>c.path==='/sis/portal/editor/')).toBe(false);
+    expect(state.errors).toEqual([]);
+});
+
+
+const rolePanel = page => page.locator('.campus-role-audience');
+const availableRoles = page => rolePanel(page).getByRole('group', { name: 'Available roles', exact: true });
+
+test('role-targeted news saves exact identities, disables stale review and preserves selection through publication return', async ({ page }) => {
+    const state = await content(page, { audience: 'campus' });
+    expect(state.calls.filter(call => call.path === '/sis/portal/audience-roles/')).toHaveLength(0);
+    await page.getByRole('combobox', { name: /^Audience/u }).selectOption('roles');
+    const role = availableRoles(page).getByRole('button', { name: 'Fictional role 0', exact: true });
+    await role.focus();
+    await page.keyboard.press('Enter');
+    await expect(role).toHaveAttribute('aria-pressed', 'true');
+    await expect(role).toHaveClass(/active/u);
+    await expect(role).toBeFocused();
+    await expect(page.getByRole('button', { name: 'Review publication', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    const saved = state.calls.filter(call => call.path === '/sis/portal/editor/').at(-1).data;
+    expect(saved).toMatchObject({ audience: 'roles', audience_roles: [state.roles[0].id] });
+    await expect(rolePanel(page).getByRole('list', { name: 'Selected roles', exact: true })).toContainText('Fictional role 0');
+    await expect(page.getByRole('button', { name: 'Review publication', exact: true })).toBeEnabled();
+    await page.getByRole('button', { name: 'Review publication', exact: true }).click();
+    await expect(page.locator('#drawer-body')).toContainText('Selected account roles: Fictional role 0');
+    await expect(page.locator('#drawer-body')).toContainText('Other accounts cannot read it');
+    expect(state.publications()).toHaveLength(0);
+    await page.getByRole('button', { name: 'Back to editor', exact: true }).click();
+    await expect(rolePanel(page).getByRole('list', { name: 'Selected roles', exact: true })).toContainText('Fictional role 0');
+    await page.getByRole('button', { name: 'Review publication', exact: true }).click();
+    await page.getByRole('button', { name: 'Confirm publication', exact: true }).click();
+    expect(state.publications()).toHaveLength(1);
+    expect(state.publications()[0].csrf).toBe('fictional-test-token');
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(state.errors).toEqual([]);
+});
+
+test('role audiences enforce ten selections, recover searches and keep invalid drafts and safe labels accessible', async ({ page }) => {
+    const state = await content(page);
+    state.roleFailure = true;
+    state.roles[0].name = 'Fictional <img> role';
+    await page.getByRole('combobox', { name: /^Audience/u }).selectOption('roles');
+    await expect(rolePanel(page)).toContainText('Roles could not load.');
+    await page.getByRole('button', { name: 'Find roles', exact: true }).click();
+    await expect(availableRoles(page).getByRole('button')).toHaveCount(20);
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    await expect(rolePanel(page)).toContainText('Select one to ten account roles before saving.');
+    expect(state.calls.filter(call => call.path === '/sis/portal/editor/')).toHaveLength(0);
+    for (const role of state.roles.slice(0, 10)) await availableRoles(page).getByRole('button', { name: role.name, exact: true }).click();
+    await expect(rolePanel(page)).not.toContainText('Select one to ten account roles before saving.');
+    await expect(availableRoles(page).getByRole('button', { name: 'Fictional role 10', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Remove role: Fictional <img> role', exact: true }).click();
+    await expect(availableRoles(page).getByRole('button', { name: 'Fictional role 10', exact: true })).toBeEnabled();
+    await expect(rolePanel(page).locator('img, script')).toHaveCount(0);
+    await accessible(page);
+    await page.getByRole('button', { name: 'Next roles', exact: true }).click();
+    await expect(availableRoles(page).getByRole('button')).toHaveCount(5);
+    await expect(page.getByRole('button', { name: 'Next roles', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Previous roles', exact: true }).click();
+    await expect(availableRoles(page).getByRole('button')).toHaveCount(20);
+    await expect(page.getByRole('button', { name: 'Previous roles', exact: true })).toBeDisabled();
+    await page.getByLabel('Search account roles', { exact: true }).fill('no matching role');
+    await page.keyboard.press('Enter');
+    await expect(rolePanel(page)).toContainText('No account roles match this search.');
+    await expect(rolePanel(page).getByRole('list', { name: 'Selected roles', exact: true })).toContainText('Fictional role 1');
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.addStyleTag({ content: 'html { font-size: 200% !important; }' });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    expect(state.errors).toEqual([]);
+});
+
+test('changing a role audience to campus clears targets on save without discarding a toggled draft', async ({ page }) => {
+    const state = await content(page);
+    const audience = page.getByRole('combobox', { name: /^Audience/u });
+    await audience.selectOption('roles');
+    await availableRoles(page).getByRole('button', { name: 'Fictional role 0', exact: true }).click();
+    await audience.selectOption('campus');
+    await expect(rolePanel(page)).toBeHidden();
+    await audience.selectOption('roles');
+    await expect(rolePanel(page).getByRole('list', { name: 'Selected roles', exact: true })).toContainText('Fictional role 0');
+    await audience.selectOption('campus');
+    await page.getByRole('button', { name: 'Save draft', exact: true }).click();
+    expect(state.calls.filter(call => call.path === '/sis/portal/editor/').at(-1).data.audience_roles).toEqual([]);
+    await expect(rolePanel(page)).toBeHidden();
+    expect(state.errors).toEqual([]);
+});
+
+test('closed and changed audiences ignore late role-directory responses without reopening the editor', async ({ page }) => {
+    const state = await content(page);
+    let release;
+    state.roleGate = new Promise(resolve => { release = resolve; });
+    const audience = page.getByRole('combobox', { name: /^Audience/u });
+    await audience.selectOption('roles');
+    await expect(rolePanel(page)).toContainText('Loading account roles');
+    await audience.selectOption('campus');
+    release();
+    await expect(rolePanel(page)).toBeHidden();
+    await expect(availableRoles(page).getByRole('button')).toHaveCount(0);
+    state.roleGate = null;
+    await audience.selectOption('roles');
+    await expect(availableRoles(page).getByRole('button')).toHaveCount(20);
+    state.roleGate = new Promise(resolve => { release = resolve; });
+    await page.getByRole('button', { name: 'Find roles', exact: true }).click();
+    await page.getByRole('button', { name: 'Close record', exact: true }).click();
+    release();
+    await expect(page.locator('#record-drawer')).not.toHaveClass(/show/u);
+    expect(state.errors).toEqual([]);
+});
+
+test('new role-targeted news uses the existing draft form and keeps role targeting unavailable for pages and links', async ({ page }) => {
+    const state = await content(page);
+    await page.getByRole('button', { name: 'Close record', exact: true }).click();
+    await page.getByRole('button', { name: 'Create content', exact: true }).click();
+    const kind = page.getByRole('combobox', { name: /^Content type/u });
+    const audience = page.getByRole('combobox', { name: /^Audience/u });
+    await kind.selectOption('page');
+    await expect(audience.locator('option[value="roles"]')).toBeDisabled();
+    await kind.selectOption('link');
+    await expect(audience.locator('option[value="roles"]')).toBeDisabled();
+    await kind.selectOption('news');
+    await expect(audience.locator('option[value="roles"]')).toBeEnabled();
+    await audience.selectOption('roles');
+    await availableRoles(page).getByRole('button', { name: 'Fictional role 0', exact: true }).click();
+    await kind.selectOption('page');
+    await expect(audience).toHaveValue('');
+    await expect(rolePanel(page)).toBeHidden();
+    await kind.selectOption('news');
+    await audience.selectOption('roles');
+    await expect(rolePanel(page).getByRole('list', { name: 'Selected roles', exact: true })).toContainText('Fictional role 0');
+    await page.getByRole('textbox', { name: /^Unique code/u }).fill('fictional-role-draft');
+    await page.getByRole('textbox', { name: /^Title/u }).fill('Fictional role draft');
+    await page.getByRole('textbox', { name: /^Content/u }).fill('Fictional draft wording.');
+    await page.getByRole('button', { name: 'Save and continue', exact: false }).click();
+    const payload = state.calls.filter(call => call.path === '/sis/portal/editor/').at(-1).data;
+    expect(payload).toMatchObject({ kind: 'news', audience: 'roles', audience_roles: [state.roles[0].id] });
+    expect(payload.content).toContain('Fictional draft wording.');
+    expect(state.publications()).toHaveLength(0);
     expect(state.errors).toEqual([]);
 });

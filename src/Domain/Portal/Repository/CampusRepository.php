@@ -15,9 +15,9 @@ interface CampusRepository
     /** @return array{items: list<array<string, mixed>>, next_after: ?string} */
     public function sections(?EntityId $term, string $search, ?EntityId $after): array;
     /** @return list<array<string, mixed>> */
-    public function news(bool $campus, ?EntityId $after = null): array;
+    public function news(?EntityId $owner, ?EntityId $after = null): array;
     /** @return array<string, mixed> */
-    public function article(string $code, bool $campus): array;
+    public function article(string $code, ?EntityId $owner): array;
     public function audience(EntityId $post): string;
     public function setAudience(EntityId $post, string $audience): void;
     public function personForUser(EntityId $user): EntityId;

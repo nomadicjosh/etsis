@@ -58,6 +58,9 @@ final readonly class CampusAnnouncementService
         $html = $post->contentFormat === 'html' ? $this->markup->sanitize($post->content) : null;
         $text = $html === null ? $post->content : $this->markup->plainText($html);
         $this->owner($owner);
+        if ($this->visible($id, $owner) != $post) {
+            throw new ConcurrentModificationException('This announcement changed. Read its current version.');
+        }
         return ['id' => $id->value, 'title' => $post->title, 'revision' => $post->version,
             'content' => $text, 'content_format' => $post->contentFormat, 'content_html' => $html,
             'unread' => $read === null || (int) $read['revision'] !== $post->version];
@@ -113,7 +116,7 @@ final readonly class CampusAnnouncementService
             if (($this->announcements->dismissedRevision($owner, $id) ?? -1) >= $revision) {
                 return ['deleted' => true];
             }
-            $post = $this->visible($id);
+            $post = $this->visible($id, $owner, true);
             if ($post->version !== $revision) {
                 throw new ConcurrentModificationException('This announcement changed. Refresh before deleting it.');
             }
@@ -121,7 +124,7 @@ final readonly class CampusAnnouncementService
             $this->audit->record($owner, 'portal.announcement.deleted', $id);
             $this->owner($owner);
             if (
-                $this->visible($id) != $post
+                $this->visible($id, $owner, true) != $post
                 || $this->announcements->dismissedRevision($owner, $id) !== $revision
                 || $this->announcements->readState($owner, $id) !== null
             ) {
@@ -131,13 +134,13 @@ final readonly class CampusAnnouncementService
         });
     }
 
-    private function visible(EntityId $id, ?EntityId $owner = null): PortalPost
+    private function visible(EntityId $id, EntityId $owner, bool $includeDismissed = false): PortalPost
     {
         $post = $this->posts->get($id);
         if (
-            ($owner !== null && ($this->announcements->dismissedRevision($owner, $id) ?? -1) >= $post->version)
+            (!$includeDismissed && ($this->announcements->dismissedRevision($owner, $id) ?? -1) >= $post->version)
             || $post->kind !== 'news' || $post->status !== 'published'
-            || !$this->announcements->available($id)
+            || !$this->announcements->available($id, $owner)
             || !new PublicationWindow($post->visibleFrom, $post->visibleUntil)->visible($this->clock->now())
         ) {
             throw new RecordNotFoundException('Announcement unavailable.');

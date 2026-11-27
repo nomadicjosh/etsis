@@ -17,6 +17,15 @@ final readonly class SisPortalEditorController
     {
     }
 
+    public function roles(ServerRequest $request): ResponseInterface
+    {
+        $f = new FormInput($request->getQueryParams());
+        return new JsonResponse($this->service->audienceRoles(
+            $f->search('search', 80),
+            $f->optionalId('after'),
+        ));
+    }
+
     public function get(string $id): ResponseInterface
     {
         return new JsonResponse($this->service->get(new EntityId($id)));
@@ -88,6 +97,12 @@ final readonly class SisPortalEditorController
     public function save(#[\SensitiveParameter] ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);
+        $data = $request->getParsedBody();
+        $roles = is_array($data) && array_key_exists('audience_roles', $data) ? $data['audience_roles'] : [];
+        if (!is_array($roles)) {
+            throw new \Domain\Shared\Exception\ValidationException([['field' => 'audience_roles',
+                'message' => \Codefy\Framework\Helpers\trans('Choose account roles as a list of role references.')]]);
+        }
         return new JsonResponse(
             [
                 "id" => $this->service->save(
@@ -99,6 +114,7 @@ final readonly class SisPortalEditorController
                     $f->text("audience", 8),
                     $f->optionalInteger("version"),
                     $f->optionalText("content_format", 8) ?? "plain",
+                    $roles,
                 )->value,
                 "status" => "draft",
             ],

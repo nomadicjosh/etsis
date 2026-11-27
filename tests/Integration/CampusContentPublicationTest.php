@@ -262,6 +262,7 @@ final class CampusContentPublicationTest extends TestCase
             $s->clock,
             new \Domain\Shared\Service\ReviewProof($c->cipher, $s->clock),
             new \Infrastructure\Portal\SymfonyContentMarkup(),
+            new \Infrastructure\Persistence\Repository\SqlContentAudienceRepository($s->sql),
         );
         $before = $s->sql->rows("sis_portal_posts");
         try {

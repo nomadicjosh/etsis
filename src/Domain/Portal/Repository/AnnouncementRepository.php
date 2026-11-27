@@ -11,7 +11,7 @@ interface AnnouncementRepository
     /** @return list<array<string, mixed>> */
     public function page(EntityId $owner, bool $unreadOnly, ?EntityId $after): array;
 
-    public function available(EntityId $post): bool;
+    public function available(EntityId $post, EntityId $owner): bool;
 
     /** @return array<string, mixed>|null */
     public function readState(EntityId $owner, EntityId $post): ?array;

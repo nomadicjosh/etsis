@@ -136,3 +136,14 @@ The program's [cross-component course-sharing setting](program-publication.md#co
 ## Student-related contact reports
 
 [Current account email reporting](student-contact-reporting.md) requires the independent protected `sis:reporting:contact` permission together with the report and dataset duties. It applies to five existing student-related sources, including contact-only predicates, conditions, matching, named copies, saved/shared/static results, messaging handoffs and CSV/complete exports. The metadata is hidden without that authority. Account/profile editing and ordinary administrator/reporting groups do not implicitly grant it; the new migration adds no role or user grants. The protected super role retains its existing behavior. Only the email of the exact account linked to the canonical person is exposed; no credentials, alternate contacts, raw profile payloads or new person dataset are added.
+
+
+## Announcement audiences
+
+[Selected-role campus announcements](campus-announcements.md#selected-account-roles) use actual
+current account-role assignments, independently of permission implications or person capabilities.
+Matching any selected role permits reading while the publication is available. The Super role
+does not bypass this recipient scope. Existing content-management and publishing duties remain
+separate from ordinary reading and from role administration. The authoring lookup exposes
+bounded role labels without members or grants; private reader responses omit the selected-role
+definition. Role deletion or a new same-named role never broadens an earlier selection.

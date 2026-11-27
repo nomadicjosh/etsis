@@ -217,6 +217,7 @@ final class CampusFixture
             $f->clock,
             new \Domain\Shared\Service\ReviewProof($this->cipher, $f->clock),
             new \Infrastructure\Portal\SymfonyContentMarkup(),
+            new \Infrastructure\Persistence\Repository\SqlContentAudienceRepository($f->sql),
         );
         $this->gateway = new FixturePaymentGateway();
         $this->checkout = new PortalPaymentService(

@@ -249,7 +249,7 @@ return [
     'delete_notification' => trans_html('Delete notification'),
     'announcements' => trans_html('Campus announcements'),
     'announcement_publish_help' => trans_html(
-        'After approval, campus news appears in the notification bell for signed-in applicants, students and staff. '
+        'After approval, news appears in the notification bell for its selected signed-in audience. '
         . 'Publication times control its availability. Public website news is separate.',
     ),
     'announcement_changed' => trans_html('This announcement changed or is unavailable. Refresh the list.'),
