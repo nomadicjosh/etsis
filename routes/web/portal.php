@@ -240,6 +240,9 @@ return static function (Psr7Router $router): void {
     $router->map(['POST'], '/portal/api/advising-appointments/calendar/', [
         $appointments, 'myCalendar',
     ])->name('owner.appointments.my_calendar');
+    $router->map(['POST'], '/portal/api/advising-appointments/export/', [
+        $appointments, 'export',
+    ])->name('owner.appointments.export');
     $router->map(['POST'], '/portal/api/students/{student}/programs/{pursuit}/appointments/list/', [
         $appointments, 'ownerList',
     ])->name('owner.appointments.list');

@@ -13,8 +13,10 @@ use Qubus\Http\ServerRequest;
 
 final readonly class AdvisingAppointmentController
 {
-    public function __construct(private AdvisingAppointmentService $service)
-    {
+    public function __construct(
+        private AdvisingAppointmentService $service,
+        private \Application\Service\AdvisingAppointmentExport $export,
+    ) {
     }
 
     public function staffList(
@@ -76,6 +78,16 @@ final readonly class AdvisingAppointmentController
             $f->optionalText('view', 5) ?? 'week',
             $f->boolean('include_cancelled')
         ));
+    }
+
+    public function export(#[\SensitiveParameter] ServerRequest $request): ResponseInterface
+    {
+        $form = FormInput::from($request);
+        return new JsonResponse(['calendar' => $this->export->prepare(
+            $form->optionalText('date', 10),
+            $form->optionalText('view', 5) ?? 'week',
+            $form->boolean('include_cancelled'),
+        )]);
     }
 
     public function bookingChoices(

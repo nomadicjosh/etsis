@@ -11299,3 +11299,43 @@ msgstr ""
 #: resources/views/backend/workspace/campus-audience-labels.php:27
 msgid "Publish this saved news for active students with an active pursuit in any selected program and an enabled linked account. Other accounts cannot read it through the bell, campus news or a direct link."
 msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:59
+msgid "Take your advising calendar with you"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:60
+msgid "Download advising calendar (.ics)"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:61
+msgid "Download the displayed week or month for your calendar app. Cancelled appointments are included only when Show cancelled appointments is selected."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:63
+msgid "This file contains private appointment times. Names, program details and appointment messages are omitted. It is a snapshot; check My timetable for changes and keep the file private."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:66
+msgid "Preparing your advising calendar…"
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:67
+msgid "Calendar download started."
+msgstr ""
+
+#: resources/views/shared/advising-appointment-labels.php:68
+msgid "The advising calendar could not be prepared. Refresh the calendar and try again."
+msgstr ""
+
+#: src/Application/View/AdvisingAppointmentCalendar.php:29
+msgid "Advising appointment"
+msgstr ""
+
+#: src/Application/View/AdvisingAppointmentCalendar.php:30
+msgid "This calendar is a snapshot. Check My timetable for appointment changes."
+msgstr ""
+
+#: src/Application/View/AdvisingAppointmentCalendar.php:36
+msgid "My advising appointments"
+msgstr ""

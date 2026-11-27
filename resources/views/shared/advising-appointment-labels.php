@@ -56,6 +56,16 @@ return [
     'next_period' => trans_html('Next period'),
     'show_cancelled' => trans_html('Show cancelled appointments'),
     'refresh_calendar' => trans_html('Refresh appointment calendar'),
+    'download_title' => trans_html('Take your advising calendar with you'),
+    'download_calendar' => trans_html('Download advising calendar (.ics)'),
+    'download_scope' => trans_html('Download the displayed week or month for your calendar app. '
+        . 'Cancelled appointments are included only when Show cancelled appointments is selected.'),
+    'download_privacy' => trans_html('This file contains private appointment times. '
+        . 'Names, program details and appointment messages are omitted. '
+        . 'It is a snapshot; check My timetable for changes and keep the file private.'),
+    'download_preparing' => trans_html('Preparing your advising calendar…'),
+    'download_started' => trans_html('Calendar download started.'),
+    'download_failed' => trans_html('The advising calendar could not be prepared. Refresh the calendar and try again.'),
     'calendar_empty' => trans_html('No advising appointments in this period.'),
     'calendar_help' => trans_html('Dates and times use the institution timezone. '
         . 'Program names are current labels. Class meetings and advising appointments have separate calendars.'),

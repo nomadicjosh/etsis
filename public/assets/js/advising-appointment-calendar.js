@@ -3,13 +3,15 @@
     'use strict';
     let sequence = 0;
     window.createAdvisingAppointmentCalendar = ({ node, request, labels: t }) => ({
-        mount(container, endpoint, { owner = false, portal = false, detailEndpoint = null, initial = null, initialError = null, onBack = null, onDenied = null } = {}) {
+        mount(container, endpoint, { owner = false, portal = false, detailEndpoint = null, initial = null, initialError = null, onBack = null, onDenied = null, exportEndpoint = null } = {}) {
             const identity = `appointment-calendar-${++sequence}`;
             const root = node('section', { class: 'mb-4' });
             const controls = node('form', { class: 'row g-3 mb-3' });
             const output = node('div');
             const status = node('p', { id: `${identity}-status`, role: 'status', 'aria-live': 'polite', tabindex: '-1', class: 'form-text text-break' });
             let busy = false, generation = 0, current = initial, restore = null;
+            let exporting = false, exportAbort = null;
+            const canExport = owner && Boolean(exportEndpoint);
             const button = (label, run, icon = 'arrow-right') => node('button', { type: 'button',
                 class: `btn ${portal ? 'campus-button-outline' : 'btn-outline-primary'}`,
                 onclick: () => work(run) }, node('i', { class: `bi bi-${icon} me-2`, 'aria-hidden': 'true' }), label);
@@ -22,12 +24,13 @@
                 catch (error) {
                     if (!root.isConnected) return;
                     output.replaceChildren();
-                    if ([401, 403].includes(error.status)) { current = null; onDenied?.(); }
+                    if ([401, 403].includes(error.status)) { invalidate(); onDenied?.(); }
                     status.textContent = [401, 403].includes(error.status) ? t.denied : error.message || t.calendar_failure;
                     status.focus();
                 } finally {
                     busy = false;
                     root.querySelectorAll('button,input,select').forEach(b => { b.disabled = false; });
+                    download.disabled = exporting || !current;
                 }
             }
             function control(label, key, element) {
@@ -45,16 +48,25 @@
             controls.append(node('div', { class: 'col-12 d-flex flex-wrap gap-2 align-items-center' }, refresh,
                 node('div', { class: 'form-check' }, cancelled, node('label', { for: cancelled.id, class: 'form-check-label' }, t.show_cancelled))));
             const navigation = node('div', { class: 'd-flex gap-2 flex-wrap mb-3' }, ...(onBack ? [button(t.back_list, onBack, 'arrow-left')] : []), previous, next);
+            const downloadStatus = node('p', { role: 'status', 'aria-live': 'polite', tabindex: '-1', class: 'form-text mb-0 mt-2 text-break' });
+            const download = node('button', { type: 'button', disabled: true,
+                class: `btn ${portal ? 'campus-button-outline' : 'btn-outline-primary'}`, onclick: downloadCalendar },
+                node('i', { class: 'bi bi-calendar2-plus me-2', 'aria-hidden': 'true' }), t.download_calendar);
+            const downloadCard = node('section', { class: 'border rounded bg-white p-3 mb-3', 'aria-label': t.download_title, hidden: true },
+                node('h4', { class: 'h6' }, t.download_title), node('p', {}, t.download_scope),
+                node('p', { class: 'form-text' }, t.download_privacy), download, downloadStatus);
             previous.hidden = next.hidden = true;
-            root.append(node('h3', { class: 'h5' }, t.calendar), node('p', { class: 'form-text' }, t.calendar_help), controls, navigation, status, output);
+            root.append(node('h3', { class: 'h5' }, t.calendar), node('p', { class: 'form-text' }, t.calendar_help), controls, navigation, status, downloadCard, output);
             container.append(root);
             const invalidate = () => {
                 generation++; output.replaceChildren(); current = null; previous.hidden = next.hidden = true;
+                exportAbort?.abort(); downloadCard.hidden = true; download.disabled = true; downloadStatus.textContent = '';
             };
             date.addEventListener('input', invalidate); view.addEventListener('change', invalidate); cancelled.addEventListener('change', invalidate);
             controls.addEventListener('submit', event => { event.preventDefault(); work(() => load()); });
             async function load(target = null) {
                 const serial = ++generation;
+                exportAbort?.abort(); downloadCard.hidden = true;
                 if (target) date.value = target;
                 if (date.value && !controls.reportValidity()) return;
                 const query = { ...(date.value ? { date: date.value } : {}), view: view.value, include_cancelled: cancelled.checked };
@@ -65,6 +77,8 @@
             function draw() {
                 date.value = current.from; view.value = current.view; cancelled.checked = current.include_cancelled;
                 previous.hidden = next.hidden = false;
+                downloadCard.hidden = !canExport; download.disabled = exporting || busy;
+                downloadStatus.textContent = '';
                 const items = new Map(current.items.map(item => [item.id, item]));
                 const days = [];
                 for (const day of current.days) {
@@ -89,7 +103,7 @@
                 }
             }
             function inspect(item) {
-                generation++;
+                generation++; exportAbort?.abort(); downloadCard.hidden = true;
                 controls.hidden = navigation.hidden = true;
                 output.replaceChildren();
                 const details = node('section'); output.append(details);
@@ -102,6 +116,49 @@
                         controls.hidden = navigation.hidden = false; restore = item.id; await load();
                     }),
                 });
+            }
+            async function downloadCalendar() {
+                if (!canExport || exporting || busy || !current || !root.isConnected) return;
+                exporting = true; download.disabled = true;
+                const serial = generation;
+                const active = () => root.isConnected && serial === generation;
+                const controller = new AbortController(); exportAbort = controller;
+                const timeout = setTimeout(() => controller.abort(), 15000);
+                const leaving = () => controller.abort();
+                window.addEventListener('pagehide', leaving, { once: true });
+                downloadStatus.setAttribute('role', 'status'); downloadStatus.textContent = t.download_preparing;
+                try {
+                    const result = await request(exportEndpoint, 'POST', {
+                        date: current.from, view: current.view, include_cancelled: current.include_cancelled,
+                    }, controller.signal);
+                    if (!active()) return;
+                    if (typeof result.calendar !== 'string' || !result.calendar.startsWith('BEGIN:VCALENDAR\r\n')
+                        || !result.calendar.endsWith('END:VCALENDAR\r\n')) throw new Error(t.download_failed);
+                    const file = new Blob([result.calendar], { type: 'text/calendar;charset=utf-8' });
+                    if (file.size > 2097152) throw new Error(t.download_failed);
+                    const url = URL.createObjectURL(file);
+                    const cleanup = () => {
+                        URL.revokeObjectURL(url); clearTimeout(timer);
+                        window.removeEventListener('pagehide', cleanup);
+                    };
+                    const timer = setTimeout(cleanup, 1000);
+                    window.addEventListener('pagehide', cleanup, { once: true });
+                    const link = node('a', { href: url, download: 'my-advising-appointments.ics', hidden: true });
+                    root.append(link); link.click(); link.remove();
+                    downloadStatus.textContent = t.download_started;
+                } catch (error) {
+                    if (!active()) return;
+                    if ([401, 403].includes(error.status)) {
+                        invalidate(); onDenied?.(); status.textContent = t.denied; status.focus();
+                    } else {
+                        downloadStatus.setAttribute('role', 'alert'); downloadStatus.textContent = t.download_failed;
+                        downloadStatus.focus();
+                    }
+                } finally {
+                    clearTimeout(timeout); window.removeEventListener('pagehide', leaving);
+                    if (exportAbort === controller) exportAbort = null;
+                    exporting = false; download.disabled = busy || !current;
+                }
             }
             if (initial) draw();
             else if (initialError) status.textContent = [401, 403].includes(initialError.status) ? t.denied : initialError.message || t.calendar_failure;

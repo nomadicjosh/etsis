@@ -510,6 +510,27 @@ final readonly class AdvisingAppointmentService
         string $view = 'week',
         bool $includeCancelled = false,
     ): array {
+        return $this->readCalendar($channel, $student, $pursuit, $date, $view, $includeCancelled, false);
+    }
+
+    /** Internal owner-only export source; no conversation, participant labels or raw identity links. */
+    public function calendarExport(
+        ?string $date = null,
+        string $view = 'week',
+        bool $includeCancelled = false,
+    ): array {
+        return $this->readCalendar('owner', null, null, $date, $view, $includeCancelled, true);
+    }
+
+    private function readCalendar(
+        string $channel,
+        ?EntityId $student,
+        ?EntityId $pursuit,
+        ?string $date,
+        string $view,
+        bool $includeCancelled,
+        bool $export,
+    ): array {
         if (($student === null) !== ($pursuit === null) || ($student === null && $channel !== 'owner')) {
             throw new AccessDeniedException();
         }
@@ -526,7 +547,8 @@ final readonly class AdvisingAppointmentService
             $pursuit,
             $actor,
             $period,
-            $includeCancelled
+            $includeCancelled,
+            $export
         ): array {
             $read = fn(): array => $this->records->period(
                 $student,
@@ -562,13 +584,17 @@ final readonly class AdvisingAppointmentService
                     $hosts[$host->id->value] = [$host->givenName, $host->familyName, $host->ownerUserId?->value];
                 }
                 [$givenName, $familyName] = $hosts[$data['host_person_id']];
-                $rows[] = ['id' => $data['id'], 'student_id' => $s->value, 'pursuit_id' => $p->value,
-                    'host_name' => $givenName . ' ' . $familyName,
-                    'program_code' => $program['code'], 'program_title' => $program['title'],
+                $rows[] = ['id' => $data['id'],
                     'status' => $data['status'], 'starts_at' => $data['time']['starts_at'],
-                    'ends_at' => $data['time']['ends_at']];
+                    'ends_at' => $data['time']['ends_at']] + ($export
+                    ? ['version' => $data['version'], 'updated_at' => $data['updated_at']]
+                    : ['student_id' => $s->value, 'pursuit_id' => $p->value,
+                        'host_name' => $givenName . ' ' . $familyName,
+                        'program_code' => $program['code'], 'program_title' => $program['title']]);
             }
-            $this->audit->record($actor, 'advising.appointment_calendar_read', $student ?? $actor);
+            if (!$export) {
+                $this->audit->record($actor, 'advising.appointment_calendar_read', $student ?? $actor);
+            }
             if (
                 array_map(static fn(AdvisingAppointment $i): array => $i->facts(), $records)
                 !== array_map(static fn(AdvisingAppointment $i): array => $i->facts(), $read())

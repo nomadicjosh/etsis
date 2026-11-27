@@ -57,11 +57,33 @@ if (
 $sis->access->actor = $sis->admissions->person($advisingStudent->personId)->ownerUserId;
 $mine = $checkInPost('/portal/api/advising-appointments/calendar/', ['date' => $appointmentDay,
     'include_cancelled' => true]);
+$appointmentFile = $checkInPost('/portal/api/advising-appointments/export/', ['date' => $appointmentDay,
+    'include_cancelled' => true, 'owner_user_id' => $advisingActor->value]);
+if (
+    !str_contains($appointmentFile['calendar'] ?? '', 'STATUS:CANCELLED')
+    || !str_contains($appointmentFile['calendar'], 'CLASS:PRIVATE')
+    || str_contains($appointmentFile['calendar'], 'Fictional meeting instructions.')
+    || str_contains($appointmentFile['calendar'], $appointmentCreated['id'])
+    || str_contains($appointmentFile['calendar'], $advisingPerson->id->value)
+) {
+    throw new RuntimeException('The private advising export lost owner scope or exposed appointment details.');
+}
+$appointmentEmpty = $checkInPost('/portal/api/advising-appointments/export/', ['date' => $appointmentDay]);
+if (str_contains($appointmentEmpty['calendar'] ?? '', 'BEGIN:VEVENT')) {
+    throw new RuntimeException('The advising export included an unrequested cancelled appointment.');
+}
 $exact = $checkInPost($appointmentOwnerBase . 'list/', ['appointment_id' => $appointmentCreated['id']]);
 if (count($mine['items']) !== 1 || $exact['items'][0]['status'] !== 'cancelled' || $exact['can_schedule']) {
     throw new RuntimeException('The exact finished owner appointment or independent calendar failed.');
 }
 $sis->access->actor = $advisingActor;
+$staffAppointmentFile = $checkInPost('/portal/api/advising-appointments/export/', [
+    'date' => $appointmentDay, 'include_cancelled' => true,
+    'student_id' => $advisingStudent->id->value, 'pursuit_id' => $advisingPursuit,
+]);
+if (str_contains($staffAppointmentFile['calendar'] ?? '', 'BEGIN:VEVENT')) {
+    throw new RuntimeException('Staff authority or supplied student identities bypassed personal calendar scope.');
+}
 $newAppointment = $checkInPost($appointmentBase . 'schedule/', array_replace($appointmentCommand, [
     'appointment_id' => \Domain\Shared\ValueObject\EntityId::generate()->value,
 ]));

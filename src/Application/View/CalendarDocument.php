@@ -53,7 +53,8 @@ final class CalendarDocument
             $this->url($event['url']);
             $starts = $this->instant($event['starts_at']);
             $ends = $this->instant($event['ends_at']);
-            if ($ends <= $starts) {
+            $status = $event['status'] ?? 'CONFIRMED';
+            if ($ends <= $starts || !in_array($status, ['CONFIRMED', 'CANCELLED'], true)) {
                 throw new InvalidArgumentException('Use ordered meeting times.');
             }
             $properties = [
@@ -68,8 +69,8 @@ final class CalendarDocument
                 'LOCATION:' . $this->text($event['location']),
                 'URL:' . $event['url'],
                 $private ? 'CLASS:PRIVATE' : 'CLASS:PUBLIC',
-                'STATUS:CONFIRMED',
-                $private ? 'TRANSP:OPAQUE' : 'TRANSP:TRANSPARENT',
+                'STATUS:' . $status,
+                $private && $status !== 'CANCELLED' ? 'TRANSP:OPAQUE' : 'TRANSP:TRANSPARENT',
                 'END:VEVENT',
             ];
             foreach ($properties as $line) {

@@ -2763,6 +2763,7 @@
                     appointments.replaceChildren();
                     window.createAdvisingAppointmentCalendar({ node: el, request, labels }).mount(appointments, endpoint, {
                         owner: true, portal: true, initial, initialError,
+                        exportEndpoint: '/portal/api/advising-appointments/export/',
                     });
                 }
                 requestAnimationFrame(() => {
