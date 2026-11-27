@@ -515,3 +515,35 @@ The separate [account projection recovery guide](account-projection-recovery.md)
 Use `ddev codex sis:history:verify --transcript-document='<sis_transcript_documents.id>' --json` to check one retained encrypted PDF/HTML, its request reference and available release/delivery evidence. This exclusive selector accepts no replay options: it shares the original artifact reader and evaluates no current grade/catalog policy. Bounded ordinary SELECTs, captured-row rechecks and fixed private results keep it read-only, including with writes prohibited. It creates no support receipt, audit, business event or replacement document.
 
 The [transcript recovery guide](transcript-recovery.md) explains results, earlier unrecorded confirmations, size/time bounds and the exercised isolated database/application-key/event-key recovery scenario. Artifact consistency and protected-journal recovery are separate checks; neither alone proves historical issuance, archive completeness or institution-led restore acceptance.
+
+## Selected section meeting-plan verification
+
+A trusted deployment operator can check one section's published meeting plan without changing its timetable:
+
+```sh
+ddev codex sis:history:verify --meeting-plan='SECTION_ULID' --events=500 --json
+```
+
+Use the section ULID, rather than a room, booking or publication reference. Omit `--json` for a plain-text summary. This selector is exclusive: do not combine it with another subject, `--streams` or `--cursor`. Invalid input exits 2 before resolving storage and never echoes the supplied value. Console messages use plain operator text without translation helpers.
+
+The check authenticates and replays the complete recorded meeting-plan stream through the ordinary aggregate/definition validators, checks its head, and compares the exact current publication/version/fingerprint pointer. For a current plan with meetings, it also replays the section-publication stream under the same allowance, resolves the plan's retained offering references, checks stable section/course/term routing, and shares the publication workflow's instructional-date and delivery-mode rules. Room-free meetings require a retained online/hybrid offering. Missing references, substituted routing or dates outside the retained offering cannot produce a verified result. Use the separate `--section` mode for its broader course, binding and catalog-projection checks.
+
+No recorded plan produces **observed_empty**. A genuine published plan with zero meetings produces **verified**, one or more publications and zero current meetings. The latter records an explicit institutional decision; the checker never infers it from missing bookings. Later draft edits, current course/term labels, room changes and booking cancellation do not rewrite the retained publication. The current plan uses its originally referenced offering, even if a later offering has been published. Earlier plans receive structural/chain validation; this mode does not resolve every earlier plan's external dependencies.
+
+Results use fixed statuses:
+
+| Status | Exit | Meaning |
+| --- | --- | --- |
+| `verified` | 0 | The selected recorded plan chain, current pointer and current-plan retained offerings match at the observed boundaries. |
+| `observed_empty` | 3 | The existing section has no recorded meeting-plan publication or pointer. This is not a verified historical timetable. |
+| `changed` | 3 | Section routing, source heads or the current pointer changed during the check. Retry during a stable interval. |
+| `limited` | 3 | The shared replay allowance was exhausted; completed publication/meeting counts are withheld. |
+| `unverified` | 1 | Identity, protected journal, pointer or retained-offering evidence requires investigation, or the source is unavailable. |
+
+JSON contains only `scope: section_meeting_plan`, `section_reference`, `status`, `events_checked`, `publications_checked`, `current_meetings_checked`, whitelisted `issues` and `records_changed: false`. Only a verified result includes completed publication/meeting counts. Issue codes are `identity`, `journal`, `projection`, `offering_reference` and `unavailable`. Names, course/room labels, meeting times, locations, booking identities/purposes, faculty assessments, reasons, keys, raw payloads and underlying exception messages remain private.
+
+The default allowance is 500 events; valid choices are 1–2,000. Plan and offering replay share a 4 MiB decoded payload/metadata allowance, 400 pages and five cooperative elapsed seconds. Each routing/pointer/head lookup is limited to two rows with bound identifiers. The time allowance is checked between operations; deployment database statement/lock deadlines remain separate. Repeated/empty provider cursors cannot loop indefinitely. An inherited transaction is rejected as unavailable. The tool uses ordinary read-only queries without row locks; it captures and rechecks section/course/term existence, source heads and the current pointer. This is an observed comparison, not an independent checkpoint or a system-wide snapshot.
+
+It publishes/selects nothing, reads no working booking list or student roster, writes no audit/support receipt, repairs no projection, and sends no external effect. It does not reassess current student/faculty conflicts, approve working requests, verify every historical approval/operation receipt, prove earlier archive completeness or certify backup restoration. Preserve the original facts and investigate through their authorized workflows; do not edit events to make a check pass.
+
+Qualification uses populated fictional SQLite histories with writes prohibited, actual lazy command/provider wiring, invalid/exclusive selectors, exact multipage event bounds, oversized payloads, broken cursors, source failures, authenticated inconsistent offering references, pointer/journal damage and concurrent boundary changes. Five-driver SQL capture checks cover bounded prepared routing queries. Adjacent publication/faculty/timetable and existing operator checks remain green. Native PostgreSQL has no recorded meeting-plan pointer at inspection; its missing-reference SQL path passes with writes prohibited and all original row fingerprints preserved. Populated native meeting-plan, multi-engine contention and independent institutional recovery acceptance remain open.

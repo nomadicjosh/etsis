@@ -61,6 +61,7 @@ try {
                 'check-grade-certification',
                 'check-support-history',
                 'check-catalog-projections',
+                'check-meeting-plan-history',
                 'check-curriculum-projections',
                 'check-program-campus',
                 'check-standing-proposals',
@@ -376,6 +377,9 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/HistoryCheckBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-meeting-plan-history') {
+            require __DIR__ . '/MeetingPlanHistoryBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-graduate-history') {
             require __DIR__ . '/GraduateHistoryBootChecks.php';

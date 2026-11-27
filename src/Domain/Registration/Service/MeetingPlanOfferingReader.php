@@ -58,9 +58,16 @@ final readonly class MeetingPlanOfferingReader
                 throw new CorruptHistoryException();
             }
         }
+        self::validate($plan, $definitions);
+        return $definitions;
+    }
+
+    /** Shared retained-date/delivery rules; callers must authenticate the definitions first. */
+    public static function validate(SectionMeetingPlanDefinition $plan, #[\SensitiveParameter] array $definitions): void
+    {
         $zone = new DateTimeZone($plan->data["timezone"]);
         foreach ($plan->data["meetings"] as $meeting) {
-            $definition = $definitions[$meeting["offering_publication_id"]];
+            $definition = $definitions[$meeting["offering_publication_id"]] ?? throw new CorruptHistoryException();
             $start = new DateTimeImmutable($definition["instruction_starts_on"], $zone);
             $end = new DateTimeImmutable($definition["instruction_ends_on"], new DateTimeZone("UTC"))
                 ->modify("+1 day")
@@ -80,6 +87,5 @@ final readonly class MeetingPlanOfferingReader
                 ]);
             }
         }
-        return $definitions;
     }
 }

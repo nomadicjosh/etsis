@@ -25,6 +25,8 @@ Open **Academic catalog → Sections → a section → Published section details
 
 Previous results are restricted observations, not approvals or continuing guarantees. Access loss clears results/receipts; late responses cannot reopen a closed view. See [selected catalog verification](event-history-foundation.md#selected-course-and-section-publication-checks) for operator modes, limits and preserved personal-receipt routing.
 
+A deployment operator can check the published meeting pattern separately with `sis:history:verify --meeting-plan=SECTION_ULID`. It checks the recorded plan chain, current published-plan reference and the retained offerings used by the current meetings. Working booking changes remain separate from the last deliberate publication. See [meeting-plan verification](event-history-foundation.md#selected-section-meeting-plan-verification) for the command, results and limits.
+
 ## Instructional methods and campuses
 
 In **Academic catalog → Curriculum**, use **Instructional methods** and **Campuses & sites** to create your institution's definitions. A method describes the teaching format, such as lecture, seminar or laboratory. Delivery mode still separately means in person, online or hybrid. A campus/site is optional and does not reserve or require a room. No institution-specific definitions are seeded.

@@ -40,6 +40,8 @@ final class VerifyHistoryCommand extends ConsoleCommand
         ['waitlist-entry', null, 'required', 'Compare one retained waitlist request with queue history; no cursor.'],
         ['course', null, 'required', 'Compare one course publication history and retained references; no cursor.'],
         ['section', null, 'required', 'Compare one section publication, bindings and retained references; no cursor.'],
+        ['meeting-plan', null, 'required',
+            'Check one published section meeting plan and retained offerings; no cursor.'],
         ['program', null, 'required', 'Compare one program publication history and cohort projections; no cursor.'],
         ['course-group', null, 'required', 'Compare one reusable group publication history and pointer; no cursor.'],
         ['curriculum', null, 'required', 'Compare one degree/component publication and pointer; no cursor.'],
@@ -92,6 +94,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
             $requirements = $this->getOptions('requirements');
             $progress = $this->getOptions('progress-record');
             $waitlist = $this->getOptions('waitlist-entry');
+            $meetingPlan = $this->getOptions('meeting-plan');
             $catalog = ['course' => $this->getOptions('course'), 'section' => $this->getOptions('section'),
                 'program' => $this->getOptions('program'), 'group' => $this->getOptions('course-group'),
                 'curriculum' => $this->getOptions('curriculum')];
@@ -103,7 +106,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
             $graduatePolicy = $this->getOptions('graduate-policy') === true;
             $graduateApprovals = $this->getOptions('graduate-approvals');
             $subjects = [$account, $student, $credit, $person, $ssn, $application, $standing, $load, $transcript,
-                $advisors, $requirements, $progress, $waitlist,
+                $advisors, $requirements, $progress, $waitlist, $meetingPlan,
                 ...array_values($employment), ...array_values($catalog),
                 $graduatePolicy ? \Domain\Registration\GraduateRegistrationPolicy::ID : null, $graduateApprovals];
             if (count(array_filter($subjects, static fn(mixed $id): bool => $id !== null)) > 1) {
@@ -117,6 +120,12 @@ final class VerifyHistoryCommand extends ConsoleCommand
                     throw new InvalidArgumentException();
                 }
                 return $this->transcript(new EntityId($transcript), $json);
+            }
+            if ($meetingPlan !== null) {
+                if (!is_string($meetingPlan) || $cursor !== null || $this->input->hasParameterOption('--streams')) {
+                    throw new InvalidArgumentException();
+                }
+                return $this->meetingPlan(new EntityId($meetingPlan), $events, $json);
             }
             if ($ssn !== null) {
                 if (
@@ -217,7 +226,7 @@ final class VerifyHistoryCommand extends ConsoleCommand
                     . '--standing=PURSUIT_ULID, --load=DETERMINATION_ULID, --advisors=PURSUIT_ULID, '
                     . '--requirements=PURSUIT_ULID, --primary-position=EMPLOYEE_ULID, '
                     . '--position=POSITION_ULID, --time-entry=ENTRY_ULID, '
-                    . '--course=COURSE_ULID, --section=SECTION_ULID, --graduate-policy '
+                    . '--course=COURSE_ULID, --section=SECTION_ULID, --meeting-plan=SECTION_ULID, --graduate-policy '
                     . 'or --graduate-approvals=PURSUIT_ULID '
                     . 'with --events and optional --json. Use --ssn-person=PERSON_ULID with --events=1..500. '
                     . 'Use --transcript-document=DOCUMENT_ULID with optional --json and no replay options.',
@@ -376,6 +385,29 @@ final class VerifyHistoryCommand extends ConsoleCommand
                 . 'not current policy, source registration freshness, census or graduation eligibility, '
                 . 'fresh progress reproduction, every retry receipt or archive completeness. '
                 . 'An empty observation is not verified prior history.');
+        }
+        return match ($result->status) {
+            'verified' => self::SUCCESS,
+            'observed_empty', 'changed', 'limited' => 3,
+            default => self::FAILURE,
+        };
+    }
+
+    private function meetingPlan(EntityId $section, int $events, bool $json): int
+    {
+        $result = $this->codefy->make(\Domain\Registration\Repository\MeetingPlanVerifier::class)
+            ->verify($section, $events);
+        if ($json) {
+            $this->terminalRaw(json_encode($result->describe(), JSON_THROW_ON_ERROR));
+        } else {
+            $this->terminalRaw('Section meeting plan ' . $section->value . ': ' . $result->status . '.');
+            $this->terminalRaw($result->events . ' events checked. No records were changed.');
+            if ($result->issues !== []) {
+                $this->terminalRaw('Components requiring review: ' . implode(', ', $result->issues) . '.');
+            }
+            $this->terminalRaw('This compares the protected plan chain, current pointer and retained offerings '
+                . 'used by the current plan. It does not approve working bookings, reassess conflicts, '
+                . 'verify every earlier plan dependency or certify archive completeness.');
         }
         return match ($result->status) {
             'verified' => self::SUCCESS,
