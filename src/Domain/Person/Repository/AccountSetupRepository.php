@@ -23,4 +23,10 @@ interface AccountSetupRepository
     public function delivery(EntityId $id, string $tokenHash, string $state): void;
     /** @param array<string,scalar|null> $changes */
     public function renew(EntityId $id, array $changes): void;
+    /** @return list<EntityId> */
+    public function retentionCandidates(string $cutoff, ?EntityId $after, int $limit): array;
+    /** Bounded binding metadata only; previews do not lock or fetch notification content.
+     * @return array<string,mixed>|null */
+    public function retentionRecord(EntityId $id, bool $lock = false): ?array;
+    public function redactNotice(EntityId $id, string $tokenHash, string $state, string $expiresAt): bool;
 }

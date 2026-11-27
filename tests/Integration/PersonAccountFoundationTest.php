@@ -202,6 +202,70 @@ final class PersonAccountFoundationTest extends TestCase
         preg_match('/#([a-f0-9]{64})/', $notice['body'], $m);
         return $m[1];
     }
+    public function testCleanedUpInvitationRemainsExpiredAndCanBeDeliberatelyReissuedAndUsed(): void
+    {
+        $s = new SisFixture();
+        $person = $s->registrationService()->staff(
+            EntityId::generate(),
+            'Fictional',
+            'Person',
+            'setup@example.invalid'
+        );
+        $old = $this->token($s, $person->id);
+        $setup = $this->onboarding($s);
+        $s->clock->time = $s->clock->time->modify('+73 hours');
+        $retention = new \Domain\Person\Service\AccountSetupRetention(
+            new SqlAccountSetupRepository($s->sql),
+            $s->dropCipher,
+            $s->transactions,
+            $s->clock
+        );
+        self::assertSame(1, $retention->run(apply: true)['cleared']);
+        self::assertSame(['state' => 'expired', 'pending' => true], $setup->status($person->id));
+        try {
+            $setup->complete($old, self::PASSWORD);
+            self::fail('An expired invitation still worked.');
+        } catch (\DomainException) {
+        }
+        $setup->reissue($person->id);
+        $fresh = $this->token($s, $person->id);
+        self::assertNotSame($old, $fresh);
+        self::assertSame(0, $retention->run(apply: true)['examined']);
+        $setup->complete($fresh, self::PASSWORD);
+        self::assertFalse($setup->status($person->id)['pending']);
+    }
+
+    public function testAReissueBetweenRetentionInspectionAndLockIsKeptIntact(): void
+    {
+        $s = new SisFixture();
+        $person = $s->registrationService()->staff(EntityId::generate(), 'Fictional', 'Person', 'race@example.invalid');
+        $setup = $this->onboarding($s);
+        $real = new SqlAccountSetupRepository($s->sql);
+        $repository = $this->createMock(\Domain\Person\Repository\AccountSetupRepository::class);
+        $repository->method('retentionCandidates')->willReturnCallback($real->retentionCandidates(...));
+        $repository->method('retentionRecord')->willReturnCallback(
+            static function (EntityId $id, bool $lock = false) use ($setup, $person, $real): ?array {
+                if ($lock) {
+                    $setup->reissue($person->id);
+                }
+                return $real->retentionRecord($id, $lock);
+            }
+        );
+        $repository->expects(self::never())->method('redactNotice');
+        $s->clock->time = $s->clock->time->modify('+73 hours');
+        $retention = new \Domain\Person\Service\AccountSetupRetention(
+            $repository,
+            $s->dropCipher,
+            $s->transactions,
+            $s->clock
+        );
+        $result = $retention->run(apply: true);
+        self::assertSame([1, 0], [$result['changed'], $result['cleared']]);
+        self::assertSame('queued', $setup->status($person->id)['state']);
+        $setup->complete($this->token($s, $person->id), self::PASSWORD);
+        self::assertFalse($setup->status($person->id)['pending']);
+    }
+
     public function testStaffCreationIsAtomicIdempotentAndCreatesOnlyABasicLinkedAccount(): void
     {
         $s = new SisFixture();

@@ -9,6 +9,7 @@ use DateTimeZone;
 use Domain\Communications\Service\MailTransport;
 use Domain\Communications\Service\MessageCipher;
 use Domain\Person\Repository\AccountSetupRepository;
+use Domain\Person\ValueObject\AccountSetupGrant;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
 use Domain\Shared\Service\Clock;
@@ -79,7 +80,7 @@ final readonly class AccountSetupService
                 'encrypted_notice' => $this->cipher->seal(json_encode($notice, JSON_THROW_ON_ERROR)),
             ];
             $changes['sealed_grant'] = $this->cipher->seal(json_encode(
-                self::grant(array_replace(
+                AccountSetupGrant::claims(array_replace(
                     $r,
                     $changes
                 )),
@@ -96,45 +97,10 @@ final readonly class AccountSetupService
     {
         return hash('sha256', (string) $user->token() . "\0" . (string) $user->emailAddress());
     }
-    /**
-     * @param array<string,mixed> $row
-     * @return array<string,string>
-     */
-    public static function grant(array $row): array
-    {
-        $grant = ['purpose' => 'person.account.setup.v1'];
-        foreach (
-            ['id',
-            'person_id',
-            'user_id',
-            'token_hash',
-            'credential_hash',
-            'expires_at',
-            'requested_at'] as $key
-        ) {
-            if (!is_string($row[$key] ?? null)) {
-                throw new \DomainException('This setup link is unavailable.');
-            }
-            $grant[$key] = $row[$key];
-        }
-        return $grant;
-    }
     /** @param array<string,mixed> $row */
-    private function verifyGrant(array $row): void
+    private function verifyGrant(#[\SensitiveParameter] array $row): void
     {
-        try {
-            if (
-                !is_string($row['sealed_grant'] ?? null) || strlen($row['sealed_grant']) > 8192 ||
-                json_decode(
-                    $this->cipher->open($row['sealed_grant']),
-                    true,
-                    4,
-                    JSON_THROW_ON_ERROR
-                ) !== self::grant($row)
-            ) {
-                throw new \DomainException();
-            }
-        } catch (\Throwable) {
+        if (!AccountSetupGrant::matches($this->cipher, $row)) {
             throw new \DomainException('This setup link is unavailable.');
         }
     }

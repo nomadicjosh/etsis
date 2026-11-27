@@ -17,6 +17,7 @@ final class MaintenanceCommandPolicyTest extends TestCase
             ['', 'list', 'help sis:moodle:sync', 'sis:maintenance up', 'sis:history:verify --json',
             'sis:history:anchor --action=compare', 'sis:database:postgres --switch',
             'sis:projections:academic-dates --apply',
+            'sis:accounts:prune-setup --apply --limit=50',
             'migrate:status', 'migrate:up', 'migrate:rollback', 'schedule:list', 'route:list', 'sis:access:bootstrap',
             'sis:communications:send --help'] as $command
         ) {
@@ -26,7 +27,7 @@ final class MaintenanceCommandPolicyTest extends TestCase
             ['sis:communications:send --apply', 'sis:accounts:send-setup --apply',
             'sis:admissions:documents --apply', 'sis:reports:export --apply', 'sis:reports:prune --apply',
             'sis:moodle:sync', 'sis:moodle:provision', 'queue:run', 'schedule:run', 'migrate:fresh',
-            'sis:comm:send --apply', 'sis:communications:send -- --help'] as $command
+            'sis:comm:send --apply', 'sis:accounts:prune --apply', 'sis:communications:send -- --help'] as $command
         ) {
             self::assertFalse(MaintenanceCommandPolicy::permits(new StringInput($command)), $command);
         }

@@ -601,6 +601,9 @@ try {
         } elseif (($argv[1] ?? '') === 'check-session-retention') {
             require __DIR__ . '/SessionRetentionBootChecks.php';
             $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-setup-retention') {
+            require __DIR__ . '/AccountSetupRetentionBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-moodle') {
             $kernel->bootstrap();
             $app->configContainer->setConfigKey('moodle', ['enabled' => false]);

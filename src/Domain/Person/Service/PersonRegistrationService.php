@@ -13,6 +13,7 @@ use Domain\Shared\ValueObject\DerivedIdentity;
 use Domain\Person\Person;
 use Domain\Person\Repository\AccountSetupRepository;
 use Domain\Person\Repository\PersonAccountRepository;
+use Domain\Person\ValueObject\AccountSetupGrant;
 use Domain\Person\ValueObject\InstitutionalId;
 use Domain\Shared\Exception\ValidationException;
 use Domain\Shared\Persistence\UnitOfWork;
@@ -238,7 +239,7 @@ final readonly class PersonRegistrationService
                     'encrypted_notice' => $this->cipher->seal(json_encode($notice, JSON_THROW_ON_ERROR)),
                 ];
                 $setup['sealed_grant'] = $this->cipher->seal(json_encode(
-                    AccountSetupService::grant($setup),
+                    AccountSetupGrant::claims($setup),
                     JSON_THROW_ON_ERROR
                 ));
                 $this->setups->stage($setup);
