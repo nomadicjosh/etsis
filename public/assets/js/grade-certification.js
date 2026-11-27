@@ -2,6 +2,8 @@
 window.createGradeCertification = function (ui) {
     "use strict";
     const { node, request, task, can, table, openDrawer } = ui;
+    const configuration = document.getElementById('workspace-config');
+    const auditingLabels = configuration ? JSON.parse(configuration.textContent).course_auditing_labels || {} : {};
     const action = (label, run, primary = false) =>
         node(
             "button",
@@ -57,7 +59,7 @@ window.createGradeCertification = function (ui) {
         node(
             "p",
             { class: "form-text" },
-            "Includes every current enrolled or withdrawn student, up to fifty. Early drops and cancelled registrations are excluded. Certification retains this review; later grade corrections remain available. Names and institutional IDs shown here are current values.",
+            auditingLabels.certification_scope || "Includes every current enrolled or withdrawn student, up to fifty. Early drops and cancelled registrations are excluded. Certification retains this review; later grade corrections remain available. Names and institutional IDs shown here are current values.",
         );
     async function open(section, back) {
         const body = openDrawer("Class grade certification");

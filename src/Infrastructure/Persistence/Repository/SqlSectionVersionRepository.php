@@ -248,6 +248,9 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 $facts['continuing_education'] =
                 ContinuingEducationUnits::stored($row['continuing_education'])->describe();
             }
+            if ($row['auditing'] !== null) {
+                $facts['auditing'] = \Domain\Registration\ValueObject\CourseAuditing::stored($row['auditing'])->facts();
+            }
             if ($row['contact_hours'] !== null) {
                 if (!is_string($row['contact_hours']) || strlen($row['contact_hours']) > 2048) {
                     throw new CorruptHistoryException();
@@ -315,10 +318,13 @@ final readonly class SqlSectionVersionRepository implements SectionVersionReposi
                 "schema_version" =>
                     $definition->classifications === null ? 1 : 2,
             ] + array_diff_key($definition->definition->data, [
-                'web_registration' => true, 'contact_hours' => true, 'student_selectable_credits' => true,
+                'auditing' => true, 'web_registration' => true, 'contact_hours' => true,
+                'student_selectable_credits' => true,
             'continuing_education' => true, 'eligible_program_ids' => true, 'require_program_campus' => true,
             ]) +
-                ['student_selectable_credits' => array_key_exists(
+                ['auditing' => isset($definition->definition->data['auditing'])
+                    ? json_encode($definition->definition->data['auditing'], JSON_THROW_ON_ERROR) : null,
+                'student_selectable_credits' => array_key_exists(
                     'student_selectable_credits',
                     $definition->definition->data
                 )

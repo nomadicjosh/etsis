@@ -297,13 +297,14 @@ window.createWorkspaceOperations = function (ui) {
             scrollTable(
                 ["Course / section", "Status", "Action"],
                 rows.map((item) => [
-                    `${item.course_code} · ${item.section_code}`,
+                    `${item.course_code} · ${item.section_code}${item.basis === 'audit' ? ` · ${ui.auditingLabels.auditor}` : ''}`,
                     badge(item.status),
                     ["A", "N"].includes(item.status)
                         ? node("div", { class: "d-flex flex-wrap gap-2" },
-                              button("Change section", () => ui.batchRegistration().changeSection(row.id, item.section_id, back)),
+                              item.basis === 'audit' ? null :
+                                  button("Change section", () => ui.batchRegistration().changeSection(row.id, item.section_id, back)),
                               button("Drop / withdraw", () => ui.courseDrops().review(row.id, item.section_id, back)),
-                              ...(can('sis:student:read') && (item.id || item.enrollment_id) ? [
+                              ...(item.basis !== 'audit' && can('sis:student:read') && (item.id || item.enrollment_id) ? [
                                   button(ui.ceuLabels?.earned_title || 'Earned CEUs',
                                       () => window.createEarnedCeus({ node, request, task, openDrawer, labels: ui.ceuLabels })
                                           .open(row.id, item.section_id, item.enrollment_id || item.id, back)),
@@ -2343,6 +2344,8 @@ window.createWorkspaceOperations = function (ui) {
                         button(ui.creditLabels?.section_title || "Offering credits", () => ui.catalog().credits("sections", row, () => openRecord(sectionName, row))),
                         ...(ui.programEligibilityLabels ? [button(ui.programEligibilityLabels.title,
                             () => ui.catalog().eligiblePrograms(row.id, () => openRecord(sectionName, row)))] : []),
+                        ...(ui.auditingLabels ? [button(ui.auditingLabels.title,
+                            () => ui.catalog().auditing(row.id, () => openRecord(sectionName, row)))] : []),
                         button("Contact hours", () => ui.catalog().contactHours(row, () => openRecord(sectionName, row))),
                         button("Published section details", () => ui.catalog().sectionPublications(row.id, null, [], null,
                             () => openRecord(sectionName, row, origin))),

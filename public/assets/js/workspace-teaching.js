@@ -248,7 +248,9 @@ window.createWorkspaceTeaching = function (ui) {
                                       `${student.given_name} ${student.family_name}`,
                                       student.institutional_id,
                                       status(student.status),
-                                      student.grade_code || "—",
+                                      student.basis === 'audit'
+                                          ? JSON.parse(document.getElementById('workspace-config').textContent).course_auditing_labels.auditor
+                                          : student.grade_code || "—",
                                       page.can_grade && ["A", "N"].includes(student.status)
                                           ? button("Grade & attendance", () =>
                                                 studentRecord(row, student, back),
@@ -665,6 +667,12 @@ window.createWorkspaceTeaching = function (ui) {
                 button("Skip student", queue.next),
                 button("Back to roster", back, "btn-link"),
             );
+            return;
+        }
+        if (choices.auditing) {
+            const labels = JSON.parse(document.getElementById('workspace-config').textContent).course_auditing_labels;
+            loading.replaceChildren(identity(), node('p', { role: 'status', class: 'alert alert-info' }, labels.no_grade),
+                ...(queue ? [button('Next student', queue.next)] : []), button('Back to roster', back, 'btn-link'));
             return;
         }
         if (queue && choices.posted) {

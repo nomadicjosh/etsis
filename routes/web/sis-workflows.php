@@ -1069,6 +1069,9 @@ return static function (Psr7Router $router): void {
     $router->post('/sis/bookings/{id}/public-event/review/', [$campusEvents, 'review']);
     $router->post('/sis/bookings/{id}/public-event/publish/', [$campusEvents, 'publish']);
     $router->post('/sis/bookings/{id}/public-event/withdraw/', [$campusEvents, 'withdraw']);
+    $auditing = \Application\Http\Controller\CourseAuditingPolicyController::class;
+    $router->post('/sis/sections/{id}/auditing/current/', [$auditing, 'current']);
+    $router->post('/sis/sections/{id}/auditing/save/', [$auditing, 'save']);
     $programEligibility = \Application\Http\Controller\SectionProgramPolicyController::class;
     $router->post('/sis/sections/{id}/eligible-programs/current/', [$programEligibility, 'current']);
     $router->post('/sis/sections/{id}/eligible-programs/choices/', [$programEligibility, 'choices']);

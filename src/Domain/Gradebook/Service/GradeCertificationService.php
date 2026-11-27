@@ -369,6 +369,13 @@ final readonly class GradeCertificationService
                 $budget,
             );
             $credit = $this->credits->certificationFacts($enrollment, $budget);
+            if (($credit['credit']['basis'] ?? null) === 'audit') {
+                // Auditors remain on teaching/attendance rosters, outside academic grade certification.
+                if (($enrollmentFacts['facts']['basis'] ?? null) !== 'audit') {
+                    throw new CorruptHistoryException();
+                }
+                continue;
+            }
             $person = $this->admissions->student($student)->personId;
             $issue =
             $enrollmentFacts["history_version"] < 1 || $credit["history_version"] < 1

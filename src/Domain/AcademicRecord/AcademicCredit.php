@@ -100,6 +100,12 @@ final class AcademicCredit extends EventSourcedAggregate
                 throw new CorruptHistoryException();
             }
         }
+        if (
+            ($p['credit']['basis'] ?? null) === 'audit' &&
+            ($p['provenance'] !== 'registration' || $this->sectionVersion === null || $p['grade'] !== null)
+        ) {
+            throw new CorruptHistoryException();
+        }
         if ($p["provenance"] === "registration") {
             $this->registeredCredits = array_intersect_key(
                 $p["credit"],
@@ -272,6 +278,7 @@ final class AcademicCredit extends EventSourcedAggregate
     private function allowsGrade(mixed $withdrawn, mixed $reconcileQuantities = false): bool
     {
         if (
+            ($this->credit['basis'] ?? null) === 'audit' ||
             !is_bool($withdrawn) ||
             !is_bool($reconcileQuantities) ||
             ($reconcileQuantities && !$withdrawn) ||
@@ -354,7 +361,8 @@ final class AcademicCredit extends EventSourcedAggregate
     }
     public function canCorrectRegisteredCredits(): bool
     {
-        return $this->credit !== null && in_array($this->credit['status'], ['A', 'N'], true) &&
+        return $this->credit !== null && ($this->credit['basis'] ?? null) !== 'audit' &&
+        in_array($this->credit['status'], ['A', 'N'], true) &&
         $this->registeredCredits !== null && $this->provenance === 'registration' &&
         $this->pendingGradeChange === null;
     }
@@ -644,7 +652,8 @@ final class AcademicCredit extends EventSourcedAggregate
     /** Verified CEU completion never requires an academic grade or creates academic credit. */
     public function canDecideEarnedCeus(): bool
     {
-        return $this->playhead() > 0 && $this->provenance === 'registration' &&
+        return ($this->credit['basis'] ?? null) !== 'audit' &&
+        $this->playhead() > 0 && $this->provenance === 'registration' &&
         $this->sectionVersion !== null && $this->pendingGradeChange === null &&
         in_array($this->credit['status'], ['A', 'N', 'W'], true) &&
         !WithdrawnCreditQuantities::requiresReview($this->credit, $this->grade);

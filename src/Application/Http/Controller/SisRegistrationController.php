@@ -93,7 +93,10 @@ final readonly class SisRegistrationController
             new \Domain\Registration\ValueObject\RegistrationBatchSelection(
                 $f->id("section_id"),
                 $f->id("student_id"),
-            )->withCreditChoices(\Application\Http\RegistrationPlanInput::credits($request)),
+            )->withCreditChoices(\Application\Http\RegistrationPlanInput::credits($request))
+                ->withBasis(\Domain\Registration\Enum\EnrollmentBasis::parse(
+                    $f->optionalText("basis", 16) ?? "standard"
+                )),
             $f->text("revision", 64),
             $f->text("review_token", 8192),
             $f->boolean("by_staff"),
@@ -115,7 +118,10 @@ final readonly class SisRegistrationController
                 new \Domain\Registration\ValueObject\RegistrationBatchSelection(
                     $f->id("section_id"),
                     $f->id("student_id"),
-                )->withCreditChoices(\Application\Http\RegistrationPlanInput::credits($request)),
+                )->withCreditChoices(\Application\Http\RegistrationPlanInput::credits($request))
+                ->withBasis(\Domain\Registration\Enum\EnrollmentBasis::parse(
+                    $f->optionalText("basis", 16) ?? "standard"
+                )),
                 $f->boolean("by_staff"),
             ),
         );

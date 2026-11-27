@@ -11,6 +11,7 @@ use function Codefy\Framework\Helpers\trans_html;
 /** Per-record candidacy only; never an allocation or completion decision. */
 enum CourseMatchStatus: string
 {
+    case Audited = "audited";
     case ComponentExcluded = "component_excluded";
     case RequirementGradeInsufficient = 'requirement_grade_insufficient';
     case RequirementOriginExcluded = 'requirement_origin_excluded';
@@ -48,6 +49,7 @@ enum CourseMatchStatus: string
     public function explanation(): string
     {
         return match ($this) {
+            self::Audited => trans_html('Audited courses do not satisfy degree requirements.'),
             self::ComponentExcluded
             => trans_html("An approved course route reserves this course for another curriculum component."),
             self::PlacementRestricted

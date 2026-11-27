@@ -1,5 +1,9 @@
 # Institutional credits and grade history
 
+[Course auditing](course-auditing.md) retains zero-credit institutional records with an explicit audit
+basis. Academic grading, registered-credit corrections and CEU awards cannot turn them into credit.
+Transcripts display AU or AU/W from that basis; no final grade or completion is invented.
+
 Institutional credits now have a replayable history from accepted registration through final-grade decisions and reviewed early/late drops. These events use the existing **`sis_history_events`** journal. There is no additional event store. [Transfer awards and corrections](transfer-credit-history.md) now also use the shared journal. [Accepted enrollment/seat decisions](registration-history.md) now have their own replayable history and committed section order. Full section-definition versions and student/program transitions remain staged work.
 
 ## Staff workflow

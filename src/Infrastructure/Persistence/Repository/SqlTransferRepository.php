@@ -147,7 +147,8 @@ final readonly class SqlTransferRepository implements TransferRepository
             $declared = \Domain\Catalog\ValueObject\ContinuingEducationUnits::stored(
                 $credit['accepted_ceu_declaration']
             );
-            $credit['continuing_education_only'] = $credit['credit_type'] === 'institutional' &&
+            $auditing = ($credit['basis'] ?? 'standard') === 'audit';
+            $credit['continuing_education_only'] = !$auditing && $credit['credit_type'] === 'institutional' &&
             (int) $credit['attempted_milli'] === 0 && (int) $credit['completed_milli'] === 0 &&
             $declared?->milli !== null;
             unset($credit['accepted_ceu_declaration']);
@@ -156,10 +157,10 @@ final readonly class SqlTransferRepository implements TransferRepository
                 $award->facts,
                 array_flip(['earned_milli', 'completed_on'])
             );
-            $credit["grade_code"] =
-            $credit["status"] === "V"
+            $credit["grade_code"] = $auditing ? ($credit['status'] === 'W' ? 'AU/W' : 'AU') :
+            ($credit["status"] === "V"
             ? "Voided"
-            : $credit["grade_code"] ?? ($credit["status"] === "W" ? "W" : null);
+            : $credit["grade_code"] ?? ($credit["status"] === "W" ? "W" : null));
             $credit["counts_gpa"] = (bool) ($credit["counts_gpa"] ?? false);
         }
         unset($credit);

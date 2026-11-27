@@ -14,6 +14,7 @@ final class AcademicWorkView
     {
         $facts = $input["credit"];
         return [
+            ...isset($facts['basis']) ? ['basis' => $facts['basis']] : [],
             ...!empty($input['continuing_education_only']) ? ['continuing_education_only' => true] : [],
             ...isset($input['earned_ceus']) ? ['earned_ceus' => array_intersect_key(
                 $input['earned_ceus'],

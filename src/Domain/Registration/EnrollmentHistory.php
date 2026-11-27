@@ -18,6 +18,12 @@ final class EnrollmentHistory extends EventSourcedAggregate
     /** @var array<string,mixed>|null */
     private ?\Domain\Registration\ValueObject\SelectedRegistrationCredits $creditChoice = null;
     private ?array $facts = null;
+    private ?array $auditingPolicy = null;
+
+    public function auditingPolicy(): ?array
+    {
+        return $this->auditingPolicy;
+    }
     /** @var array<string,mixed>|null */
     private ?array $source = null;
     /** @var array<string,mixed>|null */
@@ -127,6 +133,18 @@ final class EnrollmentHistory extends EventSourcedAggregate
             $metadata['prerequisite_evidence']['assignment_id'] ?? ''
         );
         $this->sectionVersion = $metadata["section_version_id"] ?? null;
+        if (($p['enrollment']['basis'] ?? null) === 'audit') {
+            $policy = \Domain\Registration\ValueObject\CourseAuditing::from($metadata['auditing_policy'] ?? null);
+            $this->auditingPolicy = $policy->facts();
+            if (
+                $this->sectionVersion === null ||
+                (!$p['eligibility']['by_staff'] && !$policy->selfService)
+            ) {
+                throw new CorruptHistoryException();
+            }
+        } elseif (isset($metadata['auditing_policy'])) {
+            throw new CorruptHistoryException();
+        }
         if ($this->sectionVersion !== null) {
             new \Domain\Shared\ValueObject\EntityId($this->sectionVersion);
             if ($p["provenance"] !== "registered") {

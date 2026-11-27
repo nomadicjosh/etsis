@@ -13,6 +13,20 @@ final class RegistrationBatchSelection
     /** @var list<EntityId> */
     public readonly array $students;
     private array $creditChoices = [];
+    private \Domain\Registration\Enum\EnrollmentBasis $enrollmentBasis =
+    \Domain\Registration\Enum\EnrollmentBasis::Standard;
+
+    public function withBasis(\Domain\Registration\Enum\EnrollmentBasis $basis): self
+    {
+        $copy = clone $this;
+        $copy->enrollmentBasis = $basis;
+        return $copy;
+    }
+
+    public function basis(): \Domain\Registration\Enum\EnrollmentBasis
+    {
+        return $this->enrollmentBasis;
+    }
 
     public function __construct(public readonly EntityId $section, EntityId ...$students)
     {
@@ -58,6 +72,7 @@ final class RegistrationBatchSelection
         }
         return hash('sha256', json_encode([$this->section->value,
             array_map(static fn (EntityId $id): string => $id->value, $this->students),
-            $revision, ...($this->creditChoices === [] ? [] : [$this->creditChoices])], JSON_THROW_ON_ERROR));
+            $revision, ...($this->basis() === \Domain\Registration\Enum\EnrollmentBasis::Audit ? ['audit'] : []),
+            ...($this->creditChoices === [] ? [] : [$this->creditChoices])], JSON_THROW_ON_ERROR));
     }
 }

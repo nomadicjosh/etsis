@@ -147,12 +147,17 @@ final readonly class CampusService
         return $this->registrations->commitPlan($operation, $selection, $revision, $token, false);
     }
 
-    public function reviewRegistration(EntityId $student, EntityId $section, ?int $creditsMilli = null): array
-    {
+    public function reviewRegistration(
+        EntityId $student,
+        EntityId $section,
+        ?int $creditsMilli = null,
+        \Domain\Registration\Enum\EnrollmentBasis $basis = \Domain\Registration\Enum\EnrollmentBasis::Standard,
+    ): array {
         $this->repository->ownedStudent($this->access->authenticatedUserId(), $student);
         return $this->registrations->review(
             new \Domain\Registration\ValueObject\RegistrationBatchSelection($section, $student)
-                ->withCreditChoices($creditsMilli === null ? [] : [$student->value => $creditsMilli]),
+                ->withCreditChoices($creditsMilli === null ? [] : [$student->value => $creditsMilli])
+                ->withBasis($basis),
             false,
         );
     }
@@ -164,12 +169,14 @@ final readonly class CampusService
         string $revision,
         #[\SensitiveParameter] string $token,
         ?int $creditsMilli = null,
+        \Domain\Registration\Enum\EnrollmentBasis $basis = \Domain\Registration\Enum\EnrollmentBasis::Standard,
     ): array {
         $this->repository->ownedStudent($this->access->authenticatedUserId(), $student);
         return $this->registrations->commit(
             $operation,
             new \Domain\Registration\ValueObject\RegistrationBatchSelection($section, $student)
-                ->withCreditChoices($creditsMilli === null ? [] : [$student->value => $creditsMilli]),
+                ->withCreditChoices($creditsMilli === null ? [] : [$student->value => $creditsMilli])
+                ->withBasis($basis),
             $revision,
             $token,
             false,

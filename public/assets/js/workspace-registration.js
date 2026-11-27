@@ -14,6 +14,7 @@ window.createWorkspaceRegistration = function (ui) {
     } = ui;
     const configNode = document.getElementById('workspace-config');
     const creditLabels = configNode ? JSON.parse(configNode.textContent).credit_policy_labels || {} : {};
+    const auditLabels = configNode ? JSON.parse(configNode.textContent).course_auditing_labels || {} : {};
     const creditText = (key, fallback) => creditLabels[key] || fallback;
     const notificationLabels = configNode ? JSON.parse(configNode.textContent).notification_labels || {} : {};
     const openRegistration = (title, eyebrow) => {
@@ -435,6 +436,12 @@ window.createWorkspaceRegistration = function (ui) {
             { layout: "registration_section" },
         );
         if (!body.isConnected) return;
+        const basis = node('select', { id: 'registration-basis', name: 'basis', class: 'form-select' },
+            node('option', { value: 'standard' }, auditLabels.standard),
+            node('option', { value: 'audit' }, auditLabels.audit));
+        basis.value = draft.basis || 'standard';
+        form.append(node('label', { for: basis.id, class: 'form-label' }, auditLabels.basis), basis,
+            node('p', { class: 'form-text' }, auditLabels.change_help));
         let generation = 0,
             confirmation = null;
         let creditControl = null, creditChoices = {};
@@ -448,6 +455,7 @@ window.createWorkspaceRegistration = function (ui) {
                 section_id: section,
                 by_staff: true,
                 credit_choices: creditChoices,
+                basis: basis.value,
             });
             if (!source.isConnected || turn !== generation) return;
             const panel = openRegistration(
@@ -463,6 +471,7 @@ window.createWorkspaceRegistration = function (ui) {
                         section_id: section,
                         by_staff: true,
                         credit_choices: creditChoices,
+                basis: basis.value,
                         operation_id: reviewed.operation_id,
                         revision: reviewed.revision,
                         review_token: reviewed.review_token,
@@ -482,15 +491,15 @@ window.createWorkspaceRegistration = function (ui) {
                 schedule.registration(reviewed, money),
                 ui.graduate && reviewed.students[0]?.readiness?.some(check => check.code.startsWith('graduate_'))
                     ? button(ui.graduateLabels.open_approvals, () => ui.graduate.open(student, section,
-                        () => single(student, back, { section_id: section }), reviewed.students[0].assignment_id)) : null,
-                (reviewed.students[0]?.waitlist?.enabled ||
+                        () => single(student, back, { section_id: section, basis: basis.value }), reviewed.students[0].assignment_id)) : null,
+                basis.value !== 'audit' && (reviewed.students[0]?.waitlist?.enabled ||
                     reviewed.students[0]?.waitlist?.entry_id) &&
                     ui.can("sis:registration:waitlist")
                     ? button("Waitlist options", () =>
                           window
                               .createSectionWaitlist(ui)
                               .place(student, { id: section }, () =>
-                                  single(student, back, { section_id: section }),
+                                  single(student, back, { section_id: section, basis: basis.value }),
                               ),
                       )
                     : null,
@@ -499,7 +508,7 @@ window.createWorkspaceRegistration = function (ui) {
                     { class: "inline-actions" },
                     confirm,
                     button("Refresh review", () => reviewSelection(section)),
-                    button("Change section", () => single(student, back, { section_id: section })),
+                    button("Change section", () => single(student, back, { section_id: section, basis: basis.value })),
                 ),
                 button("Back to student", back, "btn-link"),
             );

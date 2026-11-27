@@ -115,6 +115,9 @@ final readonly class SqlAcademicCreditRepository implements AcademicCreditReposi
             $r[$key] = (int) $v;
         }
         $ref = $this->sql->rows("sis_credit_course_versions", ["id" => $credit->value], 1)[0] ?? null;
+        if ($r['basis'] === 'standard') {
+            unset($r['basis']);
+        }
         return new CreditSnapshot(
             array_intersect_key($r, array_flip(CreditSnapshot::FIELDS)) + [
                 "course_version_id" => $ref["course_version_id"] ?? null,

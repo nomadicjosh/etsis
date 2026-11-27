@@ -221,6 +221,10 @@ final class CombinedDegreeProgressTest extends TestCase
             public int $calls = 0;public function __construct(private StudentSpecializationRequirementsFixture $f)
             {
             }
+            public function selected(EntityId $credit): ?array
+            {
+                return new SqlAcademicInputRepository($this->f->r->sis->sql)->selected($credit);
+            }
             public function inventory(EntityId $student): \Domain\DegreeAudit\ValueObject\AcademicInputInventory
             {
                 $this->calls++;
@@ -400,6 +404,10 @@ final class CombinedDegreeProgressTest extends TestCase
         $repository = new class ($f) implements \Domain\DegreeAudit\Repository\AcademicInputRepository {
             public function __construct(private StudentSpecializationRequirementsFixture $f)
             {
+            }
+            public function selected(EntityId $credit): ?array
+            {
+                return new SqlAcademicInputRepository($this->f->r->sis->sql)->selected($credit);
             }
             public function inventory(EntityId $student): \Domain\DegreeAudit\ValueObject\AcademicInputInventory
             {

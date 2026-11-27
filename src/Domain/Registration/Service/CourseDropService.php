@@ -611,7 +611,8 @@ final readonly class CourseDropService
                 "status" => $closed->status->value,
                 "version" => $closed->version,
                 "effective_on" => $effective,
-                "grade_code" => $context["outcome"]["grade_code"],
+                "grade_code" => $closed->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit &&
+                    !$context['outcome']['delete_records'] ? 'AU/W' : $context["outcome"]["grade_code"],
                 "academic_records_removed" => $context["outcome"]["delete_records"],
                 "course_charge" => $context["outcome"]["delete_records"]
                     ? ($reversed
@@ -620,6 +621,7 @@ final readonly class CourseDropService
                     : "kept",
                 "cash_refund_issued" => false,
                 "term_id" => $closed->termId->value,
+                ...$closed->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit ? ['basis' => 'audit'] : [],
                 "registered_at" => $closed->registeredAt->format(DATE_ATOM),
                 "status_at" => $closed->statusAt->format(DATE_ATOM),
             ] + ($withdrawal === null ? [] : ['withdrawal_credit' => $context['withdrawal_credit']]);
@@ -759,6 +761,7 @@ final readonly class CourseDropService
             new DateTimeImmutable($result["registered_at"]),
             new DateTimeImmutable($result["status_at"]),
             $result["version"],
+            \Domain\Registration\Enum\EnrollmentBasis::from($result["basis"] ?? "standard"),
         );
     }
     /** @return array{person: EntityId, course: EntityId, term: EntityId} */

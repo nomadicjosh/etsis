@@ -1,5 +1,10 @@
 # Registration decisions and section order
 
+[Course auditing](course-auditing.md) records an explicit enrollment basis with the accepted offering
+policy. Auditors use ordinary seats and eligibility checks, receive the configured audit fee and zero
+registered-credit tuition, and never gain academic credit, GPA points or CEUs. Reviewed drops and
+tracked restoration preserve that basis and the original financial facts.
+
 Accepted registrations, early/late drops and reviewed tracked late-withdrawal reinstatements have their own replayable enrollment history in **`sis_history_events`**. Each enrollment ULID identifies one `EnrollmentHistory` stream. [Academic-credit decisions](academic-credit-history.md) and finance remain separate domain facts, saved in the same transaction. There is one authoritative event table.
 
 ## Interrupted confirmations and process-loss checks

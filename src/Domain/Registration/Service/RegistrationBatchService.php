@@ -72,7 +72,10 @@ final readonly class RegistrationBatchService
     ): array {
         $quotes = [];
         return $this->context(
-            new RegistrationBatchSelection($section, $student),
+            new RegistrationBatchSelection($section, $student)->withBasis(
+                $this->repository->enrollment($student, $section)?->basis
+                    ?? \Domain\Registration\Enum\EnrollmentBasis::Standard
+            ),
             $budget,
             true,
             $quotes,
@@ -110,6 +113,12 @@ final readonly class RegistrationBatchService
                     "message" => "Choose a different section of the same course and academic term.",
                 ],
             ]);
+        }
+        if ($old->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit) {
+            throw new ValidationException([['field' => 'from_section_id', 'message' =>
+                \Codefy\Framework\Helpers\trans(
+                    'Review the audit drop and make a new registration during add/drop to change sections.'
+                )]]);
         }
         $quotes = [];
         $result = $this->context($selection, $budget, $byStaff, $quotes, replacingSection: $from);
@@ -694,6 +703,7 @@ final readonly class RegistrationBatchService
                         courseRead: $courseRead,
                         waitlistBudget: $waitlistBudget,
                         creditsMilli: $selection->creditsMilli(new EntityId($row["id"])),
+                        basis: $selection->basis(),
                     );
                 } catch (DomainException) {
                     throw new ValidationException([
@@ -711,6 +721,8 @@ final readonly class RegistrationBatchService
                 $items[] = [
                     "student_id" => $row["id"],
                     "enrollment_id" => $enrollment->id->value,
+                    ...$enrollment->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit
+                        ? ['basis' => 'audit'] : [],
                     "created" => $new,
                     "status" => $enrollment->status->value,
                 ];
@@ -735,7 +747,8 @@ final readonly class RegistrationBatchService
             foreach ($context['students'] as $reviewedStudent) {
                 if (
                     $reviewedStudent['enrollment_id'] === null &&
-                    ($reviewedStudent['prerequisites']['permission'] !== null || $queueVersion !== null)
+                    ($selection->basis() === \Domain\Registration\Enum\EnrollmentBasis::Audit ||
+                    $reviewedStudent['prerequisites']['permission'] !== null || $queueVersion !== null)
                 ) {
                     $this->registration->verifyCompletion(
                         new EntityId($reviewedStudent['id']),
@@ -967,12 +980,20 @@ final readonly class RegistrationBatchService
             ? $this->schedules->evaluate($id, $section->id, $scheduleRead, $replacingSection)
             : null;
             $originalCredits = $enrollment === null ? null : $this->versions->enrollmentCredits($enrollment->id);
-            $quantity = $originalCredits ?? $course->registrationCreditsMilli();
+            $auditing = $selection->basis() === \Domain\Registration\Enum\EnrollmentBasis::Audit;
+            $quantity = $auditing ? 0 : ($originalCredits ?? $course->registrationCreditsMilli());
             $creditProblem = null;
+            if ($auditing && $enrollment === null) {
+                try {
+                    \Domain\Registration\ValueObject\CourseAuditing::requireAllowed($section, $byStaff);
+                } catch (ValidationException $error) {
+                    $creditProblem = $error->errors[0]['message'];
+                }
+            }
             $requestedCredits = $selection->creditsMilli($id) ?? $waitlistStatuses[$id->value]['credits_milli'] ?? null;
             if ($enrollment === null && $reinstating === null) {
                 try {
-                    $choice = \Domain\Registration\ValueObject\SelectedRegistrationCredits::choose(
+                    $choice = $auditing ? null : \Domain\Registration\ValueObject\SelectedRegistrationCredits::choose(
                         $section,
                         $course,
                         $requestedCredits
@@ -991,12 +1012,22 @@ final readonly class RegistrationBatchService
                     $creditProblem = $error->errors[0]['message'];
                 }
             }
+            if (
+                ($auditing && $requestedCredits !== null) ||
+                ($enrollment !== null && $enrollment->basis !== $selection->basis()) ||
+                ($auditing && $waitlistStatuses[$id->value]['entry_id'] !== null)
+            ) {
+                $creditProblem = \Codefy\Framework\Helpers\trans(
+                    'Review the enrollment basis and remove credit choices or a credit waitlist request ' .
+                    'before auditing.'
+                );
+            }
             $quote =
             $enrollment === null && $reinstating === null && $creditProblem === null
             ? $this->billing->registrationQuote(
                 $id,
                 $section->termId,
-                $section->fee,
+                \Domain\Registration\ValueObject\CourseAuditing::fee($section, $selection->basis()),
                 $quantity,
                 $budget,
                 $rules,
@@ -1154,14 +1185,19 @@ final readonly class RegistrationBatchService
                 ],
                 "enrollment_id" => $enrollment?->id->value,
                 "enrollment_status" => $enrollment?->status->value,
+                ...$auditing ? ['basis' => 'audit'] : [],
             ];
         }
         return [
+            ...$selection->basis() === \Domain\Registration\Enum\EnrollmentBasis::Audit
+                ? ['basis' => 'audit'] : [],
             "by_staff" => $byStaff,
-            "section" => ($section->studentSelectableCredits ? [
+            "section" => ($section->studentSelectableCredits &&
+                $selection->basis() === \Domain\Registration\Enum\EnrollmentBasis::Standard ? [
                 "student_selectable_credits" => true,
                 "credit_policy" => $course->creditPolicy?->describe(),
             ] : []) + [
+                ...$section->auditing === null ? [] : ['auditing' => $section->auditing->facts()],
                 "id" => $section->id->value,
                 "code" => $section->code,
                 "term_id" => $section->termId->value,

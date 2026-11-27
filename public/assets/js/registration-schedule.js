@@ -4,6 +4,7 @@ window.createRegistrationSchedule = function (ui) {
     const { node } = ui;
     const configElement = typeof document === 'undefined' ? null :
         document.getElementById('workspace-config') || document.getElementById('campus-config');
+    const auditLabels = configElement ? JSON.parse(configElement.textContent).course_auditing_labels || {} : {};
     const originLabels = ui.prerequisiteOriginLabels ||
         (configElement ? JSON.parse(configElement.textContent).prerequisite_origin_labels : null) || {};
     const originDefaults = { equivalents_title: 'Equivalent courses',
@@ -231,10 +232,11 @@ window.createRegistrationSchedule = function (ui) {
             "div",
             {},
             node("h3", { class: "h5" }, `${review.section.course_code} · ${review.section.course_title}`),
+            review.basis === 'audit' ? node('p', { class: 'alert alert-info', role: 'status' }, auditLabels.review_help) : null,
             node(
                 "p",
                 {},
-                `Section ${review.section.code} · ${(student.credits_milli ?? review.section.credits_milli) / 1000} credits · ${review.section.seats_remaining} seats remaining`,
+                `Section ${review.section.code} · ${(review.basis === 'audit' ? 0 : (student.credits_milli ?? review.section.credits_milli)) / 1000} credits · ${review.section.seats_remaining} seats remaining`,
             ),
             node(
                 "p",

@@ -1962,7 +1962,7 @@
                         ? table(
                               ['Course', 'Section', ceuLabels.accepted_title || 'Accepted offered CEUs', ceuLabels.earned_title || 'Earned CEUs', 'Status', 'Actions'],
                               student.enrollments.map((item) => [
-                                  item.course_code,
+                                  item.basis === 'audit' ? `${item.course_code} · ${config.course_auditing_labels.auditor}` : item.course_code,
                                   item.section_code,
                                   el('span', {}, ceuText(item.continuing_education)),
                                   el('span', {}, earnedCeuText(item.earned_ceus)),
@@ -1976,7 +1976,8 @@
                                       }[item.status] || item.status,
                                   ),
                                   ['A', 'N'].includes(item.status)
-                                      ? el('div', { class: 'd-flex flex-wrap gap-2' }, button('Change section', () => changeSection(student.id, item.section_id)), button('Drop / withdraw', async () => {
+                                      ? el('div', { class: 'd-flex flex-wrap gap-2' },
+                                        item.basis === 'audit' ? null : button('Change section', () => changeSection(student.id, item.section_id)), button('Drop / withdraw', async () => {
                                             const plan = await request('/portal/api/drop-review/', 'POST', { student_id: student.id, section_id: item.section_id });
                                             const command = Object.fromEntries(['student_id', 'section_id', 'enrollment_id', 'version', 'operation_id', 'revision', 'effective_on'].map(key => [key, plan[key]]));
                                             let finished = false;
@@ -2177,7 +2178,7 @@
         form.addEventListener('submit', event => { event.preventDefault(); if (form.reportValidity()) task(() => waitlistUi().place(student.value, { id: course.id }, renderService, true), submit); });
         body.append(form); dialog('Choose your student program', body);
     }
-    function confirmRegistration(course, presetStudent = null) {
+    function confirmRegistration(course, presetStudent = null, selectedBasis = 'standard') {
         const form = el('form');
         const student = control(
             form,
@@ -2199,6 +2200,13 @@
         const confirmation = el('button', { class: 'btn campus-button', type: 'submit', disabled: true }, 'Confirm registration');
         let serial = 0, reviewedStudent = '', reviewed = null, dialogGeneration = 0;
         const presenter = window.createRegistrationSchedule({ node: el });
+        const auditLabels = config.course_auditing_labels || {};
+        const basis = el('select', { id: 'portal-registration-basis', class: 'form-select' },
+            el('option', { value: 'standard' }, auditLabels.standard),
+            ...(course.auditing?.self_service ? [el('option', { value: 'audit' }, auditLabels.audit)] : []));
+        basis.value = course.auditing?.self_service && selectedBasis === 'audit' ? 'audit' : 'standard';
+        if (course.auditing?.self_service) form.append(
+            el('label', { for: basis.id, class: 'form-label' }, auditLabels.basis), basis);
         let creditControl = null, creditsMilli = null;
         async function checkSchedule() {
             if (creditControl) creditsMilli = creditControl.read();
@@ -2211,7 +2219,7 @@
                 schedulePanel.replaceChildren(el('p', { role: 'status' }, 'Choose a student record to review registration.'));
                 return;
             }
-            const result = await request('/portal/api/registration/review/', 'POST', { student_id: selected, section_id: course.id, credits_milli: creditsMilli });
+            const result = await request('/portal/api/registration/review/', 'POST', { student_id: selected, section_id: course.id, credits_milli: creditsMilli, basis: basis.value });
             if (!form.isConnected || turn !== serial || student.value !== selected || pageLeaving || dialogGeneration !== portalDialogGeneration) return;
             reviewedStudent = selected;
             reviewed = result;
@@ -2222,9 +2230,10 @@
             schedulePanel.replaceChildren(...[creditControl?.card, presenter.registration(result, amount)].filter(Boolean));
             if (graduateRegistration && result.students[0]?.readiness?.some(check => check.code.startsWith('graduate_')))
                 schedulePanel.append(button(config.graduate_registration_labels.open_approvals,
-                    () => graduateRegistration.open(selected, course.id, () => confirmRegistration(course, selected), result.students[0].assignment_id)));
+                    () => graduateRegistration.open(selected, course.id, () => confirmRegistration(course, selected, basis.value), result.students[0].assignment_id)));
             confirmation.disabled = !presenter.canConfirm(result);
         }
+        basis.addEventListener('change', () => { creditControl = null; creditsMilli = null; task(checkSchedule); });
         student.addEventListener('change', () => task(checkSchedule));
         form.append(
             schedulePanel,
@@ -2241,6 +2250,7 @@
                         student_id: student.value,
                         section_id: course.id,
                         credits_milli: creditsMilli,
+                        basis: basis.value,
                         operation_id: reviewed.operation_id,
                         revision: reviewed.revision,
                         review_token: reviewed.review_token,

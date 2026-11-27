@@ -1170,6 +1170,9 @@ final readonly class SectionPublicationService
             "instruction_starts_on" => $start,
             "instruction_ends_on" => $end,
         ];
+        if (isset($row['auditing'])) {
+            $data['auditing'] = \Domain\Registration\ValueObject\CourseAuditing::stored($row['auditing'])->facts();
+        }
         if ($recordWeb) {
             $data['web_registration'] = (bool) $row['web_registration'];
         }

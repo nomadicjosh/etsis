@@ -101,6 +101,7 @@ final class ReinstatementEventSchema
             'program_campus_evidence',
             "registration_window",
             "section_version_id",
+            "auditing_policy",
         ];
         if (
             array_diff($required, array_keys($value)) !== [] ||
@@ -120,6 +121,12 @@ final class ReinstatementEventSchema
                     !== ($value['section_version_id'] ?? null))
         ) {
             throw new InvalidArgumentException("Retain met reinstatement requirements.");
+        }
+        if (array_key_exists('auditing_policy', $value)) {
+            CourseAuditing::from($value['auditing_policy']);
+            if (!isset($value['section_version_id'])) {
+                throw new InvalidArgumentException('Retain the published audit policy.');
+            }
         }
         if (isset($value['graduate_course_evidence'])) {
             new GraduateEnrollmentEvidence($value['graduate_course_evidence']);

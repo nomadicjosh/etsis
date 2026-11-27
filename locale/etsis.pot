@@ -11671,3 +11671,123 @@ msgstr ""
 #: src/Domain/Reporting/ValueObject/ReportQuery.php:289
 msgid "Explicit missing-value calculations require nonmonetary numeric fields."
 msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:8
+msgid "Course auditing"
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:9
+msgid "Enrollment basis"
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:10
+msgid "Standard enrollment"
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:11
+msgid "Audit — no credit or GPA"
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:12
+msgid "Allow auditing for this section"
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:13
+msgid "Allow students to request an audit seat"
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:14
+msgid "Audit section fee"
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:15
+msgid "Auditors use a seat and follow the same eligibility, timetable and registration limits. They receive no academic credits, GPA points or CEUs and cannot satisfy prerequisites or degree requirements."
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:20
+msgid "The audit fee replaces the ordinary section fee. Registered-credit charges are zero; applicable once-per-term fees still apply. Enter zero to waive the audit section fee."
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:24
+msgid "Save these draft rules, then publish and select the section offering. Later policy changes do not change existing enrollment bases or charges."
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:28
+msgid "Audit enrollment uses one seat and earns zero academic credits, GPA points or CEUs. AU is an audit designation, not an earned grade. Review the charges before confirming."
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:32
+msgid "To change an audit enrollment, review its drop and make a new registration during add/drop. Credit waitlist requests cannot be converted to audit requests."
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:36
+msgid "Save audit rules"
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:37
+msgid "Audit rules saved. Publish and select the offering before using them."
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:40
+msgid "Loading audit rules…"
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:41
+msgid "Auditor"
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:42
+msgid "Audited courses do not receive an academic grade."
+msgstr ""
+
+#: src/Domain/Registration/ValueObject/CourseAuditing.php:52
+msgid "Auditing requires a published section policy that allows this registration method."
+msgstr ""
+
+#: src/Domain/Registration/Enum/EnrollmentBasis.php:15
+msgid "Choose a valid enrollment basis."
+msgstr ""
+
+#: src/Domain/Registration/Service/CourseAuditingPolicyService.php:46
+msgid "The auditing policy changed. Reload it before saving."
+msgstr ""
+
+#: src/Domain/DegreeAudit/ValueObject/CourseMatchStatus.php:52
+msgid "Audited courses do not satisfy degree requirements."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationService.php:118
+msgid "An existing enrollment has a different basis. Review its drop before registering again."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationService.php:148
+msgid "Auditing does not select academic credits."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationService.php:163
+msgid "Withdraw the credit waitlist request before requesting an available audit seat."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationBatchService.php:119
+msgid "Review the audit drop and make a new registration during add/drop to change sections."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationBatchService.php:1022
+msgid "Review the enrollment basis and remove credit choices or a credit waitlist request before auditing."
+msgstr ""
+
+#: src/Domain/AcademicRecord/Service/InstitutionalCreditLedger.php:331
+msgid "An audited course cannot receive an academic grade or credit."
+msgstr ""
+
+#: src/Domain/Registration/Service/CourseAuditingPolicyService.php:60
+msgid "The auditing policy changed while saving."
+msgstr ""
+
+#: src/Domain/Registration/Service/RegistrationService.php:451
+msgid "The auditing policy changed during registration."
+msgstr ""
+
+#: resources/views/shared/course-auditing-labels.php:43
+msgid "Includes current standard enrollments and withdrawals, up to fifty. Auditors, early drops and cancelled registrations are excluded. Certification retains this review; later grade corrections remain available. Names and institutional IDs shown here are current values."
+msgstr ""

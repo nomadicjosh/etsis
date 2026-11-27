@@ -22,11 +22,15 @@ final readonly class EnrollmentFacts
         "registered_at",
         "status_at",
         "version",
+        "basis",
     ];
     /** @param array<string,mixed> $facts */
     public function __construct(#[\SensitiveParameter] public array $facts)
     {
-        if (count($facts) !== 8 || array_diff(array_keys($facts), self::FIELDS) !== []) {
+        if (
+            (count($facts) !== 8 && count($facts) !== 9) || array_diff(array_keys($facts), self::FIELDS) !== [] ||
+            array_diff(array_diff(self::FIELDS, ['basis']), array_keys($facts)) !== []
+        ) {
             self::invalid();
         }
         foreach (["id", "student_id", "section_id", "term_id"] as $key) {
@@ -43,12 +47,16 @@ final readonly class EnrollmentFacts
         ) {
             self::invalid();
         }
+        if (array_key_exists('basis', $facts) && $facts['basis'] !== 'audit') {
+            self::invalid();
+        }
         self::timestamp($facts["registered_at"]);
         self::timestamp($facts["status_at"]);
     }
     public static function fromEnrollment(Enrollment $e): self
     {
         return new self([
+            ...$e->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit ? ['basis' => 'audit'] : [],
             "id" => $e->id->value,
             "student_id" => $e->studentId->value,
             "section_id" => $e->sectionId->value,

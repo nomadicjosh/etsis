@@ -78,6 +78,9 @@ final readonly class SisRegistrationBatchController
             $ids[] = new EntityId($id);
         }
         return new RegistrationBatchSelection(FormInput::from($request)->id('section_id'), ...$ids)
-            ->withCreditChoices(\Application\Http\RegistrationPlanInput::credits($request));
+            ->withCreditChoices(\Application\Http\RegistrationPlanInput::credits($request))
+            ->withBasis(\Domain\Registration\Enum\EnrollmentBasis::parse(
+                FormInput::from($request)->optionalText("basis", 16) ?? "standard"
+            ));
     }
 }

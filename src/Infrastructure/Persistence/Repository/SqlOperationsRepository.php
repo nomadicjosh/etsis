@@ -28,8 +28,8 @@ final readonly class SqlOperationsRepository implements OperationsRepository
             array_map(static fn(string $name): string => $alias . "." . $q($name), $names),
         );
         [$table, $foreign, $fields] = match ($context) {
-            "roster" => ["sis_enrollments", "section_id", ["id", "student_id", "status"]],
-            "enrollments" => ["sis_enrollments", "student_id", ["id", "section_id", "status", "term_id"]],
+            "roster" => ["sis_enrollments", "section_id", ["id", "student_id", "status", "basis"]],
+            "enrollments" => ["sis_enrollments", "student_id", ["id", "section_id", "status", "term_id", "basis"]],
             "assignments" => [
                 "sis_assignments",
                 "section_id",
@@ -143,7 +143,8 @@ final readonly class SqlOperationsRepository implements OperationsRepository
             }
             if (in_array($gradeStatus, ["needs_grade", "graded"], true)) {
                 $where .=
-                " AND c." . $q("grade_id") . ($gradeStatus === "graded" ? " IS NOT NULL" : " IS NULL");
+                " AND r." . $q("basis") . " = 'standard' AND c." .
+                $q("grade_id") . ($gradeStatus === "graded" ? " IS NOT NULL" : " IS NULL");
             }
             $terms = preg_split("/\s+/u", trim($search), -1, PREG_SPLIT_NO_EMPTY);
             if ($terms === false) {

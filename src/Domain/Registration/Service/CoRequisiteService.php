@@ -63,7 +63,8 @@ final readonly class CoRequisiteService
         foreach ($inputs->items as $work) {
             $ref = $references[$work['id']] ?? null;
             if (
-                !in_array($work['course_id'], $required, true) || !$work['history_recorded'] || $ref === null ||
+                ($work['basis'] ?? null) === 'audit' || !in_array($work['course_id'], $required, true) ||
+                !$work['history_recorded'] || $ref === null ||
                 !in_array($work['status'], ['A', 'N'], true) || in_array($ref['section_id'], $exclude, true)
             ) {
                 continue;

@@ -25,11 +25,16 @@ final readonly class CreditSnapshot
         "status",
         "version",
         "course_version_id",
+        "basis",
     ];
     /** @param array<string,mixed> $facts */
     public function __construct(public array $facts)
     {
-        if (count($facts) !== count(self::FIELDS) || array_diff(array_keys($facts), self::FIELDS) !== []) {
+        if (
+            (count($facts) !== count(self::FIELDS) && count($facts) !== count(self::FIELDS) - 1) ||
+            array_diff(array_keys($facts), self::FIELDS) !== [] ||
+            array_diff(array_diff(self::FIELDS, ['basis']), array_keys($facts)) !== []
+        ) {
             self::invalid();
         }
         $identifiers = ["id", "student_id", "course_id", "term_id", "source_id", "grade_id", "course_version_id"];
@@ -51,6 +56,13 @@ final readonly class CreditSnapshot
             $facts["credit_type"] !== "institutional" ||
             $facts["completed_milli"] > $facts["attempted_milli"] ||
             !in_array($facts["status"], ["A", "N", "W", "D"], true)
+        ) {
+            self::invalid();
+        }
+        if (
+            array_key_exists('basis', $facts) && ($facts['basis'] !== 'audit' ||
+            $facts['attempted_milli'] !== 0 || $facts['completed_milli'] !== 0 ||
+            $facts['grade_points_milli'] !== 0 || $facts['grade_id'] !== null)
         ) {
             self::invalid();
         }

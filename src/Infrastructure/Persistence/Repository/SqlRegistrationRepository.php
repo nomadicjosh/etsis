@@ -171,6 +171,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             \Domain\Registration\ValueObject\OfferingCeuChoice::stored($r['continuing_education']),
             new SqlSectionProgramPolicyRepository($this->sql)->current($id),
             (bool) $r['student_selectable_credits'],
+            \Domain\Registration\ValueObject\CourseAuditing::stored($r['auditing']),
         );
     }
 
@@ -221,6 +222,7 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
             new DateTimeImmutable($r["registered_at"], new DateTimeZone("UTC")),
             new DateTimeImmutable($r["status_at"], new DateTimeZone("UTC")),
             (int) $r["version"],
+            \Domain\Registration\Enum\EnrollmentBasis::from($r["basis"]),
         );
     }
 
@@ -367,6 +369,8 @@ final readonly class SqlRegistrationRepository implements RegistrationRepository
                 "active" => (int) $section->active,
                 "web_registration" => (int) $section->webRegistration,
                 "student_selectable_credits" => (int) $section->studentSelectableCredits,
+                "auditing" => $section->auditing === null ? null :
+                    json_encode($section->auditing->facts(), JSON_THROW_ON_ERROR),
                 "fee_minor" => $section->fee->minor,
                 "currency" => $section->fee->currency,
             ]);

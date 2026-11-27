@@ -2,7 +2,12 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__) . "/Support/SisFixture.php";
+namespace Tests\Integration;
+
+use DateTimeImmutable;
+use RuntimeException;
+use SisFixture;
+use EventStoreFixture;
 use Domain\Registration\EnrollmentHistory;
 use Domain\Registration\Service\EnrollmentHistoryService;
 use Domain\Registration\ValueObject\EnrollmentHistoryId;
@@ -12,8 +17,13 @@ use Domain\Shared\Exception\RecordNotFoundException;
 use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\Repository\SqlEnrollmentHistoryRepository;
 use PHPUnit\Framework\TestCase;
+
 final class EnrollmentHistoryTest extends TestCase
 {
+    public static function setUpBeforeClass(): void
+    {
+        require_once dirname(__DIR__) . "/Support/SisFixture.php";
+    }
     private function replay(SisFixture $f, EntityId $id): EnrollmentHistory
     {
         $root = EnrollmentHistory::root(new EnrollmentHistoryId($id->value));
@@ -227,6 +237,8 @@ final class EnrollmentHistoryTest extends TestCase
             $section = $f->section();
             $e = $f->service->register($student->id, $section->id);
             if ($kind === "routing") {
+                // Remove the disposable notice before deliberately damaging its restricted source.
+                $f->sql->execute("DELETE FROM sis_enrollment_updates WHERE enrollment_id = ?", [$e->id->value]);
                 $f->sql->execute("DELETE FROM sis_registration_streams WHERE id = ?", [$e->id->value]);
             } elseif ($kind === "index") {
                 $f->sql->execute("DELETE FROM sis_registration_decisions WHERE enrollment_id = ?", [

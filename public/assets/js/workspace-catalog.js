@@ -2,6 +2,8 @@
 window.createWorkspaceCatalog = function (ui) {
     "use strict";
     const { node, request, task, buildForm, formData, openDrawer, table, money } = ui;
+    const auditing = window.createCourseAuditing?.({ node, request, task, openDrawer,
+        labels: ui.auditingLabels, moneyInput: ui.moneyInput, publish: (id, back) => sectionPublications(id, null, [], null, back) });
     const programEligibility = window.createSectionProgramEligibility?.({ node, request, task, openDrawer,
         labels: ui.programEligibilityLabels, publish: (id, back) => sectionPublications(id, null, [], null, back) });
     const prerequisiteOriginText = key => ui.prerequisiteOriginLabels?.[key] ||
@@ -1488,6 +1490,10 @@ window.createWorkspaceCatalog = function (ui) {
         if (ui.programEligibilityLabels) fields.push([ui.programEligibilityLabels.campus_heading,
             definition.require_program_campus === undefined ? ui.programEligibilityLabels.campus_unknown
                 : ui.programEligibilityLabels[definition.require_program_campus ? 'campus_enabled' : 'campus_disabled']]);
+        if (ui.auditingLabels && definition.auditing) {
+            fields.push([ui.auditingLabels.title, ui.auditingLabels.audit],
+                [ui.auditingLabels.fee, money(definition.auditing.fee_minor, definition.currency)]);
+        }
         if (facultyLabel !== null) fields.push(["Faculty", facultyLabel]);
         if (classifications) {
             const ancestors = classifications.reporting_group_ancestors;
@@ -2103,5 +2109,5 @@ window.createWorkspaceCatalog = function (ui) {
         }).open(kind, row.id, back, () => kind === 'courses' ? publications(row.id, null, [], back, undefined, ui.creditLabels?.back || 'Back to record')
             : sectionPublications(row.id, null, [], null, back));
     }
-    return { eligiblePrograms: (id, back) => programEligibility.open(id, back), ceus, credits, contactHours, enrollmentReview, subjects, courseSubject, clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
+    return { auditing: (id, back) => auditing.open(id, back), eligiblePrograms: (id, back) => programEligibility.open(id, back), ceus, credits, contactHours, enrollmentReview, subjects, courseSubject, clone, start, plans, publications, courseText, sectionDefinition, sectionPublications, templateDraft: draftList };
 };

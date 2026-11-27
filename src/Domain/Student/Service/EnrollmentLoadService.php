@@ -181,6 +181,7 @@ final readonly class EnrollmentLoadService
                         new \DateTimeImmutable($facts["registered_at"]),
                         new \DateTimeImmutable($facts["status_at"]),
                         $facts["version"],
+                        \Domain\Registration\Enum\EnrollmentBasis::from($facts["basis"] ?? "standard"),
                     );
                     $credit = $this->credits->registrationLoadFacts($enrollment, $budget);
                     $units = $credit["credits_milli"];

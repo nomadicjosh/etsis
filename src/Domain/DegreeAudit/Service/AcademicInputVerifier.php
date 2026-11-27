@@ -70,6 +70,7 @@ final readonly class AcademicInputVerifier
                     $r["id"] !== $source["id"] ||
                     $r["term_id"] !== ($input["registration_term_id"] ?? $c["term_id"]) ||
                     $r["status"] !== $c["status"] ||
+                    ($r['basis'] ?? 'standard') !== ($c['basis'] ?? 'standard') ||
                     ($source["section_id"] !== null && $r["section_id"] !== $source["section_id"]) ||
                     $source["registration_seen"] !== $registration["history_recorded"] ||
                     $source["source_seen"] !== ($r["status"] !== "D")

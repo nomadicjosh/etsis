@@ -68,11 +68,12 @@ final readonly class EnrollmentLedger
         $selected = $this->verifyOffering($section, $course);
         $this->verifyCompletionAnchor($prerequisites, $selected);
         if (
+            ($enrollment->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit ? null :
             \Domain\Registration\ValueObject\SelectedRegistrationCredits::choose(
                 $section,
                 $course,
                 $creditChoice?->milli
-            )?->values() !== $creditChoice?->values()
+            ))?->values() !== $creditChoice?->values()
         ) {
             throw new CorruptHistoryException();
         }
@@ -95,7 +96,12 @@ final readonly class EnrollmentLedger
                 throw new CorruptHistoryException();
             }
         }
+        if ($enrollment->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit) {
+            \Domain\Registration\ValueObject\CourseAuditing::requireAllowed($section, $eligibility['by_staff']);
+        }
         $metadata = [
+            ...$enrollment->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit
+                ? ['auditing_policy' => $section->auditing->facts()] : [],
             "__aggregate_type" => "enrollment",
             "prerequisite_evidence" => $prerequisites->retained(),
             "schedule_evidence" => $schedule->facts,
@@ -389,7 +395,12 @@ final readonly class EnrollmentLedger
         if ($evidence['prerequisites']->groups?->hasRecency()) {
             $this->verifyCompletionAnchor($evidence['prerequisites'], $this->selectedOffering($section->id));
         }
+        if ($enrollment->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit) {
+            \Domain\Registration\ValueObject\CourseAuditing::requireAllowed($section, true);
+        }
         $metadata = [
+            ...$enrollment->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit
+                ? ['auditing_policy' => $section->auditing->facts()] : [],
             "__aggregate_type" => "enrollment",
             "prerequisite_evidence" => $evidence["prerequisites"]->retained(),
             "schedule_evidence" => $evidence["schedule"]->facts,
@@ -472,6 +483,7 @@ final readonly class EnrollmentLedger
             $enrollment->registeredAt,
             $context->effectiveAt,
             $facts["version"],
+            $enrollment->basis,
         );
     }
     /** Restricted curated read, after caller authorizes and locks the student/section.
@@ -592,12 +604,22 @@ final readonly class EnrollmentLedger
             return $root;
         }
         if (
-            $root->sectionVersion() !== null
+            ($f['basis'] ?? null) !== 'audit' && $root->sectionVersion() !== null
             && ($this->versions->find(new EntityId($root->sectionVersion()))
                 ?->definition->data["student_selectable_credits"] ?? false)
             && $root->creditChoice() === null
         ) {
             throw new CorruptHistoryException();
+        }
+        if (($f['basis'] ?? null) === 'audit') {
+            $retained = $this->versions->find(new EntityId($root->sectionVersion() ??
+                throw new CorruptHistoryException()));
+            if (
+                $retained?->definition->data['auditing'] !== $root->auditingPolicy() ||
+                $root->creditChoice() !== null
+            ) {
+                throw new CorruptHistoryException();
+            }
         }
         if ($root->creditChoice() !== null) {
             RegistrationCreditEvidence::verify(

@@ -65,6 +65,7 @@ final readonly class RegistrationService
         ?\Domain\Registration\Waitlist\WaitlistBypass $waitlistBypass = null,
         ?\Domain\Shared\EventSourcing\HistoryReadBudget $waitlistBudget = null,
         ?int $creditsMilli = null,
+        \Domain\Registration\Enum\EnrollmentBasis $basis = \Domain\Registration\Enum\EnrollmentBasis::Standard,
     ): Enrollment {
         $actor = $this->access->authenticatedUserId();
         $initialStudent = $this->admissions->student($studentId);
@@ -87,6 +88,7 @@ final readonly class RegistrationService
             $waitlistBypass,
             $waitlistBudget,
             $creditsMilli,
+            $basis,
         ): Enrollment {
             // Eligibility locks follow student, person, section and course order.
             $this->repository->lockStudent($studentId);
@@ -112,6 +114,17 @@ final readonly class RegistrationService
             if ($existing !== null) {
                 if ($existing->status->isEnrolled()) {
                     $original = $this->enrollments->verifyExisting($existing, $section);
+                    if ($existing->basis !== $basis) {
+                        throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+                            'An existing enrollment has a different basis. Review its drop before registering again.'
+                        ));
+                    }
+                    if ($basis === \Domain\Registration\Enum\EnrollmentBasis::Audit && $creditsMilli !== null) {
+                        throw new \Domain\Shared\Exception\ValidationException([['field' => 'credits_milli',
+                            'message' => \Codefy\Framework\Helpers\trans(
+                                'Auditing does not select academic credits.'
+                            )]]);
+                    }
                     \Domain\Registration\ValueObject\SelectedRegistrationCredits::retry(
                         $original->creditChoice(),
                         $creditsMilli
@@ -128,6 +141,13 @@ final readonly class RegistrationService
                     "A closed enrollment requires registrar review before re-enrollment.",
                 );
             }
+            if ($basis === \Domain\Registration\Enum\EnrollmentBasis::Audit) {
+                \Domain\Registration\ValueObject\CourseAuditing::requireAllowed($section, $byStaff);
+                if ($creditsMilli !== null) {
+                    throw new \Domain\Shared\Exception\ValidationException([['field' => 'credits_milli',
+                        'message' => \Codefy\Framework\Helpers\trans('Auditing does not select academic credits.')]]);
+                }
+            }
             if ($waitlistBypass !== null && !$byStaff) {
                 throw new AccessDeniedException('Waitlist bypass requires staff registration.');
             }
@@ -138,6 +158,12 @@ final readonly class RegistrationService
                 $waitlistBypass,
                 $waitlistBudget,
             );
+            if ($basis === \Domain\Registration\Enum\EnrollmentBasis::Audit && $waitlistClaim->entry !== null) {
+                throw new \Domain\Shared\Exception\ValidationException([['field' => 'basis', 'message' =>
+                    \Codefy\Framework\Helpers\trans(
+                        'Withdraw the credit waitlist request before requesting an available audit seat.'
+                    )]]);
+            }
             if ($waitlistClaim->creditsMilli !== null) {
                 if ($creditsMilli !== null && $creditsMilli !== $waitlistClaim->creditsMilli) {
                     throw new \Domain\Shared\Exception\ValidationException([["field" => "credits_milli", "message" =>
@@ -159,12 +185,15 @@ final readonly class RegistrationService
                     'Select a published course definition for this credit range before registration.',
                 );
             }
-            $creditChoice = \Domain\Registration\ValueObject\SelectedRegistrationCredits::choose(
-                $section,
-                $course,
-                $creditsMilli
-            );
-            $quantity = $creditChoice?->milli ?? $course->registrationCreditsMilli();
+            $creditChoice = $basis === \Domain\Registration\Enum\EnrollmentBasis::Audit ? null
+                : \Domain\Registration\ValueObject\SelectedRegistrationCredits::choose(
+                    $section,
+                    $course,
+                    $creditsMilli
+                );
+            $quantity = $basis === \Domain\Registration\Enum\EnrollmentBasis::Audit
+                ? 0 : ($creditChoice?->milli ?? $course->registrationCreditsMilli());
+            $fee = \Domain\Registration\ValueObject\CourseAuditing::fee($section, $basis);
             $window = $this->windows->checked($section->termId, $this->repository->window($section->termId));
             $courseRead ??= new RegistrationCourseRead();
             if (
@@ -251,6 +280,7 @@ final readonly class RegistrationService
                     : RegistrationStatus::SelfRegistered,
                 $now,
                 $now,
+                basis: $basis,
             );
             $this->enrollments->accept(
                 $enrollment,
@@ -297,7 +327,7 @@ final readonly class RegistrationService
                 $studentId,
                 $section->termId,
                 $enrollment->id,
-                $section->fee,
+                $fee,
                 $quantity,
                 new EventContext(
                     $actor,
@@ -404,6 +434,19 @@ final readonly class RegistrationService
             $freshWindow = $this->windows->checked($section->termId, $this->repository->window($section->termId));
             if ($freshWindow->fingerprint() !== $window->fingerprint()) {
                 throw new ConcurrentModificationException('The assessed registration window changed. Review again.');
+            }
+            if ($basis === \Domain\Registration\Enum\EnrollmentBasis::Audit) {
+                $freshOffering = $this->repository->section($sectionId);
+                \Domain\Registration\ValueObject\CourseAuditing::requireAllowed($freshOffering, $byStaff);
+                $this->enrollments->verifyOffering($freshOffering, $course);
+                if (
+                    $freshOffering->auditing?->facts() !== $section->auditing?->facts() ||
+                    $freshOffering->publicationVersionId?->value !== $section->publicationVersionId?->value
+                ) {
+                    throw new ConcurrentModificationException(\Codefy\Framework\Helpers\trans(
+                        'The auditing policy changed during registration.'
+                    ));
+                }
             }
             // Final checks are part of the same unit of work, including the seat, credit, charge and audit.
             $this->assertEligible(
@@ -583,6 +626,10 @@ final readonly class RegistrationService
         }
         $this->verifyCourseSelection($sectionId, $budget, $courseRead ?? new RegistrationCourseRead());
         $accepted = $this->enrollments->verifyExisting($enrollment, $section, $budget);
+        if ($enrollment->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit) {
+            \Domain\Registration\ValueObject\CourseAuditing::requireAllowed($section, $byStaff);
+            $this->enrollments->verifyOffering($section, $course);
+        }
         $this->credits->verifyOpenEnrollment($enrollment, $budget);
         $campusProof = $accepted->campusEvidence();
         $selection = $this->pursuits->activeSelection($studentId, $campusProof === null

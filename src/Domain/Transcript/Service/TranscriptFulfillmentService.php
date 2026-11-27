@@ -893,7 +893,8 @@ final readonly class TranscriptFulfillmentService
                 ]);
             }
             if (
-                !$continuingEducation && empty($work['continuing_education_only']) && $work["grade"] === null &&
+                !$continuingEducation && ($work['basis'] ?? null) !== 'audit' &&
+                empty($work['continuing_education_only']) && $work["grade"] === null &&
                 ($work["grade_recorded"] ||
                     $work["status"] === "W" ||
                     $work["completed_milli"] > 0 ||
@@ -916,6 +917,7 @@ final readonly class TranscriptFulfillmentService
                 "course_code" => $work["course_code"],
                 "course_title" => $work["course_title"],
                 "credit_type" => $work["credit_type"],
+                ...isset($work['basis']) ? ['basis' => $work['basis']] : [],
                 "status" => $work["status"],
                 "version" => $row["version"],
                 "term_code" => $work["term_code"] ?? $row["term_code"],
@@ -926,7 +928,9 @@ final readonly class TranscriptFulfillmentService
                 ...isset($work['earned_ceus']) ? ['earned_ceus' => $work['earned_ceus']] : [],
                 "completed_milli" => $work["completed_milli"],
                 "grade_points_milli" => $work["quality_points_milli"],
-                "grade_code" => $work["status"] === "V" ? "Voided" : $work["grade"]["code"] ?? null,
+                "grade_code" => ($work['basis'] ?? null) === 'audit'
+                    ? ($work['status'] === 'W' ? 'AU/W' : 'AU')
+                    : ($work["status"] === "V" ? "Voided" : $work["grade"]["code"] ?? null),
                 "counts_gpa" => $work["grade"]["counts_gpa"] ?? false,
                 "academic_on" => $work["academic_on"],
                 "completed_on" => $work["completed_on"],

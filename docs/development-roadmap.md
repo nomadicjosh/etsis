@@ -341,7 +341,7 @@ This is an order of emphasis, not a requirement to finish every item in a large 
 - [x] Complete [reviewed transcript layouts and retained accessible originals](workflow-review.md#choose-and-preview-a-transcript-layout): Classic/Modern with Letter/A4 paper, on-demand sandboxed previews, layout-bound expiring reviews, actual encrypted HTML/PDF retention, exact original reads/retries and presentation-independent academic/delivery checks. Reuse the existing preparation, artifact and permission boundaries; add no schema or parallel journal.
 - [x] Bundle [institutional transcript release checks](workflow-review.md#institutional-transcript-release-checks) across setup, preparation, delivery and retained evidence: independent protected setup authority, bounded encrypted revisioned settings, stage-specific staff confirmations, short final concurrency guards, unchanged academic fingerprints, preserved originals/retries, and accessible in-place forms. Add one portable settings migration without another journal, inferred historical confirmations or automatic role grants.
 - [ ] Complete institution-approved automated transcript release rules and electronic delivery/signature integrations where selected.
-- [ ] Course Auditing: lets students sit in on a class without earning credit or affecting their GPA.
+- [x] Complete [Course Auditing](course-auditing.md): published section permission/self-service rules and audit fees; reviewed staff/student registration basis; normal seats and eligibility with zero registered-credit tuition; protected zero-credit facts; grade/CEU/degree/prerequisite exclusions; rosters, AU/AU/W transcripts, early-drop reversal and same-basis reviewed restoration. Preserve earlier events and accepted retries. Use individual reviews for audit sections; the schedule planner remains standard, and basis/section changes require reviewed drop/new registration during add/drop.
 
 **Done when:** staff can complete an authorized academic case in one connected flow; corrections preserve original facts, repeated confirmations cannot overwrite newer decisions, and academic/seat/financial effects commit together where required.
 
@@ -811,6 +811,22 @@ External student-progress AI remains deferred by project direction; catalog-auth
 - [x] etSIS System: Provide a separate [plain-language glossary](glossary.md) for terms used throughout the docs and roadmap, including journals, projections, ULIDs, people/access, curriculum/pursuits, academic work, finance, reporting, background processing and integrations. Include concrete examples and links to the relevant workflow guides; connect it from installation, workspace, domain and event-history documentation.
 
 ## Next implementation stages
+
+**Delivery cadence:** complete a substantial untouched workflow before selecting another narrow extension.
+**Course Auditing** (section 2) completes the first major workflow in this cadence: policy,
+reviewed registration, seats, charges, academic exclusions and connected staff/student views.
+Next prioritize remaining degree/graduation decisions, optional application/transcript payments,
+and tenant isolation as explicit
+end-to-end milestones. Establish each milestone's acceptance boundary before implementation.
+Completed extension leaves do not complete their broad parent feature.
+
+Stagger smaller work where it supports a milestone: eligibility/section details with registration;
+grading/calculation refinements with academic and degree decisions; notification triggers/delivery
+with their owning workflow; report expression additions with approved student reporting. The unstarted
+automatic advising appointment reminder belongs with the later notification delivery milestone.
+Continue urgent security, privacy and correctness fixes throughout. Run bounded native-engine and
+recovery checks alongside these milestones, then independent release acceptance in section 8.
+This is an implementation order, not a calendar deadline or a claim of feature completion.
 
 1. **Section-version integration:** the [first publication stage](section-publication.md) now retains instructional dates and reviewed delivery/capacity/teaching/fee facts. The verified reference cache and explicit initial selection for new individual/self-service and group registrations are implemented. Reviewed amendments now preserve existing student references and charges while changing the selection for later registrations. Offering-plan review now includes section dates and offering facts; confirmation atomically retains their versions and activates empty drafts. Reviewed term drop-policy publications and new drop references are now retained. Section instructional-method/campus snapshots and current-versus-retained report fields are implemented. Reviewed registration windows/course limits, section self-registration flags and accepted policy references are now connected above. Optional enrollment targets, staff review and current/retained reporting are now connected above. Nested counted prerequisite routes, publication/cloning and shared registration evidence are now connected above. Next, complete other eligibility definitions and remaining section fields; preserve unknown earlier definitions instead of backfilling invented ones. Full section/policy coverage in milestone 1 remains open.
 2. **Policy and attempt integration:** retain the applicable section/policy references in new enrollment/academic facts, then complete reviewed replacements and remaining consequential lifecycle paths. Include reconciliation checks with each slice.

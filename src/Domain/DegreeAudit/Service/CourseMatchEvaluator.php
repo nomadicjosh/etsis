@@ -367,6 +367,9 @@ final readonly class CourseMatchEvaluator
         if ($candidate["approval_conflict"]) {
             return Status::ApprovalConflict;
         }
+        if (($work['basis'] ?? null) === 'audit') {
+            return Status::Audited;
+        }
         if ($candidate["waived"]) {
             return Status::Waived;
         }

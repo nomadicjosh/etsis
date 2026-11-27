@@ -125,6 +125,13 @@ A separate unit used for continuing education and professional development. Offe
 
 ## Registration and academic work
 
+### Course auditing / auditor
+
+Attending a section under an explicit audit enrollment basis. An auditor uses a seat and pays the
+institution's configured audit/term fees, with zero academic credits, GPA points or CEUs. Transcripts
+use AU or AU/W designations. A degree audit evaluates degree progress; course auditing records
+noncredit attendance. See [course auditing](course-auditing.md).
+
 ### Registration / enrollment
 
 An accepted placement of a student into a course section. Registration checks, seat allocation, academic-attempt creation and applicable charges are coordinated by the registration workflow. A preview or waitlist request is not an accepted enrollment. See [registration history](registration-history.md).

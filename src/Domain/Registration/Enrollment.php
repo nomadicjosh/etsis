@@ -20,6 +20,7 @@ final readonly class Enrollment
         public DateTimeImmutable $registeredAt,
         public DateTimeImmutable $statusAt,
         public int $version = 0,
+        public \Domain\Registration\Enum\EnrollmentBasis $basis = \Domain\Registration\Enum\EnrollmentBasis::Standard,
     ) {
     }
 
@@ -37,7 +38,8 @@ final readonly class Enrollment
             $term->dropStatusOn($on),
             $this->registeredAt,
             $on,
-            $this->version + 1
+            $this->version + 1,
+            $this->basis
         );
     }
 
@@ -61,7 +63,8 @@ final readonly class Enrollment
             $on->format('Y-m-d') <= $graceEndsOn ? RegistrationStatus::Dropped : RegistrationStatus::Withdrawn,
             $this->registeredAt,
             $on,
-            $this->version + 1
+            $this->version + 1,
+            $this->basis
         );
     }
 }

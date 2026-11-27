@@ -163,6 +163,7 @@ final readonly class SqlCampusRepository implements CampusRepository
                 " AS " .
                 $q("description") .
                 ', offered.' . $q('continuing_education') . ' AS ' . $q('continuing_education') .
+                ', offered.' . $q('auditing') . ' AS ' . $q('auditing') .
                 ', offered.' . $q('student_selectable_credits') . ' AS ' . $q('student_selectable_credits') .
                 ', offered_course.' . $q('credit_policy') . ' AS ' . $q('credit_policy') .
                 ', ' . $courseNumber . ' AS ' . $q('course_number') .
@@ -227,6 +228,7 @@ final readonly class SqlCampusRepository implements CampusRepository
             25,
         );
         foreach ($rows as &$row) {
+            $row['auditing'] = \Domain\Registration\ValueObject\CourseAuditing::stored($row['auditing'])?->facts();
             if ((int) $row['student_selectable_credits'] === 1) {
                 $row['student_selectable_credits'] = true;
                 $row['credit_policy'] = \Domain\Catalog\ValueObject\CreditPolicy::stored(
@@ -439,6 +441,7 @@ final readonly class SqlCampusRepository implements CampusRepository
         $rows = $this->sql->fetch(
             "SELECT e." .
                 $q("id") .
+                ", e." . $q("basis") .
                 ", e." .
                 $q("section_id") .
                 ", e." .
@@ -495,6 +498,10 @@ final readonly class SqlCampusRepository implements CampusRepository
             100,
         );
         foreach ($rows as &$row) {
+            if ($row['basis'] === 'audit') {
+                $row['credits_milli'] = 0;
+                $row['continuing_education'] = null;
+            }
             $award = \Domain\AcademicRecord\ValueObject\EarnedCeus::stored($row['earned_ceus']);
             $row['earned_ceus'] = $award === null ? null : array_intersect_key(
                 $award->facts,

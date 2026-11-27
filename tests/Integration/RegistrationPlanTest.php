@@ -400,6 +400,7 @@ final class RegistrationPlanTest extends TestCase
             $f->windowPolicies(),
             $f->waitlistGuard($audit),
             $f->graduateGate(),
+            $f->enrollmentNotifications(),
         );
         try {
             $f->registrationBatches(registration: $core)->commitPlan(

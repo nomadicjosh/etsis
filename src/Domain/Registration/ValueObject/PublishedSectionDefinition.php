@@ -60,7 +60,8 @@ final readonly class PublishedSectionDefinition
         \Domain\Catalog\Course $course,
     ): bool {
         $d = $this->definition->data;
-        return ($d['eligible_program_ids'] ?? []) === $section->programPolicy->programIds &&
+        return ($d['auditing'] ?? null) === $section->auditing?->facts() &&
+        ($d['eligible_program_ids'] ?? []) === $section->programPolicy->programIds &&
         ($d['require_program_campus'] ?? false) === $section->programPolicy->requireCampus &&
         ($d['student_selectable_credits'] ?? false) === $section->studentSelectableCredits &&
         $this->section->value === $section->id->value &&

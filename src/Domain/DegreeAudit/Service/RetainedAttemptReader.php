@@ -35,7 +35,8 @@ final readonly class RetainedAttemptReader
                 throw new CorruptHistoryException();
             }
             return PolicyAttempt::fromAcademicWork($work, $date);
-        }, $inputs->items);
+        }, array_values(array_filter($inputs->items, static fn (array $work): bool =>
+            ($work['basis'] ?? null) !== 'audit')));
         if (
             $policy->gpa !== RepeatGpaPolicy::LatestEligible ||
             $policy->attemptOrder !== RepeatAttemptOrder::AcademicPeriod

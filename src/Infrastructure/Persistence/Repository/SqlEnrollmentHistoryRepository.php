@@ -38,6 +38,9 @@ final readonly class SqlEnrollmentHistoryRepository implements EnrollmentHistory
             }
             $r[$key] = EnrollmentFacts::utc(new \DateTimeImmutable($r[$key], new \DateTimeZone("UTC")));
         }
+        if ($r['basis'] === 'standard') {
+            unset($r['basis']);
+        }
         return new EnrollmentFacts(array_intersect_key($r, array_flip(EnrollmentFacts::FIELDS)))->facts;
     }
     public function decisions(EntityId $enrollment): array

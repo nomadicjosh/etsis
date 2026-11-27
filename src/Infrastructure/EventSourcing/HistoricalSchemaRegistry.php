@@ -1253,6 +1253,20 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'auditing_policy') {
+                    $policy = \Domain\Registration\ValueObject\CourseAuditing::from($value);
+                    if (
+                        !in_array($class, [\Domain\Registration\Event\EnrollmentWasEstablished::class,
+                        \Domain\Registration\Event\EnrollmentWasReinstated::class], true) ||
+                        ($class === \Domain\Registration\Event\EnrollmentWasEstablished::class &&
+                            (($payload['enrollment']['basis'] ?? null) !== 'audit' ||
+                                $payload['provenance'] !== 'registered')) || !isset($metadata['section_version_id']) ||
+                        (!$payload['eligibility']['by_staff'] && !$policy->selfService)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'student_credit_choice') {
                     if (!is_array($value)) {
                         throw new CorruptHistoryException();

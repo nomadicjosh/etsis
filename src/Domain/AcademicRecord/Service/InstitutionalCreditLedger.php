@@ -83,6 +83,8 @@ final readonly class InstitutionalCreditLedger
             $this->actor($actor);
             $id = EntityId::generate();
             $facts = new CreditSnapshot([
+                ...$enrollment->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit
+                    ? ['basis' => 'audit'] : [],
                 "id" => $id->value,
                 "student_id" => $enrollment->studentId->value,
                 "course_id" => $course->id->value,
@@ -91,7 +93,8 @@ final readonly class InstitutionalCreditLedger
                 "credit_type" => "institutional",
                 "course_code" => $course->code,
                 "course_title" => $course->publishedTranscriptTitle ?? $course->title,
-                "attempted_milli" => $creditChoice?->milli ?? $course->registrationCreditsMilli(),
+                "attempted_milli" => $enrollment->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit
+                    ? 0 : ($creditChoice?->milli ?? $course->registrationCreditsMilli()),
                 "completed_milli" => 0,
                 "grade_points_milli" => 0,
                 "grade_id" => null,
@@ -125,6 +128,8 @@ final readonly class InstitutionalCreditLedger
             $enrollmentChoice = $enrollmentFact?->event->metadata()['student_credit_choice'] ?? null;
             if (
                 $enrollmentFact === null || $enrollmentFact->event->playhead() !== 1
+                || ($enrollmentFact->event->payload()['enrollment']['basis'] ?? 'standard')
+                    !== $enrollment->basis->value
                 || ($enrollmentChoice === null ? null :
                     \Domain\Registration\ValueObject\SelectedRegistrationCredits::from($enrollmentChoice)->values())
                     !== $creditChoice?->values()
@@ -199,7 +204,8 @@ final readonly class InstitutionalCreditLedger
             $policies,
         );
         try {
-            $items = $this->gradeChoices($root, $facts, $student, $assignment);
+            $items = ($facts['basis'] ?? null) === 'audit' ? []
+            : $this->gradeChoices($root, $facts, $student, $assignment);
             $needs = false;
         } catch (\Domain\Gradebook\Exception\GradingContextRequiredException) {
             $items = [];
@@ -208,6 +214,7 @@ final readonly class InstitutionalCreditLedger
         $observedGrade = $this->observedGrade($root, $facts);
         $canAmend = $this->canAmend($withdrawn);
         $result = [
+            ...($facts['basis'] ?? null) === 'audit' ? ['auditing' => true] : [],
             "items" => $items,
             "pursuits" => $pursuits,
             "needs_assignment" => $needs,
@@ -319,6 +326,10 @@ final readonly class InstitutionalCreditLedger
             $this->records->lockStudent($student);
             $this->records->lockSection($section);
             [$id, $root, $facts] = $this->source($enrollment, $student, $section);
+            if (($facts['basis'] ?? null) === 'audit') {
+                throw new ValidationException([['field' => 'grade_id', 'message' =>
+                    \Codefy\Framework\Helpers\trans('An audited course cannot receive an academic grade or credit.')]]);
+            }
             $withdrawn = $facts["status"] === "W";
             $this->gradeEnrollmentScope(
                 $enrollment,
@@ -1247,7 +1258,7 @@ final readonly class InstitutionalCreditLedger
             $root->acceptHistorical($base);
         }
         $grade =
-        $outcome["grade_id"] === null
+        $closed->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit || $outcome["grade_id"] === null
         ? null
         : GradeSnapshot::fromRow($this->grades->snapshot(new EntityId($outcome["grade_id"])))->facts;
         $o = array_intersect_key(
@@ -1263,6 +1274,12 @@ final readonly class InstitutionalCreditLedger
                 "grace_ends_on",
             ]),
         );
+        if ($closed->basis === \Domain\Registration\Enum\EnrollmentBasis::Audit) {
+            $o['grade_id'] = null;
+            $o['grade_code'] = $o['delete_records'] ? null : 'W';
+            $o['points_milli'] = 0;
+            $o['counts_gpa'] = false;
+        }
         $event = InstitutionalCreditWasDropped::occur(
             new AcademicCreditId($id->value),
             [
@@ -1494,7 +1511,10 @@ final readonly class InstitutionalCreditLedger
     /** Classify only from exact zero academic quantities and the accepted immutable CEU declaration. */
     private function continuingEducationOnly(AcademicCredit $root, array $facts, HistoryReadBudget $budget): bool
     {
-        if ($facts['attempted_milli'] !== 0 || $facts['completed_milli'] !== 0 || $root->sectionVersion() === null) {
+        if (
+            ($facts['basis'] ?? null) === 'audit' || $facts['attempted_milli'] !== 0 ||
+            $facts['completed_milli'] !== 0 || $root->sectionVersion() === null
+        ) {
             return false;
         }
         $section = $root->section() ?? throw new CorruptHistoryException();

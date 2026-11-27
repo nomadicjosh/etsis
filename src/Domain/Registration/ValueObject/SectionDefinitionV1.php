@@ -32,16 +32,19 @@ final readonly class SectionDefinitionV1
     public function __construct(public array $data)
     {
         if (
-            count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 8 ||
+            count($data) < count(self::FIELDS) || count($data) > count(self::FIELDS) + 9 ||
             array_diff(array_keys($data), [...self::FIELDS, 'web_registration', 'minimum_enrollment',
                 'contact_hours', 'credits_milli', 'continuing_education', 'eligible_program_ids',
-                'require_program_campus', 'student_selectable_credits']) !== [] ||
+                'require_program_campus', 'student_selectable_credits', 'auditing']) !== [] ||
             array_diff(self::FIELDS, array_keys($data)) !== [] ||
             (array_key_exists('web_registration', $data) && !is_bool($data['web_registration']))
         ) {
             throw new InvalidArgumentException(
                 "A complete section definition is required.",
             );
+        }
+        if (array_key_exists('auditing', $data)) {
+            CourseAuditing::from($data['auditing']);
         }
         if (array_key_exists('eligible_program_ids', $data)) {
             if (!is_array($data['eligible_program_ids'])) {

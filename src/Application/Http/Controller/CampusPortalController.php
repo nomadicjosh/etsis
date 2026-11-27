@@ -227,6 +227,7 @@ final readonly class CampusPortalController
                 $f->text("revision", 64),
                 $f->text("review_token", 8192),
                 $f->optionalInteger("credits_milli"),
+                \Domain\Registration\Enum\EnrollmentBasis::parse($f->optionalText("basis", 16) ?? "standard"),
             ) + ["status" => "registered"],
         );
     }
@@ -261,6 +262,7 @@ final readonly class CampusPortalController
                 $f->id("student_id"),
                 $f->id("section_id"),
                 $f->optionalInteger("credits_milli"),
+                \Domain\Registration\Enum\EnrollmentBasis::parse($f->optionalText("basis", 16) ?? "standard"),
             ),
         );
     }

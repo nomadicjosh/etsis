@@ -75,6 +75,7 @@ try {
                 'check-transcript-updates',
                 'check-standing-updates',
                 'check-enrollment-updates',
+                'check-course-auditing',
                 'check-admission-notices',
                 'check-public-event-feed',
                 'check-timetable-export',
@@ -446,6 +447,11 @@ try {
                 static fn() => $admissionNotices->campus->cipher
             );
             require __DIR__ . '/AdmissionNoticesBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-course-auditing') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/CourseAuditingBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-enrollment-updates') {
             $kernel->bootstrap();
