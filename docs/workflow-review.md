@@ -1437,3 +1437,47 @@ The existing staff **Transcript requests** screen now supports [current transcri
 ## Account-level tuition and fee breakdowns
 
 The existing current and recorded-cutoff student-account sources now offer [independent net charge components](account-charge-reports.md): tuition, fees, staff-recorded charges and explicit unknown sources. Each aggregates at account/currency grain without joining charge and payment detail together. Accepted linked credits, replacements and reversals preserve their retained categories and recorded chronology. Ordinary field controls, matching-record filters, currency-safe summaries, private saves/shares/static captures and complete background exports remain shared; no financial fact or schema changes.
+
+
+### Nested numeric calculation groups
+
+In an existing numeric column's settings, **Calculation group** lets you calculate with a
+parenthesized expression instead of a single field or constant. Each group has a **Left operand**,
+**Calculation** (Add, Subtract, Multiply or Divide) and **Right operand**. Either operand can be an
+authorized numeric field, decimal constant or another group. Only the selected group is shown;
+**Edit left group**, **Edit right group** and **Back to parent group** preserve the surrounding
+expression and return keyboard focus to its control.
+
+To build `(capacity − 5) ÷ (2 + 2)`:
+
+1. Add the existing Section capacity column, choose **Subtract**, select **Decimal constant** and enter `5`.
+2. Choose **Add another operation**. The starting expression becomes `(capacity − 5)`;
+   the next operation defaults to Divide by `1`, preserving the existing result.
+3. Choose **Calculation group** for the divisor. Keep Add and enter `2` in both operands.
+4. Use **Edit starting expression** to revisit the numerator, then **Back to calculation** to return.
+   Check the **Calculated expression** before previewing or saving.
+
+The same controls support groups on both sides of an operation. Expressions have at most **four
+group levels and fifteen operations per column**, counting both branches and the outer operation.
+The editor disables additions at those bounds; the server independently rejects deeper, larger or
+malformed definitions. Removing the calculation restores the original column field. Duplication,
+reopening, switching operand types and back navigation preserve the branches that are still used.
+
+Groups use **nonmonetary numeric fields**. Decimal syntax, missing-input/zero-divisor behavior,
+row-before-summary calculation, conditional summaries and typed summary filters are the same as
+[ordinary numeric calculations](#numeric-calculations-in-existing-reports). Monetary fields keep
+the existing single-operation, same-currency/unit field calculations; a monetary value cannot be
+hidden in either branch of a group, including a counted column. Text, dates, Boolean values, SQL
+and executable formulas are not numeric operands. General mixed-type expressions remain open.
+
+Every field in both branches retains its own source and ancestor permissions. Referencing a
+record quantity inside a group does not bypass restrictions on joins that repeat that record.
+Disconnecting a relationship removes columns that depend on it, including hidden group operands;
+student-population handoffs retain the required relationships and the original source grants.
+The feature extends existing student-related reports only; it adds no report source or template.
+
+An unfinished constant anywhere in the tree blocks **Preview** and **Save** without discarding
+the draft. The branded inspector shows one group at a time and reflows at narrow widths and
+enlarged text. Definitions use the existing encrypted save/share mechanism, dynamic queries,
+fixed static captures, private CSV and complete background exports. Editing report arithmetic
+never changes source academic, registration or financial facts.

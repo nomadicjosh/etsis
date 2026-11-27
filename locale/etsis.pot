@@ -10995,3 +10995,79 @@ msgstr ""
 #: src/Domain/Registration/Service/EnrollmentUpdatesService.php
 msgid "Reload the current course-registration notification."
 msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:8
+msgid "Add another operation"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:9
+msgid "Edit starting expression"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:10
+msgid "Back to calculation"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:11
+msgid "Starting expression"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:12
+msgid "Complete each calculation group with numeric fields and valid decimal constants, or remove the calculation."
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:15
+msgid "Calculation group"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:16
+msgid "A group calculates its two operands first. Use up to four group levels and fifteen operations per column. Groups use nonmonetary numeric fields. Missing inputs and division by zero remain blank."
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:20
+msgid "Left operand"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:21
+msgid "Right operand"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:22
+msgid "Operand type"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:23
+msgid "Numeric field"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:24
+msgid "Edit left group"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:25
+msgid "Edit right group"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:26
+msgid "Back to parent group"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:27
+msgid "This group has reached the nesting or operation limit."
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:28
+msgid "Unavailable field"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:29
+msgid "Calculated expression"
+msgstr ""
+
+#: src/Domain/Reporting/ValueObject/ReportCalculation.php:103
+msgid "Choose numeric fields, decimal constants and valid operations, with up to four group levels and fifteen operations."
+msgstr ""
+
+#: src/Domain/Reporting/ValueObject/ReportQuery.php:269
+msgid "Nested calculations require nonmonetary numeric fields."
+msgstr ""

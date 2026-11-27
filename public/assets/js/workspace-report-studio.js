@@ -76,6 +76,43 @@ window.createWorkspaceReportStudio = function (ui) {
                     "'": "&#39;",
                 })[char],
         );
+    function calculationFields(operand) {
+        if (!operand) return [];
+        const fields = operand.field ? [operand.field] : operand.group
+            ? [...calculationFields(operand.group.left), ...calculationFields(operand.group.right)] : [];
+        return [...fields, ...calculationFields(operand.left)];
+    }
+    const calculationSymbol = operator => ({ '+': '+', '-': '−', '*': '×', '/': '÷' })[operator];
+    function operandText(operand, fields) {
+        if (operand.field) return fields[operand.field]?.label || ui.calculationLabels.unavailable;
+        if (Object.hasOwn(operand, 'value')) return operand.value;
+        return `(${operandText(operand.group.left, fields)} ${calculationSymbol(operand.group.operator)} ${operandText(operand.group.right, fields)})`;
+    }
+    function calculationSize(operand) {
+        return (operand?.group ? 1 + calculationSize(operand.group.left) + calculationSize(operand.group.right) : 0)
+            + (operand?.left ? calculationSize(operand.left) : 0);
+    }
+    function calculationDepth(operand) {
+        return Math.max(operand?.group ? 1 + Math.max(calculationDepth(operand.group.left), calculationDepth(operand.group.right)) : 0,
+            operand?.left ? calculationDepth(operand.left) : 0);
+    }
+    function calculationText(column, fields) {
+        const left = column.calculation.left ? operandText(column.calculation.left, fields) : fields[column.field].label;
+        return `${left} ${calculationSymbol(column.calculation.operator)} ${operandText(column.calculation, fields)}`;
+    }
+    function validCalculation(calculation, fields) {
+        let operations = 1;
+        const operand = (part, depth) => {
+            if (Object.hasOwn(part, 'value')) return typeof part.value === 'string'
+                && /^-?(?:0|[1-9][0-9]{0,8})(?:\.[0-9]{1,6})?$/.test(part.value);
+            if (part.field) return ['integer', 'double'].includes(fields[part.field]?.type);
+            return !!part.group && depth < 4 && ++operations <= 15
+                && !!calculationSymbol(part.group.operator)
+                && operand(part.group.left, depth + 1) && operand(part.group.right, depth + 1);
+        };
+        return !calculation || (!!calculationSymbol(calculation.operator) && operand(calculation, 0)
+            && (!calculation.left || operand(calculation.left, 0)));
+    }
     const rowSelectionUi = window.createReportRowSelection({ node, button, labeled });
     function destroyWidgets() {
         widgets.forEach((widget) => {
@@ -965,7 +1002,7 @@ window.createWorkspaceReportStudio = function (ui) {
         }
         definition.columns.forEach((c) => {
             connect(dataset.fields[c.field].relation);
-            if (c.calculation?.field) connect(dataset.fields[c.calculation.field].relation);
+            calculationFields(c.calculation).forEach(id => connect(dataset.fields[id].relation));
             conditionFields(c.conditions, id => connect(dataset.fields[id].relation));
             for (const branch of c.label_mapping?.branches || [])
                 conditionFields(branch.when, id => connect(dataset.fields[id].relation));
@@ -1664,7 +1701,7 @@ window.createWorkspaceReportStudio = function (ui) {
                 definition.columns.filter(
                     (column) =>
                         !branch.has(dataset.fields[column.field].relation) &&
-                        (!column.calculation?.field || !branch.has(dataset.fields[column.calculation.field].relation)) &&
+                        !calculationFields(column.calculation).some(id => branch.has(dataset.fields[id].relation)) &&
                         !hasConditionInBranch(column.conditions, branch) &&
                         !(column.label_mapping?.branches || []).some(rule => hasConditionInBranch(rule.when, branch)),
                 ),
@@ -1753,7 +1790,7 @@ window.createWorkspaceReportStudio = function (ui) {
                     "small",
                     {},
                     column.calculation
-                        ? `${dataset.fields[column.field].label} ${{ "+": "+", "-": "−", "*": "×", "/": "÷" }[column.calculation.operator]} ${column.calculation.field ? dataset.fields[column.calculation.field].label : column.calculation.value}`
+                        ? calculationText(column, dataset.fields)
                         : column.label_mapping ? ui.labelLabels.source
                             : `${relationLabel(dataset.fields[column.field].relation)} · ${dataset.fields[column.field].label}`,
                 );
@@ -1983,22 +2020,38 @@ window.createWorkspaceReportStudio = function (ui) {
                 const candidates = node("div", { class: "report-calculation-fields" });
                 let operator = column.calculation?.operator || calculationOperators.get(column) || "-";
                 const constant = Object.hasOwn(column.calculation || {}, 'value');
-                for (const [mode, label] of [['field', labels.field], ['value', labels.constant]]) {
-                    if (mode === 'value' && !field.constant_calculation) continue;
+                const grouped = !!column.calculation?.group;
+                for (const [mode, label] of [['field', labels.field], ['value', labels.constant], ['group', labels.group]]) {
+                    if (mode !== 'field' && !field.constant_calculation) continue;
                     const choice = button(label, () => {
                         calculationOperators.set(column, operator);
-                        if (mode === 'value') column.calculation = { operator, value: column.calculation?.value ?? '' };
-                        else if (constant) delete column.calculation;
+                        if (mode === 'value') column.calculation = { operator, value: column.calculation?.value ?? '', ...(column.calculation?.left ? { left: column.calculation.left } : {}) };
+                        else if (mode === 'group' && !grouped) {
+                            const previous = column.calculation ? structuredClone(column.calculation) : { field: column.field };
+                            delete previous.operator;
+                            delete previous.left;
+                            column.calculation = { operator, ...(column.calculation?.left ? { left: column.calculation.left } : {}), group: { operator: '+', left: previous, right: { value: '0' } } };
+                        } else if (mode === 'field' && (constant || grouped)) {
+                            column.calculation = column.calculation?.left ? { operator, left: column.calculation.left, field: column.field } : undefined;
+                            if (!column.calculation) delete column.calculation;
+                        }
                         dirty();
                         renderColumns();
                         inspect(column);
-                        inspector.querySelector(mode === 'value' ? '[data-report-constant]' : '[data-report-operand="field"]')?.focus();
+                        inspector.querySelector(mode === 'value' ? '[data-report-constant]'
+                            : mode === 'group' ? '[data-report-group-editor] select' : '[data-report-operand="field"]')?.focus();
                     }, 'report-choice-tile');
-                    choice.setAttribute('aria-pressed', String(constant === (mode === 'value')));
+                    choice.setAttribute('aria-pressed', String(mode === (grouped ? 'group' : constant ? 'value' : 'field')));
                     choice.dataset.reportOperand = mode;
                     operands.append(choice);
                 }
+                let refreshGroupPreview = () => {}, refreshNextOperation = () => {};
                 function numericFields() {
+                    refreshGroupPreview = () => {};
+                    if (grouped) {
+                        groupEditor();
+                        return;
+                    }
                     if (constant) {
                         const value = node('input', { type: 'text', class: 'form-control', inputmode: 'decimal',
                             maxlength: 17, value: column.calculation.value, 'data-report-constant': '',
@@ -2020,7 +2073,7 @@ window.createWorkspaceReportStudio = function (ui) {
                             const choose = button(
                                 f.label,
                                 () => {
-                                    column.calculation = { operator, field: id };
+                                    column.calculation = { operator, field: id, ...(column.calculation?.left ? { left: column.calculation.left } : {}) };
                                     connect(f.relation);
                                     dirty();
                                     renderColumns();
@@ -2032,6 +2085,121 @@ window.createWorkspaceReportStudio = function (ui) {
                             choose.setAttribute("aria-pressed", String(column.calculation?.field === id));
                             candidates.append(choose);
                         });
+                }
+                function groupEditor(starting = false) {
+                    const editor = node('div', { class: 'report-arithmetic-group', 'data-report-group-editor': '' });
+                    const preview = node('p', { class: 'report-arithmetic-preview', 'aria-label': labels.expression });
+                    let path = [];
+                    let focusTarget = null;
+                    const changed = () => {
+                        dirty();
+                        renderColumns();
+                        refreshNextOperation();
+                        preview.textContent = calculationText(column, dataset.fields);
+                    };
+                    const operationsList = [['+', labels.add], ['-', labels.subtract], ['*', labels.multiply], ['/', labels.divide]];
+                    const select = (entries, value, label) => {
+                        const control = node('select', { class: 'form-select', 'aria-label': label });
+                        for (const [key, title] of entries) control.append(node('option', { value: key }, title));
+                        control.value = value;
+                        return control;
+                    };
+                    const draw = () => {
+                        let group = starting ? column.calculation.left.group : column.calculation.group;
+                        for (const side of path) group = group[side].group;
+                        editor.replaceChildren();
+                        if (starting && !path.length) {
+                            const back = button(labels.back_calculation, () => {
+                                numericFields();
+                                inspector.querySelector('[data-edit-start]')?.focus();
+                            });
+                            back.prepend(icon('arrow-left'));
+                            editor.append(back);
+                        }
+                        if (path.length) {
+                            const back = button(labels.back_group, () => {
+                                focusTarget = path.pop();
+                                draw();
+                            });
+                            back.prepend(icon('arrow-left'));
+                            editor.append(back);
+                        }
+                        const heading = node('h4', { class: 'h6', tabindex: '-1', 'data-report-group-heading': '' },
+                            [starting ? labels.starting_expression : labels.group, ...path.map(side => labels[side])].join(' / '));
+                        editor.append(heading);
+                        const operation = select(operationsList, group.operator, labels.operation);
+                        operation.addEventListener('change', () => { group.operator = operation.value; changed(); });
+                        editor.append(labeled(labels.operation, operation));
+                        for (const side of ['left', 'right']) {
+                            const part = group[side];
+                            const mode = part.group ? 'group' : Object.hasOwn(part, 'value') ? 'value' : 'field';
+                            const card = node('fieldset', { class: 'report-arithmetic-operand' });
+                            card.append(node('legend', { class: 'h6' }, labels[side]));
+                            const canNest = path.length + 1 < 4 && calculationSize(column.calculation) + 1 < 15;
+                            const choices = [['field', labels.field], ['value', labels.constant]];
+                            if (canNest || mode === 'group') choices.push(['group', labels.group]);
+                            const kind = select(choices, mode, labels.operand_type);
+                            kind.dataset.operandSide = side;
+                            kind.addEventListener('change', () => {
+                                if (kind.value === 'group') group[side] = {
+                                    group: { operator: '+', left: structuredClone(part), right: { value: '0' } },
+                                };
+                                else if (kind.value === 'value') group[side] = { value: '' };
+                                else group[side] = { field: column.field };
+                                focusTarget = side;
+                                changed();
+                                draw();
+                            });
+                            card.append(labeled(labels.operand_type, kind));
+                            if (mode === 'group') {
+                                const edit = button(labels[side === 'left' ? 'edit_left' : 'edit_right'], () => {
+                                    path.push(side);
+                                    draw();
+                                    editor.querySelector('[data-report-group-heading]')?.focus();
+                                });
+                                edit.dataset.editGroup = side;
+                                card.append(edit);
+                            } else if (mode === 'value') {
+                                const value = node('input', { type: 'text', class: 'form-control', inputmode: 'decimal',
+                                    maxlength: 17, value: part.value, 'aria-label': labels.value });
+                                value.setAttribute('aria-invalid', String(!validCalculation({ operator: '+', value: part.value }, dataset.fields)));
+                                value.addEventListener('input', () => {
+                                    part.value = value.value;
+                                    value.setAttribute('aria-invalid', String(!validCalculation({ operator: '+', value: part.value }, dataset.fields)));
+                                    changed();
+                                });
+                                card.append(labeled(labels.value, value));
+                            } else {
+                                const fields = Object.entries(dataset.fields).filter(([, f]) => f.constant_calculation)
+                                    .map(([id, f]) => [id, `${relationLabel(f.relation)} · ${f.label}`]);
+                                const chosen = select(fields, part.field, labels.numeric_field);
+                                chosen.addEventListener('change', () => {
+                                    part.field = chosen.value;
+                                    connect(dataset.fields[part.field].relation);
+                                    renderMap();
+                                    changed();
+                                });
+                                card.append(labeled(labels.numeric_field, chosen));
+                            }
+                            if (!canNest && mode !== 'group') card.append(node('p', { class: 'form-text' }, labels.group_limit));
+                            editor.append(card);
+                        }
+                        editor.append(preview);
+                        changedPreview();
+                        if (focusTarget) {
+                            editor.querySelector(`[data-edit-group="${focusTarget}"]`)
+                                ?.focus({ preventScroll: true });
+                            if (!editor.contains(document.activeElement))
+                                editor.querySelector(`[data-operand-side="${focusTarget}"]`)?.focus({ preventScroll: true });
+                            focusTarget = null;
+                        }
+                    };
+                    const changedPreview = () => {
+                        preview.textContent = calculationText(column, dataset.fields);
+                    };
+                    refreshGroupPreview = changedPreview;
+                    candidates.replaceChildren(node('p', { class: 'form-text' }, labels.group_help), editor);
+                    draw();
                 }
                 [
                     ["+", labels.add],
@@ -2052,6 +2220,7 @@ window.createWorkspaceReportStudio = function (ui) {
                             [...operations.children].forEach((b) =>
                                 b.setAttribute("aria-pressed", String(b === choice)),
                             );
+                            refreshGroupPreview();
                             // Keep the focused constant input and its caret while changing the operation.
                         },
                         "report-choice-tile",
@@ -2062,6 +2231,34 @@ window.createWorkspaceReportStudio = function (ui) {
                 inspector.append(operations, operands, candidates);
                 if (!field.constant_calculation) inspector.append(node('p', { class: 'form-text' }, labels.money));
                 numericFields();
+                if (column.calculation?.left?.group) {
+                    const editStart = button(labels.edit_start, () => {
+                        groupEditor(true);
+                        candidates.querySelector('[data-report-group-heading]')?.focus();
+                    });
+                    editStart.dataset.editStart = '';
+                    inspector.append(editStart);
+                }
+                if (field.constant_calculation && column.calculation) {
+                    const next = button(labels.next_operation, () => {
+                        if (calculationDepth(column.calculation) >= 4 || calculationSize(column.calculation) + 1 >= 15) return;
+                        const previous = structuredClone(column.calculation);
+                        const left = previous.left || { field: column.field };
+                        delete previous.left;
+                        const operator = previous.operator;
+                        delete previous.operator;
+                        column.calculation = { operator: '/', left: { group: { operator, left, right: previous } }, value: '1' };
+                        dirty();
+                        renderColumns();
+                        inspect(column);
+                        inspector.querySelector('[data-report-constant]')?.focus();
+                    });
+                    refreshNextOperation = () => {
+                        next.disabled = calculationDepth(column.calculation) >= 4 || calculationSize(column.calculation) + 1 >= 15;
+                    };
+                    refreshNextOperation();
+                    inspector.append(next);
+                }
                 if (column.calculation)
                     inspector.append(
                         button(labels.remove, () => {
@@ -2497,9 +2694,9 @@ window.createWorkspaceReportStudio = function (ui) {
         function collect() {
             if (!definition.columns.length) throw new Error("Choose at least one field for your report.");
             for (const column of definition.columns) {
-                if (Object.hasOwn(column.calculation || {}, 'value') &&
-                    !/^-?(?:0|[1-9][0-9]{0,8})(?:\.[0-9]{1,6})?$/.test(column.calculation.value))
-                    throw new Error(ui.calculationLabels.invalid);
+                if (!validCalculation(column.calculation, dataset.fields))
+                    throw new Error(column.calculation.group || column.calculation.left
+                        ? ui.calculationLabels.group_invalid : ui.calculationLabels.invalid);
             }
             syncFilters();
             matchingLogic.normalize();

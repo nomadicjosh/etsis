@@ -5,8 +5,11 @@ now extend the bounded arithmetic contract. A numeric source field can be combin
 authorized numeric field or an explicit decimal constant. Operations run on rows before summaries;
 missing inputs and zero divisors remain unspecified. Monetary constants remain disallowed, with
 the existing currency, unit and repeated-row safeguards retained. The shared encrypted definition,
-dynamic/static/shared results and CSV/complete-export workflows apply. Arbitrary nested/mixed
-expression trees, independent fact pre-aggregation and the other acceptance gaps below remain open.
+dynamic/static/shared results and CSV/complete-export workflows apply.
+[Nested numeric groups](workflow-review.md#nested-numeric-calculation-groups) now add bounded
+parenthesized expressions on both sides, with recursive grants and preserved monetary/quantity
+restrictions. Mixed-type expressions, independent fact pre-aggregation and other acceptance gaps
+remain open.
 
 This review uses the actual examples in `legacy/docs/sql-query`, the saved-query/SQL routers and module, the section-roster/transfer routers, and the reporting views in the legacy migrations. The legacy feature allowed SELECT reporting across related tables; it was substantially more capable than the original fixed student-list report. Read-only access must preserve analytical power. This document is an acceptance plan, not a claim that the replacement builder is complete.
 
@@ -54,7 +57,7 @@ The old examples also include SSN-derived PIN functions, raw SQL logging and nam
 
 Report Studio implements student/current-primary-program records plus the first three joined dataset families: student program/catalog assignments, academic credit/final-grade snapshots, and sections/enrollments. Staff can select chained INNER/LEFT relationships, calculated numeric columns, readable names/statuses, nested conditions, related-row join conditions, grouping, summary conditions, distinct output and ordering. Text/date MIN/MAX retain their types when filtering summarized output. AJAX previews pair exact-value tables with charts, with versioned encrypted saves, existing account-based sharing and formula-safe CSV exports of the current page. Source permissions are required for every reference and ancestor relationship, including filter-only paths.
 
-The remaining acceptance work above includes more domain sources, derived financial aggregates, general latest-row selectors, configurable relationships beyond the approved registry, general expression trees and wider reviewed population hand-offs. The current UI is an initial working stage, not a full replacement for every legacy SELECT. See [backend-workspace.md](backend-workspace.md#relational-report-studio) for setup and limits.
+The remaining acceptance work above includes more domain sources, derived financial aggregates, general latest-row selectors, configurable relationships beyond the approved registry, mixed-type expression trees and wider reviewed population hand-offs. The current UI is an initial working stage, not a full replacement for every legacy SELECT. See [backend-workspace.md](backend-workspace.md#relational-report-studio) for setup and limits.
 
 [Saved report settings](workflow-review.md#saved-report-results-and-automatic-removal) distinguish live dynamic reports from encrypted complete static captures, with independent optional expiry. [Complete background exports](workflow-review.md#complete-report-exports) now prepare up to 25,000 rows/16 MiB, with requester-only progress, cancellation, authenticated private downloads and bounded artifact retention. Capture/export limits and deployment cleanup instructions are documented there; broader load and live multi-engine acceptance remain open.
 
@@ -81,10 +84,20 @@ Current [student-account reports](workflow-review.md#student-account-reports) no
 [Calendar period columns](workflow-review.md#calendar-period-reports) now extend dated-source acceptance across genuine application submissions, scheduled meetings and financial postings. The general column control groups approved dates by day/month/year without dropping their year or changing raw filter semantics. Monthly starters reuse ordinary joins, source permissions, typed summaries, saved/static results and existing exports; currency/grain guards still apply. Missing dates, months without records, fiscal calendars, historical as-of accounts and actual bank settlement dates are not inferred. General expression trees and broader derived fact-grain aggregates remain open.
 
 
-[Custom ordered text labels](workflow-review.md#custom-labels-in-existing-reports) now complete the visual `CASE` label-mapping slice: up to eight first-match rules, explicit NULL/fallback output, shared bounded All/Any conditions, text grouping/minimum/maximum and typed counts/summary filters. Hidden predicates retain field/source/ancestor grants, root and financial totals retain fan-out/currency guards, and saved/static/shared/formula-safe export/population paths use the same validated definition. No new report source or template is added. Broader numeric/mixed expression trees, independent financial pre-aggregation and other remaining acceptance cases stay open.
+[Custom ordered text labels](workflow-review.md#custom-labels-in-existing-reports) now complete the visual `CASE` label-mapping slice: up to eight first-match rules, explicit NULL/fallback output, shared bounded All/Any conditions, text grouping/minimum/maximum and typed counts/summary filters. Hidden predicates retain field/source/ancestor grants, root and financial totals retain fan-out/currency guards, and saved/static/shared/formula-safe export/population paths use the same validated definition. No new report source or template is added. Mixed-type expression trees, independent financial pre-aggregation and other remaining acceptance cases stay open.
 
 [Retained reporting-group roots](section-publication.md#current-and-retained-reporting-fields) now support accepted-period rollups in the existing student-credit source. Group stable root references and use distinct students across sibling groups; retain exact original labels, row grain and the known-hierarchy flag after current reparenting. Earlier absent paths remain unknown. This adds no dataset/template, census inference, raw-event query or new financial aggregate.
 
 [Independent account charge components](account-charge-reports.md) now advance the legacy tuition/fee/payment acceptance case: current and recorded-cutoff accounts expose side-by-side net tuition, fee, manual and unclassified amounts without joining several posting facts together. Linked credits, active replacements, reversal chronology, zero accounts, currency precision and existing fan-out guards stay explicit. Financial posting sources retain their declared detail grain; these component fields belong to the account sources. The shared save/static/share/export implementation and source permissions apply. Further institutional financial sources, arbitrary derived relationships and richer expression trees remain open.
 
 The [current student contact-email extension](student-contact-reporting.md) completes the email-selection part of `email-active-students.md` in existing student, program, application, credit and account sources. It follows the exact canonical account link, preserves earlier unknowns and requires an independent contact-reporting duty in visible/hidden fields, copies, shares, static results, messaging selection and exports. A current email correction changes fresh dynamic results while retained static values remain fixed. This adds no report type or template and sends no message; postal-address selection and further contact fields remain separate work.
+
+
+[Nested numeric calculation groups](workflow-review.md#nested-numeric-calculation-groups) now complete
+the bounded numeric expression-tree slice. The visual editor retains both branches, explicit
+parentheses, decimal constants, four group levels and fifteen operations per column. Every hidden
+field and ancestor still requires current authority; quantity fan-out, monetary units, NULL and
+row-before-summary rules apply throughout. Existing encrypted saves, fixed captures, sharing,
+private CSV, complete background exports and population selection carry the same definition.
+This adds no report type or source. Mixed text/date expressions, broader functions and independent
+financial pre-aggregation remain open.

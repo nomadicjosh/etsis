@@ -97,11 +97,11 @@ final readonly class ReportQuery
                 if (!is_array($calc)) {
                     self::invalid("Choose numeric fields and a valid calculation.");
                 }
-                new ReportCalculation($calc);
+                $calculation = new ReportCalculation($calc);
                 if (
                     !in_array($type, ['integer', 'double'], true) ||
-                    (isset($calc['field']) &&
-                        !in_array($schema['fields'][$calc['field']]['type'] ?? null, ['integer', 'double'], true))
+                    array_any($calculation->fields(), static fn(string $id): bool =>
+                        !in_array($schema['fields'][$id]['type'] ?? null, ['integer', 'double'], true))
                 ) {
                     self::invalid("Choose numeric fields and a valid calculation.");
                 }
@@ -205,9 +205,8 @@ final readonly class ReportQuery
     {
         $totals = array_filter($columns, fn(array $c): bool =>
             in_array($c['aggregate'], ['sum', 'avg'], true) &&
-            (($this->schema['fields'][$c['field']]['root_metric'] ?? false) ||
-                (isset($c['calculation']['field']) &&
-                    ($this->schema['fields'][$c['calculation']['field']]['root_metric'] ?? false))));
+            array_any(self::columnFields($c), fn(string $id): bool =>
+                $this->schema['fields'][$id]['root_metric'] ?? false));
         if ($totals === []) {
             return;
         }
@@ -230,9 +229,8 @@ final readonly class ReportQuery
             $collect($filter);
         }
         foreach ($columns as $column) {
-            $relations[] = $this->schema['fields'][$column['field']]['relation'];
-            if (isset($column['calculation']['field'])) {
-                $relations[] = $this->schema['fields'][$column['calculation']['field']]['relation'];
+            foreach (self::columnFields($column) as $id) {
+                $relations[] = $this->schema['fields'][$id]['relation'];
             }
             foreach (self::predicateGroups($column) as $group) {
                 $collect($group);
@@ -263,6 +261,15 @@ final readonly class ReportQuery
                 continue; // The output is text, not a monetary amount.
             }
             $field = $this->schema['fields'][$column['field']];
+            if (
+                isset($column['calculation']) && new ReportCalculation($column['calculation'])->nested() &&
+                array_any(self::columnFields($column), fn(string $id): bool =>
+                    isset($this->schema['fields'][$id]['currency_field']))
+            ) {
+                self::invalid(\Codefy\Framework\Helpers\trans(
+                    'Nested calculations require nonmonetary numeric fields.',
+                ));
+            }
             $other = isset($column['calculation']['field'])
             ? $this->schema['fields'][$column['calculation']['field']] : null;
             $currency = $field['currency_field'] ?? $other['currency_field'] ?? null;
@@ -300,9 +307,8 @@ final readonly class ReportQuery
                     array_keys($this->definition['record_selection'] ?? [])
                 );
                 foreach ($columns as $c) {
-                    $relations[] = $this->schema['fields'][$c['field']]['relation'];
-                    if (isset($c['calculation']['field'])) {
-                        $relations[] = $this->schema['fields'][$c['calculation']['field']]['relation'];
+                    foreach (self::columnFields($c) as $id) {
+                        $relations[] = $this->schema['fields'][$id]['relation'];
                     }
                 }
                 $collect = function (?array $group) use (&$collect, &$relations): void {
@@ -484,7 +490,7 @@ final readonly class ReportQuery
         $definition = $this->definition;
         // Output fields can introduce joins too. Keep them even when replacing the visible columns.
         foreach ($definition['columns'] as $column) {
-            $fields = [$column['field'], $column['calculation']['field'] ?? null];
+            $fields = self::columnFields($column);
             $collect = function (?array $group) use (&$collect, &$fields): void {
                 foreach ($group['rules'] ?? [] as $rule) {
                     if (isset($rule['condition'])) {
@@ -553,6 +559,15 @@ final readonly class ReportQuery
         };
     }
 
+    /** @param array<string,mixed> $column
+     * @return list<string>
+     */
+    private static function columnFields(array $column): array
+    {
+        return [$column['field'], ...(isset($column['calculation'])
+            ? new ReportCalculation($column['calculation'])->fields() : [])];
+    }
+
     /** @return list<array|null> */
     private static function predicateGroups(array $column): array
     {
@@ -597,11 +612,9 @@ final readonly class ReportQuery
     /** @return array{0:list<string>,1:list<string>} */
     private function references(): array
     {
-        $fields = array_column($this->definition["columns"], "field");
-        foreach ($this->definition["columns"] as $column) {
-            if (isset($column["calculation"]["field"])) {
-                $fields[] = $column["calculation"]["field"];
-            }
+        $fields = [];
+        foreach ($this->definition['columns'] as $column) {
+            array_push($fields, ...self::columnFields($column));
         }
         $collect = function (?array $group) use (&$collect, &$fields): void {
             foreach ($group["rules"] ?? [] as $rule) {

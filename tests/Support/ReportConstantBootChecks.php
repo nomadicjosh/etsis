@@ -45,6 +45,30 @@ if (
 ) {
     throw new RuntimeException('A calculated CSV lost its saved result or private response.');
 }
+$grouped = $definition;
+$grouped['columns'][1]['calculation'] = ['operator' => '/',
+    'left' => ['group' => ['operator' => '-', 'left' => ['field' => 'capacity'], 'right' => ['value' => '4']]],
+    'group' => ['operator' => '+', 'left' => ['value' => '2'], 'right' => ['value' => '2']]];
+$groupPreview = $teachingPost($path, ['definition' => $grouped, 'offset' => 0]);
+$groupRows = json_decode((string) $groupPreview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if ($groupPreview->getStatusCode() !== 200 || ($groupRows['items'][0]['c1'] ?? null) !== 5.25) {
+    throw new RuntimeException('A grouped calculation lost parentheses or typed results.');
+}
+$groupReport = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$groupSaved = $teachingPost('/sis/report-studio/save/', ['report_id' => $groupReport, 'operation_id' => $groupReport,
+    'version' => -1, 'name' => 'Fictional grouped calculation', 'definition' => $grouped]);
+$groupCsv = $teachingPost('/sis/report-studio/' . $groupReport . '/export/', ['offset' => 0]);
+if (
+    $groupSaved->getStatusCode() !== 201 || $groupCsv->getStatusCode() !== 200
+    || !str_contains((string) $groupCsv->getBody(), '5.25')
+    || !str_contains($groupCsv->getHeaderLine('Cache-Control'), 'no-store') || $groupCsv->hasHeader('phpdebugbar-id')
+) {
+    throw new RuntimeException('Grouped calculations lost their saved private CSV workflow.');
+}
+$grouped['columns'][1]['calculation']['left']['group']['right']['value'] = '1e3';
+if ($teachingPost($path, ['definition' => $grouped, 'offset' => 0])->getStatusCode() !== 422) {
+    throw new RuntimeException('A hidden untyped operand reached the actual query route.');
+}
 $sis->access->grants = ['sis:reporting:run'];
 if ($teachingPost('/sis/report-studio/' . $report . '/export/', ['offset' => 0])->getStatusCode() !== 403) {
     throw new RuntimeException('A calculated CSV bypassed its current source duty.');

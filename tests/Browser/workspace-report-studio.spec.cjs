@@ -157,8 +157,9 @@ async function fixture(page, options = {}) {
         case_due_on: { label: 'Next casework due date', type: 'date', relation: 'casework' },
         case_reference: { label: 'Casework reference', type: 'string', relation: 'casework' },
     });
+    if (options.numericOperands) fields.numeric_course_credits = { label: 'Fictional course credits', type: 'double', relation: 'course' };
     for (const field of Object.values(fields)) field.constant_calculation =
-        ['integer', 'double'].includes(field.type) && !['account', 'entry'].includes(field.relation);
+        ['integer', 'double'].includes(field.type) && !['account', 'balance', 'entry'].includes(field.relation);
     const dataset = options.curriculum ? {
         id: options.curriculum === 'catalog' ? 'catalog_components' : 'selected_components',
         label: options.curriculum === 'catalog' ? 'Current curriculum components' : 'Selected student curriculum',
@@ -1987,5 +1988,125 @@ for (const historical of [false, true]) test(`account charge components preserve
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await accessible(page);
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+async function groupedColumn(page) {
+    await constantColumn(page);
+    await page.getByLabel('Constant value', { exact: true }).fill('5');
+    await page.getByRole('button', { name: 'Subtract', exact: true }).click();
+    await page.getByRole('button', { name: 'Add another operation', exact: true }).click();
+    await page.getByRole('button', { name: 'Calculation group', exact: true }).click();
+    const editor = page.locator('[data-report-group-editor]');
+    await editor.getByRole('group', { name: 'Left operand', exact: true }).getByLabel('Constant value', { exact: true }).fill('2');
+    await editor.getByRole('group', { name: 'Right operand', exact: true }).getByLabel('Constant value', { exact: true }).fill('2');
+    return editor;
+}
+
+test('nested numeric groups preserve both branches, explicit parentheses, save, reopen and independent duplicates', async ({ page }) => {
+    const f = await fixture(page);
+    const editor = await groupedColumn(page);
+    await expect(editor.getByLabel('Calculated expression', { exact: true })).toHaveText('(Section capacity − 5) ÷ (2 + 2)');
+    await page.getByLabel('Report name', { exact: true }).fill('Fictional grouped calculation');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const calculation = { operator: '/',
+        left: { group: { operator: '-', left: { field: 'capacity' }, right: { value: '5' } } },
+        group: { operator: '+', left: { value: '2' }, right: { value: '2' } } };
+    expect(f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns[3].calculation).toEqual(calculation);
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: /^Column 4 settings:/ }).click();
+    await expect(editor.getByLabel('Calculated expression', { exact: true })).toHaveText('(Section capacity − 5) ÷ (2 + 2)');
+    await page.getByRole('button', { name: 'Duplicate column', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit starting expression', exact: true }).click();
+    await expect(editor.locator('[data-report-group-heading]')).toBeFocused();
+    await editor.getByRole('group', { name: 'Right operand', exact: true }).getByLabel('Constant value', { exact: true }).fill('7');
+    await page.getByRole('button', { name: 'Back to calculation', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Edit starting expression', exact: true })).toBeFocused();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const columns = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns;
+    expect(columns[3].calculation).toEqual(calculation);
+    expect(columns[4].calculation.left.group.right).toEqual({ value: '7' });
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('invalid hidden group constants block preview and save, retain drafts and reflow with enlarged text', async ({ page }) => {
+    const f = await fixture(page);
+    const editor = await groupedColumn(page);
+    await page.getByLabel('Report name', { exact: true }).fill('Fictional incomplete group');
+    await page.getByRole('button', { name: 'Edit starting expression', exact: true }).click();
+    const value = editor.getByRole('group', { name: 'Right operand', exact: true }).getByLabel('Constant value', { exact: true });
+    await value.fill('1e3');
+    await expect(value).toHaveAttribute('aria-invalid', 'true');
+    await page.getByRole('button', { name: 'Back to calculation', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    await expect(page.locator('.report-local-error')).toContainText('Complete each calculation group');
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    expect(f.calls.filter(call => /\/(preview|save)\/$/.test(call.path))).toEqual([]);
+    await page.getByRole('button', { name: 'Edit starting expression', exact: true }).click();
+    await expect(value).toHaveValue('1e3');
+    await value.fill('4.5');
+    await page.setViewportSize({ width: 320, height: 812 });
+    await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+    await accessible(page);
+    await page.screenshot({ path: '/tmp/etsis-nested-calculation-phone.png', fullPage: true });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByRole('button', { name: 'Back to calculation', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('button', { name: 'Edit starting expression', exact: true })).toBeFocused();
+    await page.getByRole('button', { name: 'Remove calculation', exact: true }).click();
+    await expect(editor).toHaveCount(0);
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns[3].calculation).toBeUndefined();
+    expect(f.errors).toEqual([]);
+});
+
+test('nested groups have bounded depth, keyboard parent navigation and a single active editor', async ({ page }) => {
+    const f = await fixture(page);
+    const editor = await groupedColumn(page);
+    for (let depth = 1; depth < 4; depth++) {
+        await editor.getByRole('group', { name: 'Left operand', exact: true }).getByLabel('Operand type', { exact: true }).selectOption('group');
+        await page.getByRole('button', { name: 'Edit left group', exact: true }).focus();
+        await page.keyboard.press('Space');
+        await expect(editor.locator('[data-report-group-heading]')).toBeFocused();
+    }
+    await expect(editor).toHaveCount(1);
+    await expect(editor.getByRole('group', { name: 'Left operand', exact: true }).getByLabel('Operand type', { exact: true }).locator('option[value="group"]')).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Add another operation', exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Back to parent group', exact: true }).click();
+    await expect(page.getByRole('button', { name: 'Edit left group', exact: true })).toBeFocused();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/preview/'))).toHaveLength(1);
+    expect(f.errors).toEqual([]);
+});
+
+
+test('disconnecting a hidden group operand removes its dependent column and preserves unrelated columns', async ({ page }) => {
+    const f = await fixture(page, { numericOperands: true });
+    const editor = await groupedColumn(page);
+    const left = editor.getByRole('group', { name: 'Left operand', exact: true });
+    await left.getByLabel('Operand type', { exact: true }).selectOption('field');
+    await left.getByLabel('Numeric field', { exact: true }).selectOption('numeric_course_credits');
+    await page.getByRole('button', { name: 'Done', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns[3].calculation.group.left)
+        .toEqual({ field: 'numeric_course_credits' });
+    await page.getByRole('tab', { name: 'Fields', exact: true }).click();
+    await page.getByRole('button', { name: 'Remove Course and its fields', exact: true }).click();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns.map(c => c.field))
+        .toEqual(['section_code', 'term_code', 'enrollment_id']);
+    expect(f.errors).toEqual([]);
+});
+
+test('monetary columns retain field-only calculations without group or chained-operation controls', async ({ page }) => {
+    const f = await fixture(page, { accounts: true });
+    await page.getByRole('button', { name: 'Outstanding student balances', exact: true }).click();
+    await page.getByRole('button', { name: /^Column 5 settings:/ }).click();
+    await expect(page.getByRole('button', { name: 'Another field', exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Calculation group', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Decimal constant', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Add another operation', exact: true })).toHaveCount(0);
     expect(f.errors).toEqual([]);
 });

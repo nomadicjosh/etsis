@@ -15,6 +15,30 @@ final readonly class ReportSelectCompiler
     {
     }
 
+    /** @param array<string,mixed> $operand
+     * @param list<scalar|null> $parameters
+     */
+    private function arithmeticOperand(array $operand, callable $field, array &$parameters): string
+    {
+        if (isset($operand['field'])) {
+            return $field($operand['field']);
+        }
+        if (isset($operand['value'])) {
+            $parameters[] = $operand['value'];
+            return 'CAST(? AS DECIMAL(24, 6))';
+        }
+        $group = $operand['group'];
+        $left = $this->arithmeticOperand($group['left'], $field, $parameters);
+        $right = $this->arithmeticOperand($group['right'], $field, $parameters);
+        return $this->arithmetic($left, $group['operator'], $right);
+    }
+
+    private function arithmetic(string $left, string $operator, string $right): string
+    {
+        return '(' . $left . ($operator === '/' ? ' * 1.0 / NULLIF(' . $right . ', 0)'
+            : ' ' . $operator . ' ' . $right) . ')';
+    }
+
     /** @return array{sql: string, parameters: list<scalar|null>} */
     public function compile(ReportQuery $query): array
     {
@@ -52,18 +76,15 @@ final readonly class ReportSelectCompiler
                 );
             }
             if (isset($column["calculation"])) {
-                if (isset($column['calculation']['field'])) {
-                    $other = $expression($column['calculation']['field']);
-                } else {
-                    $other = 'CAST(? AS DECIMAL(24, 6))';
-                    $rowParameters[] = $column['calculation']['value'];
+                if (isset($column['calculation']['left'])) {
+                    $rowExpression = $this->arithmeticOperand(
+                        $column['calculation']['left'],
+                        $expression,
+                        $rowParameters,
+                    );
                 }
-                $op = $column["calculation"]["operator"];
-                $rowExpression =
-                "(" .
-                $rowExpression .
-                ($op === "/" ? " * 1.0 / NULLIF(" . $other . ", 0)" : " " . $op . " " . $other) .
-                ")";
+                $other = $this->arithmeticOperand($column['calculation'], $expression, $rowParameters);
+                $rowExpression = $this->arithmetic($rowExpression, $column['calculation']['operator'], $other);
             }
             if (isset($column['label_mapping'])) {
                 $rowExpression = 'CASE';
