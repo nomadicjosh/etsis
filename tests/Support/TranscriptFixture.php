@@ -96,6 +96,7 @@ final class TranscriptFixture
                 $f->clock,
             ),
             $f->graduationReader(),
+            $f->feeClearance(),
         );
     }
 }

@@ -86,6 +86,7 @@ final readonly class AdmissionDecisionLedger
         ?string $formHash,
         EntityId $operation,
         EntityId $actor,
+        ?array $fee = null,
     ): void {
         if (
             $this->access->authenticatedUserId()->value !== $actor->value ||
@@ -103,7 +104,7 @@ final readonly class AdmissionDecisionLedger
                 "authorization" => $authorization,
                 "form_definition_hash" => $formHash,
             ],
-            ["__aggregate_type" => "admission_decision"],
+            ["__aggregate_type" => "admission_decision"] + ($fee === null ? [] : ["service_fee" => $fee]),
         )->withPlayhead(1);
         $root = AdmissionDecision::root(new AdmissionDecisionId($a->id->value));
         $root->acceptHistorical($e);

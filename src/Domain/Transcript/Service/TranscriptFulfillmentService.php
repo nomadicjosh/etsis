@@ -57,6 +57,7 @@ final readonly class TranscriptFulfillmentService
         private TranscriptStandingSource $standing,
         private TranscriptNotifications $notifications,
         private \Domain\Graduation\Service\GraduationReader $graduation,
+        private \Domain\ServiceFee\Service\FeeClearance $fees,
     ) {
     }
 
@@ -372,6 +373,7 @@ final readonly class TranscriptFulfillmentService
     {
         $actor = $this->authorize();
         $record = $this->records->request($request);
+        $this->fees->verifyTranscript($record);
         $latest = $this->records->latest($request);
         $this->authorize($actor);
         return [
@@ -733,6 +735,7 @@ final readonly class TranscriptFulfillmentService
     private function context(EntityId $request, ?string $layoutCode = null): array
     {
         $record = $this->records->request($request);
+        $this->fees->verifyTranscript($record);
         if (!in_array($record["status"], ["pending", "ready"], true)) {
             throw new ValidationException([
                 [

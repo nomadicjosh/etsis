@@ -14,6 +14,8 @@ interface PaymentRepository
     /** @return array<string, mixed>|null */
     public function active(EntityId $account, int $now): ?array;
 
+    public function activeFee(EntityId $fee, int $now): ?array;
+
     /** @param array<string, scalar|null> $record */
     public function add(EntityId $id, array $record): void;
 

@@ -20,14 +20,16 @@ async function fixture(page) {
     await page.route('**/sis/**', async route => {
         const req = route.request(), path = new URL(req.url()).pathname;
         let json = {};
-        if (path === '/sis/ui/metrics/') json = { cards: [], intake: [], pipeline: [], queue: [] };
+        if (path === '/sis/imports/notices/') json = { items: [], next_after: null };
+        else if (path === '/sis/ui/metrics/') json = { cards: [], intake: [], pipeline: [], queue: [] };
         else if (path.startsWith('/sis/ui/data/')) {
             const source = path.split('/')[4];
             json = { items: source === 'people' ? [{ id: person, given_name: 'Fictional', family_name: 'Applicant', institutional_id: 'S-FICTIONAL' }]
                 : source === 'programs' ? [{ id: program, code: 'DIP.ART', title: 'Studio Arts' }]
                     : source === 'terms' ? [{ id: term, code: '26/FA' }]
                         : source === 'applications' ? [{ id: application, given_name: 'Fictional', family_name: 'Applicant', status: 'submitted' }] : [], next_after: null };
-        } else if (path === `/sis/forms/programs/${program}/active/`) {
+        } else if (path.includes('/service-fees/prepare/')) json = { required: false, fee_id: null, cleared: true };
+        else if (path === `/sis/forms/programs/${program}/active/`) {
             json = { id: formId, name: 'Studio Arts application', application_program_id: program, submission_id: receipt, fields, layout };
         } else if (path === `/sis/forms/${formId}/submissions/`) {
             expect(req.headers()['x-csrf-token']).toBe('fictional-test-token');

@@ -29,8 +29,11 @@ async function fixture(page, { applications = [
     await page.route(/\/(?:portal\/api|sis\/(?:forms|form-submissions))\//, async route => {
         const req = route.request(), path = new URL(req.url()).pathname;
         let json = {};
-        if (path.startsWith('/portal/api/email-verification/') && verification) return verification(route);
-        if (path === '/portal/api/me/') { overviewReads.push(path); json = me; }
+        if (path === '/portal/api/service-fees/page/') json = { items: [], next_after: null };
+        else if (path === '/portal/api/service-fees/prepare/') json = { required: false, fee_id: null, cleared: true };
+        else if (path.startsWith('/portal/api/email-verification/') && verification) return verification(route);
+        else if (path === '/portal/api/me/') { overviewReads.push(path); json = me; }
+        else if (path === '/portal/api/registration-open/') json = { items: [], next_after: null };
         else if (/^\/portal\/api\/(?:[a-z]+-updates|announcements)\/$/.test(path)) json = { items: [], next: null };
         else if (path === '/portal/api/notification-preferences/') json = {
             preferences: { sound: false, sound_id: 'tone', keep_visible: false }, revision: 0, person_id: person, own: true,

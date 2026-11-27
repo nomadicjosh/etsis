@@ -391,4 +391,11 @@ return static function (Psr7Router $router): void {
         ->name('sis.portal.audience.programs');
     $router->map(["GET"], "/sis/portal/editor/{id}/", [Editor::class, "get"])->name("sis.portal.editor.get");
     $router->map(["POST"], "/sis/portal/editor/", [Editor::class, "save"])->name("sis.portal.editor.save");
+
+    $fees = \Application\Http\Controller\SisServiceFeeController::class;
+    $router->post('/portal/api/service-fees/page/', [$fees, 'ownerPage']);
+    $router->post('/portal/api/service-fees/prepare/', [$fees, 'ownerPrepare']);
+    $router->get('/portal/api/service-fees/{fee}/', [$fees, 'ownerShow']);
+    $router->post('/portal/api/service-fees/{fee}/checkout/', [$fees, 'checkout']);
+    $router->post('/portal/api/service-fees/{fee}/history/', [$fees, 'ownerHistory']);
 };

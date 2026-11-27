@@ -34,6 +34,7 @@ final readonly class ApplicationSubmissionService
         private AuditTrail $audit,
         private MessageCipher $cipher,
         private \Domain\User\Service\OwnerEmailVerification $verification,
+        private \Domain\ServiceFee\Service\FeeClearance $fees,
     ) {
     }
 
@@ -80,6 +81,9 @@ final readonly class ApplicationSubmissionService
             $this->catalogs->lockTerm($term);
             $this->catalogs->lockProgram($program);
             $this->recheckDirect($actor);
+            $feeTarget = ['program_id' => $program->value, 'term_id' => $term->value];
+            $feeOwner = $this->admissions->person($person)->ownerUserId;
+            $fee = $this->fees->apply('application', $person, $feeOwner, $feeTarget, $id, $actor);
             $a = new AdmissionApplication($id, $person, $program, $term);
             $this->admissions->addApplication($a);
             $this->ledger->submitted(
@@ -90,8 +94,18 @@ final readonly class ApplicationSubmissionService
                 null,
                 $id,
                 $actor,
+                $fee,
             );
             $this->audit->record($actor, "admissions.applied", $a->id);
+            $this->recheckDirect($actor);
+            $this->fees->assertApplied(
+                $fee,
+                'application',
+                $person,
+                $this->admissions->person($person)->ownerUserId,
+                $feeTarget,
+                $id
+            );
             return $a;
         });
     }
@@ -190,6 +204,9 @@ final readonly class ApplicationSubmissionService
                     "This application identity already exists. Start a new submission.",
                 );
             }
+            $feeTarget = ['program_id' => $program->value, 'term_id' => $term->value];
+            $feeOwner = $this->admissions->person($person)->ownerUserId;
+            $fee = $this->fees->apply('application', $person, $feeOwner, $feeTarget, $id, $actor);
             $a = new AdmissionApplication($id, $person, $program, $term);
             $this->admissions->addApplication($a);
             $this->forms->storeSubmission(
@@ -208,6 +225,7 @@ final readonly class ApplicationSubmissionService
                 SubmissionIntegrity::formHash($form),
                 $submission,
                 $actor,
+                $fee,
             );
             $this->audit->record($actor, "admissions.applied", $id);
             $this->audit->record($actor, "admissions.form_submitted", $id);
@@ -215,6 +233,14 @@ final readonly class ApplicationSubmissionService
             if ($ownerSubmission) {
                 $this->verification->requireForApplication($actor, $person);
             }
+            $this->fees->assertApplied(
+                $fee,
+                'application',
+                $person,
+                $this->admissions->person($person)->ownerUserId,
+                $feeTarget,
+                $id
+            );
             return $id;
         });
     }

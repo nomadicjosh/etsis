@@ -76,6 +76,7 @@ try {
                 'check-standing-updates',
                 'check-enrollment-updates',
                 'check-graduation',
+                'check-service-fees',
                 'check-course-auditing',
                 'check-admission-notices',
                 'check-public-event-feed',
@@ -448,6 +449,11 @@ try {
                 static fn() => $admissionNotices->campus->cipher
             );
             require __DIR__ . '/AdmissionNoticesBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-service-fees') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/ServiceFeesBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-graduation') {
             $kernel->bootstrap();

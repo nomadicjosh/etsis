@@ -26,6 +26,7 @@ final readonly class PaymentConfirmationService
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private Clock $clock,
+        private \Domain\ServiceFee\Service\ServiceFeeProvider $fees,
     ) {
     }
 
@@ -47,6 +48,18 @@ final readonly class PaymentConfirmationService
                 || $record['currency'] !== $confirmation['currency']
             ) {
                 throw new DomainException('Payment does not match its checkout.');
+            }
+            if ($record['purpose'] !== 'account') {
+                if (!in_array($record['purpose'], ['application', 'transcript'], true) || $record['fee_id'] === null) {
+                    throw new DomainException('Invalid payment purpose.');
+                }
+                $this->fees->accept($record, $confirmation);
+                $this->payments->attach($id, $confirmation['session'], '');
+                $this->payments->paid($id);
+                return;
+            }
+            if ($record['account_id'] === null || $record['fee_id'] !== null) {
+                throw new DomainException('Invalid account payment.');
             }
             if ($record['status'] === 'paid') {
                 return;

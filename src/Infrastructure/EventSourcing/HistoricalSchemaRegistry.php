@@ -52,6 +52,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\ServiceFee\Event\ServiceFeeDecisionWasRecorded::class => [
+                'type' => 'service_fee', 'root' => \Domain\ServiceFee\ServiceFee::class,
+                'fields' => \Domain\ServiceFee\ServiceFee::FIELDS,
+            ],
             \Domain\Graduation\Event\GraduationDecisionWasRecorded::class => [
                 'type' => 'graduation', 'root' => \Domain\Graduation\GraduationCase::class,
                 'fields' => \Domain\Graduation\GraduationCase::FIELDS,
@@ -976,6 +980,9 @@ final readonly class HistoricalSchemaRegistry
                     throw new CorruptHistoryException();
                 }
             }
+            if ($stream->type === 'service_fee') {
+                \Domain\ServiceFee\ServiceFee::validate($payload);
+            }
             if ($stream->type === 'graduation') {
                 \Domain\Graduation\GraduationCase::validate($payload);
             }
@@ -1162,6 +1169,7 @@ final readonly class HistoricalSchemaRegistry
                 // This complete payload is validated by its bounded typed schema above.
                 if (
                     in_array($class, [
+                    \Domain\ServiceFee\Event\ServiceFeeDecisionWasRecorded::class,
                     \Domain\Person\Event\PersonSsnWasRecorded::class,
                     \Domain\Registration\Event\EnrollmentWasReinstated::class,
                     \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class,
@@ -1260,6 +1268,16 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === 'service_fee') {
+                    if (
+                        $class !== \Domain\Admissions\Event\AdmissionApplicationWasSubmitted::class
+                        || !is_array($value)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    \Domain\ServiceFee\Service\FeeClearance::validateReference($value);
+                    continue;
+                }
                 if ($name === 'auditing_policy') {
                     $policy = \Domain\Registration\ValueObject\CourseAuditing::from($value);
                     if (
@@ -1905,6 +1923,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\ServiceFee\ServiceFee::class => 'service_fee',
             \Domain\Graduation\GraduationCase::class => 'graduation',
             \Domain\Person\PersonSsnHistory::class => 'person_ssn',
             \Domain\Registration\Waitlist\SectionWaitlist::class => 'section_waitlist',
@@ -1991,6 +2010,7 @@ final readonly class HistoricalSchemaRegistry
             'employment_lifecycle' => new \Domain\HumanResources\ValueObject\EmploymentTimelineId($id),
             'person_profile' => new \Domain\Person\ValueObject\PersonProfileId($id),
             'employment_profile' => new \Domain\HumanResources\ValueObject\EmploymentProfileId($id),
+            'service_fee' => new \Domain\ServiceFee\ValueObject\ServiceFeeId($id),
             'graduation' => new \Domain\Graduation\ValueObject\GraduationId($id),
             'work_pursuit' => new \Domain\AcademicRecord\ValueObject\WorkPursuitId($id),
             'student_specializations' => new \Domain\Student\ValueObject\StudentSpecializationsId($id),

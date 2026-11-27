@@ -298,6 +298,10 @@ A **billing rule** defines when and how an assessment is proposed. A **retained 
 
 A **financial journal** records accounting entries, commonly with debit and credit lines. The **general ledger**, or **GL**, organizes accounting postings by account. This is a different use of *journal* from the shared business-event journal. Automatic student-account-to-GL mappings and period-closing work have their own [roadmap status](development-roadmap.md#6-finance-and-institutional-integrations).
 
+### Service fee / assessment / waiver
+
+A **service fee** is an optional charge for one application or official transcript request. Its **assessment** retains the quoted amount, currency and policy for that person and target. A **waiver** is an authorized, reasoned decision excusing the remaining fee; it is distinct from money received. A **completed refund** records money actually returned against an earlier receipt. Neither a later refund nor a policy change erases the original receipt or accepted service. See [Application and official transcript fees](service-fees.md).
+
 ## Reports and selected populations
 
 ### Dataset / source / field

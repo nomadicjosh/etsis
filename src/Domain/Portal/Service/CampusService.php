@@ -39,6 +39,7 @@ final readonly class CampusService
         private \Domain\Person\Service\PersonContactService $contacts,
         private \Domain\Registration\Service\RegistrationBatchService $registrations,
         private \Domain\AcademicRecord\Service\CeuRecordService $ceuRecords,
+        private \Domain\ServiceFee\Service\FeeClearance $fees,
     ) {
     }
 
@@ -310,8 +311,11 @@ final readonly class CampusService
                 }
                 return;
             }
+            $feeTarget = ['student_id' => $student->value];
+            $fee = $this->fees->apply('transcript', $person, $user, $feeTarget, $request, $user);
             $this->repository->addTranscriptRequest($request, [
                 "student_id" => $student->value,
+                "fee_id" => $fee["fee_id"] ?? null,
                 "owner_user_id" => $user->value,
                 "delivery" => $delivery,
                 "encrypted_recipient" => $this->cipher->seal($delivery === "electronic" ? $recipient : ""),
@@ -320,6 +324,11 @@ final readonly class CampusService
                 "version" => 0,
             ]);
             $this->audit->record($user, "transcript.requested", $request);
+            $this->repository->ownedStudent($user, $student);
+            if ($this->access->authenticatedUserId()->value !== $user->value) {
+                throw new AccessDeniedException();
+            }
+            $this->fees->assertApplied($fee, 'transcript', $person, $user, $feeTarget, $request);
         });
     }
 
@@ -338,6 +347,7 @@ final readonly class CampusService
         if ($record["owner_user_id"] !== $user->value) {
             $this->access->requirePermission("sis:transcript:manage");
         }
+        $this->fees->verifyTranscript($record);
         $record["recipient"] = $this->cipher->open($record["encrypted_recipient"]);
         unset($record["encrypted_recipient"]);
         return $record;

@@ -1303,3 +1303,7 @@ h3 { font-size: .9rem; font-weight: 650; }
 .campus-role-audience .list-group-item { white-space: normal; overflow-wrap: anywhere; }
 .campus-role-audience .btn { white-space: normal; overflow-wrap: anywhere; }
 .campus-role-audience .campus-role-remove { width: 2.75rem; min-height: 2.75rem; flex: 0 0 2.75rem; }
+
+/* Retained fee labels, receipt references and staff reasons must reflow on narrow screens. */
+.service-fee-summary, .service-fee-workbench { min-width: 0; overflow-wrap: anywhere; }
+.service-fee-summary .btn, .service-fee-workbench .btn { white-space: normal; text-align: start; }

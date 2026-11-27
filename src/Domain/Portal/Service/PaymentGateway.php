@@ -12,7 +12,7 @@ interface PaymentGateway
     public function enabled(): bool;
 
     /** @return array{session: string, url: string} */
-    public function checkout(EntityId $payment, Money $amount, int $expiresAt): array;
+    public function checkout(EntityId $payment, Money $amount, int $expiresAt, string $purpose = 'account'): array;
 
     /** @return array{payment: string, session: string, minor: int, currency: string}|null */
     public function verify(#[\SensitiveParameter] string $body, #[\SensitiveParameter] string $signature): ?array;

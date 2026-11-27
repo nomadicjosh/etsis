@@ -318,6 +318,7 @@
     const moodlePeople = window.createWorkspaceMoodlePeople({ node, request, task, can, openDrawer, openPerson });
     const moodleRequests = window.createWorkspaceMoodleRequests({ node, request, task, can, openDrawer, openPerson });
     const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions, offices: () => restrictionStudio.officeSetup({ label: 'Back to roles & access', run: async () => { drawer.hide(); await loadAccess(); } }) });
+    const serviceFees = window.createServiceFees({ node, request, task, openDrawer, buildForm, formData, notify, labels: config.service_fee_labels });
     const peopleStudio = window.createWorkspacePeople({ admissionProgramLabels: config.admission_program_labels, admissionEntryLabels: config.admission_entry_labels, historyChecks: () => historyChecks, historyCheckLabels: config.history_check_labels, documentHoldLabels: config.document_hold_labels, documentRetentionLabels: config.document_retention_labels, closeDrawer: () => drawer.hide(), node, request, task, openDrawer, buildForm, formData, notify, can, openPerson, badge, recordSummary, actionMenu, historyPanel, messageRecord: operations.messageRecord, flow: operations.flow, loginUrl: config.login_url || '/login/' });
     const teachingStudio = window.createWorkspaceTeaching({ categoryRuleLabels: config.coursework_category_labels, historyChecks: () => historyChecks, historyCheckLabels: config.history_check_labels, ceuLabels: config.ceu_labels, actionMenu, node, request, requestFile, task, can, recordSummary, buildForm, formData, openDrawer, openRecord, table, badge, flow: operations.flow });
     const schedulingStudio = window.createWorkspaceScheduling({ historyChecks: () => historyChecks, historyCheckLabels: config.history_check_labels, openCalendar: () => { drawer.hide(); return navigate('calendar', current !== 'calendar'); }, node, request, task, can, recordSummary, actionMenu, showAudit: (dataset, id) => operations.audit(dataset, { id }), openDrawer, buildForm, formData, notify, table, badge, financeReviews: () => financeReviewStudio, flow: operations.flow, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve(),
@@ -608,6 +609,7 @@
             tool('Comparison policy', () => window.createGradeComparisonPolicy({node,request,task,openDrawer,closeDrawer: () => drawer.hide()}).open(), 'Publish institutional grade comparison policy', 'sliders'));
         if (section === 'students' && can('sis:gradebook:policy')) tools.append(
             tool('Grade policy', () => teachingStudio.gradeChangePolicy(), 'Configure grade correction policy', 'sliders'));
+        if (['applications', 'students', 'transcripts'].includes(section) && can('sis:fees:configure')) tools.append(tool(config.service_fee_labels.policies, () => serviceFees.policies(), config.service_fee_labels.policies, 'sliders'));
         if (section === 'applications') tools.append(tool('Follow-up queue', () => peopleStudio.caseQueue(),
             'Open admissions follow-up queue', 'inboxes'));
         if (section === 'applications') tools.append(tool('Withdrawal requests', () => peopleStudio.withdrawalQueue(),
@@ -1293,6 +1295,7 @@
                 if (can('sis:person:manage') && can('sis:communications:manage')) extra.push({ label: 'Message person', icon: 'envelope',
                     run: () => operations.messageRecord('person', id, () => openPerson(id), body) });
                 if (person.ownerUserId && can('admin:edit:user')) extra.push({ label: 'Manage sign-in account', icon: 'key', run: () => peopleStudio.account(person) });
+                if (can('sis:fees:manage') && can('sis:person:manage')) extra.push({ label: config.service_fee_labels.title, icon: 'receipt', run: () => serviceFees.person(person.id.value, () => openPerson(person.id.value)) });
                 if (can('sis:person:manage')) extra.push({ label: config.notification_labels.preferences,
                     icon: 'bell', run: async () => {
                         const host = openDrawer(config.notification_labels.preferences);
@@ -2132,7 +2135,7 @@
         body.append(node('p', { class: 'muted-text' }, 'Preview only. Nothing you enter here is submitted.'), applicationControls(formDraft.fields, true, formDraft.layout || []));
     });
 
-    async function startApplication(personId = null, personLabel = '') {
+    async function startApplication(personId = null, personLabel = '', selection = {}) {
         const body = openDrawer('Start an application', 'ADMISSIONS INTAKE');
         body.classList.add('admission-start-panel');
         body.append(node('button', { type: 'button', class: 'btn btn-link mb-3',
@@ -2153,7 +2156,7 @@
         body.append(introduction, setup, stage);
         const fields = [...(personId ? [] : [['person_id', 'Person', 'lookup', 'people']]),
             ['program_id', 'Academic program', 'lookup', 'programs'], ['entry_term_id', 'Entry term', 'lookup', 'terms']];
-        const selector = await buildForm(fields, {}, { layout: 'application_start' });
+        const selector = await buildForm(fields, selection, { layout: 'application_start' });
         if (!body.isConnected) return;
         if (personId) setup.append(recordSummary([['Applicant', personLabel || 'Selected person record']]));
         const status = node('p', { role: 'status', class: 'form-text' });
@@ -2175,6 +2178,14 @@
                 const context = [['Person', personLabel || selector.elements.namedItem('person_id').selectedOptions[0].label],
                     ['Academic program', selector.elements.namedItem('program_id').selectedOptions[0].label],
                     ['Entry term', selector.elements.namedItem('entry_term_id').selectedOptions[0].label]];
+                // The server submission gate also checks staff writes. Staff with fee authority can resolve this quote here.
+                if (can('sis:fees:manage') && can('sis:person:manage')) {
+                    const fee = await request(`/sis/people/${personId || data.person_id}/service-fees/prepare/`, 'POST', {
+                        purpose: 'application', program_id: data.program_id, term_id: data.entry_term_id,
+                    });
+                    if (fee.required && !fee.cleared) return serviceFees.detail(fee.fee_id, () => startApplication(personId || data.person_id, personLabel, { program_id: data.program_id, entry_term_id: data.entry_term_id }));
+                    if (fee.required) form.submission_id = fee.fee_id;
+                }
                 const key = JSON.stringify([personId || data.person_id, data.program_id, data.entry_term_id, form.id]);
                 setup.hidden = true; introduction.hidden = true; stage.hidden = false;
                 if (cached === key && content.childElementCount) {

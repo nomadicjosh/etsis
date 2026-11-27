@@ -4,6 +4,8 @@ Use the [etSIS system glossary](docs/glossary.md) for plain-language definitions
 
 ## Version 10 - A New Beginning
 
+Configure optional [application and official transcript fees](docs/service-fees.md), including confirmed payment, staff receipts and reasoned waivers. Both fees start disabled.
+
 ## Alpha development
 
 The application is in active alpha. Breaking changes and necessary database migrations are expected. We evolve one current domain model instead of maintaining a new class for each development-era field addition. Release compatibility will be stabilized during release-candidate planning. Historical publications and student/financial decisions remain distinct, preserved facts.

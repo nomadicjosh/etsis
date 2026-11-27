@@ -1384,3 +1384,7 @@
 @media (max-width: 600px) {
     .campus-catalog-filters.campus-program-filters { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Retained fee labels, receipt references and staff reasons must reflow on narrow screens. */
+.service-fee-summary, .service-fee-workbench { min-width: 0; overflow-wrap: anywhere; }
+.service-fee-summary .btn, .service-fee-workbench .btn { white-space: normal; text-align: start; }

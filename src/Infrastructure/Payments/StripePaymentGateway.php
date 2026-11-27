@@ -16,6 +16,8 @@ use Stripe\Stripe;
 use Stripe\StripeClient;
 use Stripe\Webhook;
 
+use function Codefy\Framework\Helpers\trans;
+
 final readonly class StripePaymentGateway implements PaymentGateway
 {
     public function __construct(private ConfigContainer $config)
@@ -32,11 +34,17 @@ final readonly class StripePaymentGateway implements PaymentGateway
         && $this->baseUrl() !== null;
     }
 
-    public function checkout(EntityId $payment, Money $amount, int $expiresAt): array
+    public function checkout(EntityId $payment, Money $amount, int $expiresAt, string $purpose = 'account'): array
     {
         if (!$this->enabled()) {
             throw new DomainException('Online payments are not configured.');
         }
+        [$label, $return] = match ($purpose) {
+            'account' => [trans('Student account payment'), '/portal/student/accounts/'],
+            'application' => [trans('Application fee'), '/portal/apply/'],
+            'transcript' => [trans('Official transcript fee'), '/portal/student/transcripts/'],
+            default => throw new InvalidArgumentException('Invalid payment purpose.'),
+        };
         $http = new CurlClient();
         $http->setTimeout(12);
         $http->setConnectTimeout(4);
@@ -52,9 +60,9 @@ final readonly class StripePaymentGateway implements PaymentGateway
                 'expires_at' => $expiresAt,
                 'line_items' => [['price_data' => ['currency' => strtolower($amount->currency),
                     'unit_amount' => $amount->minor,
-                    'product_data' => ['name' => 'Student account payment']], 'quantity' => 1]],
-                'success_url' => $this->baseUrl() . '/portal/student/accounts/?checkout=returned',
-                'cancel_url' => $this->baseUrl() . '/portal/student/accounts/?checkout=cancelled',
+                    'product_data' => ['name' => $label]], 'quantity' => 1]],
+                'success_url' => $this->baseUrl() . $return . '?checkout=returned',
+                'cancel_url' => $this->baseUrl() . $return . '?checkout=cancelled',
             ], ['idempotency_key' => 'sis-' . $payment->value]);
         } catch (ApiErrorException) {
             throw new DomainException('Checkout is temporarily unavailable. Please try again.');

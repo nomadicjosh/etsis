@@ -26,6 +26,7 @@
     }) : null;
     void notifications?.loadPreferences();
     const feedbackText = (key, fallback) => notificationLabels[key] || fallback;
+    const serviceFees = window.createServiceFees({ node: el, request, task, labels: config.service_fee_labels });
     let me = null;
     let addToRegistrationPlan = null;
     let dialogOpener = null;
@@ -933,6 +934,29 @@
                 icon('arrow-right'),
             ),
         );
+        if (config.signedIn) {
+            const fees = el('section', { class: 'mt-3', 'aria-label': config.service_fee_labels.title });
+            container.append(fees);
+            requestAnimationFrame(() => { if (!fees.isConnected) return; void task(() => serviceFees.ownerList(fees, 'application', async fee => {
+                let selected = config.programs.find(item => item.id === fee.target.program_id);
+                if (!selected) {
+                    const result = await request(`/portal/api/programs/?${new URLSearchParams({ q: fee.target.program_id })}`);
+                    if (!fees.isConnected) return;
+                    selected = result.items.find(item => item.id === fee.target.program_id);
+                    if (!selected) throw new Error(config.service_fee_labels.contact);
+                    config.programs.push(selected);
+                }
+                if (![...program.options].some(option => option.value === selected.id)) {
+                    program.append(el('option', { value: selected.id }, selected.title));
+                }
+                if (![...term.options].some(option => option.value === fee.target.term_id)) {
+                    config.terms.push({ id: fee.target.term_id, code: fee.labels.term });
+                    term.append(el('option', { value: fee.target.term_id }, fee.labels.term));
+                }
+                program.value = fee.target.program_id; term.value = fee.target.term_id;
+                form.requestSubmit();
+            })); });
+        }
         const next = el('div', { class: 'mt-4' });
         const finder = programFinder(program, next);
         let applicationRequest = 0;
@@ -995,11 +1019,18 @@
                         `/sis/forms/programs/${programId}/active/`,
                     );
                     if (serial !== applicationRequest || programId !== program.value || termId !== term.value) return;
+                    const fee = await request('/portal/api/service-fees/prepare/', 'POST', {
+                        purpose: 'application', program_id: programId, term_id: termId,
+                    });
+                    if (serial !== applicationRequest || programId !== program.value || termId !== term.value) return;
+                    const mount = async currentFee => {
+                    if (serial !== applicationRequest || !next.isConnected) return;
+                    next.replaceChildren();
                     const intake = window.createApplicationIntake({
                         fields: schema.fields, layout: schema.layout || [], run: task,
                         primaryClass: 'btn campus-button', secondaryClass: 'btn campus-button-outline',
                         submit: answers => request(`/sis/forms/${schema.id}/submissions/`, 'POST', {
-                            submission_id: schema.submission_id, person_id: me.person.id,
+                            submission_id: currentFee.required ? currentFee.fee_id : schema.submission_id, person_id: me.person.id,
                             program_id: programId, entry_term_id: termId, answers,
                         }),
                         complete: async () => {
@@ -1029,6 +1060,8 @@
                     );
                     next.tabIndex = -1;
                     next.focus();
+                    };
+                    await serviceFees.ownerGate(next, fee, mount);
                 },
                 one('[type="submit"]', form),
             );
@@ -2398,7 +2431,7 @@
             el(
                 'p',
                 { class: 'campus-muted' },
-                'The registrar will review your request and arrange delivery. Submitting this form does not automatically send a transcript or charge a fee.',
+                config.service_fee_labels.transcript_help,
             ),
             el(
                 'button',
@@ -2411,8 +2444,13 @@
             task(
                 async () => {
                     if (!form.reportValidity()) return;
+                    const selectedStudent = student.value;
+                    const fee = await request('/portal/api/service-fees/prepare/', 'POST', { purpose: 'transcript', student_id: selectedStudent });
+                    if (student.value !== selectedStudent || !form.isConnected) return;
+                    const send = async currentFee => {
+                    if (student.value !== selectedStudent || !form.isConnected) return;
                     await request('/portal/api/transcripts/', 'POST', {
-                        request_id: me.request_id,
+                        request_id: currentFee.required ? currentFee.fee_id : me.request_id,
                         student_id: student.value,
                         delivery: delivery.value,
                         recipient: recipient.disabled ? '' : recipient.value,
@@ -2421,11 +2459,18 @@
                         feedbackText('transcript_requested', 'Your request is with the registrar. Follow its progress below.'),
                     );
                     await renderService();
+                    };
+                    await serviceFees.ownerGate(feeHost, fee, send);
                 },
                 one('[type="submit"]', form),
             );
         });
+        const feeHost = el('section', { class: 'mt-3', 'aria-live': 'polite' });
+        student.addEventListener('change', () => feeHost.replaceChildren());
+        form.append(feeHost);
         container.append(surface('Request an official transcript', form));
+        const feeHistory = el('section', { class: 'mt-4' }); container.append(feeHistory);
+        requestAnimationFrame(() => { if (feeHistory.isConnected) void task(() => serviceFees.ownerList(feeHistory, 'transcript')); });
         if (me.transcript_requests.length)
             container.append(
                 surface(

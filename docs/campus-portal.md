@@ -64,6 +64,10 @@ The server determines the account balance and currency, verifies ownership, and 
 
 The webhook reads its raw signed body before constructing the router's legacy scalar JSON parser. It uses signature authentication rather than a browser CSRF token. All other browser mutations retain the normal framework CSRF pipeline and the typed `_workspace_json` form transport. Unexpected/transient webhook failures return a generic retry response without recording payloads or upstream error details in logs. Configure provider retry monitoring and institutional reconciliation before accepting live payments. Automated Stripe refunds/disputes and transcript-email delivery are outside this adapter's scope; financial corrections use the existing staff finance workflows.
 
+## Optional application and transcript fees
+
+[Service fee policies and workflows](service-fees.md) connect hosted payment and reasoned staff waivers to application submission and official transcript requests. Both fees default to zero. Prospects can pay through their sign-in/person account before matriculation; service fees stay separate from student-account bill payments. Server-confirmed receipts govern clearance. Unofficial academic/CEU records remain free, and fee payment does not automatically release or deliver an official transcript.
+
 ## Privacy and validation
 
 Portal reads/writes require the signed-in owner, including when that person also holds staff permissions. Registrar processing uses its dedicated permission. Private records are never placed in browser storage. Responses are private/no-store, with CSRF, escaped rendering, focus indicators, semantic labels, accessible errors, reduced motion, and keyboard-scrollable tables. Debug collectors are suppressed on portal, root, admin, and account-entry routes.

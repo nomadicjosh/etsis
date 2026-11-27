@@ -12079,3 +12079,273 @@ msgstr ""
 #: src/Domain/Graduation/Service/GraduationService.php
 msgid "Revoke the credential through the authorized graduation workflow before reopening its pursuit."
 msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:8
+msgid "Application and transcript fees"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:9
+msgid "Service fee policies"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:10
+#: src/Infrastructure/Payments/StripePaymentGateway.php:44
+msgid "Application fee"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:11
+#: src/Infrastructure/Payments/StripePaymentGateway.php:45
+msgid "Official transcript fee"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:13
+msgid "Fees are optional. Enter zero to disable a fee for new assessments. Existing quotes retain their amount, currency and waiver policy. Unofficial transcripts remain free."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:16
+msgid "Amount"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:17
+msgid "Currency"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:18
+msgid "Allow reasoned staff waivers"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:19
+msgid "Save policy"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:21
+msgid "Back to fees"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:22
+msgid "Prepare a fee"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:23
+msgid "Academic program"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:25
+msgid "Student record"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:27
+msgid "Prepare a quote for this person, then record an actual payment or authorized waiver. Application fees apply to one program and entry term; transcript fees apply to one official request."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:31
+msgid "No service fees found."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:32
+msgid "No fee is required for this selection."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:33
+msgid "Load more fees"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:34
+msgid "View fee"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:35
+msgid "Quoted fee"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:36
+msgid "Net payments"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:37
+msgid "Remaining payment"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:38
+msgid "Fee cleared"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:39
+msgid "Payment required"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:40
+msgid "Authorized waiver"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:41
+msgid "Applied to the accepted request"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:43
+msgid "Ready for the selected application or transcript request"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:45
+msgid "Pay securely"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:46
+msgid "Refresh payment status"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:48
+msgid "Payment is confirmed by the server. Returning from checkout alone does not clear this fee. Refresh its status if confirmation is still pending."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:52
+msgid "Contact the institution if you need help with payment or a fee waiver."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:54
+msgid "Resume application"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:55
+msgid "Fee decision history"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:57
+msgid "Record received payment"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:58
+msgid "Review fee waiver"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:59
+msgid "Record completed refund"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:60
+msgid "Payment method"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:61
+msgid "Receipt reference (optional)"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:62
+msgid "Completed refund reference"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:64
+msgid "Record a refund already completed through the institution's payment process. This does not send money or cancel an accepted application or transcript request."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:68
+msgid "Record money actually received. Use a receipt reference only; never enter card numbers, bank details or credentials."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:74
+msgid "Back to fee"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:76
+msgid "Review this decision before confirming. The amount, policy and recorded balance must still match."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:78
+msgid "Decision recorded."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:79
+msgid "Received payments"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:80
+msgid "Completed refunds"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:81
+msgid "Original payment"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:82
+msgid "Cash"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:83
+msgid "Check"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:84
+msgid "Card"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:85
+msgid "Bank transfer"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:86
+msgid "Wire transfer"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:87
+msgid "Money order"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:88
+msgid "PayPal"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:89
+msgid "Other"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:90
+msgid "Fee assessed"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:91
+msgid "Fee applied"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:92
+msgid "Continue to application"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:94
+msgid "Any required fee must be cleared before requesting an official transcript. The registrar then reviews your request and arranges delivery."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:97
+msgid "Enter a valid amount in this currency."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:99
+msgid "Payments exceed the quoted fee. Contact the institution to review the excess."
+msgstr ""
+
+#: src/Infrastructure/Payments/StripePaymentGateway.php:43
+msgid "Student account payment"
+msgstr ""
+
+#: src/Domain/Portal/Service/HostedCheckout.php:43
+msgid "This checkout attempt expired. Refresh this payment to start again."
+msgstr ""
+
+#: src/Domain/ServiceFee/Service/ServiceFeeService.php:626
+msgid "This fee decision is not available for the recorded balance and policy."
+msgstr ""
+
+#: src/Domain/ServiceFee/Service/ServiceFeeService.php:642
+msgid "Enter a reason of 1 to 1,000 characters."
+msgstr ""
+
+#: src/Domain/ServiceFee/Service/ServiceFeeCheckout.php:49
+msgid "Online payments are not configured. Contact the institution about payment or an authorized waiver."
+msgstr ""
+
+#: src/Domain/ServiceFee/Service/ServiceFeeCheckout.php:71
+msgid "This fee has already been cleared or used. Refresh its status."
+msgstr ""
+
+#: src/Domain/ServiceFee/Service/FeeClearance.php:178
+msgid "Complete the required service fee payment or obtain an authorized waiver before submitting."
+msgstr ""

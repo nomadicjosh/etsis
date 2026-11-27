@@ -36,7 +36,7 @@ final class FixturePaymentGateway implements PaymentGateway
         return $this->available;
     }
 
-    public function checkout(EntityId $payment, Money $amount, int $expiresAt): array
+    public function checkout(EntityId $payment, Money $amount, int $expiresAt, string $purpose = 'account'): array
     {
         $this->calls[] = [$payment->value, $amount->minor, $amount->currency, $expiresAt];
         if ($this->failOnce) {
@@ -198,6 +198,7 @@ final class CampusFixture
                 $f->access,
                 $f->transactions,
             ),
+            $f->feeClearance(),
         );
         $posts = new SqlPortalRepository($f->sql, $f->clock);
         $this->posts = new PortalService(
@@ -226,10 +227,10 @@ final class CampusFixture
             $f->accounts,
             $f->access,
             $this->gateway,
-            $this->cipher,
             $f->transactions,
             $f->audit,
             $f->clock,
+            new \Domain\Portal\Service\HostedCheckout($this->payments, $this->gateway, $this->cipher, $f->transactions, $f->clock),
         );
         $this->confirmation = new PaymentConfirmationService(
             $this->gateway,
@@ -238,6 +239,7 @@ final class CampusFixture
             $f->transactions,
             $f->audit,
             $f->clock,
+            $f->feeProvider(),
         );
     }
 }

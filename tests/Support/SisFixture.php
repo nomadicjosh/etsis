@@ -1559,6 +1559,77 @@ final class SisFixture
             $this->applicationRevisions(),
         );
     }
+    public function feeLedger(): \Domain\ServiceFee\Service\ServiceFeeLedger
+    {
+        return new \Domain\ServiceFee\Service\ServiceFeeLedger(
+            new \Infrastructure\Persistence\Repository\SqlServiceFeeRepository(
+                $this->sql,
+            ),
+            EventStoreFixture::history($this->connection->queryBuilder()),
+        );
+    }
+    public function feeClearance(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\ServiceFee\Service\FeeClearance {
+        return new \Domain\ServiceFee\Service\FeeClearance(
+            new \Infrastructure\Persistence\Repository\SqlServiceFeeRepository(
+                $this->sql,
+            ),
+            $this->feeLedger(),
+            $audit ?? $this->audit,
+            $this->clock,
+            $this->admissions,
+        );
+    }
+    public function fees(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\ServiceFee\Service\ServiceFeeService {
+        return new \Domain\ServiceFee\Service\ServiceFeeService(
+            new \Infrastructure\Persistence\Repository\SqlServiceFeeRepository(
+                $this->sql,
+            ),
+            $this->feeLedger(),
+            $this->admissions,
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository(
+                $this->sql,
+            ),
+            new \Infrastructure\Persistence\Repository\SqlCatalogYearRepository(
+                $this->sql,
+            ),
+            new \Infrastructure\Persistence\Repository\SqlApplicationFormRepository(
+                $this->sql,
+            ),
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->clock,
+            new \Domain\Shared\Service\ReviewProof(
+                $this->dropCipher,
+                $this->clock,
+            ),
+            new class implements \Domain\User\Service\OwnerEmailVerification {
+                public function requireForApplication(
+                    EntityId $owner,
+                    EntityId $person,
+                ): void {}
+            },
+        );
+    }
+    public function feeProvider(): \Domain\ServiceFee\Service\ServiceFeeProvider
+    {
+        return new \Domain\ServiceFee\Service\ServiceFeeProvider(
+            $this->feeLedger(),
+            new \Infrastructure\Persistence\Repository\SqlServiceFeeRepository(
+                $this->sql,
+            ),
+            $this->admissions,
+            new \Infrastructure\Persistence\Repository\SqlPaymentRepository(
+                $this->sql,
+            ),
+            $this->audit,
+            $this->clock,
+        );
+    }
     public function submissionService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
         ?\Domain\Admissions\Repository\AdmissionsRepository $repository = null,
@@ -1580,6 +1651,7 @@ final class SisFixture
                     // This base fixture's institution has not enabled the optional security policy.
                 }
             },
+            $this->feeClearance($audit),
         );
     }
     /** Current-state fixture for an application predating tracked submission. */

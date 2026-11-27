@@ -27,6 +27,14 @@ final readonly class SqlPaymentRepository implements PaymentRepository
             . ' > ? ORDER BY ' . $q('id') . ' DESC', [$account->value, $now], 1)[0] ?? null;
     }
 
+    public function activeFee(EntityId $fee, int $now): ?array
+    {
+        $q = $this->sql->quote(...);
+        return $this->sql->fetch('SELECT * FROM ' . $q('sis_portal_payments') . ' WHERE '
+            . $q('fee_id') . ' = ? AND ' . $q('status') . " = 'pending' AND " . $q('expires_at')
+            . ' > ? ORDER BY ' . $q('id') . ' DESC', [$fee->value, $now], 1)[0] ?? null;
+    }
+
     public function add(EntityId $id, array $record): void
     {
         $this->sql->insert('sis_portal_payments', ['id' => $id->value] + $record);

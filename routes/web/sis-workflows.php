@@ -1688,4 +1688,14 @@ return static function (Psr7Router $router): void {
     $router->post("/sis/course-groups/{id}/publish/", [SisCourseGroupController::class, "publish"]);
     $router->post("/sis/course-groups/{id}/versions/", [SisCourseGroupController::class, "versions"]);
     $router->get("/sis/course-groups/{id}/versions/{version}/", [SisCourseGroupController::class, "version"]);
+
+    $fees = \Application\Http\Controller\SisServiceFeeController::class;
+    $router->get('/sis/service-fees/policies/', [$fees, 'policies']);
+    $router->post('/sis/service-fees/policies/{purpose}/', [$fees, 'policy']);
+    $router->post('/sis/people/{person}/service-fees/page/', [$fees, 'page']);
+    $router->post('/sis/people/{person}/service-fees/prepare/', [$fees, 'prepare']);
+    $router->get('/sis/service-fees/{fee}/', [$fees, 'show']);
+    foreach (['history', 'review', 'confirm'] as $action) {
+        $router->post('/sis/service-fees/{fee}/' . $action . '/', [$fees, $action]);
+    }
 };
