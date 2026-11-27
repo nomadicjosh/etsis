@@ -1594,6 +1594,17 @@ return static function (Psr7Router $router): void {
             [\Application\Http\Controller\SisWorkPursuitController::class, $action]
         );
     }
+    $graduation = \Application\Http\Controller\SisGraduationController::class;
+    $router->get('/sis/students/{student}/programs/{assignment}/graduation/', [$graduation, 'current']);
+    foreach (['history', 'review', 'confirm'] as $action) {
+        $router->post(
+            '/sis/students/{student}/programs/{assignment}/graduation/' . $action . '/',
+            [$graduation, $action]
+        );
+    }
+    foreach (['page/' => 'queue', 'review/' => 'reviewGroup', 'confirm/' => 'confirmGroup'] as $suffix => $action) {
+        $router->post('/sis/graduation-conferral/' . $suffix, [$graduation, $action]);
+    }
     foreach (['page/' => 'page', 'review/' => 'review', 'confirm/' => 'confirm'] as $suffix => $action) {
         $router->post(
             '/sis/students/{student}/programs/{assignment}/degree-requirements/records/' . $suffix,

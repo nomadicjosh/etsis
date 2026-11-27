@@ -39,6 +39,7 @@ window.createWorkspaceStudents = function (ui) {
             table(headers, rows, caption),
         );
 
+    const graduation = window.createGraduation({ ...ui, labels: ui.graduationLabels });
     const status = (value) =>
         value === null ? "Unknown" : value ? "Active" : "Inactive";
     async function activity(record, back) {
@@ -941,12 +942,13 @@ window.createWorkspaceStudents = function (ui) {
                     : "Each program has its own entry term. Assignments take effect now; the institutional entry term stays unchanged. Closing an assignment is not graduation or withdrawal.",
             ),
         );
-        if (can("sis:registration:manage") && record.primary_program_status !== "closed")
+        if (can("sis:registration:manage"))
             programs.append(
                 node(
                     "div",
                     { class: "inline-actions", role: "group", "aria-label": "Program assignment tasks" },
-                    button("Change program", () => assignProgram(record, back, {}, true), "btn-primary"),
+                    record.primary_program_status !== "closed"
+                        ? button("Change program", () => assignProgram(record, back, {}, true), "btn-primary") : null,
                     button("Assign an additional program", () => assignProgram(record, back)),
                 ),
             );
@@ -1017,6 +1019,7 @@ window.createWorkspaceStudents = function (ui) {
                                           "btn-link btn-sm",
                                       ),
                                   );
+                              extra.push(button(ui.graduationLabels.title, () => graduation.open(id, item.id, back)));
                               if (can("sis:registration:manage")) {
                                   extra.push(
                                       button("Program status history", () =>
@@ -1029,13 +1032,12 @@ window.createWorkspaceStudents = function (ui) {
                                       ),
                                   );
                                   if (
-                                      record.primary_program_status !== "closed" &&
                                       !item.is_primary && item.status === "active"
                                   )
                                       extra.push(
                                           button("Make primary", () => primaryProgram(record, item, back)),
                                       );
-                                  if (record.primary_program_status !== "closed" && !item.is_primary)
+                                  if (!item.is_primary)
                                       extra.push(
                                           button(
                                               item.status === "active"

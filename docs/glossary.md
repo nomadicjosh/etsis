@@ -435,3 +435,7 @@ An **LMS**, or *learning management system*, manages teaching activities and lea
 ### Accessibility / WCAG 2.2 AA
 
 **Accessibility** means people can use the interface with different abilities, devices and assistive technologies. **WCAG 2.2 AA** is the project's target for student-facing views, covering needs such as keyboard operation, focus, contrast, readable errors and narrow-screen reflow. The roadmap separately tracks verification of those requirements.
+
+### Graduation eligibility / conferral / revocation
+
+An eligibility decision retains reviewed academic evidence and institutional clearance; it does not award a degree. Conferral is the separately authorized credential decision and closes only its program pursuit. Revocation preserves the original award while removing its current conferred status; it does not reopen a pursuit or delete academic credit. See [Graduation and credentials](graduation-and-credentials.md).

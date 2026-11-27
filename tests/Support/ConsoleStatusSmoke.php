@@ -75,6 +75,7 @@ try {
                 'check-transcript-updates',
                 'check-standing-updates',
                 'check-enrollment-updates',
+                'check-graduation',
                 'check-course-auditing',
                 'check-admission-notices',
                 'check-public-event-feed',
@@ -447,6 +448,14 @@ try {
                 static fn() => $admissionNotices->campus->cipher
             );
             require __DIR__ . '/AdmissionNoticesBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-graduation') {
+            $kernel->bootstrap();
+            require_once __DIR__ . '/GraduationFixture.php';
+            $graduationFixture = new \Tests\Support\GraduationFixture();
+            $httpSis = $graduationFixture->sis;
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/GraduationBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-course-auditing') {
             $kernel->bootstrap();

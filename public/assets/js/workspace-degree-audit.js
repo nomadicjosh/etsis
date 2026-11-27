@@ -2762,7 +2762,12 @@ window.createWorkspaceDegreeAudit = function (ui) {
                 node("p", {}, `${work.credit_type} · ${work.term_code || "Term not recorded"}`),
                 node("p", {}, work.owner ? `Belongs to ${pursuitLabel(work.owner)}` : "Pursuit not recorded. Review source evidence before assigning it."));
             card.append(button("Attribution & reuse history", () => scopeHistory(base, work, restore)));
-            if (!work.owner) {
+            if (work.transfer_required) {
+                state.selected.delete(work.id);
+                card.append(node("p", { class: "alert alert-info" }, ui.graduationLabels.transfer_required));
+                if (work.reuse_assignment_ids.includes(receiving)) card.append(button("Revoke reuse for this pursuit",
+                    () => scopeReason(base, work, "revoke_reuse", receiving, restore)));
+            } else if (!work.owner) {
                 card.append(button("Attribute this work", () => scopeTarget(base, work, "attribute", restore)));
             } else {
                 card.append(button("Correct attribution", () => scopeTarget(base, work, "correct_attribution", restore)));

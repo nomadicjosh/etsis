@@ -76,6 +76,7 @@ final class EarnedCeuTranscriptTest extends TestCase
                 $s->admissions,
                 $s->clock,
             ),
+            $s->graduationReader(),
         );
         $f->confirm($f->review());
         $unofficial = new \Domain\Transfer\Service\TransferService(

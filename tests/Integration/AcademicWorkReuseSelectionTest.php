@@ -87,7 +87,8 @@ final class AcademicWorkReuseSelectionTest extends TestCase
             $s->transactions,
             $s->dropCipher,
             $s->clock,
-            $audit ?? $s->audit
+            $audit ?? $s->audit,
+            $s->graduationReader(),
         );
     }
 

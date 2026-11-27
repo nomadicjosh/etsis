@@ -12,6 +12,10 @@ New registrations, whether entered by the student or by staff, record their curr
 
 Older work with no recorded pursuit stops a complete audit or prerequisite check with an actionable records-office message. It is not silently assigned to today's primary program or treated as zero earned credit. Attribution alone does not establish an unknown grade, course publication or earlier award history.
 
+A genuine [graduation conferral](graduation-and-credentials.md) changes the receiving-work boundary: graduated-pursuit work requires formal transfer evaluation into another pursuit. Ordinary reuse, including an earlier approval, cannot supply that transfer decision. The scope workbench identifies this requirement and blocks new reuse/attribution bypasses. Current recorded awards remain retained; a closed pursuit without a credential is not inferred graduated.
+
+A genuine [graduation conferral](graduation-and-credentials.md) now enforces the completed-degree boundary. Its original coursework cannot count toward another pursuit through ordinary reuse, even when that approval predates graduation. The workbench identifies the need for formal receiving transfer evaluation. A revoked credential does not remove that boundary; an ordinary closed pursuit without a recorded award does not establish graduation. Structured same-institution receiving transfer evaluation remains separate roadmap work.
+
 ### Registrar review
 
 Open **Students → the student → Student programs → Degree requirements → Work attribution & reuse**, or choose **Review earlier coursework** immediately after confirming a program change. The latter opens the new pursuit directly, even before degree requirements are published or assigned. This office-only workbench identifies the receiving pursuit and lists current work across the student's pursuits, including unknown attribution. It does not expose restricted early-drop records.

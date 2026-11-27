@@ -306,6 +306,12 @@ return static function (Psr7Router $router): void {
         '/portal/api/students/{student}/programs/{pursuit}/advisors/',
         [$advising, 'owner']
     )->name('portal.advisors.owner');
+    $graduation = \Application\Http\Controller\SisGraduationController::class;
+    $router->get('/portal/api/students/{student}/programs/{assignment}/graduation/', [$graduation, 'owner']);
+    $router->post(
+        '/portal/api/students/{student}/programs/{assignment}/graduation/history/',
+        [$graduation, 'ownerHistory']
+    );
     $recordedProgress = \Application\Http\Controller\SisDegreeProgressRecordController::class;
     $router->post(
         '/portal/api/students/{student}/programs/{assignment}/degree-progress-records/page/',

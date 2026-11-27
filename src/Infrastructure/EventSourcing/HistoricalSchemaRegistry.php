@@ -52,6 +52,10 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Graduation\Event\GraduationDecisionWasRecorded::class => [
+                'type' => 'graduation', 'root' => \Domain\Graduation\GraduationCase::class,
+                'fields' => \Domain\Graduation\GraduationCase::FIELDS,
+            ],
             \Domain\Person\Event\PersonSsnWasRecorded::class => [
                 'type' => 'person_ssn', 'root' => \Domain\Person\PersonSsnHistory::class,
                 'fields' => \Domain\Person\PersonSsnHistory::FIELDS,
@@ -971,6 +975,9 @@ final readonly class HistoricalSchemaRegistry
                 if ($payload["student_id"] !== (string) $stream->aggregateId) {
                     throw new CorruptHistoryException();
                 }
+            }
+            if ($stream->type === 'graduation') {
+                \Domain\Graduation\GraduationCase::validate($payload);
             }
             if ($stream->type === 'work_pursuit') {
                 \Domain\AcademicRecord\ValueObject\WorkPursuitSchema::validate($payload);
@@ -1898,6 +1905,7 @@ final readonly class HistoricalSchemaRegistry
     public function streamFor(AggregateId $id): StreamReference
     {
         $type = match ($id->aggregateClassName()) {
+            \Domain\Graduation\GraduationCase::class => 'graduation',
             \Domain\Person\PersonSsnHistory::class => 'person_ssn',
             \Domain\Registration\Waitlist\SectionWaitlist::class => 'section_waitlist',
             \Domain\Student\StandingProposalPolicy::class => 'standing_proposal_policy',
@@ -1983,6 +1991,7 @@ final readonly class HistoricalSchemaRegistry
             'employment_lifecycle' => new \Domain\HumanResources\ValueObject\EmploymentTimelineId($id),
             'person_profile' => new \Domain\Person\ValueObject\PersonProfileId($id),
             'employment_profile' => new \Domain\HumanResources\ValueObject\EmploymentProfileId($id),
+            'graduation' => new \Domain\Graduation\ValueObject\GraduationId($id),
             'work_pursuit' => new \Domain\AcademicRecord\ValueObject\WorkPursuitId($id),
             'student_specializations' => new \Domain\Student\ValueObject\StudentSpecializationsId($id),
             "grading_scale" => new \Domain\Gradebook\ValueObject\GradingScaleId($id),

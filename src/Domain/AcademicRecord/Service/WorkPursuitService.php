@@ -44,6 +44,7 @@ final readonly class WorkPursuitService
         private MessageCipher $cipher,
         private Clock $clock,
         private AuditTrail $audit,
+        private \Domain\Graduation\Service\GraduationReader $graduation,
     ) {
     }
 
@@ -64,6 +65,9 @@ final readonly class WorkPursuitService
         if ($record->studentId->value !== $student->value || $record->status !== 'active') {
             self::invalid('Choose an active program pursuit belonging to this student.');
         }
+        if ($this->graduation->load($student, $record->id, new HistoryReadBudget())->state()['credential'] !== null) {
+            self::invalid('An awarded pursuit cannot receive new registrations or academic work.');
+        }
         return $record;
     }
 
@@ -74,6 +78,7 @@ final readonly class WorkPursuitService
         EntityId $assignment,
         HistoryReadBudget $budget,
     ): AcademicInputSet {
+        $graduation = $this->graduation->student($student, $budget);
         $byId = array_column($inputs->items, null, 'id');
         $items = $references = [];
         $gaps = false;
@@ -91,7 +96,15 @@ final readonly class WorkPursuitService
             if (WorkPursuitLedger::fingerprint($scope['source']) !== WorkPursuitLedger::fingerprint($expected)) {
                 throw new CorruptHistoryException();
             }
-            if (!$root->appliesTo($assignment->value)) {
+            if (
+                !$root->appliesTo($assignment->value) ||
+                \Domain\Graduation\Service\GraduationReader::transferRequired(
+                    $graduation,
+                    $assignment->value,
+                    $scope,
+                    $reference['credit_id'],
+                )
+            ) {
                 continue;
             }
             $references[] = $reference + ["pursuit_version" => $root->playhead()];
@@ -123,7 +136,13 @@ final readonly class WorkPursuitService
         ) {
             throw new CorruptHistoryException();
         }
-        return $root->appliesTo($assignment->value);
+        return $root->appliesTo($assignment->value) &&
+        !\Domain\Graduation\Service\GraduationReader::transferRequired(
+            $this->graduation->student(new EntityId($p['source']['student_id']), $budget),
+            $assignment->value,
+            $p,
+            $credit['id'],
+        );
     }
 
     /**
@@ -138,6 +157,7 @@ final readonly class WorkPursuitService
             $this->authorize($actor);
             $this->admissions->student($student);
             $budget = new HistoryReadBudget();
+            $graduation = $this->graduation->student($student, $budget);
             $receiving = $assignment === null ? null : $this->target($student, $assignment, 'read', $budget);
             $inputs = $this->inputs->verify($student, $budget);
             $refs = array_column($inputs->references, null, 'credit_id');
@@ -165,7 +185,14 @@ final readonly class WorkPursuitService
                 $items[] = ['id' => $work['id'], 'course_code' => $work['course_code'],
                     'course_title' => $work['course_title'], 'credit_type' => $work['credit_type'],
                     'term_code' => $work['term_code'], 'owner' => $owner,
-                    'reuse_assignment_ids' => $p === null ? [] : array_keys($p['reuse'])];
+                    'reuse_assignment_ids' => $p === null ? [] : array_keys($p['reuse']),
+                    'transfer_required' => $assignment !== null && $p !== null &&
+                        \Domain\Graduation\Service\GraduationReader::transferRequired(
+                            $graduation,
+                            $assignment->value,
+                            $p,
+                            $work['id'],
+                        )];
             }
             $this->authorize($actor);
             return ['items' => $items, 'receiving' => $receiving,
@@ -486,6 +513,7 @@ final readonly class WorkPursuitService
         ) {
             self::invalid('Choose a different valid attribution or reuse decision for this coursework.');
         }
+        $this->graduationGuard($student, $credit, $assignment, $action, $scope, $budget);
         $payload = ['decision_id' => $operation->value, 'previous_decision_id' => $root->decision(),
             'action' => $action, 'source' => $this->source($student, $work), 'assignment_id' => $assignment->value,
             'academic_version' => $work['history_version'], 'work_hash' => WorkPursuitLedger::fingerprint($work)];
@@ -543,6 +571,14 @@ final readonly class WorkPursuitService
                 }
                 $accepted = $result['new'];
                 if ($result['new']) {
+                    $this->graduationGuard(
+                        $student,
+                        $credit,
+                        new EntityId($p['assignment_id']),
+                        $p['action'],
+                        $this->ledger->load($credit, $budget)->projection(),
+                        $budget
+                    );
                     if ($expires <= $this->clock->now()->getTimestamp()) {
                         throw new ConcurrentModificationException('This scope review expired. Review it again.');
                     }
@@ -561,6 +597,14 @@ final readonly class WorkPursuitService
                         $targets[$key] = true;
                     }
                     $this->audit->record($actor, 'academic.work_' . $p['action'], $credit);
+                    $this->graduationGuard(
+                        $student,
+                        $credit,
+                        new EntityId($p['assignment_id']),
+                        $p['action'],
+                        $this->ledger->load($credit, $budget)->projection(),
+                        $budget
+                    );
                 }
                 $receipts[] = ['credit_id' => $credit->value, 'receipt' => $result['receipt']];
             }
@@ -631,6 +675,33 @@ final readonly class WorkPursuitService
         return ['id' => $p->id->value, 'program_code' => $program['code'], 'program_title' => $program['title'],
             'entry_term_code' => $this->students->term($p->entryTermId)['code'], 'status' => $p->status];
     }
+    private function graduationGuard(
+        EntityId $student,
+        EntityId $credit,
+        EntityId $target,
+        string $action,
+        ?array $scope,
+        HistoryReadBudget $budget
+    ): void {
+        if (!in_array($action, ['approve_reuse', 'correct_attribution', 'attribute'], true)) {
+            return;
+        }
+        $states = $this->graduation->student($student, $budget);
+        if (
+            ($states[$target->value]['credential'] ?? null) !== null ||
+            ($scope !== null && \Domain\Graduation\Service\GraduationReader::transferRequired(
+                $states,
+                $target->value,
+                $scope,
+                $credit->value,
+            ))
+        ) {
+            self::invalid(
+                'Work from a graduated pursuit requires formal transfer evaluation into the receiving pursuit.'
+            );
+        }
+    }
+
     private static function invalid(string $message): never
     {
         throw new ValidationException([['field' => 'pursuit', 'message' => $message]]);

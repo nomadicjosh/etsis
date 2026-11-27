@@ -1006,6 +1006,7 @@ final class SisFixture
             $this->dropCipher,
             $this->clock,
             $audit ?? $this->audit,
+            $this->graduationReader(),
         );
     }
     /** Explicit registrar attribution for fictional older current records; no grade or award history is invented. */
@@ -1297,6 +1298,16 @@ final class SisFixture
             $advisors,
         );
     }
+    public function graduationReader(): \Domain\Graduation\Service\GraduationReader
+    {
+        return new \Domain\Graduation\Service\GraduationReader(
+            new \Infrastructure\Persistence\Repository\SqlGraduationRepository($this->sql),
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository($this->sql),
+            $this->admissions,
+        );
+    }
+
     public function programStatusService(
         ?\Domain\Audit\Repository\AuditTrail $audit = null,
     ): \Domain\Student\Service\StudentProgramStatusService {
@@ -1310,6 +1321,7 @@ final class SisFixture
             $this->dropCipher,
             $this->clock,
             $this->primaryProgramLedger(),
+            $this->graduationReader(),
         );
     }
     public function activityService(

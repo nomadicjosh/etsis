@@ -107,8 +107,9 @@ final readonly class DegreeProgressService implements DegreeProgressReader
         EntityId $student,
         EntityId $assignment,
         HistoryReadBudget $budget,
+        ?string $evaluatedOn = null,
     ): array {
-        $data = $this->curriculumProgress($student, $assignment, true, $budget, true);
+        $data = $this->curriculumProgress($student, $assignment, true, $budget, true, $evaluatedOn);
         return $data["basis"] ??
         throw new \Domain\Shared\Exception\ValidationException([
                 [
@@ -158,6 +159,7 @@ final readonly class DegreeProgressService implements DegreeProgressReader
         bool $staff,
         ?HistoryReadBudget $budget,
         bool $capture = false,
+        ?string $evaluationDate = null,
     ): array {
         $actor = $staff
         ? $this->specializations->authorizeRead($student, $assignment)
@@ -173,11 +175,12 @@ final readonly class DegreeProgressService implements DegreeProgressReader
                 $staff,
                 $authorize,
                 $capture,
+                $evaluationDate,
             ): array {
                 $this->students->lock($student);
                 $authorize();
                 $budget ??= new HistoryReadBudget();
-                $evaluatedOn = $this->clock->now()->format("Y-m-d");
+                $evaluatedOn = $evaluationDate ?? $this->clock->now()->format("Y-m-d");
                 $all = $this->adjustments->curriculumContext($student, $assignment, $budget);
                 foreach ($all["components"] as &$component) {
                     $component["effective"] = GroupWorkEligibility::atEvaluation(

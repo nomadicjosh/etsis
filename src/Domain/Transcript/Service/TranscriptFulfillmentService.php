@@ -56,6 +56,7 @@ final readonly class TranscriptFulfillmentService
         private TranscriptReleasePolicyRepository $releasePolicies,
         private TranscriptStandingSource $standing,
         private TranscriptNotifications $notifications,
+        private \Domain\Graduation\Service\GraduationReader $graduation,
     ) {
     }
 
@@ -830,6 +831,7 @@ final readonly class TranscriptFulfillmentService
                     "title" => $label["title"] ?? $label["program_title"],
                 ];
             }
+            $credentials = $continuingEducation ? [] : $this->graduation->credentials($student, $budget);
             $verified = $this->academicInputs->verify($student, $budget);
             if ($includeStanding === null) {
                 $standingPolicy = $this->releasePolicies->current();
@@ -1007,7 +1009,8 @@ final readonly class TranscriptFulfillmentService
                 "completed_milli" => $earned,
                 "gpa_milli" => $gpaCredits === 0 ? null : intdiv($points * 1000, $gpaCredits),
             ],
-        ] + ($standing === null ? [] : ['standing' => $standing]);
+        ] + ($standing === null ? [] : ['standing' => $standing])
+        + ($credentials === [] ? [] : ['credentials' => $credentials]);
     }
 
     /** @return array<string, mixed> */

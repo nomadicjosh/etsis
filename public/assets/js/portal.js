@@ -1348,6 +1348,13 @@
                                 () => review(student.id, pursuit.id),
                                 true,
                             ),
+                            button(config.graduation_labels.title, () => {
+                                ++generation;
+                                window.createGraduation({ node: el, request, labels: config.graduation_labels,
+                                    task: run => run().catch(error => notice(error.message)), buttonClass: "campus-button-outline" })
+                                    .owner(result, `/portal/api/students/${student.id}/programs/${pursuit.id}/graduation/`)
+                                    .catch(error => notice(error.message));
+                            }),
                             button(`Recorded reviews · ${pursuit.program_code} · ${pursuit.term_code}`, () => {
                                 ++generation;
                                 const records = window.createRecordedDegreeProgress({ node: el, request, buttonClass: "campus-button-outline" }, `/portal/api/students/${student.id}/programs/${pursuit.id}/degree-progress-records/`);

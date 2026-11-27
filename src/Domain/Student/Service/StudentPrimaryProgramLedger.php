@@ -85,7 +85,7 @@ final readonly class StudentPrimaryProgramLedger
         Student $student,
         ?\Domain\Shared\EventSourcing\HistoryReadBudget $budget = null,
     ): int {
-        return $this->load($student, budget: $budget)["root"]->playhead();
+        return $this->load($student, budget: $budget, allowClosed: true)["root"]->playhead();
     }
 
     /**
@@ -94,8 +94,8 @@ final readonly class StudentPrimaryProgramLedger
      */
     public function current(Student $student): array
     {
-        $root = $this->load($student)["root"];
-        return $root->selection() ?? $this->selection($this->statuses->primaryAssignment($student));
+        $root = $this->load($student, allowClosed: true)["root"];
+        return $root->selection() ?? $this->selection($this->statuses->primaryAssignment($student, allowClosed: true));
     }
 
     /** Transcript context may use the exact last-selected pursuit after it closes.
@@ -139,7 +139,7 @@ final readonly class StudentPrimaryProgramLedger
      */
     public function receipt(Student $student, EntityId $operation, EntityId $actor): ?array
     {
-        return $this->load($student, $operation, $actor)["receipt"];
+        return $this->load($student, $operation, $actor, allowClosed: true)["receipt"];
     }
 
     /**
@@ -170,7 +170,7 @@ final readonly class StudentPrimaryProgramLedger
         ) {
             throw new CorruptHistoryException();
         }
-        $root = $this->load($student)["root"];
+        $root = $this->load($student, allowClosed: true)["root"];
         $expected = $root->playhead();
         $at = $this->clock->now();
         if ($expected === 0) {

@@ -294,6 +294,7 @@ final class StudentProgramStatusHistoryTest extends TestCase
             $f->dropCipher,
             $f->clock,
             $f->primaryProgramLedger(),
+            $f->graduationReader(),
         );
         $this->expectException(AccessDeniedException::class);
         $service->review($p->studentId, $p->id, false, $this->revision($p), "Fictional reason");

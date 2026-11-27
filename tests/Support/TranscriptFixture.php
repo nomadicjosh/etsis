@@ -95,6 +95,7 @@ final class TranscriptFixture
                 $f->admissions,
                 $f->clock,
             ),
+            $f->graduationReader(),
         );
     }
 }

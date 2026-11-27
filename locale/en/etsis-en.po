@@ -3410,3 +3410,311 @@ msgstr ""
 #: resources/views/shared/site-navigation.phtml:45
 msgid "Open menu"
 msgstr ""
+
+#: resources/views/shared/graduation-labels.php
+msgid "Graduation & credentials"
+msgstr "Graduation & credentials"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Group conferral queue"
+msgstr "Group conferral queue"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Back to conferral queue"
+msgstr "Back to conferral queue"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Loading graduation record…"
+msgstr "Loading graduation record…"
+
+#: resources/views/shared/graduation-labels.php
+msgid "No credential has been conferred for this pursuit."
+msgstr "No credential has been conferred for this pursuit."
+
+#: resources/views/shared/graduation-labels.php
+msgid "Eligibility records the reviewed academic evidence and institutional clearance. Conferral is a separate authorized decision and closes only this pursuit."
+msgstr "Eligibility records the reviewed academic evidence and institutional clearance. Conferral is a separate authorized decision and closes only this pursuit."
+
+#: resources/views/shared/graduation-labels.php
+msgid "Eligible for conferral"
+msgstr "Eligible for conferral"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Eligibility incomplete"
+msgstr "Eligibility incomplete"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Review eligibility"
+msgstr "Review eligibility"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Review conferral"
+msgstr "Review conferral"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Correct title or honors"
+msgstr "Correct title or honors"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Revoke credential"
+msgstr "Revoke credential"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Credential decision history"
+msgstr "Credential decision history"
+
+#: resources/views/shared/graduation-labels.php
+msgid "More decisions"
+msgstr "More decisions"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Credential title"
+msgstr "Credential title"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Graduation date"
+msgstr "Graduation date"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Graduation term"
+msgstr "Graduation term"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Honors (optional)"
+msgstr "Honors (optional)"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Reason and supporting evidence"
+msgstr "Reason and supporting evidence"
+
+#: resources/views/shared/graduation-labels.php
+msgid "I verified the institution’s other graduation requirements and release clearances."
+msgstr "I verified the institution’s other graduation requirements and release clearances."
+
+#: resources/views/shared/graduation-labels.php
+msgid "I reviewed any earlier-history gaps and verified the supporting records."
+msgstr "I reviewed any earlier-history gaps and verified the supporting records."
+
+#: resources/views/shared/graduation-labels.php
+msgid "All supported academic minimums and curriculum components must be satisfied. An attestation cannot override a failed or unknown academic check."
+msgstr "All supported academic minimums and curriculum components must be satisfied. An attestation cannot override a failed or unknown academic check."
+
+#: resources/views/shared/graduation-labels.php
+msgid "Enter the actual graduation date, on or before today. Earned work needs verified completion dates. The academic review uses this date for recency checks."
+msgstr "Enter the actual graduation date, on or before today. Earned work needs verified completion dates. The academic review uses this date for recency checks."
+
+#: resources/views/shared/graduation-labels.php
+msgid "Review decision"
+msgstr "Review decision"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Confirm decision"
+msgstr "Confirm decision"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Revise review"
+msgstr "Revise review"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Graduation decision recorded."
+msgstr "Graduation decision recorded."
+
+#: resources/views/shared/graduation-labels.php
+msgid "Conferral closes this pursuit automatically. The student, account and other pursuits remain available."
+msgstr "Conferral closes this pursuit automatically. The student, account and other pursuits remain available."
+
+#: resources/views/shared/graduation-labels.php
+msgid "Revocation retains the original award and its history. This does not reopen the pursuit or change earned course credits."
+msgstr "Revocation retains the original award and its history. This does not reopen the pursuit or change earned course credits."
+
+#: resources/views/shared/graduation-labels.php
+msgid "Correct only the credential title or honors here. A change to graduation date, term or curriculum requires revocation, a fresh eligibility review and a new conferral."
+msgstr "Correct only the credential title or honors here. A change to graduation date, term or curriculum requires revocation, a fresh eligibility review and a new conferral."
+
+#: resources/views/shared/graduation-labels.php
+msgid "No graduation decisions have been recorded. A closed pursuit alone does not prove graduation."
+msgstr "No graduation decisions have been recorded. A closed pursuit alone does not prove graduation."
+
+#: resources/views/shared/graduation-labels.php
+msgid "Choose up to ten candidates with recorded eligibility. Every selected candidate is rechecked before the group is confirmed. If any review is stale, the entire selection remains unconfirmed."
+msgstr "Choose up to ten candidates with recorded eligibility. Every selected candidate is rechecked before the group is confirmed. If any review is stale, the entire selection remains unconfirmed."
+
+#: resources/views/shared/graduation-labels.php
+msgid "No recorded eligible candidates are waiting for conferral. Review eligibility from each student’s program record first."
+msgstr "No recorded eligible candidates are waiting for conferral. Review eligibility from each student’s program record first."
+
+#: resources/views/shared/graduation-labels.php
+msgid "Select candidate"
+msgstr "Select candidate"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Review selected conferrals"
+msgstr "Review selected conferrals"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Confer selected group"
+msgstr "Confer selected group"
+
+#: resources/views/shared/graduation-labels.php
+msgid "The selected credentials were conferred and their pursuits closed."
+msgstr "The selected credentials were conferred and their pursuits closed."
+
+#: resources/views/shared/graduation-labels.php
+msgid "Next candidates"
+msgstr "Next candidates"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Previous candidates"
+msgstr "Previous candidates"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Selected candidates"
+msgstr "Selected candidates"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Credential details"
+msgstr "Credential details"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Eligibility decision"
+msgstr "Eligibility decision"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Credential conferred"
+msgstr "Credential conferred"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Credential corrected"
+msgstr "Credential corrected"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Credential revoked"
+msgstr "Credential revoked"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Recorded"
+msgstr "Recorded"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Program"
+msgstr "Program"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Retained curriculum"
+msgstr "Retained curriculum"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Academic requirements"
+msgstr "Academic requirements"
+
+#: resources/views/shared/graduation-labels.php
+msgid "The retained curriculum allocation and all supported academic minimums are satisfied."
+msgstr "The retained curriculum allocation and all supported academic minimums are satisfied."
+
+#: resources/views/shared/graduation-labels.php
+msgid "Some graduation checks remain incomplete. Review the degree progress details before recording a new eligibility decision."
+msgstr "Some graduation checks remain incomplete. Review the degree progress details before recording a new eligibility decision."
+
+#: resources/views/shared/graduation-labels.php
+msgid "Choose at least one candidate."
+msgstr "Choose at least one candidate."
+
+#: resources/views/shared/graduation-labels.php
+msgid "This coursework belongs to a graduated pursuit. Formal transfer evaluation into the receiving pursuit is required; ordinary reuse approval cannot make it count."
+msgstr "This coursework belongs to a graduated pursuit. Formal transfer evaluation into the receiving pursuit is required; ordinary reuse approval cannot make it count."
+
+#: resources/views/shared/graduation-labels.php
+msgid "Current credential"
+msgstr "Current credential"
+
+#: resources/views/shared/graduation-labels.php
+msgid "Original awards remain in history after correction or revocation. Protected reasons and raw event details are excluded."
+msgstr "Original awards remain in history after correction or revocation. Protected reasons and raw event details are excluded."
+
+#: resources/views/backend/transcript-document.phtml
+msgid "Conferred credentials"
+msgstr "Conferred credentials"
+
+#: resources/views/backend/transcript-document.phtml
+msgid "Honors"
+msgstr "Honors"
+
+#: resources/views/backend/transcript-document.phtml
+msgid "Only the recorded standing effective at the preparation cutoff is included."
+msgstr "Only the recorded standing effective at the preparation cutoff is included."
+
+#: resources/views/backend/transcript-document.phtml
+msgid "No selected academic standing is included for this date."
+msgstr "No selected academic standing is included for this date."
+
+#: resources/views/backend/transcript-document.phtml
+msgid "No standing is recorded for this date."
+msgstr "No standing is recorded for this date."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Choose between one and ten candidates."
+msgstr "Choose between one and ten candidates."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Choose valid graduation candidates."
+msgstr "Choose valid graduation candidates."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Choose each pursuit once."
+msgstr "Choose each pursuit once."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Choose between one and ten reviewed candidates."
+msgstr "Choose between one and ten reviewed candidates."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Review each selected candidate for conferral."
+msgstr "Review each selected candidate for conferral."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Choose an active pursuit without a current credential."
+msgstr "Choose an active pursuit without a current credential."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Choose a graduation date on or before today and record eligibility first."
+msgstr "Choose a graduation date on or before today and record eligibility first."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Verify actual completion dates on all earned work before the graduation date."
+msgstr "Verify actual completion dates on all earned work before the graduation date."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Graduation inputs changed or eligibility is incomplete. Record a fresh eligibility decision."
+msgstr "Graduation inputs changed or eligibility is incomplete. Record a fresh eligibility decision."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Choose a currently conferred credential."
+msgstr "Choose a currently conferred credential."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Change the credential title or honors before reviewing."
+msgstr "Change the credential title or honors before reviewing."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Provide valid graduation details and explicit review confirmations."
+msgstr "Provide valid graduation details and explicit review confirmations."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Enter a reason of 1–1,000 characters."
+msgstr "Enter a reason of 1–1,000 characters."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Graduation inputs changed. Review again."
+msgstr "Graduation inputs changed. Review again."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "An awarded pursuit cannot receive new registrations or academic work."
+msgstr "An awarded pursuit cannot receive new registrations or academic work."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Work from a graduated pursuit requires formal transfer evaluation into the receiving pursuit."
+msgstr "Work from a graduated pursuit requires formal transfer evaluation into the receiving pursuit."
+
+#: src/Domain/Graduation/Service/GraduationService.php
+msgid "Revoke the credential through the authorized graduation workflow before reopening its pursuit."
+msgstr "Revoke the credential through the authorized graduation workflow before reopening its pursuit."

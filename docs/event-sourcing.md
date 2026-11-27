@@ -1,5 +1,7 @@
 # Event sourcing direction
 
+[Graduation and credentials](graduation-and-credentials.md) now record reviewed eligibility, authorized conferral, wording corrections and revocation in the existing journal. Conferral closes only its pursuit atomically; bounded group confirmations retain individual decisions and receipts. Historical awards are not inferred from current status or legacy fields.
+
 The [etSIS system glossary](glossary.md#history-and-reviewed-decisions) explains events, journals, streams, projections, replay and reconciliation in plain language.
 
 Security, student privacy and historical academic integrity are the highest development priorities. This document supersedes the earlier assumption that only finance should be event sourced. The [architecture and retrofit review](event-sourcing-architecture.md) makes the direction actionable and distinguishes current capabilities from required changes. The [legacy academic field review](academic-history-field-review.md) identifies missing data and its correct ownership.

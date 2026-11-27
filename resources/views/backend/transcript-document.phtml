@@ -100,6 +100,29 @@ use function Codefy\Framework\Helpers\trans_html;
             ): ?>
                 <p>The primary program pursuit was closed at preparation.</p>
             <?php endif; ?>
+            <?php if (!empty($document['credentials'])): ?>
+                <section aria-labelledby="credentials-title">
+                    <h2 id="credentials-title"><?= trans_html('Conferred credentials') ?></h2>
+                    <?php foreach ($document['credentials'] as $credential): ?>
+                        <dl>
+                            <dt><?= $escape($credential['proposal']['title']) ?></dt>
+                            <dd>
+                                <?= $escape($credential['proposal']['awarded_on']) ?> ·
+                                <?= $escape($credential['term']['code']) ?> ·
+                                <?= $escape($credential['program']['title']) ?>
+                            </dd>
+                            <?php if ($credential['proposal']['honors'] !== ''): ?>
+                                <dt><?= trans_html('Honors') ?></dt>
+                                <dd><?= $escape($credential['proposal']['honors']) ?></dd>
+                            <?php endif; ?>
+                            <?php foreach ($credential['components'] as $component): ?>
+                                <dt><?= $escape($component['code']) ?></dt>
+                                <dd><?= $escape($component['title']) ?></dd>
+                            <?php endforeach; ?>
+                        </dl>
+                    <?php endforeach; ?>
+                </section>
+            <?php endif; ?>
             <?php if (isset($document['standing'])): ?>
                 <section class="academic-standing" aria-labelledby="standing-title">
                     <h2 id="standing-title">Recorded academic standing</h2>
@@ -113,7 +136,9 @@ use function Codefy\Framework\Helpers\trans_html;
                         === 'effective_at_cutoff'; ?>
                     <?php if ($currentStanding): ?>
                         <p>
-                            <?= trans_html('Only the recorded standing effective at the preparation cutoff is included.') ?>
+                            <?= trans_html(
+                                'Only the recorded standing effective at the preparation cutoff is included.'
+                            ) ?>
                         </p>
                     <?php endif; ?>
                     <?php if (!empty($document['standing']['filtered'])): ?>

@@ -32,6 +32,7 @@ final readonly class StudentProgramStatusService
         private MessageCipher $cipher,
         private Clock $clock,
         private StudentPrimaryProgramLedger $primaryPrograms,
+        private \Domain\Graduation\Service\GraduationReader $graduation,
     ) {
     }
 
@@ -186,6 +187,17 @@ final readonly class StudentProgramStatusService
     }
     private function allowed(Student $student, StudentProgram $p, string $status): void
     {
+        if (
+            $status === 'active' && $this->graduation->load(
+                $student->id,
+                $p->id,
+                new \Domain\Shared\EventSourcing\HistoryReadBudget()
+            )->state()['credential'] !== null
+        ) {
+            throw new ValidationException([['field' => 'status',
+                'message' => 'Revoke the credential through the authorized graduation workflow '
+                    . 'before reopening its pursuit.']]);
+        }
         if ($p->status === $status) {
             throw new ValidationException([
                 ["field" => "active", "message" => "This assignment already has the selected status."],
