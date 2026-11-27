@@ -11183,3 +11183,51 @@ msgstr ""
 #: src/Infrastructure/Reporting/SchedulingReportSchema.php:94
 msgid "Scheduled elapsed minutes measure the full UTC interval, including breaks; they do not certify attendance, contact hours or published instruction."
 msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:8
+msgid "Section meeting plan"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:9
+msgid "Check meeting-plan history"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:10
+msgid "Compare recorded meeting-plan publications, their current pointer and original offering references using a 200-event allowance. Booking approvals, current conflicts, student eligibility and archive completeness need separate reviews. Nothing is published or repaired."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:15
+msgid "No meeting-plan publication observed"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:16
+msgid "No meeting-plan publication or pointer was found for this section. This does not establish an earlier timetable or publish a plan with no meetings."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:20
+msgid "A trusted operator can run a larger bounded meeting-plan check. Plan and offering history share the event, byte and time allowance; no partial result is certified."
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:24
+msgid "Retained meeting-plan publications checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:25
+msgid "Current published meetings checked"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:26
+msgid "Section, course and term routing"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:27
+msgid "Current meeting-plan publication pointer"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:28
+msgid "Original retained offering references"
+msgstr ""
+
+#: resources/views/backend/workspace/history-check-labels.php:29
+msgid "This meeting plan is unavailable. Reopen the section after your access or its records have been reviewed."
+msgstr ""

@@ -33,6 +33,14 @@ Open **Academic catalog → Sections → Meeting plan**. The guide distinguishes
 
 The reviewed confirmation has a fresh guide for that captured review. Its faculty links focus the existing assessment and its meeting link focuses the displayed schedule. The publication reason remains untouched. Working booking changes take effect in the academic timetable after the revised meeting plan is published. The guide does not approve bookings, acknowledge faculty warnings or publish a schedule.
 
+## Check meeting-plan history
+
+From **Sections → Meeting plan**, use **Check meeting-plan history** to open the existing support drawer. The action also appears on publication-history pages and when damaged evidence prevents the ordinary plan editor from loading. It requires scheduling, catalog, history-verification and audit duties together. An access denial does not expose the action or restore an earlier draft.
+
+Choose **Run history check** to compare the retained plan, current pointer and original offering references using a fixed 200-event allowance. The result shows safe counts and component names, followed by a restricted support reference. An explicitly published plan with no meetings is different from no recorded plan. This check publishes or repairs nothing and does not certify current booking/faculty/student conflicts.
+
+**Back to record** rechecks access, restores the unfinished publication reason or the selected history page, and returns focus to the action. Existing publication reviews and confirmations remain separate. See [staff meeting-plan support checks](event-history-foundation.md#staff-meeting-plan-support-checks) for permission, privacy, receipt and limit details.
+
 ## Refresh, privacy and accessibility
 
 All three workflows use one shared presentation component and fixed guidance text. The guide reads captured response flags in page memory; it does not fetch other records, call an AI provider, write browser storage, append events or change the database. Personal names, staff notes, tokens and reasons are not copied into the guidance model. Opening or following a guide adds no permissions and bypasses no review or institutional policy.

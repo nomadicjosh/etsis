@@ -9,7 +9,7 @@ use Symfony\Component\Process\Process;
 
 final class MeetingPlanHistoryCommandTest extends TestCase
 {
-    public function testActualLazyCommandKeepsSelectorsExclusiveOutputPrivateAndSourcesReadOnly(): void
+    public function testActualCommandAndStaffRoutesKeepChecksPrivateBoundedAndIndependentlyAuthorized(): void
     {
         $process = new Process([PHP_BINARY, '-d', 'memory_limit=96M',
             dirname(__DIR__) . '/Support/ConsoleStatusSmoke.php', 'check-meeting-plan-history']);

@@ -45,6 +45,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
     const kinds = { waitlist: text('waitlist'), credit: text('academic_credit'), progress: text('recorded_progress'), advisors: text('advisor_assignments'), requirements: text('degree_selection'), person: 'Person profile', student: 'Student academic records', account: 'Student account', application: text('application'), standing: text('program_standing'), load: text('retained_load'), primary: text('primary_position'), position: text('position'), time: text('time_entry') };
     kinds.gradpolicy = text('graduate_policy'); kinds.graduate = text('graduate_approvals');
     kinds.ssn = text('ssn');
+    kinds.meetingplan = text('meeting_plan');
     const graduateKinds = ['gradpolicy', 'graduate'];
     const employmentKinds = ['primary', 'position', 'time'];
     kinds.course = text('catalog_course'); kinds.section = text('catalog_section');
@@ -68,7 +69,10 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         course_reference: text('course_reference'), course_binding: text('course_binding'), offering_selection: text('offering_selection') });
     Object.assign(issues, { graduate_history: text('graduate_components'), retained_reference: text('graduate_references') });
     issues.ssn_projection = text('ssn_components');
+    issues.offering_reference = text('meeting_plan_offerings');
     function observation(kind, state) {
+        if (kind === 'meetingplan' && state === 'observed_empty') return [text('meeting_plan_empty'), text('meeting_plan_empty_help')];
+        if (kind === 'meetingplan' && state === 'limited') return [statuses.limited[0], text('meeting_plan_limit_help')];
         if (kind === 'ssn' && state === 'observed_empty') return [text('ssn_empty'), text('ssn_empty_help')];
         if (kind === 'ssn' && state === 'limited') return [statuses.limited[0], text('ssn_limit_help')];
         if (graduateKinds.includes(kind) && state === 'limited') return [statuses.limited[0], text('graduate_limit_help')];
@@ -127,7 +131,14 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
             if (check.position != null) result.append(node('p', {}, `Observed stream position: ${check.position}.`));
             if (check.current_records != null) result.append(node('p', {}, `Current academic records checked: ${check.current_records}.`));
             if (check.expected_postings != null) result.append(node('p', {}, `Expected postings checked: ${check.expected_postings}.`));
-            const components = (check.issues || []).filter(key => Object.hasOwn(issues, key)).map(key => key === 'identity' && employmentKinds.includes(kind) ? text('hr_identity') : issues[key]);
+            if (kind === 'meetingplan') {
+                for (const [key, label] of [['publications_checked', 'meeting_plan_publications'], ['current_meetings_checked', 'meeting_plan_meetings']])
+                    if (check[key] != null) result.append(node('p', {}, `${text(label)}: ${check[key]}.`));
+            }
+            const components = (check.issues || []).filter(key => Object.hasOwn(issues, key)
+                || (kind === 'meetingplan' && key === 'projection')).map(key =>
+                kind === 'meetingplan' && ['identity', 'projection'].includes(key) ? text(`meeting_plan_${key}`)
+                    : key === 'identity' && employmentKinds.includes(kind) ? text('hr_identity') : issues[key]);
             if (components.length) result.append(node('p', {}, `Components for review: ${components.join(', ')}.`));
             after = null; stack = [];
             await load();
@@ -140,7 +151,7 @@ window.createWorkspaceHistoryChecks = ({ node, request, task, openDrawer, labels
         controls.append(run, button('Refresh previous checks', () => load()));
         if (back) controls.append(node('button', { type: 'button', class: 'btn btn-link', onclick: event => task(back, event.currentTarget) }, 'Back to record'));
         body.append(node('h3', { class: 'h5' }, kinds[kind]),
-            node('p', {}, text(graduateKinds.includes(kind) ? 'graduate_help' : curriculumKinds.includes(kind) ? 'catalog_curriculum_help' : catalogKinds.includes(kind) ? 'catalog_help' : employmentKinds.includes(kind) ? 'hr_help' :
+            node('p', {}, text(kind === 'meetingplan' ? 'meeting_plan_help' : graduateKinds.includes(kind) ? 'graduate_help' : curriculumKinds.includes(kind) ? 'catalog_curriculum_help' : catalogKinds.includes(kind) ? 'catalog_help' : employmentKinds.includes(kind) ? 'hr_help' :
                 kind === 'ssn' ? 'ssn_help' : kind === 'waitlist' ? 'waitlist_help' : kind === 'credit' ? 'credit_help' : kind === 'progress' ? 'progress_help' : ['advisors', 'requirements'].includes(kind) ? 'curriculum_help' : 'check_help')),
             node('p', { class: 'form-text' }, text(employmentKinds.includes(kind) ? 'hr_history_help' : 'history_help')),
             controls, status, result, history, node('div', { class: 'd-flex gap-2 flex-wrap' }, previous, older));

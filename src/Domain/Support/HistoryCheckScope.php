@@ -64,13 +64,15 @@ final readonly class HistoryCheckScope
             }
             return;
         }
-        $catalog = in_array($kind, [HistoryCheckSubject::Course, HistoryCheckSubject::Section], true);
+        $catalog = in_array($kind, [HistoryCheckSubject::Course, HistoryCheckSubject::Section,
+            HistoryCheckSubject::MeetingPlan], true);
         if (
             $catalog ? ($person !== null || $owner !== null || $student !== null || $pursuit !== null
             || $employee !== null || $course === null
             || ($kind === HistoryCheckSubject::Course
                 && ($course->value !== $subject->value || $section !== null || $term !== null))
-            || ($kind === HistoryCheckSubject::Section && ($section?->value !== $subject->value || $term === null)))
+            || (in_array($kind, [HistoryCheckSubject::Section, HistoryCheckSubject::MeetingPlan], true)
+                && ($section?->value !== $subject->value || $term === null)))
             : ($person === null || $course !== null || $term !== null)
         ) {
             throw new \InvalidArgumentException('Use canonical personal or non-personal catalog routing.');

@@ -78,3 +78,55 @@ if (
 ) {
     throw new RuntimeException('Read-only meeting-plan verification changed source facts.');
 }
+
+// Connect the same verifier to the actual private browser routes; only support metadata may be written.
+$s->connection->pdo->exec('PRAGMA query_only = OFF');
+$s->clock->time = new DateTimeImmutable('2026-11-27T18:00:00Z');
+$businessTables = ['sis_history_events', 'sis_history_streams', 'sis_history_operations',
+    'sis_section_meeting_plans', 'sis_bookings', 'sis_booking_slots', 'sis_enrollments', 'sis_academic_credits'];
+$business = array_map($s->sql->rows(...), $businessTables);
+$base = '/sis/history-checks/meetingplan/' . $f->section->id->value . '/';
+$csrf = $post->withUri(new \Laminas\Diactoros\Uri('https://campus.example.invalid' . $base . 'run/'))
+    ->withoutHeader('X-CSRF-Token')->withParsedBody([]);
+if ($app->router->match($csrf)->getStatusCode() !== 403) {
+    throw new RuntimeException('Meeting-plan support bypassed framework CSRF.');
+}
+$s->access->staff = false;
+$duties = ['sis:history:verify', 'sis:audit:read', 'sis:catalog:manage', 'sis:scheduling:manage'];
+foreach ($duties as $missing) {
+    $s->access->grants = array_values(array_diff($duties, [$missing]));
+    foreach (['run/', 'history/'] as $action) {
+        if ($teachingPost($base . $action, [])->getStatusCode() !== 403) {
+            throw new RuntimeException('Meeting-plan support bypassed an independent current duty.');
+        }
+    }
+}
+$s->access->grants = $duties;
+$response = $teachingPost($base . 'run/', ['events' => 2000]);
+$result = json_decode((string) $response->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $response->getStatusCode() !== 200 || $result['event_limit'] !== 200
+    || $result['result']['status'] !== 'verified' || $result['result']['events_checked'] !== 2
+    || $result['result']['current_meetings_checked'] !== 1
+    || !str_contains($response->getHeaderLine('Cache-Control'), 'private, no-store')
+    || $response->hasHeader('phpdebugbar-id')
+) {
+    throw new RuntimeException('Meeting-plan browser support lost its bounded private result.');
+}
+foreach (['PRIVATE', '2026-08-10', 'booking_id', 'room_id', 'reason', 'definition'] as $private) {
+    if (str_contains((string) $response->getBody(), $private)) {
+        throw new RuntimeException('Meeting-plan support exposed a private source value.');
+    }
+}
+$page = $teachingPost($base . 'history/', []);
+$rows = json_decode((string) $page->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $page->getStatusCode() !== 200 || $rows['items'] !== [$result['receipt']]
+    || !str_contains($page->getHeaderLine('Cache-Control'), 'private, no-store')
+    || $page->hasHeader('phpdebugbar-id')
+) {
+    throw new RuntimeException('Meeting-plan support receipts lost their private routing.');
+}
+if ($business !== array_map($s->sql->rows(...), $businessTables)) {
+    throw new RuntimeException('Meeting-plan support changed a publication, booking or academic source.');
+}

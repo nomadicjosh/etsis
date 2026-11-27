@@ -5,6 +5,30 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans_html;
 
 return [
+    'meeting_plan' => trans_html('Section meeting plan'),
+    'check_meetingplan' => trans_html('Check meeting-plan history'),
+    'meeting_plan_help' => trans_html(
+        'Compare recorded meeting-plan publications, their current pointer and original offering references '
+        . 'using a 200-event allowance. Booking approvals, current conflicts, student eligibility and archive '
+        . 'completeness need separate reviews. Nothing is published or repaired.'
+    ),
+    'meeting_plan_empty' => trans_html('No meeting-plan publication observed'),
+    'meeting_plan_empty_help' => trans_html(
+        'No meeting-plan publication or pointer was found for this section. '
+        . 'This does not establish an earlier timetable or publish a plan with no meetings.'
+    ),
+    'meeting_plan_limit_help' => trans_html(
+        'A trusted operator can run a larger bounded meeting-plan check. '
+        . 'Plan and offering history share the event, byte and time allowance; no partial result is certified.'
+    ),
+    'meeting_plan_publications' => trans_html('Retained meeting-plan publications checked'),
+    'meeting_plan_meetings' => trans_html('Current published meetings checked'),
+    'meeting_plan_identity' => trans_html('Section, course and term routing'),
+    'meeting_plan_projection' => trans_html('Current meeting-plan publication pointer'),
+    'meeting_plan_offerings' => trans_html('Original retained offering references'),
+    'meeting_plan_unavailable' => trans_html(
+        'This meeting plan is unavailable. Reopen the section after your access or its records have been reviewed.'
+    ),
     'ssn' => trans_html('Person SSN history'),
     'ssn_components' => trans_html('Saved SSN projection'),
     'ssn_empty' => trans_html('No saved SSN history observed'),

@@ -15,6 +15,7 @@ enum HistoryCheckSubject: string
     case Waitlist = 'waitlist';
     case Course = 'course';
     case Section = 'section';
+    case MeetingPlan = 'meetingplan';
     case Program = 'program';
     case CourseGroup = 'group';
     case Curriculum = 'curriculum';
@@ -41,6 +42,7 @@ enum HistoryCheckSubject: string
             self::Student, self::Credit => ["sis:student:read"],
             self::Waitlist => ['sis:student:read', 'sis:registration:waitlist', 'sis:registration:manage'],
             self::Course, self::Section, self::Program, self::CourseGroup, self::Curriculum => ['sis:catalog:manage'],
+            self::MeetingPlan => ['sis:catalog:manage', 'sis:scheduling:manage'],
             self::Account => ["sis:student:read", "sis:finance:read"],
             self::Application => ["sis:admissions:manage"],
             self::Standing => ["sis:student:read", "sis:standing:manage"],
@@ -64,6 +66,7 @@ enum HistoryCheckSubject: string
             self::Waitlist => 'waitlist_entry',
             self::Course => 'course_publication',
             self::Section => 'section_publication',
+            self::MeetingPlan => 'section_meeting_plan',
             self::Program => 'program_publication',
             self::CourseGroup => 'group_publication',
             self::Curriculum => 'curriculum_publication',
@@ -91,6 +94,7 @@ enum HistoryCheckSubject: string
             self::PrimaryPosition => 'primary_position_reference',
             self::TimeEntry => 'time_entry_reference',
             self::Ssn => 'person_reference',
+            self::MeetingPlan => 'section_reference',
             default => $this->value . "_reference",
         };
     }

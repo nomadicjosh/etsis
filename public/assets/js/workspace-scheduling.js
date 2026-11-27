@@ -1184,14 +1184,32 @@ window.createWorkspaceScheduling = function (ui) {
         }
         return region;
     }
-    async function meetingPlan(sectionId) {
+    async function meetingPlan(sectionId, resume = null) {
         if (!can('sis:scheduling:manage') || !can('sis:catalog:manage')) return;
         const body = openDrawer('Section meeting plan', 'ACADEMIC SCHEDULE');
         body.append(node('p', { role: 'status' }, 'Loading the section meeting plan…'));
         const base = `/sis/sections/${sectionId}/meeting-plan/`;
-        const snapshot = await request(`${base}setup/`, 'POST', {});
+        let reason = resume?.reason || '', generation = 0;
+        const historyCheck = (cursor = null, showHistory = false) => {
+            if (!ui.historyChecks || !['sis:scheduling:manage', 'sis:catalog:manage', 'sis:history:verify', 'sis:audit:read']
+                .every(can)) return;
+            body.append(ui.historyChecks().publicationAction('meetingplan', sectionId,
+                () => meetingPlan(sectionId, { reason, showHistory, historyCursor: cursor }), () => {
+                    reason = body.querySelector('textarea[name="reason"]')?.value ?? reason;
+                    generation++;
+                }));
+        };
+        let snapshot;
+        try { snapshot = await request(`${base}setup/`, 'POST', {}); }
+        catch (error) {
+            if (!body.isConnected) return;
+            body.replaceChildren(node('p', { class: 'alert alert-warning', role: 'alert' },
+                ui.historyCheckLabels.meeting_plan_unavailable));
+            if (![401, 403].includes(error.status)) historyCheck();
+            if (resume) return;
+            throw error;
+        }
         if (!body.isConnected) return;
-        let reason = '', generation = 0;
         const focusTitle = () => body.querySelector('h2')?.focus();
         const title = text => node('h2', { class: 'h4', tabindex: '-1' }, text);
         const explain = () => node('p', { class: 'form-text' },
@@ -1223,6 +1241,7 @@ window.createWorkspaceScheduling = function (ui) {
             body.append(status);
             if (snapshot.published) body.append(button('View published plan', () => retained(snapshot.published)));
             if (snapshot.published) body.append(button('Publication history', () => history()));
+            historyCheck();
             if (snapshot.pending_booking_ids.length) {
                 body.append(node('h3', { class: 'h5 mt-4' }, 'Meeting requests need a decision'),
                     node('p', {}, 'Approve or cancel these pending requests before reviewing the plan. Return here after making the decisions.'));
@@ -1286,6 +1305,7 @@ window.createWorkspaceScheduling = function (ui) {
             if (!body.isConnected || serial !== generation) return;
             body.replaceChildren(title('Meeting plan publications'), node('p', { class: 'form-text' },
                 `History through publication ${result.through_version}. Earlier plans retain their original locations and meeting times.`));
+            historyCheck(cursor, true);
             result.items.forEach(item => body.append(node('article', { class: 'border rounded p-3 mb-3' },
                 node('h3', { class: 'h5' }, `Plan ${item.version}`),
                 node('p', {}, `${display(item.recorded_at)} · ${item.definition.meetings.length} meetings`),
@@ -1327,7 +1347,8 @@ window.createWorkspaceScheduling = function (ui) {
                 button('Back to working schedule', home), confirmButton));
             focusTitle();
         };
-        home();
+        if (resume?.showHistory) await history(resume.historyCursor);
+        else home();
     }
     return { room, booking, requestBooking, requestSeries, building, buildingForm, roomForm, calendar, categoryForm, categoryBadge, meetingPlan };
 };

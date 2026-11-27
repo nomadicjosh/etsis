@@ -351,6 +351,7 @@ echo $loader->render('framework::backend/workspace/index', [
         '/admin/student-read-fixture/' => ['sis:student:read'],
         '/admin/hr-only-fixture/' => ['sis:hr:manage'],
         '/admin/catalog-only-fixture/' => ['sis:catalog:manage'],
+        '/admin/meeting-plan-office-fixture/' => ['sis:catalog:manage', 'sis:scheduling:manage'],
         '/admin/waitlist-office-fixture/' => ['sis:catalog:manage', 'sis:registration:manage',
             'sis:registration:waitlist'],
         '/admin/transcript-office-fixture/' => ['sis:transcript:manage'],

@@ -611,6 +611,234 @@ final class HistoryCheckServiceTest extends TestCase
         }
     }
 
+    public function testMeetingPlanSupportVerifiesTheRealPlanAndKeepsOnlyNonpersonalReceipts(): void
+    {
+        require_once dirname(__DIR__) . '/Support/AcademicTimetableFixture.php';
+        $f = new \Tests\Support\AcademicTimetableFixture();
+        $start = new \DateTimeImmutable('2026-08-10T10:00:00-07:00');
+        $booking = $f->bookings->request(null, 'PRIVATE fictional booking purpose', [
+            new \Domain\Scheduling\TimeSlot($start, $start->modify('+1 hour')),
+        ], section: $f->section->id);
+        $f->bookings->approve($booking->id, 0);
+        $f->publish();
+        $s = $f->sis;
+        $s->clock->time = new \DateTimeImmutable('2026-11-27T18:00:00Z');
+        $tables = ['sis_history_events', 'sis_history_streams', 'sis_history_operations',
+            'sis_bookings', 'sis_booking_slots', 'sis_section_meeting_plans', 'sis_section_versions',
+            'sis_enrollments', 'sis_academic_credits'];
+        $before = array_map($s->sql->rows(...), $tables);
+        $result = $this->service($s)->run(HistoryCheckSubject::MeetingPlan, $f->section->id);
+        self::assertSame('verified', $result['result']['status']);
+        self::assertSame('section_meeting_plan', $result['result']['scope']);
+        self::assertSame($f->section->id->value, $result['result']['section_reference']);
+        self::assertSame(200, $result['event_limit']);
+        self::assertSame(2, $result['result']['events_checked']);
+        self::assertSame(1, $result['result']['publications_checked']);
+        self::assertSame(1, $result['result']['current_meetings_checked']);
+        self::assertFalse($result['result']['records_changed']);
+        self::assertSame($before, array_map($s->sql->rows(...), $tables));
+        $receipt = $s->sql->rows('sis_history_checks')[0];
+        self::assertSame('meetingplan', $receipt['subject_type']);
+        self::assertSame($f->section->id->value, $receipt['subject_id']);
+        foreach (['person_id', 'student_id', 'owner_user_id'] as $key) {
+            self::assertNull($receipt[$key]);
+        }
+        $history = $this->service($s)->history(HistoryCheckSubject::MeetingPlan, $f->section->id);
+        self::assertSame([$result['receipt']], $history['items']);
+        foreach (['PRIVATE', 'Fictional', '2026-08-10', 'booking_id', 'room_id', 'reason', 'definition'] as $private) {
+            self::assertStringNotContainsString($private, json_encode([$result, $history], JSON_THROW_ON_ERROR));
+        }
+    }
+
+    public function testMeetingPlanSupportDistinguishesAbsentHistoryFromAnExplicitEmptyPublishedPlan(): void
+    {
+        require_once dirname(__DIR__) . '/Support/AcademicTimetableFixture.php';
+        $f = new \Tests\Support\AcademicTimetableFixture();
+        $service = $this->service($f->sis);
+        $empty = $service->run(HistoryCheckSubject::MeetingPlan, $f->section->id)['result'];
+        self::assertSame('observed_empty', $empty['status']);
+        self::assertNull($empty['publications_checked']);
+        self::assertNull($empty['current_meetings_checked']);
+        $f->publish();
+        $published = $service->run(HistoryCheckSubject::MeetingPlan, $f->section->id)['result'];
+        self::assertSame('verified', $published['status']);
+        self::assertSame(1, $published['publications_checked']);
+        self::assertSame(0, $published['current_meetings_checked']);
+    }
+
+    public function testMeetingPlanSupportCanObserveADamagedPointerWithoutOpeningTheOrdinaryEditor(): void
+    {
+        require_once dirname(__DIR__) . '/Support/AcademicTimetableFixture.php';
+        $f = new \Tests\Support\AcademicTimetableFixture();
+        $f->publish();
+        $f->sis->sql->update(
+            'sis_section_meeting_plans',
+            ['definition_hash' => str_repeat('0', 64)],
+            ['id' => $f->section->id->value]
+        );
+        $before = array_map($f->sis->sql->rows(...), ['sis_section_meeting_plans', 'sis_history_events',
+            'sis_history_streams', 'sis_history_operations']);
+        $result = $this->service($f->sis)->run(HistoryCheckSubject::MeetingPlan, $f->section->id);
+        self::assertSame('unverified', $result['result']['status']);
+        self::assertSame(['projection'], $result['result']['issues']);
+        self::assertNull($result['result']['publications_checked']);
+        self::assertSame($before, array_map($f->sis->sql->rows(...), ['sis_section_meeting_plans', 'sis_history_events',
+            'sis_history_streams', 'sis_history_operations']));
+    }
+
+    public function testMeetingPlanSupportRequiresEveryIndependentDutyForBothRunAndPreviousReceipts(): void
+    {
+        require_once dirname(__DIR__) . '/Support/AcademicTimetableFixture.php';
+        $f = new \Tests\Support\AcademicTimetableFixture();
+        $s = $f->sis;
+        $duties = ['sis:history:verify', 'sis:audit:read', 'sis:catalog:manage', 'sis:scheduling:manage'];
+        $provider = $this->createMock(\Domain\Registration\Repository\MeetingPlanVerifier::class);
+        $provider->expects(self::never())->method('verify');
+        $service = $this->service($s, meetingPlans: $provider);
+        $s->access->staff = false;
+        foreach ($duties as $missing) {
+            $s->access->grants = array_values(array_diff($duties, [$missing]));
+            $this->rejects(
+                fn() => $service->run(HistoryCheckSubject::MeetingPlan, $f->section->id),
+                AccessDeniedException::class
+            );
+            $this->rejects(
+                fn() => $service->history(HistoryCheckSubject::MeetingPlan, $f->section->id),
+                AccessDeniedException::class
+            );
+        }
+        self::assertSame([], $s->sql->rows('sis_history_checks'));
+    }
+
+    public function testMeetingPlanSupportPreservesBoundedProviderOutcomesAndConcealsProviderFailures(): void
+    {
+        require_once dirname(__DIR__) . '/Support/AcademicTimetableFixture.php';
+        $f = new \Tests\Support\AcademicTimetableFixture();
+        $s = $f->sis;
+        foreach (['changed', 'limited', 'unverified', 'wrong_reference', 'excess', 'failure'] as $outcome) {
+            $provider = $this->createStub(\Domain\Registration\Repository\MeetingPlanVerifier::class);
+            $provider->method('verify')->willReturnCallback(function (
+                EntityId $section,
+                int $limit
+            ) use (
+                $s,
+                $outcome
+) {
+                self::assertSame(200, $limit);
+                self::assertFalse($s->sql->inTransaction());
+                if ($outcome === 'failure') {
+                    throw new \RuntimeException('PRIVATE upstream evidence must never be returned.');
+                }
+                return new \Domain\Registration\ValueObject\MeetingPlanCheck(
+                    $outcome === 'wrong_reference' ? EntityId::generate() : $section,
+                    $outcome === 'excess' ? 'limited' : ($outcome === 'wrong_reference' ? 'changed' : $outcome),
+                    $outcome === 'excess' ? 201 : 1,
+                    issues: $outcome === 'unverified' ? ['offering_reference'] : []
+                );
+            });
+            $result = $this->service($s, meetingPlans: $provider)
+                ->run(HistoryCheckSubject::MeetingPlan, $f->section->id)['result'];
+            self::assertSame(
+                in_array($outcome, ['changed', 'limited', 'unverified'], true) ? $outcome : 'unverified',
+                $result['status']
+            );
+            self::assertStringNotContainsString('PRIVATE', json_encode($result));
+            self::assertNull($result['publications_checked'] ?? null);
+            self::assertNull($result['current_meetings_checked'] ?? null);
+            if (in_array($outcome, ['wrong_reference', 'excess', 'failure'], true)) {
+                self::assertSame(['unavailable'], $result['issues']);
+                self::assertSame(0, $result['events_checked']);
+            }
+        }
+    }
+
+    public function testMeetingPlanSupportRollsBackReceiptAndAuditWhenFinalAuthorityOrRoutingChanges(): void
+    {
+        require_once dirname(__DIR__) . '/Support/AcademicTimetableFixture.php';
+        foreach (['audit', 'authority', 'actor', 'course', 'term'] as $failure) {
+            $f = new \Tests\Support\AcademicTimetableFixture();
+            $f->publish();
+            $s = $f->sis;
+            $other = $s->section();
+            $actor = $s->user();
+            $before = array_map($s->sql->rows(...), ['sis_history_checks', 'sis_audit', 'sis_sections',
+                'sis_history_events', 'sis_history_streams', 'sis_history_operations']);
+            $audit = $this->createStub(AuditTrail::class);
+            $audit->method('record')->willReturnCallback(function () use ($s, $f, $failure, $other, $actor): void {
+                if ($failure === 'audit') {
+                    throw new \RuntimeException('Fictional mandatory audit failure.');
+                }
+                if ($failure === 'authority') {
+                    $s->access->staff = false;
+                    $s->access->grants = [];
+                }
+                if ($failure === 'actor') {
+                    $s->access->actor = $actor;
+                }
+                if ($failure === 'course') {
+                    $s->sql->update(
+                        'sis_sections',
+                        ['course_id' => $other->courseId->value],
+                        ['id' => $f->section->id->value]
+                    );
+                }
+                if ($failure === 'term') {
+                    $next = EntityId::generate();
+                    $s->sql->insert('sis_terms', ['id' => $next->value, 'code' => 'FICT-NEXT',
+                        'starts_on' => '2027-01-01', 'ends_on' => '2027-05-01', 'add_drop_ends_on' => '2027-01-15']);
+                    $s->sql->update('sis_sections', ['term_id' => $next->value], ['id' => $f->section->id->value]);
+                }
+            });
+            $this->rejects(fn() => $this->service($s, audit: $audit)
+                ->run(HistoryCheckSubject::MeetingPlan, $f->section->id), match ($failure) {
+                    'audit' => \RuntimeException::class,
+                    'authority', 'actor' => AccessDeniedException::class,
+                    default => ConcurrentModificationException::class,
+                });
+            self::assertSame($before, array_map($s->sql->rows(...), ['sis_history_checks', 'sis_audit', 'sis_sections',
+                'sis_history_events', 'sis_history_streams', 'sis_history_operations']));
+        }
+    }
+
+    public function testMeetingPlanSupportRejectsRoutingChangesBeforeReceiptPersistence(): void
+    {
+        require_once dirname(__DIR__) . '/Support/AcademicTimetableFixture.php';
+        $f = new \Tests\Support\AcademicTimetableFixture();
+        $s = $f->sis;
+        $other = $s->section();
+        $provider = $this->createStub(\Domain\Registration\Repository\MeetingPlanVerifier::class);
+        $provider->method('verify')->willReturnCallback(function (EntityId $section, int $limit) use ($s, $other) {
+            self::assertFalse($s->sql->inTransaction());
+            $s->sql->update('sis_sections', ['course_id' => $other->courseId->value], ['id' => $section->value]);
+            return new \Domain\Registration\ValueObject\MeetingPlanCheck($section, 'changed', 0);
+        });
+        $this->rejects(fn() => $this->service($s, meetingPlans: $provider)
+            ->run(HistoryCheckSubject::MeetingPlan, $f->section->id), ConcurrentModificationException::class);
+        self::assertSame([], $s->sql->rows('sis_history_checks'));
+    }
+
+    public function testMeetingPlanReceiptsArePagedSeparatelyFromSectionPublicationChecks(): void
+    {
+        require_once dirname(__DIR__) . '/Support/AcademicTimetableFixture.php';
+        $f = new \Tests\Support\AcademicTimetableFixture();
+        $service = $this->service($f->sis);
+        $service->run(HistoryCheckSubject::Section, $f->section->id);
+        for ($index = 0; $index < 12; $index++) {
+            $service->run(HistoryCheckSubject::MeetingPlan, $f->section->id);
+        }
+        $first = $service->history(HistoryCheckSubject::MeetingPlan, $f->section->id);
+        self::assertCount(10, $first['items']);
+        self::assertNotNull($first['next_after']);
+        $second = $service->history(
+            HistoryCheckSubject::MeetingPlan,
+            $f->section->id,
+            new EntityId($first['next_after'])
+        );
+        self::assertCount(2, $second['items']);
+        self::assertNull($second['next_after']);
+        self::assertCount(1, $service->history(HistoryCheckSubject::Section, $f->section->id)['items']);
+    }
+
     private function service(
         CampusFixture|\SisFixture $c,
         ?PersonProjectionVerifier $people = null,
@@ -620,6 +848,7 @@ final class HistoryCheckServiceTest extends TestCase
         ?\Domain\Student\Repository\StudentDecisionProjectionVerifier $decisions = null,
         ?\Domain\HumanResources\Repository\EmploymentProjectionVerifier $employment = null,
         ?\Domain\Catalog\Repository\CatalogProjectionVerifier $catalog = null,
+        ?\Domain\Registration\Repository\MeetingPlanVerifier $meetingPlans = null,
     ): HistoryCheckService {
         $s = $c instanceof CampusFixture ? $c->sis : $c;
         $cipher = $c instanceof CampusFixture ? $c->cipher : $s->dropCipher;
@@ -698,6 +927,10 @@ final class HistoryCheckServiceTest extends TestCase
                     \EventStoreFixture::history($s->connection->queryBuilder()),
                     $cipher
                 )
+            ),
+            $meetingPlans ?? new \Infrastructure\Projection\SqlMeetingPlanVerifier(
+                $s->sql,
+                \EventStoreFixture::history($s->connection->queryBuilder())
             ),
         );
     }

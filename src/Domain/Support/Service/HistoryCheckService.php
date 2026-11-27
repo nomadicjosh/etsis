@@ -64,6 +64,7 @@ final readonly class HistoryCheckService
         private \Domain\DegreeAudit\Repository\CourseGroupRepository $courseGroups,
         private \Domain\DegreeAudit\Repository\RequirementsRepository $curricula,
         private \Domain\Person\Repository\PersonSsnProjectionVerifier $ssns,
+        private \Domain\Registration\Repository\MeetingPlanVerifier $meetingPlans,
     ) {
     }
 
@@ -103,11 +104,14 @@ final readonly class HistoryCheckService
             }
             return new HistoryCheckScope($kind, $id);
         }
-        if (in_array($kind, [HistoryCheckSubject::Course, HistoryCheckSubject::Section], true)) {
+        if (
+            in_array($kind, [HistoryCheckSubject::Course, HistoryCheckSubject::Section,
+            HistoryCheckSubject::MeetingPlan], true)
+        ) {
             if ($actor->value !== $this->access->authenticatedUserId()->value) {
                 throw new AccessDeniedException();
             }
-            $section = $kind === HistoryCheckSubject::Section ? $this->catalog->get('sections', $id) : null;
+            $section = $kind === HistoryCheckSubject::Course ? null : $this->catalog->get('sections', $id);
             $course = $section === null ? $id : new EntityId($section['course_id']);
             $this->catalog->get('courses', $course);
             return new HistoryCheckScope(
@@ -265,6 +269,8 @@ final readonly class HistoryCheckService
                     ->course($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Section => $this->catalogHistory
                     ->section($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
+                HistoryCheckSubject::MeetingPlan => $this->meetingPlans
+                    ->verify($scope->subject, HistoryCheckReceipt::EVENT_LIMIT)->describe(),
                 HistoryCheckSubject::Program, HistoryCheckSubject::CourseGroup, HistoryCheckSubject::Curriculum
                 => $this->catalogHistory->curriculum($scope->kind->value, $scope->subject,
                         HistoryCheckReceipt::EVENT_LIMIT)->describe(),
@@ -343,7 +349,10 @@ final readonly class HistoryCheckService
         if ($scope->person !== null) {
             $this->people->lock($scope->person);
         }
-        if ($scope->section !== null && $scope->kind === HistoryCheckSubject::Section) {
+        if (
+            $scope->section !== null && in_array($scope->kind, [HistoryCheckSubject::Section,
+            HistoryCheckSubject::MeetingPlan], true)
+        ) {
             $this->catalog->lock('sections', $scope->section);
         }
         if ($scope->course !== null) {
