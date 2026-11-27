@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Infrastructure\Reporting;
 
+use function Codefy\Framework\Helpers\trans;
+
 /** Approved scheduling read models; private requester identities and meeting links stay outside reporting. */
 final class SchedulingReportSchema
 {
@@ -37,6 +39,12 @@ final class SchedulingReportSchema
             'meeting_id' => $field('Meeting reference', 'string', 'meeting', 'id'),
             'starts_at' => $field('Meeting starts UTC', 'datetime', 'meeting', 'starts_at'),
             'ends_at' => $field('Meeting ends UTC', 'datetime', 'meeting', 'ends_at'),
+            'elapsed_minutes' => $field(trans('Scheduled elapsed minutes'), 'double', 'meeting', 'starts_at') + [
+                'expression' => 'meeting_elapsed_minutes', 'quantity_grain' => 'meeting',
+                'help' => trans('The full elapsed UTC interval in minutes, including breaks. '
+                    . 'Apply booking approval and cancellation filters explicitly. '
+                    . 'This does not calculate instructional contact hours or certify attendance.'),
+            ],
             'cancelled_at' => $field('Meeting cancelled UTC', 'datetime', 'meeting', 'cancelled_at'),
             'booking_id' => $field('Booking reference', 'string', 'booking', 'id'),
             'booking_title' => $field('Booking title', 'string', 'booking', 'title'),
@@ -80,7 +88,9 @@ final class SchedulingReportSchema
                 'label' => 'Scheduled meetings',
                 'description' => 'One row per booking occurrence, including online meetings. Times are UTC. '
                     . 'Booking approval and occurrence cancellation are separate filters; these are booking '
-                    . 'records, not proof that a class timetable has been published.',
+                    . 'records, not proof that a class timetable has been published. '
+                    . trans('Scheduled elapsed minutes measure the full UTC interval, including breaks; '
+                        . 'they do not certify attendance, contact hours or published instruction.'),
                 'permissions' => ['sis:scheduling:manage'],
                 'relationships' => [
                     'booking' => $join('sis_bookings', 'meeting', 'booking_id', 'id', 'Bookings'),
@@ -94,7 +104,9 @@ final class SchedulingReportSchema
                 'label' => 'Rooms and bookings',
                 'description' => 'Start with every physical room, including rooms without bookings or a building. '
                     . 'Connecting meetings adds one row per occurrence; count distinct meetings or rooms '
-                    . 'when summarizing. No booking in a chosen window does not certify availability.',
+                    . 'when summarizing. No booking in a chosen window does not certify availability. '
+                    . trans('Scheduled elapsed minutes measure the full UTC interval, including breaks; '
+                        . 'they do not certify attendance, contact hours or published instruction.'),
                 'permissions' => ['sis:scheduling:manage'],
                 'relationships' => [
                     'building' => $building,
@@ -139,6 +151,9 @@ final class SchedulingReportSchema
                 $sections['fields']['scheduled_' . $id] = array_replace($field, [
                     'relation' => $mapping[$field['relation']],
                 ]);
+                if (isset($field['quantity_grain'])) {
+                    $sections['fields']['scheduled_' . $id]['quantity_grain'] = $mapping[$field['quantity_grain']];
+                }
             }
         }
         return $sections;

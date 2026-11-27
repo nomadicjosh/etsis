@@ -117,7 +117,7 @@ A deliberately accepted version of a course, program, policy or other meaningful
 
 ### Contact hours / clock hours
 
-**Contact hours** measure instructional contact under an institutional policy. etSIS's fallback uses 50 instructional minutes per contact hour, expressed per typical teaching week; the institution can publish another rule. **Clock hours** describe elapsed time, with 60 minutes in an hour. Neither is automatically an academic-credit or payroll award. See [teaching contact hours](human-resources.md#institutional-time-review-and-teaching-contact-policy).
+**Contact hours** measure instructional contact under an institutional policy. etSIS's fallback uses 50 instructional minutes per contact hour, expressed per typical teaching week; the institution can publish another rule. **Clock hours** describe elapsed time, with 60 minutes in an hour. Neither is automatically an academic-credit or payroll award. See [teaching contact hours](human-resources.md#institutional-time-review-and-teaching-contact-policy). **Scheduled elapsed minutes** in reports measure the whole booked UTC interval, including breaks; they do not apply this contact-hour policy or prove attendance. See [meeting duration](workflow-review.md#scheduled-meeting-duration).
 
 ### CEU — continuing education unit
 

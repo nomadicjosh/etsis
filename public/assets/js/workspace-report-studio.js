@@ -1908,6 +1908,7 @@ window.createWorkspaceReportStudio = function (ui) {
                 node("div", { class: "report-inspector-heading" }, node("h2", {}, "Column settings"), done),
                 node("p", {}, column.label),
             );
+            if (field.help) inspector.append(node("p", { class: "form-text" }, field.help));
             const summaries = node("div", {
                 class: "report-summary-choices",
                 role: "group",

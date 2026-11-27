@@ -94,6 +94,8 @@ async function fixture(page, options = {}) {
             choices: { approved: 'Approved', requested: 'Requested', cancelled: 'Cancelled' } },
         starts_at: { label: 'Meeting starts UTC', type: 'datetime', relation: 'meeting' },
         ends_at: { label: 'Meeting ends UTC', type: 'datetime', relation: 'meeting' },
+        elapsed_minutes: { label: 'Scheduled elapsed minutes', type: 'double', relation: 'meeting',
+            constant_calculation: true, help: 'The full elapsed UTC interval in minutes, including breaks. Apply booking approval and cancellation filters explicitly. This does not calculate instructional contact hours or certify attendance.' },
         cancelled_at: { label: 'Meeting cancelled UTC', type: 'datetime', relation: 'meeting' },
     } : options.accounts ? {
         account_id: { label: 'Account reference', type: 'string', relation: 'account' },
@@ -352,7 +354,7 @@ async function fixture(page, options = {}) {
         else if (path === '/sis/report-studio/save/') { definition = data.definition; name = data.name; version = data.version + 1; result = { id: data.report_id }; }
         else if (path.endsWith('/preview/') || path.endsWith('/run/')) {
             const query = data.definition || definition;
-            const values = { tuition: 25, fees: 3, manual_charges: 2, unclassified_charges: 0, cutoff_utc: query.financial_as_of?.replace('T', ' ').replace('Z', ''), pursuit_id: id(92), component_row_id: id(93), component_code: 'ART', component_title: 'Retained <b>concentration</b>', component_kind: 'concentration', component_active: true, department_title: 'English <b>department</b>', school_title: 'Arts <college>', parent_major_code: 'ENG', academic_year_code: '2026-2027', pursuit_status: 'active', cohort_matches: true, checkin_id: id(95), due_on: '2026-11-25', followup_status: 'responded', attendance_id: id(94), held_on: '2026-11-21', attendance_status: 'absent', section_code: 'MATH.101.A', determined_on: '2026-11-21', classification_title: 'Full time', registered_credits: 6.25, determination_id: id(90), student_id: id(91), application_id: id(80), case_office:'Admissions <b>fictional</b>', case_work_status:'waiting', case_due_on:'2026-09-01', posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
+            const values = { tuition: 25, fees: 3, manual_charges: 2, unclassified_charges: 0, cutoff_utc: query.financial_as_of?.replace('T', ' ').replace('Z', ''), pursuit_id: id(92), component_row_id: id(93), component_code: 'ART', component_title: 'Retained <b>concentration</b>', component_kind: 'concentration', component_active: true, department_title: 'English <b>department</b>', school_title: 'Arts <college>', parent_major_code: 'ENG', academic_year_code: '2026-2027', pursuit_status: 'active', cohort_matches: true, checkin_id: id(95), due_on: '2026-11-25', followup_status: 'responded', attendance_id: id(94), held_on: '2026-11-21', attendance_status: 'absent', section_code: 'MATH.101.A', determined_on: '2026-11-21', classification_title: 'Full time', registered_credits: 6.25, determination_id: id(90), student_id: id(91), application_id: id(80), case_office:'Admissions <b>fictional</b>', case_work_status:'waiting', case_due_on:'2026-09-01', posting_payment_method: 'scholarship', posting_amount: 12.5, posting_type: 'payment', posting_reversed: false, posting_recorded_at: '2026-11-19 18:00:00', elapsed_minutes: 50.5, booking_title: 'Fictional seminar', starts_at: '2026-11-19 18:00:00', ends_at: '2026-11-19 19:00:00', room_code: 'SCI.101', room_name: 'Science laboratory', building_name: 'Science building', room_capacity: 30, booking_status: 'approved', account_id: id(15), term_code: '26/FA', currency: 'USD', balance: 12.34, charges: 30, payments: 20.66, refunds: 3, institutional_id: 'S-FICTIONAL', full_name: 'Alex Example', program_code: 'BS.CS',
                 entry_term: '26/FA', latest_term_code: options.never ? null : '27/SP',
                 latest_term_starts_on: options.never ? null : '2027-01-04', status: 'accepted', term_starts_on: '2027-01-04',
                 submitted_on: options.unknownSubmission ? null : '2026-08-10', submission_channel: 'form',
@@ -2108,5 +2110,50 @@ test('monetary columns retain field-only calculations without group or chained-o
     await expect(page.getByRole('button', { name: 'Calculation group', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Decimal constant', exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Add another operation', exact: true })).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});
+
+
+for (const width of [1440, 320]) test(`scheduled elapsed minutes keep numeric authoring, guidance and saved filters at ${width}px`, async ({ page }) => {
+    const f = await fixture(page, { scheduling: 'meetings' });
+    await page.getByRole('button', { name: 'Approved meeting schedule', exact: true }).click();
+    const studio = page.locator('dialog.report-studio');
+    await studio.getByLabel('Report name', { exact: true }).fill('Fictional class-meeting minutes');
+    await studio.locator('[data-report-field="elapsed_minutes"] input').check();
+    const column = studio.locator('.report-output-row').filter({ hasText: 'Scheduled elapsed minutes' })
+        .getByRole('button', { name: /^Column \d+ settings:/ });
+    await column.click();
+    const settings = studio.getByRole('complementary', { name: 'Column settings', exact: true });
+    await expect(settings).toContainText('The full elapsed UTC interval in minutes, including breaks.');
+    await expect(settings).toContainText('does not calculate instructional contact hours or certify attendance');
+    await expect(settings.getByRole('group', { name: 'Calendar grouping', exact: true })).toHaveCount(0);
+    await settings.getByRole('button', { name: 'Total', exact: true }).click();
+    await expect(settings.getByRole('button', { name: 'Total', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await settings.getByRole('button', { name: 'Done', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await studio.locator('.report-advanced-filters > summary').click();
+    const rows = studio.getByRole('group', { name: 'Row conditions', exact: true });
+    await rows.getByLabel('Row conditions: field', { exact: true }).first().selectOption('elapsed_minutes');
+    await rows.getByLabel('Row conditions: comparison', { exact: true }).first().selectOption('greater_or_equal');
+    await rows.getByLabel('Row conditions: value', { exact: true }).first().fill('50.5');
+    await studio.getByRole('button', { name: 'Preview', exact: true }).click();
+    const query = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition;
+    expect(query.columns.find(c => c.field === 'elapsed_minutes')).toMatchObject({ aggregate: 'sum' });
+    expect(query.filters.rules[0]).toMatchObject({ id: 'elapsed_minutes', value: 50.5 });
+    await expect(studio.getByRole('table', { name: 'Relational report results', exact: true })).toContainText('50.5');
+    await studio.getByRole('button', { name: 'Save', exact: true }).click();
+    await studio.getByRole('button', { name: 'Edit', exact: true }).click();
+    await column.click();
+    await expect(settings.getByRole('button', { name: 'Total', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await page.setViewportSize({ width, height: 920 });
+    if (width === 320) await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await settings.getByRole('button', { name: 'Done', exact: true }).click();
+    await studio.getByRole('tab', { name: 'Filters', exact: true }).click();
+    await studio.locator('.report-advanced-filters > summary').click();
+    await expect(rows.getByLabel('Row conditions: value', { exact: true }).first()).toHaveValue('50.5');
+    expect(f.calls.filter(call => /\/(preview|save)\/$/.test(call.path)).every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });

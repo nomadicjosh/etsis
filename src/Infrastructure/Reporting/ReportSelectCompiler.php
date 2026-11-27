@@ -279,6 +279,9 @@ final readonly class ReportSelectCompiler
      */
     private function fieldExpression(array $field, string $alias): string
     {
+        if (($field['expression'] ?? null) === 'meeting_elapsed_minutes') {
+            return new MeetingDurationReportSql($this->sql)->minutes($alias);
+        }
         $q = $this->sql->quote(...);
         $name = $q($alias) . '.' . $q($field['column']);
         if (isset($field['charge_component'])) {

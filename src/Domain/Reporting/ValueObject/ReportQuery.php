@@ -197,17 +197,28 @@ final readonly class ReportQuery
             }
         }
         $this->validateMoney($columns);
-        $this->validateRootMetrics($columns);
+        $this->validateQuantities($columns);
     }
 
-    /** Prevent one-to-many joins from multiplying already-counted quantities at their source grain. */
-    private function validateRootMetrics(array $columns): void
+    /** Prevent one-to-many joins from multiplying quantities at their declared source grain. */
+    private function validateQuantities(array $columns): void
     {
-        $totals = array_filter($columns, fn(array $c): bool =>
-            in_array($c['aggregate'], ['sum', 'avg'], true) &&
-            array_any(self::columnFields($c), fn(string $id): bool =>
-                $this->schema['fields'][$id]['root_metric'] ?? false));
-        if ($totals === []) {
+        $grains = [];
+        foreach ($columns as $column) {
+            if (!in_array($column['aggregate'], ['sum', 'avg'], true)) {
+                continue;
+            }
+            foreach (self::columnFields($column) as $id) {
+                $field = $this->schema['fields'][$id];
+                if ($field['root_metric'] ?? false) {
+                    $grains[$this->schema['root']] = true;
+                }
+                if (isset($field['quantity_grain'])) {
+                    $grains[$field['quantity_grain']] = true;
+                }
+            }
+        }
+        if ($grains === []) {
             return;
         }
         $relations = array_merge(
@@ -236,17 +247,26 @@ final readonly class ReportQuery
                 $collect($group);
             }
         }
-        foreach (array_unique($relations) as $relation) {
-            while ($relation !== $this->schema['root']) {
-                $r = $this->schema['relationships'][$relation];
-                if (
-                    ($r['many'] ?? false) &&
-                    ($this->definition['record_selection'][$relation]['ties'] ?? null) !== 'one'
-                ) {
-                    self::invalid('Choose one related row or use matching-record conditions before totaling ' .
-                        'record quantities. Multiple related rows would repeat each source record.');
+        foreach (array_keys($grains) as $grain) {
+            $path = [];
+            for (
+                $current = $grain; $current !== $this->schema['root'];
+                $current = $this->schema['relationships'][$current]['parent']
+            ) {
+                $path[$current] = true;
+            }
+            foreach (array_unique($relations) as $relation) {
+                while ($relation !== $this->schema['root']) {
+                    $r = $this->schema['relationships'][$relation];
+                    if (
+                        ($r['many'] ?? false) && !isset($path[$relation]) &&
+                        ($this->definition['record_selection'][$relation]['ties'] ?? null) !== 'one'
+                    ) {
+                        self::invalid('Choose one related row or use matching-record conditions before totaling ' .
+                            'record quantities. Multiple related rows would repeat each source record.');
+                    }
+                    $relation = $r['parent'];
                 }
-                $relation = $r['parent'];
             }
         }
     }

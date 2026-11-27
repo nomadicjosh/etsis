@@ -11171,3 +11171,15 @@ msgstr ""
 #: src/Application/Http/Controller/SisPortalEditorController.php:104
 msgid "Choose account roles as a list of role references."
 msgstr ""
+
+#: src/Infrastructure/Reporting/SchedulingReportSchema.php:41
+msgid "Scheduled elapsed minutes"
+msgstr ""
+
+#: src/Infrastructure/Reporting/SchedulingReportSchema.php:43
+msgid "The full elapsed UTC interval in minutes, including breaks. Apply booking approval and cancellation filters explicitly. This does not calculate instructional contact hours or certify attendance."
+msgstr ""
+
+#: src/Infrastructure/Reporting/SchedulingReportSchema.php:94
+msgid "Scheduled elapsed minutes measure the full UTC interval, including breaks; they do not certify attendance, contact hours or published instruction."
+msgstr ""

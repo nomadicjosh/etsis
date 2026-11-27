@@ -101,7 +101,7 @@ final readonly class RelationalReportService
             }
             $fields[$id] = array_intersect_key(
                 $field,
-                array_flip(['label', 'type', 'relation', 'copy_group', 'choices']),
+                array_flip(['label', 'type', 'relation', 'copy_group', 'choices', 'help']),
             );
             $fields[$id]['constant_calculation'] = in_array($field['type'], ['integer', 'double'], true)
             && !isset($field['currency_field']);

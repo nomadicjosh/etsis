@@ -66,6 +66,10 @@ final class ReportGraph
                         $schema['fields'][$id . '__' . $field]['money_grain'] =
                         $mapped[$metadata['money_grain']] ?? $metadata['money_grain'];
                     }
+                    if (isset($metadata['quantity_grain'])) {
+                        $schema['fields'][$id . '__' . $field]['quantity_grain'] =
+                        $mapped[$metadata['quantity_grain']] ?? $metadata['quantity_grain'];
+                    }
                 }
             }
         }
