@@ -1,5 +1,7 @@
 # Guides for captured reviews
 
+The separate [etSIS system glossary](glossary.md) explains terms such as pursuit, publication, review, journal and projection.
+
 Implemented 2026-11-20. Open **Admissions guide**, **Registration guide** or **Meeting plan guide** inside the relevant review. These compact, collapsible guides explain the next steps using the information already on screen. They complement the existing degree-progress guide.
 
 ## Admissions

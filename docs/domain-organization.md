@@ -1,5 +1,7 @@
 # Domain organization
 
+For plain-language definitions of domain, aggregate, repository, adapter, DTO and related terms, see the [etSIS system glossary](glossary.md#server-processing-and-technical-terms).
+
 The existing `src/Domain/User` context is the project template. It groups the business workflow and its command/query handlers inside the domain, including the context's services, DTOs, validation and repository contracts. The migrated SIS contexts use the same organization and the PSR-4 namespaces already declared in `composer.json`.
 
 | Location | Responsibility | Examples |

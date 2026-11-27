@@ -1,5 +1,7 @@
 # Event sourcing direction
 
+The [etSIS system glossary](glossary.md#history-and-reviewed-decisions) explains events, journals, streams, projections, replay and reconciliation in plain language.
+
 Security, student privacy and historical academic integrity are the highest development priorities. This document supersedes the earlier assumption that only finance should be event sourced. The [architecture and retrofit review](event-sourcing-architecture.md) makes the direction actionable and distinguishes current capabilities from required changes. The [legacy academic field review](academic-history-field-review.md) identifies missing data and its correct ownership.
 
 The rationale below describes benefits, not a claim that the current application already has these protections. Event streams still require authorization, concurrency control, protected storage, explicit retention and tested replay. Accepted server-side ordering can be recorded; client click order and clock precision alone do not establish fairness. Retrospective projections can use only facts actually captured at the time.

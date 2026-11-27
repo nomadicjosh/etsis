@@ -1,5 +1,7 @@
 # etSIS
 
+Use the [etSIS system glossary](docs/glossary.md) for plain-language definitions of academic, financial and technical terms used throughout these guides.
+
 ## Version 10 - A New Beginning
 
 ## Alpha development
