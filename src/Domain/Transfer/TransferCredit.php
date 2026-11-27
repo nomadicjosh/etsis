@@ -26,6 +26,7 @@ final class TransferCredit extends EventSourcedAggregate
     /** Last retained grading policy survives a void.
      * @var array<string,mixed>|null */
     private ?array $grade = null;
+    private ?int $retainedQuantity = null;
     private ?string $decision = null;
     private ?string $provenance = null;
     private ?string $academicOn = null;
@@ -55,12 +56,16 @@ final class TransferCredit extends EventSourcedAggregate
         $this->courseVersion = $event->metaParam("course_version_id", null);
         if ($this->courseVersion !== null) {
             new \Domain\Shared\ValueObject\EntityId($this->courseVersion);
-            if ($p["provenance"] !== "award") {
+            if (!in_array($p["provenance"], ["award", "internal_award"], true)) {
                 throw new CorruptHistoryException();
             }
         }
+        if ($p['provenance'] === 'internal_award' && $this->courseVersion === null) {
+            throw new CorruptHistoryException();
+        }
         $this->originalCourseVersion = $this->courseVersion;
         $this->credit = $p["credit"];
+        $this->retainedQuantity = $p["credit"]["status"] === "A" ? $p["credit"]["completed_milli"] : null;
         $this->source = $p["source"];
         $this->originalCourseId = $p["source"]["course_id"];
         $this->originalCompletedOn = $p["source"]["completed_on"];
@@ -89,6 +94,12 @@ final class TransferCredit extends EventSourcedAggregate
         ) {
             throw new CorruptHistoryException();
         }
+        if (
+            isset($this->source['internal']) && $p['action'] !== 'void' &&
+            $p['credits_milli'] > $this->source['internal']['credits_milli']
+        ) {
+            throw new CorruptHistoryException();
+        }
         $g = $p["grade"];
         $units = $p["credits_milli"] ?? 0;
         $this->credit = array_replace($this->credit, [
@@ -101,6 +112,7 @@ final class TransferCredit extends EventSourcedAggregate
             "version" => $this->credit["version"] + 1,
         ]);
         if ($g !== null) {
+            $this->retainedQuantity = $units;
             $this->grade = $g;
         }
         $this->decision = $p["decision_id"];
@@ -117,6 +129,9 @@ final class TransferCredit extends EventSourcedAggregate
             $p["previous_academic_on"] !== $this->academicOn ||
             ($p["academic_on"] !== null && $p["academic_on"] > $this->source["completed_on"])
         ) {
+            throw new CorruptHistoryException();
+        }
+        if (isset($this->source['internal'])) {
             throw new CorruptHistoryException();
         }
         $this->academicOn = $p["academic_on"];
@@ -213,6 +228,12 @@ final class TransferCredit extends EventSourcedAggregate
         ) {
             throw new CorruptHistoryException();
         }
+        if (
+            isset($this->source['internal']) && (!isset($p['term_id']) ||
+            $p['completed_on'] !== $this->source['completed_on'] || $p['academic_on'] !== $this->academicOn)
+        ) {
+            throw new CorruptHistoryException();
+        }
         $this->academicOn = $p["academic_on"];
         $this->source["completed_on"] = $p["completed_on"];
         ++$this->credit["version"];
@@ -228,6 +249,10 @@ final class TransferCredit extends EventSourcedAggregate
     public function originalCourseVersion(): ?string
     {
         return $this->originalCourseVersion;
+    }
+    public function retainedQuantity(): ?int
+    {
+        return $this->retainedQuantity;
     }
     public function academicOn(): ?string
     {

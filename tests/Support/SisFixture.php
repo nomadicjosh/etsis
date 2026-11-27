@@ -1338,6 +1338,42 @@ final class SisFixture
             $this->clock,
         );
     }
+    public function internalTransfers(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Transfer\Service\InternalTransferService {
+        return new \Domain\Transfer\Service\InternalTransferService(
+            new \Infrastructure\Persistence\Repository\SqlTransferCreditRepository(
+                $this->sql,
+            ),
+            $this->transferCredits(),
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->workPursuitLedger(),
+            $this->workPursuits(),
+            $this->inputVerifier(),
+            $this->graduationReader(),
+            new \Infrastructure\Persistence\Repository\SqlStudentRecordRepository(
+                $this->sql,
+            ),
+            $this->admissions,
+            $this->gradeCatalog(),
+            new \Domain\Catalog\Service\PublishedCourseReader(
+                EventStoreFixture::history($this->connection->queryBuilder()),
+            ),
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->clock,
+            new \Domain\Shared\Service\ReviewProof(
+                $this->dropCipher,
+                $this->clock,
+            ),
+            new \Infrastructure\Persistence\Repository\SqlCourseSearchRepository(
+                $this->sql,
+            ),
+            $this->programStatusLedger(),
+            $this->profileLedger(),
+        );
+    }
     public function transferCredits(): \Domain\Transfer\Service\TransferCreditLedger
     {
         $history = new \Infrastructure\EventSourcing\SqlHistoricalEventStore(

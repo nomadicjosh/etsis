@@ -31,6 +31,8 @@ use Domain\Transfer\ValueObject\TransferCreditFacts;
 use Domain\Transfer\ValueObject\TransferCreditId;
 use Throwable;
 
+use function Codefy\Framework\Helpers\trans;
+
 /** Reviewed receiving-course decisions; preserve original award identity and explicit prior evidence. */
 final readonly class TransferCourseService
 {
@@ -134,6 +136,7 @@ final readonly class TransferCourseService
             }
             $course ??= new EntityId($facts["course_id"]);
             $definition = $this->courses->version($course, $courseVersion, $budget);
+            $this->internalQuantity($root, $facts, $definition);
             $reason = trim($reason);
             if (
                 $reason === "" ||
@@ -284,6 +287,7 @@ final readonly class TransferCourseService
                 ) {
                     throw new CorruptHistoryException();
                 }
+                $this->internalQuantity($root, $facts, $definition);
                 $root->acceptHistorical($event);
                 $this->records->acceptCourse(
                     new EntityId($facts["id"]),
@@ -440,6 +444,21 @@ final readonly class TransferCourseService
     {
         if ($this->authorize()->value !== $actor->value) {
             throw new AccessDeniedException("The transfer decision actor changed.");
+        }
+    }
+    private function internalQuantity(
+        \Domain\Transfer\TransferCredit $root,
+        array $facts,
+        \Domain\Catalog\ValueObject\PublishedCourseDefinition $definition,
+    ): void {
+        if (
+            isset($root->source()['internal']) && $facts['completed_milli'] >
+            ($definition->definition->creditPolicy?->maximumMilli ?? $definition->definition->creditsMilli)
+        ) {
+            self::invalid('course_id', trans(
+                "Correct the receiving quantity before accepting a course with a smaller academic " .
+                "maximum."
+            ));
         }
     }
     private function lock(EntityId $student, EntityId $award, EntityId $actor): void

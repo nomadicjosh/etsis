@@ -27,6 +27,8 @@ use Domain\Student\Service\StudentPrimaryProgramLedger;
 use Domain\Student\Service\StudentProgramStatusLedger;
 use JsonException;
 
+use function Codefy\Framework\Helpers\trans;
+
 /** Authoritative pursuit applicability, separate from grade-policy context and curriculum publication. */
 final readonly class WorkPursuitService
 {
@@ -95,6 +97,13 @@ final readonly class WorkPursuitService
                 'origin' => $reference['origin'], 'source_id' => $reference['source_id']];
             if (WorkPursuitLedger::fingerprint($scope['source']) !== WorkPursuitLedger::fingerprint($expected)) {
                 throw new CorruptHistoryException();
+            }
+            $workItem = $byId[$reference['credit_id']] ?? null;
+            if (
+                ($workItem['transfer_source'] ?? null) === 'same_institution' &&
+                $workItem['receiving_assignment_id'] !== $assignment->value
+            ) {
+                continue;
             }
             if (
                 !$root->appliesTo($assignment->value) ||
@@ -685,6 +694,17 @@ final readonly class WorkPursuitService
     ): void {
         if (!in_array($action, ['approve_reuse', 'correct_attribution', 'attribute'], true)) {
             return;
+        }
+        $selected = $this->inputs->selected($credit, $budget);
+        $work = $selected?->items[0] ?? null;
+        if (
+            ($work['transfer_source'] ?? null) === 'same_institution' &&
+            $work['receiving_assignment_id'] !== $target->value
+        ) {
+            self::invalid(trans(
+                "A receiving transfer decision applies only to its accepted pursuit. Evaluate the " .
+                "original institutional work separately."
+            ));
         }
         $states = $this->graduation->student($student, $budget);
         if (

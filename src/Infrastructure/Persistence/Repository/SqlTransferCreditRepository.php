@@ -10,6 +10,7 @@ use Domain\Catalog\ValueObject\PublishedCourseDefinition;
 use Domain\Shared\ValueObject\EntityId;
 use Domain\Transfer\Repository\TransferCreditRepository;
 use Domain\Transfer\ValueObject\TransferCreditFacts;
+use Domain\Transfer\ValueObject\InternalTransferSource;
 use Infrastructure\Persistence\SqlRecords;
 
 final readonly class SqlTransferCreditRepository implements TransferCreditRepository
@@ -31,7 +32,11 @@ final readonly class SqlTransferCreditRepository implements TransferCreditReposi
     }
     public function award(EntityId $award): array
     {
-        return $this->sql->one("sis_transfer_awards", ["id" => $award->value]);
+        $rows = $this->sql->rows('sis_transfer_sources', ['id' => $award->value], 2);
+        if (count($rows) !== 1) {
+            throw new CorruptHistoryException();
+        }
+        return $rows[0];
     }
     public function corrected(EntityId $student, EntityId $equivalency, string $completed): ?array
     {
@@ -62,6 +67,55 @@ final readonly class SqlTransferCreditRepository implements TransferCreditReposi
         return new TransferCreditFacts(
             array_intersect_key($r, array_flip(TransferCreditFacts::FIELDS)),
         )->facts;
+    }
+    public function internal(EntityId $award): ?array
+    {
+        return $this->sql->rows(
+            "sis_internal_transfer_awards",
+            ["id" => $award->value],
+            1,
+        )[0] ?? null;
+    }
+    public function internalExisting(
+        EntityId $student,
+        EntityId $assignment,
+        EntityId $source,
+    ): ?array {
+        return $this->sql->rows(
+            "sis_internal_transfer_awards",
+            [
+                "student_id" => $student->value,
+                "receiving_assignment_id" => $assignment->value,
+                "source_credit_id" => $source->value,
+            ],
+            1,
+        )[0] ?? null;
+    }
+    public function internalPage(
+        EntityId $student,
+        EntityId $assignment,
+        ?EntityId $after = null,
+    ): array {
+        $q = $this->sql->quote(...);
+        return $this->sql->fetch(
+            "SELECT * FROM " .
+                $q("sis_internal_transfer_awards") .
+                " WHERE " .
+                $q("student_id") .
+                " = ? AND " .
+                $q("receiving_assignment_id") .
+                " = ?" .
+                ($after === null ? "" : " AND " . $q("id") . " < ?") .
+                " ORDER BY " .
+                $q("id") .
+                " DESC",
+            [
+                $student->value,
+                $assignment->value,
+                ...$after === null ? [] : [$after->value],
+            ],
+            11,
+        );
     }
     public function courseVersion(EntityId $credit): ?EntityId
     {
@@ -117,14 +171,24 @@ final readonly class SqlTransferCreditRepository implements TransferCreditReposi
                 "course_version_id" => $definition->versionId->value,
             ]);
         }
-        $this->sql->insert("sis_transfer_awards", [
+        if (isset($source['internal'])) {
+            $i = $source['internal'];
+            $this->sql->insert('sis_internal_transfer_awards', ['id' => $source['award_id'],
+                'student_id' => $source['student_id'], 'credit_id' => $credit['id'], 'term_id' => $source['term_id'],
+                'completed_on' => $source['completed_on'], 'source_credit_id' => $i['source_credit_id'],
+                'source_pursuit_id' => $i['source_pursuit_id'], 'source_credential_id' => $i['source_credential_id'],
+                'receiving_assignment_id' => $i['receiving_assignment_id'],
+                'lineage_hash' => InternalTransferSource::hash($i)]);
+        } else {
+            $this->sql->insert("sis_transfer_awards", [
             "id" => $source["award_id"],
             "student_id" => $source["student_id"],
             "equivalency_id" => $source["equivalency_id"],
             "completed_on" => $source["completed_on"],
             "term_id" => $source["term_id"],
             "credit_id" => $credit["id"],
-        ]);
+            ]);
+        }
         $this->track($source, $credit);
     }
     public function project(array $credit, int $expectedVersion): void
@@ -162,7 +226,7 @@ final readonly class SqlTransferCreditRepository implements TransferCreditReposi
         if ($award["term_id"] !== $source["term_id"]) {
             if (
                 $this->sql->update(
-                    "sis_transfer_awards",
+                    isset($source["internal"]) ? "sis_internal_transfer_awards" : "sis_transfer_awards",
                     ["term_id" => $source["term_id"]],
                     ["id" => $source["award_id"], "term_id" => $award["term_id"]]
                 ) !== 1

@@ -2,7 +2,13 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__) . "/Support/TransferAwardFixture.php";
+namespace Tests\Integration;
+
+use TransferAwardFixture;
+use HiatusFixture;
+use EventStoreFixture;
+use DateTimeImmutable;
+use RuntimeException;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\Exception\ConcurrentModificationException;
@@ -13,8 +19,13 @@ use Domain\Transfer\ValueObject\AwardChange;
 use Domain\Transfer\ValueObject\TransferCreditId;
 use Infrastructure\Persistence\Repository\SqlTransferCreditRepository;
 use PHPUnit\Framework\TestCase;
+
 final class TransferCreditHistoryTest extends TestCase
 {
+    public static function setUpBeforeClass(): void
+    {
+        require_once dirname(__DIR__) . "/Support/TransferAwardFixture.php";
+    }
     private function fixture(bool $legacy = false): TransferAwardFixture
     {
         $h = new HiatusFixture();
@@ -327,11 +338,15 @@ final class TransferCreditHistoryTest extends TestCase
         );
         $stage->pdo->exec(
             "CREATE TABLE sis_transfer_awards (id TEXT PRIMARY KEY,student_id TEXT," .
-                "equivalency_id TEXT,completed_on TEXT,term_id TEXT,credit_id TEXT)",
+                "equivalency_id TEXT,completed_on TEXT,term_id TEXT,credit_id TEXT,corrected_completed_on TEXT)",
         );
         $stage->pdo->exec(
             "CREATE TABLE sis_transfer_credit_streams (id TEXT PRIMARY KEY,student_id TEXT,credit_id TEXT)",
         );
+        $migration = new \CreateSisInternalTransfers('internal-transfer-stage');
+        $adapter = new \Qubus\Expressive\Migration\Adapter\DbalMigrationAdapter($stage, 'test_migrations');
+        $migration->setObjectMap(new \ArrayObject(['phpmig.adapter' => $adapter]));
+        $migration->up();
         $repo = new SqlTransferCreditRepository(
             new \Infrastructure\Persistence\SqlRecords($stage->queryBuilder()),
         );

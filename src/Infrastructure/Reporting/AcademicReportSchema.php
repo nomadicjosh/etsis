@@ -328,7 +328,7 @@ final class AcademicReportSchema
                 ...$personJoins,
                 "term" => $join("sis_terms", "credit", "term_id", "id"),
                 "grade" => $join("sis_grades", "credit", "grade_id", "id"),
-                'transfer_completion' => $join('sis_transfer_awards', 'credit', 'source_id', 'id') + [
+                'transfer_completion' => $join('sis_transfer_sources', 'credit', 'source_id', 'id') + [
                     'source' => 'transfer_award',
                 ],
                 'institutional_dates' => $join('sis_academic_date_index', 'credit', 'id', 'id') + [
@@ -753,7 +753,7 @@ final class AcademicReportSchema
             ],
             'credit_term' => $join('sis_terms', 'academic_credit', 'term_id', 'id'),
             'credit_grade' => $join('sis_grades', 'academic_credit', 'grade_id', 'id'),
-            'credit_transfer_completion' => $join('sis_transfer_awards', 'academic_credit', 'source_id', 'id') + [
+            'credit_transfer_completion' => $join('sis_transfer_sources', 'academic_credit', 'source_id', 'id') + [
                 'source' => 'transfer_award',
             ],
             'credit_institutional_dates' => $join('sis_academic_date_index', 'academic_credit', 'id', 'id') + [

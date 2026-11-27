@@ -28,6 +28,8 @@ use Domain\Transfer\Repository\TransferCreditRepository;
 use Domain\Transfer\ValueObject\TransferCreditId;
 use Throwable;
 
+use function Codefy\Framework\Helpers\trans;
+
 /** Shared registrar review of source chronology and local posting placement, preserving awarded credit. */
 final readonly class TransferAcademicDetailsService
 {
@@ -89,6 +91,15 @@ final readonly class TransferAcademicDetailsService
                 ? $this->credits->verified($this->awards->get($student, $award), $budget)
                 : null;
             $previousCompleted = $root->source()["completed_on"] ?? $record["completed_on"];
+            if (
+                isset($root->source()['internal']) && ($academicOn !== $root->academicOn() ||
+                ($completedOn !== null && $completedOn !== $previousCompleted))
+            ) {
+                self::invalid('completed_on', trans(
+                    "The original institutional completion date is retained. Correct only the receiving" .
+                    " posting term here."
+                ));
+            }
             $completedOn ??= $previousCompleted;
             $today = $this->clock->now()->format("Y-m-d");
             $effectiveOn ??= $today;
@@ -380,6 +391,12 @@ final readonly class TransferAcademicDetailsService
     private function availableDate(EntityId $student, EntityId $award, string $date): void
     {
         $row = $this->records->award($award);
+        if ($row['source_kind'] === 'same_institution') {
+            if ($row['completed_on'] !== $date) {
+                self::invalid('completed_on', trans("Preserve the original institutional completion date."));
+            }
+            return;
+        }
         $equivalency = new EntityId($row["equivalency_id"]);
         $candidates = [
             $this->records->existing($student, $equivalency, $date),

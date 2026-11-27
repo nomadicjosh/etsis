@@ -77,6 +77,7 @@ try {
                 'check-enrollment-updates',
                 'check-graduation',
                 'check-service-fees',
+                'check-internal-transfers',
                 'check-course-auditing',
                 'check-admission-notices',
                 'check-public-event-feed',
@@ -449,6 +450,16 @@ try {
                 static fn() => $admissionNotices->campus->cipher
             );
             require __DIR__ . '/AdmissionNoticesBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-internal-transfers') {
+            $kernel->bootstrap();
+            require_once __DIR__ . '/GraduationFixture.php';
+            $internalFixture = new \Tests\Support\GraduationFixture();
+            $internalFixture->confirm($internalFixture->review());
+            $internalFixture->confirm($internalFixture->review('confer'));
+            $httpSis = $internalFixture->sis;
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/InternalTransferBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-service-fees') {
             $kernel->bootstrap();

@@ -1307,3 +1307,6 @@ h3 { font-size: .9rem; font-weight: 650; }
 /* Retained fee labels, receipt references and staff reasons must reflow on narrow screens. */
 .service-fee-summary, .service-fee-workbench { min-width: 0; overflow-wrap: anywhere; }
 .service-fee-summary .btn, .service-fee-workbench .btn { white-space: normal; text-align: start; }
+
+.internal-transfer-workbench { min-width: 0; overflow-wrap: anywhere; }
+.internal-transfer-workbench .btn { white-space: normal; text-align: start; }

@@ -25,6 +25,9 @@ interface TransferCreditRepository
     public function mapping(EntityId $award): ?array;
     /** @return array<string,mixed> */
     public function credit(EntityId $credit): array;
+    public function internal(EntityId $award): ?array;
+    public function internalPage(EntityId $student, EntityId $assignment, ?EntityId $after = null): array;
+    public function internalExisting(EntityId $student, EntityId $assignment, EntityId $source): ?array;
     public function courseVersion(EntityId $credit): ?EntityId;
     public function acceptCourse(
         EntityId $credit,

@@ -3988,3 +3988,312 @@ msgstr "This fee has already been cleared or used. Refresh its status."
 #: src/Domain/ServiceFee/Service/FeeClearance.php:178
 msgid "Complete the required service fee payment or obtain an authorized waiver before submitting."
 msgstr "Complete the required service fee payment or obtain an authorized waiver before submitting."
+
+#: resources/views/shared/internal-transfer-labels.php:8
+msgid "Student"
+msgstr "Student"
+
+#: resources/views/shared/internal-transfer-labels.php:10
+msgid "Grade policy for GPA"
+msgstr "Grade policy for GPA"
+
+#: resources/views/shared/internal-transfer-labels.php:11
+msgid "Correct posting term"
+msgstr "Correct posting term"
+
+#: resources/views/shared/internal-transfer-labels.php:12
+msgid "Receiving posting term changed"
+msgstr "Receiving posting term changed"
+
+#: resources/views/shared/internal-transfer-labels.php:13
+msgid "Review posting term"
+msgstr "Review posting term"
+
+#: resources/views/shared/internal-transfer-labels.php:14
+msgid "Confirm posting term"
+msgstr "Confirm posting term"
+
+#: resources/views/shared/internal-transfer-labels.php:16
+msgid "The receiving posting term is independent of the original completion date. This correction preserves the source coursework and its dates."
+msgstr "The receiving posting term is independent of the original completion date. This correction preserves the source coursework and its dates."
+
+#: resources/views/shared/internal-transfer-labels.php:19
+msgid "Same-institution transfer evaluation"
+msgstr "Same-institution transfer evaluation"
+
+#: resources/views/shared/internal-transfer-labels.php:21
+msgid "Evaluate institutionally earned academic coursework from a genuinely conferred degree for this receiving pursuit. The original coursework and credential remain unchanged."
+msgstr "Evaluate institutionally earned academic coursework from a genuinely conferred degree for this receiving pursuit. The original coursework and credential remain unchanged."
+
+#: resources/views/shared/internal-transfer-labels.php:24
+msgid "Evaluate completed-degree work"
+msgstr "Evaluate completed-degree work"
+
+#: resources/views/shared/internal-transfer-labels.php:25
+msgid "Available completed-degree coursework"
+msgstr "Available completed-degree coursework"
+
+#: resources/views/shared/internal-transfer-labels.php:27
+msgid "No eligible, unevaluated institutional coursework is available for this pursuit."
+msgstr "No eligible, unevaluated institutional coursework is available for this pursuit."
+
+#: resources/views/shared/internal-transfer-labels.php:30
+msgid "No same-institution transfer evaluations are recorded for this pursuit."
+msgstr "No same-institution transfer evaluations are recorded for this pursuit."
+
+#: resources/views/shared/internal-transfer-labels.php:32
+msgid "Original coursework and credential"
+msgstr "Original coursework and credential"
+
+#: resources/views/shared/internal-transfer-labels.php:33
+msgid "Receiving pursuit"
+msgstr "Receiving pursuit"
+
+#: resources/views/shared/internal-transfer-labels.php:34
+msgid "Receiving course"
+msgstr "Receiving course"
+
+#: resources/views/shared/internal-transfer-labels.php:35
+msgid "Published receiving definition"
+msgstr "Published receiving definition"
+
+#: resources/views/shared/internal-transfer-labels.php:36
+msgid "Posting term"
+msgstr "Posting term"
+
+#: resources/views/shared/internal-transfer-labels.php:37
+msgid "Academic credits to accept"
+msgstr "Academic credits to accept"
+
+#: resources/views/shared/internal-transfer-labels.php:38
+msgid "Receiving grade"
+msgstr "Receiving grade"
+
+#: resources/views/shared/internal-transfer-labels.php:39
+msgid "Original grade"
+msgstr "Original grade"
+
+#: resources/views/shared/internal-transfer-labels.php:40
+msgid "GPA-eligible grade"
+msgstr "GPA-eligible grade"
+
+#: resources/views/shared/internal-transfer-labels.php:41
+msgid "Grade excludes GPA"
+msgstr "Grade excludes GPA"
+
+#: resources/views/shared/internal-transfer-labels.php:43
+msgid "The accepted amount cannot exceed the earned source or the published receiving maximum. CEUs and audited work are excluded. Completion remains the original verified date."
+msgstr "The accepted amount cannot exceed the earned source or the published receiving maximum. CEUs and audited work are excluded. Completion remains the original verified date."
+
+#: resources/views/shared/internal-transfer-labels.php:47
+msgid "Originally earned credits"
+msgstr "Originally earned credits"
+
+#: resources/views/shared/internal-transfer-labels.php:48
+msgid "Verified completion"
+msgstr "Verified completion"
+
+#: resources/views/shared/internal-transfer-labels.php:49
+msgid "Source credential"
+msgstr "Source credential"
+
+#: resources/views/shared/internal-transfer-labels.php:50
+msgid "Conferral date"
+msgstr "Conferral date"
+
+#: resources/views/shared/internal-transfer-labels.php:51
+msgid "Source program"
+msgstr "Source program"
+
+#: resources/views/shared/internal-transfer-labels.php:52
+msgid "Find receiving course"
+msgstr "Find receiving course"
+
+#: resources/views/shared/internal-transfer-labels.php:53
+msgid "Search courses"
+msgstr "Search courses"
+
+#: resources/views/shared/internal-transfer-labels.php:54
+msgid "Select course"
+msgstr "Select course"
+
+#: resources/views/shared/internal-transfer-labels.php:55
+msgid "More courses"
+msgstr "More courses"
+
+#: resources/views/shared/internal-transfer-labels.php:58
+msgid "Publish an academic receiving-course definition before evaluating this course."
+msgstr "Publish an academic receiving-course definition before evaluating this course."
+
+#: resources/views/shared/internal-transfer-labels.php:60
+msgid "Evaluation reason"
+msgstr "Evaluation reason"
+
+#: resources/views/shared/internal-transfer-labels.php:61
+msgid "Review evaluation"
+msgstr "Review evaluation"
+
+#: resources/views/shared/internal-transfer-labels.php:62
+msgid "Confirm evaluation"
+msgstr "Confirm evaluation"
+
+#: resources/views/shared/internal-transfer-labels.php:63
+msgid "Revise evaluation"
+msgstr "Revise evaluation"
+
+#: resources/views/shared/internal-transfer-labels.php:65
+msgid "Back to evaluations"
+msgstr "Back to evaluations"
+
+#: resources/views/shared/internal-transfer-labels.php:66
+msgid "Back to available coursework"
+msgstr "Back to available coursework"
+
+#: resources/views/shared/internal-transfer-labels.php:67
+msgid "View evaluation"
+msgstr "View evaluation"
+
+#: resources/views/shared/internal-transfer-labels.php:68
+msgid "Load more evaluations"
+msgstr "Load more evaluations"
+
+#: resources/views/shared/internal-transfer-labels.php:69
+msgid "More available coursework"
+msgstr "More available coursework"
+
+#: resources/views/shared/internal-transfer-labels.php:70
+msgid "Accepted receiving credit"
+msgstr "Accepted receiving credit"
+
+#: resources/views/shared/internal-transfer-labels.php:71
+msgid "Voided evaluation"
+msgstr "Voided evaluation"
+
+#: resources/views/shared/internal-transfer-labels.php:72
+msgid "Correct receiving units or grade"
+msgstr "Correct receiving units or grade"
+
+#: resources/views/shared/internal-transfer-labels.php:73
+msgid "Void receiving award"
+msgstr "Void receiving award"
+
+#: resources/views/shared/internal-transfer-labels.php:74
+msgid "Reinstate receiving award"
+msgstr "Reinstate receiving award"
+
+#: resources/views/shared/internal-transfer-labels.php:75
+msgid "Correct receiving course"
+msgstr "Correct receiving course"
+
+#: resources/views/shared/internal-transfer-labels.php:76
+msgid "Receiving award established"
+msgstr "Receiving award established"
+
+#: resources/views/shared/internal-transfer-labels.php:77
+msgid "Receiving decision history"
+msgstr "Receiving decision history"
+
+#: resources/views/shared/internal-transfer-labels.php:79
+msgid "Receiving course publication changed"
+msgstr "Receiving course publication changed"
+
+#: resources/views/shared/internal-transfer-labels.php:80
+msgid "Receiving decision recorded."
+msgstr "Receiving decision recorded."
+
+#: resources/views/shared/internal-transfer-labels.php:81
+msgid "Effective date"
+msgstr "Effective date"
+
+#: resources/views/shared/internal-transfer-labels.php:82
+msgid "Review receiving course"
+msgstr "Review receiving course"
+
+#: resources/views/shared/internal-transfer-labels.php:83
+msgid "Confirm receiving course"
+msgstr "Confirm receiving course"
+
+#: resources/views/shared/internal-transfer-labels.php:85
+msgid "Source evidence or receiving details may have changed. Review the current records again."
+msgstr "Source evidence or receiving details may have changed. Review the current records again."
+
+#: resources/views/shared/internal-transfer-labels.php:88
+msgid "Review the original evidence and the receiving decision before confirming. This decision applies only to the selected receiving pursuit."
+msgstr "Review the original evidence and the receiving decision before confirming. This decision applies only to the selected receiving pursuit."
+
+#: resources/views/shared/internal-transfer-labels.php:92
+msgid "Voiding removes the current credits and GPA contribution of this receiving award. It preserves the original coursework, credential and all earlier receiving decisions."
+msgstr "Voiding removes the current credits and GPA contribution of this receiving award. It preserves the original coursework, credential and all earlier receiving decisions."
+
+#: resources/views/shared/internal-transfer-labels.php:96
+msgid "This pursuit is closed. Existing evaluations remain available for authorized corrections; new awards require an active receiving pursuit."
+msgstr "This pursuit is closed. Existing evaluations remain available for authorized corrections; new awards require an active receiving pursuit."
+
+#: resources/views/shared/internal-transfer-labels.php:99
+msgid "No matching courses were found."
+msgstr "No matching courses were found."
+
+#: resources/views/shared/internal-transfer-labels.php:101
+msgid "This is the effective date of the receiving-course correction; the original completion date remains unchanged."
+msgstr "This is the effective date of the receiving-course correction; the original completion date remains unchanged."
+
+#: resources/views/shared/internal-transfer-labels.php:105
+msgid "Select a published definition and the receiving academic details."
+msgstr "Select a published definition and the receiving academic details."
+
+#: resources/views/shared/internal-transfer-labels.php:108
+msgid "The published receiving grade controls its points and GPA eligibility. Degree rules may still exclude transfer GPA. A passing source grade does not silently select a receiving grade."
+msgstr "The published receiving grade controls its points and GPA eligibility. Degree rules may still exclude transfer GPA. A passing source grade does not silently select a receiving grade."
+
+#: src/Domain/Transfer/Service/InternalTransferService.php:466
+msgid "This source already has a receiving evaluation. Review that award instead."
+msgstr "This source already has a receiving evaluation. Review that award instead."
+
+#: src/Domain/Transfer/Service/InternalTransferService.php:482
+msgid "Choose a decision available for the current transfer status."
+msgstr "Choose a decision available for the current transfer status."
+
+#: src/Domain/Transfer/Service/InternalTransferService.php:504
+msgid "Change the receiving credit amount or grade before reviewing a correction."
+msgstr "Change the receiving credit amount or grade before reviewing a correction."
+
+#: src/Domain/Transfer/Service/InternalTransferService.php:522
+msgid "Choose verified institutional coursework for this student."
+msgstr "Choose verified institutional coursework for this student."
+
+#: src/Domain/Transfer/Service/InternalTransferService.php:538
+msgid "Use passed, dated academic credit from a genuinely conferred different pursuit."
+msgstr "Use passed, dated academic credit from a genuinely conferred different pursuit."
+
+#: src/Domain/Transfer/Service/InternalTransferService.php:580
+msgid "The receiving academic quantity must fit both the earned source and the published receiving course."
+msgstr "The receiving academic quantity must fit both the earned source and the published receiving course."
+
+#: src/Domain/Transfer/Service/InternalTransferService.php:597
+msgid "Choose a passing grade from a published receiving grading scale."
+msgstr "Choose a passing grade from a published receiving grading scale."
+
+#: src/Domain/Transfer/Service/InternalTransferService.php:1026
+msgid "Enter an evaluation reason of 1 to 1,000 characters."
+msgstr "Enter an evaluation reason of 1 to 1,000 characters."
+
+#: src/Domain/AcademicRecord/Service/WorkPursuitService.php:705
+msgid "A receiving transfer decision applies only to its accepted pursuit. Evaluate the original institutional work separately."
+msgstr "A receiving transfer decision applies only to its accepted pursuit. Evaluate the original institutional work separately."
+
+#: src/Domain/Transfer/Service/TransferAcademicDetailsService.php:99
+msgid "The original institutional completion date is retained. Correct only the receiving posting term here."
+msgstr "The original institutional completion date is retained. Correct only the receiving posting term here."
+
+#: src/Domain/Transfer/Service/TransferAcademicDetailsService.php:396
+msgid "Preserve the original institutional completion date."
+msgstr "Preserve the original institutional completion date."
+
+#: src/Domain/Transfer/Service/TransferAwardService.php:76
+#: src/Domain/Transfer/Service/TransferAwardService.php:136
+msgid "Use the same-institution evaluation in the receiving pursuit for this award."
+msgstr "Use the same-institution evaluation in the receiving pursuit for this award."
+
+#: src/Domain/Transfer/Service/TransferCourseService.php:459
+msgid "Correct the receiving quantity before accepting a course with a smaller academic maximum."
+msgstr "Correct the receiving quantity before accepting a course with a smaller academic maximum."

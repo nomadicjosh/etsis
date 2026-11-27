@@ -85,6 +85,9 @@ window.createWorkspaceTransferAwards = function (ui) {
         body.append(node("p", { role: "status" }, "Loading the retained award…"));
         const value = await request(endpoint(student, award));
         if (!body.isConnected) return;
+        if (value.source_kind === 'same_institution') {
+            return ui.internalTransfers().detail(student, value.receiving_assignment_id, award, () => ui.openStudent(student));
+        }
         const actions = node("div", {
             class: "inline-actions",
             role: "group",

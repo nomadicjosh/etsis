@@ -21,17 +21,23 @@ final readonly class SqlTransferAwardRepository implements TransferAwardReposito
     public function get(EntityId $student, EntityId $award): array
     {
         $q = $this->sql->quote(...);
-        $r = $this->sql->one("sis_transfer_awards", ["id" => $award->value, "student_id" => $student->value]);
+        $r = $this->sql->one("sis_transfer_sources", ["id" => $award->value, "student_id" => $student->value]);
         $credit = $this->sql->one("sis_academic_credits", [
             "id" => $r["credit_id"],
             "student_id" => $student->value,
             "source_id" => $award->value,
             "credit_type" => "transfer",
         ]);
-        $context = new SqlTransferCatalogRepository($this->sql, $this->grades)->get(
-            "equivalencies",
-            new EntityId($r["equivalency_id"]),
-        );
+        if ($r['source_kind'] === 'same_institution') {
+            $keys = ['institution_id', 'external_course_id', 'institution_code',
+                'institution_name', 'external_code', 'external_title'];
+            $context = array_fill_keys($keys, null);
+        } else {
+            $context = new SqlTransferCatalogRepository($this->sql, $this->grades)->get(
+                "equivalencies",
+                new EntityId($r["equivalency_id"]),
+            );
+        }
         if ($credit["term_id"] !== $r["term_id"]) {
             throw new RecordNotFoundException("Transfer award context does not match its credit.");
         }
@@ -74,6 +80,7 @@ final readonly class SqlTransferAwardRepository implements TransferAwardReposito
             $credit[$key] = (int) $credit[$key];
         }
         return [
+            "source_kind" => $r["source_kind"],
             "id" => $r["id"],
             "student_id" => $r["student_id"],
             "equivalency_id" => $r["equivalency_id"],
@@ -95,7 +102,8 @@ final readonly class SqlTransferAwardRepository implements TransferAwardReposito
 
     public function lock(EntityId $award, EntityId $credit): void
     {
-        $this->sql->lock("sis_transfer_awards", $award->value, "id");
+        $internal = $this->sql->rows('sis_internal_transfer_awards', ['id' => $award->value], 1) !== [];
+        $this->sql->lock($internal ? 'sis_internal_transfer_awards' : 'sis_transfer_awards', $award->value, 'id');
         $this->sql->lock("sis_academic_credits", $credit->value, "id");
     }
 

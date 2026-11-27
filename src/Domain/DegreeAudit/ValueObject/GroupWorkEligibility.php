@@ -114,6 +114,7 @@ final readonly class GroupWorkEligibility
     public function transferStatus(
         ?string $origin = null,
         ?string $institution = null,
+        bool $sameInstitution = false,
     ): ?CourseMatchStatus {
         $allowed = $this->facts["transfer_institutions"] ?? [];
         if ($allowed === [] || $origin === "institutional") {
@@ -121,6 +122,9 @@ final readonly class GroupWorkEligibility
         }
         if ($origin !== "transfer") {
             return CourseMatchStatus::OriginUnknown;
+        }
+        if ($sameInstitution) {
+            return CourseMatchStatus::TransferInstitutionExcluded;
         }
         if ($institution === null) {
             return CourseMatchStatus::TransferInstitutionUnknown;

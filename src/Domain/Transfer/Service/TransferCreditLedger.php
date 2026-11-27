@@ -26,6 +26,7 @@ use Domain\Transfer\TransferCredit;
 use Domain\Transfer\TransferEquivalency;
 use Domain\Transfer\ValueObject\AwardChange;
 use Domain\Transfer\ValueObject\TransferCreditId;
+use Domain\Transfer\ValueObject\InternalTransferSource;
 use Domain\Transfer\ValueObject\TransferCreditFacts;
 use Qubus\Exception\Data\TypeException;
 
@@ -240,6 +241,10 @@ final readonly class TransferCreditLedger
                     ]),
                 ),
             );
+            if (isset($s['internal'])) {
+                $record['source_kind'] = 'same_institution';
+                $record['receiving_assignment_id'] = $s['internal']['receiving_assignment_id'];
+            }
             $record["credit"] = $root->credit();
             $display = $root->display();
             $record["grade_code"] = $display["grade_code"];
@@ -287,6 +292,8 @@ final readonly class TransferCreditLedger
             "course_version_id" => $root->courseVersion(),
             "retained_term_code" => $root->source()["term_code"] ?? null,
             'transfer_institution_id' => $root->source()['institution_id'] ?? null,
+            ...isset($root->source()['internal']) ? ['transfer_source' => 'same_institution',
+                'receiving_assignment_id' => $root->source()['internal']['receiving_assignment_id']] : [],
         ];
     }
     /**
@@ -507,6 +514,26 @@ final readonly class TransferCreditLedger
             throw new CorruptHistoryException();
         }
         $a = $this->records->award($award);
+        if (isset($s['internal'])) {
+            $i = $s['internal'];
+            $person = $this->admissions->student(new EntityId($c['student_id']))->personId;
+            if ($i['person']['person_id'] !== $person->value) {
+                throw new CorruptHistoryException();
+            }
+            $row = $this->records->internal($award) ?? throw new CorruptHistoryException();
+            $keys = ['source_credit_id', 'source_pursuit_id', 'source_credential_id', 'receiving_assignment_id'];
+            foreach ($keys as $key) {
+                if ($row[$key] !== $i[$key]) {
+                    throw new CorruptHistoryException();
+                }
+            }
+            if ($a['source_kind'] !== 'same_institution' || $row['lineage_hash'] !== InternalTransferSource::hash($i)) {
+                throw new CorruptHistoryException();
+            }
+        } elseif ($a['source_kind'] !== 'external') {
+            throw new CorruptHistoryException();
+        }
+
         if (
             $m === null ||
             count($m) !== 3 ||

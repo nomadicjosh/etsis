@@ -20,6 +20,8 @@ final class AcademicWorkView
                 $input['earned_ceus'],
                 array_flip(['earned_milli', 'completed_on'])
             )] : [],
+            ...isset($input['transfer_source']) ? ['transfer_source' => $input['transfer_source'],
+                'receiving_assignment_id' => $input['receiving_assignment_id']] : [],
             "id" => $id,
             "course_id" => $facts["course_id"],
             "course_code" => $facts["course_code"],

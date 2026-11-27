@@ -1020,6 +1020,7 @@ window.createWorkspaceStudents = function (ui) {
                                       ),
                                   );
                               extra.push(button(ui.graduationLabels.title, () => graduation.open(id, item.id, back)));
+                              if (can('sis:transfer:manage') && can('sis:student:read')) extra.push(button(ui.internalTransferLabels.title, () => ui.internalTransfers().open(id, item.id, back)));
                               if (can("sis:registration:manage")) {
                                   extra.push(
                                       button("Program status history", () =>

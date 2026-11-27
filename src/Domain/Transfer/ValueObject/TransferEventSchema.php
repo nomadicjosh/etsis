@@ -89,14 +89,14 @@ final class TransferEventSchema
         new EntityId($p["decision_id"]);
         if ($class === TransferCreditWasEstablished::class) {
             if (
-                !in_array($p["provenance"], ["award", "observed_existing"], true) ||
+                !in_array($p["provenance"], ["award", "observed_existing", "internal_award"], true) ||
                 !is_array($p["credit"]) ||
                 !is_array($p["source"])
             ) {
                 self::invalid();
             }
             new TransferCreditFacts($p["credit"]);
-            self::source($p["source"]);
+            self::source($p["source"], $p["provenance"] === "internal_award");
             foreach (["student_id", "course_id", "term_id"] as $key) {
                 if ($p["credit"][$key] !== $p["source"][$key]) {
                     self::invalid();
@@ -115,6 +115,19 @@ final class TransferEventSchema
                 }
             } elseif ($p["credit"]["grade_id"] !== null) {
                 self::invalid();
+            }
+            if ($p['provenance'] === 'internal_award') {
+                if (
+                    $p['grade'] === null || !$p['grade']['passes'] || $p['credit']['status'] !== 'A' ||
+                    $p['credit']['version'] !== 0 || $p['credit']['attempted_milli'] < 1 ||
+                    $p['credit']['attempted_milli'] !== $p['credit']['completed_milli'] ||
+                    $p['credit']['completed_milli'] > $p['source']['internal']['credits_milli'] ||
+                    $p['source']['completed_on'] !== $p['source']['internal']['completed_on'] ||
+                    $p['credit']['grade_points_milli'] !== ($p['grade']['counts_gpa'] ?
+                        intdiv($p['credit']['completed_milli'] * $p['grade']['points_milli'], 1000) : 0)
+                ) {
+                    self::invalid();
+                }
             }
             if ($p["provenance"] === "award") {
                 if (
@@ -283,7 +296,7 @@ final class TransferEventSchema
         }
     }
     /** @param array<string,mixed> $s */
-    private static function source(array $s): void
+    private static function source(array $s, bool $internal = false): void
     {
         $keys = [
             "award_id",
@@ -302,6 +315,10 @@ final class TransferEventSchema
             "equivalency",
             "grade_rank",
         ];
+        if ($internal) {
+            $keys[] = "internal";
+            InternalTransferSource::validate($s["internal"] ?? []);
+        }
         if (count($s) !== count($keys) || array_diff(array_keys($s), $keys) !== []) {
             self::invalid();
         }
@@ -315,6 +332,12 @@ final class TransferEventSchema
             "external_course_id",
         ];
         foreach ($identities as $key) {
+            if ($internal && in_array($key, ['equivalency_id','institution_id','external_course_id'], true)) {
+                if ($s[$key] !== null) {
+                    self::invalid();
+
+                } continue;
+            }
             if (!is_string($s[$key])) {
                 self::invalid();
             }
@@ -322,6 +345,12 @@ final class TransferEventSchema
         }
         $labels = ["institution_code", "institution_name", "external_code", "external_title", "term_code"];
         foreach ($labels as $key) {
+            if ($internal && $key !== 'term_code') {
+                if ($s[$key] !== null) {
+                    self::invalid();
+
+                } continue;
+            }
             if (
                 !is_string($s[$key]) ||
                 trim($s[$key]) === "" ||

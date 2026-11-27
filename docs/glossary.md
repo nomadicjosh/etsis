@@ -148,6 +148,10 @@ The student's record of a particular institutional or transfer course attempt an
 
 **Institutional credit** is recorded for the institution's own academic work. **Transfer credit** is an accepted award through the formal transfer-evaluation workflow. Recording an external course or creating an equivalency alone does not award credit to a student. See [transfer-credit history](transfer-credit-history.md).
 
+### Same-institution receiving transfer
+
+A separately reviewed transfer award accepting institutionally earned coursework from a genuinely conferred pursuit into another pursuit for the same student. It preserves the original attempt, grade, completion date and credential; the new receiving credit belongs only to the selected pursuit and provides no institutional residency credit. Ordinary course reuse is not this approval. See [same-institution transfer evaluation](same-institution-transfers.md).
+
 ### External course / transfer equivalency
 
 An **external course** describes a sending institution's course. A **transfer equivalency** records its approved relationship to a receiving institution's course and applicable award rules. The individual student's transfer award is a separate decision. See [transfer publications](transfer-course-publications.md).

@@ -401,6 +401,7 @@ final readonly class CourseMatchEvaluator
         $transfer = $eligibility->transferStatus(
             $work['credit_type'] ?? null,
             $work['transfer_institution_id'] ?? null,
+            ($work['transfer_source'] ?? null) === 'same_institution',
         );
         if ($transfer !== null && $transfer !== Status::TransferInstitutionUnknown) {
             return $transfer;

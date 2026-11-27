@@ -28,7 +28,7 @@ final readonly class SqlAcademicInputRepository implements AcademicInputReposito
             "enrollments" => ["sis_enrollments", ["id", "section_id", "term_id"], ["term_id", "status"]],
             "transfer" => ["sis_transfer_credit_streams", ["id", "credit_id"], ["id"]],
             "awards" => [
-                "sis_transfer_awards",
+                "sis_transfer_sources",
                 ["id", "credit_id", "term_id"],
                 ["equivalency_id", "completed_on"],
             ],
@@ -101,7 +101,7 @@ final readonly class SqlAcademicInputRepository implements AcademicInputReposito
         $sourceTables = [
             "registration" => "sis_registration_streams",
             "enrollments" => "sis_enrollments",
-            "awards" => "sis_transfer_awards",
+            "awards" => "sis_transfer_sources",
         ];
         foreach ($sourceTables as $kind => $table) {
             $ids = array_keys($kind === "awards" ? $awards : $enrollments);

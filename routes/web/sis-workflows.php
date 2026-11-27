@@ -1698,4 +1698,13 @@ return static function (Psr7Router $router): void {
     foreach (['history', 'review', 'confirm'] as $action) {
         $router->post('/sis/service-fees/{fee}/' . $action . '/', [$fees, $action]);
     }
+
+    $internal = \Application\Http\Controller\SisInternalTransferController::class;
+    $base = '/sis/students/{student}/programs/{assignment}/internal-transfers/';
+    foreach (['page','candidates','search','review','confirm'] as $action) {
+        $router->post($base . $action . '/', [$internal,$action]);
+    }
+    $router->post($base . 'courses/{course}/publications/', [$internal,'publications']);
+    $router->get($base . '{award}/', [$internal,'show']);
+    $router->post($base . '{award}/history/', [$internal,'history']);
 };

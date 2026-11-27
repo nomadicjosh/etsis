@@ -21,6 +21,8 @@ use Domain\Transfer\Repository\TransferAwardRepository;
 use Domain\Transfer\ValueObject\AwardChange;
 use DomainException;
 
+use function Codefy\Framework\Helpers\trans;
+
 final readonly class TransferAwardService
 {
     public function __construct(
@@ -68,6 +70,12 @@ final readonly class TransferAwardService
         ?EntityId $operation = null,
     ): array {
         $actor = $this->authorize();
+        $source = $this->awards->get($student, $award);
+        if (($source['source_kind'] ?? null) === 'same_institution') {
+            throw new ValidationException([['field' => 'award', 'message' => trans(
+                "Use the same-institution evaluation in the receiving pursuit for this award."
+            )]]);
+        }
         $budget = new HistoryReadBudget();
         $initial = $this->stableRecord($student, $award, $budget);
         $operation ??= EntityId::generate();
@@ -122,6 +130,12 @@ final readonly class TransferAwardService
         #[\SensitiveParameter] ?string $reviewToken = null,
     ): array {
         $actor = $this->authorize();
+        $source = $this->awards->get($student, $award);
+        if (($source['source_kind'] ?? null) === 'same_institution') {
+            throw new ValidationException([['field' => 'award', 'message' => trans(
+                "Use the same-institution evaluation in the receiving pursuit for this award."
+            )]]);
+        }
         $budget = new HistoryReadBudget();
         $initial = $this->stableRecord($student, $award, $budget);
         // Resolve lock identities outside the transaction; lock the complete context before any consistent read.

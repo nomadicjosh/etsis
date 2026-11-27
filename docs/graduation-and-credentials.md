@@ -48,7 +48,7 @@ New official academic transcripts retain currently conferred credentials, their 
 
 Once a genuine conferral is recorded, coursework belonging to that pursuit or included in its award evidence cannot satisfy another pursuit through an ordinary reuse approval. This applies to earlier reuse approvals too. New ordinary approvals and attribution changes cannot bypass the rule. The staff scope screen identifies **formal transfer evaluation required** instead of offering a new reuse approval.
 
-The original academic work and credential remain intact. Structured same-institution transfer evaluation with a new receiving decision, source lineage and duplicate-credit safeguards remains an explicit roadmap item. Do not create a fictional external college/equivalency, move the original credits, or relabel them as transfer work to work around that boundary. A closed pursuit without a recorded award is not presumed graduated.
+The original academic work and credential remain intact. Use [same-institution transfer evaluation](same-institution-transfers.md) from the receiving pursuit to review institutionally earned work and record a separate receiving award. It retains the original attempt/credential lineage, requires a published receiving course and explicit grade/quantity/term, and prevents duplicate awards within that pursuit. Do not create a fictional external college/equivalency, move the original credits, or relabel them as transfer work to work around that boundary. A closed pursuit without a recorded award is not presumed graduated.
 
 ## Authority and retained facts
 

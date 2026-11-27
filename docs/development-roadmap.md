@@ -439,7 +439,7 @@ The approved drop policy remains: an early drop removes current enrollment/trans
 - [x] Deliver [reviewed graduation eligibility and credential decisions](graduation-and-credentials.md): retained exact combined audit/academic basis, explicit institutional clearance/history-gap acknowledgment, independent conferral authority, attributed title/honors corrections and revocation, and automatic closure of only the awarded pursuit. Keep the person/account, other pursuits and original awards intact; active/closed status alone does not prove graduation.
 - [x] Add a [bounded group conferral queue](graduation-and-credentials.md#confer-a-group): explicitly select up to ten recorded eligible candidates, review each current credential, confirm atomically, reject stale/unauthorized selections and retain individual award identities and original retry receipts. Provide staff/owner decision readers and pin conferred academic credentials into newly prepared transcripts without rewriting earlier documents.
 - [x] Enforce the [completed-degree transfer boundary](graduation-and-credentials.md#coursework-from-a-graduated-pursuit) for genuine recorded awards: previously graduated coursework cannot reach another pursuit through ordinary reuse, including approvals predating conferral. Preserve prior source/award history, identify the need for formal transfer evaluation in the scope screen and prevent attribution/reopening/registration bypasses.
-- [ ] Complete structured same-institution transfer-credit evaluation of completed-degree work into a receiving pursuit, with an explicit new receiving decision, retained original award/attempt lineage and duplicate-credit safeguards. The graduation/reuse boundary is enforced above; ordinary reuse is not a substitute, and the current external-equivalency authoring workflow must not be used to fabricate a same-institution source. Larger background ceremonies and saved-report candidate intake belong with the later operations milestone.
+- [x] Complete [structured same-institution transfer evaluation](same-institution-transfers.md) of institutionally earned completed-degree work into an explicit receiving pursuit: genuine credential/source checks, frozen original attempt/person/publication lineage, published receiving course/grade/quantity/term review, one source evaluation per receiving pursuit, and reasoned amendment/void/reinstatement. Preserve original facts and retries; attribute only the new receiving credit, enforce transfer GPA/residency/prerequisite boundaries and prevent ordinary reuse or fictional external equivalencies. Shared course/posting-term corrections and staff transcript drilldowns retain the original completion date. Larger background evaluations, automated articulation/institution-specific approval policies, ceremonies and saved-report intake remain later operations/integration work.
 
 **Done when:** the same retained inputs reproduce the same explained result; later catalog changes leave earlier results interpretable; distinct student-program pursuits remain separate unless reuse is explicitly approved; an authorized graduation decision is retained independently.
 
@@ -776,12 +776,6 @@ External student-progress AI remains deferred by project direction; catalog-auth
 
 **Done when:** the intended release scope is explicit and accepted, recovery is demonstrated, and operational/security/accessibility checks pass. Event sourcing supports evidence; it does not by itself certify legal compliance.
 
-## 9. Multi-tenancy
-- [ ] One install codebase, multiple tenants; support subdomain installs; each subdomain should have its own database.
-- [ ] Privacy and Security is of the utmost importance; making sure institution data isn't leaking into other institution data; making sure institutions can't see or manipulate other institution's data.
-- [ ] Option of offloading uploaded documents to Amazon S3 with encryption
-- [ ] Secure and encrypted mission-critical database backups with option to offload to Amazon S3
-
 ## 10. Misc.
 - [ ] Profile Photo: Gravatar, photo upload support with cropping, or take photo via computer camera (if institution takes a photo, then it cannot be overwritten with Gravatar or uploaded photo). Institutions should also be able to import a photo (or drag and drop) or a zip file of photos named accordingly (i.e. ID: 01M85RGDAGE378W3TF41NTR156.jpg; First,Last: joshua_parker.jpg, etc.) so that they are automatically attached to the correct person. .png, and .jpg files only.
 - [x] [Maintenance mode](maintenance-mode.md), with current super-administrator access, private browser/API responses, paused background launches and explicit framework console controls.
@@ -815,6 +809,8 @@ External student-progress AI remains deferred by project direction; catalog-auth
 - [ ] Allow institutions to upload/design official and unofficial transcript layouts for different academic levels. Existing registered layouts/protected originals remain available; external signature and automated delivery integrations remain under transcript release above.
 - [x] [Optional application fees](service-fees.md): institution policy, account-based prospect checkout before the questions, retained quotes, staff receipts/reasoned waivers, confirmed-payment submission gates for owner and staff, recovery after checkout and original accepted retry receipts. No student account is required before matriculation.
 - [x] etSIS System: Provide a separate [plain-language glossary](glossary.md) for terms used throughout the docs and roadmap, including journals, projections, ULIDs, people/access, curriculum/pursuits, academic work, finance, reporting, background processing and integrations. Include concrete examples and links to the relevant workflow guides; connect it from installation, workspace, domain and event-history documentation.
+- [ ] Option of offloading uploaded documents to Amazon S3 with encryption
+- [ ] Secure and encrypted mission-critical database backups with option to offload to Amazon S3
 
 ## Next implementation stages
 
@@ -823,12 +819,15 @@ External student-progress AI remains deferred by project direction; catalog-auth
 reviewed registration, seats, charges, academic exclusions and connected staff/student views.
 **Graduation & credentials** (section 3) now completes reviewed eligibility, individual/bounded group
 conferral, automatic awarded-pursuit closure, corrections/revocation, portal readers and transcript
-preservation. Structured receiving transfer evaluation remains explicitly separate and unchecked.
+preservation. [Same-institution receiving transfer evaluation](same-institution-transfers.md) now
+completes the related completed-degree workflow for institutionally earned academic work, with
+explicit receiving awards, original lineage and correction/duplicate safeguards.
 [Optional application/transcript fees](service-fees.md) now complete the next end-to-end milestone:
 retained policy/quotes, prospect/owner hosted checkout, actual receipts/refunds, reasoned staff waivers,
 submission/request gates, recovery and private staff/portal views. Provider settlement/refund automation
-remains finance operations work. Next prioritize tenant isolation or the explicitly remaining
-structured receiving-transfer milestone. Establish each milestone's acceptance boundary before implementation.
+remains finance operations work. Next select another substantial unchecked milestone, such as
+background Moodle gradebook intake or controlled student-account-to-GL mapping/period closing,
+rather than another narrow transfer extension. Establish each milestone's acceptance boundary before implementation.
 Completed extension leaves do not complete their broad parent feature.
 
 Stagger smaller work where it supports a milestone: eligibility/section details with registration;
