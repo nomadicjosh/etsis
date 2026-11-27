@@ -55,3 +55,20 @@
 .website-embed-frame { width: 100%; aspect-ratio: 16 / 9; min-height: 240px; }
 .website-embed-map .website-embed-frame { aspect-ratio: 4 / 3; }
 .website-embed-frame iframe { display: block; width: 100%; height: 100%; min-height: 240px; border: 0; }
+
+.website-button {
+    max-width: 100%;
+    min-height: 2.75rem;
+    white-space: normal;
+    overflow-wrap: anywhere;
+}
+.website-button.btn { color: var(--bs-btn-color); }
+.website-button.btn:hover,
+.website-button.btn:focus-visible { color: var(--bs-btn-hover-color); }
+.website-button.btn:active { color: var(--bs-btn-active-color); }
+.website-button.btn[aria-disabled="true"] { color: var(--bs-btn-disabled-color); }
+.website-button:focus-visible {
+    outline: 3px solid #fff;
+    outline-offset: 2px;
+    box-shadow: 0 0 0 6px #16324f;
+}

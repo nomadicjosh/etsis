@@ -20,7 +20,7 @@ $websiteConfig["theme"]["active_theme"] = "PageBuilderTheme";
 $websiteConfig["theme"]["parents"] = [];
 $websiteConfig["router"]["use_router"] = false;
 \Vihzhuo\Extensions::registerBlock('regular-form', $root . '/resources/blocks/forms/form');
-foreach (['youtube', 'google-map'] as $slug) {
+foreach (['youtube', 'google-map', 'button'] as $slug) {
     \Vihzhuo\Extensions::registerBlock($slug, $root . '/resources/blocks/' . $slug);
 }
 new \Application\Service\CodefyPageBuilder($websiteConfig);
@@ -84,6 +84,17 @@ if (($_GET['forms'] ?? '') === '1') {
     $data['blocks']['en']['IDcontact'] = ['slug' => 'regular-form', 'settings' => ['attributes' => [
         'website-definition' => json_encode($websiteForm, JSON_THROW_ON_ERROR),
     ]]];
+    $record->setData(['data' => $data], false);
+}
+if (($_GET['buttons'] ?? '') === '1') {
+    require __DIR__ . '/website-button-data.php';
+    $data = $record->getBuilderData();
+    foreach ($websiteButtons as $name => $attributes) {
+        $data['html'][0] .= '[block slug="button" id="IDbutton-' . $name . '"]';
+        $data['components'][0][] = ['tagName' => 'phpb-block',
+            'attributes' => ['slug' => 'button', 'id' => 'IDbutton-' . $name]];
+        $data['blocks']['en']['IDbutton-' . $name] = ['slug' => 'button', 'settings' => ['attributes' => $attributes]];
+    }
     $record->setData(['data' => $data], false);
 }
 if (($_GET['embeds'] ?? '') === '1') {

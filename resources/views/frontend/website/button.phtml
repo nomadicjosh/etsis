@@ -1,0 +1,38 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_html;
+
+?>
+<?php if ($button->type === 'link' && $button->destination !== null && !$preview) : ?>
+    <a
+        class="<?= phpb_e($button->classes) ?>"
+        href="<?= phpb_e($button->destination) ?>"
+        <?php if ($button->newTab) : ?>
+            target="_blank"
+            rel="noopener noreferrer"
+        <?php endif; ?>
+    >
+        <?= phpb_e($button->label) ?>
+        <?php if ($button->newTab) : ?>
+            <i class="bi bi-box-arrow-up-right ms-1" aria-hidden="true"></i>
+            <span class="visually-hidden"><?= trans_html('(opens in a new tab)') ?></span>
+        <?php endif; ?>
+    </a>
+<?php elseif ($button->type === 'link') : ?>
+    <span class="<?= phpb_e($button->classes) ?> disabled" role="link" aria-disabled="true">
+        <?= phpb_e($button->label) ?>
+    </span>
+    <?php if ($preview && $button->destination === null) : ?>
+        <p class="form-text"><?= trans_html('Choose a valid link destination in Settings before publishing.') ?></p>
+    <?php endif; ?>
+<?php else : ?>
+    <button
+        class="<?= phpb_e($button->classes) ?>"
+        type="<?= $preview ? 'button' : phpb_e($button->type) ?>"
+        <?= $preview ? 'disabled' : '' ?>
+    >
+        <?= phpb_e($button->label) ?>
+    </button>
+<?php endif; ?>

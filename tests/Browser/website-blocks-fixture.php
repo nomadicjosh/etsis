@@ -58,6 +58,13 @@ if (($_GET['embeds'] ?? '') === '1') {
         $blocks['ID' . $slug] = ['slug' => $slug, 'settings' => ['attributes' => $attributes]];
     }
 }
+if (($_GET['buttons'] ?? '') === '1') {
+    require __DIR__ . '/website-button-data.php';
+    \Vihzhuo\Extensions::registerBlock('button', $root . '/resources/blocks/button');
+    foreach ($websiteButtons as $name => $attributes) {
+        $blocks['IDbutton-' . $name] = ['slug' => 'button', 'settings' => ['attributes' => $attributes]];
+    }
+}
 if (($_GET['forms'] ?? '') === '1') {
     require __DIR__ . '/website-form-data.php';
     \Vihzhuo\Extensions::registerBlock('regular-form', $root . '/resources/blocks/forms/form');
@@ -79,13 +86,21 @@ $page->setTranslations(['en' => ['meta_title' => 'Fictional interactive blocks',
 phpb_set_in_editmode(($_GET['edit'] ?? '') === '1');
 $renderer = new \Vihzhuo\Modules\GrapesJS\PageRenderer($theme, $page, phpb_in_editmode());
 $body = '<div class="container py-4"><h1 id="page-title">Fictional interactive information</h1>';
-foreach ((($_GET['embeds'] ?? '') === '1' ? [] : ['one', 'two']) as $name) {
+foreach ((isset($websiteEmbeds) || isset($websiteButtons) ? [] : ['one', 'two']) as $name) {
     $body .= '<section aria-label="Questions ' . $name . '" class="mb-4">'
     . $renderer->renderBlock('accordion', 'IDquestions-' . $name) . '</section>';
     $body .= $renderer->renderBlock('carousel', 'IDhighlights-' . $name);
 }
 foreach (array_keys($websiteEmbeds ?? []) as $slug) {
     $body .= $renderer->renderBlock($slug, 'ID' . $slug);
+}
+if (isset($websiteButtons)) {
+    $body .= '<form aria-label="Fictional button behavior" action="/fictional-submit/" method="post">';
+    foreach (array_keys($websiteButtons) as $name) {
+        $body .= '<div class="mb-4" data-button-case="' . $name . '">'
+        . $renderer->renderBlock('button', 'IDbutton-' . $name) . '</div>';
+    }
+    $body .= '</form>';
 }
 if (($_GET['forms'] ?? '') === '1') {
     $body .= $renderer->renderBlock('regular-form', 'IDcontact');

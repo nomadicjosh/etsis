@@ -10655,3 +10655,95 @@ msgstr ""
 #: src/Domain/Admissions/Service/AdmissionUpdatesService.php:183
 msgid "The admission update changed before completion."
 msgstr ""
+
+#: src/Application/View/WebsiteButton.php:33
+msgid "Continue"
+msgstr ""
+
+#: resources/blocks/button/config.php:9
+msgid "Button"
+msgstr ""
+
+#: resources/blocks/button/config.php:14
+msgid "Visible label (up to 200 characters)"
+msgstr ""
+
+#: resources/blocks/button/config.php:19
+msgid "Button behavior"
+msgstr ""
+
+#: resources/blocks/button/config.php:21
+msgid "Action button"
+msgstr ""
+
+#: resources/blocks/button/config.php:22
+msgid "Link to a destination"
+msgstr ""
+
+#: resources/blocks/button/config.php:23
+msgid "Submit the enclosing form"
+msgstr ""
+
+#: resources/blocks/button/config.php:29
+msgid "Link destination (local path, HTTP(S), email or telephone)"
+msgstr ""
+
+#: resources/blocks/button/config.php:35
+msgid "Open web links in a new tab"
+msgstr ""
+
+#: resources/blocks/button/config.php:40
+msgid "Style"
+msgstr ""
+
+#: resources/blocks/button/config.php:42
+msgid "Primary"
+msgstr ""
+
+#: resources/blocks/button/config.php:43
+msgid "Secondary"
+msgstr ""
+
+#: resources/blocks/button/config.php:44
+msgid "Success"
+msgstr ""
+
+#: resources/blocks/button/config.php:45
+msgid "Danger"
+msgstr ""
+
+#: resources/blocks/button/config.php:46
+msgid "Warning"
+msgstr ""
+
+#: resources/blocks/button/config.php:47
+msgid "Info"
+msgstr ""
+
+#: resources/blocks/button/config.php:48
+msgid "Light"
+msgstr ""
+
+#: resources/blocks/button/config.php:49
+msgid "Dark"
+msgstr ""
+
+#: resources/blocks/button/config.php:55
+msgid "Size"
+msgstr ""
+
+#: resources/blocks/button/config.php:57
+msgid "Regular"
+msgstr ""
+
+#: resources/blocks/button/config.php:58
+msgid "Small"
+msgstr ""
+
+#: resources/blocks/button/config.php:59
+msgid "Large"
+msgstr ""
+
+#: resources/views/frontend/website/button.phtml:28
+msgid "Choose a valid link destination in Settings before publishing."
+msgstr ""

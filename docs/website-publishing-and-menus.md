@@ -51,6 +51,20 @@ Add **Website form**, select it on the canvas and use **Settings → Edit websit
 
 See [Website forms and reply access](website-forms.md) for optional department routing, explicit department/form memberships, separate read/manage permissions, the encrypted staff inbox and permanent submission deletion. These contact/inquiry forms are separate from the admissions Form Library and do not create academic history or admission applications.
 
+## Accessible buttons and destinations
+
+Select the native **Button** block and open **Settings**. Give it a short, descriptive **Visible label**, then choose **Button behavior**:
+
+- **Link to a destination** navigates to an explicit local path such as `/portal/programs/`, a named fragment such as `#entry-requirements`, an HTTP(S) address, a `mailto:` email link or a `tel:` telephone link. It renders as an ordinary link styled as a button, works with Enter and remains usable without JavaScript.
+- **Action button** is for behavior supplied by the theme. It neither navigates nor submits a form by itself. New buttons and earlier unspecified/unsupported types use this safe default.
+- **Submit the enclosing form** submits an actual enclosing form with native browser behavior. Choose it deliberately. It does not create a form, an intake handler or permission to submit data; use the independent **Website form** designer for contact/inquiry forms.
+
+For a web link, **Open web links in a new tab** adds an external-link Bootstrap icon, a screen-reader notice and `noopener noreferrer`. Email and telephone links retain their normal handler without opening an extra blank tab. The destination policy is shared with the Menu Builder: no script/data URLs, protocol-relative addresses, embedded credentials, control characters or arbitrary relative paths. An invalid or empty link stays visibly unavailable, has no navigation target and is skipped by Tab. The designer explains that a valid destination is needed; it does not silently choose a different URL. This rendering safeguard does not replace the normal publication review.
+
+The eight Bootstrap color choices and three sizes use bounded settings. Native buttons wrap long labels, retain a minimum 44px target at the default text size and have a two-color keyboard-focus indicator. Scoped styling keeps the campus themes' general link colors from overriding button contrast. Labels render as plain text; blank, malformed or over-200-character labels fall back to **Continue**, so set meaningful wording before publication.
+
+All links and form actions are inactive inside the canvas. Select their enclosing block to change Settings; native rerendering retains the label, destination and other settings for the normal page save. Existing explicit submit/style/size/text choices keep their meaning. Existing saved designs are not rewritten, and freely editable HTML links remain separate HTML content. Save and review the page normally after changing button settings. The four bundled themes are checked with keyboard access, narrow screens, enlarged text and automated accessibility rules; institution-selected themes and assistive-technology acceptance remain separate release work.
+
 ## Accessible accordion and carousel blocks
 
 **Accordion** and **Carousel** remain dynamic PHP blocks: select the block and use **Settings → Number of items (1–20)** to change their structure. Edit headings, answers and slide content in their nested HTML child blocks. Existing relative child IDs stay the same, so already saved heading/body/slide content is retained. Each rendered accordion uses separate DOM IDs for its headers and panels; two accordions on one page cannot open each other's answers. All answers start collapsed with matching button state. Tab reaches each heading, and Enter or Space toggles it. Opening another answer closes the earlier answer in that same accordion only. Keep interactive links and controls in the answer, rather than inside the heading button.
