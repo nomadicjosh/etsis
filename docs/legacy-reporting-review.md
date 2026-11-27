@@ -101,3 +101,6 @@ row-before-summary rules apply throughout. Existing encrypted saves, fixed captu
 private CSV, complete background exports and population selection carry the same definition.
 This adds no report type or source. Mixed text/date expressions, broader functions and independent
 financial pre-aggregation remain open.
+
+
+[Explicit missing numeric values](workflow-review.md#explicit-missing-numeric-values) now complete the numeric NULL-aware-function slice of the legacy `COALESCE`/conditional calculation acceptance. Report authors can deliberately choose a fallback or blank a matching value within the same bounded expression tree. Real zero, unspecified input, row-before-summary behavior, hidden field grants, quantity grain, monetary restrictions and existing saved/static/shared/CSV/complete-export paths remain explicit. No new dataset or report template is introduced. Mixed text/date expressions, further functions and independent fact pre-aggregation remain open.

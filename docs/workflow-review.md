@@ -774,7 +774,7 @@ as a decimal parameter; there is no SQL entry or executable formula field.
 A calculation runs on each selected row **before** Sum, Average, Minimum, Maximum, Count or other
 summaries. Column conditions apply to those rows, while shared filters continue to test original
 source values. Summary filters use the calculated output's numeric type. Missing operands and
-zero divisors produce blank/NULL, preserving an unknown value rather than treating it as zero;
+zero divisors produce blank/NULL by default, preserving an unknown value rather than treating it as zero;
 counts omit those NULL values and an entirely unspecified Sum remains blank. Ordinary division
 preserves fractional results. Reporting quantities do not establish degree eligibility or earned credit.
 
@@ -1498,3 +1498,25 @@ the draft. The branded inspector shows one group at a time and reflows at narrow
 enlarged text. Definitions use the existing encrypted save/share mechanism, dynamic queries,
 fixed static captures, private CSV and complete background exports. Editing report arithmetic
 never changes source academic, registration or financial facts.
+
+
+### Explicit missing numeric values
+
+Existing student-related reports now support **Use fallback** (`coalesce`) and **Blank matching value** (`nullif`) in the numeric column inspector and inside calculation groups. Choose a field or decimal constant as usual; the help beside the operation explains how the first and second values are used. The calculated-expression preview shows function-style arguments, including nested starting expressions. These are controlled builder operations, not an SQL or formula input.
+
+| Operation | Result |
+| --- | --- |
+| Use fallback(first, second) | Keep the first value when it is specified; use the second only when the first is NULL. Zero remains a specified value. Both missing produces an unspecified result. |
+| Blank matching value(first, second) | Return NULL when both numeric values match; otherwise keep the first value. An unspecified first value stays unspecified. An unspecified comparison does not erase a specified first value. |
+
+For example, a planning report can deliberately use **Use fallback(Selected minimum enrollment target, 0)** to display a chosen planning fallback for an unknown target. A source with a real zero stays zero. **Blank matching value(Quantity, 0)** can deliberately omit zero quantities from that calculated column. Comparison is numeric: `0` and `-0.000000` match. Fallback is a report-authoring choice; the underlying unknown source value and retained academic facts keep their original meaning.
+
+Use **Add another operation** to wrap an existing calculation, or choose **Calculation group** and edit either branch. A fallback can handle the NULL result of the existing protected division-by-zero calculation. It does not catch execution errors. Each fallback/blanking operation counts toward the same four group levels and fifteen operations per column. Incomplete decimal constants remain drafts and block preview/save without being discarded; changing operations preserves the entered value and the other branch.
+
+Operations run **on each row before summaries** and before the calculated column’s aggregate result is tested by HAVING. A fallback can intentionally make a formerly unspecified row countable; blanking a matching value can exclude it from Count, Average or Sum. Column conditions still select which rows contribute. Original field filters keep their source meaning. Calculations never authorize a student action or reinterpret an academic award.
+
+Both operations require **nonmonetary numeric fields**, including the original column field and every hidden/named-copy operand. Monetary columns keep their existing same-currency/unit field arithmetic; neither a counted column nor a hidden branch can bypass that restriction. Text, dates, Boolean values, arbitrary functions and malformed decimal literals remain invalid. The same source/ancestor/field duties, join-grain and row-multiplication safeguards apply even to a fallback branch whose value is not used on a particular row.
+
+Encrypted saved definitions, dynamic results, fixed static captures, shares, private preview/CSV, complete background export capture and population derivation use the same checked expression. A later source correction changes a fresh dynamic result, while the earlier static capture retains its saved result. Sharing continues to require the recipient’s current source grants. This adds no report source, template, grant, schema or historical business event; mixed text/date expressions and broader independent financial pre-aggregation remain open.
+
+Qualification includes fictional SQLite reporting and real PostgreSQL execution of nine compiled plans over three session-local temporary rows, rolled back after checking. Five-dialect SQL compilation covers bound literal order and portable COALESCE/NULLIF syntax; it does not certify native execution on every PDO engine. Focused browser checks cover exact saved groups, duplication, local validation, keyboard returns, monetary controls and narrow/enlarged-text accessibility.

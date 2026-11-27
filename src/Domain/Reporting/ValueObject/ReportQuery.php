@@ -282,6 +282,15 @@ final readonly class ReportQuery
             }
             $field = $this->schema['fields'][$column['field']];
             if (
+                isset($column['calculation']) && new ReportCalculation($column['calculation'])->usesNullHandling()
+                && array_any(self::columnFields($column), fn (string $id): bool =>
+                    isset($this->schema['fields'][$id]['currency_field']))
+            ) {
+                self::invalid(\Codefy\Framework\Helpers\trans(
+                    'Explicit missing-value calculations require nonmonetary numeric fields.',
+                ));
+            }
+            if (
                 isset($column['calculation']) && new ReportCalculation($column['calculation'])->nested() &&
                 array_any(self::columnFields($column), fn(string $id): bool =>
                     isset($this->schema['fields'][$id]['currency_field']))

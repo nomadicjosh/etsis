@@ -69,6 +69,34 @@ $grouped['columns'][1]['calculation']['left']['group']['right']['value'] = '1e3'
 if ($teachingPost($path, ['definition' => $grouped, 'offset' => 0])->getStatusCode() !== 422) {
     throw new RuntimeException('A hidden untyped operand reached the actual query route.');
 }
+$nulls = $definition;
+$nulls['columns'][1]['calculation'] = ['operator' => 'coalesce',
+    'left' => ['group' => ['operator' => 'nullif', 'left' => ['field' => 'capacity'], 'right' => ['value' => '25']]],
+    'value' => '7.25'];
+$nullPreview = $teachingPost($path, ['definition' => $nulls, 'offset' => 0]);
+$nullRows = json_decode((string) $nullPreview->getBody(), true, flags: JSON_THROW_ON_ERROR);
+if (
+    $nullPreview->getStatusCode() !== 200 || ($nullRows['items'][0]['c1'] ?? null) !== 7.25
+    || !str_contains($nullPreview->getHeaderLine('Cache-Control'), 'no-store')
+    || $nullPreview->hasHeader('phpdebugbar-id')
+) {
+    throw new RuntimeException('Explicit missing-value calculations lost their private typed result.');
+}
+$nullReport = \Domain\Shared\ValueObject\EntityId::generate()->value;
+$nullSaved = $teachingPost('/sis/report-studio/save/', ['report_id' => $nullReport, 'operation_id' => $nullReport,
+    'version' => -1, 'name' => 'Fictional missing-value calculation', 'definition' => $nulls]);
+$nullCsv = $teachingPost('/sis/report-studio/' . $nullReport . '/export/', ['offset' => 0]);
+if (
+    $nullSaved->getStatusCode() !== 201 || $nullCsv->getStatusCode() !== 200
+    || !str_contains((string) $nullCsv->getBody(), '7.25')
+    || !str_contains($nullCsv->getHeaderLine('Cache-Control'), 'no-store') || $nullCsv->hasHeader('phpdebugbar-id')
+) {
+    throw new RuntimeException('Explicit missing-value calculations lost their saved private CSV.');
+}
+$nulls['columns'][1]['calculation']['left']['group']['operator'] = 'NULLIF;SELECT 1';
+if ($teachingPost($path, ['definition' => $nulls, 'offset' => 0])->getStatusCode() !== 422) {
+    throw new RuntimeException('An unsupported hidden numeric operation reached SQL.');
+}
 $sis->access->grants = ['sis:reporting:run'];
 if ($teachingPost('/sis/report-studio/' . $report . '/export/', ['offset' => 0])->getStatusCode() !== 403) {
     throw new RuntimeException('A calculated CSV bypassed its current source duty.');

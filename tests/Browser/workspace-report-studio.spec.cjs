@@ -2157,3 +2157,87 @@ for (const width of [1440, 320]) test(`scheduled elapsed minutes keep numeric au
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
     expect(f.errors).toEqual([]);
 });
+
+
+test('explicit missing-value operations preserve decimal drafts, exact definitions and independent duplicates', async ({ page }) => {
+    const f = await fixture(page);
+    await constantColumn(page);
+    const value = page.getByLabel('Constant value', { exact: true });
+    await value.fill('0');
+    await page.getByRole('button', { name: 'Use fallback', exact: true }).click();
+    await expect(value).toHaveValue('0');
+    await expect(page.locator('.report-inspector')).toContainText('Zero is a specified value.');
+    await page.getByLabel('Report name', { exact: true }).fill('Fictional explicit missing-value calculation');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns[3].calculation)
+        .toEqual({ operator: 'coalesce', value: '0' });
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+    await page.getByRole('button', { name: 'Edit', exact: true }).click();
+    await page.getByRole('button', { name: /^Column 4 settings:/ }).click();
+    await expect(page.getByRole('button', { name: 'Use fallback', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await expect(value).toHaveValue('0');
+    await page.getByRole('button', { name: 'Duplicate column', exact: true }).click();
+    await page.getByRole('button', { name: 'Blank matching value', exact: true }).click();
+    await expect(page.locator('.report-inspector')).toContainText('a match becomes unspecified');
+    await value.fill('-0.000000');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const columns = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns;
+    expect(columns[3].calculation).toEqual({ operator: 'coalesce', value: '0' });
+    expect(columns[4].calculation).toEqual({ operator: 'nullif', value: '-0.000000' });
+    expect(f.calls.every(call => call.csrf === 'fictional-test-token')).toBe(true);
+    expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(f.errors).toEqual([]);
+});
+
+test('explicit missing-value groups keep nested fallback and blanking on both sides through keyboard returns', async ({ page }) => {
+    const f = await fixture(page);
+    const editor = await groupedColumn(page);
+    await editor.getByLabel('Calculation', { exact: true }).selectOption('nullif');
+    await expect(editor).toContainText('a match becomes unspecified');
+    await page.getByRole('button', { name: 'Use fallback', exact: true }).click();
+    await expect(editor.getByLabel('Calculated expression', { exact: true }))
+        .toHaveText('Use fallback((Section capacity − 5), Blank matching value(2, 2))');
+    await page.getByRole('button', { name: 'Edit starting expression', exact: true }).click();
+    await editor.getByLabel('Calculation', { exact: true }).selectOption('coalesce');
+    await expect(editor).toContainText('Zero is a specified value.');
+    await page.getByRole('button', { name: 'Back to calculation', exact: true }).focus();
+    await page.keyboard.press('Enter');
+    await expect(page.getByRole('button', { name: 'Edit starting expression', exact: true })).toBeFocused();
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    const calculation = f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns[3].calculation;
+    expect(calculation).toEqual({ operator: 'coalesce',
+        left: { group: { operator: 'coalesce', left: { field: 'capacity' }, right: { value: '5' } } },
+        group: { operator: 'nullif', left: { value: '2' }, right: { value: '2' } } });
+    expect(f.errors).toEqual([]);
+});
+
+test('explicit missing-value choices retain incomplete constants, stop submission and reflow with enlarged text', async ({ page }) => {
+    const f = await fixture(page);
+    await constantColumn(page);
+    await page.getByRole('button', { name: 'Use fallback', exact: true }).click();
+    await page.getByLabel('Constant value', { exact: true }).fill('1e');
+    await page.getByRole('button', { name: 'Blank matching value', exact: true }).click();
+    await expect(page.getByLabel('Constant value', { exact: true })).toHaveValue('1e');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    await expect(page.locator('.report-local-error')).toContainText('Complete each decimal constant');
+    expect(f.calls.some(call => call.path.endsWith('/preview/'))).toBe(false);
+    await page.setViewportSize({ width: 320, height: 900 });
+    await page.addStyleTag({ content: 'html { font-size: 200%; }' });
+    await accessible(page);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+    await page.getByLabel('Constant value', { exact: true }).fill('0.5');
+    await page.getByRole('button', { name: 'Preview', exact: true }).click();
+    expect(f.calls.filter(call => call.path.endsWith('/preview/')).at(-1).data.definition.columns[3].calculation)
+        .toEqual({ operator: 'nullif', value: '0.5' });
+    expect(f.errors).toEqual([]);
+});
+
+test('explicit missing-value controls remain unavailable on monetary columns', async ({ page }) => {
+    const f = await fixture(page, { accounts: true });
+    await page.getByRole('button', { name: 'Outstanding student balances', exact: true }).click();
+    await page.getByRole('button', { name: /^Column 5 settings:/ }).click();
+    await expect(page.getByRole('button', { name: 'Use fallback', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Blank matching value', exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Calculation group', exact: true })).toHaveCount(0);
+    expect(f.errors).toEqual([]);
+});

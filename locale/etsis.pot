@@ -11631,3 +11631,43 @@ msgstr ""
 #: src/Application/Http/Controller/RegistrationOpenController.php:28
 msgid "Choose whether to include read registration notices."
 msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:52
+msgid "Use fallback"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:53
+msgid "Blank matching value"
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:54
+msgid "Keep the first value when it is specified; otherwise use the second value. Zero is a specified value. A missing fallback leaves the result unspecified."
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:58
+msgid "Keep the first value unless it equals the second value; a match becomes unspecified. A missing comparison value does not erase a specified first value."
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:62
+msgid "Missing values remain unspecified by default. Use fallback and blank matching value are explicit choices for nonmonetary numeric fields, applied before summaries."
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:66
+msgid "Use nonmonetary numeric fields for missing-value calculations."
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:16
+msgid "A group calculates its two operands first. Use up to four group levels and fifteen operations per column. Groups use nonmonetary numeric fields. Missing inputs and division by zero remain blank unless you explicitly choose a fallback."
+msgstr ""
+
+#: resources/views/backend/workspace/report-calculation-labels.php:38
+msgid "Use up to nine whole digits and six decimal places, with a dot for decimals. Missing inputs and division by zero remain blank unless you explicitly choose a fallback. Calculations run before summaries."
+msgstr ""
+
+#: src/Domain/Reporting/ValueObject/ReportCalculation.php:117
+msgid "Choose numeric fields, decimal constants and supported operations, with up to four group levels and fifteen operations."
+msgstr ""
+
+#: src/Domain/Reporting/ValueObject/ReportQuery.php:289
+msgid "Explicit missing-value calculations require nonmonetary numeric fields."
+msgstr ""

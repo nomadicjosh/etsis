@@ -30,13 +30,18 @@ final readonly class ReportSelectCompiler
         $group = $operand['group'];
         $left = $this->arithmeticOperand($group['left'], $field, $parameters);
         $right = $this->arithmeticOperand($group['right'], $field, $parameters);
-        return $this->arithmetic($left, $group['operator'], $right);
+        return $this->numericOperation($left, $group['operator'], $right);
     }
 
-    private function arithmetic(string $left, string $operator, string $right): string
+    private function numericOperation(string $left, string $operator, string $right): string
     {
-        return '(' . $left . ($operator === '/' ? ' * 1.0 / NULLIF(' . $right . ', 0)'
-            : ' ' . $operator . ' ' . $right) . ')';
+        return match ($operator) {
+            'coalesce' => 'COALESCE(' . $left . ', ' . $right . ')',
+            'nullif' => 'NULLIF(' . $left . ', ' . $right . ')',
+            '+', '-', '*', '/' => '(' . $left . ($operator === '/' ? ' * 1.0 / NULLIF(' . $right . ', 0)'
+                : ' ' . $operator . ' ' . $right) . ')',
+            default => throw new \LogicException('Unknown numeric calculation operation.'),
+        };
     }
 
     /** @return array{sql: string, parameters: list<scalar|null>} */
@@ -84,7 +89,7 @@ final readonly class ReportSelectCompiler
                     );
                 }
                 $other = $this->arithmeticOperand($column['calculation'], $expression, $rowParameters);
-                $rowExpression = $this->arithmetic($rowExpression, $column['calculation']['operator'], $other);
+                $rowExpression = $this->numericOperation($rowExpression, $column['calculation']['operator'], $other);
             }
             if (isset($column['label_mapping'])) {
                 $rowExpression = 'CASE';

@@ -8,11 +8,12 @@ use Domain\Shared\Exception\ValidationException;
 
 use function Codefy\Framework\Helpers\trans;
 
-/** Typed arithmetic operands; decimal literals remain strings across JSON and PDO boundaries. */
+/** Typed numeric operands; decimal literals remain strings across JSON and PDO boundaries. */
 final readonly class ReportCalculation
 {
     public const int MAX_DEPTH = 4;
     public const int MAX_OPERATIONS = 15;
+    public const array OPERATORS = ['+', '-', '*', '/', 'coalesce', 'nullif'];
 
     /** @param array<string,mixed> $definition */
     public function __construct(public array $definition)
@@ -20,7 +21,7 @@ final readonly class ReportCalculation
         $operations = 1;
         if (
             count($definition) !== (array_key_exists('left', $definition) ? 3 : 2) ||
-            !in_array($definition['operator'] ?? null, ['+', '-', '*', '/'], true)
+            !in_array($definition['operator'] ?? null, self::OPERATORS, true)
         ) {
             self::invalid();
         }
@@ -63,7 +64,7 @@ final readonly class ReportCalculation
         if (
             $depth >= self::MAX_DEPTH || ++$operations > self::MAX_OPERATIONS ||
             !is_array($group) || count($group) !== 3 ||
-            !in_array($group['operator'] ?? null, ['+', '-', '*', '/'], true) ||
+            !in_array($group['operator'] ?? null, self::OPERATORS, true) ||
             !is_array($group['left'] ?? null) || !is_array($group['right'] ?? null)
         ) {
             self::invalid();
@@ -98,10 +99,23 @@ final readonly class ReportCalculation
         return isset($this->definition['group']) || isset($this->definition['left']);
     }
 
+    public function usesNullHandling(): bool
+    {
+        $uses = function (array $part) use (&$uses): bool {
+            if (in_array($part['operator'] ?? null, ['coalesce', 'nullif'], true)) {
+                return true;
+            }
+            return (isset($part['group']) && $uses($part['group']))
+            || (isset($part['left']) && $uses($part['left']))
+            || (isset($part['right']) && $uses($part['right']));
+        };
+        return $uses($this->definition);
+    }
+
     private static function invalid(): never
     {
         throw new ValidationException([['field' => 'calculation', 'message' => trans(
-            'Choose numeric fields, decimal constants and valid operations, '
+            'Choose numeric fields, decimal constants and supported operations, '
             . 'with up to four group levels and fifteen operations.',
         )]]);
     }

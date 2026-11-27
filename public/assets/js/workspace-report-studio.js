@@ -82,11 +82,19 @@ window.createWorkspaceReportStudio = function (ui) {
             ? [...calculationFields(operand.group.left), ...calculationFields(operand.group.right)] : [];
         return [...fields, ...calculationFields(operand.left)];
     }
-    const calculationSymbol = operator => ({ '+': '+', '-': '−', '*': '×', '/': '÷' })[operator];
+    const calculationSymbol = operator => ({ '+': '+', '-': '−', '*': '×', '/': '÷',
+        coalesce: ui.calculationLabels.coalesce, nullif: ui.calculationLabels.nullif })[operator];
+    const nullOperation = operator => ['coalesce', 'nullif'].includes(operator);
+    const usesNullHandling = part => !!part && (nullOperation(part.operator) || usesNullHandling(part.group)
+        || usesNullHandling(part.left) || usesNullHandling(part.right));
+    const operationText = (operator, left, right, grouped = false) => nullOperation(operator)
+        ? `${calculationSymbol(operator)}(${left}, ${right})`
+        : `${grouped ? '(' : ''}${left} ${calculationSymbol(operator)} ${right}${grouped ? ')' : ''}`;
     function operandText(operand, fields) {
         if (operand.field) return fields[operand.field]?.label || ui.calculationLabels.unavailable;
         if (Object.hasOwn(operand, 'value')) return operand.value;
-        return `(${operandText(operand.group.left, fields)} ${calculationSymbol(operand.group.operator)} ${operandText(operand.group.right, fields)})`;
+        return operationText(operand.group.operator, operandText(operand.group.left, fields),
+            operandText(operand.group.right, fields), true);
     }
     function calculationSize(operand) {
         return (operand?.group ? 1 + calculationSize(operand.group.left) + calculationSize(operand.group.right) : 0)
@@ -98,7 +106,7 @@ window.createWorkspaceReportStudio = function (ui) {
     }
     function calculationText(column, fields) {
         const left = column.calculation.left ? operandText(column.calculation.left, fields) : fields[column.field].label;
-        return `${left} ${calculationSymbol(column.calculation.operator)} ${operandText(column.calculation, fields)}`;
+        return operationText(column.calculation.operator, left, operandText(column.calculation, fields));
     }
     function validCalculation(calculation, fields) {
         let operations = 1;
@@ -2020,6 +2028,15 @@ window.createWorkspaceReportStudio = function (ui) {
                     'aria-label': labels.operand });
                 const candidates = node("div", { class: "report-calculation-fields" });
                 let operator = column.calculation?.operator || calculationOperators.get(column) || "-";
+                const operationHelp = node('p', { class: 'form-text', 'aria-live': 'polite' });
+                const refreshOperationHelp = () => {
+                    operationHelp.textContent = nullOperation(operator) ? labels[`${operator}_help`] : labels.null_help;
+                    candidates.querySelectorAll('[data-report-operand-field]').forEach(choice => {
+                        choice.disabled = nullOperation(operator)
+                            && !dataset.fields[choice.dataset.reportOperandField]?.constant_calculation;
+                    });
+                };
+                refreshOperationHelp();
                 const constant = Object.hasOwn(column.calculation || {}, 'value');
                 const grouped = !!column.calculation?.group;
                 for (const [mode, label] of [['field', labels.field], ['value', labels.constant], ['group', labels.group]]) {
@@ -2084,8 +2101,10 @@ window.createWorkspaceReportStudio = function (ui) {
                                 "report-choice-tile",
                             );
                             choose.setAttribute("aria-pressed", String(column.calculation?.field === id));
+                            choose.dataset.reportOperandField = id;
                             candidates.append(choose);
                         });
+                    refreshOperationHelp();
                 }
                 function groupEditor(starting = false) {
                     const editor = node('div', { class: 'report-arithmetic-group', 'data-report-group-editor': '' });
@@ -2098,7 +2117,8 @@ window.createWorkspaceReportStudio = function (ui) {
                         refreshNextOperation();
                         preview.textContent = calculationText(column, dataset.fields);
                     };
-                    const operationsList = [['+', labels.add], ['-', labels.subtract], ['*', labels.multiply], ['/', labels.divide]];
+                    const operationsList = [['+', labels.add], ['-', labels.subtract], ['*', labels.multiply], ['/', labels.divide],
+                        ['coalesce', labels.coalesce], ['nullif', labels.nullif]];
                     const select = (entries, value, label) => {
                         const control = node('select', { class: 'form-select', 'aria-label': label });
                         for (const [key, title] of entries) control.append(node('option', { value: key }, title));
@@ -2129,8 +2149,14 @@ window.createWorkspaceReportStudio = function (ui) {
                             [starting ? labels.starting_expression : labels.group, ...path.map(side => labels[side])].join(' / '));
                         editor.append(heading);
                         const operation = select(operationsList, group.operator, labels.operation);
-                        operation.addEventListener('change', () => { group.operator = operation.value; changed(); });
-                        editor.append(labeled(labels.operation, operation));
+                        const help = node('p', { class: 'form-text', 'aria-live': 'polite' },
+                            nullOperation(group.operator) ? labels[`${group.operator}_help`] : labels.null_help);
+                        operation.addEventListener('change', () => {
+                            group.operator = operation.value;
+                            help.textContent = nullOperation(group.operator) ? labels[`${group.operator}_help`] : labels.null_help;
+                            changed();
+                        });
+                        editor.append(labeled(labels.operation, operation), help);
                         for (const side of ['left', 'right']) {
                             const part = group[side];
                             const mode = part.group ? 'group' : Object.hasOwn(part, 'value') ? 'value' : 'field';
@@ -2207,6 +2233,7 @@ window.createWorkspaceReportStudio = function (ui) {
                     ["-", labels.subtract],
                     ["*", labels.multiply],
                     ["/", labels.divide],
+                    ...(field.constant_calculation ? [['coalesce', labels.coalesce], ['nullif', labels.nullif]] : []),
                 ].forEach(([op, label]) => {
                     const choice = button(
                         label,
@@ -2222,6 +2249,7 @@ window.createWorkspaceReportStudio = function (ui) {
                                 b.setAttribute("aria-pressed", String(b === choice)),
                             );
                             refreshGroupPreview();
+                            refreshOperationHelp();
                             // Keep the focused constant input and its caret while changing the operation.
                         },
                         "report-choice-tile",
@@ -2229,7 +2257,7 @@ window.createWorkspaceReportStudio = function (ui) {
                     choice.setAttribute("aria-pressed", String(operator === op));
                     operations.append(choice);
                 });
-                inspector.append(operations, operands, candidates);
+                inspector.append(operations, operationHelp, operands, candidates);
                 if (!field.constant_calculation) inspector.append(node('p', { class: 'form-text' }, labels.money));
                 numericFields();
                 if (column.calculation?.left?.group) {
@@ -2695,6 +2723,9 @@ window.createWorkspaceReportStudio = function (ui) {
         function collect() {
             if (!definition.columns.length) throw new Error("Choose at least one field for your report.");
             for (const column of definition.columns) {
+                if (usesNullHandling(column.calculation) && [column.field, ...calculationFields(column.calculation)]
+                    .some(id => !dataset.fields[id]?.constant_calculation))
+                    throw new Error(ui.calculationLabels.null_money);
                 if (!validCalculation(column.calculation, dataset.fields))
                     throw new Error(column.calculation.group || column.calculation.left
                         ? ui.calculationLabels.group_invalid : ui.calculationLabels.invalid);

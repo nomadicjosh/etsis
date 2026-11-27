@@ -15,7 +15,8 @@ return [
     'group' => trans_html('Calculation group'),
     'group_help' => trans_html(
         'A group calculates its two operands first. Use up to four group levels and fifteen operations per column. '
-        . 'Groups use nonmonetary numeric fields. Missing inputs and division by zero remain blank.',
+        . 'Groups use nonmonetary numeric fields. Missing inputs and division by zero remain blank '
+        . 'unless you explicitly choose a fallback.',
     ),
     'left' => trans_html('Left operand'),
     'right' => trans_html('Right operand'),
@@ -36,7 +37,8 @@ return [
     'value' => trans_html('Constant value'),
     'help' => trans_html(
         'Use up to nine whole digits and six decimal places, with a dot for decimals. '
-        . 'Missing inputs and division by zero remain blank. Calculations run before summaries.',
+        . 'Missing inputs and division by zero remain blank unless you explicitly choose a fallback. '
+        . 'Calculations run before summaries.',
     ),
     'money' => trans_html('Monetary calculations require another amount in the same currency and units.'),
     'invalid' => trans_html(
@@ -47,5 +49,20 @@ return [
     'subtract' => trans_html('Subtract'),
     'multiply' => trans_html('Multiply'),
     'divide' => trans_html('Divide'),
+    'coalesce' => trans_html('Use fallback'),
+    'nullif' => trans_html('Blank matching value'),
+    'coalesce_help' => trans_html(
+        'Keep the first value when it is specified; otherwise use the second value. '
+        . 'Zero is a specified value. A missing fallback leaves the result unspecified.'
+    ),
+    'nullif_help' => trans_html(
+        'Keep the first value unless it equals the second value; a match becomes unspecified. '
+        . 'A missing comparison value does not erase a specified first value.'
+    ),
+    'null_help' => trans_html(
+        'Missing values remain unspecified by default. Use fallback and blank matching value are '
+        . 'explicit choices for nonmonetary numeric fields, applied before summaries.'
+    ),
+    'null_money' => trans_html('Use nonmonetary numeric fields for missing-value calculations.'),
     'remove' => trans_html('Remove calculation'),
 ];
