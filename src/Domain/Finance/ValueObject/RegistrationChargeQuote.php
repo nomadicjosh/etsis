@@ -17,9 +17,16 @@ final readonly class RegistrationChargeQuote implements \JsonSerializable
         public TermFeeQuote $termQuote,
         public Money $sectionFee,
         public int $creditsMilli,
+        private ?array $pendingTuition = null,
     ) {
-        if ($sectionFee->minor < 0 || $creditsMilli < 0 || $creditsMilli > 999999) {
-            throw new InvalidArgumentException("A section fee and valid registration credits are required.");
+        if (
+            $sectionFee->minor < 0 ||
+            $creditsMilli < 0 ||
+            $creditsMilli > 999999
+        ) {
+            throw new InvalidArgumentException(
+                "A section fee and valid registration credits are required.",
+            );
         }
         $facts = $termQuote->facts();
         $problems = $facts["problems"];
@@ -29,14 +36,16 @@ final readonly class RegistrationChargeQuote implements \JsonSerializable
         $total = 0;
         $add = static function (int $minor) use (&$total, &$problems): void {
             if ($minor > Money::MAX_MINOR - $total) {
-                $problems[] = "The registration charges exceed the supported amount limit.";
+                $problems[] =
+                "The registration charges exceed the supported amount limit.";
                 return;
             }
             $total += $minor;
         };
         if ($sectionFee->minor > 0) {
             if ($sectionFee->currency !== $currency) {
-                $problems[] = "The account and applicable fees must use one currency.";
+                $problems[] =
+                "The account and applicable fees must use one currency.";
             }
             $items[] = [
                 "name" => "Section fee",
@@ -52,10 +61,14 @@ final readonly class RegistrationChargeQuote implements \JsonSerializable
             $state = $credit ? "new" : $states[(string) $rule->aggregateId()];
             try {
                 $amount = $credit
-                ? RegistrationPrice::amountForCredits($creditsMilli, $rule->amount())
+                ? RegistrationPrice::amountForCredits(
+                    $creditsMilli,
+                    $rule->amount(),
+                )
                 : $rule->amount();
             } catch (InvalidArgumentException) {
-                $problems[] = "A registration price exceeds the supported amount limit.";
+                $problems[] =
+                "A registration price exceeds the supported amount limit.";
                 continue;
             }
             $items[] = [
@@ -73,15 +86,42 @@ final readonly class RegistrationChargeQuote implements \JsonSerializable
         }
         // Include the projected new charges in overflow detection, without disclosing the existing balance.
         if ($facts["balance_before_minor"] > Money::MAX_MINOR - $total) {
-            $problems[] = "The resulting account balance exceeds the supported amount limit.";
+            $problems[] =
+            "The resulting account balance exceeds the supported amount limit.";
         }
         $problems = array_values(array_unique($problems));
-        $this->summary = [
+        $summary = [
             "currency" => $currency,
             "total_minor" => $problems === [] ? $total : null,
             "items" => $items,
             "problems" => $problems,
         ];
+        if ($pendingTuition !== null) {
+            $pending = $pendingTuition["after"];
+            $summary = [
+                "currency" =>
+                    $pendingTuition["snapshot"]["definition"]["currency"],
+                "total_minor" =>
+                    $pending["total_minor"] - $pendingTuition["before_minor"],
+                "mode" => "pending",
+                "pending_total_minor" => $pending["total_minor"],
+                "problems" => [],
+                "items" => array_map(
+                    static fn(array $line): array => [
+                        "name" => $line["name"],
+                        "minor" => $line["minor"],
+                        "currency" =>
+                            $pendingTuition["snapshot"]["definition"][
+                                "currency"
+                            ],
+                        "basis" => "pending_invoice",
+                        "status" => "new",
+                    ],
+                    $pending["lines"],
+                ),
+            ];
+        }
+        $this->summary = $summary;
     }
 
     /** @return array<string,mixed> */
@@ -98,15 +138,19 @@ final readonly class RegistrationChargeQuote implements \JsonSerializable
 
     /** Proposed early-drop course reversal only; no balances, account IDs or unrelated entries leave this value.
      * @return array<string,mixed> */
-    public function sectionChangeSummary(\Domain\Shared\ValueObject\EntityId $enrollment): array
-    {
+    public function sectionChangeSummary(
+        \Domain\Shared\ValueObject\EntityId $enrollment,
+    ): array {
         $account = $this->termQuote->account;
         $credit = 0;
         $references = [];
         foreach ($account?->courseCharges($enrollment) ?? [] as $id) {
-            $entry = $account->entry($id) ?? throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+            $entry =
+            $account->entry($id) ??
+            throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
             if (
-                $entry["type"] !== \Domain\Finance\Enum\EntryType::Charge->value ||
+                $entry["type"] !==
+                    \Domain\Finance\Enum\EntryType::Charge->value ||
                 $entry["currency"] !== $account->balance()->currency
             ) {
                 throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
@@ -118,7 +162,12 @@ final readonly class RegistrationChargeQuote implements \JsonSerializable
                 );
             }
             $credit += $remaining;
-            $references[] = [$id->value, $entry["minor"], $entry["reversed"], $remaining];
+            $references[] = [
+                $id->value,
+                $entry["minor"],
+                $entry["reversed"],
+                $remaining,
+            ];
         }
         $problems = array_values(
             array_filter(
@@ -131,45 +180,118 @@ final readonly class RegistrationChargeQuote implements \JsonSerializable
         foreach ($this->summary["items"] as $item) {
             if ($item["status"] === "new") {
                 if ($item["minor"] > Money::MAX_MINOR - $newCharges) {
-                    $problems[] = "The registration charges exceed the supported amount limit.";
+                    $problems[] =
+                    "The registration charges exceed the supported amount limit.";
                     break;
                 }
                 $newCharges += $item["minor"];
             }
         }
+        $pending = null;
+        if ($this->pendingTuition !== null) {
+            $state = $this->pendingTuition["state"];
+            unset($state["courses"][$enrollment->value]);
+            $root = \Domain\Tuition\TuitionBill::estimate(
+                $this->pendingTuition["snapshot"],
+                $state,
+                [
+                    "enrollment_id" => "00000000000000000000000000",
+                    "minor" => 0,
+                    "credits_milli" => 0,
+                ],
+            );
+            $next = \Domain\Tuition\TuitionBill::estimate(
+                $this->pendingTuition["snapshot"],
+                $state,
+                [
+                    "enrollment_id" => "00000000000000000000000000",
+                    "minor" => $this->sectionFee->minor,
+                    "credits_milli" => $this->creditsMilli,
+                ],
+            );
+            $newCharges =
+            $next["pending"]["total_minor"] -
+            $root["pending"]["total_minor"];
+            $pending = $next["pending"]["total_minor"];
+        }
         $currency = $this->summary["currency"];
         $balance = $account?->balance()->minor ?? 0;
         if ($balance < -Money::MAX_MINOR + $credit) {
-            $problems[] = "The course reversal exceeds the supported account amount limit.";
+            $problems[] =
+            "The course reversal exceeds the supported account amount limit.";
         }
         if ($balance - $credit > Money::MAX_MINOR - $newCharges) {
-            $problems[] = "The resulting account balance exceeds the supported amount limit.";
+            $problems[] =
+            "The resulting account balance exceeds the supported amount limit.";
         }
         $newCharges = $problems === [] ? $newCharges : null;
         return [
             "currency" => $currency,
             "credit_minor" => $credit,
             "new_charge_minor" => $newCharges,
-            "net_change_minor" => $newCharges === null ? null : $newCharges - $credit,
+            "net_change_minor" =>
+                $newCharges === null
+                    ? null
+                    : ($pending === null ? $newCharges : 0) - $credit,
+            ...$pending === null
+                ? []
+                : ["mode" => "pending", "pending_total_minor" => $pending],
             "problems" => $problems,
-            "reversal_revision" => hash("sha256", json_encode($references, JSON_THROW_ON_ERROR)),
+            "reversal_revision" => hash(
+                "sha256",
+                json_encode($references, JSON_THROW_ON_ERROR),
+            ),
         ];
     }
 
     /** Deduplicate term-wide fees across a working schedule; never changes accepted financial facts.
-     * @param array<string,true> $termFees
+     * @param array<string,mixed> $termFees
      * @return array<string,mixed> */
     public function planSummary(array &$termFees): array
     {
+        if ($this->pendingTuition !== null) {
+            $key = "tuition:" . $this->pendingTuition["bill_id"];
+            $working = $termFees[$key] ?? [
+                "state" => $this->pendingTuition["state"],
+                "total" => $this->pendingTuition["before_minor"],
+            ];
+            $next = \Domain\Tuition\TuitionBill::estimate(
+                $this->pendingTuition["snapshot"],
+                $working["state"],
+                [
+                    "enrollment_id" => \Domain\Shared\ValueObject\EntityId::generate()
+                        ->value,
+                    "minor" => $this->sectionFee->minor,
+                    "credits_milli" => $this->creditsMilli,
+                ],
+            );
+            $termFees[$key] = [
+                "state" => $next["state"],
+                "total" => $next["pending"]["total_minor"],
+            ];
+            return array_replace($this->summary, [
+                "total_minor" =>
+                    $next["pending"]["total_minor"] - $working["total"],
+                "pending_total_minor" => $next["pending"]["total_minor"],
+            ]);
+        }
         $summary = $this->summary;
         $index = $this->sectionFee->minor > 0 ? 1 : 0;
         foreach ($this->termQuote->rules as $rule) {
-            $key = $this->termQuote->term->value . ":" . (string) $rule->aggregateId();
-            if ($rule->basis() === BillingBasis::Term && $summary["items"][$index]["status"] === "new") {
+            $key =
+            $this->termQuote->term->value .
+            ":" .
+            (string) $rule->aggregateId();
+            if (
+                $rule->basis() === BillingBasis::Term &&
+                $summary["items"][$index]["status"] === "new"
+            ) {
                 if (isset($termFees[$key])) {
-                    $summary["items"][$index]["status"] = "included_in_schedule";
+                    $summary["items"][$index]["status"] =
+                    "included_in_schedule";
                     if ($summary["total_minor"] !== null) {
-                        $summary["total_minor"] -= $summary["items"][$index]["minor"];
+                        $summary["total_minor"] -=
+                        $summary["items"][$index]["minor"];
                     }
                 }
                 $termFees[$key] = true;
@@ -196,6 +318,11 @@ final readonly class RegistrationChargeQuote implements \JsonSerializable
                     $this->sectionFee->minor,
                     $this->sectionFee->currency,
                     $this->creditsMilli,
+                    $this->pendingTuition === null
+                        ? null
+                        : \Domain\Finance\ValueObject\LedgerSchema::hash(
+                            $this->pendingTuition["snapshot"],
+                        ),
                 ],
                 JSON_THROW_ON_ERROR,
             ),
@@ -231,6 +358,7 @@ final readonly class RegistrationChargeQuote implements \JsonSerializable
                     $this->sectionFee->currency,
                     $this->creditsMilli,
                     $this->summary,
+                    $this->pendingTuition["version"] ?? null,
                 ],
                 JSON_THROW_ON_ERROR,
             ),
@@ -241,5 +369,10 @@ final readonly class RegistrationChargeQuote implements \JsonSerializable
     public function __debugInfo(): array
     {
         return ["quote" => "[protected registration pricing]"];
+    }
+
+    public function pendingTuition(): ?array
+    {
+        return $this->pendingTuition;
     }
 }

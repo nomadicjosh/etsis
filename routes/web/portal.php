@@ -353,6 +353,15 @@ return static function (Psr7Router $router): void {
         ->name("portal.applications");
     $router->map(["POST"], "/portal/api/contact/", [Portal::class, "contact"])->name("portal.contact");
     $activity = \Application\Http\Controller\PaymentActivityController::class;
+    $tuition = \Application\Http\Controller\TuitionController::class;
+    $router->map(['GET'], '/portal/api/tuition/bills/', [$tuition, 'ownerBills'])
+        ->name('portal.tuition.bills');
+    $router->map(['GET'], '/portal/api/tuition/bills/{id}/', [$tuition, 'ownerBill'])
+        ->name('portal.tuition.bill');
+    $router->map(['GET'], '/portal/api/tuition/invoices/{id}/', [$tuition, 'ownerInvoice'])
+        ->name('portal.tuition.invoice');
+    $router->map(['GET'], '/portal/api/tuition/invoices/{id}/print/', [$tuition, 'ownerPrint'])
+        ->name('portal.tuition.print');
     $router->map(['GET'], '/portal/api/payment-activity/{kind}/{id}/', [$activity, 'ownerShow'])
         ->name('portal.payment_activity.show');
     $router->map(['POST'], '/portal/api/payment-activity/{id}/retry/', [$activity, 'ownerRetry'])

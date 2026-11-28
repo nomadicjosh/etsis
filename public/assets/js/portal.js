@@ -2515,6 +2515,14 @@
     }
 
     function accounts(container) {
+        const invoices = el('section', { class: 'mb-4', 'aria-label': config.tuition_labels.title });
+        container.append(invoices);
+        // Mount after the service container has joined the document; never retain private data between pages.
+        requestAnimationFrame(() => { if (!pageLeaving && invoices.isConnected) void window.createTuitionInvoices({
+            node: el, request, task, labels: config.tuition_labels,
+            close: () => bootstrap.Modal.getInstance(one('#campus-dialog'))?.hide(),
+            open: title => { const body = el('div'); dialog(title, body); return body; }
+        }).mount(invoices); });
         if (!me.accounts.length) {
             container.append(
                 empty(

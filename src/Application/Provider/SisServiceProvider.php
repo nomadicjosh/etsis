@@ -406,6 +406,8 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\EventSourcedBillingRuleRepository::class,
             \Domain\Finance\Service\TermFeeBilling::class =>
                 \Infrastructure\Persistence\EventSourcedRegistrationBilling::class,
+            \Domain\Tuition\Repository\TuitionRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlTuitionRepository::class,
             \Domain\Finance\Repository\BillingBatchRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlBillingBatchRepository::class,
             \Domain\Reporting\Repository\ReportRepository::class =>

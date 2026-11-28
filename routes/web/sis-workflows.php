@@ -1458,6 +1458,31 @@ return static function (Psr7Router $router): void {
     $router->map(['POST'], '/sis/payment-activity/{id}/retry/', [$activity, 'staffRetry'])
         ->name('sis.payment_activity.retry');
     $accounting = \Application\Http\Controller\SisAccountingController::class;
+    $tuition = \Application\Http\Controller\TuitionController::class;
+    $router->map(['GET'], '/sis/tuition/schedules/', [$tuition, 'schedules'])
+        ->name('sis.tuition.schedules');
+    $router->map(['GET'], '/sis/tuition/schedules/{id}/', [$tuition, 'schedule'])
+        ->name('sis.tuition.schedule');
+    $router->map(['GET'], '/sis/tuition/assignment/', [$tuition, 'assignment'])
+        ->name('sis.tuition.assignment');
+    $router->map(['POST'], '/sis/tuition/schedule/review/', [$tuition, 'reviewSchedule'])
+        ->name('sis.tuition.schedule_review');
+    $router->map(['POST'], '/sis/tuition/assignment/review/', [$tuition, 'reviewAssignment'])
+        ->name('sis.tuition.assignment_review');
+    $router->map(['GET'], '/sis/tuition/bills/', [$tuition, 'staffBills'])
+        ->name('sis.tuition.bills');
+    $router->map(['GET'], '/sis/tuition/bills/{id}/', [$tuition, 'staffBill'])
+        ->name('sis.tuition.bill');
+    $router->map(['POST'], '/sis/tuition/bills/{id}/review/', [$tuition, 'reviewInvoice'])
+        ->name('sis.tuition.invoice_review');
+    $router->map(['POST'], '/sis/tuition/bills/{id}/reprice/', [$tuition, 'reviewReprice'])
+        ->name('sis.tuition.reprice_review');
+    $router->map(['POST'], '/sis/tuition/confirm/', [$tuition, 'confirm'])
+        ->name('sis.tuition.confirm');
+    $router->map(['GET'], '/sis/tuition/invoices/{id}/', [$tuition, 'staffInvoice'])
+        ->name('sis.tuition.invoice');
+    $router->map(['GET'], '/sis/tuition/invoices/{id}/print/', [$tuition, 'staffPrint'])
+        ->name('sis.tuition.print');
     $router->map(['GET'], '/sis/accounting/', [$accounting, 'overview'])->name('sis.accounting.overview');
     $router->map(['POST'], '/sis/accounting/fees/review/', [$accounting, 'fees'])->name('sis.accounting.fees');
     $router->map(['POST'], '/sis/accounting/expense/review/', [$accounting, 'expense'])->name('sis.accounting.expense');

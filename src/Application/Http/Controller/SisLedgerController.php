@@ -21,6 +21,8 @@ use Laminas\Diactoros\Response\JsonResponse;
 use Psr\Http\Message\ResponseInterface;
 use Qubus\Http\ServerRequest;
 
+use function Codefy\Framework\Helpers\trans;
+
 final readonly class SisLedgerController
 {
     public function __construct(
@@ -131,6 +133,12 @@ final readonly class SisLedgerController
     public function defineBillingRule(ServerRequest $request): ResponseInterface
     {
         $f = FormInput::from($request);
+        if ($f->text("kind", 12) !== "fee") {
+            throw new ValidationException([[
+                "field" => "kind",
+                "message" => trans("Use tuition schedules for tuition pricing."),
+            ]]);
+        }
         $rule = $this->billing->define(
             $f->id("operation_id"),
             $f->id("term_id"),

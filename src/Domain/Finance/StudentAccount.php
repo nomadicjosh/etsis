@@ -131,6 +131,7 @@ final class StudentAccount extends EventSourcedAggregate
     }
 
     private array $captureStates = [];
+    private array $invoiceCharges = [];
 
     public function captures(): array
     {
@@ -304,6 +305,7 @@ final class StudentAccount extends EventSourcedAggregate
         ?RegistrationPrice $registrationPrice = null,
         ?ChargeSource $chargeSource = null,
         ?\Domain\Finance\ValueObject\GatewayReceipt $gatewayReceipt = null,
+        ?\Domain\Tuition\ValueObject\InvoiceCharge $invoiceCharge = null,
     ): void {
         if (
             $gatewayReceipt !== null && ($type !== EntryType::Payment || $staffRecorded
@@ -321,9 +323,21 @@ final class StudentAccount extends EventSourcedAggregate
         $chargeSource?->validate($type->value, $staffRecorded, $registrationPrice !== null);
         if (
             $registrationPrice !== null && ($type !== EntryType::Charge || $staffRecorded
-            || $registrationPrice->amount != $amount)
+            || ($registrationPrice->amount != $amount && $invoiceCharge === null))
         ) {
             throw new DomainException('Registration pricing belongs to its exact automatic charge.');
+        }
+        if (
+            $invoiceCharge !== null && ($type !== EntryType::Charge || $staffRecorded
+            || $invoiceCharge->values()['line']['minor'] !== $amount->minor
+            || $invoiceCharge->values()['currency'] !== $amount->currency
+            || $invoiceCharge->values()['line']['price'] !== $registrationPrice?->values()
+            || \Domain\Tuition\ValueObject\InvoiceCharge::operation(
+                $invoiceCharge->values()['invoice_id'],
+                $invoiceCharge->values()['line']
+            )->value !== $operationId->value)
+        ) {
+            throw new DomainException('Retain the exact issued invoice charge.');
         }
         if ($type === EntryType::ChargeCredit) {
             throw new DomainException("A charge credit requires its original charge and a reviewed instruction.");
@@ -345,6 +359,7 @@ final class StudentAccount extends EventSourcedAggregate
         if (isset($this->operations[$operationId->value])) {
             if (
                 $this->operations[$operationId->value] !== $entry ||
+                ($this->invoiceCharges[$operationId->value] ?? null)?->values() !== $invoiceCharge?->values() ||
                 ($this->gatewayReceipts[$operationId->value] ?? null)?->values() !== $gatewayReceipt?->values() ||
                 ($this->openingPaymentDetails[$operationId->value] ?? null)?->values() !==
                     $paymentDetails?->values() ||
@@ -375,7 +390,8 @@ final class StudentAccount extends EventSourcedAggregate
                     ($allocation === null ? [] : ["refund_allocations" => $allocation->values()]) +
                     ($registrationPrice === null ? [] : ["registration_price" => $registrationPrice->values()]) +
                     ($chargeSource === null ? [] : ['charge_source' => $chargeSource->value]) +
-                    ($gatewayReceipt === null ? [] : ['gateway_receipt' => $gatewayReceipt->values()]),
+                    ($gatewayReceipt === null ? [] : ['gateway_receipt' => $gatewayReceipt->values()]) +
+                    ($invoiceCharge === null ? [] : ['invoice_charge' => $invoiceCharge->values()]),
             ),
         );
     }
@@ -1192,6 +1208,22 @@ final class StudentAccount extends EventSourcedAggregate
     protected function whenAccountEntryWasPosted(AccountEntryWasPosted $event): void
     {
         $payload = $event->payload();
+        if (isset($event->metadata()['invoice_charge'])) {
+            $invoice = new \Domain\Tuition\ValueObject\InvoiceCharge($event->metadata()['invoice_charge']);
+            if (
+                $payload['type'] !== 'charge' || ($event->metadata()['staff_recorded'] ?? false)
+                || $payload['minor'] !== $invoice->values()['line']['minor']
+                || $payload['currency'] !== $invoice->values()['currency']
+                || $invoice->values()['line']['price'] !== ($event->metadata()['registration_price'] ?? null)
+                || \Domain\Tuition\ValueObject\InvoiceCharge::operation(
+                    $invoice->values()['invoice_id'],
+                    $invoice->values()['line']
+                )->value !== $payload['operation_id']
+            ) {
+                throw new DomainException('The account charge does not match its invoice.');
+            }
+            $this->invoiceCharges[$payload['operation_id']] = $invoice;
+        }
         if (isset($event->metadata()['gateway_receipt'])) {
             $receipt = new \Domain\Finance\ValueObject\GatewayReceipt($event->metadata()['gateway_receipt']);
             if (
@@ -1215,7 +1247,8 @@ final class StudentAccount extends EventSourcedAggregate
             $price = RegistrationPrice::fromRecorded($event->metadata()['registration_price']);
             if (
                 $payload['type'] !== 'charge' || ($event->metadata()['staff_recorded'] ?? false)
-                || $payload['minor'] !== $price->amount->minor || $payload['currency'] !== $price->amount->currency
+                || ($payload['minor'] !== $price->amount->minor && !isset($event->metadata()['invoice_charge']))
+                || $payload['currency'] !== $price->amount->currency
             ) {
                 throw new DomainException('The retained registration charge does not match its price.');
             }

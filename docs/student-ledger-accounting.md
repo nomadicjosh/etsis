@@ -4,6 +4,8 @@ Open **Student accounts → Accounting controls**. The same tool is available fr
 
 Automatic mapping starts off for every currency. Publish a mapping deliberately before opening student accounts or posting journals in that currency. The current activation workflow supports a currency with no existing financial records; an institution with existing accounts or journals needs a separate reviewed opening-position conversion. It does not infer accounting entries from old balances or silently adopt earlier transactions.
 
+[Tuition and invoices](tuition-invoicing.md) uses these accounting controls: assigned schedules retain classified tuition income and additional-fee counterparts, registration creates pending estimates, and invoice confirmation posts the reviewed charges and balanced journals together. Pending estimates are excluded from account balances and online payment amounts. Tuition-specific refund policies and installment plans remain separate roadmap work.
+
 ## Set up the accounts and mapping
 
 1. In **Chart of accounts**, create the counterpart accounts with their institutional codes, titles and currencies. For a simple example, these might be a tuition counterpart and a bank account. Select the appropriate account classification when creating each account. The finance office determines its recognition policy. Earlier unclassified accounts can be reviewed through [Payment gateways → Clearing accounts](payment-gateways.md#prepare-the-chart-of-accounts).

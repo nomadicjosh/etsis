@@ -307,6 +307,32 @@ final readonly class LedgerControl
                     throw new CorruptHistoryException();
                 }
             }
+            if (isset($event->metadata()['invoice_charge'])) {
+                $invoice = new \Domain\Tuition\ValueObject\InvoiceCharge($event->metadata()['invoice_charge']);
+                $i = $invoice->values();
+                $source = $this->evidence->recordedEvent(new EntityId($i['event_id']));
+                $invoiceEvent = $source->event;
+                $details = $invoiceEvent->payload()['details'] ?? [];
+                $line = array_find(
+                    $details['lines'] ?? [],
+                    static fn(array $l): bool => $l['key'] === $i['line']['key']
+                );
+                $posting = $this->evidence->recordedEvent(new EntityId((string) $event->eventId()));
+                if (
+                    !$invoiceEvent instanceof \Domain\Tuition\Event\TuitionBillActionWasRecorded
+                    || ($invoiceEvent->payload()['action'] ?? null) !== 'invoice'
+                    || (string) $invoiceEvent->aggregateId() !== $i['bill_id']
+                    || $details['invoice_id'] !== $i['invoice_id'] || $details['account_id'] !== $account
+                    || $details['reference'] !== $i['reference'] || $details['currency'] !== $currency
+                    || LedgerSchema::hash($line) !== LedgerSchema::hash($i['line'])
+                    || $source->context->describe() !== $posting->context->describe()
+                    || $p['type'] !== 'charge' || $i['currency'] !== $currency || $i['line']['minor'] !== $p['minor']
+                    || $i['line']['account']['id'] === $receivable
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                $target = $i['line']['account'];
+            }
             $basis = [
                 "type" => $p["type"],
                 "minor" => $p["minor"],

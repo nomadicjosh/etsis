@@ -1,0 +1,70 @@
+<?php
+
+declare(strict_types=1);
+
+use function Codefy\Framework\Helpers\trans_html;
+use function Qubus\Security\Helpers\esc_html;
+use function Qubus\Security\Helpers\esc_attr;
+
+$format = new NumberFormatter(Locale::getDefault(), NumberFormatter::CURRENCY);
+$format->setTextAttribute(NumberFormatter::CURRENCY_CODE, $invoice['currency']);
+$places = $format->getAttribute(NumberFormatter::FRACTION_DIGITS);
+$money = static fn(int $v): string => (string) $format->formatCurrency($v / 10 ** $places, $invoice['currency']);
+?>
+<!doctype html>
+<html lang="<?= esc_attr(str_replace('_', '-', Locale::getDefault())) ?>">
+    <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <meta name="robots" content="noindex, nofollow">
+        <title><?= esc_html($invoice['reference']) ?></title>
+        <link rel="stylesheet" href="/assets/css/invoice-print.css">
+    </head>
+    <body>
+        <main>
+            <header>
+                <p><?= trans_html('Student invoice') ?></p>
+                <h1><?= esc_html($invoice['reference']) ?></h1>
+            </header>
+            <dl>
+                <dt><?= trans_html('Student') ?></dt>
+                <dd><?= esc_html($invoice['recipient']['name']) ?></dd>
+                <dt><?= trans_html('Institutional ID') ?></dt>
+                <dd><?= esc_html($invoice['recipient']['institutional_id']) ?></dd>
+                <dt><?= trans_html('Term') ?></dt>
+                <dd><?= esc_html($invoice['term_label']) ?></dd>
+                <dt><?= trans_html('Issued') ?></dt>
+                <dd><?= esc_html($invoice['issued_at']) ?></dd>
+                <dt><?= trans_html('Due date') ?></dt>
+                <dd><?= esc_html($invoice['due_on']) ?></dd>
+            </dl>
+            <table>
+                <caption><?= trans_html('Issued invoice lines') ?></caption>
+                <thead>
+                    <tr>
+                        <th scope="col"><?= trans_html('Description') ?></th>
+                        <th scope="col"><?= trans_html('Quoted amount') ?></th>
+                        <th scope="col"><?= trans_html('Invoiced amount') ?></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($invoice['lines'] as $line) : ?>
+                        <tr>
+                            <th scope="row"><?= esc_html($line['name']) ?></th>
+                            <td><?= esc_html($money($line['quoted_minor'])) ?></td>
+                            <td><?= esc_html($money($line['minor'])) ?></td>
+                        </tr>
+                    <?php endforeach; ?>
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <th scope="row" colspan="2"><?= trans_html('Invoice total') ?></th>
+                        <td><?= esc_html($money($invoice['total_minor'])) ?></td>
+                    </tr>
+                </tfoot>
+            </table>
+            <p><?= trans_html('This invoice retains its issued charges. Your current account balance includes later payments, credits and refunds.') ?></p>
+            <p class="screen-help"><?= trans_html('Use your browser’s Print action to print or save this invoice.') ?></p>
+        </main>
+    </body>
+</html>

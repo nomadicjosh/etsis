@@ -304,6 +304,14 @@ A **refund** records an authorized return of money through the supported payment
 
 A **billing rule** defines when and how an assessment is proposed. A **retained charge source** records the pricing and classification accepted for an actual posting. Later changes to today's prices do not silently reprice that original charge. See [account charge reports](account-charge-reports.md).
 
+### Tuition schedule / credit bracket
+
+A **tuition schedule** calculates term tuition from registered academic credits and an explicitly selected income account. A **credit bracket** defines a range with a flat amount and optional additional-credit rate. Student assignments override program assignments, which override term defaults; an existing bill retains its accepted schedule. CEUs do not increase this credit quantity. See [tuition and invoices](tuition-invoicing.md).
+
+### Pending term bill / invoice
+
+A **pending term bill** holds estimates awaiting staff review; it does not change the payable balance. An **invoice** retains the actual reviewed charges, including adjustments and zero-amount exclusions, and posts positive charges to the student account and general ledger atomically. Later payments and credits change the account statement without rewriting the invoice. See [invoice review](tuition-invoicing.md#review-and-issue-an-invoice).
+
 ### Financial journal (general ledger)
 
 A **financial journal** records balanced debit and credit lines. The **general ledger**, or **GL**, organizes those postings by financial account. This is a different use of *journal* from the shared business-event journal. [Student-account accounting](student-ledger-accounting.md) now connects future accepted account transactions to their retained mapping and ledger journals; existing-record opening-position conversion remains separate.

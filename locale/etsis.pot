@@ -14018,3 +14018,228 @@ msgstr ""
 #: resources/views/shared/service-fee-labels.php:11
 msgid "This quote has no automatic GL mapping. Later setup does not change its accounting."
 msgstr ""
+
+msgid "Tuition and invoices"
+msgstr ""
+
+msgid ""
+"Review pending tuition and fees before they become payable. Issued invoices "
+"retain their original charges."
+msgstr ""
+
+msgid "Tuition schedules"
+msgstr ""
+
+msgid "Assign a tuition schedule"
+msgstr ""
+
+msgid "Pending charges"
+msgstr ""
+
+msgid "All term bills and invoices"
+msgstr ""
+
+msgid "Create tuition schedule"
+msgstr ""
+
+msgid "Edit published schedule"
+msgstr ""
+
+msgid "Back"
+msgstr ""
+
+msgid "Back to invoice"
+msgstr ""
+
+msgid "Back to term bill"
+msgstr ""
+
+msgid "Schedule name"
+msgstr ""
+
+msgid "Classified tuition income account"
+msgstr ""
+
+msgid "Reason for this billing decision"
+msgstr ""
+
+msgid "Credit brackets"
+msgstr ""
+
+msgid "Bracket"
+msgstr ""
+
+msgid ""
+"Use contiguous ranges from 0 through 999.999 academic credits. Each bracket "
+"calculates a flat amount plus its rate for credits above the specified "
+"threshold. CEUs are excluded."
+msgstr ""
+
+msgid "From credits (inclusive)"
+msgstr ""
+
+msgid "Through credits (inclusive)"
+msgstr ""
+
+msgid "Flat amount"
+msgstr ""
+
+msgid "Amount per additional credit"
+msgstr ""
+
+msgid "Charge the rate above this many credits"
+msgstr ""
+
+msgid "Add bracket"
+msgstr ""
+
+msgid "Remove bracket"
+msgstr ""
+
+msgid "Move bracket up"
+msgstr ""
+
+msgid "Move bracket down"
+msgstr ""
+
+msgid "Review billing decision"
+msgstr ""
+
+msgid ""
+"Check the exact amounts and source below. Editing a field requires a fresh "
+"review."
+msgstr ""
+
+msgid "Confirm billing decision"
+msgstr ""
+
+msgid "Billing decision recorded."
+msgstr ""
+
+msgid "Assignment level"
+msgstr ""
+
+msgid ""
+"Student assignment takes precedence, then program, then term. Existing term "
+"bills retain their schedule until an authorized reprice before their first "
+"invoice."
+msgstr ""
+
+msgid "Assignment target"
+msgstr ""
+
+msgid "Tuition schedule"
+msgstr ""
+
+msgid "Clear this assignment and use the next fallback"
+msgstr ""
+
+msgid "Loading the current assignment…"
+msgstr ""
+
+msgid "Current assignment loaded."
+msgstr ""
+
+msgid "Review term bill"
+msgstr ""
+
+msgid "Invoice due date"
+msgstr ""
+
+msgid "Pending line"
+msgstr ""
+
+msgid "Quoted amount"
+msgstr ""
+
+msgid "Amount to invoice"
+msgstr ""
+
+msgid "Remove from this invoice"
+msgstr ""
+
+msgid "Restore quoted amount"
+msgstr ""
+
+msgid ""
+"Adjust or remove each pending line, then review the complete invoice. Zero "
+"records an excluded charge. Nothing becomes payable until confirmation."
+msgstr ""
+
+msgid "Review and issue invoice"
+msgstr ""
+
+msgid "Issued invoices"
+msgstr ""
+
+msgid "Student invoice"
+msgstr ""
+
+msgid "Issued"
+msgstr ""
+
+msgid "Invoice reference"
+msgstr ""
+
+msgid "Invoice total"
+msgstr ""
+
+msgid "Pending total · Not yet payable"
+msgstr ""
+
+msgid "Registered academic credits"
+msgstr ""
+
+msgid "Review current schedule repricing"
+msgstr ""
+
+msgid ""
+"Use the current assignment and publication for this unissued term bill. "
+"Accepted registration quantities stay unchanged. Issued terms retain their "
+"original pricing."
+msgstr ""
+
+msgid ""
+"Invoiced term tuition exceeds the current quote. Review the original account "
+"charge for any permitted credit; no automatic tuition refund is inferred."
+msgstr ""
+
+msgid "Print invoice"
+msgstr ""
+
+msgid "Tuition information is unavailable with your current access."
+msgstr ""
+
+msgid ""
+"These are pending estimates. Staff must review and issue an invoice before "
+"the charges are payable."
+msgstr ""
+
+msgid "Section fee"
+msgstr ""
+
+msgid "Due date"
+msgstr ""
+
+msgid "Issued invoice lines"
+msgstr ""
+
+msgid "Description"
+msgstr ""
+
+msgid "Invoiced amount"
+msgstr ""
+
+msgid ""
+"This invoice retains its issued charges. Your current account balance "
+"includes later payments, credits and refunds."
+msgstr ""
+
+msgid "Use your browser’s Print action to print or save this invoice."
+msgstr ""
+
+msgid "Use tuition schedules for tuition pricing."
+msgstr ""
+
+msgid "Review tuition and pending fees in Tuition and invoices before posting."
+msgstr ""

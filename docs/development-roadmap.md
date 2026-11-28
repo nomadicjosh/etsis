@@ -827,7 +827,7 @@ You should be able to use etSIS to accept online payments for tuition, fees, app
 - [ ] Support for emailing online payment receipts: When someone makes an online payment to a student's account, select whether to email an online payment receipt to the student and the payer.
 - [x] [Online payments must not exceed the outstanding balance](payment-capture.md) for all enabled hosted Stripe card purposes: coordinated protected reservations, final partial capture or cancellation, server verification/retry, retained received-money evidence, atomic posting and private owner/staff activity. Future provider/ACH adapters must qualify an equivalent collection boundary before enablement; independent provider actions, live acceptance, refunds/disputes and settlement remain explicit gates.
 - [ ] Support for An Institutional Student Information Record (ISIR); financial aid, and disbursements (do online research for the best implementation and workflow). Student must accept financial aid package.
-- [ ] Tuition schedules and bracketing (connected to an income account in Chart of Accounts). A tuition schedule can be added to a student or get associated to a term or academic program. When a student enrolls in courses, a pending (status) tuition charge is created, and any necessary fees will be added. After someone reviews the pending charges (remove a charge, adjust charges, etc), then they get invoiced.
+- [x] [Tuition schedules and bracketing → pending charge review → invoices](tuition-invoicing.md): reviewed classified-income schedules with exact credit bands; student/program/term precedence; protected registration-driven pending tuition and fees; staff adjustments/exclusions; atomic invoice/account/GL acceptance; private owner views and printable retained invoices. Existing-registration opening conversion, bulk issue, tuition refund policies and payment plans remain separate.
 - [ ] Refund policies: automatically calculates refunds for invoiced charges when a student withdraws from courses. A refund policy can be added to a student's account or by making it a default for a particular tuition schedule. If no refund policy is set, student charges will have to be manually tracked and adjusted. When a withdrawal occurs, if it is within the timeframe of the refund policy, a pending credit is created.
 - [ ] General Ledger Report: displays the debit and credit balances for all accounts with transaction activity during a given time period. A summary view should show the cumulative debits and credits for each affected account while a detail view should show the entries connected to each individual transaction.
 
@@ -847,6 +847,7 @@ Payment plans allow students to pay their invoices in installments. A payment pl
 ## Next implementation stages
 
 **Delivery cadence:** complete a substantial untouched workflow before selecting another narrow extension.
+[Tuition schedules and invoice review](tuition-invoicing.md) now complete the next section 11 milestone. Continue with tuition-specific refund policies and reviewed pending credits, then installment/payment-plan setup and recalculation; retain aid/ISIR and the other substantial finance items below as open.
 **Course Auditing** (section 2) completes the first major workflow in this cadence: policy,
 reviewed registration, seats, charges, academic exclusions and connected staff/student views.
 **Graduation & credentials** (section 3) now completes reviewed eligibility, individual/bounded group
@@ -876,7 +877,7 @@ protected reservations, final partial capture/cancellation, server reconciliatio
 all enabled card purposes. [Service-fee accounting and processing expenses](service-fee-accounting.md)
 now complete the connected prospective income/liability/expense mappings, source journals and reviewed
 actual expense entries. Continue remaining section 11 settlement/reconciliation, payer/receipt,
-provider/ACH, tuition/invoicing and payment-plan
+provider/ACH, tuition-specific refund policies and payment-plan
 workflows. Do not substitute another narrow reporting or notification extension for those milestones.
 Establish each milestone's acceptance boundary before implementation.
 Completed extension leaves do not complete their broad parent feature.

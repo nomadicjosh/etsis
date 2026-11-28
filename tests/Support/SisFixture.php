@@ -256,7 +256,8 @@ final class SisFixture
                 EventStoreFixture::financialWriter($db)
             ),
             $this->admissions,
-            $this->primaryProgramLedger()
+            $this->primaryProgramLedger(),
+            $this->tuitionBilling(),
         );
     }
 
@@ -568,6 +569,7 @@ final class SisFixture
             $rules,
             $this->admissions,
             $this->primaryProgramLedger(),
+            $this->tuitionBilling(),
         );
         $dropPolicies = new \Infrastructure\Persistence\Repository\SqlDropPolicyRepository(
             $this->sql,
@@ -1521,6 +1523,7 @@ final class SisFixture
             ),
             $this->admissions,
             $this->primaryProgramLedger(),
+            $this->tuitionBilling(),
         );
         return new \Domain\Registration\Service\CourseDropService(
             new \Infrastructure\Persistence\Repository\SqlCourseDropRepository($this->sql),
@@ -1641,6 +1644,26 @@ final class SisFixture
             $this->dropCipher,
             $this->applicationRevisions(),
         );
+    }
+    public function tuitionLedger(): \Domain\Tuition\Service\TuitionLedger
+    {
+        return new \Domain\Tuition\Service\TuitionLedger(
+            new \Infrastructure\Persistence\Repository\SqlTuitionRepository($this->sql),
+            EventStoreFixture::history($this->connection->queryBuilder())
+        );
+    }
+    public function tuition(?\Domain\Audit\Repository\AuditTrail $audit = null): \Domain\Tuition\Service\TuitionService
+    {
+        return new \Domain\Tuition\Service\TuitionService($this->tuitionLedger(), $this->tuitionBilling(),
+            $this->ledgerControl(), $this->accounts, $this->termFees(), $this->admissions, $this->registration,
+            new \Domain\Person\Service\ProfileLedger(EventStoreFixture::history($this->connection->queryBuilder()), $this->clock),
+            $this->access, $this->transactions, $audit ?? $this->audit, $this->clock, $this->dropCipher,
+            EventStoreFixture::history($this->connection->queryBuilder()), $this->financialCommands());
+    }
+    public function tuitionBilling(): \Domain\Tuition\Service\TuitionBilling
+    {
+        return new \Domain\Tuition\Service\TuitionBilling($this->tuitionLedger(), $this->ledgerControl(),
+            $this->admissions, $this->registration, $this->audit);
     }
     public function feeLedger(): \Domain\ServiceFee\Service\ServiceFeeLedger
     {

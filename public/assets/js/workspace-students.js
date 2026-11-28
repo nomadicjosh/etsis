@@ -925,6 +925,8 @@ window.createWorkspaceStudents = function (ui) {
             extra.push(button("Primary-program history", () => primaryHistory(id, back)));
         }
 
+        if (can("sis:finance:read") && can("sis:student:read") && can("sis:finance:post") && can("sis:finance:ledger"))
+            extra.push(button(ui.tuitionLabels.assignment, () => ui.tuition().assignment(back, { scope: "student", scope_id: id })));
         if (extra.length) actions.append(actionMenu("More", extra, { context: "More student actions" }));
 
         const programs = node(

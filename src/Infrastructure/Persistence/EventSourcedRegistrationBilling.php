@@ -189,6 +189,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         private BillingRuleRepository $rules,
         private AdmissionsRepository $admissions,
         private \Domain\Student\Service\StudentPrimaryProgramLedger $primaryPrograms,
+        private \Domain\Tuition\Service\TuitionBilling $tuition,
     ) {
     }
 
@@ -198,6 +199,7 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         EntityId $enrollment,
         EventContext $context,
     ): bool {
+        $this->tuition->remove($student, $term, $enrollment, $context);
         $row =
         $this->sql->rows(
             "sis_student_accounts",
@@ -255,7 +257,20 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
                 ],
             ]);
         }
-        $this->applyQuote($quote->termQuote, $context, $operation, $fee, $creditsMilli);
+        if (
+            !$this->tuition->accept(
+                $student,
+                $term,
+                $operation,
+                $fee,
+                $creditsMilli,
+                $quote->termQuote,
+                $context,
+                $quote->pendingTuition()
+            )
+        ) {
+            $this->applyQuote($quote->termQuote, $context, $operation, $fee, $creditsMilli);
+        }
     }
 
     public function registrationQuote(
@@ -267,10 +282,12 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
         ?array $rules = null,
     ): \Domain\Finance\ValueObject\RegistrationChargeQuote {
         $program = $this->admissions->student($student)->programId;
+        $termQuote = $this->quote($student, $term, $rules ?? $this->rules($term, $budget, [$program]), $budget);
         return new \Domain\Finance\ValueObject\RegistrationChargeQuote(
-            $this->quote($student, $term, $rules ?? $this->rules($term, $budget, [$program]), $budget),
+            $termQuote,
             $fee,
             $creditsMilli,
+            $this->tuition->preview($student, $term, $fee, $creditsMilli, $termQuote, $budget),
         );
     }
 
@@ -318,6 +335,10 @@ final readonly class EventSourcedRegistrationBilling implements RegistrationBill
 
     public function apply(TermFeeQuote $quote, EventContext $context): array
     {
+        if ($this->tuition->requiresInvoice($quote->student, $quote->term)) {
+            throw new ValidationException([['field' => 'students',
+                'message' => trans('Review tuition and pending fees in Tuition and invoices before posting.')]]);
+        }
         return $this->applyQuote($quote, $context, null, null, null);
     }
 

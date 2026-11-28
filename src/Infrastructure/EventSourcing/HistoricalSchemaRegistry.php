@@ -53,6 +53,18 @@ final readonly class HistoricalSchemaRegistry
     private function definition(string $class): array
     {
         return match ($class) {
+            \Domain\Tuition\Event\TuitionScheduleWasPublished::class => [
+                'type' => 'tuition_schedule', 'root' => \Domain\Tuition\TuitionSchedule::class,
+                'fields' => \Domain\Tuition\TuitionSchedule::FIELDS,
+            ],
+            \Domain\Tuition\Event\TuitionAssignmentWasRecorded::class => [
+                'type' => 'tuition_assignment', 'root' => \Domain\Tuition\TuitionAssignment::class,
+                'fields' => \Domain\Tuition\TuitionAssignment::FIELDS,
+            ],
+            \Domain\Tuition\Event\TuitionBillActionWasRecorded::class => [
+                'type' => 'tuition_bill', 'root' => \Domain\Tuition\TuitionBill::class,
+                'fields' => \Domain\Tuition\TuitionBill::FIELDS,
+            ],
             \Domain\ServiceFee\Event\ServiceFeeDecisionWasRecorded::class => [
                 'type' => 'service_fee', 'root' => \Domain\ServiceFee\ServiceFee::class,
                 'fields' => \Domain\ServiceFee\ServiceFee::FIELDS,
@@ -698,6 +710,15 @@ final readonly class HistoricalSchemaRegistry
         int $version,
     ): void {
         try {
+            match ($class) {
+                \Domain\Tuition\Event\TuitionScheduleWasPublished::class =>
+                \Domain\Tuition\TuitionSchedule::validate($payload),
+                \Domain\Tuition\Event\TuitionAssignmentWasRecorded::class =>
+                \Domain\Tuition\TuitionAssignment::validate($payload),
+                \Domain\Tuition\Event\TuitionBillActionWasRecorded::class =>
+                \Domain\Tuition\TuitionBill::validate($payload),
+                default => null,
+            };
             if ($class === \Domain\Finance\Event\AccountPaymentCaptureWasReserved::class) {
                 \Domain\Payments\ValueObject\CaptureState::plan($payload);
             } elseif ($class === \Domain\Finance\Event\AccountPaymentCaptureProgressWasRecorded::class) {
@@ -1257,6 +1278,9 @@ final readonly class HistoricalSchemaRegistry
                 // This complete payload is validated by its bounded typed schema above.
                 if (
                     in_array($class, [
+                    \Domain\Tuition\Event\TuitionScheduleWasPublished::class,
+                    \Domain\Tuition\Event\TuitionAssignmentWasRecorded::class,
+                    \Domain\Tuition\Event\TuitionBillActionWasRecorded::class,
                     \Domain\Finance\Event\AccountPaymentCaptureWasReserved::class,
                     \Domain\Finance\Event\AccountPaymentCaptureProgressWasRecorded::class,
                     \Domain\Finance\Event\LedgerBookWasPublished::class,
@@ -1664,8 +1688,29 @@ final readonly class HistoricalSchemaRegistry
                     $price = \Domain\Finance\ValueObject\RegistrationPrice::fromRecorded($value);
                     if (
                         $price->values() != $value || $price->amount->minor < 1
-                        || $price->amount->minor !== $payload['minor']
+                        || ($price->amount->minor !== $payload['minor'] && !isset($metadata['invoice_charge']))
                         || $price->amount->currency !== $payload['currency']
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
+                if ($name === 'invoice_charge') {
+                    if (
+                        $class !== \Domain\Finance\Event\AccountEntryWasPosted::class || $payload['type'] !== 'charge'
+                        || ($metadata['staff_recorded'] ?? false)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $invoice = new \Domain\Tuition\ValueObject\InvoiceCharge($value);
+                    if (
+                        $value['line']['minor'] !== $payload['minor'] || $value['currency'] !== $payload['currency']
+                        || ($value['line']['price'] ?? null) !== ($metadata['registration_price'] ?? null)
+                        || \Domain\Tuition\ValueObject\InvoiceCharge::operation(
+                            $value['invoice_id'],
+                            $value['line']
+                        )->value
+                            !== $payload['operation_id']
                     ) {
                         throw new CorruptHistoryException();
                     }
@@ -2057,6 +2102,9 @@ final readonly class HistoricalSchemaRegistry
         $type = match ($id->aggregateClassName()) {
             \Domain\ServiceFee\ServiceFee::class => 'service_fee',
             \Domain\Graduation\GraduationCase::class => 'graduation',
+            \Domain\Tuition\TuitionSchedule::class => 'tuition_schedule',
+            \Domain\Tuition\TuitionAssignment::class => 'tuition_assignment',
+            \Domain\Tuition\TuitionBill::class => 'tuition_bill',
             \Domain\Person\PhotoHistory::class => 'person_photo',
             \Domain\Person\PersonSsnHistory::class => 'person_ssn',
             \Domain\Registration\Waitlist\SectionWaitlist::class => 'section_waitlist',
@@ -2121,6 +2169,9 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            'tuition_schedule' => new \Domain\Tuition\ValueObject\TuitionScheduleId($id),
+            'tuition_assignment' => new \Domain\Tuition\ValueObject\TuitionAssignmentId($id),
+            'tuition_bill' => new \Domain\Tuition\ValueObject\TuitionBillId($id),
             'person_photo' => new \Domain\Person\ValueObject\PhotoHistoryId($id),
             'person_ssn' => new \Domain\Person\ValueObject\PersonSsnId($id),
             'section_waitlist' => new \Domain\Registration\Waitlist\WaitlistId($id),

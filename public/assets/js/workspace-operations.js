@@ -59,7 +59,7 @@ window.createWorkspaceOperations = function (ui) {
             ["term_id", "Term", "lookup", "terms"],
             ["program_id", "Program (optional)", "lookup", "programs", false],
             ["name", "Rule name"],
-            ["kind", "Type", "choice", ["tuition", "fee"]],
+            ["kind", "Type", "choice", ["fee"]],
             ["pricing_basis", "How to charge", "choice", [
                 { value: "term", label: "Once per billing term" },
                 { value: "registered_credit", label: "Per registered credit" },

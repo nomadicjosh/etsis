@@ -299,6 +299,8 @@
     };
     datasets.transcripts = { title: 'Transcript requests', description: 'Review a request, prepare the official record, and record delivery after it is complete.', icon: 'file-earmark-text', permission: 'sis:transcript:manage', columns: [['Request', 'short_id'], ['Delivery', 'delivery'], ['Status', 'status'], ['Requested', 'requested_at']] };
     const historyChecks = window.createWorkspaceHistoryChecks({ node, request, task, openDrawer, labels: config.history_check_labels });
+    const tuition = window.createWorkspaceTuition({ labels: config.tuition_labels,
+        node, request, task, can, buildForm, formData, openDrawer, openRecord, notify });
     const studentLedger = window.createWorkspaceStudentLedger({ labels: config.accounting_labels,
         node, request, task, can, table, buildForm, formData, openDrawer, openRecord, actionMenu, notify });
     const paymentGateways = window.createWorkspacePaymentGateways({ node, request, task, openDrawer, notify, actionMenu,
@@ -363,7 +365,7 @@
     const standingStudio = window.createWorkspaceStanding({ proposalLabels: config.standing_proposal_labels, node, request, task, can, openDrawer, degreeAudit: () => degreeAuditStudio });
     const advisingStudio = window.createWorkspaceAdvising({ historyChecks: () => historyChecks, historyCheckLabels: config.history_check_labels, node, request, task, can, openDrawer });
     const internalTransfers = window.createInternalTransfers({ node, request, task, openDrawer, buildForm, formData, notify, labels: config.internal_transfer_labels });
-    const studentStudio = window.createWorkspaceStudents({ internalTransfers: () => internalTransfers, internalTransferLabels: config.internal_transfer_labels, graduationLabels: config.graduation_labels, ceuLabels: config.ceu_labels, historyCheckLabels: config.history_check_labels, historyChecks: () => historyChecks, prerequisitePermissions: () => prerequisitePermissions, enrollmentLoad: () => enrollmentLoad, standing: () => standingStudio, advising: () => advisingStudio, node, request, task, can, actionMenu, recordSummary, messageRecord: operations.messageRecord, disposeActionMenus, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
+    const studentStudio = window.createWorkspaceStudents({ tuition: () => tuition, tuitionLabels: config.tuition_labels, internalTransfers: () => internalTransfers, internalTransferLabels: config.internal_transfer_labels, graduationLabels: config.graduation_labels, ceuLabels: config.ceu_labels, historyCheckLabels: config.history_check_labels, historyChecks: () => historyChecks, prerequisitePermissions: () => prerequisitePermissions, enrollmentLoad: () => enrollmentLoad, standing: () => standingStudio, advising: () => advisingStudio, node, request, task, can, actionMenu, recordSummary, messageRecord: operations.messageRecord, disposeActionMenus, buildForm, formData, degreeAudit: () => degreeAuditStudio, openDrawer, openPerson, table, badge, flow: operations.flow, registration: operations.registration, restrictions: () => restrictionStudio, registrationHistory: () => batchRegistration, calendar: () => academicCalendarStudio, teaching: () => teachingStudio, transferAwards: () => transferAwardStudio, hiatus: () => hiatusStudio, showAudit: (dataset, id) => operations.audit(dataset, { id }) });
     relationalStudio = window.createWorkspaceReportStudio({ calculationLabels: config.report_calculation_labels,
         labelLabels: config.report_label_labels, reportingLabels: config.section_reporting_labels,
         notify, notificationLabels: config.notification_labels,
@@ -676,6 +678,8 @@
         } else create.removeAttribute('aria-label');
         if (['accounts', 'journals', 'ledger'].includes(section) && can('sis:finance:ledger') && can('sis:payments:configure')) tools.append(tool(config.payment_gateway_labels.title, () => paymentGateways.open(), config.payment_gateway_labels.title, 'credit-card'));
         if (['accounts', 'journals', 'ledger'].includes(section) && can('sis:finance:ledger')) tools.append(tool(config.accounting_labels.title, () => studentLedger.open(), config.accounting_labels.title, 'bank'));
+        if (['accounts', 'billing', 'journals', 'ledger'].includes(section) && can('sis:finance:read') && can('sis:student:read'))
+            tools.append(tool(config.tuition_labels.title, () => tuition.open(), config.tuition_labels.title, 'receipt'));
         if (section === 'accounts' && can('sis:finance:post')) tools.append(tool('Finance reviews', () => financeReviewStudio.queue(), 'Finance review queue', 'inboxes'));
         if (section === 'billing' && can('sis:finance:post') && can('sis:finance:read') && can('sis:student:read')) tools.append(tool('Review bills', () => operations.billingBatch(), 'Review student bills', 'receipt'));
         if (section === 'registration' && can('sis:registration:manage')) tools.append(tool('Hiatus history', () => hiatusStudio.choose(), 'Student hiatus history', 'clock-history'));
@@ -1447,6 +1451,11 @@
         if (section === 'sections' && can('sis:scheduling:manage') && can('sis:catalog:manage'))
             actions.append(node('button', { type: 'button', class: 'btn btn-outline-primary',
                 onclick: () => task(() => schedulingStudio.meetingPlan(row.id)) }, 'Meeting plan'));
+        if (['students', 'programs', 'terms'].includes(section) && can('sis:finance:read') && can('sis:student:read')
+            && can('sis:finance:post') && can('sis:finance:ledger')) actions.append(node('button', {
+                type: 'button', class: 'btn btn-outline-primary', onclick: () => task(() => tuition.assignment(
+                    () => openRecord(section, row, origin), { scope: { students: 'student', programs: 'program', terms: 'term' }[section], scope_id: row.id })) },
+                node('i', { class: 'bi bi-receipt me-2', 'aria-hidden': 'true' }), config.tuition_labels.assignment));
         await operations.enhance(section, row, body, origin);
     }
 

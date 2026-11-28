@@ -1072,7 +1072,9 @@ Only the selected account is restored, under the shared bounded history reader. 
 
 ### Billing rules and ledger journals
 
-**Term billing → Define a billing rule** retains one immutable fee or tuition definition for a term and optional program. Choose **Once per billing term** for a flat charge, or **Per registered credit** and enter its rate. Applicable institution-wide and program-specific rules are additive; a program rate does not silently replace an institution-wide rule. Enter a reason when defining or retiring a rule. Saving opens its detail screen. To change a price, retire its old definition and create a replacement; earlier charges retain their original inputs.
+New tuition definitions use [Tuition schedules](tuition-invoicing.md). Earlier tuition rules remain historical definitions and can be retired; they are not silently converted or offered as new tuition authoring. A scheduled student term uses pending invoice review instead of direct batch fee posting.
+
+**Term billing → Define a billing rule** retains one immutable additional-fee definition for a term and optional program. Choose **Once per billing term** for a flat charge, or **Per registered credit** and enter its rate. Applicable institution-wide and program-specific rules are additive; a program rate does not silently replace an institution-wide rule. Enter a reason when defining or retiring a rule. Saving opens its detail screen. To change a price, retire its old definition and create a replacement; earlier charges retain their original inputs.
 
 The **Term billing** list now shows rule names, billing terms, program scope, fee/tuition type, exact amounts with currency, and Active/Retired status. Search by those labels, a program title or currency; for example, search `Retired` to find earlier definitions or `All programs` to find institution-wide fees. Results use fifty-record pages and retain the existing workspace search and keyboard-accessible record links. Term/program labels describe their current reference records; they do not relabel historical charges.
 
@@ -1111,6 +1113,10 @@ Choose **Confirm reviewed charges** to post only the new fees displayed. All stu
 Registration and batch billing share the same flat-fee calculation and account posting code. Each batch restores applicable institutional/program fee definitions once, with at most 500 matching definitions and 2,000 student-fee lines. Rule, account and primary-selection reads share a 400-page/2,000-event allowance; pursuit-status verification retains its existing separate bounds. The protected review is limited to 256 KiB and the browser shows ten students per review page. Student/person locks are acquired in a stable order before rechecking the selected facts; account writes retain expected-version concurrency. Confirmation uses its transactional fee view: a fee committed after that view is established is left for a later review, rather than silently added to this one. These limits bound interactive work; larger/background population billing and per-credit pricing remain future work.
 
 `20261116000005_CreateSisBillingBatches` adds an encrypted completed-result receipt keyed by the reviewed operation and original token hash. This is retry support, not another event journal or a new recovery queue. Authoritative charges remain in the existing protected student-account streams, with the batch correlation, billing-term cause, trusted actor/acceptance time and entered reason. The migration adds only this support table and its user/term references; it does not rewrite recorded events, receipts or financial balances.
+
+### Tuition and invoices
+
+**Working.** [Tuition schedules and invoice review](tuition-invoicing.md) connect classified-income credit brackets, student/program/term assignments and accepted registrations to protected pending charges. Finance can adjust or exclude every line, review the due date/reason and atomically issue the invoice with the actual account/GL postings. Staff and verified owners can view and privately print the retained invoice. Pending estimates remain outside balances and payment limits. Unissued terms can be deliberately repriced; issued terms retain their sources. Older-registration opening conversion, bulk issue, tuition-specific refund policies and installment plans remain separate.
 
 ### Finance review evidence
 

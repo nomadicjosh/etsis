@@ -80,6 +80,7 @@ try {
                 'check-internal-transfers',
                 'check-moodle-grades',
                 'check-student-ledger',
+                'check-tuition',
                 'check-payment-gateways',
                 'check-person-photos',
                 'check-course-auditing',
@@ -479,6 +480,14 @@ try {
                 static fn() => $gatewayFixture->campus->cipher
             );
             require __DIR__ . '/PaymentGatewayBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-tuition') {
+            $kernel->bootstrap();
+            require_once __DIR__ . '/PaymentGatewayFixture.php';
+            $tuitionFixture = new \Tests\Support\PaymentGatewayFixture();
+            $httpSis = $tuitionFixture->sis;
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/TuitionBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-student-ledger') {
             $kernel->bootstrap();

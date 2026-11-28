@@ -113,7 +113,7 @@ foreach ([[500, "term"], [125, "registered_credit"]] as [$minor, $basis]) {
         "operation_id" => \Domain\Shared\ValueObject\EntityId::generate()->value,
         "term_id" => $sis->term->value,
         "name" => "Fictional " . $basis,
-        "kind" => "tuition",
+        "kind" => "fee",
         "pricing_basis" => $basis,
         "amount_minor" => $minor,
         "currency" => "USD",

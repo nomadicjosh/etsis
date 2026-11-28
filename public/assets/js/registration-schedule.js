@@ -189,15 +189,17 @@ window.createRegistrationSchedule = function (ui) {
                 `${course.code || "Course"}${course.title ? ` · ${course.title}` : ""}: ${meanings[value.courses[index]] || "Not checked"}`))));
     }
     function charges(value, money) {
+        const pendingLabels = JSON.parse(document.querySelector("#workspace-config, #campus-config")?.textContent || "{}").tuition_labels;
         return node(
             "section",
             { class: "border rounded p-3 mb-3", "aria-label": "Registration charges",
                 'data-charges-attention': String(value.total_minor == null || value.problems.length > 0) },
-            node("h3", { class: "h6" }, "New registration charges"),
+            node("h3", { class: "h6" }, value.mode === "pending" && pendingLabels ? pendingLabels.pending_total : "New registration charges"),
+            value.mode === "pending" && pendingLabels ? node("p", { class: "alert alert-info" }, pendingLabels.pending_notice) : null,
             node(
                 "p",
                 { class: "fw-semibold" },
-                value.total_minor == null ? "Pricing needs review" : money(value.total_minor, value.currency),
+                value.total_minor == null ? "Pricing needs review" : money(value.mode === "pending" ? value.pending_total_minor : value.total_minor, value.currency),
             ),
             value.items.length
                 ? node(
