@@ -125,19 +125,20 @@ window.createServiceFees = function (ui) {
             host.append(node('p', { role: 'status', class: 'alert alert-info' }, l.free));
         }, save); });
     }
-    async function detail(id, back, recordBack = null) {
+    async function detail(id, back, recordBack = null, backLabel = l.back_fees) {
         const host = ui.openDrawer(l.title); host.classList.add('service-fee-workbench');
         const data = await request(`/sis/service-fees/${id}/`);
         if (!host.isConnected) return;
         if (recordBack) host.append(button(l.back, recordBack, 'arrow-left'));
-        host.append(node('section', { class: 'my-3', 'aria-label': l.back_fees },
-            button(l.back_fees, back, 'arrow-left')), summary(data));
-        if (ui.activity) host.append(button(l.payment_activity, () => ui.activity('fee', id, () => detail(id, back, recordBack)), 'credit-card'));
+        host.append(node('section', { class: 'my-3', 'aria-label': backLabel },
+            button(backLabel, back, 'arrow-left')), summary(data));
+        if (data.accounting) host.append(node('p', { class: 'form-text' }, l[`accounting_${data.accounting}`]));
+        if (ui.activity) host.append(button(l.payment_activity, () => ui.activity('fee', id, () => detail(id, back, recordBack, backLabel)), 'credit-card'));
         const actions = node('div', { class: 'd-flex flex-wrap gap-2 mb-3' });
-        if (!data.cleared && !data.applied_to) actions.append(button(l.payment, () => decision(data, 'payment', back, {}, recordBack), 'cash-coin'));
-        if (!data.cleared && !data.applied_to && data.policy.waivers) actions.append(button(l.waive, () => decision(data, 'waive', back, {}, recordBack), 'shield-check'));
+        if (!data.cleared && !data.applied_to) actions.append(button(l.payment, () => decision(data, 'payment', back, {}, recordBack, backLabel), 'cash-coin'));
+        if (!data.cleared && !data.applied_to && data.policy.waivers) actions.append(button(l.waive, () => decision(data, 'waive', back, {}, recordBack, backLabel), 'shield-check'));
         if (data.payments.some(p => p.minor > data.refunds.filter(r => r.payment_id === p.payment_id).reduce((n, r) => n + r.minor, 0))) {
-            actions.append(button(l.refund, () => decision(data, 'refund', back, {}, recordBack), 'arrow-return-left'));
+            actions.append(button(l.refund, () => decision(data, 'refund', back, {}, recordBack, backLabel), 'arrow-return-left'));
         }
         host.append(actions);
         for (const key of ['payments', 'refunds']) {
@@ -148,8 +149,8 @@ window.createServiceFees = function (ui) {
         }
         await history(host, data, 'staff');
     }
-    async function decision(data, action, back, draft = {}, recordBack = null) {
-        const host = ui.openDrawer(l[action]); host.classList.add('service-fee-workbench'); host.append(button(l.edit, () => detail(data.fee_id, back, recordBack), 'arrow-left'), summary(data));
+    async function decision(data, action, back, draft = {}, recordBack = null, backLabel = l.back_fees) {
+        const host = ui.openDrawer(l[action]); host.classList.add('service-fee-workbench'); host.append(button(l.edit, () => detail(data.fee_id, back, recordBack, backLabel), 'arrow-left'), summary(data));
         if (action !== 'waive') host.append(node('p', { class: 'alert alert-info' }, action === 'refund' ? l.refund_help : l.receipt_help));
         const fields = action === 'payment' ? [['minor', l.amount, 'money'], ['method', l.method, 'choice', ['cash', 'check', 'card', 'bank_transfer', 'wire_transfer', 'money_order', 'paypal', 'other'].map(value => ({ value, label: l[value] }))], ['reference', l.reference, 'text', '', false]]
             : action === 'refund' ? [['payment_id', l.receipt, 'choice', data.payments.map(p => ({ value: p.payment_id,
@@ -173,7 +174,7 @@ window.createServiceFees = function (ui) {
             if (action === 'payment') values.reference ??= null;
             const result = await request(`/sis/service-fees/${data.fee_id}/review/`, 'POST', { action, details: values, reason });
             if (!host.isConnected) return;
-            const confirmHost = ui.openDrawer(l.review); confirmHost.classList.add('service-fee-workbench'); confirmHost.append(button(l.edit, () => decision(data, action, back, { ...values, reason }, recordBack), 'arrow-left'), summary(result.summary),
+            const confirmHost = ui.openDrawer(l.review); confirmHost.classList.add('service-fee-workbench'); confirmHost.append(button(l.edit, () => decision(data, action, back, { ...values, reason }, recordBack, backLabel), 'arrow-left'), summary(result.summary),
                 node('p', {}, l.review_help), node('p', { class: 'fw-semibold' }, l[action]), node('p', {}, result.reason));
             if (result.details.minor) confirmHost.append(node('p', {}, money(result.details.minor, data.policy.currency)));
             if (result.details.method) confirmHost.append(node('p', {}, `${l.method}: ${l[result.details.method] || result.details.method}`));
@@ -185,7 +186,7 @@ window.createServiceFees = function (ui) {
             if (action === 'refund') confirmHost.append(node('p', { class: 'alert alert-info' }, l.refund_help));
             confirmHost.append(button(l.confirm, async () => {
                 await request(`/sis/service-fees/${data.fee_id}/confirm/`, 'POST', result);
-                ui.notify?.(l.recorded); if (confirmHost.isConnected) await detail(data.fee_id, back, recordBack);
+                ui.notify?.(l.recorded); if (confirmHost.isConnected) await detail(data.fee_id, back, recordBack, backLabel);
             }, 'check2-circle'));
         }, review); });
     }

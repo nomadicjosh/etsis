@@ -6005,3 +6005,87 @@ msgstr "Online capture reserved"
 #: resources/views/shared/service-fee-labels.php:10
 msgid "Online capture verification"
 msgstr "Online capture verification"
+
+#: resources/views/backend/workspace/accounting-labels.php:8
+msgid "Service-fee accounting"
+msgstr "Service-fee accounting"
+
+#: resources/views/backend/workspace/accounting-labels.php:9
+msgid "Review service-fee accounting"
+msgstr "Review service-fee accounting"
+
+#: resources/views/backend/workspace/accounting-labels.php:11
+msgid "New quotes retain these accounts and the recognition policy. Earlier quotes keep their original accounting status. Configure classified accounts before selecting them here."
+msgstr "New quotes retain these accounts and the recognition policy. Earlier quotes keep their original accounting status. Configure classified accounts before selecting them here."
+
+#: resources/views/backend/workspace/accounting-labels.php:15
+msgid "Service-fee journals are not enabled for new quotes in this currency."
+msgstr "Service-fee journals are not enabled for new quotes in this currency."
+
+#: resources/views/backend/workspace/accounting-labels.php:16
+msgid "Staff receipt and refund asset"
+msgstr "Staff receipt and refund asset"
+
+#: resources/views/backend/workspace/accounting-labels.php:17
+msgid "Unearned fees liability"
+msgstr "Unearned fees liability"
+
+#: resources/views/backend/workspace/accounting-labels.php:18
+msgid "Processing expense account"
+msgstr "Processing expense account"
+
+#: resources/views/backend/workspace/accounting-labels.php:19
+msgid "Application fee income"
+msgstr "Application fee income"
+
+#: resources/views/backend/workspace/accounting-labels.php:20
+msgid "Transcript fee income"
+msgstr "Transcript fee income"
+
+#: resources/views/backend/workspace/accounting-labels.php:21
+msgid "Recognize fee income"
+msgstr "Recognize fee income"
+
+#: resources/views/backend/workspace/accounting-labels.php:22
+msgid "When the application or transcript request is accepted"
+msgstr "When the application or transcript request is accepted"
+
+#: resources/views/backend/workspace/accounting-labels.php:23
+msgid "When money is received"
+msgstr "When money is received"
+
+#: resources/views/backend/workspace/accounting-labels.php:24
+msgid "Record processing expense"
+msgstr "Record processing expense"
+
+#: resources/views/backend/workspace/accounting-labels.php:26
+msgid "Record an actual processor charge from a statement. Debit the configured expense account and credit the asset actually charged. Include the statement reference in the reason. This does not collect a fee from the student or record a bank payout."
+msgstr "Record an actual processor charge from a statement. Debit the configured expense account and credit the asset actually charged. Include the statement reference in the reason. This does not collect a fee from the student or record a bank payout."
+
+#: resources/views/backend/workspace/accounting-labels.php:30
+msgid "Actual expense amount"
+msgstr "Actual expense amount"
+
+#: resources/views/backend/workspace/accounting-labels.php:31
+msgid "Asset charged by the processor"
+msgstr "Asset charged by the processor"
+
+#: resources/views/backend/workspace/accounting-labels.php:32
+msgid "Unique accounting reference (uppercase)"
+msgstr "Unique accounting reference (uppercase)"
+
+#: resources/views/backend/workspace/accounting-labels.php:34
+msgid "Open service fee"
+msgstr "Open service fee"
+
+#: resources/views/backend/workspace/accounting-labels.php:36
+msgid "This journal retains an original service-fee decision. Open the fee to review its receipts and completed refunds."
+msgstr "This journal retains an original service-fee decision. Open the fee to review its receipts and completed refunds."
+
+#: resources/views/shared/service-fee-labels.php:9
+msgid "Automatic journals use the accounting setup retained by this quote."
+msgstr "Automatic journals use the accounting setup retained by this quote."
+
+#: resources/views/shared/service-fee-labels.php:11
+msgid "This quote has no automatic GL mapping. Later setup does not change its accounting."
+msgstr "This quote has no automatic GL mapping. Later setup does not change its accounting."

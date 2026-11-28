@@ -1238,7 +1238,13 @@ window.createWorkspaceOperations = function (ui) {
     async function journal(body, row, origin = {}) {
         const data = await request(`/sis/journals/${row.id}/`);
         if (!body.isConnected) return;
-        if (data.accounting?.source) body.append(section(ui.ledgerLabels.source,
+        if (data.accounting?.source?.kind === "service_fee") {
+            const source = section(ui.ledgerLabels.source, node("p", { class: "form-text" }, ui.ledgerLabels.fee_source_help));
+            if (can("sis:fees:manage") && can("sis:person:manage")) source.append(button(ui.ledgerLabels.fee_source,
+                () => ui.serviceFees().detail(data.accounting.source.fee_id,
+                    () => openRecord("journals", row, origin), null, ui.ledgerLabels.back_journal)));
+            body.append(source);
+        } else if (data.accounting?.source) body.append(section(ui.ledgerLabels.source,
             node("p", { class: "form-text" }, ui.ledgerLabels.source_help),
             button(ui.ledgerLabels.source_account, () => openRecord("accounts", {
                 id: data.accounting.source.account_id, currency: data.currency,

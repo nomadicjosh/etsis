@@ -38,7 +38,11 @@ final class LedgerSchema
             "charge_sources",
             "payment_methods",
             "periods",
+            ...(array_key_exists('service_fees', $data) ? ['service_fees'] : []),
         ]);
+        if (array_key_exists('service_fees', $data)) {
+            \Domain\ServiceFee\ValueObject\FeeAccounting::mapping($data['service_fees']);
+        }
         new Money(0, $data["currency"]);
         new DateTimeZone($data["timezone"]);
         if (
@@ -219,6 +223,12 @@ final class LedgerSchema
             new EntityId($data[$field]);
         }
         if ($data["source"] === null) {
+            return;
+        }
+        if (($data['source']['kind'] ?? null) === 'service_fee') {
+            self::keys($data['source'], ['kind', 'fee_id', 'event_id']);
+            new EntityId($data['source']['fee_id']);
+            new EntityId($data['source']['event_id']);
             return;
         }
         self::keys($data["source"], [

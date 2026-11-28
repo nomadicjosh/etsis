@@ -61,6 +61,33 @@ final readonly class SisAccountingController
         );
     }
 
+    public function fees(ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        $mapping = ['recognition' => $f->text('recognition', 16)];
+        foreach (['cash', 'liability', 'expense', 'application', 'transcript'] as $key) {
+            $mapping[$key] = $f->id($key)->value;
+        }
+        return new JsonResponse($this->service->reviewServiceFees(
+            $f->text('currency', 3),
+            $mapping,
+            $f->bodyText('reason')
+        ));
+    }
+
+    public function expense(ServerRequest $request): ResponseInterface
+    {
+        $f = FormInput::from($request);
+        return new JsonResponse($this->service->reviewExpense(
+            $f->text('currency', 3),
+            $f->integer('amount_minor'),
+            $f->id('asset'),
+            $f->text('reference', 80),
+            $f->date('posted_on')->format('Y-m-d'),
+            $f->bodyText('reason')
+        ));
+    }
+
     public function closing(
         ServerRequest $request,
         string $id,

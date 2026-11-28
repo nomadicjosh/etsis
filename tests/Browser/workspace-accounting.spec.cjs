@@ -6,7 +6,9 @@ async function fixture(page) {
     const state = { calls: [], errors: [], deny: false, stale: false, closed: false, saved: null };
     const account = (n, code, title) => ({ id: id(n), code, title, currency: "USD" });
     const ar = account(1, "AR", "Fictional receivable"), revenue = account(2, "REV", "Fictional income <script>"),
-        bank = account(3, "BANK", "Fictional bank");
+        bank = account(3, "BANK", "Fictional bank"), liability = account(8, "UNEARN", "Fictional unearned fees"),
+        expense = account(9, "COST", "Fictional processing expense");
+    state.feeMap = { cash: bank, liability, expense, application: revenue, transcript: revenue, recognition: "acceptance" };
     state.definition = { currency: "USD", timezone: "America/Los_Angeles", receivable: ar, charge: revenue,
         payment: bank, refund: bank, charge_sources: {}, payment_methods: {} };
     const period = () => ({ id: id(5), position: 4, definition: { book_id: id(4), currency: "USD", label: "Fictional August",
@@ -18,9 +20,18 @@ async function fixture(page) {
         state.calls.push({ path, value, csrf: request.headers()["x-csrf-token"] });
         let result = { items: [], next_after: null };
         if (path === "/sis/ui/metrics/") result = { cards: [], intake: [], pipeline: [], queue: [] };
-        else if (path === "/sis/ui/data/ledger/") result = { items: [ar, revenue, bank], next_after: null };
+        else if (path === "/sis/ui/data/ledger/") result = { items: [ar, revenue, bank, liability, expense], next_after: null };
         else if (path === "/sis/accounting/") result = { currency: "USD", book: { id: id(4), position: 2,
-            definition: state.definition }, periods: [period()], next_after: null };
+            definition: state.definition }, periods: [period()], next_after: null, default_date: "2026-08-10" };
+        else if (path === "/sis/accounting/fees/review/") {
+            state.saved = { ...value, action: "fee_mapping" };
+            result = { action: "fee_mapping", definition: { ...state.definition,
+                service_fees: { ...state.feeMap, recognition: value.recognition } }, review_token: "fictional-review" };
+        } else if (path === "/sis/accounting/expense/review/") {
+            state.saved = { ...value, action: "expense" };
+            result = { action: "expense", definition: { ...value, minor: value.amount_minor,
+                asset: bank, expense }, review_token: "fictional-review" };
+        }
         else if (path === "/sis/accounting/mapping/review/") {
             state.saved = value;
             if (state.holdReview) await state.holdReview;
@@ -40,8 +51,10 @@ async function fixture(page) {
         } else if (path === "/sis/accounting/confirm/") {
             if (state.stale) { state.stale = false; return route.fulfill({ status: 409,
                 json: { error: "Fictional accounting source changed. Review again." } }); }
-            if (state.saved.action) state.closed = state.saved.action === "close";
-            result = { id: id(5), action: state.saved.action || "mapping", position: 5 };
+            if (state.saved.action === "fee_mapping") state.definition.service_fees = { ...state.feeMap,
+                recognition: state.saved.recognition };
+            else if (["close", "reopen"].includes(state.saved.action)) state.closed = state.saved.action === "close";
+            result = { id: state.saved.action === "expense" ? id(6) : id(5), action: state.saved.action || "mapping", position: 5 };
         } else if (path === `/sis/accounts/${id(7)}/`) result = {
             id: id(7), currency: "USD", balance_minor: 123456, position: 1, institutional_id: "FICTIONAL.007", entries: [],
         };
@@ -50,6 +63,14 @@ async function fixture(page) {
                 { account_id: ar.id, account_code: ar.code, account_title: ar.title, amount_minor: 123456 },
                 { account_id: revenue.id, account_code: revenue.code, account_title: revenue.title, amount_minor: -123456 }],
             accounting: { book_id: id(4), period_id: id(5), source: { account_id: id(7) } } };
+        if (path === `/sis/journals/${id(6)}/` && state.saved?.action === "expense") result.accounting.source = null;
+        if (path === `/sis/journals/${id(6)}/` && state.feeSource) result.accounting.source = {
+            kind: "service_fee", fee_id: id(10), event_id: id(11) };
+        if (path === `/sis/service-fees/${id(10)}/`) result = { required: true, fee_id: id(10), purpose: "transcript",
+            labels: { title: "Fictional transcript", term: "" }, target: { student_id: id(12) },
+            policy: { minor: 2500, currency: "USD", waivers: true }, net_minor: 2500,
+            cleared: true, waived: false, applied_to: id(13), accounting: "retained", version: 3,
+            payments: [{ payment_id: id(14), minor: 2500, currency: "USD", channel: "provider" }], refunds: [] };
         await route.fulfill({ json: result, headers: { "Cache-Control": "private, no-store" } });
     });
     await page.goto("/admin/workspace/accounts/");
@@ -153,5 +174,64 @@ test("accounting screens reflow at 320px and clear private results on access los
     await expect(body(page)).toContainText("Accounting access is no longer available");
     await expect(body(page)).not.toContainText("SA.FICTIONAL");
     expect(await page.evaluate(() => localStorage.length + sessionStorage.length)).toBe(0);
+    expect(state.errors).toEqual([]);
+});
+
+test("service fee setup reviews recognition and preserves its draft after a stale source", async ({ page }) => {
+    const state = await fixture(page);
+    await body(page).getByRole("button", { name: "Review service-fee accounting", exact: true }).click();
+    for (const [label, value] of [["Staff receipt and refund asset", 3], ["Unearned fees liability", 8],
+        ["Processing expense account", 9], ["Application fee income", 2], ["Transcript fee income", 2]]) {
+        await page.getByLabel(label, { exact: false }).selectOption(id(value));
+    }
+    await expect(page.getByLabel("Recognize fee income", { exact: false })).toHaveValue("acceptance");
+    await page.getByLabel("Reason for this accounting decision").fill("Approve fictional fee recognition.");
+    await body(page).getByRole("button", { name: "Review accounting change", exact: true }).click();
+    await expect(body(page)).toContainText("Fictional unearned fees");
+    state.stale = true;
+    await body(page).getByRole("button", { name: "Confirm accounting change", exact: true }).click();
+    await expect(page.getByLabel("Reason for this accounting decision")).toHaveValue("Approve fictional fee recognition.");
+    await body(page).getByRole("button", { name: "Review accounting change", exact: true }).click();
+    await body(page).getByRole("button", { name: "Confirm accounting change", exact: true }).click();
+    await expect(body(page).getByRole("button", { name: "Record processing expense", exact: true })).toBeVisible();
+    expect(state.saved.recognition).toBe("acceptance");
+    expect(state.errors).toEqual([]);
+});
+
+test("actual processing expense shows both accounts and amount before posting with CSRF", async ({ page }) => {
+    const state = await fixture(page);
+    state.definition.service_fees = state.feeMap;
+    await body(page).getByRole("button", { name: "Refresh accounting controls", exact: true }).click();
+    await body(page).getByRole("button", { name: "Record processing expense", exact: true }).click();
+    await page.getByLabel("Actual expense amount", { exact: false }).fill("1.50");
+    await page.getByLabel("Unique accounting reference", { exact: false }).fill("COST.FICTIONAL");
+    await page.getByLabel("Reason for this accounting decision").fill("Fictional actual statement transaction txn_123.");
+    await body(page).getByRole("button", { name: "Review accounting change", exact: true }).click();
+    await expect(body(page)).toContainText("Fictional processing expense");
+    await expect(body(page)).toContainText("1.50");
+    expect(state.saved.amount_minor).toBe(150);
+    expect(state.saved.asset).toBe(id(3));
+    const call = state.calls.find(c => c.path === "/sis/accounting/expense/review/");
+    expect(call.csrf).toBe("fictional-test-token");
+    await page.setViewportSize({ width: 320, height: 900 });
+    const scan = await new AxeBuilder({ page }).include("#record-drawer").withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"]).analyze();
+    expect(scan.violations).toEqual([]);
+    expect(await body(page).evaluate(e => e.scrollWidth <= e.clientWidth + 1)).toBe(true);
+    await page.screenshot({ path: test.info().outputPath("processing-expense-narrow.png") });
+    await body(page).getByRole("button", { name: "Confirm accounting change", exact: true }).click();
+    await expect(body(page)).toContainText("Journal lines");
+    expect(state.errors).toEqual([]);
+});
+
+test("a service fee journal opens its original fee and returns to the journal and reconciliation", async ({ page }) => {
+    const state = await fixture(page); state.feeSource = true;
+    await body(page).getByRole("button", { name: "Reconcile period", exact: true }).click();
+    await body(page).getByRole("button", { name: "View journal", exact: true }).click();
+    await body(page).getByRole("button", { name: "Open service fee", exact: true }).click();
+    await expect(body(page)).toContainText("Automatic journals use the accounting setup retained by this quote.");
+    await body(page).getByRole("button", { name: "Back to journal", exact: true }).click();
+    await expect(body(page)).toContainText("Journal lines");
+    await body(page).getByRole("button", { name: "Back to reconciliation", exact: true }).click();
+    await expect(body(page)).toContainText("SA.FICTIONAL");
     expect(state.errors).toEqual([]);
 });

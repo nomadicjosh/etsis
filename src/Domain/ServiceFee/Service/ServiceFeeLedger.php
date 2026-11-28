@@ -24,6 +24,7 @@ final readonly class ServiceFeeLedger
         private ServiceFeeRepository $records,
         private HistoricalEventStore $history,
         private \Domain\Finance\Repository\LedgerControlRepository $controls,
+        private ServiceFeePosting $posting,
     ) {
     }
     public static function stream(EntityId $fee): StreamReference
@@ -95,6 +96,7 @@ final readonly class ServiceFeeLedger
     ): ServiceFee {
         $this->controls->lock();
         $root = $this->load($fee, $budget);
+        $details = $this->details($root, $action, $details);
         $intent = FeeSchema::hash([
             $fee->value,
             $action,
@@ -140,8 +142,15 @@ final readonly class ServiceFeeLedger
         $stored =
         $this->history->latest(self::stream($fee)) ??
         throw new CorruptHistoryException();
+        $before = $root->state();
         $root->accept($stored);
+        $this->posting->advance($before, $root, $stored, $context);
         $this->records->save($root, $expected);
         return $root;
+    }
+
+    public function details(ServiceFee $root, string $action, array $details): array
+    {
+        return $this->posting->details($root, $action, $details);
     }
 }

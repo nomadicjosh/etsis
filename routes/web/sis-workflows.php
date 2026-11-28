@@ -1459,6 +1459,8 @@ return static function (Psr7Router $router): void {
         ->name('sis.payment_activity.retry');
     $accounting = \Application\Http\Controller\SisAccountingController::class;
     $router->map(['GET'], '/sis/accounting/', [$accounting, 'overview'])->name('sis.accounting.overview');
+    $router->map(['POST'], '/sis/accounting/fees/review/', [$accounting, 'fees'])->name('sis.accounting.fees');
+    $router->map(['POST'], '/sis/accounting/expense/review/', [$accounting, 'expense'])->name('sis.accounting.expense');
     $router->map(['POST'], '/sis/accounting/mapping/review/', [$accounting, 'mapping'])->name('sis.accounting.mapping');
     $router->map(['POST'], '/sis/accounting/periods/review/', [$accounting, 'period'])->name('sis.accounting.period');
     $router

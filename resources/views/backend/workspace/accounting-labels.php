@@ -5,6 +5,37 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans;
 
 return [
+    'fees' => trans('Service-fee accounting'),
+    'fee_configure' => trans('Review service-fee accounting'),
+    'fee_help' => trans(
+        'New quotes retain these accounts and the recognition policy. '
+        . 'Earlier quotes keep their original accounting status. '
+        . 'Configure classified accounts before selecting them here.'
+    ),
+    'fee_inactive' => trans('Service-fee journals are not enabled for new quotes in this currency.'),
+    'cash' => trans('Staff receipt and refund asset'),
+    'liability' => trans('Unearned fees liability'),
+    'expense' => trans('Processing expense account'),
+    'application' => trans('Application fee income'),
+    'transcript' => trans('Transcript fee income'),
+    'recognition' => trans('Recognize fee income'),
+    'recognition_acceptance' => trans('When the application or transcript request is accepted'),
+    'recognition_receipt' => trans('When money is received'),
+    'expense_title' => trans('Record processing expense'),
+    'expense_help' => trans(
+        'Record an actual processor charge from a statement. Debit the configured expense account and credit '
+        . 'the asset actually charged. Include the statement reference in the reason. '
+        . 'This does not collect a fee from the student or record a bank payout.'
+    ),
+    'expense_amount' => trans('Actual expense amount'),
+    'asset' => trans('Asset charged by the processor'),
+    'reference' => trans('Unique accounting reference (uppercase)'),
+    'posted_on' => trans('Accounting date'),
+    'fee_source' => trans('Open service fee'),
+    'fee_source_help' => trans(
+        'This journal retains an original service-fee decision. '
+        . 'Open the fee to review its receipts and completed refunds.'
+    ),
     'current_labels' => trans(
         'Account names are current chart labels. Original journal identities, amounts '
         . 'and mapping references remain retained.'

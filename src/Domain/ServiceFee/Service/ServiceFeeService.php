@@ -225,6 +225,8 @@ final readonly class ServiceFeeService
                 "net_minor" => $s["net_minor"],
                 "applied_to" => $s["applied_to"],
                 "version" => $root->playhead(),
+                'accounting' => $channel === 'staff'
+                    ? (($a['accounting'] ?? null) === null ? 'unmapped' : 'retained') : null,
                 "payments" => array_map(
                     static fn(array $r): array => array_intersect_key(
                         $r,
@@ -597,6 +599,10 @@ final readonly class ServiceFeeService
                 trim($reason),
             ]),
         ];
+        $p['details'] = $this->ledger->details($root, $action, $details);
+        $p['intent'] = FeeSchema::hash([
+            (string) $root->aggregateId(), $action, $p['details'], trim($reason),
+        ]);
         $event = \Domain\ServiceFee\Event\ServiceFeeDecisionWasRecorded::occur(
             $root->aggregateId(),
             $p,

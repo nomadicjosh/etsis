@@ -6,6 +6,10 @@ use function Codefy\Framework\Helpers\trans;
 
 return [
     'payment_activity' => trans('Payment activity'),
+    'accounting_retained' => trans('Automatic journals use the accounting setup retained by this quote.'),
+    'accounting_unmapped' => trans(
+        'This quote has no automatic GL mapping. Later setup does not change its accounting.'
+    ),
     'capture_reserve' => trans('Online capture reserved'),
     'capture_progress' => trans('Online capture verification'),
     "title" => trans("Application and transcript fees"),

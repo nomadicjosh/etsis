@@ -820,7 +820,8 @@ You should be able to use etSIS to accept online payments for tuition, fees, app
 
 - [x] Support for [setting up classified asset accounts](payment-gateways.md#prepare-the-chart-of-accounts), including reviewed classification of earlier unknown accounts without changing old journals.
 - [x] Support for [selecting the clearing asset for named gateway connections](payment-gateways.md): new student-account receipts retain that assignment in protected history and balanced GL postings; later configuration changes and source reversals preserve the original counterpart. Bank settlement and service-fee GL income/expense posting remain separate below.
-- [ ] Support and documentation on setting up appropriate income and corresponding expence accounts for service fees and credit/debit transactions
+- [x] [Set up service-fee income and payment-processing expense accounts](service-fee-accounting.md): reviewed per-currency classified mappings, prospective retained quotes, explicit acceptance/receipt recognition, gross receipts/refunds/partial-waiver accounting, source-linked balanced journals and period verification. Record actual processor costs through reviewed, idempotent expense journals without changing student payments. Earlier opening-position conversion and automated settlement/fee ingestion remain separate.
+- [ ] Reconcile provider balance transactions, processing charges/credits and bank payouts through reviewed settlement workflows; preserve original gross student/service-fee receipts and prevent duplicate statement ingestion. Qualify actual provider test-mode and institutional reconciliation before live use.
 - [ ] Support for recurring payments (i.e. donations); supported by Stripe and Authorize.net
 - [ ] Support for online payers (third party)
 - [ ] Support for emailing online payment receipts: When someone makes an online payment to a student's account, select whether to email an online payment receipt to the student and the payer.
@@ -870,9 +871,12 @@ substantial operations milestone for PostgreSQL/SQLite with an optional S3 repos
 retention, engine/load and institutional cutover qualification remain explicit operations gates.
 [Reviewed payment connections and clearing assets](payment-gateways.md) now complete the next substantial
 finance setup milestone, including named Stripe connections, purpose/currency routing and retained gross
-student-account receipt assignments. The strict online balance ceiling remains open: finish the coordinated
-authorization/capture or reservation workflow before claiming it. Then stagger remaining section 11
-service-fee income/expense and settlement, payer/receipt, provider/ACH, tuition/invoicing and payment-plan
+student-account receipt assignments. [Balance-limited hosted card capture](payment-capture.md) now completes
+protected reservations, final partial capture/cancellation, server reconciliation and private activity for
+all enabled card purposes. [Service-fee accounting and processing expenses](service-fee-accounting.md)
+now complete the connected prospective income/liability/expense mappings, source journals and reviewed
+actual expense entries. Continue remaining section 11 settlement/reconciliation, payer/receipt,
+provider/ACH, tuition/invoicing and payment-plan
 workflows. Do not substitute another narrow reporting or notification extension for those milestones.
 Establish each milestone's acceptance boundary before implementation.
 Completed extension leaves do not complete their broad parent feature.

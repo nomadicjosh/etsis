@@ -59,12 +59,19 @@ window.createWorkspaceStudentLedger = function (ui) {
                 for (const [key, label] of [["label", L.label], ["starts_on", L.start], ["ends_on", L.end], ["timezone", L.timezone]]) {
                     if (d[key]) details.append(node("dt", {}, label), node("dd", {}, d[key]));
                 }
+                const fees = d.service_fees || d;
+                for (const key of ["cash", "liability", "expense", "application", "transcript", "asset"]) {
+                    if (fees[key]) details.append(node("dt", {}, L[key]), node("dd", {}, `${fees[key].code} · ${fees[key].title}`));
+                }
+                if (fees.recognition) details.append(node("dt", {}, L.recognition), node("dd", {}, L[`recognition_${fees.recognition}`]));
+                if (d.minor) details.append(node("dt", {}, L.expense_amount), node("dd", {}, amount(d.minor, d.currency)));
+                for (const key of ["reference", "posted_on"]) if (d[key]) details.append(node("dt", {}, L[key]), node("dd", {}, d[key]));
                 details.append(node("dt", {}, L.reason), node("dd", {}, draft.reason));
                 const confirm = button(L.confirm, async () => {
                     if (!proof) return;
                     try {
-                        await call(body, "/sis/accounting/confirm/", "POST", { review_token: proof });
-                        if (body.isConnected) { ui.notify(L.saved); await after(); }
+                        const accepted = await call(body, "/sis/accounting/confirm/", "POST", { review_token: proof });
+                        if (body.isConnected) { ui.notify(L.saved); await after(accepted); }
                     } catch (error) {
                         proof = null;
                         preview.replaceChildren();
@@ -111,6 +118,35 @@ window.createWorkspaceStudentLedger = function (ui) {
             }
             return output;
         }, after);
+    }
+    async function feeMapping(saved, currency, after) {
+        const body = openDrawer(L.fees, L.kicker), d = saved.book.definition.service_fees;
+        body.append(button(L.back, after, "arrow-left"), text(L.fee_help));
+        const fields = ["cash", "liability", "expense", "application", "transcript"].map(key => [key, L[key], "lookup", "ledger"]);
+        fields.push(["recognition", L.recognition, "choice", ["acceptance", "receipt"].map(value => ({ value, label: L[`recognition_${value}`] }))],
+            ["reason", L.reason, "textarea"]);
+        const preset = { recognition: d?.recognition || "acceptance" };
+        for (const key of ["cash", "liability", "expense", "application", "transcript"]) preset[key] = d?.[key]?.id || "";
+        const form = await buildForm(fields, preset);
+        if (!body.isConnected) return;
+        reviewPanel(body, form, fields, "/sis/accounting/fees/review/", value => ({ ...value, currency }), after);
+    }
+    async function expense(saved, currency, after) {
+        const body = openDrawer(L.expense_title, L.kicker);
+        body.append(button(L.back, after, "arrow-left"), text(L.expense_help));
+        const fields = [["currency", L.currency, "currency"], ["amount_minor", L.expense_amount, "money"],
+            ["asset", L.asset, "lookup", "ledger"], ["reference", L.reference], ["posted_on", L.posted_on, "date"],
+            ["reason", L.reason, "textarea"]];
+        const form = await buildForm(fields, { currency, asset: saved.book.definition.service_fees.cash.id,
+            posted_on: saved.default_date });
+        if (!body.isConnected) return;
+        form.elements.currency.disabled = true;
+        const places = new Intl.NumberFormat(undefined, { style: "currency", currency }).resolvedOptions().maximumFractionDigits;
+        form.elements.amount_minor.min = form.elements.amount_minor.step = String(10 ** -places);
+        form.elements.amount_minor.max = String(2000000000 / 10 ** places);
+        form.elements.reference.pattern = "[A-Z0-9][A-Z0-9._\\x2D\\x2F]{0,79}";
+        reviewPanel(body, form, fields, "/sis/accounting/expense/review/", value => ({ ...value, currency }),
+            result => openRecord("journals", { id: result.id }, { backLabel: L.back, back: after }));
     }
     async function createPeriod(currency, after) {
         const body = openDrawer(L.open_period, L.kicker);
@@ -191,6 +227,19 @@ window.createWorkspaceStudentLedger = function (ui) {
         mappingCard.firstElementChild.append(button(L.configure, () => mapping(saved, currency, back), "diagram-3"));
         body.append(mappingCard);
         if (!saved.book) return;
+        const fees = saved.book.definition.service_fees;
+        const feeCard = card(L.fees, text(L.fee_help));
+        if (!fees) feeCard.firstElementChild.append(text(L.fee_inactive));
+        else {
+            const list = node("dl", { class: "detail-list" });
+            for (const key of ["cash", "liability", "expense", "application", "transcript"]) list.append(
+                node("dt", {}, L[key]), node("dd", {}, `${fees[key].code} · ${fees[key].title}`));
+            list.append(node("dt", {}, L.recognition), node("dd", {}, L[`recognition_${fees.recognition}`]));
+            feeCard.firstElementChild.append(list, button(L.expense_title, () => expense(saved, currency, back), "receipt"));
+        }
+        if (can("sis:fees:configure")) feeCard.firstElementChild.append(button(L.fee_configure,
+            () => feeMapping(saved, currency, back), "diagram-3"));
+        body.append(feeCard);
         const periods = card(L.periods, text(L.period_help), button(L.open_period, () => createPeriod(currency, back), "calendar-plus"));
         for (const p of saved.periods) {
             const actions = controls();

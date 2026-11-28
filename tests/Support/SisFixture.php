@@ -1650,6 +1650,9 @@ final class SisFixture
             ),
             EventStoreFixture::history($this->connection->queryBuilder()),
             $this->ledgerControl()->records,
+            new \Domain\ServiceFee\Service\ServiceFeePosting(
+                $this->ledgerControl(), $this->journalRepository(), $this->clock
+            ),
         );
     }
     public function feeClearance(

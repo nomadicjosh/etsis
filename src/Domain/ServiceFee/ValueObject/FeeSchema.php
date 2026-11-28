@@ -99,7 +99,9 @@ final class FeeSchema
                     "target",
                     "labels",
                     "policy",
+                    ...(array_key_exists('accounting', $d) ? ['accounting'] : []),
                 ]);
+                FeeAccounting::snapshot($d['accounting'] ?? null);
                 new EntityId($d["person_id"]);
                 new EntityId($d["owner_id"]);
                 self::purpose($d["purpose"]);
@@ -118,7 +120,11 @@ final class FeeSchema
                     "method",
                     "reference",
                     "session",
+                    ...(array_key_exists('asset', $d) ? ['asset'] : []),
                 ]);
+                if (array_key_exists('asset', $d)) {
+                    \Domain\Finance\ValueObject\LedgerSchema::account($d['asset']);
+                }
                 new EntityId($d["payment_id"]);
                 self::amount($d["minor"]);
                 new \Domain\Finance\ValueObject\Money(

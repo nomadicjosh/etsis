@@ -88,6 +88,9 @@ final class ServiceFee extends EventSourcedAggregate
             } elseif ($p['action'] === 'capture_progress') {
                 $this->captureStates = \Domain\Payments\ValueObject\CaptureState::advance($this->captureStates, $d);
             } elseif ($p["action"] === "payment") {
+                if (($this->assessment['accounting'] ?? null) !== null && !isset($d['asset'])) {
+                    throw new CorruptHistoryException();
+                }
                 if (
                     isset($this->payments[$d["payment_id"]]) ||
                     $d["currency"] !==
@@ -112,6 +115,14 @@ final class ServiceFee extends EventSourcedAggregate
                         $this->captureStates,
                         ['payment_id' => $d['payment_id'], 'state' => 'paid', 'received_minor' => $d['minor']]
                     );
+                }
+                if (($this->assessment['accounting'] ?? null) !== null) {
+                    $asset = $d['channel'] === 'provider'
+                    ? $this->captureStates[$d['payment_id']]['plan']['receipt']['asset']
+                    : $this->assessment['accounting']['definition']['cash'];
+                    if ($d['asset'] !== array_intersect_key($asset, array_flip(['id', 'code', 'title']))) {
+                        throw new CorruptHistoryException();
+                    }
                 }
                 $this->payments[$d["payment_id"]] = $d;
             } elseif ($p["action"] === "waive") {

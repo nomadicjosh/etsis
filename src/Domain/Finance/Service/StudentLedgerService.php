@@ -94,6 +94,9 @@ final readonly class StudentLedgerService
             "periods" => $periods,
             "next_after" => $next,
             "default_timezone" => $this->clock->now()->getTimezone()->getName(),
+            'default_date' => $this->clock->now()->setTimezone(new \DateTimeZone(
+                $book['definition']['timezone'] ?? $this->clock->now()->getTimezone()->getName()
+            ))->format('Y-m-d'),
         ];
     }
 
@@ -151,6 +154,9 @@ final readonly class StudentLedgerService
             "payment_methods" => [],
             "periods" => $book["definition"]["periods"] ?? [],
         ];
+        if (isset($book['definition']['service_fees'])) {
+            $definition['service_fees'] = $book['definition']['service_fees'];
+        }
         $mappingDefinitions = [
             "charge_sources" => [$sources, ChargeSource::class],
             "payment_methods" => [$methods, PaymentMethod::class],
@@ -269,6 +275,103 @@ final readonly class StudentLedgerService
         );
     }
 
+    public function reviewServiceFees(string $currency, array $input, string $reason): array
+    {
+        $actor = $this->actor();
+        $this->commands->assertActor($actor, 'sis:fees:configure');
+        $book = $this->control->book($currency) ?? throw new DomainException('Publish the currency mapping first.');
+        \Domain\Finance\ValueObject\LedgerSchema::keys(
+            $input,
+            ['cash', 'liability', 'expense', 'application', 'transcript', 'recognition']
+        );
+        $map = ['recognition' => $input['recognition']];
+        foreach (
+            ['cash' => 'asset', 'liability' => 'liability', 'expense' => 'expense',
+            'application' => 'income', 'transcript' => 'income'] as $key => $kind
+        ) {
+            $map[$key] = $this->classified($input[$key], $currency, $kind, $book['definition']['receivable']['id']);
+        }
+        \Domain\ServiceFee\ValueObject\FeeAccounting::mapping($map);
+        $definition = $book['definition'];
+        $definition['service_fees'] = $map;
+        $this->fresh($actor);
+        $this->commands->assertActor($actor, 'sis:fees:configure');
+        return $this->issue(
+            'fee_mapping',
+            $book['id'],
+            $definition,
+            $book['position'],
+            $book['position'],
+            $this->commands->reason($reason),
+            $actor
+        );
+    }
+
+    private function classified(string $id, string $currency, string $kind, string $receivable): array
+    {
+        $row = $this->control->records->account($id);
+        if ($row['currency'] !== $currency || $row['kind'] !== $kind || $id === $receivable) {
+            throw new DomainException('Choose a distinct account with the required classification and currency.');
+        }
+        return $this->account($id, $currency);
+    }
+
+    public function reviewExpense(
+        string $currency,
+        int $minor,
+        EntityId $asset,
+        string $reference,
+        string $date,
+        string $reason,
+    ): array {
+        $actor = $this->actor();
+        $book = $this->control->book($currency) ?? throw new DomainException('Publish the currency mapping first.');
+        $map = $book['definition']['service_fees'] ?? throw new DomainException('Configure fee accounting first.');
+        if ($minor <= 0) {
+            throw new DomainException('Enter the positive processing expense actually charged.');
+        }
+        $on = \DateTimeImmutable::createFromFormat('!Y-m-d', $date);
+        if ($on === false || $on->format('Y-m-d') !== $date) {
+            throw new DomainException('Choose an explicit accounting date.');
+        }
+        $definition = ['currency' => $currency, 'minor' => $minor, 'reference' => $reference,
+            'posted_on' => $date, 'asset' => $this->classified(
+                $asset->value,
+                $currency,
+                'asset',
+                $book['definition']['receivable']['id']
+            ), 'expense' => $map['expense']];
+        $this->classified($map['expense']['id'], $currency, 'expense', $book['definition']['receivable']['id']);
+        $id = new JournalId();
+        \Domain\Finance\Journal::post(
+            $id,
+            $reference,
+            new \DateTimeImmutable($date),
+            $this->expenseLines($definition),
+            $actor,
+            $this->control->accounting($currency, $date)
+        );
+        $this->fresh($actor);
+        return $this->issue(
+            'expense',
+            (string) $id,
+            $definition,
+            0,
+            $book['position'],
+            $this->commands->reason($reason),
+            $actor
+        );
+    }
+
+    private function expenseLines(array $d): array
+    {
+        return [new \Domain\Finance\LedgerLine(
+            new EntityId($d['expense']['id']),
+            new Money($d['minor'], $d['currency'])
+        ),
+            new \Domain\Finance\LedgerLine(new EntityId($d['asset']['id']), new Money(-$d['minor'], $d['currency']))];
+    }
+
     private function issue(
         string $action,
         string $id,
@@ -302,6 +405,9 @@ final readonly class StudentLedgerService
     {
         $actor = $this->actor();
         $claim = $this->open($token, "review", $actor, false);
+        if ($claim['action'] === 'fee_mapping') {
+            $this->commands->assertActor($actor, 'sis:fees:configure');
+        }
         $closing = in_array($claim["action"], ["close", "reopen"], true);
         $this->fresh($actor, $closing);
         return $this->transactions->run(function () use (
@@ -313,10 +419,32 @@ final readonly class StudentLedgerService
             $this->control->records->lock();
             $operation = new EntityId($claim["operation"]);
             $saved = $this->evidence->operationEvents($operation);
+            if ($claim['action'] === 'expense') {
+                $posted = $this->control->postedJournal($claim['id']);
+                $saved = $posted === null ? null : [$posted];
+            }
             $definition = $claim["definition"];
             if ($saved !== null) {
                 $stored = $saved[0];
                 $p = $stored->event->payload();
+                if ($claim['action'] === 'expense') {
+                    $expected = array_map(static fn($line): array => ['account_id' => $line->accountId->value,
+                        'minor' => $line->amount->minor], $this->expenseLines($definition));
+                    if (
+                        !$stored->event instanceof JournalWasPosted || $p['lines'] !== $expected
+                        || $p['reference'] !== $definition['reference'] || $p['posted_on'] !== $definition['posted_on']
+                        || $p['currency'] !== $definition['currency']
+                        || $stored->context->actor?->value !== $actor->value
+                        || $stored->context->reason !== $claim['reason']
+                        || $stored->context->origin !== 'command'
+                        || $stored->context->correlation?->value !== $claim['operation']
+                        || (string) $stored->event->aggregateId() !== $claim['id']
+                    ) {
+                        throw new ConcurrentModificationException('This expense belongs to another instruction.');
+                    }
+                    $this->fresh($actor);
+                    return ['id' => $claim['id'], 'action' => 'expense', 'position' => 1];
+                }
                 if (
                     $stored->context->actor?->value !== $actor->value ||
                     (string) $stored->event->aggregateId() !== $claim["id"] ||
@@ -333,6 +461,9 @@ final readonly class StudentLedgerService
                     );
                 }
                 $this->control->validateDecision($stored);
+                if ($claim['action'] === 'fee_mapping') {
+                    $this->commands->assertActor($actor, 'sis:fees:configure');
+                }
                 $this->fresh($actor, $closing);
                 return [
                     "id" => $claim["id"],
@@ -352,7 +483,48 @@ final readonly class StudentLedgerService
                 $operation,
                 $claim["reason"],
             );
-            if ($claim["action"] === "mapping") {
+            if ($claim['action'] === 'fee_mapping') {
+                $this->commands->assertActor($actor, 'sis:fees:configure');
+                foreach (
+                    ['cash' => 'asset', 'liability' => 'liability', 'expense' => 'expense',
+                    'application' => 'income', 'transcript' => 'income'] as $key => $kind
+                ) {
+                    $expected = $definition['service_fees'][$key];
+                    if (
+                        LedgerSchema::hash($this->classified(
+                            $expected['id'],
+                            $definition['currency'],
+                            $kind,
+                            $book['definition']['receivable']['id']
+                        )) !== LedgerSchema::hash($expected)
+                    ) {
+                        throw new ConcurrentModificationException('A selected account changed. Review again.');
+                    }
+                }
+                $this->control->saveBook($claim['id'], $definition, $claim['position'], $context, $operation);
+            } elseif ($claim['action'] === 'expense') {
+                foreach (['asset' => 'asset', 'expense' => 'expense'] as $key => $kind) {
+                    if (
+                        LedgerSchema::hash($this->classified(
+                            $definition[$key]['id'],
+                            $definition['currency'],
+                            $kind,
+                            $book['definition']['receivable']['id']
+                        )) !== LedgerSchema::hash($definition[$key])
+                    ) {
+                        throw new ConcurrentModificationException('A selected expense account changed. Review again.');
+                    }
+                }
+                $journal = \Domain\Finance\Journal::post(
+                    new JournalId($claim['id']),
+                    $definition['reference'],
+                    new \DateTimeImmutable($definition['posted_on']),
+                    $this->expenseLines($definition),
+                    $actor,
+                    $this->control->accounting($definition['currency'], $definition['posted_on'])
+                );
+                $this->journals->save($journal, $context);
+            } elseif ($claim["action"] === "mapping") {
                 if ($book === null) {
                     if (
                         $this->control->records->hasEarlierPostings(
@@ -470,6 +642,9 @@ final readonly class StudentLedgerService
             );
             $this->open($token, "review", $actor);
             $this->fresh($actor, $closing);
+            if ($claim['action'] === 'fee_mapping') {
+                $this->commands->assertActor($actor, 'sis:fees:configure');
+            }
             return [
                 "id" => $claim["id"],
                 "action" => $claim["action"],

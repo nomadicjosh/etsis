@@ -13934,3 +13934,87 @@ msgstr ""
 #: resources/views/shared/service-fee-labels.php:10
 msgid "Online capture verification"
 msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:8
+msgid "Service-fee accounting"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:9
+msgid "Review service-fee accounting"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:11
+msgid "New quotes retain these accounts and the recognition policy. Earlier quotes keep their original accounting status. Configure classified accounts before selecting them here."
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:15
+msgid "Service-fee journals are not enabled for new quotes in this currency."
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:16
+msgid "Staff receipt and refund asset"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:17
+msgid "Unearned fees liability"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:18
+msgid "Processing expense account"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:19
+msgid "Application fee income"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:20
+msgid "Transcript fee income"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:21
+msgid "Recognize fee income"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:22
+msgid "When the application or transcript request is accepted"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:23
+msgid "When money is received"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:24
+msgid "Record processing expense"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:26
+msgid "Record an actual processor charge from a statement. Debit the configured expense account and credit the asset actually charged. Include the statement reference in the reason. This does not collect a fee from the student or record a bank payout."
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:30
+msgid "Actual expense amount"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:31
+msgid "Asset charged by the processor"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:32
+msgid "Unique accounting reference (uppercase)"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:34
+msgid "Open service fee"
+msgstr ""
+
+#: resources/views/backend/workspace/accounting-labels.php:36
+msgid "This journal retains an original service-fee decision. Open the fee to review its receipts and completed refunds."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:9
+msgid "Automatic journals use the accounting setup retained by this quote."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:11
+msgid "This quote has no automatic GL mapping. Later setup does not change its accounting."
+msgstr ""

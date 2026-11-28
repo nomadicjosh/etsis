@@ -22,8 +22,8 @@ $decodeLedger = static function (
     );
 };
 $ledger = $app->make(LedgerService::class);
-$income = $ledger->addAccount("HTTP.INCOME", "Fictional income", "USD");
-$bank = $ledger->addAccount("HTTP.BANK", "Fictional bank", "USD");
+$income = $ledger->addAccount("HTTP.INCOME", "Fictional income", "USD", 'income');
+$bank = $ledger->addAccount("HTTP.BANK", "Fictional bank", "USD", 'asset');
 $review = $decodeLedger(
     $teachingPost("/sis/accounting/mapping/review/", [
         "currency" => "USD",
@@ -58,6 +58,27 @@ $period = $decodeLedger(
     ]),
 )["id"];
 $finance = $app->make(\Domain\Finance\Service\StudentAccountService::class);
+$liability = $ledger->addAccount('HTTP.UNEARN', 'Fictional unearned fees', 'USD', 'liability');
+$expense = $ledger->addAccount('HTTP.COST', 'Fictional processing expense', 'USD', 'expense');
+$feeInput = ['currency' => 'USD', 'cash' => $bank->value, 'liability' => $liability->value,
+    'expense' => $expense->value, 'application' => $income->value, 'transcript' => $income->value,
+    'recognition' => 'acceptance', 'reason' => 'Approve fictional fee recognition.'];
+$feeReview = $decodeLedger($teachingPost('/sis/accounting/fees/review/', $feeInput));
+$decodeLedger($teachingPost('/sis/accounting/confirm/', ['review_token' => $feeReview['review_token']]));
+$costInput = ['currency' => 'USD', 'amount_minor' => 150, 'asset' => $bank->value,
+    'reference' => 'HTTP.COST', 'posted_on' => '2026-08-10', 'reason' => 'Actual fictional processing cost.'];
+$costReview = $decodeLedger($teachingPost('/sis/accounting/expense/review/', $costInput));
+$cost = $decodeLedger($teachingPost('/sis/accounting/confirm/', ['review_token' => $costReview['review_token']]));
+$costRetry = $decodeLedger($teachingPost('/sis/accounting/confirm/', ['review_token' => $costReview['review_token']]));
+if ($costRetry !== $cost) {
+    throw new RuntimeException('Processing expense retry changed its original result.');
+}
+$missingCostCsrf = $app->router->match($post->withUri(new \Laminas\Diactoros\Uri(
+    'https://campus.example.invalid/sis/accounting/expense/review/'
+))->withParsedBody($costInput));
+if ($missingCostCsrf->getStatusCode() !== 403) {
+    throw new RuntimeException('Processing expense omitted CSRF protection.');
+}
 $account = $finance->open($sis->student()->id, $sis->term, "USD");
 $finance->post(
     $account->aggregateId(),
@@ -106,6 +127,14 @@ if (
 }
 $sis->access->staff = false;
 $sis->access->grants = ["sis:finance:ledger"];
+if (
+    $teachingPost('/sis/accounting/fees/review/', $feeInput)->getStatusCode() !== 403
+    || $teachingPost('/sis/accounting/confirm/', [
+        'review_token' => $feeReview['review_token'],
+    ])->getStatusCode() !== 403
+) {
+    throw new RuntimeException('Service-fee mapping lost its independent configuration duty.');
+}
 if (
     $teachingPost($base . "reconcile/", [])->getStatusCode() !== 403 ||
     $teachingPost("/sis/accounting/confirm/", [

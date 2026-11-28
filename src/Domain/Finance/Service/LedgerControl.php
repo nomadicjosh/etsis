@@ -80,6 +80,16 @@ final readonly class LedgerControl
         ];
     }
 
+    public function postedJournal(string $id): ?StoredEvent
+    {
+        $page = new HistoryReadBudget()->page($this->history, new StreamReference(new JournalId($id), 'journal'));
+        $stored = $page->events[0] ?? null;
+        if ($stored !== null && (!$stored->event instanceof JournalWasPosted || $stored->event->playhead() !== 1)) {
+            throw new CorruptHistoryException();
+        }
+        return $stored;
+    }
+
     public function period(string $id): array
     {
         $stored = $this->history->latest(
@@ -554,13 +564,14 @@ final readonly class LedgerControl
         $sourceEvent = $this->evidence->recordedEvent(
             new EntityId($source["event_id"]),
         );
+        $fee = ($source['kind'] ?? null) === 'service_fee';
         $definition = $configuration->event->payload()["definition"] ?? null;
         if (
             !($configuration->event instanceof LedgerBookWasPublished) ||
             (string) $configuration->event->aggregateId() !==
                 $accounting["book_id"] ||
             (string) $sourceEvent->event->aggregateId() !==
-                $source["account_id"] ||
+                ($fee ? $source['fee_id'] : $source['account_id']) ||
             $stored->context->describe() !==
                 $sourceEvent->context->describe() ||
             $sourceEvent->context->effectiveAt === null
@@ -577,9 +588,8 @@ final readonly class LedgerControl
         ) {
             throw new CorruptHistoryException();
         }
-        $expected =
-        $this->sourceLines($sourceEvent->event, $definition, $started) ??
-        throw new CorruptHistoryException();
+        $expected = $fee ? ['lines' => $this->feeLines($sourceEvent)]
+        : ($this->sourceLines($sourceEvent->event, $definition, $started) ?? throw new CorruptHistoryException());
         $facts = static fn(array $lines): array => array_map(
             static fn(LedgerLine $l): array => [
                 $l->accountId->value,
@@ -589,13 +599,58 @@ final readonly class LedgerControl
             $lines,
         );
         if (
-            LedgerSchema::hash($expected["entry_basis"]) !==
+            (!$fee && (LedgerSchema::hash($expected["entry_basis"]) !==
                 LedgerSchema::hash($source["entry_basis"]) ||
-            $expected["entry_operation"] !== $source["entry_operation"] ||
+            $expected["entry_operation"] !== $source["entry_operation"])) ||
+            ($fee && $net !== 0) ||
             $facts($expected["lines"]) !== $facts($journal->lines())
         ) {
             throw new CorruptHistoryException();
         }
         return $net;
+    }
+
+    private function feeLines(StoredEvent $source): array
+    {
+        if (!$source->event instanceof \Domain\ServiceFee\Event\ServiceFeeDecisionWasRecorded) {
+            throw new CorruptHistoryException();
+        }
+        $root = \Domain\ServiceFee\ServiceFee::root($source->event->aggregateId());
+        $budget = new HistoryReadBudget();
+        $cursor = null;
+        do {
+            $page = $budget->page($this->history, new StreamReference($root->aggregateId(), 'service_fee'), $cursor);
+            foreach ($page->events as $stored) {
+                $before = $root->state();
+                $root->accept($stored);
+                if ($stored->event->eventId()->equals($source->event->eventId())) {
+                    $after = $root->state();
+                    $snapshot = $after['assessment']['accounting'] ?? throw new CorruptHistoryException();
+                    $configuration = $this->evidence->recordedEvent(new EntityId($snapshot['configuration_event_id']));
+                    if (
+                        !$configuration->event instanceof LedgerBookWasPublished
+                        || (string) $configuration->event->aggregateId()
+                            !== (string) LedgerBookId::forCurrency($after['assessment']['policy']['currency'])
+                        || ($configuration->event->payload()['definition']['service_fees'] ?? null)
+                            !== $snapshot['definition']
+                        || $configuration->event->payload()['definition']['currency']
+                            !== $after['assessment']['policy']['currency']
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $this->validateDecision($configuration);
+                    return \Domain\ServiceFee\ValueObject\FeeAccounting::lines(
+                        $before,
+                        $after,
+                        $stored->event->payload()
+                    );
+                }
+                if ($stored->event->playhead() >= $source->event->playhead()) {
+                    throw new CorruptHistoryException();
+                }
+            }
+            $cursor = $page->nextCursor;
+        } while ($cursor !== null);
+        throw new CorruptHistoryException();
     }
 }

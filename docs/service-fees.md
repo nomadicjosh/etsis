@@ -10,6 +10,8 @@ For each service, choose the amount, currency and whether staff may grant an ind
 
 The policy applies institution-wide. An assessment retains its quoted amount, currency and waiver policy. A later policy change applies to new assessments; it does not rewrite existing quotes, receipts, waivers or accepted requests. An outstanding existing quote remains payable under its retained terms even if new fees are subsequently disabled.
 
+Finance can separately enable [service-fee accounting](service-fee-accounting.md) through **Accounting controls**. New quotes retain the reviewed income/liability/asset assignments and recognition policy; earlier unmapped quotes stay unchanged. Receipts, completed refunds and recognition then post source-linked journals atomically. Actual processor costs use a separate reviewed expense journal and never reduce the person’s payment.
+
 ## Applicant workflow
 
 1. Sign in, select the academic program and entry term, and continue to the application. Complete any required email verification first.
@@ -47,7 +49,7 @@ Staff can review bounded decision history and recorded reasons. Owners receive t
 
 ## Payment setup and recovery
 
-Hosted payment uses the existing [portal payment configuration](campus-portal.md#optional-bill-payment): an explicitly assigned named connection for each fee purpose/currency, matching live/test mode, HTTPS application URL and authenticated webhook. [Connection setup](payment-gateways.md) retains the merchant and clearing assignment; service-fee GL income/expense posting and settlement remain separate work. Application checkout returns to Applications; transcript checkout returns to Transcripts. No live settlement was exercised by the isolated tests.
+Hosted payment uses the existing [portal payment configuration](campus-portal.md#optional-bill-payment): an explicitly assigned named connection for each fee purpose/currency, matching live/test mode, HTTPS application URL and authenticated webhook. [Connection setup](payment-gateways.md) retains the merchant and clearing assignment; mapped fee receipts debit that original clearing asset and use their quote’s recognition policy. Automated settlement and processor-fee ingestion remain separate work. Application checkout returns to Applications; transcript checkout returns to Transcripts. No live settlement was exercised by the isolated tests.
 
 If online payment is unavailable, the quote remains pending and directs the owner to the institution. Authorized staff can record an actual external receipt or an allowed waiver, subject to any protected capture reservation. A provider timeout leaves recoverable work with the same idempotency identity. Expired attempts can be replaced, but local expiry cannot release an uncertain reservation. New and earlier attempts share the same protected outstanding-balance budget; duplicate notifications cannot post money twice. **Payment activity** beside the fee and in its detail drawer shows progress and lets an authorized owner or staff member request server verification. See [Balance-limited online payments](payment-capture.md) for worker setup, holds, cancellation and reconciliation.
 

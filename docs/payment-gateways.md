@@ -15,7 +15,7 @@ A processor clearing asset represents the gross money held or received through t
 
 For example, a verified USD 100.00 student-account payment debits the **clearing asset retained by its checkout** and credits that currency's accounts-receivable control account. This assignment takes precedence over the generic payment/method counterpart for that receipt. Later corrections/reversals retain the original source counterpart. A subsequent bank deposit, processor expense or settlement adjustment is a separate accounting decision; this workflow does not infer a net deposit or a processing fee.
 
-Application and transcript fees retain their own protected service-fee assessments and receipts. Their checkout retains the selected connection/clearing assignment, but this milestone does not automatically journal those service fees into the student-account GL. Service-fee income, processing-expense mappings and settlement reconciliation remain open.
+Application and transcript fees retain their own protected assessments and receipts. Finance can now enable [service-fee income/liability and processing-expense accounting](service-fee-accounting.md) for new quotes. Online fee receipts debit their original retained clearing asset and post their quote’s recognition policy, without creating a student account. Actual processor costs use a separately reviewed expense journal. Earlier unmapped quotes retain their status; automated fee ingestion and settlement reconciliation remain open.
 
 ## Verify a named Stripe connection
 

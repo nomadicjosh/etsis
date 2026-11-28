@@ -320,6 +320,10 @@ A **payment connection** identifies a verified provider merchant, currency, live
 
 A **card authorization** asks the provider to hold funds without recording an SIS payment. **Capture** collects an authorized amount. A protected SIS **capture reservation** allocates the balance still owed while the server completes or verifies that collection. For example, a USD 100 checkout can capture USD 75 if the balance falls before reservation. **Funds received** means collection is verified but the financial receipt still awaits posting; it is separate from **Payment recorded**. See [Balance-limited online payments](payment-capture.md).
 
+### Unearned fees / income recognition / processing expense
+
+**Unearned fees** are collected funds held as a liability before the institution's configured recognition point. **Income recognition** is the accounting decision to record eligible net collected fees as income; receiving money and recognizing income can happen at different times. A **processing expense** records an actual provider cost separately from the person's gross payment. For example, a USD 25 fee can first credit unearned fees, move to fee income when its request is accepted, and retain any processor cost as a separate expense. See [Service-fee accounting](service-fee-accounting.md).
+
 ### Accounting period / reconciliation / closing
 
 An **accounting period** has inclusive dates in the institution's selected accounting timezone and is independent of academic terms. **Reconciliation** verifies its recorded activity against retained sources and checkpoints. **Closing** prevents further postings to that period; a reasoned authorized reopening retains the earlier closing decision. The accepted accounting date can differ from an academic or financial source's earlier business effective date. See [Reconcile and close](student-ledger-accounting.md#reconcile-and-close).
