@@ -177,6 +177,7 @@ return [
         \Application\Console\Commands\VerifyHistoryCommand::class,
         \Application\Console\Commands\ReconcileAcademicDatesCommand::class,
         \Application\Console\Commands\HistoryAnchorCommand::class,
+        \Application\Console\Commands\BackupCommand::class,
         \Application\Console\Commands\RecoverAccountProjectionsCommand::class,
         \Application\Console\Commands\PruneLoginSessionsCommand::class,
         \Application\Console\Commands\PruneReportsCommand::class,

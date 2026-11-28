@@ -667,6 +667,9 @@ try {
         ) {
             require __DIR__ . '/HistoryVerificationBootChecks.php';
             $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-backups') {
+            require __DIR__ . '/BackupBootChecks.php';
+            $status = 0;
         } elseif (($argv[1] ?? '') === 'check-history-anchor') {
             require __DIR__ . '/HistoryAnchorBootChecks.php';
             $status = 0;

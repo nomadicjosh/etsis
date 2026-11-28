@@ -4,6 +4,8 @@ Implemented November 24, 2026. Trusted deployment operators can capture a bounde
 
 This is an operator command, not a staff report or browser API. It appends no event, runs no projector or event handler, repairs no record and changes no access or financial decision. It does not create a database or document backup, verify all application projections/files, certify archive completeness before capture or establish an independent integrity anchor unless operators actually retain the checkpoint and its independent key under separate protected custody.
 
+The separate [encrypted backup workflow](encrypted-backups.md) now pairs this checkpoint with native PostgreSQL/SQLite exports and private-file snapshots in a local/optional S3 Restic repository. Its isolated restore package verifies captured bytes; independent checkpoint comparison after database import and institutional acceptance remain required.
+
 ## Prepare a checkpoint for a backup or upgrade
 
 Use paths visible to the PHP interpreter running the command. Each destination directory must already exist, be owned by that operating-system user and have private permissions, normally `0700`. Files use `0600`; symbolic links, public-tree destinations, nonprivate files/directories and existing output files are refused. Use canonical absolute paths without symlinked parents or `..` segments. Keep recovery material outside version control and ordinary application artifact cleanup.

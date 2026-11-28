@@ -515,6 +515,17 @@ final class SisServiceProvider extends CodefyServiceProvider
                 $this->codefy->publicPath(),
             );
         });
+        $this->codefy->delegate(\Infrastructure\Backup\BackupRuntime::class, function () {
+            return new \Infrastructure\Backup\BackupRuntime(
+                $this->codefy->configContainer,
+                $this->codefy->make(\Domain\Shared\Operations\MaintenanceMode::class),
+                new \Infrastructure\Backup\LazyBackupHistory(
+                    fn() => $this->codefy->make(\Domain\Shared\EventSourcing\HistoryAnchorService::class),
+                    $this->codefy->make(\Domain\Shared\EventSourcing\HistoryAnchorStorage::class),
+                ),
+                $this->codefy->publicPath(),
+            );
+        });
         $this->codefy->delegate(\Domain\Person\Service\PhotoPolicy::class, function () {
             $config = $this->codefy->configContainer;
             return new \Domain\Person\Service\PhotoPolicy(

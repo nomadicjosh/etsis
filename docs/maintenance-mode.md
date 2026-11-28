@@ -32,6 +32,8 @@ Payment webhooks and Moodle's server session channel stay paused even if a brows
 
 ## Background work and recovery tools
 
+The exact `sis:backup` operator command remains available during maintenance. [Encrypted capture](encrypted-backups.md) additionally requires actual maintenance state and an explicit attestation that every worker and administrative writer is paused. Initialization, listing and isolated recovery do not resume admission or activate a restored database.
+
 New application/background command launches return exit code **75** while maintenance is active or its state cannot be read. This includes account-setup mail, campaign delivery, document processing, report exports/pruning, Moodle synchronization/provisioning, the scheduler and generic queues. Programmatic application-kernel dispatch uses the same gate. No queued work is consumed by enabling, inspecting or reopening maintenance.
 
 The exact-name recovery allowlist retains:

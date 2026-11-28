@@ -5,6 +5,8 @@ An issued transcript retains its encrypted original PDF, accessible HTML and pre
 These particular artifacts are part of the **database backup**, not regenerated files in a cache or theme folder.
 Other private documents and application files still require their own backup and restore procedures.
 
+The [encrypted backup and isolated recovery workflow](encrypted-backups.md) captures the complete database alongside configured private files and recovery keys. After importing its verified package into an isolated database, use the selected transcript checks below for expected issued originals.
+
 Trusted deployment operators can check one retained document without rendering it again, comparing it with today's
 grades, accessing a mail provider or writing any audit/history record:
 

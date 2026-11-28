@@ -23,7 +23,7 @@ final class MaintenanceCommandPolicy
             return true;
         }
         return in_array($input->getFirstArgument() ?? 'list', [
-            'sis:maintenance', 'sis:history:verify', 'sis:history:anchor', 'sis:access:bootstrap',
+            'sis:maintenance', 'sis:history:verify', 'sis:history:anchor', 'sis:backup', 'sis:access:bootstrap',
             'sis:database:postgres', 'sis:projections:account', 'sis:projections:academic-dates',
             'sis:accounts:prune-setup',
             'list', 'help', 'route:list', 'schedule:list',

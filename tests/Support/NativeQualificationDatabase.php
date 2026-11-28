@@ -474,8 +474,18 @@ final class NativeQualificationDatabase
         // PostgreSQL requires all fixture connections closed before dropping its database.
         gc_collect_cycles();
         $quote = $this->driver === 'pgsql' ? '"' : '`';
-        $this->server->pdo->exec('DROP DATABASE ' . $quote . $this->name . $quote .
-            ($this->driver === 'pgsql' ? ' WITH (FORCE)' : ''));
+        // PostgreSQL marks an interrupted DROP invalid. Allow its bounded filesystem cleanup more than a read query.
+        if ($this->driver === 'pgsql') {
+            $this->server->pdo->exec("SET statement_timeout = '15s'");
+        }
+        try {
+            $this->server->pdo->exec('DROP DATABASE ' . $quote . $this->name . $quote .
+                ($this->driver === 'pgsql' ? ' WITH (FORCE)' : ''));
+        } finally {
+            if ($this->driver === 'pgsql') {
+                $this->server->pdo->exec("SET statement_timeout = '5s'");
+            }
+        }
         $this->created = false;
         $this->database = $this->server = null;
         $this->settings = [];

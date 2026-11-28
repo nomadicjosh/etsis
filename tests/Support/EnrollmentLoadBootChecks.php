@@ -43,6 +43,7 @@ $loadReceipt = $loadPost($loadPolicy . "publish/", $loadProof);
 if ($loadReceipt !== $loadPost($loadPolicy . "publish/", $loadProof)) {
     throw new RuntimeException("Load publication lost its original receipt.");
 }
+// Shared advising setup retains one three-credit class; this adds a second three-credit registration.
 $loadSection = $sis->section();
 $sis->service->register($advisingStudent->id, $loadSection->id);
 $loadBase = "/students/" . $advisingStudent->id->value . "/programs/" . $advisingPursuit . "/load/";
@@ -53,7 +54,7 @@ if (count($loadTerms["items"]) < 1) {
 }
 $loadReview = $loadPost("/sis" . $loadBase . "review/", ["term_id" => $sis->term->value]);
 if (
-    $loadReview["credits_milli"] !== 3000 ||
+    $loadReview["credits_milli"] !== 6000 ||
     $loadReview["classification"]["code"] !== "PART" ||
     $loadReview["official"]
 ) {
@@ -98,7 +99,7 @@ if ($loadAccepted !== $loadPost('/sis' . $loadBase . 'record-confirm/', $loadIns
     throw new RuntimeException('The load determination lost its original confirmation receipt.');
 }
 $loadStaffRecords = $loadPost('/sis' . $loadBase . 'determinations/', ['term_id' => $sis->term->value]);
-if (count($loadStaffRecords['items']) !== 1 || $loadStaffRecords['items'][0]['credits_milli'] !== 3000) {
+if (count($loadStaffRecords['items']) !== 1 || $loadStaffRecords['items'][0]['credits_milli'] !== 6000) {
     throw new RuntimeException('The retained load did not resolve through the real providers.');
 }
 $sis->access->staff = false;

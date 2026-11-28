@@ -408,6 +408,8 @@ A disposable stored copy used to avoid repeating work. Losing or clearing a cach
 
 An **artifact** is a stored output or working file, such as a prepared transcript, reviewed import or report export. **Retention** determines how long it must be kept and when removal is allowed. A **backup** is a recovery copy of required data and files. Encrypted records also require their applicable keys for recovery; creating a new key does not recover old encrypted data.
 
+An **encrypted backup bundle** pins the native database export, private files, source release and matching history checkpoint. Its **isolated recovery package** verifies recovered bytes in a new private directory; it does not import or activate the SIS. Keep the bundle's component snapshots together. See [encrypted backups](encrypted-backups.md).
+
 ### Encryption / sealed data / masking
 
 **Encryption** protects stored contents using a key. **Sealed data** includes protection intended to detect unauthorized changes as well as conceal the protected contents. **Masking** limits what is displayed, such as showing only the last four digits of an identifier. Masking is a display rule, not a replacement for encrypted storage or access checks. See [person identifiers](person-ssns.md).

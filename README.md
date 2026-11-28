@@ -67,6 +67,8 @@ ddev exec npm run build:assets
 
 Generate `.enc.key` **once for a new installation**. Reuse it when it already exists, retain it with your database backups, and keep it outside version control. Recorded encrypted history cannot be recovered simply by generating a replacement key. The application requires writable `storage/` directories; DDEV handles the normal local permissions.
 
+[Encrypted backups and isolated recovery](docs/encrypted-backups.md) covers private operator setup, PostgreSQL/SQLite native exports, local/optional S3 Restic repositories, independent checkpoints, recovered keys/files and deliberately isolated restoration.
+
 ### 4. Register your account and grant initial administrator access
 
 Open [the registration page](https://etsis.ddev.site/register/) and create your own account using a fictional name/email and a password of at least **26 characters**. Usernames use 6–20 lowercase letters, underscores or hyphens; for example, `alpha_tester`. Registration creates a person record and its ordinary sign-in account together. Staff-created people also receive an account, with private [initial password setup](docs/person-identity-and-accounts.md).

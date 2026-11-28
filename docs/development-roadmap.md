@@ -768,7 +768,7 @@ External student-progress AI remains deferred by project direction; catalog-auth
 - [x] [Qualify graduate registration, academic minima and billing preservation](native-workflow-qualification.md#graduate-policy-approval-and-registration-recovery): interrupted/retried reviewed enrollment, retained offering/attempt quantities, one charge and actual early-drop reversal, original retries after later drops/rules/expiry, registration-time GPA rejection and every-completed-graduate-course minimum after an earlier failure and later pass. Preserve final-credit eligibility for accepted enrollment after later revocation/stricter policy; compare every configured PostgreSQL table and remove exact owned test databases. Broader deployed authorization, institution policies, engines/load and restore gates remain open.
 - [x] [Isolate coordinated recovery workers](native-workflow-qualification.md#coordinated-waitlist-recovery): supply private minimal translation/bootstrap configuration instead of loading institutional services, verify operation with an unavailable inherited application path, retain fixed rejection/error protocols and bounded private pipes, and qualify unchanged source fingerprints/limited application privileges with exact owned-database cleanup.
 - [ ] Complete independent authorization, privacy, upload, CSRF and security review; test keyboard/screen-reader flows, contrast, focus, errors, reflow and reduced motion against WCAG 2.2 AA.
-- [ ] Exercise encrypted artifact and database backup/restore together, key loss/rotation recovery, failed rebuilds and deployment rollback/recovery procedures. The bounded independent journal-checkpoint and fictional mixed-key recovery checks above are qualified; they do not complete artifact/projection restoration or institution-led custody/restore acceptance.
+- [ ] Complete institutional key-loss/rotation recovery, failed rebuilds and deployment rollback/cutover acceptance. [Encrypted backup bundles](encrypted-backups.md) now qualify matching PostgreSQL/SQLite database/private-file recovery and recovered-key journal comparison, alongside the independent checkpoint and selected transcript exercises. Broader projection rebuilds, external stores, production custody and institution-led recovery acceptance remain open.
 - [x] Exercise [selected transcript database/artifact/key recovery](transcript-recovery.md#exercise-database-and-key-recovery-together): private isolated populated SQLite copy, independently encrypted journal checkpoint, actual retained preparation/delivery evidence, separate missing/wrong application/event-key failures and recovery with original providers. Detect document damage even when the journal still matches; preserve source facts. Other artifact stores, native-engine restores, larger inventories, reader switches and institutional custody/acceptance remain open.
 - [x] Add the [etSIS-only alpha developer setup](../README.md#install-and-setup-for-alpha-testing), with DDEV configuration, private key creation, migrations/assets, ordinary registration, hidden-email/confirmed first-super bootstrap and feedback guidance. Verify empty SQLite and isolated MariaDB migration/registration/admin access; fix SQLite compiler state so legacy auto-increment tables cannot remove later ULID primary keys. Preserve existing databases.
 - [ ] Finish upgrade/operations guides, office setup guides, policy configuration, safe monitoring and incident procedures.
@@ -812,10 +812,29 @@ External student-progress AI remains deferred by project direction; catalog-auth
 - [x] [Optional application fees](service-fees.md): institution policy, account-based prospect checkout before the questions, retained quotes, staff receipts/reasoned waivers, confirmed-payment submission gates for owner and staff, recovery after checkout and original accepted retry receipts. No student account is required before matriculation.
 - [x] etSIS System: Provide a separate [plain-language glossary](glossary.md) for terms used throughout the docs and roadmap, including journals, projections, ULIDs, people/access, curriculum/pursuits, academic work, finance, reporting, background processing and integrations. Include concrete examples and links to the relevant workflow guides; connect it from installation, workspace, domain and event-history documentation.
 - [ ] Option of offloading uploaded documents to Amazon S3 with encryption
-- [ ] Secure and encrypted mission-critical database backups with option to offload to Amazon S3
+- [x] Implement [encrypted PostgreSQL/SQLite database and private-file backup bundles](encrypted-backups.md): native consistent exports streamed into local/optional HTTPS S3 Restic repositories, independent journal checkpoints, explicit quiesced maintenance boundaries, drift/failure/size guards and private operator commands. Restore a checked package into a new isolated directory, preserving the running database, original keys and recorded facts; qualify real encrypted SQLite and owned fictional PostgreSQL round trips. Live S3/custody/load, other engines, bundle-aware retention and institution-led recovery/cutover acceptance remain separate operations work.
+- [ ] Qualify production backup custody, live S3/IAM, larger/resumable history inventories, additional native exporters and bundle-aware retention/legal holds. Exercise independent repository-password/key recovery and institutional recovery/cutover procedures without pruning a completed bundle's referenced components.
 
 ## 11. Student Accounts Additional Implementations/Features
-- [ ]
+You should be able to use etSIS to accept online payments for tuition, fees, applications, transcripts, and donations. Online payment options should include credit cards, debit cards, electronic checks (ACH) and external checkouts (Paypal). Implement these features with the best security and logical workflow.
+
+- [ ] Support for setting up asset account (Chart of Accounts) into which an institution deposits funds received
+- [ ] Support for selecting asset account (Chart of Accounts) for the payment gateway account(s) that are set up
+- [ ] Support and documentation on setting up appropriate income and corresponding expence accounts for service fees and credit/debit transactions
+- [ ] Support for recurring payments (i.e. donations); supported by Stripe and Authorize.net
+- [ ] Support for online payers (third party)
+- [ ] Support for emailing online payment receipts: When someone makes an online payment to a student's account, select whether to email an online payment receipt to the student and the payer.
+- [ ] Online payments must not exceed balance
+- [ ] Support for An Institutional Student Information Record (ISIR); financial aid, and disbursements (do online research for the best implementation and workflow)
+- [ ] Tuition schedules and bracketing (connected to an income account in Chart of Accounts)
+- [ ] Refund policies: automatically calculates refunds for invoiced charges when a student withdraws from courses. A refund policy can be added to a student's account or by making it a default for a particular tuition schedule. If no refund policy is set, student charges will have to be manually tracked and adjusted. When a withdrawal occurs, if it is within the timeframe of the refund policy, a pending credit is createed
+
+### Supported Payment Gateways
+- [ ] Stripe (credit card, debit card, ACH)
+- [ ] Authorize.net (credit card, debit card, ACH)
+- [ ] Paypal Business (suggest to use as supplement to the other 2, but not as primary)
+- [ ] Use connections as an alternative to add gateway settings in `.env`
+- [ ] Support for choosing which payment gateway to use for different kinds of online payments (i.e. Authorize.net for donations, but Stripe for tuition and fees)
 
 **Managed hosting boundary:** the separate hosting-service assessment recommends independent SIS installations and institutional databases, with an external customer/provisioning control plane. No core multi-tenancy section, shared academic database or institution keys on SIS tables are planned. The assessment is a design, not implemented provisioning or completion of the S3/backup items above.
 
@@ -841,8 +860,12 @@ reconciliation and controlled period closing/reopening. Existing-record opening-
 belongs with finance conversion/recovery work.
 [Canonical profile photos](profile-photos.md) now complete the next substantial identity milestone,
 including private capture/cropping, institutional protection, reviewed server imports and artifact disposal.
-Next prioritize another substantial untouched workflow, such as encrypted backup/restore qualification,
-before another narrow integration extension. Establish each milestone's acceptance boundary before implementation.
+[Encrypted database/private-file backup and isolated recovery](encrypted-backups.md) now complete the next
+substantial operations milestone for PostgreSQL/SQLite with an optional S3 repository. Wider custody,
+retention, engine/load and institutional cutover qualification remain explicit operations gates.
+Next prioritize the connected student-account payment setup in section 11: reviewed gateway connections,
+asset-account assignment and balance-limited tuition checkout before another narrow integration extension.
+Establish each milestone's acceptance boundary before implementation.
 Completed extension leaves do not complete their broad parent feature.
 
 Stagger smaller work where it supports a milestone: eligibility/section details with registration;

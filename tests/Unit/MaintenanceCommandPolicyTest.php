@@ -15,7 +15,8 @@ final class MaintenanceCommandPolicyTest extends TestCase
     {
         foreach (
             ['', 'list', 'help sis:moodle:sync', 'sis:maintenance up', 'sis:history:verify --json',
-            'sis:history:anchor --action=compare', 'sis:database:postgres --switch',
+            'sis:history:anchor --action=compare', 'sis:backup --action=capture --quiesced',
+            'sis:database:postgres --switch',
             'sis:projections:academic-dates --apply',
             'sis:accounts:prune-setup --apply --limit=50',
             'sis:accounts:email-verification --prune --apply --limit=50',
