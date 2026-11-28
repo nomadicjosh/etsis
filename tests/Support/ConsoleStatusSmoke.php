@@ -79,6 +79,7 @@ try {
                 'check-service-fees',
                 'check-internal-transfers',
                 'check-moodle-grades',
+                'check-student-ledger',
                 'check-course-auditing',
                 'check-admission-notices',
                 'check-public-event-feed',
@@ -451,6 +452,11 @@ try {
                 static fn() => $admissionNotices->campus->cipher
             );
             require __DIR__ . '/AdmissionNoticesBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-student-ledger') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/StudentLedgerBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-moodle-grades') {
             $kernel->bootstrap();

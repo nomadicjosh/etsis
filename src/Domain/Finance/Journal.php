@@ -22,6 +22,7 @@ final class Journal extends EventSourcedAggregate
     /** @var list<LedgerLine> */
     private array $lines = [];
     private bool $reversed = false;
+    private ?array $accounting = null;
 
     /** @param list<LedgerLine> $lines */
     public static function post(
@@ -29,7 +30,8 @@ final class Journal extends EventSourcedAggregate
         string $reference,
         DateTimeImmutable $on,
         array $lines,
-        EntityId $actor
+        EntityId $actor,
+        ?array $accounting = null,
     ): self {
         if (
             preg_match('/^[A-Z0-9][A-Z0-9._\/-]{0,79}$/D', $reference) !== 1 || count($lines) < 2
@@ -50,7 +52,11 @@ final class Journal extends EventSourcedAggregate
             $accounts[$line->accountId->value] = true;
             $payload[] = ['account_id' => $line->accountId->value, 'minor' => $line->amount->minor];
         }
-        if ($debits !== $credits || $debits > Money::MAX_MINOR || count($accounts) < 2) {
+        if ($accounting !== null) {
+            \Domain\Finance\ValueObject\LedgerSchema::accounting($accounting);
+        }
+        $maximum = ($accounting['source'] ?? null) === null ? Money::MAX_MINOR : Money::MAX_MINOR * 2;
+        if ($debits !== $credits || $debits > $maximum || count($accounts) < 2) {
             throw new DomainException('A journal must balance across distinct accounts within the amount limit.');
         }
         $journal = self::root($id);
@@ -59,7 +65,8 @@ final class Journal extends EventSourcedAggregate
             ['reference' => $reference,
             'posted_on' => $on->format('Y-m-d'),
             'currency' => $currency, 'lines' => $payload, 'actor_id' => $actor->value],
-            [Metadata::AGGREGATE_TYPE => 'journal']
+            [Metadata::AGGREGATE_TYPE => 'journal'] +
+                ($accounting === null ? [] : ['ledger_accounting' => $accounting]),
         ));
 
         return $journal;
@@ -91,6 +98,11 @@ final class Journal extends EventSourcedAggregate
         return $this->postedOn;
     }
 
+    public function accounting(): ?array
+    {
+        return $this->accounting;
+    }
+
     public function isReversed(): bool
     {
         return $this->reversed;
@@ -108,6 +120,7 @@ final class Journal extends EventSourcedAggregate
         $this->reference = $p['reference'];
         $this->currency = $p['currency'];
         $this->postedOn = $p['posted_on'];
+        $this->accounting = $event->metadata()['ledger_accounting'] ?? null;
         $this->lines = array_map(fn (array $line): LedgerLine => new LedgerLine(
             new EntityId($line['account_id']),
             new Money($line['minor'], $this->currency)

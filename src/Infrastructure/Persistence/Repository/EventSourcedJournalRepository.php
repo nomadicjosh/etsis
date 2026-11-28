@@ -23,6 +23,7 @@ final readonly class EventSourcedJournalRepository implements JournalRepository
         private TransactionalEventStore $events,
         private UnitOfWork $transactions,
         private FinancialEventWriter $writer,
+        private \Domain\Finance\Service\LedgerControl $control,
     ) {
     }
 
@@ -58,12 +59,23 @@ final readonly class EventSourcedJournalRepository implements JournalRepository
             return;
         }
         $this->transactions->run(function () use ($journal, $events, $context): void {
+            $this->control->records->lock();
+            $currencies = [];
+            foreach ($journal->lines() as $line) {
+                $currencies[$line->accountId->value] ??= $this->ledgerCurrency($line->accountId);
+                if ($currencies[$line->accountId->value] !== $line->amount->currency) {
+                    throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+                }
+            }
             if ($events[0] instanceof JournalWasPosted) {
                 $this->sql->insert('sis_journals', ['id' => (string) $journal->aggregateId(),
                     'reference' => $journal->reference(), 'currency' => $journal->currency(),
                         'posted_on' => $journal->postedOn()]);
             }
             $this->writer->append($journal, $context);
+            foreach ($events as $event) {
+                $this->control->journalMovement($journal, $event, $context);
+            }
         });
         $journal->clearRecordedEvents();
     }

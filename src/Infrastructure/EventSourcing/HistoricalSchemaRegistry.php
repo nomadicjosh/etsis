@@ -15,6 +15,7 @@ use DateTimeImmutable;
 use DateTimeZone;
 use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\StreamReference;
+use Domain\Shared\ValueObject\EntityId;
 use Infrastructure\Persistence\EventClassMap;
 use Qubus\Exception\Data\TypeException;
 
@@ -605,6 +606,22 @@ final readonly class HistoricalSchemaRegistry
                 "root" => \Domain\Finance\Journal::class,
                 "fields" => ["reference", "posted_on", "currency", "lines", "actor_id"],
             ],
+            \Domain\Finance\Event\LedgerBookWasPublished::class => [
+                "type" => "ledger_book",
+                "root" => \Domain\Finance\LedgerBook::class,
+                "fields" => ["definition", "operation_id", "intent"],
+            ],
+            \Domain\Finance\Event\LedgerPeriodWasRecorded::class => [
+                "type" => "ledger_period",
+                "root" => \Domain\Finance\LedgerPeriod::class,
+                "fields" => [
+                    "definition",
+                    "operation_id",
+                    "intent",
+                    "action",
+                    "movement_event_id",
+                ],
+            ],
             \Domain\Finance\Event\JournalWasReversed::class => [
                 "type" => "journal",
                 "root" => \Domain\Finance\Journal::class,
@@ -669,6 +686,53 @@ final readonly class HistoricalSchemaRegistry
     ): void {
         try {
             $definition = $this->definition($class);
+            if (
+                in_array(
+                    $class,
+                    [
+                        \Domain\Finance\Event\LedgerBookWasPublished::class,
+                        \Domain\Finance\Event\LedgerPeriodWasRecorded::class,
+                    ],
+                    true,
+                )
+            ) {
+                if (!is_array($payload["definition"] ?? null)) {
+                    throw new CorruptHistoryException();
+                }
+                $class === \Domain\Finance\Event\LedgerBookWasPublished::class
+                ? \Domain\Finance\ValueObject\LedgerSchema::book(
+                    $payload["definition"],
+                )
+                : \Domain\Finance\ValueObject\LedgerSchema::period(
+                    $payload["definition"],
+                );
+                new EntityId($payload["operation_id"]);
+                if (
+                    !is_string($payload["intent"]) ||
+                    preg_match('/^[a-f0-9]{64}$/D', $payload["intent"]) !== 1
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                if (
+                    $class ===
+                    \Domain\Finance\Event\LedgerPeriodWasRecorded::class
+                ) {
+                    if (
+                        !in_array(
+                            $payload["action"],
+                            ["open", "close", "reopen", "movement"],
+                            true,
+                        ) ||
+                        ($payload["action"] === "movement") !==
+                            ($payload["movement_event_id"] !== null)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    if ($payload["movement_event_id"] !== null) {
+                        new EntityId($payload["movement_event_id"]);
+                    }
+                }
+            }
             if ($class === \Domain\Person\Event\PersonSsnWasRecorded::class) {
                 \Domain\Person\PersonSsnHistory::validate($payload);
                 if ($payload['person_id'] !== (string) $stream->aggregateId) {
@@ -1169,6 +1233,8 @@ final readonly class HistoricalSchemaRegistry
                 // This complete payload is validated by its bounded typed schema above.
                 if (
                     in_array($class, [
+                    \Domain\Finance\Event\LedgerBookWasPublished::class,
+                    \Domain\Finance\Event\LedgerPeriodWasRecorded::class,
                     \Domain\ServiceFee\Event\ServiceFeeDecisionWasRecorded::class,
                     \Domain\Person\Event\PersonSsnWasRecorded::class,
                     \Domain\Registration\Event\EnrollmentWasReinstated::class,
@@ -1268,6 +1334,19 @@ final readonly class HistoricalSchemaRegistry
                 }
             }
             foreach ($metadata as $name => $value) {
+                if ($name === "ledger_accounting") {
+                    if (
+                        $class !==
+                            \Domain\Finance\Event\JournalWasPosted::class ||
+                        !is_array($value)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    \Domain\Finance\ValueObject\LedgerSchema::accounting(
+                        $value,
+                    );
+                    continue;
+                }
                 if ($name === 'service_fee') {
                     if (
                         $class !== \Domain\Admissions\Event\AdmissionApplicationWasSubmitted::class
@@ -1859,7 +1938,7 @@ final readonly class HistoricalSchemaRegistry
                 $this->user($payload, $stream);
             }
             if ($class === \Domain\Finance\Event\JournalWasPosted::class) {
-                $this->journal($payload);
+                $this->journal($payload, ($metadata['ledger_accounting']['source'] ?? null) !== null);
             }
         } catch (\Throwable) {
             throw new CorruptHistoryException();
@@ -1986,6 +2065,8 @@ final readonly class HistoricalSchemaRegistry
             \Domain\Finance\StudentAccount::class => "student_account",
             \Domain\Finance\BillingRule::class => "billing_rule",
             \Domain\Finance\Journal::class => "journal",
+            \Domain\Finance\LedgerBook::class => 'ledger_book',
+            \Domain\Finance\LedgerPeriod::class => 'ledger_period',
             \Domain\User\User::class => "user",
             default => throw new CorruptHistoryException(),
         };
@@ -2050,6 +2131,8 @@ final readonly class HistoricalSchemaRegistry
             "student_account" => new \Domain\Finance\ValueObject\AccountId($id),
             "billing_rule" => new \Domain\Finance\ValueObject\BillingRuleId($id),
             "journal" => new \Domain\Finance\ValueObject\JournalId($id),
+            'ledger_book' => new \Domain\Finance\ValueObject\LedgerBookId($id),
+            'ledger_period' => new \Domain\Finance\ValueObject\LedgerPeriodId($id),
             "user" => new \Domain\User\ValueObject\UserId($id),
             default => throw new CorruptHistoryException(),
         };
@@ -2057,7 +2140,7 @@ final readonly class HistoricalSchemaRegistry
     }
 
     /** @param array<mixed> $payload */
-    private function journal(#[\SensitiveParameter] array $payload): void
+    private function journal(#[\SensitiveParameter] array $payload, bool $studentSource = false): void
     {
         if (
             !is_string($payload["reference"]) ||
@@ -2093,7 +2176,7 @@ final readonly class HistoricalSchemaRegistry
             $debits += max(0, $line["minor"]);
             $accounts[$line["account_id"]] = true;
         }
-        if ($balance !== 0 || $debits > 2000000000 || count($accounts) < 2) {
+        if ($balance !== 0 || $debits > ($studentSource ? 4000000000 : 2000000000) || count($accounts) < 2) {
             throw new CorruptHistoryException();
         }
     }

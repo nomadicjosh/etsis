@@ -12,6 +12,7 @@ use Domain\Shared\EventSourcing\CorruptHistoryException;
 use Domain\Shared\EventSourcing\EventContext;
 use Domain\Shared\EventSourcing\EventPage;
 use Domain\Shared\EventSourcing\HistoricalEventStore;
+use Domain\Shared\EventSourcing\HistoricalEventEvidence;
 use Domain\Shared\EventSourcing\StoredEvent;
 use Domain\Shared\EventSourcing\StreamReference;
 use Domain\Shared\Exception\AccessDeniedException;
@@ -24,7 +25,7 @@ use InvalidArgumentException;
 use PDOException;
 use Throwable;
 
-final class SqlHistoricalEventStore implements HistoricalEventStore
+final class SqlHistoricalEventStore implements HistoricalEventStore, HistoricalEventEvidence
 {
     private bool $migrationVerified = false;
 
@@ -395,6 +396,93 @@ final class SqlHistoricalEventStore implements HistoricalEventStore
         // Each lookup is constrained by a unique key; do not wrap locking SQL in pagination subqueries.
         return $this->sql->fetch("SELECT * FROM " . $from . " WHERE " . $where . $suffix, array_values($criteria))[0] ??
         null;
+    }
+
+    public function recordedEvent(EntityId $event): StoredEvent
+    {
+        $this->requireMigrationComplete();
+        return $this->transactions->run(function () use ($event): StoredEvent {
+            $row =
+                $this->sql->rows(
+                    "sis_history_events",
+                    ["event_id" => $event->value],
+                    1,
+                )[0] ?? throw new CorruptHistoryException();
+            $head = $this->sql->one("sis_history_streams", [
+                "id" => $row["stream_id"],
+            ]);
+            $stream = $this->schemas->stream(
+                $head["stream_type"],
+                $head["aggregate_id"],
+            );
+            $this->verifyHead($head, $stream);
+            $stored = $this->decode($stream, $row);
+            $data = $this->codec->open(
+                "history.event.v1",
+                $row["sealed_event"],
+            );
+            $this->verifyOperation(new EntityId($data["operation_id"]));
+            return $stored;
+        });
+    }
+
+    public function operationEvents(EntityId $operation): ?array
+    {
+        $this->requireMigrationComplete();
+        return $this->transactions->run(function () use ($operation): ?array {
+            $receipt =
+                $this->sql->rows(
+                    "sis_history_operations",
+                    ["id" => $operation->value],
+                    1,
+                )[0] ?? null;
+            if ($receipt === null) {
+                return null;
+            }
+            $count = $this->verifyOperation($operation);
+            $data = $this->codec->open(
+                "history.receipt.v1",
+                $receipt["sealed_receipt"],
+            );
+            $result = $this->receiptResult($data["result"]);
+            $q = $this->sql->quote(...);
+            $rows = $this->sql->fetch(
+                "SELECT * FROM " .
+                    $q("sis_history_events") .
+                    " WHERE " .
+                    $q("stream_id") .
+                    " = ? AND " .
+                    $q("position") .
+                    " >= ? AND " .
+                    $q("position") .
+                    " <= ? ORDER BY " .
+                    $q("position"),
+                [
+                    $receipt["stream_id"],
+                    $result["first_version"],
+                    $result["last_version"],
+                ],
+                50,
+            );
+            if (count($rows) !== $count) {
+                throw new CorruptHistoryException();
+            }
+            $head = $this->sql->one("sis_history_streams", [
+                "id" => $rows[0]["stream_id"],
+            ]);
+            $stream = $this->schemas->stream(
+                $head["stream_type"],
+                $head["aggregate_id"],
+            );
+            return array_map(
+                fn(array $row): StoredEvent => $this->decode(
+                    $stream,
+                    $row,
+                    $operation,
+                ),
+                $rows,
+            );
+        });
     }
 
     /** @param array<string, mixed> $head */

@@ -50,6 +50,7 @@ final readonly class WorkspaceService
         "equivalencies" => "sis:transfer:manage",
     ];
     public const array PERMISSIONS = [
+        'sis:finance:close',
         'sis:fees:configure',
         'sis:fees:manage',
         'sis:registration:graduate-policy:publish',

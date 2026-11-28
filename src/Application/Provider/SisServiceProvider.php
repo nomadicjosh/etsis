@@ -447,6 +447,10 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlTransferRepository::class,
             \Domain\Finance\Repository\JournalRepository::class =>
                 \Infrastructure\Persistence\Repository\EventSourcedJournalRepository::class,
+            \Domain\Finance\Repository\LedgerControlRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlLedgerControlRepository::class,
+            \Domain\Shared\EventSourcing\HistoricalEventEvidence::class =>
+                \Infrastructure\EventSourcing\SqlHistoricalEventStore::class,
             \Domain\Shared\Persistence\UnitOfWork::class =>
                 \Infrastructure\Persistence\DatabaseUnitOfWork::class,
             \Domain\Audit\Repository\AuditTrail::class => \Infrastructure\Persistence\SqlAuditTrail::class,

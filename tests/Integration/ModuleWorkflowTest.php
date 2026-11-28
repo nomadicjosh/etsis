@@ -230,6 +230,7 @@ final class ModuleWorkflowTest extends TestCase
             EventStoreFixture::framework($f->connection->queryBuilder()),
             $f->transactions,
             \EventStoreFixture::financialWriter($f->connection->queryBuilder()),
+            $f->ledgerControl(),
         );
         $service = new LedgerService(
             $repository,
@@ -237,6 +238,7 @@ final class ModuleWorkflowTest extends TestCase
             $f->transactions,
             $f->audit,
             $f->financialCommands(),
+            $f->ledgerControl(),
         );
         $receivable = $service->addAccount("AR", "Student Receivable", "USD");
         $revenue = $service->addAccount("REV", "Tuition Revenue", "USD");

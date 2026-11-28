@@ -143,6 +143,11 @@ final class AdmissionsTest extends TestCase
             $store,
             $db,
             EventStoreFixture::financialWriter($db),
+            new \Domain\Finance\Service\StudentLedgerPosting(
+                $this->f->ledgerControl(),
+                $this->f->journalRepository(),
+                $this->f->clock,
+            ),
         );
         $finance = new \Domain\Finance\Service\StudentAccountService(
             $accounts,

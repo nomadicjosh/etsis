@@ -27,6 +27,7 @@ final readonly class LedgerService
         private UnitOfWork $transactions,
         private AuditTrail $audit,
         private FinancialCommandPolicy $commands,
+        private LedgerControl $control,
     ) {
     }
 
@@ -61,6 +62,7 @@ final readonly class LedgerService
         $id = new JournalId($operation->value);
         $candidate = Journal::post($id, $reference, $on, $lines, $actor);
         return $this->transactions->run(function () use ($id, $operation, $candidate, $reason, $actor): Journal {
+            $this->control->records->lock();
             try {
                 $existing = $this->repository->get($id);
             } catch (RecordNotFoundException) {
@@ -80,6 +82,14 @@ final readonly class LedgerService
                 }
                 return $existing;
             }
+            $candidate = Journal::post(
+                $id,
+                $candidate->reference(),
+                new DateTimeImmutable($candidate->postedOn()),
+                $candidate->lines(),
+                $actor,
+                $this->control->accounting($candidate->currency(), $candidate->postedOn())
+            );
             foreach ($candidate->lines() as $line) {
                 if ($this->repository->ledgerCurrency($line->accountId) !== $line->amount->currency) {
                     throw new DomainException('The ledger account currency does not match.');
@@ -99,7 +109,11 @@ final readonly class LedgerService
         $actor = $this->access->requirePermission('sis:finance:ledger');
         $reason = $this->commands->reason($reason);
         return $this->transactions->run(function () use ($id, $position, $reason, $actor): array {
+            $this->control->records->lock();
             $journal = $this->repository->get($id);
+            if (($journal->accounting()['source'] ?? null) !== null) {
+                throw new DomainException('Correct the student account instead of reversing its automatic journal.');
+            }
             $this->commands->assertActor($actor, 'sis:finance:ledger');
             if ($journal->isReversed()) {
                 return ['status' => 'already_recorded'];
@@ -118,6 +132,9 @@ final readonly class LedgerService
     {
         $actor = $this->access->requirePermission('sis:finance:ledger');
         $journal = $this->repository->get($id);
+        if (($journal->accounting()['source'] ?? null) !== null) {
+            $this->commands->assertActor($actor, 'sis:finance:read');
+        }
         $this->commands->assertActor($actor, 'sis:finance:ledger');
         return $journal;
     }
@@ -130,5 +147,30 @@ final readonly class LedgerService
             'minor' => $line->amount->minor,
             'currency' => $line->amount->currency,
         ], $journal->lines());
+    }
+
+    /** Current chart labels are reference data; retained journal amounts and identities remain authoritative. */
+    public function describeLines(Journal $journal): array
+    {
+        $actor = $this->access->requirePermission('sis:finance:ledger');
+        if (($journal->accounting()['source'] ?? null) !== null) {
+            $this->commands->assertActor($actor, 'sis:finance:read');
+        }
+        $accounts = [];
+        $lines = [];
+        foreach ($journal->lines() as $line) {
+            $accounts[$line->accountId->value] ??= $this->control->records->account($line->accountId->value);
+            $account = $accounts[$line->accountId->value];
+            if ($account['currency'] !== $line->amount->currency) {
+                throw new \Domain\Shared\EventSourcing\CorruptHistoryException();
+            }
+            $lines[] = ['account_id' => $line->accountId->value, 'account_code' => $account['code'],
+                'account_title' => $account['title'], 'amount_minor' => $line->amount->minor];
+        }
+        $this->commands->assertActor($actor, 'sis:finance:ledger');
+        if (($journal->accounting()['source'] ?? null) !== null) {
+            $this->commands->assertActor($actor, 'sis:finance:read');
+        }
+        return $lines;
     }
 }

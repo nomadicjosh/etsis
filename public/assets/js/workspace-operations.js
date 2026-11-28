@@ -1232,9 +1232,14 @@ window.createWorkspaceOperations = function (ui) {
         actions.append(entries);
         renderEntries();
     }
-    async function journal(body, row) {
+    async function journal(body, row, origin = {}) {
         const data = await request(`/sis/journals/${row.id}/`);
         if (!body.isConnected) return;
+        if (data.accounting?.source) body.append(section(ui.ledgerLabels.source,
+            node("p", { class: "form-text" }, ui.ledgerLabels.source_help),
+            button(ui.ledgerLabels.source_account, () => openRecord("accounts", {
+                id: data.accounting.source.account_id, currency: data.currency,
+            }, { backLabel: ui.ledgerLabels.back_journal, back: () => openRecord("journals", row, origin) }))));
         body.append(
             section(
                 "Journal lines",
@@ -1242,14 +1247,16 @@ window.createWorkspaceOperations = function (ui) {
                 scrollTable(
                     ["Account", "Amount"],
                     data.lines.map((item) => [
-                        item.account_id,
+                        item.account_code ? `${item.account_code} · ${item.account_title}` : item.account_id,
                         money(item.amount_minor, data.currency),
                     ]),
                     "Journal lines",
                 ),
             ),
         );
-        if (!data.reversed)
+        if (data.lines.some((item) => item.account_code)) body.append(
+            node("p", { class: "form-text" }, ui.ledgerLabels.current_labels));
+        if (!data.reversed && !data.accounting?.source)
             body.append(
                 button("Reverse journal", () =>
                     flow(
@@ -2473,7 +2480,10 @@ window.createWorkspaceOperations = function (ui) {
                 }),
             );
         if (sectionName === "accounts") await account(body, row);
-        if (sectionName === "journals") await journal(body, row);
+        if (["accounts", "journals", "ledger"].includes(sectionName) && can("sis:finance:ledger")) {
+            body.append(button(ui.ledgerLabels.title, () => ui.ledger().open(row.currency || "USD")));
+        }
+        if (sectionName === "journals") await journal(body, row, origin || {});
         if (sectionName === "billing") await billing(body, row);
         if (sectionName === "campaigns") await campaign(body, row, origin);
         if (sectionName === "terms" && can("sis:catalog:manage")) {

@@ -99,6 +99,21 @@ final readonly class SisLedgerController
     public function show(string $id): ResponseInterface
     {
         $journal = $this->service->get(new JournalId($id));
+        $accounting = $journal->accounting();
+        if ($accounting !== null) {
+            $accounting = [
+                "book_id" => $accounting["book_id"],
+                "period_id" => $accounting["period_id"],
+                "source" =>
+                    $accounting["source"] === null
+                        ? null
+                        : [
+                            "account_id" => $accounting["source"]["account_id"],
+                            "entry_operation" =>
+                                $accounting["source"]["entry_operation"],
+                        ],
+            ];
+        }
 
         return new JsonResponse([
             "id" => (string) $journal->aggregateId(),
@@ -107,13 +122,8 @@ final readonly class SisLedgerController
             "currency" => $journal->currency(),
             "reversed" => $journal->isReversed(),
             "posted_on" => $journal->postedOn(),
-            "lines" => array_map(
-                static fn(LedgerLine $l): array => [
-                    "account_id" => $l->accountId->value,
-                    "amount_minor" => $l->amount->minor,
-                ],
-                $journal->lines(),
-            ),
+            "accounting" => $accounting,
+            "lines" => $this->service->describeLines($journal),
         ]);
     }
 

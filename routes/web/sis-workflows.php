@@ -1442,6 +1442,17 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/ledger-accounts/", [SisLedgerController::class, "account"])
         ->name("sis.ledger.account");
+    $accounting = \Application\Http\Controller\SisAccountingController::class;
+    $router->map(['GET'], '/sis/accounting/', [$accounting, 'overview'])->name('sis.accounting.overview');
+    $router->map(['POST'], '/sis/accounting/mapping/review/', [$accounting, 'mapping'])->name('sis.accounting.mapping');
+    $router->map(['POST'], '/sis/accounting/periods/review/', [$accounting, 'period'])->name('sis.accounting.period');
+    $router
+        ->map(['POST'], '/sis/accounting/periods/{id}/review/', [$accounting, 'closing'])
+        ->name('sis.accounting.closing');
+    $router->map(['POST'], '/sis/accounting/confirm/', [$accounting, 'confirm'])->name('sis.accounting.confirm');
+    $router
+        ->map(['POST'], '/sis/accounting/periods/{id}/reconcile/', [$accounting, 'reconcile'])
+        ->name('sis.accounting.reconcile');
     $router->map(["POST"], "/sis/journals/", [SisLedgerController::class, "post"])->name("sis.ledger.post");
     $router
         ->map(["POST"], "/sis/journals/{id}/reverse/", [SisLedgerController::class, "reverse"])

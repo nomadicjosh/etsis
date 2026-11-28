@@ -21,6 +21,7 @@ final readonly class EventSourcedAccountRepository implements AccountRepository
         private TransactionalEventStore $eventStore,
         private Database $db,
         private FinancialEventWriter $writer,
+        private \Domain\Finance\Service\StudentLedgerPosting $ledger,
     ) {
     }
 
@@ -60,6 +61,7 @@ final readonly class EventSourcedAccountRepository implements AccountRepository
             $events,
             $context,
         ): void {
+            $this->ledger->lock();
             if ($events[0] instanceof StudentAccountWasOpened) {
                 $this->db->table('sis_student_accounts')->insert([
                     'id' => (string) $account->aggregateId(),
@@ -69,6 +71,7 @@ final readonly class EventSourcedAccountRepository implements AccountRepository
                 ]);
             }
             $this->writer->append($account, $context);
+            $this->ledger->advance($account, $events, $context);
             new \Infrastructure\Projection\SqlAccountBalanceProjection(
                 new \Infrastructure\Persistence\SqlRecords($this->db)
             )->advance($account, $events);

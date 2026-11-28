@@ -4582,3 +4582,319 @@ msgstr "The intake notification changed. Refresh notifications."
 #: resources/views/shared/moodle-grade-import-labels.php:8
 msgid "Decision recorded at"
 msgstr "Decision recorded at"
+
+#: resources/views/backend/workspace/accounting-labels.php:9
+msgid "Account names are current chart labels. Original journal identities, amounts and mapping references remain retained."
+msgstr "Account names are current chart labels. Original journal identities, amounts and mapping references remain retained."
+
+#: resources/views/backend/workspace/accounting-labels.php:12
+msgid "Accounting controls"
+msgstr "Accounting controls"
+
+#: resources/views/backend/workspace/accounting-labels.php:13
+msgid "STUDENT FINANCE"
+msgstr "STUDENT FINANCE"
+
+#: resources/views/backend/workspace/accounting-labels.php:15
+msgid "Publish student-account mappings, open accounting periods, and verify retained activity before closing."
+msgstr "Publish student-account mappings, open accounting periods, and verify retained activity before closing."
+
+#: resources/views/backend/workspace/accounting-labels.php:18
+msgid "Automatic mapping is not enabled for this currency. Existing student accounts or journals require a separate reviewed opening-position conversion."
+msgstr "Automatic mapping is not enabled for this currency. Existing student accounts or journals require a separate reviewed opening-position conversion."
+
+#: resources/views/backend/workspace/accounting-labels.php:21
+msgid "Student-account mapping"
+msgstr "Student-account mapping"
+
+#: resources/views/backend/workspace/accounting-labels.php:22
+msgid "Review mapping setup"
+msgstr "Review mapping setup"
+
+#: resources/views/backend/workspace/accounting-labels.php:24
+msgid "Accounts receivable is created on activation and stays connected. Mapping changes apply to new entries; credits, reversals and amount corrections retain their original counterpart."
+msgstr "Accounts receivable is created on activation and stays connected. Mapping changes apply to new entries; credits, reversals and amount corrections retain their original counterpart."
+
+#: resources/views/backend/workspace/accounting-labels.php:28
+msgid "Accounting periods"
+msgstr "Accounting periods"
+
+#: resources/views/backend/workspace/accounting-labels.php:29
+msgid "Open an accounting period"
+msgstr "Open an accounting period"
+
+#: resources/views/backend/workspace/accounting-labels.php:31
+msgid "Periods use inclusive accounting dates in the configured timezone. A closed or missing period blocks new student postings for that date."
+msgstr "Periods use inclusive accounting dates in the configured timezone. A closed or missing period blocks new student postings for that date."
+
+#: resources/views/backend/workspace/accounting-labels.php:35
+msgid "Accounting timezone"
+msgstr "Accounting timezone"
+
+#: resources/views/backend/workspace/accounting-labels.php:36
+msgid "Accounts-receivable code"
+msgstr "Accounts-receivable code"
+
+#: resources/views/backend/workspace/accounting-labels.php:37
+msgid "Accounts-receivable title"
+msgstr "Accounts-receivable title"
+
+#: resources/views/backend/workspace/accounting-labels.php:38
+msgid "Student accounts receivable"
+msgstr "Student accounts receivable"
+
+#: resources/views/backend/workspace/accounting-labels.php:39
+msgid "Accounts receivable"
+msgstr "Accounts receivable"
+
+#: resources/views/backend/workspace/accounting-labels.php:40
+msgid "Default charge counterpart"
+msgstr "Default charge counterpart"
+
+#: resources/views/backend/workspace/accounting-labels.php:41
+msgid "Default payment counterpart"
+msgstr "Default payment counterpart"
+
+#: resources/views/backend/workspace/accounting-labels.php:42
+msgid "Refund disbursement counterpart"
+msgstr "Refund disbursement counterpart"
+
+#: resources/views/backend/workspace/accounting-labels.php:43
+msgid "Optional source and payment-method mappings"
+msgstr "Optional source and payment-method mappings"
+
+#: resources/views/backend/workspace/accounting-labels.php:45
+msgid "Leave an override blank to use the default counterpart. A receipt-method correction alone never moves an earlier ledger posting."
+msgstr "Leave an override blank to use the default counterpart. A receipt-method correction alone never moves an earlier ledger posting."
+
+#: resources/views/backend/workspace/accounting-labels.php:48
+msgid "Staff-recorded charges"
+msgstr "Staff-recorded charges"
+
+#: resources/views/backend/workspace/accounting-labels.php:49
+msgid "Section fees"
+msgstr "Section fees"
+
+#: resources/views/backend/workspace/accounting-labels.php:50
+msgid "Term tuition"
+msgstr "Term tuition"
+
+#: resources/views/backend/workspace/accounting-labels.php:51
+msgid "Term fees"
+msgstr "Term fees"
+
+#: resources/views/backend/workspace/accounting-labels.php:52
+msgid "Per-credit tuition"
+msgstr "Per-credit tuition"
+
+#: resources/views/backend/workspace/accounting-labels.php:53
+msgid "Per-credit fees"
+msgstr "Per-credit fees"
+
+#: resources/views/backend/workspace/accounting-labels.php:54
+msgid "Cash payments"
+msgstr "Cash payments"
+
+#: resources/views/backend/workspace/accounting-labels.php:55
+msgid "Check payments"
+msgstr "Check payments"
+
+#: resources/views/backend/workspace/accounting-labels.php:56
+msgid "Card payments"
+msgstr "Card payments"
+
+#: resources/views/backend/workspace/accounting-labels.php:57
+msgid "Bank-transfer payments"
+msgstr "Bank-transfer payments"
+
+#: resources/views/backend/workspace/accounting-labels.php:58
+msgid "Wire-transfer payments"
+msgstr "Wire-transfer payments"
+
+#: resources/views/backend/workspace/accounting-labels.php:59
+msgid "Money-order payments"
+msgstr "Money-order payments"
+
+#: resources/views/backend/workspace/accounting-labels.php:60
+msgid "PayPal payments"
+msgstr "PayPal payments"
+
+#: resources/views/backend/workspace/accounting-labels.php:61
+msgid "Loan payments"
+msgstr "Loan payments"
+
+#: resources/views/backend/workspace/accounting-labels.php:62
+msgid "Scholarship payments"
+msgstr "Scholarship payments"
+
+#: resources/views/backend/workspace/accounting-labels.php:63
+msgid "Grant payments"
+msgstr "Grant payments"
+
+#: resources/views/backend/workspace/accounting-labels.php:64
+msgid "Other payments"
+msgstr "Other payments"
+
+#: resources/views/backend/workspace/accounting-labels.php:65
+msgid "Reason for this accounting decision"
+msgstr "Reason for this accounting decision"
+
+#: resources/views/backend/workspace/accounting-labels.php:66
+msgid "Period label"
+msgstr "Period label"
+
+#: resources/views/backend/workspace/accounting-labels.php:67
+msgid "First accounting date"
+msgstr "First accounting date"
+
+#: resources/views/backend/workspace/accounting-labels.php:68
+msgid "Last accounting date"
+msgstr "Last accounting date"
+
+#: resources/views/backend/workspace/accounting-labels.php:69
+msgid "Open"
+msgstr "Open"
+
+#: resources/views/backend/workspace/accounting-labels.php:70
+msgid "Closed"
+msgstr "Closed"
+
+#: resources/views/backend/workspace/accounting-labels.php:73
+msgid "More accounting actions"
+msgstr "More accounting actions"
+
+#: resources/views/backend/workspace/accounting-labels.php:74
+msgid "Review accounting change"
+msgstr "Review accounting change"
+
+#: resources/views/backend/workspace/accounting-labels.php:75
+msgid "Confirm accounting change"
+msgstr "Confirm accounting change"
+
+#: resources/views/backend/workspace/accounting-labels.php:78
+msgid "Check the accounts, dates and reason above. Editing a field requires a fresh review."
+msgstr "Check the accounts, dates and reason above. Editing a field requires a fresh review."
+
+#: resources/views/backend/workspace/accounting-labels.php:80
+msgid "Accounting decision recorded."
+msgstr "Accounting decision recorded."
+
+#: resources/views/backend/workspace/accounting-labels.php:81
+msgid "Back to accounting controls"
+msgstr "Back to accounting controls"
+
+#: resources/views/backend/workspace/accounting-labels.php:82
+msgid "Back to reconciliation"
+msgstr "Back to reconciliation"
+
+#: resources/views/backend/workspace/accounting-labels.php:83
+msgid "Refresh accounting controls"
+msgstr "Refresh accounting controls"
+
+#: resources/views/backend/workspace/accounting-labels.php:84
+msgid "Next accounting periods"
+msgstr "Next accounting periods"
+
+#: resources/views/backend/workspace/accounting-labels.php:85
+msgid "No accounting periods have been opened."
+msgstr "No accounting periods have been opened."
+
+#: resources/views/backend/workspace/accounting-labels.php:86
+msgid "Reconcile period"
+msgstr "Reconcile period"
+
+#: resources/views/backend/workspace/accounting-labels.php:87
+msgid "Retained posting verification"
+msgstr "Retained posting verification"
+
+#: resources/views/backend/workspace/accounting-labels.php:89
+msgid "Verification compares ledger entries with their protected student-account sources and the retained period checkpoint. It creates no charge, refund or journal."
+msgstr "Verification compares ledger entries with their protected student-account sources and the retained period checkpoint. It creates no charge, refund or journal."
+
+#: resources/views/backend/workspace/accounting-labels.php:92
+msgid "Verify next entries"
+msgstr "Verify next entries"
+
+#: resources/views/backend/workspace/accounting-labels.php:93
+msgid "Start verification again"
+msgstr "Start verification again"
+
+#: resources/views/backend/workspace/accounting-labels.php:94
+msgid "{checked} of {total} entries verified"
+msgstr "{checked} of {total} entries verified"
+
+#: resources/views/backend/workspace/accounting-labels.php:96
+msgid "The period reconciles to its retained student-account activity."
+msgstr "The period reconciles to its retained student-account activity."
+
+#: resources/views/backend/workspace/accounting-labels.php:98
+msgid "Net student receivable movement"
+msgstr "Net student receivable movement"
+
+#: resources/views/backend/workspace/accounting-labels.php:99
+msgid "Journal"
+msgstr "Journal"
+
+#: resources/views/backend/workspace/accounting-labels.php:100
+msgid "Accounting date"
+msgstr "Accounting date"
+
+#: resources/views/backend/workspace/accounting-labels.php:101
+msgid "Receivable movement"
+msgstr "Receivable movement"
+
+#: resources/views/backend/workspace/accounting-labels.php:102
+msgid "View journal"
+msgstr "View journal"
+
+#: resources/views/backend/workspace/accounting-labels.php:103
+msgid "This period has no ledger activity."
+msgstr "This period has no ledger activity."
+
+#: resources/views/backend/workspace/accounting-labels.php:104
+msgid "Review period closing"
+msgstr "Review period closing"
+
+#: resources/views/backend/workspace/accounting-labels.php:105
+msgid "Review period reopening"
+msgstr "Review period reopening"
+
+#: resources/views/backend/workspace/accounting-labels.php:107
+msgid "Closing prevents further postings in this period. A new posting invalidates an unfinished closing review. Reopening requires separate authority and a recorded reason."
+msgstr "Closing prevents further postings in this period. A new posting invalidates an unfinished closing review. Reopening requires separate authority and a recorded reason."
+
+#: resources/views/backend/workspace/accounting-labels.php:111
+msgid "Automatic student-account journal"
+msgstr "Automatic student-account journal"
+
+#: resources/views/backend/workspace/accounting-labels.php:113
+msgid "Use the student account to correct this entry. Its original mapping and journal remain retained."
+msgstr "Use the student account to correct this entry. Its original mapping and journal remain retained."
+
+#: resources/views/backend/workspace/accounting-labels.php:115
+msgid "Open student account"
+msgstr "Open student account"
+
+#: resources/views/backend/workspace/accounting-labels.php:117
+msgid "Accounting access is no longer available. Reopen the task after your access is restored."
+msgstr "Accounting access is no longer available. Reopen the task after your access is restored."
+
+#: src/Application/Http/Middleware/SisPrivacyMiddleware.php:101
+msgid "The finance office must open an accounting period for this date before the transaction can be recorded."
+msgstr "The finance office must open an accounting period for this date before the transaction can be recorded."
+
+#: src/Application/Http/Middleware/SisPrivacyMiddleware.php:105
+msgid "This transaction falls in a closed accounting period. Contact the finance office."
+msgstr "This transaction falls in a closed accounting period. Contact the finance office."
+
+#: src/Application/Http/Middleware/SisPrivacyMiddleware.php:108
+msgid "This currency has existing financial records. A reviewed opening-position conversion is required before automatic mapping can be activated."
+msgstr "This currency has existing financial records. A reviewed opening-position conversion is required before automatic mapping can be activated."
+
+#: src/Application/Http/Middleware/SisPrivacyMiddleware.php:112
+msgid "Use the student account to change receivables. Manual journals cannot post to its control account."
+msgstr "Use the student account to change receivables. Manual journals cannot post to its control account."
+
+#: resources/views/backend/workspace/accounting-labels.php:83
+msgid "Back to journal"
+msgstr "Back to journal"

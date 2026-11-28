@@ -132,6 +132,48 @@ final class SisFixture
         ));
     }
 
+    public function ledgerControl(): \Domain\Finance\Service\LedgerControl
+    {
+        $history = EventStoreFixture::history(
+            $this->connection->queryBuilder(),
+        );
+        return new \Domain\Finance\Service\LedgerControl(
+            new \Infrastructure\Persistence\Repository\SqlLedgerControlRepository(
+                $this->sql,
+            ),
+            $history,
+            $history,
+        );
+    }
+
+    public function journalRepository(): \Domain\Finance\Repository\JournalRepository
+    {
+        $db = $this->connection->queryBuilder();
+        return new \Infrastructure\Persistence\Repository\EventSourcedJournalRepository(
+            $this->sql,
+            EventStoreFixture::framework($db),
+            $this->transactions,
+            EventStoreFixture::financialWriter($db),
+            $this->ledgerControl(),
+        );
+    }
+
+    public function studentLedger(
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Finance\Service\StudentLedgerService {
+        return new \Domain\Finance\Service\StudentLedgerService(
+            $this->ledgerControl(),
+            $this->journalRepository(),
+            EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->access,
+            $this->transactions,
+            $audit ?? $this->audit,
+            $this->financialCommands(),
+            $this->clock,
+            $this->dropCipher,
+        );
+    }
+
     public function finance(): \Domain\Finance\Service\StudentAccountService
     {
         return new \Domain\Finance\Service\StudentAccountService(
@@ -508,6 +550,11 @@ final class SisFixture
             EventStoreFixture::framework($db),
             $db,
             EventStoreFixture::financialWriter($db),
+            new \Domain\Finance\Service\StudentLedgerPosting(
+                $this->ledgerControl(),
+                $this->journalRepository(),
+                $this->clock,
+            ),
         );
         $rules = new \Infrastructure\Persistence\Repository\EventSourcedBillingRuleRepository(
             $this->sql,

@@ -1,5 +1,7 @@
 ## Financials and Financial Aid
 
+The [student-account accounting and period-closing guide](student-ledger-accounting.md) documents the implemented prospective student-ledger workflow: reviewed currency mappings, a protected receivable control account, atomic journals, retained corrections, bounded reconciliation and reasoned closing/reopening. Activation is currently for currencies with no existing financial records; reviewed opening-position conversion remains separate work. The financial-aid outline below describes intended domain direction, not implemented award/disbursement workflows or a universal accounting treatment for every institution.
+
 ### Set up your Chart of Accounts
 
 The Chart of Accounts lists the institution's financial accounts that are connected with their accounts receivable.

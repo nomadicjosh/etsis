@@ -23,6 +23,8 @@ use Psr\Http\Server\RequestHandlerInterface;
 use Qubus\Routing\Route\RouteAttributes;
 use Throwable;
 
+use function Codefy\Framework\Helpers\trans;
+
 final class SisPrivacyMiddleware implements MiddlewareInterface
 {
     public static function protects(ServerRequestInterface $request): bool
@@ -93,6 +95,24 @@ final class SisPrivacyMiddleware implements MiddlewareInterface
                 "Some academic work has no verified program pursuit. " .
                     "Ask the records office to review its attribution before continuing."
             );
+        } catch (\Domain\Finance\Exception\AccountingControlException $accounting) {
+            $message = match ($accounting->issue) {
+                \Domain\Finance\Enum\AccountingControlIssue::MissingPeriod => trans(
+                    'The finance office must open an accounting period for this date '
+                    . 'before the transaction can be recorded.'
+                ),
+                \Domain\Finance\Enum\AccountingControlIssue::ClosedPeriod => trans(
+                    'This transaction falls in a closed accounting period. Contact the finance office.'
+                ),
+                \Domain\Finance\Enum\AccountingControlIssue::OpeningPosition => trans(
+                    'This currency has existing financial records. A reviewed opening-position conversion '
+                    . 'is required before automatic mapping can be activated.'
+                ),
+                \Domain\Finance\Enum\AccountingControlIssue::ManualReceivable => trans(
+                    'Use the student account to change receivables. Manual journals cannot post to its control account.'
+                ),
+            };
+            $response = PrivateErrorResponse::make($request, 409, $message);
         } catch (DomainException) {
             $response = PrivateErrorResponse::make($request, 409, 'The requested transition is not permitted.');
         } catch (Throwable) {

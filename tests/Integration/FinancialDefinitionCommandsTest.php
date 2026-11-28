@@ -64,7 +64,8 @@ final class FinancialDefinitionCommandsTest extends TestCase
             $s->sql,
             EventStoreFixture::framework($db),
             $s->transactions,
-            EventStoreFixture::financialWriter($db)
+            EventStoreFixture::financialWriter($db),
+            $s->ledgerControl(),
         );
     }
 
@@ -78,7 +79,8 @@ final class FinancialDefinitionCommandsTest extends TestCase
             $s->access,
             $s->transactions,
             $audit ?? $s->audit,
-            $s->financialCommands()
+            $s->financialCommands(),
+            $s->ledgerControl(),
         );
     }
 

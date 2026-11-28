@@ -300,7 +300,15 @@ A **billing rule** defines when and how an assessment is proposed. A **retained 
 
 ### Financial journal (general ledger)
 
-A **financial journal** records accounting entries, commonly with debit and credit lines. The **general ledger**, or **GL**, organizes accounting postings by account. This is a different use of *journal* from the shared business-event journal. Automatic student-account-to-GL mappings and period-closing work have their own [roadmap status](development-roadmap.md#6-finance-and-institutional-integrations).
+A **financial journal** records balanced debit and credit lines. The **general ledger**, or **GL**, organizes those postings by financial account. This is a different use of *journal* from the shared business-event journal. [Student-account accounting](student-ledger-accounting.md) now connects future accepted account transactions to their retained mapping and ledger journals; existing-record opening-position conversion remains separate.
+
+### Receivable control account / counterpart
+
+The **receivable control account** is the financial account through which the institution records what students owe or have in credit. A **counterpart** is the other financial account used to balance a transaction, such as the selected charge or payment account. The control account stays connected once configured; correcting a charge retains its original counterpart even after a mapping change.
+
+### Accounting period / reconciliation / closing
+
+An **accounting period** has inclusive dates in the institution's selected accounting timezone and is independent of academic terms. **Reconciliation** verifies its recorded activity against retained sources and checkpoints. **Closing** prevents further postings to that period; a reasoned authorized reopening retains the earlier closing decision. The accepted accounting date can differ from an academic or financial source's earlier business effective date. See [Reconcile and close](student-ledger-accounting.md#reconcile-and-close).
 
 ### Service fee / assessment / waiver
 
