@@ -31,17 +31,25 @@ final readonly class LedgerService
     ) {
     }
 
-    public function addAccount(string $code, string $title, string $currency): EntityId
-    {
+    public function addAccount(
+        string $code,
+        string $title,
+        string $currency,
+        ?string $kind = null,
+        ?EntityId $id = null,
+    ): EntityId {
         $actor = $this->access->requirePermission('sis:finance:ledger');
         new Money(0, $currency);
+        if ($kind !== null && \Domain\Finance\Enum\LedgerAccountKind::tryFrom($kind) === null) {
+            throw new InvalidArgumentException('Invalid ledger account classification.');
+        }
         if (trim($code) === '' || strlen($code) > 80 || trim($title) === '' || mb_strlen($title) > 191) {
             throw new InvalidArgumentException('A ledger account requires a code and title.');
         }
-        $id = EntityId::generate();
-        $this->transactions->run(function () use ($id, $code, $title, $currency, $actor): void {
+        $id ??= EntityId::generate();
+        $this->transactions->run(function () use ($id, $code, $title, $currency, $actor, $kind): void {
             $this->commands->assertActor($actor, 'sis:finance:ledger');
-            $this->repository->addLedgerAccount($id, $code, $title, $currency);
+            $this->repository->addLedgerAccount($id, $code, $title, $currency, $kind);
             $this->audit->record($actor, 'ledger.account_added', $id);
             $this->commands->assertActor($actor, 'sis:finance:ledger');
         });

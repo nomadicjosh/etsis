@@ -2,17 +2,25 @@
 
 declare(strict_types=1);
 
-require_once dirname(__DIR__) . '/Support/CampusFixture.php';
+namespace Tests\Integration;
 
+use CampusFixture;
+use EventStoreFixture;
+use DomainException;
+use InvalidArgumentException;
 use Domain\Finance\ValueObject\AccountId;
 use Domain\Shared\Exception\AccessDeniedException;
 use Domain\Shared\ValueObject\EntityId;
-use Infrastructure\Payments\StripePaymentGateway;
+use Infrastructure\Payments\StripeGatewayClient;
 use PHPUnit\Framework\TestCase;
-use Qubus\Config\Collection;
 
 final class PortalPaymentsTest extends TestCase
 {
+    public static function setUpBeforeClass(): void
+    {
+        require_once dirname(__DIR__) . '/Support/CampusFixture.php';
+    }
+
     private function charged(): array
     {
         $c = new CampusFixture();
@@ -132,17 +140,11 @@ final class PortalPaymentsTest extends TestCase
         self::assertSame($c->payments->find($id)['owner_user_id'], $context->actor->value);
         self::assertSame($id->value, $context->causation->value);
         self::assertStringContainsString('Provider-authenticated', $context->reason);
-
     }
 
     public function testStripeVerifiesRawSignedBodyModeAndPaymentStateWithoutNetworkCalls(): void
     {
-        $config = Collection::factory([]);
-        $config->setConfigKey('app', ['url' => 'https://campus.example.invalid']);
-        $config->setConfigKey('portal', ['payments' => ['enabled' => true, 'live' => false,
-            'secret' => 'sk_test_fictional', 'webhook_secret' => 'whsec_fictional']]);
-        $gateway = new StripePaymentGateway($config);
-        self::assertTrue($gateway->enabled());
+        $gateway = new StripeGatewayClient();
         $id = EntityId::generate()->value;
         $event = ['id' => 'evt_fictional', 'object' => 'event', 'type' => 'checkout.session.completed',
             'livemode' => false, 'data' => ['object' => ['id' => 'cs_test_fictional', 'object' => 'checkout.session',
@@ -152,14 +154,12 @@ final class PortalPaymentsTest extends TestCase
         $time = time();
         $signature = 't=' . $time . ',v1=' . hash_hmac('sha256', $time . '.' . $body, 'whsec_fictional');
         self::assertSame(
-            ['payment' => $id, 'session' => 'cs_test_fictional', 'minor' => 12345, 'currency' => 'USD'],
-            $gateway->verify($body, $signature)
+            ['payment' => $id, 'session' => 'cs_test_fictional', 'minor' => 12345, 'currency' => 'USD',
+                'connection_id' => null, 'connection_version' => null],
+            $gateway->verify($body, $signature, 'whsec_fictional', false)
         );
-        $config->setConfigKey('portal', ['payments' => ['enabled' => false, 'live' => false,
-            'secret' => '', 'webhook_secret' => 'whsec_fictional']]);
-        self::assertFalse($gateway->enabled());
-        self::assertSame($id, $gateway->verify($body, $signature)['payment']);
+        self::assertSame($id, $gateway->verify($body, $signature, 'whsec_fictional', false)['payment']);
         $this->expectException(InvalidArgumentException::class);
-        $gateway->verify($body . ' ', $signature);
+        $gateway->verify($body . ' ', $signature, 'whsec_fictional', false);
     }
 }

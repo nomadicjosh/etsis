@@ -41,7 +41,7 @@ final readonly class ServiceFeeCheckout
         if ($data["cleared"]) {
             return ["url" => null, "cleared" => true];
         }
-        if (!$this->gateway->enabled()) {
+        if (!$this->gateway->enabled($data['purpose'], $data['policy']['currency'])) {
             throw new ValidationException([
                 [
                     "field" => "payment",
@@ -107,6 +107,7 @@ final readonly class ServiceFeeCheckout
                 "status" => "pending",
                 "expires_at" => $this->clock->now()->getTimestamp() + 3600,
             ];
+            $row = $this->gateway->prepare($id, $row);
             $this->payments->add($id, $row);
             $this->audit->record($actor, "service_fee.checkout_requested", $id);
             if (

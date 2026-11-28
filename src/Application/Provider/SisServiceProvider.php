@@ -297,7 +297,11 @@ final class SisServiceProvider extends CodefyServiceProvider
             \Domain\Portal\Repository\PaymentRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlPaymentRepository::class,
             \Domain\Portal\Service\PaymentGateway::class =>
-                \Infrastructure\Payments\StripePaymentGateway::class,
+                \Infrastructure\Payments\ConfiguredPaymentGateway::class,
+            \Domain\Payments\Service\GatewayClient::class => \Infrastructure\Payments\StripeGatewayClient::class,
+            \Domain\Payments\Service\GatewayPolicy::class => \Infrastructure\Payments\ConfiguredGatewayPolicy::class,
+            \Domain\Payments\Repository\GatewayRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlGatewayRepository::class,
             \Domain\Person\Repository\EmergencyContactsRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlEmergencyContactsRepository::class,
             \Domain\Person\Repository\EducationBackgroundRepository::class =>

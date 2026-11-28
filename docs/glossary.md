@@ -312,6 +312,10 @@ A **financial journal** records balanced debit and credit lines. The **general l
 
 The **receivable control account** is the financial account through which the institution records what students owe or have in credit. A **counterpart** is the other financial account used to balance a transaction, such as the selected charge or payment account. The control account stays connected once configured; correcting a charge retains its original counterpart even after a mapping change.
 
+### Payment connection / clearing asset
+
+A **payment connection** identifies a verified provider merchant, currency, live/test mode and encrypted credentials. A **clearing asset** records gross funds received through that provider before bank settlement. A **payment route** chooses a connection for a purpose and currency. Each checkout retains its own connection revision and clearing assignment; editing today's setup does not move an earlier receipt. See [Payment connections](payment-gateways.md).
+
 ### Accounting period / reconciliation / closing
 
 An **accounting period** has inclusive dates in the institution's selected accounting timezone and is independent of academic terms. **Reconciliation** verifies its recorded activity against retained sources and checkpoints. **Closing** prevents further postings to that period; a reasoned authorized reopening retains the earlier closing decision. The accepted accounting date can differ from an academic or financial source's earlier business effective date. See [Reconcile and close](student-ledger-accounting.md#reconcile-and-close).

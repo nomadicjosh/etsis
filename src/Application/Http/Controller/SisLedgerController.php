@@ -38,6 +38,7 @@ final readonly class SisLedgerController
             $f->text("code", 80),
             $f->text("title"),
             $f->text("currency", 3),
+            $f->optionalText("kind", 16),
         );
 
         return new JsonResponse(["id" => $id->value], 201);

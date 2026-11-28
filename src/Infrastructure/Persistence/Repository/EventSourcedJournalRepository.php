@@ -27,10 +27,15 @@ final readonly class EventSourcedJournalRepository implements JournalRepository
     ) {
     }
 
-    public function addLedgerAccount(EntityId $id, string $code, string $title, string $currency): void
-    {
+    public function addLedgerAccount(
+        EntityId $id,
+        string $code,
+        string $title,
+        string $currency,
+        ?string $kind = null,
+    ): void {
         $this->sql->insert('sis_ledger_accounts', ['id' => $id->value, 'code' => $code,
-            'title' => $title, 'currency' => $currency]);
+            'title' => $title, 'currency' => $currency, 'kind' => $kind]);
     }
 
     public function ledgerCurrency(EntityId $id): string

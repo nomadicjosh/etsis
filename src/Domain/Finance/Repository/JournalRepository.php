@@ -11,7 +11,13 @@ use Domain\Shared\ValueObject\EntityId;
 
 interface JournalRepository
 {
-    public function addLedgerAccount(EntityId $id, string $code, string $title, string $currency): void;
+    public function addLedgerAccount(
+        EntityId $id,
+        string $code,
+        string $title,
+        string $currency,
+        ?string $kind = null,
+    ): void;
     public function ledgerCurrency(EntityId $id): string;
     public function get(JournalId $id): Journal;
     public function save(Journal $journal, EventContext $context): void;

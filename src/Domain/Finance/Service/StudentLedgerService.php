@@ -369,6 +369,7 @@ final readonly class StudentLedgerService
                         $ar["code"],
                         $ar["title"],
                         $definition["currency"],
+                        'asset',
                     );
                 } elseif (
                     $definition["receivable"]["id"] !==

@@ -110,6 +110,7 @@ final readonly class WorkspaceService
         "sis:finance:read",
         "sis:finance:post",
         "sis:finance:ledger",
+        "sis:payments:configure",
         "sis:reporting:manage",
         "sis:reporting:run",
         "sis:communications:manage",

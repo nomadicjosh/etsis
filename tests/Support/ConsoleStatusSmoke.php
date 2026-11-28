@@ -80,6 +80,7 @@ try {
                 'check-internal-transfers',
                 'check-moodle-grades',
                 'check-student-ledger',
+                'check-payment-gateways',
                 'check-person-photos',
                 'check-course-auditing',
                 'check-admission-notices',
@@ -458,6 +459,26 @@ try {
             $kernel->bootstrap();
             require __DIR__ . '/SisHttpFixture.php';
             require __DIR__ . '/PersonPhotosBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-payment-gateways') {
+            $kernel->bootstrap();
+            require_once __DIR__ . '/PaymentGatewayFixture.php';
+            $gatewayFixture = new \Tests\Support\PaymentGatewayFixture(false);
+            $httpSis = $gatewayFixture->sis;
+            require __DIR__ . '/SisHttpFixture.php';
+            $app->delegate(
+                \Domain\Payments\Service\GatewayClient::class,
+                static fn() => $gatewayFixture->client
+            );
+            $app->delegate(
+                \Domain\Payments\Service\GatewayPolicy::class,
+                static fn() => $gatewayFixture->policy
+            );
+            $app->delegate(
+                \Domain\Communications\Service\MessageCipher::class,
+                static fn() => $gatewayFixture->campus->cipher
+            );
+            require __DIR__ . '/PaymentGatewayBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-student-ledger') {
             $kernel->bootstrap();

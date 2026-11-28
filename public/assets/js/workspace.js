@@ -301,7 +301,9 @@
     const historyChecks = window.createWorkspaceHistoryChecks({ node, request, task, openDrawer, labels: config.history_check_labels });
     const studentLedger = window.createWorkspaceStudentLedger({ labels: config.accounting_labels,
         node, request, task, can, table, buildForm, formData, openDrawer, openRecord, actionMenu, notify });
-    const operations = window.createWorkspaceOperations({ ledger: () => studentLedger, ledgerLabels: config.accounting_labels, graduate: () => graduateRegistration, graduateLabels: config.graduate_registration_labels, discoveryLabels: config.program_discovery_labels, ceuLabels: config.ceu_labels, creditLabels: config.credit_policy_labels, notificationLabels: config.notification_labels, auditingLabels: config.course_auditing_labels, programEligibilityLabels: config.section_program_labels, reportingLabels: config.section_reporting_labels, waitlists: () => waitlistStudio, historyChecks: () => historyChecks, node, request, task, can, table, badge, money, moneyInput, recordSummary, actionMenu, disposeActionMenus, buildForm, formData, openDrawer, notify, openRecord, createRecord, navigate, datasets, courseDrops: () => courseDropStudio, catalog: () => catalogStudio, classifications: () => classificationStudio, prerequisites: () => prerequisiteStudio, programs: () => programStudio, degreeAudit: () => degreeAuditStudio, calendar: () => academicCalendarStudio, batchRegistration: () => batchRegistration, teaching: () => teachingStudio, restrictions: () => restrictionStudio, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
+    const paymentGateways = window.createWorkspacePaymentGateways({ node, request, task, openDrawer, notify, actionMenu,
+        labels: config.payment_gateway_labels });
+    const operations = window.createWorkspaceOperations({ paymentGateways: () => paymentGateways, gatewayLabels: config.payment_gateway_labels, ledger: () => studentLedger, ledgerLabels: config.accounting_labels, graduate: () => graduateRegistration, graduateLabels: config.graduate_registration_labels, discoveryLabels: config.program_discovery_labels, ceuLabels: config.ceu_labels, creditLabels: config.credit_policy_labels, notificationLabels: config.notification_labels, auditingLabels: config.course_auditing_labels, programEligibilityLabels: config.section_program_labels, reportingLabels: config.section_reporting_labels, waitlists: () => waitlistStudio, historyChecks: () => historyChecks, node, request, task, can, table, badge, money, moneyInput, recordSummary, actionMenu, disposeActionMenus, buildForm, formData, openDrawer, notify, openRecord, createRecord, navigate, datasets, courseDrops: () => courseDropStudio, catalog: () => catalogStudio, classifications: () => classificationStudio, prerequisites: () => prerequisiteStudio, programs: () => programStudio, degreeAudit: () => degreeAuditStudio, calendar: () => academicCalendarStudio, batchRegistration: () => batchRegistration, teaching: () => teachingStudio, restrictions: () => restrictionStudio, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
     const courseDropStudio = window.createWorkspaceCourseDrops({ creditLabels: config.withdrawal_credit_labels, money,
         ceuLabels: config.ceu_labels, node, request, task, openDrawer, notify, buildForm, formData });
     const academicCalendarStudio = window.createWorkspaceAcademicCalendar({ node, request, task, buildForm, formData, openDrawer, table, badge, notify, recordSummary, refreshTerms: async () => { drawer.hide(); if (datasets[current]) await loadDirectory(); } });
@@ -670,6 +672,7 @@
             $one('span', create).textContent = 'Report Studio';
             create.setAttribute('aria-label', 'Open Report Studio');
         } else create.removeAttribute('aria-label');
+        if (['accounts', 'journals', 'ledger'].includes(section) && can('sis:finance:ledger') && can('sis:payments:configure')) tools.append(tool(config.payment_gateway_labels.title, () => paymentGateways.open(), config.payment_gateway_labels.title, 'credit-card'));
         if (['accounts', 'journals', 'ledger'].includes(section) && can('sis:finance:ledger')) tools.append(tool(config.accounting_labels.title, () => studentLedger.open(), config.accounting_labels.title, 'bank'));
         if (section === 'accounts' && can('sis:finance:post')) tools.append(tool('Finance reviews', () => financeReviewStudio.queue(), 'Finance review queue', 'inboxes'));
         if (section === 'billing' && can('sis:finance:post') && can('sis:finance:read') && can('sis:student:read')) tools.append(tool('Review bills', () => operations.billingBatch(), 'Review student bills', 'receipt'));
@@ -952,7 +955,7 @@
             { title: 'Journal details', fields: ['reference', 'posted_on', 'currency'], wide: ['reference'] },
             { title: 'Posting reason', fields: ['reason'], wide: ['reason'] },
         ],
-        ledger: [{ title: 'Ledger account', fields: ['code', 'name', 'type'], wide: ['name'] }],
+        ledger: [{ title: 'Ledger account', fields: ['code', 'title', 'currency', 'kind'], wide: ['title'] }],
         billing: [
             { title: 'Fee identity', fields: ['code', 'name', 'kind'], wide: ['name'] },
             { title: 'Amount & application', fields: ['amount_minor', 'currency', 'pricing_basis', 'program_id'], wide: ['pricing_basis', 'program_id'] },

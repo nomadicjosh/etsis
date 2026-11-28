@@ -31,9 +31,24 @@ final class FixturePaymentGateway implements PaymentGateway
     public array $calls = [];
     public ?array $confirmation = null;
 
-    public function enabled(): bool
+    public function enabled(string $purpose = 'account', ?string $currency = null): bool
     {
         return $this->available;
+    }
+
+    public function prepare(EntityId $payment, array $record): array
+    {
+        return $record;
+    }
+
+    public function checkpoint(array $record): ?string
+    {
+        return null;
+    }
+
+    public function receipt(array $record): ?\Domain\Finance\ValueObject\GatewayReceipt
+    {
+        return null;
     }
 
     public function checkout(EntityId $payment, Money $amount, int $expiresAt, string $purpose = 'account'): array

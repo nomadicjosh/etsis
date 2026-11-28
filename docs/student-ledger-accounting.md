@@ -6,7 +6,7 @@ Automatic mapping starts off for every currency. Publish a mapping deliberately 
 
 ## Set up the accounts and mapping
 
-1. In **Chart of accounts**, create the counterpart accounts with their institutional codes, titles and currencies. For a simple example, these might be a tuition counterpart and a bank account. The finance office determines the appropriate account classifications and recognition policy.
+1. In **Chart of accounts**, create the counterpart accounts with their institutional codes, titles and currencies. For a simple example, these might be a tuition counterpart and a bank account. Select the appropriate account classification when creating each account. The finance office determines its recognition policy. Earlier unclassified accounts can be reviewed through [Payment gateways → Clearing accounts](payment-gateways.md#prepare-the-chart-of-accounts).
 2. Open **Accounting controls**, select the currency, and choose **Review mapping setup**.
 3. Enter the accounting timezone and the proposed accounts-receivable code/title. Activation creates this currency's accounts-receivable control account. It cannot subsequently be disconnected or replaced; its code and title can be corrected through a later reviewed mapping.
 4. Select the default charge counterpart, payment counterpart and refund disbursement counterpart. Every account must have the same currency, and a counterpart cannot be the receivable control account.
@@ -43,6 +43,8 @@ Corrections preserve their original lineage:
 New automatic journals use the current acceptance date in the published accounting timezone. The original source's business effective date remains separate. For example, a withdrawal effective in August but accepted in September can have its financial adjustment recorded in the open September accounting period without changing the closed August ledger. Academic effective dates, original charges and retained financial history remain unchanged.
 
 Manual journals retain their explicitly selected accounting dates. Once mapping is enabled, manual journals cannot post to the student receivable control account; use the student account so the two sides remain connected. Manual journals and their permitted reversals participate in period verification. A closed period blocks both new dated manual postings and reversal of its manual journals. An institution can deliberately reopen a period under the separate closing authority when required.
+
+For a configured online student-account receipt, the [checkout's retained gateway clearing asset](payment-gateways.md) overrides the generic payment counterpart. It records the gross processor receipt, with a credit to receivables. Changing the connection or default payment mapping cannot move that earlier receipt or its linked reversal/correction. Bank settlements, processor expense and service-fee GL income remain separate workflows.
 
 ## Open an accounting period
 

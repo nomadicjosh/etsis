@@ -50,12 +50,14 @@ final readonly class HostedCheckout
             (int) $record["expires_at"],
             $record["purpose"],
         );
-        $this->transactions->run(function () use ($id, $session): void {
+        $checkpoint = $this->gateway->checkpoint($record);
+        $this->transactions->run(function () use ($id, $session, $checkpoint): void {
             $this->payments->lock($id);
             $this->payments->attach(
                 $id,
                 $session["session"],
                 $this->cipher->seal($session["url"]),
+                $checkpoint,
             );
         });
         return $session["url"];

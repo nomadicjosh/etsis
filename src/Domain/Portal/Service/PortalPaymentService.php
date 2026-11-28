@@ -81,6 +81,7 @@ final readonly class PortalPaymentService
                 'amount_minor' => $balance->minor, 'currency' => $balance->currency,
                 // A unique non-null placeholder also works with SQL Server's nullable unique semantics.
                 'session_id' => 'pending:' . $id->value, 'status' => 'pending', 'expires_at' => $now + 3600];
+            $record = $this->gateway->prepare($id, $record);
             $this->payments->add($id, $record);
             $this->audit->record($user, 'payment.checkout_requested', $id);
             return ['id' => $id->value] + $record;

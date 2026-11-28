@@ -72,6 +72,8 @@ window.createWorkspaceOperations = function (ui) {
             ["code", "Ledger account code"],
             ["title", "Account title"],
             ["currency", "Currency", "currency"],
+            ["kind", ui.gatewayLabels?.kind, "choice", ["asset", "liability", "equity", "income", "expense"].map((value) =>
+                ({ value, label: ui.gatewayLabels?.[value] }))],
         ],
     };
     const definition = (
@@ -2482,6 +2484,10 @@ window.createWorkspaceOperations = function (ui) {
         if (sectionName === "accounts") await account(body, row);
         if (["accounts", "journals", "ledger"].includes(sectionName) && can("sis:finance:ledger")) {
             body.append(button(ui.ledgerLabels.title, () => ui.ledger().open(row.currency || "USD")));
+        }
+        if (["accounts", "journals", "ledger"].includes(sectionName) && can("sis:finance:ledger") && can("sis:payments:configure")) {
+            body.append(button(ui.gatewayLabels.title, () => ui.paymentGateways().open("connections", row.currency || "USD", null,
+                () => openRecord(sectionName, row, origin || {}))));
         }
         if (sectionName === "journals") await journal(body, row, origin || {});
         if (sectionName === "billing") await billing(body, row);

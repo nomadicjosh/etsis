@@ -5487,3 +5487,259 @@ msgstr "Import notification pages"
 #: resources/views/backend/workspace/imports.phtml:235
 msgid "Import queued"
 msgstr "Import queued"
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:8
+msgid "Payment gateways"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:9
+msgid "Student accounts · Payment setup"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:10
+msgid "Set up clearing assets, verify named Stripe connections, then assign a connection for each payment purpose and currency."
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:14
+msgid "Connections"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:15
+msgid "Payment routing"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:16
+msgid "Clearing accounts"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:18
+msgid "Back to payment setup"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:19
+msgid "Your payment setup access changed. Reopen this task after access is restored."
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:20
+msgid "Reason for this payment setup change"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:21
+msgid "Connection name"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:22
+msgid "Provider"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:23
+msgid "Verified Stripe merchant"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:24
+msgid "Payment mode"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:25
+msgid "Live payments"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:26
+msgid "Test payments"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:27
+msgid "Allow new checkouts"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:30
+msgid "Payment purpose"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:32
+msgid "Account code"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:33
+msgid "Account title"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:34
+msgid "Account classification"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:35
+msgid "Assigned connection"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:36
+msgid "Payment connection"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:37
+msgid "Gateway clearing asset"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:38
+msgid "No connection · Disable this payment route"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:39
+msgid "Review payment setup"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:40
+msgid "Review this payment setup change"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:41
+msgid "Confirm payment setup"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:42
+msgid "Payment setup saved."
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:43
+msgid "Create clearing asset"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:44
+msgid "Use an asset account for gross funds received by the processor. Bank payouts, processing fees and settlement reconciliation are separate accounting decisions."
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:48
+msgid "Show accounts"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:49
+msgid "No records on this page."
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:50
+msgid "Classify existing account"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:51
+msgid "Classify an earlier account without changing its journals. A saved classification cannot be changed; create another account for a different financial purpose."
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:55
+msgid "Add Stripe connection"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:56
+msgid "Assign payment route"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:57
+msgid "New online checkouts are disabled by the installation payment switch or HTTPS configuration. Existing signed confirmations remain accepted."
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:61
+msgid "This development installation permits test connections. Test payments must never be used as real institutional receipts."
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:65
+msgid "View connection"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:66
+msgid "Review route assignment"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:67
+msgid "Next page"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:68
+msgid "Credentials are encrypted on the server and cannot be displayed. Earlier checkouts retain their original connection and clearing assignment."
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:72
+msgid "Edit connection"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:73
+msgid "More connection actions"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:74
+msgid "Use a separate connection for each merchant, currency and live/test mode. Changing credentials or the clearing account affects future checkouts after review."
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:78
+msgid "Choose a classified asset account"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:79
+msgid "Load more accounts"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:80
+msgid "Stripe secret API key"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:81
+msgid "Stripe webhook signing secret"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:82
+msgid "Leave credentials blank to retain saved values when editing. New credentials clear from this form when review is requested; re-enter them for another new-connection review."
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:86
+msgid "Configure the Stripe endpoint at /portal/payments/webhook/ for checkout.session.completed and checkout.session.async_payment_succeeded."
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:90
+msgid "Select a connection for this purpose and currency. Removing an assignment stops new checkouts. Existing sessions keep their original connection; application and transcript fee accounting remains separate from student-account journals."
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:95
+msgid "Choose connection"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:96
+msgid "Student account · Tuition and fees"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:99
+msgid "Asset"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:100
+msgid "Liability"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:101
+msgid "Equity"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:102
+msgid "Income"
+msgstr ""
+
+#: resources/views/backend/workspace/payment-gateway-labels.php:103
+msgid "Expense"
+msgstr ""
+
+#: src/Application/Http/Middleware/SisPrivacyMiddleware.php:118
+msgid "Provide a Stripe API key matching the selected live/test mode and its webhook signing secret."
+msgstr ""
+
+#: src/Application/Http/Middleware/SisPrivacyMiddleware.php:121
+msgid "The Stripe merchant could not be verified. Check the API key and its account-read permission."
+msgstr ""
+
+#: src/Application/Http/Middleware/SisPrivacyMiddleware.php:124
+msgid "Choose a classified asset in this currency, distinct from the receivables control account."
+msgstr ""
+
+#: src/Application/Http/Middleware/SisPrivacyMiddleware.php:127
+msgid "Create a separate payment connection for a different merchant, mode or currency."
+msgstr ""
+
+#: src/Application/Http/Middleware/SisPrivacyMiddleware.php:130
+msgid "Test payment connections require an isolated local, development or testing installation."
+msgstr ""

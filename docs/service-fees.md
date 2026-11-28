@@ -47,7 +47,7 @@ Staff can review bounded decision history and recorded reasons. Owners receive t
 
 ## Payment setup and recovery
 
-Hosted payment uses the existing [portal payment configuration](campus-portal.md#optional-bill-payment): configured secret, matching live/test mode, HTTPS application URL and authenticated webhook. Application checkout returns to Applications; transcript checkout returns to Transcripts. No live settlement was exercised by the isolated tests.
+Hosted payment uses the existing [portal payment configuration](campus-portal.md#optional-bill-payment): an explicitly assigned named connection for each fee purpose/currency, matching live/test mode, HTTPS application URL and authenticated webhook. [Connection setup](payment-gateways.md) retains the merchant and clearing assignment; service-fee GL income/expense posting and settlement remain separate work. Application checkout returns to Applications; transcript checkout returns to Transcripts. No live settlement was exercised by the isolated tests.
 
 If online payment is unavailable, the quote remains pending and directs the owner to the institution. Authorized staff can record an actual external receipt or an allowed waiver. A provider timeout leaves a recoverable pending checkout with the same idempotency identity. Expired attempts can be replaced. A new checkout reflects a changed outstanding balance; confirmations from older attempts still record actual money received. Duplicate authenticated confirmations cannot post money twice.
 

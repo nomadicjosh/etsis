@@ -45,18 +45,20 @@ final readonly class SqlPaymentRepository implements PaymentRepository
         $this->sql->lock('sis_portal_payments', $id->value, 'id');
     }
 
-    public function attach(EntityId $id, string $session, string $encryptedUrl): void
+    public function attach(EntityId $id, string $session, string $encryptedUrl, ?string $sealedGateway = null): void
     {
         $this->sql->update(
             'sis_portal_payments',
-            ['session_id' => $session, 'encrypted_url' => $encryptedUrl],
+            ['session_id' => $session, 'encrypted_url' => $encryptedUrl]
+                + ($sealedGateway === null ? [] : ['sealed_gateway' => $sealedGateway]),
             ['id' => $id->value, 'status' => 'pending']
         );
     }
 
-    public function paid(EntityId $id): void
+    public function paid(EntityId $id, ?string $sealedGateway = null): void
     {
-        $this->sql->update('sis_portal_payments', ['status' => 'paid', 'encrypted_url' => null], ['id' => $id->value]);
+        $this->sql->update('sis_portal_payments', ['status' => 'paid', 'encrypted_url' => null]
+            + ($sealedGateway === null ? [] : ['sealed_gateway' => $sealedGateway]), ['id' => $id->value]);
     }
 
     public function expire(EntityId $id): void

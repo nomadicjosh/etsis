@@ -21,9 +21,9 @@ interface PaymentRepository
 
     public function lock(EntityId $id): void;
 
-    public function attach(EntityId $id, string $session, string $encryptedUrl): void;
+    public function attach(EntityId $id, string $session, string $encryptedUrl, ?string $sealedGateway = null): void;
 
-    public function paid(EntityId $id): void;
+    public function paid(EntityId $id, ?string $sealedGateway = null): void;
 
     public function expire(EntityId $id): void;
 }

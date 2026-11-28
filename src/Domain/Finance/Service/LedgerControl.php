@@ -290,6 +290,13 @@ final readonly class LedgerControl
                 "refund" => $definition["refund"],
                 default => throw new CorruptHistoryException(),
             };
+            if (isset($event->metadata()['gateway_receipt'])) {
+                $receipt = new \Domain\Finance\ValueObject\GatewayReceipt($event->metadata()['gateway_receipt']);
+                $target = $receipt->values()['asset'];
+                if ($p['type'] !== 'payment' || $target['currency'] !== $currency || $target['id'] === $receivable) {
+                    throw new CorruptHistoryException();
+                }
+            }
             $basis = [
                 "type" => $p["type"],
                 "minor" => $p["minor"],

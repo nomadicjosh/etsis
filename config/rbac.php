@@ -116,6 +116,9 @@ return [
                 "sis:hr:primary" => ["description" => "Designate primary employment positions with HR authority."],
                 "sis:hr:manage" => ["description" => "Manage employment and timesheet approvals."],
                 "sis:transfer:manage" => ["description" => "Manage transfer courses and credit awards."],
+                "sis:payments:configure" => [
+                    "description" => "Review named payment connections and purpose routing with a finance ledger duty.",
+                ],
                 "sis:finance:ledger" => [
                     "description" => "Post and reverse balanced general-ledger journals.",
                 ],

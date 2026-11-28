@@ -9,7 +9,15 @@ use Domain\Shared\ValueObject\EntityId;
 
 interface PaymentGateway
 {
-    public function enabled(): bool;
+    public function enabled(string $purpose = 'account', ?string $currency = null): bool;
+
+    /** Freeze the selected connection before creating a provider session. */
+    public function prepare(EntityId $payment, array $record): array;
+
+    /** Remove an API credential once its session is known; retain signing and financial evidence. */
+    public function checkpoint(array $record): ?string;
+
+    public function receipt(array $record): ?\Domain\Finance\ValueObject\GatewayReceipt;
 
     /** @return array{session: string, url: string} */
     public function checkout(EntityId $payment, Money $amount, int $expiresAt, string $purpose = 'account'): array;

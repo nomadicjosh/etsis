@@ -818,23 +818,27 @@ External student-progress AI remains deferred by project direction; catalog-auth
 ## 11. Student Accounts Additional Implementations/Features
 You should be able to use etSIS to accept online payments for tuition, fees, applications, transcripts, and donations. Online payment options should include credit cards, debit cards, electronic checks (ACH) and external checkouts (Paypal). Implement these features with the best security and logical workflow.
 
-- [ ] Support for setting up asset account (Chart of Accounts) into which an institution deposits funds received
-- [ ] Support for selecting asset account (Chart of Accounts) for the payment gateway account(s) that are set up
+- [x] Support for [setting up classified asset accounts](payment-gateways.md#prepare-the-chart-of-accounts), including reviewed classification of earlier unknown accounts without changing old journals.
+- [x] Support for [selecting the clearing asset for named gateway connections](payment-gateways.md): new student-account receipts retain that assignment in protected history and balanced GL postings; later configuration changes and source reversals preserve the original counterpart. Bank settlement and service-fee GL income/expense posting remain separate below.
 - [ ] Support and documentation on setting up appropriate income and corresponding expence accounts for service fees and credit/debit transactions
 - [ ] Support for recurring payments (i.e. donations); supported by Stripe and Authorize.net
 - [ ] Support for online payers (third party)
 - [ ] Support for emailing online payment receipts: When someone makes an online payment to a student's account, select whether to email an online payment receipt to the student and the payer.
 - [ ] Online payments must not exceed balance
-- [ ] Support for An Institutional Student Information Record (ISIR); financial aid, and disbursements (do online research for the best implementation and workflow)
-- [ ] Tuition schedules and bracketing (connected to an income account in Chart of Accounts)
-- [ ] Refund policies: automatically calculates refunds for invoiced charges when a student withdraws from courses. A refund policy can be added to a student's account or by making it a default for a particular tuition schedule. If no refund policy is set, student charges will have to be manually tracked and adjusted. When a withdrawal occurs, if it is within the timeframe of the refund policy, a pending credit is createed
+- [ ] Support for An Institutional Student Information Record (ISIR); financial aid, and disbursements (do online research for the best implementation and workflow). Student must accept financial aid package.
+- [ ] Tuition schedules and bracketing (connected to an income account in Chart of Accounts). A tuition schedule can be added to a student or get associated to a term or academic program. When a student enrolls in courses, a pending (status) tuition charge is created, and any necessary fees will be added. After someone reviews the pending charges (remove a charge, adjust charges, etc), then they get invoiced.
+- [ ] Refund policies: automatically calculates refunds for invoiced charges when a student withdraws from courses. A refund policy can be added to a student's account or by making it a default for a particular tuition schedule. If no refund policy is set, student charges will have to be manually tracked and adjusted. When a withdrawal occurs, if it is within the timeframe of the refund policy, a pending credit is created
+
+### Payment Plans and Schedule
+Payment plans allow students to pay their invoices in installments. A payment plan can be added to a student's account or by making it a default for a particular tuition schedule. A payment plan will have plan info, eligible charges, and payment schedule. There should also be an option to adjust an individual student's payment plan and recalculations.
 
 ### Supported Payment Gateways
 - [ ] Stripe (credit card, debit card, ACH)
 - [ ] Authorize.net (credit card, debit card, ACH)
 - [ ] Paypal Business (suggest to use as supplement to the other 2, but not as primary)
-- [ ] Use connections as an alternative to add gateway settings in `.env`
+- [x] [Named, reviewed Stripe connections replace environment credentials](payment-gateways.md): independently authorized encrypted server-side setup, verified merchant identity, immutable merchant/mode/currency, reviewed key/asset changes, per-purpose routing, private Bootstrap drawers, bounded expired-review cleanup and retained checkout/confirmation evidence. The deployment admission switch remains in `.env`.
 - [ ] Support for choosing which payment gateway to use for different kinds of online payments (i.e. Authorize.net for donations, but Stripe for tuition and fees)
+  - [x] [Choose an enabled named Stripe connection by currency](payment-gateways.md#assign-payment-purposes) independently for student-account, application and official-transcript payments; review assignment/removal and preserve outstanding sessions. Additional provider adapters and donations remain open in the parent feature.
 
 **Managed hosting boundary:** the separate hosting-service assessment recommends independent SIS installations and institutional databases, with an external customer/provisioning control plane. No core multi-tenancy section, shared academic database or institution keys on SIS tables are planned. The assessment is a design, not implemented provisioning or completion of the S3/backup items above.
 
@@ -863,8 +867,12 @@ including private capture/cropping, institutional protection, reviewed server im
 [Encrypted database/private-file backup and isolated recovery](encrypted-backups.md) now complete the next
 substantial operations milestone for PostgreSQL/SQLite with an optional S3 repository. Wider custody,
 retention, engine/load and institutional cutover qualification remain explicit operations gates.
-Next prioritize the connected student-account payment setup in section 11: reviewed gateway connections,
-asset-account assignment and balance-limited tuition checkout before another narrow integration extension.
+[Reviewed payment connections and clearing assets](payment-gateways.md) now complete the next substantial
+finance setup milestone, including named Stripe connections, purpose/currency routing and retained gross
+student-account receipt assignments. The strict online balance ceiling remains open: finish the coordinated
+authorization/capture or reservation workflow before claiming it. Then stagger remaining section 11
+service-fee income/expense and settlement, payer/receipt, provider/ACH, tuition/invoicing and payment-plan
+workflows. Do not substitute another narrow reporting or notification extension for those milestones.
 Establish each milestone's acceptance boundary before implementation.
 Completed extension leaves do not complete their broad parent feature.
 

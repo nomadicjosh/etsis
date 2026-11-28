@@ -61,6 +61,8 @@ final class StudentAccount extends EventSourcedAggregate
     private array $paymentDetails = [];
     /** @var array<string,PaymentDetails> Opening snapshots keep raw posting retries stable after corrections. */
     private array $openingPaymentDetails = [];
+    /** @var array<string, \Domain\Finance\ValueObject\GatewayReceipt> */
+    private array $gatewayReceipts = [];
     /** @var array<string,array{actor:string,hash:string,result:PaymentDetailsResult}> */
     private array $paymentDetailsReceipts = [];
 
@@ -211,7 +213,14 @@ final class StudentAccount extends EventSourcedAggregate
         ?RefundAllocation $allocation = null,
         ?RegistrationPrice $registrationPrice = null,
         ?ChargeSource $chargeSource = null,
+        ?\Domain\Finance\ValueObject\GatewayReceipt $gatewayReceipt = null,
     ): void {
+        if (
+            $gatewayReceipt !== null && ($type !== EntryType::Payment || $staffRecorded
+            || $gatewayReceipt->values()['asset']['currency'] !== $amount->currency)
+        ) {
+            throw new DomainException('Gateway assignment belongs to its exact provider payment.');
+        }
         $chargeSource ??= $staffRecorded && $type === EntryType::Charge ? ChargeSource::Manual : null;
         $chargeSource?->validate($type->value, $staffRecorded, $registrationPrice !== null);
         if (
@@ -240,6 +249,7 @@ final class StudentAccount extends EventSourcedAggregate
         if (isset($this->operations[$operationId->value])) {
             if (
                 $this->operations[$operationId->value] !== $entry ||
+                ($this->gatewayReceipts[$operationId->value] ?? null)?->values() !== $gatewayReceipt?->values() ||
                 ($this->openingPaymentDetails[$operationId->value] ?? null)?->values() !==
                     $paymentDetails?->values() ||
                 ($this->refundAllocations[$operationId->value] ?? null)?->values() !== $allocation?->values() ||
@@ -268,7 +278,8 @@ final class StudentAccount extends EventSourcedAggregate
                     ($paymentDetails === null ? [] : ["payment_details" => $paymentDetails->values()]) +
                     ($allocation === null ? [] : ["refund_allocations" => $allocation->values()]) +
                     ($registrationPrice === null ? [] : ["registration_price" => $registrationPrice->values()]) +
-                    ($chargeSource === null ? [] : ['charge_source' => $chargeSource->value]),
+                    ($chargeSource === null ? [] : ['charge_source' => $chargeSource->value]) +
+                    ($gatewayReceipt === null ? [] : ['gateway_receipt' => $gatewayReceipt->values()]),
             ),
         );
     }
@@ -1085,6 +1096,16 @@ final class StudentAccount extends EventSourcedAggregate
     protected function whenAccountEntryWasPosted(AccountEntryWasPosted $event): void
     {
         $payload = $event->payload();
+        if (isset($event->metadata()['gateway_receipt'])) {
+            $receipt = new \Domain\Finance\ValueObject\GatewayReceipt($event->metadata()['gateway_receipt']);
+            if (
+                $payload['type'] !== 'payment' || ($event->metadata()['staff_recorded'] ?? false)
+                || $receipt->values()['asset']['currency'] !== $payload['currency']
+            ) {
+                throw new DomainException('The retained gateway assignment does not match its payment.');
+            }
+            $this->gatewayReceipts[$payload['operation_id']] = $receipt;
+        }
         if (array_key_exists('charge_source', $event->metadata())) {
             $source = ChargeSource::from($event->metadata()['charge_source']);
             $source->validate(

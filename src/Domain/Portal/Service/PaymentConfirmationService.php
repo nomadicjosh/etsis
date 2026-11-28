@@ -55,7 +55,7 @@ final readonly class PaymentConfirmationService
                 }
                 $this->fees->accept($record, $confirmation);
                 $this->payments->attach($id, $confirmation['session'], '');
-                $this->payments->paid($id);
+                $this->payments->paid($id, $this->gateway->checkpoint($record));
                 return;
             }
             if ($record['account_id'] === null || $record['fee_id'] !== null) {
@@ -71,7 +71,8 @@ final readonly class PaymentConfirmationService
                 $id,
                 EntryType::Payment,
                 new Money($confirmation['minor'], $confirmation['currency']),
-                $actor
+                $actor,
+                gatewayReceipt: $this->gateway->receipt($record),
             );
             // The actor is the retained checkout initiator; provider verification authorizes completion.
             $this->accounts->save($account, new EventContext(
@@ -82,7 +83,7 @@ final readonly class PaymentConfirmationService
                 reason: 'Provider-authenticated payment completing the account holder\'s retained checkout.'
             ));
             $this->payments->attach($id, $confirmation['session'], '');
-            $this->payments->paid($id);
+            $this->payments->paid($id, $this->gateway->checkpoint($record));
             $this->audit->record($actor, 'payment.confirmed', $id);
         });
     }

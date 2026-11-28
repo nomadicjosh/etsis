@@ -113,6 +113,25 @@ final class SisPrivacyMiddleware implements MiddlewareInterface
                 ),
             };
             $response = PrivateErrorResponse::make($request, 409, $message);
+        } catch (\Domain\Payments\Exception\GatewaySetupException $setup) {
+            $message = match ($setup->issue) {
+                \Domain\Payments\Enum\GatewaySetupIssue::Credentials => trans(
+                    'Provide a Stripe API key matching the selected live/test mode and its webhook signing secret.'
+                ),
+                \Domain\Payments\Enum\GatewaySetupIssue::Merchant => trans(
+                    'The Stripe merchant could not be verified. Check the API key and its account-read permission.'
+                ),
+                \Domain\Payments\Enum\GatewaySetupIssue::Asset => trans(
+                    'Choose a classified asset in this currency, distinct from the receivables control account.'
+                ),
+                \Domain\Payments\Enum\GatewaySetupIssue::Identity => trans(
+                    'Create a separate payment connection for a different merchant, mode or currency.'
+                ),
+                \Domain\Payments\Enum\GatewaySetupIssue::TestMode => trans(
+                    'Test payment connections require an isolated local, development or testing installation.'
+                ),
+            };
+            $response = PrivateErrorResponse::make($request, 422, $message);
         } catch (DomainException) {
             $response = PrivateErrorResponse::make($request, 409, 'The requested transition is not permitted.');
         } catch (Throwable) {

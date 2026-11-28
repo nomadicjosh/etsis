@@ -1442,6 +1442,16 @@ return static function (Psr7Router $router): void {
     $router
         ->map(["POST"], "/sis/ledger-accounts/", [SisLedgerController::class, "account"])
         ->name("sis.ledger.account");
+    $gateways = \Application\Http\Controller\SisPaymentGatewayController::class;
+    $router->map(['GET'], '/sis/payment-setup/directory/{kind}/', [$gateways, 'directory'])
+        ->name('sis.payment_setup.directory');
+    $router->map(['GET'], '/sis/payment-setup/connections/{id}/', [$gateways, 'show'])
+        ->name('sis.payment_setup.show');
+    $router->map(['GET'], '/sis/payment-setup/routing/', [$gateways, 'routing'])->name('sis.payment_setup.routing');
+    $router->map(['GET'], '/sis/payment-setup/assets/', [$gateways, 'assets'])->name('sis.payment_setup.assets');
+    $router->map(['POST'], '/sis/payment-setup/review/{kind}/', [$gateways, 'review'])
+        ->name('sis.payment_setup.review');
+    $router->map(['POST'], '/sis/payment-setup/confirm/', [$gateways, 'confirm'])->name('sis.payment_setup.confirm');
     $accounting = \Application\Http\Controller\SisAccountingController::class;
     $router->map(['GET'], '/sis/accounting/', [$accounting, 'overview'])->name('sis.accounting.overview');
     $router->map(['POST'], '/sis/accounting/mapping/review/', [$accounting, 'mapping'])->name('sis.accounting.mapping');

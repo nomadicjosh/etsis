@@ -1689,6 +1689,19 @@ final readonly class HistoricalSchemaRegistry
                     }
                     continue;
                 }
+                if ($name === 'gateway_receipt') {
+                    if (
+                        !is_array($value) || $class !== \Domain\Finance\Event\AccountEntryWasPosted::class
+                        || $payload['type'] !== 'payment' || ($metadata['staff_recorded'] ?? false)
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $receipt = new \Domain\Finance\ValueObject\GatewayReceipt($value);
+                    if ($receipt->values()['asset']['currency'] !== $payload['currency']) {
+                        throw new CorruptHistoryException();
+                    }
+                    continue;
+                }
                 if ($name === 'payment_details') {
                     if (
                         !is_array($value) || !in_array($class, [

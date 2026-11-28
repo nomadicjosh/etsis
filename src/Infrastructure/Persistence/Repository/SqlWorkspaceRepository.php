@@ -482,7 +482,7 @@ final readonly class SqlWorkspaceRepository implements WorkspaceRepository
         ];
         $definitions += [
             "grades" => ["sis_grades", ["id", "code", "points_milli", "passes", "counts_gpa"], ["code"]],
-            "ledger" => ["sis_ledger_accounts", ["id", "code", "title", "currency"], ["code", "title"]],
+            "ledger" => ["sis_ledger_accounts", ["id", "code", "title", "currency", "kind"], ["code", "title"]],
             "institutions" => ["sis_external_institutions", ["id", "code", "name"], ["code", "name"]],
             "external" => [
                 "sis_external_courses",
