@@ -432,6 +432,10 @@ A **notification** is a personal notice about an outcome or action needing atten
 
 An **API**, or *application programming interface*, is a defined way for systems to exchange requests and data. **REST** describes a commonly used approach to web APIs. A **webhook** is a request one service sends to a configured receiver when something happens. Each integration still needs its own permitted data, authentication and delivery rules. See [website newsletter integrations](website-newsletters.md).
 
+### Reviewed LMS grade intake
+
+A background collection of a linked LMS course total for an independent SIS grade review. Collection does not publish a grade. Authorized staff choose the published SIS grade, and the existing correction approval policy governs changes to earlier grades. See [Moodle grade intake](moodle-grade-intake.md).
+
 ### LMS / Moodle
 
 An **LMS**, or *learning management system*, manages teaching activities and learning content. **Moodle** is the LMS integrated with this project. SIS enrollment records and LMS activity remain separate, with defined synchronization responsibilities. See [optional Moodle integration](optional-moodle-integration.md).

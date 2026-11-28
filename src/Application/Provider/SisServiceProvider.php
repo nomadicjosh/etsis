@@ -56,6 +56,12 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlSpecializationPolicyRepository::class,
             \Domain\Catalog\Repository\ProgramSpecializationRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlProgramSpecializationRepository::class,
+            \Domain\Lms\Repository\MoodleGradeImportRepository::class =>
+                \Infrastructure\Lms\SqlMoodleGradeImportRepository::class,
+            \Domain\Lms\Service\MoodleGradeImportPolicy::class =>
+                \Infrastructure\Lms\ConfiguredMoodleGradeImportPolicy::class,
+            \Domain\Lms\Service\MoodleGradeGateway::class =>
+                \Infrastructure\Lms\RestMoodleGateway::class,
             \Domain\Lms\Repository\MoodleCategoryRepository::class =>
                 \Infrastructure\Lms\SqlMoodleCategoryRepository::class,
             \Domain\Lms\Repository\MoodleCourseRequestRepository::class =>

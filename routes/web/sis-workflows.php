@@ -1707,4 +1707,16 @@ return static function (Psr7Router $router): void {
     $router->post($base . 'courses/{course}/publications/', [$internal,'publications']);
     $router->get($base . '{award}/', [$internal,'show']);
     $router->post($base . '{award}/history/', [$internal,'history']);
+    $moodleGrades = \Application\Http\Controller\SisMoodleGradeImportController::class;
+    $moodleGradeBase = '/sis/moodle/grade-imports/';
+    $router->get($moodleGradeBase . 'notices/', [$moodleGrades, 'notices']);
+    $router->post($moodleGradeBase . 'notices/', [$moodleGrades, 'notices']);
+    $router->post($moodleGradeBase . 'notices/{notice}/read/', [$moodleGrades, 'read']);
+    $router->post($moodleGradeBase . 'notices/{notice}/delete/', [$moodleGrades, 'delete']);
+    foreach (['page', 'request', 'cancel'] as $action) {
+        $router->post($moodleGradeBase . '{section}/' . $action . '/', [$moodleGrades, $action]);
+    }
+    $router->get($moodleGradeBase . '{section}/{candidate}/', [$moodleGrades, 'show']);
+    $router->post($moodleGradeBase . '{section}/{candidate}/review/', [$moodleGrades, 'review']);
+    $router->post($moodleGradeBase . '{section}/{candidate}/confirm/', [$moodleGrades, 'confirm']);
 };

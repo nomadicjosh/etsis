@@ -106,6 +106,7 @@ final readonly class InstitutionalCreditLedger
                 throw new CorruptHistoryException();
             }
             $metadata = ["__aggregate_type" => "academic_credit"];
+
             if ($sectionVersion !== null) {
                 $metadata["section_version_id"] = $sectionVersion->value;
             }
@@ -306,6 +307,7 @@ final readonly class InstitutionalCreditLedger
         bool $initialOnly = false,
         bool $reconcileQuantities = false,
         ?int $attemptedMilli = null,
+        ?\Domain\Gradebook\ValueObject\ExternalGradeEvidence $externalGrade = null,
     ): array {
         $this->readAuthority($section);
         return $this->transactions->run(function () use (
@@ -322,6 +324,7 @@ final readonly class InstitutionalCreditLedger
             $initialOnly,
             $reconcileQuantities,
             $attemptedMilli,
+            $externalGrade,
         ): array {
             $this->records->lockStudent($student);
             $this->records->lockSection($section);
@@ -474,6 +477,17 @@ final readonly class InstitutionalCreditLedger
             if ($evidence !== null) {
                 $data["coursework"] = $evidence->facts;
             }
+            if ($externalGrade !== null) {
+                if (
+                    $evidence !== null || $withdrawn ||
+                    $externalGrade->facts['student_id'] !== $student->value ||
+                    $externalGrade->facts['section_id'] !== $section->value ||
+                    $externalGrade->facts['enrollment_id'] !== $enrollment->value
+                ) {
+                    throw new CorruptHistoryException();
+                }
+                $data['external_grade'] = $externalGrade->facts;
+            }
             $this->actor($actor);
             $this->authority($section, $amend, $withdrawn, $units !== null);
             $token = $this->cipher->seal(json_encode($data, JSON_THROW_ON_ERROR));
@@ -483,7 +497,7 @@ final readonly class InstitutionalCreditLedger
                     "This calculation exceeds the review size limit. Choose a grade manually.",
                 );
             }
-            unset($data["coursework"]);
+            unset($data["coursework"], $data["external_grade"]);
             return $data + [
                 "review_token" => $token,
                 ...$evidence === null ? [] : ["coursework_summary" => $evidence->summary()],
@@ -559,6 +573,12 @@ final readonly class InstitutionalCreditLedger
                 "assignment_id" => $d["assignment_id"],
             ];
             $metadata = ["__aggregate_type" => "academic_credit"];
+            if (isset($d['external_grade'])) {
+                $metadata['external_grade'] = new \Domain\Gradebook\ValueObject\ExternalGradeEvidence(
+                    $d['external_grade'],
+                )->facts;
+            }
+
             if (isset($d["coursework"])) {
                 $metadata["coursework"] = $d["coursework"];
             }
@@ -1640,6 +1660,11 @@ final readonly class InstitutionalCreditLedger
                 ...$e instanceof \Domain\AcademicRecord\Event\EarnedCeusWereDecided
                     ? ['earned_ceus' => $p['award'], 'previous_earned_ceus' => $p['previous_award']] : [],
                 "credit_unit_correction" => $unitCorrection,
+                ...$e->metaParam('external_grade', null) === null ? [] : [
+                    'external_grade_summary' => new \Domain\Gradebook\ValueObject\ExternalGradeEvidence(
+                        $e->metaParam('external_grade'),
+                    )->summary(),
+                ],
                 ...$e instanceof FinalGradeWasDecided && $e->metaParam("coursework", null) !== null
                     ? [
                         "coursework_summary" => array_intersect_key(

@@ -192,6 +192,7 @@ return [
         \Application\Console\Commands\MoodleInstanceCommand::class,
         \Application\Console\Commands\MoodleProvisionCommand::class,
         \Application\Console\Commands\MoodleSyncCommand::class,
+        \Application\Console\Commands\MoodleGradesCommand::class,
         \Application\Console\Commands\ProcessImportsCommand::class,
     ],
 ];

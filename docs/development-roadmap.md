@@ -616,7 +616,7 @@ Reporting work is limited to reports **already defined in this roadmap** and per
 - [x] Add [mapped-section student/instructor access](optional-moodle-integration.md#section-course-mapping-and-background-access) in the existing Moodle panel and one bounded `sis:moodle:sync` worker: current roles, verified publication/registration facts, instructional windows, retained former-member references, monotonic native receipts and suspension without deletion. Pre-existing manual enrollments remain externally managed; setup counts remain visible after a scan.
 - [x] Add opt-in course creation to reviewed section publication and first-use student/faculty provisioning through the existing account queue. One bounded worker rotates course, account and roster steps; current source eligibility and authority are checked around external effects. Existing accounts/courses use explicit linking, with no automatic adoption by email. Profile deficiencies and original conflicts retain the existing setup/review path. Native acceptance remains open.
 - [x] Replace the fixed Moodle category destination with an etSIS subject/department policy, bounded reference discovery, connector-owned name synchronization and explicit linking of existing categories. Publication reviews pin the retained course classification and selected organization policy; accepted requests and existing courses retain their original category routing. Connector 0.6.0-alpha requires native deployment acceptance.
-- [ ] Implement background gradebook intake with explicit source-of-truth policy, reviewed authoritative grade decisions/corrections, immutable applicable definitions and idempotent external receipts.
+- [x] Implement [reviewed background Moodle course-total intake](moodle-grade-intake.md): explicit disabled/reviewed-final policy, one linked enrollment per server step, protected working observations, exact source fences/deduplication, restartable checkpoints, cancellation and private deletable completion notices. Staff explicitly select a published SIS grade through the existing authoritative writer and independent correction approvals; retained academic source evidence and original retries preserve earlier grades and definitions. Hidden/stale/nonnumeric totals and unverifiable SIS sources cannot publish grades. Assessment-detail import, automatic conversion/nonnumeric mapping and automatic intake scheduling remain staggered integration extensions.
 - [ ] Verify native Moodle PHPUnit tests in a dedicated database and institution-specific upgrade, capabilities, enrollment, SSO/mail, outage and load acceptance. Complete institutional OIDC and reviewed bidirectional logout where required; measure direct-launch validation latency before considering an explicit bounded cache.
 - [ ] Add authorized operational workers/outbox consumers for other external effects where needed; store protected references rather than student payloads in jobs.
 - [ ] Optional integration with Zoom or Google Meet for online/hybrid courses. Google Meet or Zoom link generates automatically when a timetable session is created.
@@ -825,9 +825,11 @@ explicit receiving awards, original lineage and correction/duplicate safeguards.
 [Optional application/transcript fees](service-fees.md) now complete the next end-to-end milestone:
 retained policy/quotes, prospect/owner hosted checkout, actual receipts/refunds, reasoned staff waivers,
 submission/request gates, recovery and private staff/portal views. Provider settlement/refund automation
-remains finance operations work. Next select another substantial unchecked milestone, such as
-background Moodle gradebook intake or controlled student-account-to-GL mapping/period closing,
-rather than another narrow transfer extension. Establish each milestone's acceptance boundary before implementation.
+remains finance operations work. [Reviewed background Moodle grade intake](moodle-grade-intake.md)
+now completes the next substantial integration milestone, including server collection, staff decisions,
+approval handoff, protected source evidence and private completion notices. Next prioritize another
+substantial unchecked workflow, such as controlled student-account-to-GL mapping/period closing,
+rather than a narrow grade-import extension. Establish each milestone's acceptance boundary before implementation.
 Completed extension leaves do not complete their broad parent feature.
 
 Stagger smaller work where it supports a milestone: eligibility/section details with registration;

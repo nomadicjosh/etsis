@@ -1,7 +1,7 @@
 /* Bounded action feedback with person-owned server preferences. No notification data enters browser storage. */
 window.createWorkspaceNotifications = function (ui) {
     'use strict';
-    const { node, stack, trigger, bootstrap, labels = {}, importLabels = {}, request } = ui;
+    const { node, stack, trigger, bootstrap, labels = {}, importLabels = {}, moodleGradeLabels = {}, openMoodleGrades, request } = ui;
     const text = (key, fallback) => labels[key] || fallback;
     const sounds = Object.freeze({
         tone: null,
@@ -140,6 +140,7 @@ window.createWorkspaceNotifications = function (ui) {
             endpoints.push('/portal/api/announcements/');
             endpoints.push('/portal/api/registration-open/');
             if (importLabels.notices) endpoints.push('/sis/imports/notices/');
+            if (moodleGradeLabels.notices) endpoints.push('/sis/moodle/grade-imports/notices/');
             for (const endpoint of endpoints) {
                 try {
                     const result = await request(endpoint);
@@ -258,7 +259,7 @@ window.createWorkspaceNotifications = function (ui) {
                 feedBody));
         dialog.addEventListener('cancel', event => { event.preventDefault(); closeHistory(); });
         const currentDialog = dialog;
-        feed = window.createNotificationFeed({ node, request, labels, importLabels, notify,
+        feed = window.createNotificationFeed({ node, request, labels, importLabels, moodleGradeLabels, openMoodleGrades: section => { closeHistory(); return openMoodleGrades?.(section); }, notify,
             includePrivate: !!request && identityKnown, feedback: () => history,
             deleteFeedback: id => {
                 remove(id); const index = history.findIndex(item => item.id === id);

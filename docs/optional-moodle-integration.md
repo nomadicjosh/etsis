@@ -1,6 +1,6 @@
 # Optional Moodle integration
 
-Moodle integration is optional and disabled by default. An institution must explicitly enable and configure it. Normal SIS workflows do not require Moodle. The current implementation combines installation approval, reviewed account setup, direct launch and mapped-course student/instructor access. Opt-in course creation and first-use account eligibility are implemented through the shared background workflow. Gradebook import and native institutional acceptance remain open.
+Moodle integration is optional and disabled by default. An institution must explicitly enable and configure it. Normal SIS workflows do not require Moodle. The current implementation combines installation approval, reviewed account setup, direct launch and mapped-course student/instructor access. Opt-in course creation and first-use account eligibility are implemented through the shared background workflow. [Reviewed background course-total intake](moodle-grade-intake.md) is now implemented; native institutional acceptance remains open.
 
 ## Direct Moodle launch and coordinated sessions
 
@@ -122,7 +122,7 @@ Automated tests use fictional responses and injected clients. Disabled console c
 
 ## Remaining integration work
 
-Course creation, first-use account provisioning and mapped-course roster access now share the bounded synchronization command described below. Remaining work includes native installation/load/SSO/mail acceptance, reviewed gradebook intake, institutional OIDC and coordinated logout policy. Corrections must preserve original decisions and operation receipts; additional recovery interfaces should be added only for a demonstrated need.
+Course creation, first-use account provisioning and mapped-course roster access now share the bounded synchronization command described below. Remaining work includes native installation/load/SSO/mail acceptance, further gradebook mapping/detail extensions, institutional OIDC and coordinated logout policy. Corrections must preserve original decisions and operation receipts; additional recovery interfaces should be added only for a demonstrated need.
 
 Institutional Moodle configuration does not authorize sending student data to an AI service; student progress guidance remains inside etSIS.
 
@@ -149,7 +149,7 @@ The shared read-only gateway uses the same bounded, no-redirect, TLS-verified tr
 
 ## Installable Moodle connector and instance verification
 
-The optional [connector ZIP](../dist/moodle/local_etsis-0.6.0-alpha.zip) is ready to distribute with its [checksum](../dist/moodle/local_etsis-0.6.0-alpha.zip.sha256). Its [installation guide](../integrations/moodle/local/etsis/README.md) covers Moodle's ZIP upload, explicit settings/service enablement, dedicated account permissions and token configuration. It adds no institutional academic tables and defaults to disabled, with a disabled restricted service and no automatic account, token or role grants. Native Moodle REST checks remain usable without it.
+The optional [connector ZIP](../dist/moodle/local_etsis-0.7.0-alpha.zip) is ready to distribute with its [checksum](../dist/moodle/local_etsis-0.7.0-alpha.zip.sha256). Its [installation guide](../integrations/moodle/local/etsis/README.md) covers Moodle's ZIP upload, explicit settings/service enablement, dedicated account permissions and token configuration. It adds no institutional academic tables and defaults to disabled, with a disabled restricted service and no automatic account, token or role grants. Native Moodle REST checks remain usable without it.
 
 After an administrator installs and explicitly enables the plugin and restricted service, an etSIS deployment operator can run:
 
@@ -181,7 +181,7 @@ The private routes are GET `/sis/moodle/installation/` and POST `/sis/moodle/ins
 
 A site or identity mismatch blocks verification and leaves the approval untouched. There is intentionally no replace/delete button. Keep clones disconnected: a cloned Moodle database inherits the same identifier and cannot be distinguished solely by this check. Planned recovery/replacement workflows must explicitly assess existing links and preserve their provenance. Restoring the same installation should retain its original identity. Disabling integration stops new remote checks/approvals and does not erase the recorded approval.
 
-Installation approval alone creates no person/section links and performs no SSO, enrollment or grade synchronization. The separate [reviewed person-link workflow](moodle-person-links.md) now creates explicit person references using an installation-bound single-ID reader. Existing connection/single-ID console diagnostics remain setup tools and are not bound synchronization operations. Future SSO and workers must use the saved binding and fresh installation checks before external effects; the staff-requested account worker now follows those boundaries; mapped-course access is now implemented below, while gradebook import remains open. Tests use fictional gateway responses and never use real Moodle student records as fixtures.
+Installation approval alone creates no person/section links and performs no SSO, enrollment or grade synchronization. The separate [reviewed person-link workflow](moodle-person-links.md) now creates explicit person references using an installation-bound single-ID reader. Existing connection/single-ID console diagnostics remain setup tools and are not bound synchronization operations. Future SSO and workers must use the saved binding and fresh installation checks before external effects; the staff-requested account worker now follows those boundaries; mapped-course access is now implemented below, and reviewed background grade intake now has its [own workflow](moodle-grade-intake.md). Tests use fictional gateway responses and never use real Moodle student records as fixtures.
 
 
 ## Troubleshooting installation review
@@ -252,3 +252,8 @@ The Moodle integration user needs `local/etsis:syncsections` at system context a
 A publication review routes from the **retained course publication’s** subject or department ID. That publication must contain an active reference of the selected type. Assigning a different subject/department to today's course draft does not recategorize an older retained publication. Publish/select the appropriate course version for a new section when needed. The review displays its category choice; confirmation rejects changed settings or source labels. Accepted course requests keep their original source identity even if the institution later switches category policy. Existing Moodle courses are never moved by a policy switch. Manual links to pre-existing Moodle courses likewise retain their current native category.
 
 Migration `20261112000008_CreateSisMoodleCategories.php` adds ULID-keyed organization settings and category-mapping/checkpoint support tables. It has been applied to the configured MariaDB test installation, with before/after verification that recorded history, approvals, references and existing mappings were unchanged. Academic publications, existing links and native course receipts are preserved. The configured test database had no pending course-creation requests at preflight. An older unrouted request is not silently assigned today's policy: its protected decision remains intact and processing stops for category review. The retired Moodle global category setting is ignored, rather than treated as a historical routing fact. No additional authoritative event table or fabricated history is introduced.
+
+
+## Reviewed background grade intake
+
+Connector 0.7.0-alpha adds an explicitly enabled, read-only course-total export. The SIS collects one approved linked enrollment per server step, notifies the requester and requires a separate reviewed SIS grade decision. Existing independent correction approval still applies. Follow [Moodle grade intake](moodle-grade-intake.md) for enablement, service capabilities, source availability, cancellation, privacy and retained evidence. Assignment-detail import, automatic conversion and native institutional acceptance remain separate work.

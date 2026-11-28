@@ -1339,6 +1339,18 @@ final readonly class HistoricalSchemaRegistry
                     }
                     continue;
                 }
+                if ($name === 'external_grade') {
+                    if (
+                        !in_array($class, [
+                        \Domain\AcademicRecord\Event\FinalGradeWasDecided::class,
+                        \Domain\AcademicRecord\Event\GradeChangeWasRequested::class,
+                        ], true) || !is_array($value) || isset($metadata['coursework'])
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    new \Domain\Gradebook\ValueObject\ExternalGradeEvidence($value);
+                    continue;
+                }
                 if ($name === 'coursework') {
                     if (
                         $class !== \Domain\AcademicRecord\Event\FinalGradeWasDecided::class || !is_array($value)

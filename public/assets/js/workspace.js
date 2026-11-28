@@ -96,6 +96,8 @@
     const notifications = window.createWorkspaceNotifications({
         node, stack: $one('#workspace-status'), trigger: $one('#workspace-notifications-open'), bootstrap,
         labels: config.notification_labels, importLabels: config.import_labels,
+        moodleGradeLabels: config.moodle_grade_labels,
+        openMoodleGrades: section => task(() => moodleGrades.open(section, () => openRecord('sections', { id: section }))),
         request: (path, method, data) => request(path, method, data, true),
     });
 
@@ -314,7 +316,11 @@
     const graduateRegistration = window.createGraduateRegistration({ node, request, task, openDrawer, buildForm, can, historyChecks: () => historyChecks,
         labels: config.graduate_registration_labels });
     const batchRegistration = window.createWorkspaceRegistration({ graduate: graduateRegistration, graduateLabels: config.graduate_registration_labels, allocationLabels: config.waitlist_allocation_labels, node, request, task, can, table, money, recordSummary, buildForm, openDrawer, closeDrawer: () => drawer.hide(), refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
-    const moodleStudio = window.createWorkspaceMoodle({ node, request, task, can });
+    const moodleGrades = window.createMoodleGradeImports({ node, request, task, openDrawer, buildForm, formData,
+        notify, labels: config.moodle_grade_labels,
+        openGradeChange: (id, back) => teachingStudio.gradeChangeRecord(id, back) });
+    const moodleStudio = window.createWorkspaceMoodle({ node, request, task, can,
+        gradeLabels: config.moodle_grade_labels, openGrades: id => moodleGrades.open(id, () => openRecord('sections', { id })) });
     const moodlePeople = window.createWorkspaceMoodlePeople({ node, request, task, can, openDrawer, openPerson });
     const moodleRequests = window.createWorkspaceMoodleRequests({ node, request, task, can, openDrawer, openPerson });
     const accessStudio = window.createWorkspaceAccess({ node, request, task, openDrawer, badge, notify, definitionActions, offices: () => restrictionStudio.officeSetup({ label: 'Back to roles & access', run: async () => { drawer.hide(); await loadAccess(); } }) });

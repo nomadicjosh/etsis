@@ -1,6 +1,6 @@
 /* One bounded, private account feed. Source services retain ownership, revision and deletion authority. */
 'use strict';
-window.createNotificationFeed = ({ node, request, labels, importLabels = {}, notify,
+window.createNotificationFeed = ({ node, request, labels, importLabels = {}, moodleGradeLabels = {}, openMoodleGrades, notify,
     feedback = () => [], deleteFeedback, changed = () => {}, includePrivate = true }) => {
     const text = key => labels[key] || key;
     const icon = name => node('i', { class: `bi bi-${name}`, 'aria-hidden': 'true' });
@@ -9,6 +9,7 @@ window.createNotificationFeed = ({ node, request, labels, importLabels = {}, not
     definitions.push({ kind: 'announcement', endpoint: '/portal/api/announcements/' });
     definitions.push({ kind: 'window', endpoint: '/portal/api/registration-open/' });
     if (importLabels.notices) definitions.push({ kind: 'import', endpoint: '/sis/imports/notices/' });
+    if (moodleGradeLabels.notices) definitions.push({ kind: 'moodle_grade', endpoint: '/sis/moodle/grade-imports/notices/' });
     let root, status, toolbar, content, paging, reader = null, disposed = false, serial = 0, busy = false;
     let sources = [], pages = [], pageIndex = 0, selected = null, unavailable = false;
     const key = row => `${row.kind}:${row.item.id}:${row.item.revision ?? 0}`;
@@ -84,11 +85,12 @@ window.createNotificationFeed = ({ node, request, labels, importLabels = {}, not
     function heading(row) {
         if (row.kind === 'feedback') return row.item.message;
         if (row.kind === 'announcement') return row.item.title;
+        if (row.kind === 'moodle_grade') return moodleGradeLabels[`notification_${row.item.state}`] || moodleGradeLabels.notices;
         if (row.kind === 'import') return importLabels[row.item.state] || text('feed_import');
         return text(`${row.kind}_${row.kind === 'admissions' ? 'updated' : row.item.status}`);
     }
     function typeLabel(kind) {
-        return kind === 'import' ? importLabels.notices : text(`feed_${kind}`);
+        return kind === 'moodle_grade' ? moodleGradeLabels.notices : kind === 'import' ? importLabels.notices : text(`feed_${kind}`);
     }
     function render() {
         if (disposed || selected) return;
@@ -107,6 +109,7 @@ window.createNotificationFeed = ({ node, request, labels, importLabels = {}, not
             card.dataset.updateId = item.id;
             const context = kind === 'admissions' || kind === 'advising' || kind === 'standing'
                 ? [item.program_code, item.program_title, item.term_code]
+                : kind === 'moodle_grade' ? [`${moodleGradeLabels.processed}: ${item.processed}`, `${moodleGradeLabels.ready}: ${item.ready}`]
                 : kind === 'import' ? [String(item.target || '').replaceAll('_', ' '), `${item.processed} / ${item.total}`]
                 : [item.course_code, item.section_code, item.term_code, item.course_title];
             if (context.some(Boolean)) card.append(node('p', { class: 'text-break mb-2' }, context.filter(Boolean).join(' · ')));
@@ -119,7 +122,7 @@ window.createNotificationFeed = ({ node, request, labels, importLabels = {}, not
                 datetime: new Date(time(row)).toISOString() }, new Date(time(row)).toLocaleString()));
             const actions = node('div', { class: 'd-flex flex-wrap gap-2' });
             if (!['feedback', 'import'].includes(kind)) {
-                const label = kind === 'announcement' ? text('feed_open_announcement') : text(`${kind}_link`);
+                const label = kind === 'moodle_grade' ? moodleGradeLabels.open : kind === 'announcement' ? text('feed_open_announcement') : text(`${kind}_link`);
                 if (['registration', 'enrollment', 'admissions', 'window'].includes(kind)) {
                     actions.append(node('a', { class: 'btn btn-sm btn-outline-secondary',
                         href: kind === 'admissions' ? `/portal/admissions-updates/?update=${encodeURIComponent(item.id)}`
@@ -193,6 +196,19 @@ window.createNotificationFeed = ({ node, request, labels, importLabels = {}, not
         finally { if (active(turn)) controls(false); }
     }
     async function open(row) {
+        if (row.kind === 'moodle_grade') {
+            const turn = ++serial; controls(true);
+            try {
+                if (row.item.unread) {
+                    await request(`/sis/moodle/grade-imports/notices/${encodeURIComponent(row.item.id)}/read/`, 'POST', { revision: row.item.revision });
+                    row.item.unread = false; row.item.revision++;
+                }
+                if (!active(turn)) return;
+                changed(); await openMoodleGrades?.(row.item.section_id);
+            } catch (error) { if (active(turn)) fail(error); }
+            finally { if (active(turn)) controls(false); }
+            return;
+        }
         if (['registration', 'enrollment', 'admissions', 'window'].includes(row.kind)) {
             const turn = ++serial; controls(true);
             try {

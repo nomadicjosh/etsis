@@ -5,6 +5,8 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\env;
 
 return [
+    // Moodle supplies candidates; SIS decisions require explicit authorized review.
+    "grade_import_mode" => env(key: "SIS_MOODLE_GRADE_IMPORT_MODE", default: "disabled"),
     "course_creation_enabled" => env(key: "SIS_MOODLE_COURSE_CREATION_ENABLED", default: false) === true,
     "automatic_accounts_enabled" => env(key: "SIS_MOODLE_AUTOMATIC_ACCOUNTS_ENABLED", default: false) === true,
     "automatic_sign_in" => env(key: "SIS_MOODLE_AUTOMATIC_SIGN_IN", default: "password_email"),

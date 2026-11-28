@@ -139,6 +139,19 @@ final class AcademicCredit extends EventSourcedAggregate
     public function whenFinalGradeWasDecided(FinalGradeWasDecided $event): void
     {
         $p = $event->payload();
+        if ($event->metaParam('external_grade', null) !== null) {
+            $external = new \Domain\Gradebook\ValueObject\ExternalGradeEvidence(
+                $event->metaParam('external_grade'),
+            );
+            if (
+                $this->credit === null || $external->facts['student_id'] !== $this->credit['student_id'] ||
+                $external->facts['enrollment_id'] !== $this->credit['source_id'] ||
+                $external->facts['section_id'] !== $this->section || $event->metaParam('coursework', null) !== null
+            ) {
+                throw new CorruptHistoryException();
+            }
+        }
+
         $this->assertNext($p);
         if (
             !$this->allowsGrade(
@@ -184,6 +197,19 @@ final class AcademicCredit extends EventSourcedAggregate
         \Domain\AcademicRecord\Event\GradeChangeWasRequested $event,
     ): void {
         $p = $event->payload();
+        if ($event->metaParam('external_grade', null) !== null) {
+            $external = new \Domain\Gradebook\ValueObject\ExternalGradeEvidence(
+                $event->metaParam('external_grade'),
+            );
+            if (
+                $this->credit === null || $external->facts['student_id'] !== $this->credit['student_id'] ||
+                $external->facts['enrollment_id'] !== $this->credit['source_id'] ||
+                $external->facts['section_id'] !== $this->section || $event->metaParam('coursework', null) !== null
+            ) {
+                throw new CorruptHistoryException();
+            }
+        }
+
         $this->assertNext($p);
         if (
             $this->pendingGradeChange !== null ||

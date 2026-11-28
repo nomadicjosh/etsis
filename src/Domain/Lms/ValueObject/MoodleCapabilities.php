@@ -8,6 +8,7 @@ namespace Domain\Lms\ValueObject;
 final readonly class MoodleCapabilities
 {
     public const array FUNCTIONS = [
+        "local_etsis_get_course_grade",
         "core_webservice_get_site_info",
         "local_etsis_get_instance_info",
         "local_etsis_get_account_policy",

@@ -78,6 +78,7 @@ try {
                 'check-graduation',
                 'check-service-fees',
                 'check-internal-transfers',
+                'check-moodle-grades',
                 'check-course-auditing',
                 'check-admission-notices',
                 'check-public-event-feed',
@@ -450,6 +451,18 @@ try {
                 static fn() => $admissionNotices->campus->cipher
             );
             require __DIR__ . '/AdmissionNoticesBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-moodle-grades') {
+            $kernel->bootstrap();
+            require_once __DIR__ . '/MoodleGradeImportFixture.php';
+            $moodleGradeFixture = new \Tests\Support\MoodleGradeImportFixture();
+            $httpSis = $moodleGradeFixture->sis;
+            require __DIR__ . '/SisHttpFixture.php';
+            $app->configContainer->setConfigKey('moodle', ['enabled' => true,
+                'grade_import_mode' => 'reviewed_final', 'sync_actor' => $sis->access->actor->value]);
+            $app->delegate(\Domain\Lms\Service\MoodleGradeGateway::class,
+                static fn() => $moodleGradeFixture->remote);
+            require __DIR__ . '/MoodleGradeImportBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-internal-transfers') {
             $kernel->bootstrap();

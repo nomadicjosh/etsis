@@ -12,6 +12,7 @@ use Domain\Lms\Service\MoodleBoundRecordReader as Bound;
 use Domain\Lms\Service\MoodleAccountProvisioner as Provisioner;
 use Domain\Lms\Service\MoodleAccountReceiptReader as Receipts;
 use Domain\Lms\Service\MoodleSectionGateway as Sections;
+use Domain\Lms\Service\MoodleGradeGateway as Grade;
 use Domain\Lms\ValueObject\MoodleAccountReceipt;
 use Domain\Lms\ValueObject\MoodleAccountPolicy;
 use Domain\Lms\ValueObject\MoodleAccountDraft;
@@ -34,7 +35,7 @@ use Qubus\Exception\Data\TypeException;
 use Throwable;
 
 /** Isolated client deliberately bypasses framework HTTP debug and observer hooks. */
-final readonly class RestMoodleGateway implements Probe, Reader, Identity, Bound, Provisioner, Receipts, Sections
+final readonly class RestMoodleGateway implements Probe, Reader, Identity, Bound, Provisioner, Receipts, Sections, Grade
 {
     public function __construct(private ConfigContainer $config, private Client $http = new Client())
     {
@@ -237,6 +238,40 @@ final readonly class RestMoodleGateway implements Probe, Reader, Identity, Bound
                 throw new MoodleConnectionUnavailableException();
             }
             return new \Domain\Lms\ValueObject\MoodleExternalId($result["course_id"]);
+        } catch (Throwable) {
+            throw new MoodleConnectionUnavailableException();
+        }
+    }
+    public function courseGrade(
+        MoodleBinding $binding,
+        MoodleExternalId $course,
+        MoodleExternalId $user,
+    ): \Domain\Gradebook\ValueObject\ExternalCourseGrade {
+        try {
+            $settings = $this->settings();
+            $deadline = microtime(true) + 10;
+            $available = $this->handshake($settings, $deadline)->describe();
+            if (
+                !$available['local_etsis_get_course_grade'] ||
+                !hash_equals($binding->siteFingerprint, hash('sha256', $settings['site']->value))
+            ) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            $result = $this->request($settings, 'local_etsis_get_course_grade', [
+                'instance_hash' => $binding->instanceFingerprint,
+                'course_id' => $course->value,
+                'user_id' => $user->value,
+            ], $deadline);
+            $this->assertCurrent($settings);
+            if (
+                count($result) !== 5 || ($result['protocol'] ?? null) !== 1 ||
+                ($result['instance_hash'] ?? null) !== $binding->instanceFingerprint ||
+                (string) ($result['course_id'] ?? '') !== $course->value ||
+                (string) ($result['user_id'] ?? '') !== $user->value || !is_array($result['grade'] ?? null)
+            ) {
+                throw new MoodleConnectionUnavailableException();
+            }
+            return new \Domain\Gradebook\ValueObject\ExternalCourseGrade($result['grade']);
         } catch (Throwable) {
             throw new MoodleConnectionUnavailableException();
         }

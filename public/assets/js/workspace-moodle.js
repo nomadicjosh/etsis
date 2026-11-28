@@ -83,6 +83,7 @@ window.createWorkspaceMoodle = function (ui) {
         enrol_manual_enrol_users: 'Manual enrollment',
         enrol_manual_unenrol_users: 'Manual unenrollment',
         gradereport_user_get_grade_items: 'User grade items',
+        local_etsis_get_course_grade: ui.gradeLabels.title,
     };
     const additionalFunctions = new Set([
         'core_course_create_courses', 'core_course_update_courses',
@@ -153,7 +154,7 @@ window.createWorkspaceMoodle = function (ui) {
                 node('p', {}, 'Functions needed depend on the features your institution enables. Advertisement confirms service availability; it does not verify course permissions or enable synchronization.'), list,
                 node('details', { class: 'mt-3' },
                     node('summary', { class: 'fw-semibold' }, 'Additional Moodle functions — not required by this connector'),
-                    node('p', { class: 'mt-2' }, 'Missing functions here are expected with the etSIS section synchronization service. Managed course access uses the connector’s own enrollment function. Section course creation uses the connector’s own creation function. Gradebook import remains future work.'), additionalList));
+                    node('p', { class: 'mt-2' }, ui.gradeLabels.connector_help), additionalList));
             results.hidden = false;
             results.querySelector('h3').focus();
         } catch (error) {
@@ -263,6 +264,10 @@ window.createWorkspaceMoodle = function (ui) {
                                 student_setup_required: 'Student sign-in or role setup is needed.', source_changed: 'SIS changes are waiting for the next run.',
                                 review_required: 'Synchronization stopped for review. Check institutional settings.' };
                             card.append(node('p', {}, `Moodle course ${item.moodle_course_id}. ${messages[item.issue] || 'Review section setup.'}`));
+                            if (can('sis:gradebook:amend') && can('sis:student:read')) card.append(node('button', {
+                                type: 'button', class: 'btn btn-outline-secondary text-start',
+                                onclick: event => task(() => ui.openGrades(item.id), event.currentTarget),
+                            }, node('i', { class: 'bi bi-journal-check me-2', 'aria-hidden': 'true' }), ui.gradeLabels.open));
                             if (item.members_needing_setup) card.append(node('p', { class: 'text-body-secondary' }, `${item.members_needing_setup} members still need setup. Review their account links and current SIS roles in the person workspace.`));
                             continue;
                         }
