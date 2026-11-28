@@ -17,6 +17,9 @@ interface PaymentGateway
     /** Remove an API credential once its session is known; retain signing and financial evidence. */
     public function checkpoint(array $record): ?string;
 
+    public function inspect(array $record): array;
+    public function perform(array $record, array $plan): void;
+
     public function receipt(array $record): ?\Domain\Finance\ValueObject\GatewayReceipt;
 
     /** @return array{session: string, url: string} */

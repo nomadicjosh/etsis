@@ -5,6 +5,9 @@ declare(strict_types=1);
 use function Codefy\Framework\Helpers\trans;
 
 return [
+    'payment_activity' => trans('Payment activity'),
+    'capture_reserve' => trans('Online capture reserved'),
+    'capture_progress' => trans('Online capture verification'),
     "title" => trans("Application and transcript fees"),
     "policies" => trans("Service fee policies"),
     "application" => trans("Application fee"),

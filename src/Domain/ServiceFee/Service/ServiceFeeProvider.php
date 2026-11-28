@@ -51,7 +51,7 @@ final readonly class ServiceFeeProvider
         );
         $details = [
             "payment_id" => $payment->value,
-            "minor" => (int) $record["amount_minor"],
+            "minor" => $confirmation["minor"],
             "currency" => $record["currency"],
             "channel" => "provider",
             "method" => "card",
@@ -62,6 +62,13 @@ final readonly class ServiceFeeProvider
         $reason =
         "Provider-authenticated service fee payment completing the retained payer checkout.";
         if ($root->receipt($operation->value) === null) {
+            $capture = $root->captures()[$payment->value] ?? null;
+            if (
+                $capture === null || $capture['state'] !== 'received'
+                || $capture['received_minor'] !== $confirmation['minor']
+            ) {
+                throw new CorruptHistoryException();
+            }
             $this->audit->record($actor, "service_fee.payment_confirmed", $fee);
             $current =
             $this->payments->find($payment) ??

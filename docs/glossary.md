@@ -316,6 +316,10 @@ The **receivable control account** is the financial account through which the in
 
 A **payment connection** identifies a verified provider merchant, currency, live/test mode and encrypted credentials. A **clearing asset** records gross funds received through that provider before bank settlement. A **payment route** chooses a connection for a purpose and currency. Each checkout retains its own connection revision and clearing assignment; editing today's setup does not move an earlier receipt. See [Payment connections](payment-gateways.md).
 
+### Card authorization / capture / reservation
+
+A **card authorization** asks the provider to hold funds without recording an SIS payment. **Capture** collects an authorized amount. A protected SIS **capture reservation** allocates the balance still owed while the server completes or verifies that collection. For example, a USD 100 checkout can capture USD 75 if the balance falls before reservation. **Funds received** means collection is verified but the financial receipt still awaits posting; it is separate from **Payment recorded**. See [Balance-limited online payments](payment-capture.md).
+
 ### Accounting period / reconciliation / closing
 
 An **accounting period** has inclusive dates in the institution's selected accounting timezone and is independent of academic terms. **Reconciliation** verifies its recorded activity against retained sources and checkpoints. **Closing** prevents further postings to that period; a reasoned authorized reopening retains the earlier closing decision. The accepted accounting date can differ from an academic or financial source's earlier business effective date. See [Reconcile and close](student-ledger-accounting.md#reconcile-and-close).

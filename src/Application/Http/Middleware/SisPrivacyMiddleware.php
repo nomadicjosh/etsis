@@ -132,6 +132,11 @@ final class SisPrivacyMiddleware implements MiddlewareInterface
                 ),
             };
             $response = PrivateErrorResponse::make($request, 422, $message);
+        } catch (\Domain\Payments\Exception\CapturePendingException) {
+            $response = PrivateErrorResponse::make($request, 409, trans(
+                'An online payment is being finalized. '
+                . 'Wait for verification or ask student accounts to review its activity.'
+            ));
         } catch (DomainException) {
             $response = PrivateErrorResponse::make($request, 409, 'The requested transition is not permitted.');
         } catch (Throwable) {

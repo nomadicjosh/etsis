@@ -71,6 +71,49 @@ if (
 ) {
     throw new RuntimeException('Disposable payment proposal cleanup was blocked during maintenance.');
 }
+$routeReview = $decodeGateway($teachingPost('/sis/payment-setup/review/route/', [
+    'purpose' => 'account', 'currency' => 'USD', 'version' => 0, 'connection_id' => $accepted['id'],
+    'reason' => 'Approve fictional account payment routing.',
+]));
+$decodeGateway($teachingPost('/sis/payment-setup/confirm/', [
+    'review_id' => $routeReview['review_id'], 'review_token' => $routeReview['review_token'],
+]));
+[$paymentAccount, $paymentCheckout] = $gatewayFixture->charged();
+$paymentId = \Domain\Shared\ValueObject\EntityId::generate();
+$paymentCheckout->checkout($paymentId, $paymentAccount);
+$activityPath = '/sis/payment-activity/account/' . $paymentAccount->value . '/';
+$decodeGateway($gatewayGet($activityPath));
+$decodeGateway($gatewayGet('/portal/api/payment-activity/account/' . $paymentAccount->value . '/'));
+$decodeGateway($teachingPost('/portal/api/payment-activity/' . $paymentId->value . '/retry/', []));
+$process = new \Symfony\Component\Console\Tester\CommandTester(
+    new \Application\Console\Commands\ProcessPaymentsCommand($app)
+);
+if (
+    $process->execute([]) !== 0 || $process->execute(['--apply' => true, '--limit' => '4']) !== 2
+    || $gatewayFixture->campus->payments->find($paymentId)['status'] !== 'pending'
+) {
+    throw new RuntimeException('Payment processing ran without an explicit bounded action.');
+}
+if (
+    $process->execute(['--apply' => true, '--limit' => '1']) !== 0
+    || $gatewayFixture->campus->payments->find($paymentId)['status'] !== 'paid'
+) {
+    throw new RuntimeException('The actual payment worker did not finish its fictional authorization.');
+}
+$ownerBefore = $sis->access->actor;
+$sis->access->actor = $sis->user();
+$sis->student();
+if ($gatewayGet('/portal/api/payment-activity/account/' . $paymentAccount->value . '/')->getStatusCode() !== 403) {
+    throw new RuntimeException('A staff duty bypassed portal payment ownership.');
+}
+$sis->access->actor = $ownerBefore;
+if (
+    \Application\Console\MaintenanceCommandPolicy::permits(new \Symfony\Component\Console\Input\StringInput(
+        'sis:payments:process --apply --limit=1'
+    ))
+) {
+    throw new RuntimeException('New payment work bypassed maintenance admission.');
+}
 $permission = $sis->sql->one('sis_access_permissions', ['name' => \Domain\Payments\Service\GatewaySetup::MANAGE]);
 $gatewayFixture->roles->assign(
     \Domain\Access\Enum\GrantKind::UserPermission,
@@ -84,6 +127,6 @@ if (
 ) {
     throw new RuntimeException('Payment setup accepted a missing current duty.');
 }
-if (count($gatewayFixture->client->calls) !== 1) {
+if (count(array_filter($gatewayFixture->client->calls, static fn(array $c): bool => $c[0] === 'probe')) !== 1) {
     throw new RuntimeException('Payment HTTP fixture made unexpected provider calls.');
 }

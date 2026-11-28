@@ -293,7 +293,11 @@ final readonly class SqlAccountEntryProjection
             if ((string) $event->aggregateId() !== (string) $account->aggregateId()) {
                 throw new CorruptHistoryException();
             }
-            if ($event instanceof StudentAccountWasOpened) {
+            if (
+                $event instanceof StudentAccountWasOpened
+                || $event instanceof \Domain\Finance\Event\AccountPaymentCaptureWasReserved
+                || $event instanceof \Domain\Finance\Event\AccountPaymentCaptureProgressWasRecorded
+            ) {
                 continue;
             }
             $p = $event->payload();

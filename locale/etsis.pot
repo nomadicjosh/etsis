@@ -13845,3 +13845,92 @@ msgstr ""
 #: src/Application/Http/Middleware/SisPrivacyMiddleware.php:130
 msgid "Test payment connections require an isolated local, development or testing installation."
 msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:8
+#: resources/views/shared/service-fee-labels.php:8
+msgid "Payment activity"
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:11
+msgid "Card authorization reserves funds with the provider. The server captures only the balance still owed."
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:14
+msgid "An online payment is being finalized. Conflicting balance reductions wait until verification finishes."
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:16
+msgid "Checkout open · No money recorded"
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:17
+msgid "Capture reserved · Verification in progress"
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:18
+msgid "Funds received · Awaiting ledger posting"
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:19
+msgid "Payment recorded"
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:20
+msgid "Authorization cancelled · No money collected"
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:21
+msgid "Checkout expired"
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:22
+msgid "Provider reconciliation required"
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:23
+msgid "Checkout amount"
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:24
+msgid "Maximum capture"
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:25
+msgid "Verified received amount"
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:26
+msgid "Request verification"
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:27
+msgid "Refresh payment activity"
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:28
+msgid "Verification is queued on the server. Refresh this activity after processing."
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:29
+msgid "No online checkouts on this page."
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:31
+msgid "Payment activity is unavailable with your current access."
+msgstr ""
+
+#: resources/views/shared/payment-activity-labels.php:33
+msgid "Student accounts must reconcile this provider outcome. Requesting verification cannot change the retained capture amount."
+msgstr ""
+
+#: src/Application/Http/Middleware/SisPrivacyMiddleware.php:137
+msgid "An online payment is being finalized. Wait for verification or ask student accounts to review its activity."
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:9
+msgid "Online capture reserved"
+msgstr ""
+
+#: resources/views/shared/service-fee-labels.php:10
+msgid "Online capture verification"
+msgstr ""

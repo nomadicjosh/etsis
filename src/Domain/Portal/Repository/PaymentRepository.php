@@ -26,4 +26,10 @@ interface PaymentRepository
     public function paid(EntityId $id, ?string $sealedGateway = null): void;
 
     public function expire(EntityId $id): void;
+    public function cancelled(EntityId $id, ?string $sealedGateway = null): void;
+    public function wake(EntityId $id, int $now): void;
+    public function claim(int $now): ?array;
+    public function finish(EntityId $id, int $version, string $state, int $dueAt): void;
+    public function work(EntityId $id): ?array;
+    public function forTarget(string $field, EntityId $target, ?EntityId $after = null): array;
 }

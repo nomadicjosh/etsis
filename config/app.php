@@ -187,6 +187,7 @@ return [
         \Application\Console\Commands\PruneAccountSetupCommand::class,
         \Application\Console\Commands\EmailVerificationCommand::class,
         \Application\Console\Commands\PrunePaymentReviewsCommand::class,
+        \Application\Console\Commands\ProcessPaymentsCommand::class,
         \Application\Console\Commands\SendCampaignMessagesCommand::class,
         \Application\Console\Commands\BootstrapAccessCommand::class,
         \Application\Console\Commands\MoodleCheckCommand::class,

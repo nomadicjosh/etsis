@@ -83,6 +83,39 @@ final readonly class ConfiguredPaymentGateway implements PaymentGateway
         }
     }
 
+    private function operationalBinding(array $record): array
+    {
+        $binding = $this->configuration->binding($record);
+        $c = $binding['connection'];
+        if (!$c['live'] && !$this->policy->allowTest()) {
+            throw new DomainException('Test payments cannot be processed in this installation.');
+        }
+        $row = $this->configuration->records->connection(new EntityId($c['id']));
+        if ($row !== null) {
+            $current = $this->configuration->connection($row);
+            foreach (['merchant', 'live', 'currency'] as $key) {
+                if ($current[$key] !== $c[$key]) {
+                    throw new DomainException('The payment connection identity changed.');
+                }
+            }
+            $binding['connection']['secret'] = $current['secret'];
+        }
+        if ($binding['connection']['secret'] === null) {
+            throw new DomainException('An authenticated payment credential is required for reconciliation.');
+        }
+        return $binding;
+    }
+
+    public function inspect(array $record): array
+    {
+        return $this->client->inspect($this->operationalBinding($record), $record['session_id']);
+    }
+
+    public function perform(array $record, array $plan): void
+    {
+        $this->client->perform($this->operationalBinding($record), $plan);
+    }
+
     public function checkpoint(array $record): ?string
     {
         return $this->configuration->checkpoint($record);
@@ -104,7 +137,8 @@ final readonly class ConfiguredPaymentGateway implements PaymentGateway
             if (
                 !in_array(
                     $hint['type'] ?? null,
-                    ['checkout.session.completed', 'checkout.session.async_payment_succeeded'],
+                    ['checkout.session.completed', 'checkout.session.async_payment_succeeded',
+                    'checkout.session.expired'],
                     true
                 )
             ) {

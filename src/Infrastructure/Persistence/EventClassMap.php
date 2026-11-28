@@ -138,6 +138,8 @@ final class EventClassMap
             PasswordWasChanged::class,
             RoleWasChanged::class,
             StudentAccountWasOpened::class,
+            \Domain\Finance\Event\AccountPaymentCaptureWasReserved::class,
+            \Domain\Finance\Event\AccountPaymentCaptureProgressWasRecorded::class,
             AccountEntryWasPosted::class,
         ];
     }

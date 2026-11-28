@@ -37,6 +37,7 @@ final readonly class EventSourcedAccountRepository implements AccountRepository
             throw new \LogicException('The account event stream could not be restored.');
         }
 
+        $account->assertCaptureBudget();
         return $account;
     }
 
@@ -70,6 +71,7 @@ final readonly class EventSourcedAccountRepository implements AccountRepository
                     'currency' => $account->balance()->currency,
                 ]);
             }
+            $account->assertCaptureBudget();
             $this->writer->append($account, $context);
             $this->ledger->advance($account, $events, $context);
             new \Infrastructure\Projection\SqlAccountBalanceProjection(

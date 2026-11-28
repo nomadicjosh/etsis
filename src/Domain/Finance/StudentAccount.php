@@ -130,6 +130,96 @@ final class StudentAccount extends EventSourcedAggregate
         return $source === null ? [] : ['charge_source' => $source->value, 'charge_source_label' => $source->label()];
     }
 
+    private array $captureStates = [];
+
+    public function captures(): array
+    {
+        return $this->captureStates;
+    }
+
+    public function reserveCapture(array $plan): void
+    {
+        $old = $this->captureStates[$plan['payment_id']] ?? null;
+        if ($old !== null) {
+            if ($old['plan'] !== $plan) {
+                throw new DomainException('This payment already has a different capture plan.');
+            }
+            return;
+        }
+        \Domain\Payments\ValueObject\CaptureState::reserve(
+            $this->captureStates,
+            $plan,
+            $this->balance->minor,
+            $this->balance->currency
+        );
+        $this->recordThat(\Domain\Finance\Event\AccountPaymentCaptureWasReserved::occur(
+            $this->aggregateId(),
+            $plan,
+            [Metadata::AGGREGATE_TYPE => 'student_account']
+        ));
+    }
+
+    public function captureProgress(array $progress): void
+    {
+        $old = $this->captureStates[$progress['payment_id']] ?? throw new DomainException('Unknown capture.');
+        if ($old['state'] === $progress['state'] && $old['received_minor'] === $progress['received_minor']) {
+            return;
+        }
+        \Domain\Payments\ValueObject\CaptureState::advance($this->captureStates, $progress);
+        $this->recordThat(\Domain\Finance\Event\AccountPaymentCaptureProgressWasRecorded::occur(
+            $this->aggregateId(),
+            $progress,
+            [Metadata::AGGREGATE_TYPE => 'student_account']
+        ));
+        if ($progress['state'] === 'paid') {
+            $plan = $old['plan'];
+            $this->post(
+                new EntityId($plan['payment_id']),
+                EntryType::Payment,
+                new Money($progress['received_minor'], $plan['currency']),
+                new EntityId($plan['owner_id']),
+                gatewayReceipt: new \Domain\Finance\ValueObject\GatewayReceipt($plan['receipt'])
+            );
+        }
+    }
+
+    public function assertCaptureBudget(): void
+    {
+        \Domain\Payments\ValueObject\CaptureState::assertBudget($this->captureStates, $this->balance->minor);
+        foreach ($this->captureStates as $id => $state) {
+            if ($state['state'] !== 'paid') {
+                continue;
+            }
+            $entry = $this->operations[$id] ?? null;
+            if (
+                $entry === null || $entry['type'] !== 'payment' || $entry['minor'] !== $state['received_minor']
+                || ($this->gatewayReceipts[$id] ?? null)?->values() !== $state['plan']['receipt']
+            ) {
+                throw new DomainException('The capture completion is missing its exact financial receipt.');
+            }
+        }
+    }
+
+    protected function whenAccountPaymentCaptureWasReserved(
+        \Domain\Finance\Event\AccountPaymentCaptureWasReserved $event,
+    ): void {
+        $this->captureStates = \Domain\Payments\ValueObject\CaptureState::reserve(
+            $this->captureStates,
+            $event->payload(),
+            $this->balance->minor,
+            $this->balance->currency
+        );
+    }
+
+    protected function whenAccountPaymentCaptureProgressWasRecorded(
+        \Domain\Finance\Event\AccountPaymentCaptureProgressWasRecorded $event,
+    ): void {
+        $this->captureStates = \Domain\Payments\ValueObject\CaptureState::advance(
+            $this->captureStates,
+            $event->payload()
+        );
+    }
+
     public static function open(AccountId $id, EntityId $studentId, EntityId $termId, string $currency): self
     {
         $money = new Money(0, $currency);
@@ -220,6 +310,12 @@ final class StudentAccount extends EventSourcedAggregate
             || $gatewayReceipt->values()['asset']['currency'] !== $amount->currency)
         ) {
             throw new DomainException('Gateway assignment belongs to its exact provider payment.');
+        }
+        if (
+            isset($this->captureStates[$operationId->value])
+            && ($gatewayReceipt === null || $this->captureStates[$operationId->value]['state'] !== 'paid')
+        ) {
+            throw new DomainException('This identifier belongs to a protected online payment capture.');
         }
         $chargeSource ??= $staffRecorded && $type === EntryType::Charge ? ChargeSource::Manual : null;
         $chargeSource?->validate($type->value, $staffRecorded, $registrationPrice !== null);

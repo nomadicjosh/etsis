@@ -29,6 +29,7 @@ final readonly class HostedCheckout
     {
         $id = new EntityId($record["id"]);
         if (!empty($record["encrypted_url"])) {
+            $this->transactions->run(fn() => $this->payments->wake($id, $this->clock->now()->getTimestamp()));
             return $this->cipher->open($record["encrypted_url"]);
         }
         if (
@@ -59,6 +60,7 @@ final readonly class HostedCheckout
                 $this->cipher->seal($session["url"]),
                 $checkpoint,
             );
+            $this->payments->wake($id, $this->clock->now()->getTimestamp());
         });
         return $session["url"];
     }

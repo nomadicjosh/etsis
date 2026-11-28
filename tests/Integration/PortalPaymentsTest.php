@@ -111,6 +111,7 @@ final class PortalPaymentsTest extends TestCase
             'minor' => 12344, 'currency' => 'USD'];
         try {
             $c->confirmation->receive('{}', 'fictional-valid-signature');
+            $c->worker()->run();
             self::fail('A mismatched amount was posted.');
         } catch (DomainException) {
             self::assertSame('pending', $c->payments->find($id)['status']);
@@ -119,13 +120,16 @@ final class PortalPaymentsTest extends TestCase
         $c->gateway->confirmation['currency'] = 'EUR';
         try {
             $c->confirmation->receive('{}', 'fictional-valid-signature');
+            $c->worker()->run();
             self::fail('A mismatched currency was posted.');
         } catch (DomainException) {
             self::assertSame('pending', $c->payments->find($id)['status']);
         }
         $c->gateway->confirmation['currency'] = 'USD';
         $c->confirmation->receive('{}', 'fictional-valid-signature');
+        $c->worker()->run();
         $c->confirmation->receive('{}', 'fictional-valid-signature');
+        $c->worker()->run();
         self::assertSame('paid', $c->payments->find($id)['status']);
         $statement = $c->service->statement(new AccountId($account->value));
         self::assertSame(0, $statement['balance_minor']);

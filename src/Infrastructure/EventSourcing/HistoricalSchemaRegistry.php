@@ -572,6 +572,15 @@ final readonly class HistoricalSchemaRegistry
                 "root" => \Domain\Finance\StudentAccount::class,
                 "fields" => ["student_id", "term_id", "currency"],
             ],
+            \Domain\Finance\Event\AccountPaymentCaptureWasReserved::class => [
+                'type' => 'student_account', 'root' => \Domain\Finance\StudentAccount::class,
+                'fields' => ['payment_id', 'session', 'intent', 'authorized_minor', 'minor', 'currency',
+                    'owner_id', 'receipt'],
+            ],
+            \Domain\Finance\Event\AccountPaymentCaptureProgressWasRecorded::class => [
+                'type' => 'student_account', 'root' => \Domain\Finance\StudentAccount::class,
+                'fields' => ['payment_id', 'state', 'received_minor'],
+            ],
             \Domain\Finance\Event\AccountEntryWasPosted::class => [
                 "type" => "student_account",
                 "root" => \Domain\Finance\StudentAccount::class,
@@ -689,6 +698,11 @@ final readonly class HistoricalSchemaRegistry
         int $version,
     ): void {
         try {
+            if ($class === \Domain\Finance\Event\AccountPaymentCaptureWasReserved::class) {
+                \Domain\Payments\ValueObject\CaptureState::plan($payload);
+            } elseif ($class === \Domain\Finance\Event\AccountPaymentCaptureProgressWasRecorded::class) {
+                \Domain\Payments\ValueObject\CaptureState::progress($payload);
+            }
             $definition = $this->definition($class);
             if (
                 in_array(
@@ -1243,6 +1257,8 @@ final readonly class HistoricalSchemaRegistry
                 // This complete payload is validated by its bounded typed schema above.
                 if (
                     in_array($class, [
+                    \Domain\Finance\Event\AccountPaymentCaptureWasReserved::class,
+                    \Domain\Finance\Event\AccountPaymentCaptureProgressWasRecorded::class,
                     \Domain\Finance\Event\LedgerBookWasPublished::class,
                     \Domain\Finance\Event\LedgerPeriodWasRecorded::class,
                     \Domain\ServiceFee\Event\ServiceFeeDecisionWasRecorded::class,
@@ -1906,6 +1922,7 @@ final readonly class HistoricalSchemaRegistry
                 throw new CorruptHistoryException();
             }
             if (
+                $class !== \Domain\Finance\Event\AccountPaymentCaptureWasReserved::class &&
                 array_key_exists("minor", $payload) &&
                 (!is_int($payload["minor"]) || $payload["minor"] < 1 || $payload["minor"] > 2000000000)
             ) {

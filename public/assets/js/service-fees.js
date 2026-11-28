@@ -25,7 +25,10 @@ window.createServiceFees = function (ui) {
     }
     async function ownerGate(host, data, onClear) {
         host.replaceChildren();
+        host.removeAttribute('role'); host.removeAttribute('aria-label');
         if (!data.required || data.cleared) { await onClear(data); return; }
+        host.setAttribute('role', 'region'); host.setAttribute('aria-label', l.due);
+        if (ui.activity) host.append(button(l.payment_activity, () => ui.activity('fee', data.fee_id), 'credit-card'));
         host.append(summary(data), node('p', {}, l.checkout_help), node('p', {}, l.contact));
         host.append(node('div', { class: 'd-flex flex-wrap gap-2' },
             button(l.pay, async () => {
@@ -44,6 +47,7 @@ window.createServiceFees = function (ui) {
         if (!after) host.replaceChildren(node('h2', { class: 'h4' }, l.title));
         for (const data of page.items.filter(item => item.purpose === purpose)) {
             const box = summary(data);
+            if (ui.activity) box.append(button(l.payment_activity, () => ui.activity('fee', data.fee_id), 'credit-card'));
             if (!data.applied_to && resume) box.append(button(l.resume, () => resume(data), 'arrow-right'));
             box.append(button(l.history, () => history(box, data, 'owner'), 'clock-history'));
             host.append(box);
@@ -128,6 +132,7 @@ window.createServiceFees = function (ui) {
         if (recordBack) host.append(button(l.back, recordBack, 'arrow-left'));
         host.append(node('section', { class: 'my-3', 'aria-label': l.back_fees },
             button(l.back_fees, back, 'arrow-left')), summary(data));
+        if (ui.activity) host.append(button(l.payment_activity, () => ui.activity('fee', id, () => detail(id, back, recordBack)), 'credit-card'));
         const actions = node('div', { class: 'd-flex flex-wrap gap-2 mb-3' });
         if (!data.cleared && !data.applied_to) actions.append(button(l.payment, () => decision(data, 'payment', back, {}, recordBack), 'cash-coin'));
         if (!data.cleared && !data.applied_to && data.policy.waivers) actions.append(button(l.waive, () => decision(data, 'waive', back, {}, recordBack), 'shield-check'));

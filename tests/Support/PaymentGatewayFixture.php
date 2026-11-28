@@ -148,11 +148,8 @@ final class PaymentGatewayFixture
         $confirmation = new \Domain\Portal\Service\PaymentConfirmationService(
             $this->gateway,
             $this->campus->payments,
-            $s->accounts,
             $s->transactions,
-            $s->audit,
             $s->clock,
-            $s->feeProvider()
         );
         return [$id, $checkout, $confirmation];
     }

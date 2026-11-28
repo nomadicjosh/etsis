@@ -82,6 +82,15 @@ final class FeeSchema
             throw new CorruptHistoryException();
         }
         switch ($p["action"]) {
+            case 'capture_reserve':
+                \Domain\Payments\ValueObject\CaptureState::plan($d);
+                break;
+            case 'capture_progress':
+                \Domain\Payments\ValueObject\CaptureState::progress($d);
+                if ($d['state'] === 'paid') {
+                    throw new CorruptHistoryException();
+                }
+                break;
             case "assess":
                 self::keys($d, [
                     "person_id",

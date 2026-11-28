@@ -30,6 +30,8 @@ final class FixturePaymentGateway implements PaymentGateway
     public bool $failOnce = false;
     public array $calls = [];
     public ?array $confirmation = null;
+    public array $states = [];
+    public ?\Closure $onPerform = null;
 
     public function enabled(string $purpose = 'account', ?string $currency = null): bool
     {
@@ -48,7 +50,26 @@ final class FixturePaymentGateway implements PaymentGateway
 
     public function receipt(array $record): ?\Domain\Finance\ValueObject\GatewayReceipt
     {
-        return null;
+        return new \Domain\Finance\ValueObject\GatewayReceipt(['connection_id' => '00000000000000000000000001',
+            'version' => 1, 'provider' => 'stripe', 'merchant' => 'acct_fictional', 'live' => false,
+            'asset' => ['id' => '00000000000000000000000002', 'code' => 'FAKE.CLEAR', 'title' => 'Fictional clearing',
+                'currency' => $record['currency'], 'kind' => 'asset']]);
+    }
+
+    public function inspect(array $record): array
+    {
+        return $this->states[$record['id']] ?? ['state' => 'authorized', 'session' => $record['session_id'],
+            'intent' => 'pi_test_' . $record['id'], 'authorized_minor' => (int) $record['amount_minor'],
+            'currency' => $record['currency'], 'received_minor' => 0];
+    }
+
+    public function perform(array $record, array $plan): void
+    {
+        ($this->onPerform)?->__invoke($record, $plan);
+        $this->states[$record['id']] = ['state' => $plan['minor'] === 0 ? 'cancelled' : 'paid',
+            'session' => $record['session_id'], 'intent' => $plan['intent'],
+            'authorized_minor' => (int) $record['amount_minor'],
+            'currency' => $record['currency'], 'received_minor' => $plan['minor']];
     }
 
     public function checkout(EntityId $payment, Money $amount, int $expiresAt, string $purpose = 'account'): array
@@ -108,6 +129,28 @@ final class CampusFixture
             null,
             $review['review_token'],
         );
+    }
+
+    public function worker(
+        ?\Domain\Portal\Service\PaymentGateway $gateway = null,
+        ?\Domain\Audit\Repository\AuditTrail $audit = null,
+    ): \Domain\Payments\Service\CaptureWorker {
+        $s = $this->sis;
+        $gateway ??= $this->gateway;
+        $ledger = new \Domain\Payments\Service\CaptureLedger(
+            $s->accounts,
+            $s->feeLedger(),
+            new \Infrastructure\Persistence\Repository\SqlServiceFeeRepository($s->sql),
+            $s->feeProvider(),
+            $s->admissions,
+            $s->ledgerControl()->records,
+            $this->payments,
+            $gateway,
+            $s->transactions,
+            $audit ?? $s->audit,
+            $s->clock
+        );
+        return new \Domain\Payments\Service\CaptureWorker($this->payments, $gateway, $ledger, $s->transactions, $s->clock);
     }
 
     public function __construct()
@@ -250,11 +293,8 @@ final class CampusFixture
         $this->confirmation = new PaymentConfirmationService(
             $this->gateway,
             $this->payments,
-            $f->accounts,
             $f->transactions,
-            $f->audit,
             $f->clock,
-            $f->feeProvider(),
         );
     }
 }

@@ -27,7 +27,14 @@
     }) : null;
     void notifications?.loadPreferences();
     const feedbackText = (key, fallback) => notificationLabels[key] || fallback;
-    const serviceFees = window.createServiceFees({ node: el, request, task, labels: config.service_fee_labels });
+    const paymentActivity = window.createPaymentActivity({ node: el, request, task, labels: config.payment_activity_labels,
+        prefix: "/portal/api", open: title => { const body = el("div"); dialog(title, body); return body; } });
+    const serviceFees = window.createServiceFees({ activity: (kind, id, back = null) => {
+        const previous = [...one('#campus-dialog-body').childNodes], heading = one('#campus-dialog-title').textContent;
+        const wasOpen = one('#campus-dialog').classList.contains('show');
+        return paymentActivity.open(kind, id, back || (wasOpen ? (() => dialog(heading, ...previous))
+            : (() => bootstrap.Modal.getInstance(one('#campus-dialog'))?.hide())));
+    }, node: el, request, task, labels: config.service_fee_labels });
     let me = null;
     let addToRegistrationPlan = null;
     let dialogOpener = null;
@@ -2539,6 +2546,7 @@
                     el(
                         'div',
                         { class: 'campus-actions mt-3' },
+                        button(config.payment_activity_labels.title, () => paymentActivity.open('account', account.id, async () => { bootstrap.Modal.getInstance(one('#campus-dialog'))?.hide(); await renderService(); })),
                         button('View statement', async () => {
                             const statement = await request(
                                 `/portal/api/accounts/${account.id}/`,
@@ -2610,7 +2618,7 @@
                                           el(
                                               'p',
                                               {},
-                                              'Continue to secure hosted checkout to pay this balance. Your card details are entered with the payment provider, never stored in the SIS.',
+                                              config.payment_activity_labels.intro,
                                           ),
                                           button(
                                               'Continue to secure checkout',

@@ -10,6 +10,8 @@ interface GatewayClient
     public function merchant(#[\SensitiveParameter] string $secret): string;
     /** @return array{session:string,url:string} */
     public function checkout(#[\SensitiveParameter] array $binding, string $baseUrl): array;
+    public function inspect(#[\SensitiveParameter] array $binding, string $session): array;
+    public function perform(#[\SensitiveParameter] array $binding, array $plan): void;
     public function verify(
         #[\SensitiveParameter] string $body,
         #[\SensitiveParameter] string $signature,

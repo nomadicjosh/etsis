@@ -23,6 +23,7 @@ final readonly class ServiceFeeLedger
     public function __construct(
         private ServiceFeeRepository $records,
         private HistoricalEventStore $history,
+        private \Domain\Finance\Repository\LedgerControlRepository $controls,
     ) {
     }
     public static function stream(EntityId $fee): StreamReference
@@ -92,6 +93,7 @@ final readonly class ServiceFeeLedger
         EventContext $context,
         ?HistoryReadBudget $budget = null,
     ): ServiceFee {
+        $this->controls->lock();
         $root = $this->load($fee, $budget);
         $intent = FeeSchema::hash([
             $fee->value,

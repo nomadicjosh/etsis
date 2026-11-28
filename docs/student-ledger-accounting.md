@@ -46,6 +46,8 @@ Manual journals retain their explicitly selected accounting dates. Once mapping 
 
 For a configured online student-account receipt, the [checkout's retained gateway clearing asset](payment-gateways.md) overrides the generic payment counterpart. It records the gross processor receipt, with a credit to receivables. Changing the connection or default payment mapping cannot move that earlier receipt or its linked reversal/correction. Bank settlements, processor expense and service-fee GL income remain separate workflows.
 
+[Online card capture](payment-capture.md) reserves the balance still owed before collecting funds. Reservation and provider-observation events do not create money entries or GL journals; they protect the budget and retain actual received-money evidence. Receipt posting releases the reservation and commits the payment/journal together. Missing or closed periods leave verified funds in **Funds received → Awaiting ledger posting**, rather than losing the observation or requesting another payment. Resolve the period/setup boundary and resume server verification through **Payment activity**. While a reservation is active, conflicting credits, receipts, corrections and reversals cannot reduce its available balance.
+
 ## Open an accounting period
 
 Choose **Open an accounting period**, enter its label and inclusive first/last accounting dates, record a reason, review and confirm. Periods in the same currency cannot overlap. Their dates are independent of academic terms, so do not use term codes as accounting-period identities.

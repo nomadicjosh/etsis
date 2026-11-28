@@ -1452,6 +1452,11 @@ return static function (Psr7Router $router): void {
     $router->map(['POST'], '/sis/payment-setup/review/{kind}/', [$gateways, 'review'])
         ->name('sis.payment_setup.review');
     $router->map(['POST'], '/sis/payment-setup/confirm/', [$gateways, 'confirm'])->name('sis.payment_setup.confirm');
+    $activity = \Application\Http\Controller\PaymentActivityController::class;
+    $router->map(['GET'], '/sis/payment-activity/{kind}/{id}/', [$activity, 'staffShow'])
+        ->name('sis.payment_activity.show');
+    $router->map(['POST'], '/sis/payment-activity/{id}/retry/', [$activity, 'staffRetry'])
+        ->name('sis.payment_activity.retry');
     $accounting = \Application\Http\Controller\SisAccountingController::class;
     $router->map(['GET'], '/sis/accounting/', [$accounting, 'overview'])->name('sis.accounting.overview');
     $router->map(['POST'], '/sis/accounting/mapping/review/', [$accounting, 'mapping'])->name('sis.accounting.mapping');

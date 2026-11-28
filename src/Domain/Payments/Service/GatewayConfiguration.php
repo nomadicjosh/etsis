@@ -162,16 +162,17 @@ final readonly class GatewayConfiguration
     public function bind(EntityId $id, array $row, string $baseUrl): array
     {
         $connection = $this->select($row['purpose'], $row['currency'], true);
-        return $row + ['sealed_gateway' => $this->seal(['kind' => 'checkout', 'base_url' => $baseUrl,
+        return $row + ['sealed_gateway' => $this->seal([
+            'kind' => 'checkout', 'capture' => 'manual', 'base_url' => $baseUrl,
             'payment' => self::payment($id, $row), 'connection' => $connection])];
     }
 
     public function binding(array $row): array
     {
         $data = $this->open($row['sealed_gateway'] ?? '');
-        \Domain\Finance\ValueObject\LedgerSchema::keys($data, ['kind', 'base_url', 'payment', 'connection']);
+        \Domain\Finance\ValueObject\LedgerSchema::keys($data, ['kind', 'capture', 'base_url', 'payment', 'connection']);
         if (
-            ($data['kind'] ?? null) !== 'checkout'
+            ($data['kind'] ?? null) !== 'checkout' || ($data['capture'] ?? null) !== 'manual'
             || ($data['payment'] ?? null) !== self::payment(new EntityId($row['id']), $row)
         ) {
             throw new DomainException('Checkout does not match its retained payment configuration.');
@@ -190,7 +191,9 @@ final readonly class GatewayConfiguration
     public function checkpoint(array $row): string
     {
         $binding = $this->binding($row);
-        $binding['connection']['secret'] = null;
+        if (in_array($row['status'], ['paid', 'cancelled'], true)) {
+            $binding['connection']['secret'] = null;
+        }
         return $this->seal($binding);
     }
 

@@ -497,6 +497,10 @@ final class SisServiceProvider extends CodefyServiceProvider
         foreach ($bindings as $port => $adapter) {
             $this->codefy->alias($port, $adapter);
         }
+        $this->codefy->delegate(
+            \Infrastructure\Payments\StripeGatewayClient::class,
+            static fn() => new \Infrastructure\Payments\StripeGatewayClient()
+        );
         $this->codefy->delegate(\Infrastructure\EventSourcing\SqlHistoricalEventStore::class, fn () =>
             new \Infrastructure\EventSourcing\SqlHistoricalEventStore(
                 $this->codefy->make(\Infrastructure\Persistence\SqlRecords::class),

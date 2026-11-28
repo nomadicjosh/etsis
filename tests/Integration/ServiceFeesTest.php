@@ -288,6 +288,7 @@ final class ServiceFeesTest extends TestCase
         ];
         try {
             $c->confirmation->receive("{}", "fictional-valid-signature");
+            $c->worker()->run();
             self::fail("Mismatched payment.");
         } catch (\DomainException) {
             self::assertFalse($f->fees()->show($fee, "owner")["cleared"]);
@@ -295,7 +296,9 @@ final class ServiceFeesTest extends TestCase
         $c->gateway->confirmation["minor"] = 2500;
         $c->gateway->available = false;
         $c->confirmation->receive("{}", "fictional-valid-signature");
+        $c->worker()->run();
         $c->confirmation->receive("{}", "fictional-valid-signature");
+        $c->worker()->run();
         self::assertTrue($f->fees()->show($fee, "owner")["cleared"]);
         self::assertCount(1, $f->fees()->show($fee, "owner")["payments"]);
         self::assertSame(
@@ -307,7 +310,7 @@ final class ServiceFeesTest extends TestCase
             $checkout->checkout($fee),
         );
     }
-    public function testLatePaymentAfterWaiverAndApplicationStillRecordsActualMoney(): void
+    public function testLateAuthorizationAfterWaiverAndApplicationIsCancelledWithoutCollectingFunds(): void
     {
         [$c, $s, $fee] = $this->fixture();
         $f = $c->sis;
@@ -332,7 +335,8 @@ final class ServiceFeesTest extends TestCase
             "currency" => "USD",
         ];
         $c->confirmation->receive("{}", "fictional-valid-signature");
-        self::assertSame(2500, $f->fees()->show($fee, "staff")["net_minor"]);
+        $c->worker()->run();
+        self::assertSame(0, $f->fees()->show($fee, "staff")["net_minor"]);
         self::assertTrue($f->fees()->show($fee, "staff")["waived"]);
         self::assertSame(
             $fee->value,
@@ -498,7 +502,7 @@ final class ServiceFeesTest extends TestCase
         self::assertCount(2, $f->sql->rows("sis_applications"));
         self::assertSame([], $f->sql->rows("sis_student_accounts"));
     }
-    public function testChangedBalanceCreatesANewCheckoutAndBothLatePaymentsRemainRecorded(): void
+    public function testChangedBalanceAndMultipleAuthorizationsCannotExceedTheFeeBalance(): void
     {
         [$c, $s, $fee] = $this->fixture();
         $f = $c->sis;
@@ -515,9 +519,10 @@ final class ServiceFeesTest extends TestCase
                 "currency" => "USD",
             ];
             $c->confirmation->receive("{}", "fictional-valid-signature");
+            $c->worker()->run();
         }
-        self::assertSame(5000, $f->fees()->show($fee, "staff")["net_minor"]);
-        self::assertCount(3, $f->fees()->show($fee, "staff")["payments"]);
+        self::assertSame(2500, $f->fees()->show($fee, "staff")["net_minor"]);
+        self::assertCount(2, $f->fees()->show($fee, "staff")["payments"]);
     }
     public function testAuthenticatedConfirmationCanArriveBeforeUrlAttachment(): void
     {
@@ -542,6 +547,7 @@ final class ServiceFeesTest extends TestCase
             "currency" => "USD",
         ];
         $c->confirmation->receive("{}", "fictional-valid-signature");
+        $c->worker()->run();
         self::assertSame("paid", $c->payments->find($payment)["status"]);
         self::assertSame(2500, $f->fees()->show($fee, "staff")["net_minor"]);
         $f->sql->update(

@@ -5743,3 +5743,265 @@ msgstr ""
 #: src/Application/Http/Middleware/SisPrivacyMiddleware.php:130
 msgid "Test payment connections require an isolated local, development or testing installation."
 msgstr ""
+
+#: public/themes/campus-harbor/layouts/portal/view.php:167
+#: public/themes/campus-harbor/layouts/portal/view.php:306
+msgid "Recent notifications"
+msgstr "Recent notifications"
+
+#: public/themes/campus-harbor/layouts/portal/view.php:195
+msgid "Programs"
+msgstr "Programs"
+
+#: public/themes/campus-harbor/layouts/portal/view.php:229
+msgid "Additional website links"
+msgstr "Additional website links"
+
+#: public/themes/campus-harbor/layouts/portal/view.php:251
+msgid "Explore programs"
+msgstr "Explore programs"
+
+#: public/themes/campus-harbor/layouts/portal/view.php:307
+msgid "Campus notification"
+msgstr "Campus notification"
+
+#: public/themes/campus-harbor/layouts/portal/view.php:308
+msgid "There are no notifications from this page."
+msgstr "There are no notifications from this page."
+
+#: public/themes/campus-harbor/layouts/portal/view.php:310
+msgid "Recent action feedback stays only in this page. Reloading or signing out clears it. Check the relevant service for your current records and request status."
+msgstr "Recent action feedback stays only in this page. Reloading or signing out clears it. Check the relevant service for your current records and request status."
+
+#: resources/views/backend/workspace/index.phtml:24
+msgid "People"
+msgstr "People"
+
+#: resources/views/backend/workspace/index.phtml:25
+msgid "Admissions"
+msgstr "Admissions"
+
+#: resources/views/backend/workspace/index.phtml:26
+msgid "Students"
+msgstr "Students"
+
+#: resources/views/backend/workspace/index.phtml:27
+msgid "Academic catalog"
+msgstr "Academic catalog"
+
+#: resources/views/backend/workspace/index.phtml:30
+msgid "My teaching"
+msgstr "My teaching"
+
+#: resources/views/backend/workspace/index.phtml:31
+msgid "Registration"
+msgstr "Registration"
+
+#: resources/views/backend/workspace/index.phtml:32
+msgid "Holds & restrictions"
+msgstr "Holds & restrictions"
+
+#: resources/views/backend/workspace/index.phtml:33
+msgid "Transfer credit"
+msgstr "Transfer credit"
+
+#: resources/views/backend/workspace/index.phtml:34
+msgid "Spaces & scheduling"
+msgstr "Spaces & scheduling"
+
+#: resources/views/backend/workspace/index.phtml:35
+msgid "Student accounts"
+msgstr "Student accounts"
+
+#: resources/views/backend/workspace/index.phtml:36
+msgid "Team & timesheets"
+msgstr "Team & timesheets"
+
+#: resources/views/backend/workspace/index.phtml:37
+msgid "Communications"
+msgstr "Communications"
+
+#: resources/views/backend/workspace/index.phtml:38
+msgid "Transcript requests"
+msgstr "Transcript requests"
+
+#: resources/views/backend/workspace/index.phtml:39
+msgid "Campus content"
+msgstr "Campus content"
+
+#: resources/views/backend/workspace/index.phtml:42
+msgid "Shared reports"
+msgstr "Shared reports"
+
+#: resources/views/backend/workspace/index.phtml:43
+msgid "Reports"
+msgstr "Reports"
+
+#: resources/views/backend/workspace/index.phtml:44
+msgid "Application forms"
+msgstr "Application forms"
+
+#: resources/views/backend/workspace/index.phtml:46
+msgid "Rules & audiences"
+msgstr "Rules & audiences"
+
+#: resources/views/backend/workspace/index.phtml:47
+msgid "Roles & access"
+msgstr "Roles & access"
+
+#: resources/views/backend/workspace/index.phtml:48
+msgid "Moodle integration"
+msgstr "Moodle integration"
+
+#: resources/views/backend/workspace/index.phtml:49
+msgid "Page builder"
+msgstr "Page builder"
+
+#: resources/views/backend/workspace/index.phtml:50
+msgid "Website replies"
+msgstr "Website replies"
+
+#: resources/views/backend/workspace/index.phtml:51
+msgid "Newsletter connections"
+msgstr "Newsletter connections"
+
+#: resources/views/backend/workspace/index.phtml:60
+msgid "YOUR CAMPUS"
+msgstr "YOUR CAMPUS"
+
+#: resources/views/backend/workspace/index.phtml:60
+msgid "Campus"
+msgstr "Campus"
+
+#: resources/views/backend/workspace/index.phtml:60
+msgid "Campus navigation"
+msgstr "Campus navigation"
+
+#: resources/views/backend/workspace/index.phtml:61
+msgid "DAILY OPERATIONS"
+msgstr "DAILY OPERATIONS"
+
+#: resources/views/backend/workspace/index.phtml:61
+msgid "Operations"
+msgstr "Operations"
+
+#: resources/views/backend/workspace/index.phtml:61
+msgid "Operations navigation"
+msgstr "Operations navigation"
+
+#: resources/views/backend/workspace/index.phtml:62
+msgid "BUILD & EXPLORE"
+msgstr "BUILD & EXPLORE"
+
+#: resources/views/backend/workspace/index.phtml:62
+msgid "Tools"
+msgstr "Tools"
+
+#: resources/views/backend/workspace/index.phtml:62
+msgid "Tools navigation"
+msgstr "Tools navigation"
+
+#: resources/views/backend/workspace/index.phtml:308
+msgid "CAMPUS WORKSPACE"
+msgstr "CAMPUS WORKSPACE"
+
+#: resources/views/backend/workspace/index.phtml:319
+msgid "Campus operations"
+msgstr "Campus operations"
+
+#: resources/views/backend/workspace/index.phtml:320
+msgid "Academic & administrative tools"
+msgstr "Academic & administrative tools"
+
+#: resources/views/backend/workspace/index.phtml:377
+msgid "Collapse navigation sidebar"
+msgstr "Collapse navigation sidebar"
+
+#: resources/views/shared/payment-activity-labels.php:8
+#: resources/views/shared/service-fee-labels.php:8
+msgid "Payment activity"
+msgstr "Payment activity"
+
+#: resources/views/shared/payment-activity-labels.php:11
+msgid "Card authorization reserves funds with the provider. The server captures only the balance still owed."
+msgstr "Card authorization reserves funds with the provider. The server captures only the balance still owed."
+
+#: resources/views/shared/payment-activity-labels.php:14
+msgid "An online payment is being finalized. Conflicting balance reductions wait until verification finishes."
+msgstr "An online payment is being finalized. Conflicting balance reductions wait until verification finishes."
+
+#: resources/views/shared/payment-activity-labels.php:16
+msgid "Checkout open · No money recorded"
+msgstr "Checkout open · No money recorded"
+
+#: resources/views/shared/payment-activity-labels.php:17
+msgid "Capture reserved · Verification in progress"
+msgstr "Capture reserved · Verification in progress"
+
+#: resources/views/shared/payment-activity-labels.php:18
+msgid "Funds received · Awaiting ledger posting"
+msgstr "Funds received · Awaiting ledger posting"
+
+#: resources/views/shared/payment-activity-labels.php:19
+msgid "Payment recorded"
+msgstr "Payment recorded"
+
+#: resources/views/shared/payment-activity-labels.php:20
+msgid "Authorization cancelled · No money collected"
+msgstr "Authorization cancelled · No money collected"
+
+#: resources/views/shared/payment-activity-labels.php:21
+msgid "Checkout expired"
+msgstr "Checkout expired"
+
+#: resources/views/shared/payment-activity-labels.php:22
+msgid "Provider reconciliation required"
+msgstr "Provider reconciliation required"
+
+#: resources/views/shared/payment-activity-labels.php:23
+msgid "Checkout amount"
+msgstr "Checkout amount"
+
+#: resources/views/shared/payment-activity-labels.php:24
+msgid "Maximum capture"
+msgstr "Maximum capture"
+
+#: resources/views/shared/payment-activity-labels.php:25
+msgid "Verified received amount"
+msgstr "Verified received amount"
+
+#: resources/views/shared/payment-activity-labels.php:26
+msgid "Request verification"
+msgstr "Request verification"
+
+#: resources/views/shared/payment-activity-labels.php:27
+msgid "Refresh payment activity"
+msgstr "Refresh payment activity"
+
+#: resources/views/shared/payment-activity-labels.php:28
+msgid "Verification is queued on the server. Refresh this activity after processing."
+msgstr "Verification is queued on the server. Refresh this activity after processing."
+
+#: resources/views/shared/payment-activity-labels.php:29
+msgid "No online checkouts on this page."
+msgstr "No online checkouts on this page."
+
+#: resources/views/shared/payment-activity-labels.php:31
+msgid "Payment activity is unavailable with your current access."
+msgstr "Payment activity is unavailable with your current access."
+
+#: resources/views/shared/payment-activity-labels.php:33
+msgid "Student accounts must reconcile this provider outcome. Requesting verification cannot change the retained capture amount."
+msgstr "Student accounts must reconcile this provider outcome. Requesting verification cannot change the retained capture amount."
+
+#: src/Application/Http/Middleware/SisPrivacyMiddleware.php:137
+msgid "An online payment is being finalized. Wait for verification or ask student accounts to review its activity."
+msgstr "An online payment is being finalized. Wait for verification or ask student accounts to review its activity."
+
+#: resources/views/shared/service-fee-labels.php:9
+msgid "Online capture reserved"
+msgstr "Online capture reserved"
+
+#: resources/views/shared/service-fee-labels.php:10
+msgid "Online capture verification"
+msgstr "Online capture verification"

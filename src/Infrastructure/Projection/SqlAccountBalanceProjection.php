@@ -41,6 +41,8 @@ final readonly class SqlAccountBalanceProjection
         foreach ($events as $event) {
             if (
                 $event instanceof StudentAccountWasOpened ||
+                $event instanceof \Domain\Finance\Event\AccountPaymentCaptureWasReserved ||
+                $event instanceof \Domain\Finance\Event\AccountPaymentCaptureProgressWasRecorded ||
                 $event instanceof \Domain\Finance\Event\AccountPaymentDetailsWereChanged
             ) {
                 continue;

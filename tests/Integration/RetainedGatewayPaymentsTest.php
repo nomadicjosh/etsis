@@ -24,7 +24,7 @@ final class RetainedGatewayPaymentsTest extends TestCase
         $checkout->checkout($id, $account);
         $row = $f->campus->payments->find($id);
         self::assertStringNotContainsString('sk_test_', $row['sealed_gateway']);
-        self::assertNull($f->configuration->binding($row)['connection']['secret']);
+        self::assertSame('sk_test_fictional', $f->configuration->binding($row)['connection']['secret']);
         $f->save('connection', array_replace($f->input, ['id' => $f->connection->value, 'version' => 1,
             'secret' => 'sk_test_rotated', 'webhook' => 'whsec_rotated',
             'asset_id' => $f->other->value, 'enabled' => false]));
@@ -32,8 +32,10 @@ final class RetainedGatewayPaymentsTest extends TestCase
         self::assertFalse($f->gateway->enabled('account', 'USD'));
         [$body, $signature] = $f->notification($id);
         $confirmation->receive($body, $signature);
+        $f->campus->worker($f->gateway)->run();
         $events = $f->sis->sql->rows('sis_history_events');
         $confirmation->receive($body, $signature);
+        $f->campus->worker($f->gateway)->run();
         self::assertSame($events, $f->sis->sql->rows('sis_history_events'));
         self::assertSame(0, $f->sis->accounts->get(new AccountId($account->value))->balance()->minor);
         $binding = $f->configuration->binding($row);
@@ -70,6 +72,7 @@ final class RetainedGatewayPaymentsTest extends TestCase
         ) {
             try {
                 $confirmation->receive($body, $signature);
+                $f->campus->worker($f->gateway)->run();
                 self::fail('Unauthenticated or redirected confirmation accepted.');
             } catch (\InvalidArgumentException) {
                 self::assertSame($before, $f->sis->sql->rows('sis_history_events'));
@@ -89,7 +92,7 @@ final class RetainedGatewayPaymentsTest extends TestCase
         $f->gateway->receipt($f->campus->payments->find($id));
     }
 
-    public function testSourceBalanceChangeCannotEraseAuthenticMoneyAlreadyReceived(): void
+    public function testAuthorizationCapturesOnlyTheBalanceRemainingAfterAChargeCredit(): void
     {
         $f = new PaymentGatewayFixture();
         [$account, $checkout, $confirmation] = $f->charged();
@@ -106,7 +109,8 @@ final class RetainedGatewayPaymentsTest extends TestCase
         );
         $f->sis->saveAccount($root);
         $confirmation->receive(...$f->notification($id));
-        self::assertSame(-1000, $f->sis->accounts->get(new AccountId($account->value))->balance()->minor);
+        $f->campus->worker($f->gateway)->run();
+        self::assertSame(0, $f->sis->accounts->get(new AccountId($account->value))->balance()->minor);
         self::assertSame('paid', $f->campus->payments->find($id)['status']);
     }
 
@@ -134,6 +138,7 @@ final class RetainedGatewayPaymentsTest extends TestCase
         $f->save('connection', array_replace($f->input, ['id' => $f->connection->value, 'version' => 1,
             'webhook' => 'whsec_rotated', 'asset_id' => $f->other->value]));
         $confirmation->receive(...$f->notification($id, 'whsec_rotated'));
+        $f->campus->worker($f->gateway)->run();
         self::assertSame('paid', $f->campus->payments->find($id)['status']);
         self::assertSame(
             $f->bank->value,
@@ -148,6 +153,7 @@ final class RetainedGatewayPaymentsTest extends TestCase
         $id = EntityId::generate();
         $f->client->onCheckout = static function () use ($f, $confirmation, $id): void {
             $confirmation->receive(...$f->notification($id));
+            $f->campus->worker($f->gateway)->run();
         };
         $checkout->checkout($id, $account);
         $row = $f->campus->payments->find($id);
@@ -178,6 +184,7 @@ final class RetainedGatewayPaymentsTest extends TestCase
         $checkout->checkout($id, $account);
         $calls = array_values(array_filter($f->client->calls, static fn(array $c): bool => $c[0] === 'checkout'));
         self::assertSame('https://campus.example.invalid', $calls[1][2]);
+        $f->campus->worker($f->gateway)->run();
         self::assertNull($f->configuration->binding($f->campus->payments->find($id))['connection']['secret']);
     }
 
@@ -188,6 +195,7 @@ final class RetainedGatewayPaymentsTest extends TestCase
         $id = EntityId::generate();
         $checkout->checkout($id, $account);
         $confirmation->receive(...$f->notification($id));
+        $f->campus->worker($f->gateway)->run();
         $root = $f->sis->accounts->get(new AccountId($account->value));
         $f->sis->finance()->reverse(
             new AccountId($account->value),
@@ -216,6 +224,7 @@ final class RetainedGatewayPaymentsTest extends TestCase
         $f->policy->test = false;
         $this->expectException(\InvalidArgumentException::class);
         $confirmation->receive(...$f->notification($id));
+        $f->campus->worker($f->gateway)->run();
     }
 
     public function testFeePurposeUsesItsOwnRouteAndRetainsTheProviderReceiptWithoutAStudentJournal(): void
@@ -251,20 +260,19 @@ final class RetainedGatewayPaymentsTest extends TestCase
         self::assertFalse($result['cleared']);
         $row = $f->campus->payments->activeFee($fee, $s->clock->now()->getTimestamp());
         self::assertSame('transcript', $row['purpose']);
-        self::assertNull($f->configuration->binding($row)['connection']['secret']);
+        self::assertSame('sk_test_fictional', $f->configuration->binding($row)['connection']['secret']);
         $confirmation = new \Domain\Portal\Service\PaymentConfirmationService(
             $f->gateway,
             $f->campus->payments,
-            $s->accounts,
             $s->transactions,
-            $s->audit,
             $s->clock,
-            $s->feeProvider()
         );
         [$body, $signature] = $f->notification(new EntityId($row['id']), changes: ['amount_total' => 2500]);
         $confirmation->receive($body, $signature);
+        $f->campus->worker($f->gateway)->run();
         $events = $s->sql->rows('sis_history_events');
         $confirmation->receive($body, $signature);
+        $f->campus->worker($f->gateway)->run();
         self::assertSame($events, $s->sql->rows('sis_history_events'));
         self::assertTrue($fees->show($fee, 'owner')['cleared']);
         self::assertSame([], $s->sql->rows('sis_journals'));

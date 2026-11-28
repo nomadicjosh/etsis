@@ -352,6 +352,11 @@ return static function (Psr7Router $router): void {
     $router->map(["GET"], "/portal/api/applications/", [Portal::class, "applications"])
         ->name("portal.applications");
     $router->map(["POST"], "/portal/api/contact/", [Portal::class, "contact"])->name("portal.contact");
+    $activity = \Application\Http\Controller\PaymentActivityController::class;
+    $router->map(['GET'], '/portal/api/payment-activity/{kind}/{id}/', [$activity, 'ownerShow'])
+        ->name('portal.payment_activity.show');
+    $router->map(['POST'], '/portal/api/payment-activity/{id}/retry/', [$activity, 'ownerRetry'])
+        ->name('portal.payment_activity.retry');
     $router
         ->map(["GET"], "/portal/api/payments/status/", [Payments::class, "status"])
         ->name("portal.payments.status");

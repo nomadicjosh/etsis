@@ -22,6 +22,7 @@ final class ServiceFee extends EventSourcedAggregate
     private ?string $applied = null;
     private ?array $appliedReference = null;
     private array $receipts = [];
+    private array $captureStates = [];
 
     public static function validate(array $p): void
     {
@@ -77,7 +78,16 @@ final class ServiceFee extends EventSourcedAggregate
             if ($this->assessment === null) {
                 throw new CorruptHistoryException();
             }
-            if ($p["action"] === "payment") {
+            if ($p['action'] === 'capture_reserve') {
+                $this->captureStates = \Domain\Payments\ValueObject\CaptureState::reserve(
+                    $this->captureStates,
+                    $d,
+                    $this->due(),
+                    $this->assessment['policy']['currency']
+                );
+            } elseif ($p['action'] === 'capture_progress') {
+                $this->captureStates = \Domain\Payments\ValueObject\CaptureState::advance($this->captureStates, $d);
+            } elseif ($p["action"] === "payment") {
                 if (
                     isset($this->payments[$d["payment_id"]]) ||
                     $d["currency"] !==
@@ -86,6 +96,22 @@ final class ServiceFee extends EventSourcedAggregate
                         2000000000 - $d["minor"]
                 ) {
                     throw new CorruptHistoryException();
+                }
+                if (isset($this->captureStates[$d['payment_id']]) && $d['channel'] !== 'provider') {
+                    throw new CorruptHistoryException();
+                }
+                if (isset($this->captureStates[$d['payment_id']]) && $d['channel'] === 'provider') {
+                    $capture = $this->captureStates[$d['payment_id']];
+                    if (
+                        $capture['state'] !== 'received' || $d['minor'] !== $capture['received_minor']
+                        || $d['session'] !== $capture['plan']['session']
+                    ) {
+                        throw new CorruptHistoryException();
+                    }
+                    $this->captureStates = \Domain\Payments\ValueObject\CaptureState::advance(
+                        $this->captureStates,
+                        ['payment_id' => $d['payment_id'], 'state' => 'paid', 'received_minor' => $d['minor']]
+                    );
                 }
                 $this->payments[$d["payment_id"]] = $d;
             } elseif ($p["action"] === "waive") {
@@ -126,8 +152,25 @@ final class ServiceFee extends EventSourcedAggregate
                 $this->refunds[$p["operation_id"]] = $d;
             }
         }
+        $this->assertCaptureBudget();
         $this->previous = $p["operation_id"];
     }
+    public function captures(): array
+    {
+        return $this->captureStates;
+    }
+
+    public function due(): int
+    {
+        return $this->assessment === null || $this->waived
+        ? 0 : max(0, $this->assessment['policy']['minor'] - $this->net());
+    }
+
+    public function assertCaptureBudget(): void
+    {
+        \Domain\Payments\ValueObject\CaptureState::assertBudget($this->captureStates, $this->due());
+    }
+
     public function cleared(): bool
     {
         return $this->assessment !== null &&
@@ -152,7 +195,7 @@ final class ServiceFee extends EventSourcedAggregate
             "cleared" => $this->cleared(),
             "net_minor" => $this->net(),
             "version" => $this->playhead(),
-        ];
+        ] + ($this->captureStates === [] ? [] : ['captures' => $this->captureStates]);
     }
     public function receipt(string $operation): ?array
     {

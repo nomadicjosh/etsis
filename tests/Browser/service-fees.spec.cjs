@@ -27,6 +27,10 @@ async function fixture(page, purpose = 'application') {
         else if (path === '/sis/service-fees/policies/') result = { application: policy, transcript: policy };
         else if (/^\/sis\/service-fees\/policies\//.test(path)) result = { ...policy, ...data, revision: 2 };
         else if (path.endsWith('/service-fees/page/')) result = { items: [fee()], next_after: null };
+        else if (path.includes('/payment-activity/')) result = { items: [{ id: id(15), currency: 'USD',
+            authorized_minor: 2500, capture_minor: 2500, received_minor: state.cleared ? 2500 : null,
+            state: state.cleared ? 'paid' : 'reserved', can_retry: !state.cleared }],
+            held_minor: state.cleared ? 0 : 2500, next_after: null };
         else if (path.endsWith('/service-fees/prepare/')) result = fee();
         else if (path.endsWith(`/service-fees/${feeId}/`)) result = fee();
         else if (path.endsWith(`/service-fees/${feeId}/history/`)) result = { items: [{ action: 'assess', recorded_at: '2026-08-10T10:00:00Z', reason: path.startsWith('/sis/') ? 'Fictional assessment.' : null }], next_before: null };
@@ -103,6 +107,54 @@ test('application fee clears before questions and uses the retained fee as submi
     await expect.poll(() => state.used).toBe(true);
     const call = state.calls.find(c => c.path.endsWith('/submissions/'));
     expect(call.data.submission_id).toBe(feeId); expect(call.csrf).toBe('fictional-test-token'); expect(state.errors).toEqual([]);
+});
+
+test('applicant returns from payment activity to the same pending application fee', async ({ page }) => {
+    const state = await fixture(page);
+    await page.goto(`/portal/apply/?program=${program}&term=${term}`);
+    await page.getByRole('button', { name: 'Continue to your application', exact: true }).click();
+    const body = page.locator('#campus-dialog-body');
+    const gate = page.getByRole('region', { name: 'Payment required', exact: true });
+    await gate.getByRole('button', { name: 'Payment activity', exact: true }).click();
+    await expect(body).toContainText('Capture reserved');
+    await body.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.locator('#campus-dialog')).not.toBeVisible();
+    await expect(gate.getByRole('button', { name: 'Pay securely', exact: true })).toBeVisible();
+    await expect(gate).toContainText('Fictional <b>program</b>');
+    expect(state.calls.filter(c => c.path.endsWith('/service-fees/prepare/'))).toHaveLength(1);
+    expect(state.errors).toEqual([]);
+});
+
+test('staff returns from payment activity to its fee and original person record', async ({ page }) => {
+    const state = await fixture(page);
+    await page.goto('/admin/workspace/people/');
+    await page.getByLabel('Search this workspace', { exact: true }).fill('Fictional');
+    await page.getByLabel('Search this workspace', { exact: true }).press('Enter');
+    await page.getByRole('button', { name: 'Fictional Applicant', exact: true }).click();
+    await recordAction(page, 'Application and transcript fees');
+    await page.getByRole('button', { name: 'View fee', exact: true }).click();
+    const body = page.locator('#drawer-body');
+    await body.getByRole('button', { name: 'Payment activity', exact: true }).click();
+    await expect(body).toContainText('Capture reserved');
+    await body.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(body.getByRole('button', { name: 'Review fee waiver', exact: true })).toBeVisible();
+    await body.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.getByRole('tablist', { name: 'Person record sections' })).toBeVisible();
+    expect(state.errors).toEqual([]);
+});
+
+test('completed transcript fee activity returns to the existing page without opening an old dialog', async ({ page }) => {
+    const state = await fixture(page, 'transcript');
+    state.cleared = true; state.used = true;
+    await page.goto('/portal/student/transcripts/');
+    const content = page.locator('#campus-service-content');
+    await content.getByRole('button', { name: 'Payment activity', exact: true }).click();
+    const body = page.locator('#campus-dialog-body');
+    await expect(body).toContainText('Payment recorded');
+    await body.getByRole('button', { name: 'Back to record', exact: true }).click();
+    await expect(page.locator('#campus-dialog')).not.toBeVisible();
+    await expect(content).toContainText('Applied to the accepted request');
+    expect(state.errors).toEqual([]);
 });
 test('official request waits for confirmed payment while unofficial transcripts stay available', async ({ page }) => {
     const state = await fixture(page, 'transcript');

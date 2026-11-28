@@ -618,6 +618,8 @@ final readonly class ServiceFeeService
                     "",
                 ),
             );
+        } catch (\Domain\Payments\Exception\CapturePendingException $pending) {
+            throw $pending;
         } catch (\Throwable) {
             throw new ValidationException([
                 [

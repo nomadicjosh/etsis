@@ -1649,6 +1649,7 @@ final class SisFixture
                 $this->sql,
             ),
             EventStoreFixture::history($this->connection->queryBuilder()),
+            $this->ledgerControl()->records,
         );
     }
     public function feeClearance(
