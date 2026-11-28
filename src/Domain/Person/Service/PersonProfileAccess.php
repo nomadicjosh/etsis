@@ -26,6 +26,10 @@ final readonly class PersonProfileAccess
     {
         return $this->access->authenticatedUserId();
     }
+    public function forAccess(StudentAccess $access): self
+    {
+        return new self($this->people, $this->records, $this->roles, $access);
+    }
     public function lockStaffRoles(): void
     {
         $this->roles->lock();

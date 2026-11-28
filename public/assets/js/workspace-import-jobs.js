@@ -38,9 +38,16 @@ window.createWorkspaceImportJobs = ({ node, request, task, openDrawer, can, noti
         }
         body.replaceChildren(button('back_activity', 'arrow-left', back), summary,
             node('p', { class: item.state === 'needs_attention' ? 'alert alert-warning' : 'alert alert-info', role: 'status' },
-                item.state === 'needs_attention' ? sentence('stopped', item) : text(item.state === 'completed' ? 'completed' : 'queued_help')));
+                item.state === 'needs_attention' ? sentence('stopped', item) : text(item.state === 'completed'
+                    ? 'completed' : item.state === 'cancelled' ? 'cancelled_help' : 'queued_help')));
         if (item.error_code) body.append(node('p', {}, text(item.error_code)));
         body.append(button('refresh', 'arrow-clockwise', () => detail(id, back)));
+        if (['queued', 'running'].includes(item.state)) body.append(
+            node('p', { class: 'form-text mt-3' }, text('cancel_help')),
+            button('cancel', 'stop-circle', async () => {
+                await request(`/sis/imports/jobs/${encodeURIComponent(id)}/cancel/`, 'POST', {});
+                if (body.isConnected) await detail(id, back);
+            }));
     }
     function people() {
         if (!can('sis:person:manage')) return;

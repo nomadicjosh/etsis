@@ -71,11 +71,13 @@ final readonly class ImportRecoveryServices
     {
         $s = $this->sis;
         $roles = new SqlAccessRepository($s->sql);
+        require_once dirname(__DIR__) . '/Support/PhotoFixture.php';
         $processor = new ReviewedImportBatchProcessor(
             $s->imports($audit),
             $this->people($audit),
             $roles,
-            new SqlLoginAccountStateReader($s->sql)
+            new SqlLoginAccountStateReader($s->sql),
+            PhotoFixture::imports($s)
         );
         return new ImportWorker(
             new SqlImportQueueRepository($s->sql),

@@ -25,6 +25,9 @@ $flashMarkup = $flashMarkup ?? Codefy::$PHP->flash->display(print: false);
         <link rel="stylesheet" href="/assets/vendor/icons/bootstrap-icons.min.css" />
         <link rel="stylesheet" href="/assets/css/workspace.css" />
         <script defer src="/assets/js/workspace-profile.js"></script>
+        <script defer src="/assets/vendor/photo-cropper.js"></script>
+        <script defer src="/assets/js/person-photos.js"></script>
+        <script defer src="/assets/js/person-photo-profile.js"></script>
     </head>
     <body>
         <a class="skip-link" href="#account-main">Skip to my profile</a>
@@ -115,6 +118,14 @@ $flashMarkup = $flashMarkup ?? Codefy::$PHP->flash->display(print: false);
                         </div>
                     </section>
                 </div>
+                <form id="profile-photo-csrf" hidden><?= $csrfMarkup ?></form>
+                <script id="profile-photo-config" type="application/json">
+                    <?= json_encode(
+                        require dirname(__DIR__) . '/shared/photo-labels.php',
+                        JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR
+                    ) ?>
+                </script>
+                <div id="profile-photo" class="mt-4"></div>
             </main>
         </div>
     </body>

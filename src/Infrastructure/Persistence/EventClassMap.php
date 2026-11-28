@@ -28,6 +28,7 @@ final class EventClassMap
             \Domain\Finance\Event\LedgerPeriodWasRecorded::class,
             \Domain\ServiceFee\Event\ServiceFeeDecisionWasRecorded::class,
             \Domain\Graduation\Event\GraduationDecisionWasRecorded::class,
+            \Domain\Person\Event\PersonPhotoWasRecorded::class,
             \Domain\Person\Event\PersonSsnWasRecorded::class,
             \Domain\Registration\Event\EnrollmentWasReinstated::class,
             \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class,

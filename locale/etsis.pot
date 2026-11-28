@@ -13247,3 +13247,353 @@ msgstr ""
 #: resources/views/backend/workspace/accounting-labels.php:83
 msgid "Back to journal"
 msgstr ""
+
+
+#: resources/views/shared/photo-labels.php:8
+msgid "Profile photo"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:9
+msgid "Manage profile photo"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:10
+msgid "Current profile photo"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:11
+msgid "No profile photo has been selected."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:12
+msgid "Institution-managed photo"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:14
+msgid "Your institution manages this photo. Contact staff for a correction."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:17
+msgid "Staff changes are institution-managed. Review the person and image before confirming a correction."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:20
+msgid "Photo changes are unavailable until private storage, scanning and retention are configured."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:23
+msgid "You can view this photo. Changing an institution photo requires the photo-management duty."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:25
+msgid "Choose a PNG or JPG"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:27
+msgid "Drop one PNG or JPG here, or use the file chooser. Maximum 5 MiB and four million pixels."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:29
+msgid "Crop your photo"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:31
+msgid "Drag the square or use the move and zoom buttons. The saved image is a square with private metadata removed."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:33
+msgid "Move crop left"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:34
+msgid "Move crop right"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:35
+msgid "Move crop up"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:36
+msgid "Move crop down"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:37
+msgid "Zoom crop in"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:38
+msgid "Zoom crop out"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:39
+msgid "Reset crop"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:40
+msgid "Use camera"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:41
+msgid "Live camera preview"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:43
+msgid "Camera access starts only when requested. Capture a frame or stop the camera when finished."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:45
+msgid "Capture photo"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:46
+msgid "Stop camera"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:48
+msgid "The camera is unavailable or permission was declined. You can choose a photo file."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:50
+msgid "Review my Gravatar"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:52
+msgid "I agree to send a hash of my current email address to Gravatar to retrieve my photo."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:55
+msgid "Confirm your Gravatar consent before requesting a photo."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:58
+msgid "Gravatar is contacted only after your request. The reviewed photo is saved privately; later visits do not contact Gravatar."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:61
+msgid "Reason for photo change"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:62
+msgid "Update my profile photo."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:63
+msgid "Review photo change"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:64
+msgid "Confirm photo change"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:65
+msgid "Review the selected photo"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:67
+msgid "Confirm only after checking the person, cropped photo and reason. Editing requires a new review."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:69
+msgid "Review removing the photo"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:71
+msgid "The current photo will be removed. Its selection history remains retained."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:73
+msgid "Discard photo draft"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:74
+msgid "Profile photo updated."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:75
+msgid "Reload current photo"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:77
+msgid "Reloading keeps your cropped image and reason. Review again against the current photo."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:80
+msgid "Photo access is no longer available. Reopen the person or sign in again."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:83
+msgid "The photo task could not be completed. Check the file and current record, then review again."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:85
+msgid "The private photo could not be loaded."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:87
+msgid "Choose a valid PNG or JPG up to 5 MiB and four million pixels."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:90
+#: resources/views/backend/workspace/imports.phtml:16
+msgid "Import institution photos"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:92
+msgid "Review exact filename matches, then queue server processing. A private notification announces completion or items needing attention."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:96
+msgid "One PNG/JPG or a flat ZIP up to 10 MiB; at most 200 photos, each up to 5 MiB. No folders or duplicate filenames."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:99
+msgid "Photo or ZIP file"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:100
+msgid "Match filenames using"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:101
+msgid "Exact institutional ID or person ULID"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:102
+msgid "Exact first_last or first,last name"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:104
+msgid "Names must identify exactly one person. Unmatched, ambiguous or duplicate people block submission; correct the filenames and review again."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:107
+msgid "Reason for institution photo import"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:108
+msgid "Review photo matches"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:109
+msgid "Queue photo import"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:110
+msgid "One photo match is ready for server processing."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:111
+msgid "Discard import draft"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:112
+msgid "Filename"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:113
+msgid "Matched person"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:114
+msgid "Exact match"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:115
+msgid "No unique match"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:116
+msgid "Person selected more than once"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:118
+msgid "{count} photo matches are ready for server processing."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:121
+msgid "Resolve the filename matches before queuing this import."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:124
+msgid "Photo import queued. Processing continues on the server after you leave this screen."
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:126
+msgid "Open import activity"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:127
+msgid "Next photo matches"
+msgstr ""
+
+#: resources/views/shared/photo-labels.php:128
+msgid "Previous photo matches"
+msgstr ""
+
+#: src/Application/Http/Controller/PersonPhotoController.php:52
+msgid "Choose one photo or archive within the stated size limit."
+msgstr ""
+
+#: src/Domain/Person/Service/PersonPhotoService.php:236
+msgid "This photo is managed by your institution. Contact staff for a correction."
+msgstr ""
+
+#: src/Domain/Person/Service/PersonPhotoService.php:287
+msgid "Enter a photo-change reason up to 500 characters."
+msgstr ""
+
+#: src/Domain/Person/Service/PersonPhotoService.php:313
+msgid "There is no current photo to remove."
+msgstr ""
+
+#: src/Domain/Person/Service/PersonPhotoService.php:458
+msgid "Discard an unfinished photo review or wait for it to expire before starting another."
+msgstr ""
+
+#: src/Domain/Person/Service/PhotoPolicy.php:41
+msgid "Photo changes require enabled private storage, reviewed scanning and a retention policy."
+msgstr ""
+
+#: src/Infrastructure/Person/CurlGravatarReader.php:58
+msgid "A Gravatar photo could not be retrieved. You can upload a PNG or JPG instead."
+msgstr ""
+
+#: src/Infrastructure/Person/ImagickPhotoProcessor.php:31
+msgid "Choose a single PNG or JPG up to 5 MiB and four million pixels. Image scanning must succeed."
+msgstr ""
+
+#: src/Infrastructure/Person/ZipPhotoArchive.php:47
+msgid "Choose a valid flat ZIP of PNG or JPG photos."
+msgstr ""
+
+#: src/Infrastructure/Person/ZipPhotoArchive.php:99
+msgid "Use a photo or ZIP up to 10 MiB."
+msgstr ""
+
+#: src/Infrastructure/Person/ZipPhotoArchive.php:109
+msgid "Each photo must be at most 5 MiB."
+msgstr ""
+
+#: src/Infrastructure/Person/ZipPhotoArchive.php:120
+msgid "Use between one and 200 photos per ZIP."
+msgstr ""
+
+#: src/Infrastructure/Person/ZipPhotoArchive.php:144
+msgid "The archive has duplicate, unsafe, encrypted or oversized entries."
+msgstr ""
+
+#: src/Infrastructure/Person/ZipPhotoArchive.php:172
+msgid "Use flat PNG or JPG filenames without paths or hidden files."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:10
+msgid "Cancel remaining import steps"
+msgstr ""
+
+#: resources/views/shared/import-labels.php:11
+msgid "Remaining import steps were cancelled. Completed records have not been changed."
+msgstr ""
+
+#: resources/views/shared/import-labels.php:13
+msgid "Completed records remain. Cancellation stops future steps after any current transaction finishes."
+msgstr ""

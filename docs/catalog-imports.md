@@ -98,6 +98,8 @@ Encrypted source artifacts are deleted on completion, when a job stops, or when 
 
 ## Run the server worker
 
+Staff can use **Import activity → Cancel remaining import steps** for an owned queued or running job. Cancellation takes effect at the next transaction boundary; an in-flight step can commit first. Already accepted records and their counts remain, the encrypted queued source is removed, and one private cancellation notice is issued. Original submission retries return the stopped job rather than restarting it. Review a new import for remaining records. Deleting the notice does not delete business records or restore the job.
+
 The Codefy `ConsoleCommand` is `sis:imports:run --limit=2` (one through twenty batches). It stops between batches after twenty seconds and prints only status/count metadata. Run it using the server's configured PHP interpreter, with a process memory cap and an outer deadline. The supplied launcher accepts that interpreter path:
 
 ```sh

@@ -194,5 +194,6 @@ return [
         \Application\Console\Commands\MoodleSyncCommand::class,
         \Application\Console\Commands\MoodleGradesCommand::class,
         \Application\Console\Commands\ProcessImportsCommand::class,
+        \Application\Console\Commands\PurgePersonPhotosCommand::class,
     ],
 ];

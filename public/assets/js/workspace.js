@@ -339,7 +339,8 @@
         flow: operations.flow, amounts: hrSetup.amounts, openEmployee: id => employmentStudio.employee(id), notify });
     const restrictionStudio = window.createWorkspaceRestrictions({ node, request, task, can, recordSummary, actionMenu, buildForm, formData, notify, openDrawer, openRecord, table, badge, flow: operations.flow, showAudit: (studentId, holdId) => operations.audit('students', { id: studentId }, holdId), closeDrawer: () => drawer.hide() });
     const importJobs = window.createWorkspaceImportJobs({ node, request, task, openDrawer, can, notify, table, labels: config.import_labels });
-    const importStudio = window.createWorkspaceImports({ jobs: importJobs, labels: config.import_labels, node, table, request, notify, number, task, can, recordSummary, subjects: () => catalogStudio.subjects(), classifications: kind => classificationStudio.library(kind) });
+    const photoImports = window.createPhotoImports({ node, request, labels: config.photo_labels, openDrawer, task, jobs: importJobs });
+    const importStudio = window.createWorkspaceImports({ photoImports, jobs: importJobs, labels: config.import_labels, node, table, request, notify, number, task, can, recordSummary, subjects: () => catalogStudio.subjects(), classifications: kind => classificationStudio.library(kind) });
     const transcriptWorklist = window.createTranscriptWorklist({ node, request, labels: config.transcript_worklist_labels,
         changed: () => current === 'transcripts' ? task(() => loadDirectory()) : Promise.resolve() });
     const transcriptStudio = window.createWorkspaceTranscripts({ worklist: transcriptWorklist, ceuLabels: config.ceu_labels, standingLabels: config.transcript_standing_labels, node, request, requestHtml, requestFile, task, can, recordSummary, table, badge, buildForm, formData, openDrawer, refreshDirectory: () => datasets[current] ? loadDirectory() : Promise.resolve() });
@@ -1312,6 +1313,20 @@
                         await window.createPersonNotificationPreferences({ node, request, labels: config.notification_labels,
                             player: notifications }).mount(host, `/sis/people/${person.id.value}/notification-preferences/`);
                     } });
+                if (can('sis:person:manage')) {
+                    const openPhoto = () => {
+                        const host = openDrawer(config.photo_labels.title);
+                        window.createPersonPhotos({ node, request, labels: config.photo_labels })
+                            .mount(host, `/sis/people/${person.id.value}/photo/`, { staff: true });
+                    };
+                    const photo = node('div'); body.prepend(photo);
+                    window.createPersonPhotos({ node, request, labels: config.photo_labels })
+                        .mount(photo, `/sis/people/${person.id.value}/photo/`, { staff: true, compact: true, open: openPhoto });
+                    extra.push({ label: config.photo_labels.title, icon: 'person-bounding-box', run: openPhoto });
+                    if (can('sis:import:manage') && can('sis:person:photo:manage')) extra.push({
+                        label: config.photo_labels.imports, icon: 'images', run: () => photoImports.open(),
+                    });
+                }
                 if (can('sis:person:manage') && can('sis:person:ssn:read')) extra.push({
                     label: config.person_ssn_labels.title, icon: 'shield-lock', run: () => window.createPersonSsn({
                         node, request, task, openDrawer, labels: config.person_ssn_labels,

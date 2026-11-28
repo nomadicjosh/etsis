@@ -132,6 +132,8 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
         <script defer src="/assets/js/section-waitlist.js"></script>
         <script defer src="/assets/js/workspace-ceus.js"></script>
         <script defer src="/assets/js/graduate-registration.js"></script>
+        <script defer src="/assets/vendor/photo-cropper.js"></script>
+        <script defer src="/assets/js/person-photos.js"></script>
         <script defer src="/assets/js/portal.js"></script>
     </head>
     <body class="campus-site">
@@ -309,6 +311,12 @@ foreach (['primary', 'secondary', 'footer'] as $menuSlot) {
             );
             ?>
             <form id="campus-csrf" hidden><?= $csrfMarkup ?? csrf_field() ?></form>
+            <script id="campus-photo-config" type="application/json">
+                <?= json_encode(
+                    require dirname(__DIR__, 5) . '/resources/views/shared/photo-labels.php',
+                    JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR
+                ) ?>
+            </script>
             <script id="campus-notification-config" type="application/json">
                 <?= json_encode(
                     $notificationLabels,

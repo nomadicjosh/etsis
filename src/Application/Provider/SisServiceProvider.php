@@ -209,6 +209,12 @@ final class SisServiceProvider extends CodefyServiceProvider
                 \Infrastructure\Persistence\Repository\SqlImportQueueRepository::class,
             \Domain\Import\Service\ImportBatchProcessor::class =>
                 \Infrastructure\Import\ReviewedImportBatchProcessor::class,
+            \Domain\Person\Repository\PhotoRepository::class =>
+                \Infrastructure\Persistence\Repository\SqlPhotoRepository::class,
+            \Domain\Person\Service\PhotoArchive::class => \Infrastructure\Person\ZipPhotoArchive::class,
+            \Domain\Person\Service\PhotoStorage::class => \Infrastructure\Person\SqlPhotoStorage::class,
+            \Domain\Person\Service\PhotoProcessor::class => \Infrastructure\Person\ImagickPhotoProcessor::class,
+            \Domain\Person\Service\GravatarReader::class => \Infrastructure\Person\CurlGravatarReader::class,
             \Domain\Import\Repository\PersonImportRepository::class =>
                 \Infrastructure\Persistence\Repository\SqlPersonImportRepository::class,
             \Domain\Import\Service\PersonCsvMapper::class => \Infrastructure\Import\LeaguePersonCsvMapper::class,
@@ -507,6 +513,16 @@ final class SisServiceProvider extends CodefyServiceProvider
             return new \Infrastructure\Operations\LocalHistoryAnchorStorage(
                 $this->codefy->configContainer,
                 $this->codefy->publicPath(),
+            );
+        });
+        $this->codefy->delegate(\Domain\Person\Service\PhotoPolicy::class, function () {
+            $config = $this->codefy->configContainer;
+            return new \Domain\Person\Service\PhotoPolicy(
+                $config->getConfigKey('person_photos.enabled', false) === true
+                    && class_exists(\Imagick::class) && class_exists(\finfo::class),
+                $config->getConfigKey('person_photos.scanner_reviewed', false) === true,
+                (int) $config->getConfigKey('person_photos.retention_days', 0),
+                $config->getConfigKey('person_photos.gravatar_enabled', false) === true,
             );
         });
         $this->codefy->delegate(\Domain\Admissions\Service\AdmissionDocumentPolicy::class, function () {

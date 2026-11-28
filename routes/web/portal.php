@@ -15,6 +15,25 @@ use Application\Http\Controller\AdmissionDocumentController as Documents;
 use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
+    $photos = \Application\Http\Controller\PersonPhotoController::class;
+    $router
+        ->post('/portal/api/person/photo/discard/', [$photos, 'discard'])
+        ->name('portal.person.photo.discard');
+    $router
+        ->map(['GET'], '/portal/api/person/photo/', [$photos, 'view'])
+        ->name('portal.person.photo.view');
+    $router
+        ->map(['GET'], '/portal/api/person/photo/content/', [$photos, 'content'])
+        ->name('portal.person.photo.content');
+    $router
+        ->map(['GET'], '/portal/api/person/photo/preview/{draft}/', [$photos, 'content'])
+        ->name('portal.person.photo.content.preview');
+    $router
+        ->map(['POST'], '/portal/api/person/photo/review/', [$photos, 'review'])
+        ->name('portal.person.photo.review');
+    $router
+        ->map(['POST'], '/portal/api/person/photo/confirm/', [$photos, 'confirm'])
+        ->name('portal.person.photo.confirm');
     /** @var Psr7Router&Mappable $router */
     $websiteForms = \Application\Http\Controller\WebsiteFormController::class;
     $router->get('/portal/api/website-forms/{page}/{form}/prepare/', [$websiteForms, 'prepare'])

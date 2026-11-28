@@ -35,6 +35,13 @@ await cp(
     new URL("icons/", assets),
     { recursive: true },
 );
+await build({
+    entryPoints: [fileURLToPath(new URL('tools/photo-cropper-entry.mjs', root))],
+    outfile: fileURLToPath(new URL('photo-cropper.js', assets)),
+    bundle: true, minify: true, format: 'iife', platform: 'browser', target: 'es2022', legalComments: 'inline',
+});
+await copyFile(new URL('node_modules/cropperjs/LICENSE', root), new URL('photo-cropper.LICENSE', assets));
+
 const bundled = await build({
     entryPoints: [
         fileURLToPath(new URL("tools/campus-editor-entry.mjs", root)),

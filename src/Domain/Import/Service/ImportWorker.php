@@ -144,7 +144,7 @@ final readonly class ImportWorker
                     }
                     $remaining = (int) $job["total"] - (int) $job["processed"];
                     $limit = min(
-                        $job["target"] === "people" ? 10 : 100,
+                        $job["target"] === "photos" ? 1 : ($job["target"] === "people" ? 10 : 100),
                         $remaining,
                     );
                     if ($limit < 1) {

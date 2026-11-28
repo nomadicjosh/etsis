@@ -4898,3 +4898,592 @@ msgstr "Use the student account to change receivables. Manual journals cannot po
 #: resources/views/backend/workspace/accounting-labels.php:83
 msgid "Back to journal"
 msgstr "Back to journal"
+
+
+#: resources/views/shared/photo-labels.php:8
+msgid "Profile photo"
+msgstr "Profile photo"
+
+#: resources/views/shared/photo-labels.php:9
+msgid "Manage profile photo"
+msgstr "Manage profile photo"
+
+#: resources/views/shared/photo-labels.php:10
+msgid "Current profile photo"
+msgstr "Current profile photo"
+
+#: resources/views/shared/photo-labels.php:11
+msgid "No profile photo has been selected."
+msgstr "No profile photo has been selected."
+
+#: resources/views/shared/photo-labels.php:12
+msgid "Institution-managed photo"
+msgstr "Institution-managed photo"
+
+#: resources/views/shared/photo-labels.php:14
+msgid "Your institution manages this photo. Contact staff for a correction."
+msgstr "Your institution manages this photo. Contact staff for a correction."
+
+#: resources/views/shared/photo-labels.php:17
+msgid "Staff changes are institution-managed. Review the person and image before confirming a correction."
+msgstr "Staff changes are institution-managed. Review the person and image before confirming a correction."
+
+#: resources/views/shared/photo-labels.php:20
+msgid "Photo changes are unavailable until private storage, scanning and retention are configured."
+msgstr "Photo changes are unavailable until private storage, scanning and retention are configured."
+
+#: resources/views/shared/photo-labels.php:23
+msgid "You can view this photo. Changing an institution photo requires the photo-management duty."
+msgstr "You can view this photo. Changing an institution photo requires the photo-management duty."
+
+#: resources/views/shared/photo-labels.php:25
+msgid "Choose a PNG or JPG"
+msgstr "Choose a PNG or JPG"
+
+#: resources/views/shared/photo-labels.php:27
+msgid "Drop one PNG or JPG here, or use the file chooser. Maximum 5 MiB and four million pixels."
+msgstr "Drop one PNG or JPG here, or use the file chooser. Maximum 5 MiB and four million pixels."
+
+#: resources/views/shared/photo-labels.php:29
+msgid "Crop your photo"
+msgstr "Crop your photo"
+
+#: resources/views/shared/photo-labels.php:31
+msgid "Drag the square or use the move and zoom buttons. The saved image is a square with private metadata removed."
+msgstr "Drag the square or use the move and zoom buttons. The saved image is a square with private metadata removed."
+
+#: resources/views/shared/photo-labels.php:33
+msgid "Move crop left"
+msgstr "Move crop left"
+
+#: resources/views/shared/photo-labels.php:34
+msgid "Move crop right"
+msgstr "Move crop right"
+
+#: resources/views/shared/photo-labels.php:35
+msgid "Move crop up"
+msgstr "Move crop up"
+
+#: resources/views/shared/photo-labels.php:36
+msgid "Move crop down"
+msgstr "Move crop down"
+
+#: resources/views/shared/photo-labels.php:37
+msgid "Zoom crop in"
+msgstr "Zoom crop in"
+
+#: resources/views/shared/photo-labels.php:38
+msgid "Zoom crop out"
+msgstr "Zoom crop out"
+
+#: resources/views/shared/photo-labels.php:39
+msgid "Reset crop"
+msgstr "Reset crop"
+
+#: resources/views/shared/photo-labels.php:40
+msgid "Use camera"
+msgstr "Use camera"
+
+#: resources/views/shared/photo-labels.php:41
+msgid "Live camera preview"
+msgstr "Live camera preview"
+
+#: resources/views/shared/photo-labels.php:43
+msgid "Camera access starts only when requested. Capture a frame or stop the camera when finished."
+msgstr "Camera access starts only when requested. Capture a frame or stop the camera when finished."
+
+#: resources/views/shared/photo-labels.php:45
+msgid "Capture photo"
+msgstr "Capture photo"
+
+#: resources/views/shared/photo-labels.php:46
+msgid "Stop camera"
+msgstr "Stop camera"
+
+#: resources/views/shared/photo-labels.php:48
+msgid "The camera is unavailable or permission was declined. You can choose a photo file."
+msgstr "The camera is unavailable or permission was declined. You can choose a photo file."
+
+#: resources/views/shared/photo-labels.php:50
+msgid "Review my Gravatar"
+msgstr "Review my Gravatar"
+
+#: resources/views/shared/photo-labels.php:52
+msgid "I agree to send a hash of my current email address to Gravatar to retrieve my photo."
+msgstr "I agree to send a hash of my current email address to Gravatar to retrieve my photo."
+
+#: resources/views/shared/photo-labels.php:55
+msgid "Confirm your Gravatar consent before requesting a photo."
+msgstr "Confirm your Gravatar consent before requesting a photo."
+
+#: resources/views/shared/photo-labels.php:58
+msgid "Gravatar is contacted only after your request. The reviewed photo is saved privately; later visits do not contact Gravatar."
+msgstr "Gravatar is contacted only after your request. The reviewed photo is saved privately; later visits do not contact Gravatar."
+
+#: resources/views/shared/photo-labels.php:61
+msgid "Reason for photo change"
+msgstr "Reason for photo change"
+
+#: resources/views/shared/photo-labels.php:62
+msgid "Update my profile photo."
+msgstr "Update my profile photo."
+
+#: resources/views/shared/photo-labels.php:63
+msgid "Review photo change"
+msgstr "Review photo change"
+
+#: resources/views/shared/photo-labels.php:64
+msgid "Confirm photo change"
+msgstr "Confirm photo change"
+
+#: resources/views/shared/photo-labels.php:65
+msgid "Review the selected photo"
+msgstr "Review the selected photo"
+
+#: resources/views/shared/photo-labels.php:67
+msgid "Confirm only after checking the person, cropped photo and reason. Editing requires a new review."
+msgstr "Confirm only after checking the person, cropped photo and reason. Editing requires a new review."
+
+#: resources/views/shared/photo-labels.php:69
+msgid "Review removing the photo"
+msgstr "Review removing the photo"
+
+#: resources/views/shared/photo-labels.php:71
+msgid "The current photo will be removed. Its selection history remains retained."
+msgstr "The current photo will be removed. Its selection history remains retained."
+
+#: resources/views/shared/photo-labels.php:73
+msgid "Discard photo draft"
+msgstr "Discard photo draft"
+
+#: resources/views/shared/photo-labels.php:74
+msgid "Profile photo updated."
+msgstr "Profile photo updated."
+
+#: resources/views/shared/photo-labels.php:75
+msgid "Reload current photo"
+msgstr "Reload current photo"
+
+#: resources/views/shared/photo-labels.php:77
+msgid "Reloading keeps your cropped image and reason. Review again against the current photo."
+msgstr "Reloading keeps your cropped image and reason. Review again against the current photo."
+
+#: resources/views/shared/photo-labels.php:80
+msgid "Photo access is no longer available. Reopen the person or sign in again."
+msgstr "Photo access is no longer available. Reopen the person or sign in again."
+
+#: resources/views/shared/photo-labels.php:83
+msgid "The photo task could not be completed. Check the file and current record, then review again."
+msgstr "The photo task could not be completed. Check the file and current record, then review again."
+
+#: resources/views/shared/photo-labels.php:85
+msgid "The private photo could not be loaded."
+msgstr "The private photo could not be loaded."
+
+#: resources/views/shared/photo-labels.php:87
+msgid "Choose a valid PNG or JPG up to 5 MiB and four million pixels."
+msgstr "Choose a valid PNG or JPG up to 5 MiB and four million pixels."
+
+#: resources/views/shared/photo-labels.php:90
+#: resources/views/backend/workspace/imports.phtml:16
+msgid "Import institution photos"
+msgstr "Import institution photos"
+
+#: resources/views/shared/photo-labels.php:92
+msgid "Review exact filename matches, then queue server processing. A private notification announces completion or items needing attention."
+msgstr "Review exact filename matches, then queue server processing. A private notification announces completion or items needing attention."
+
+#: resources/views/shared/photo-labels.php:96
+msgid "One PNG/JPG or a flat ZIP up to 10 MiB; at most 200 photos, each up to 5 MiB. No folders or duplicate filenames."
+msgstr "One PNG/JPG or a flat ZIP up to 10 MiB; at most 200 photos, each up to 5 MiB. No folders or duplicate filenames."
+
+#: resources/views/shared/photo-labels.php:99
+msgid "Photo or ZIP file"
+msgstr "Photo or ZIP file"
+
+#: resources/views/shared/photo-labels.php:100
+msgid "Match filenames using"
+msgstr "Match filenames using"
+
+#: resources/views/shared/photo-labels.php:101
+msgid "Exact institutional ID or person ULID"
+msgstr "Exact institutional ID or person ULID"
+
+#: resources/views/shared/photo-labels.php:102
+msgid "Exact first_last or first,last name"
+msgstr "Exact first_last or first,last name"
+
+#: resources/views/shared/photo-labels.php:104
+msgid "Names must identify exactly one person. Unmatched, ambiguous or duplicate people block submission; correct the filenames and review again."
+msgstr "Names must identify exactly one person. Unmatched, ambiguous or duplicate people block submission; correct the filenames and review again."
+
+#: resources/views/shared/photo-labels.php:107
+msgid "Reason for institution photo import"
+msgstr "Reason for institution photo import"
+
+#: resources/views/shared/photo-labels.php:108
+msgid "Review photo matches"
+msgstr "Review photo matches"
+
+#: resources/views/shared/photo-labels.php:109
+msgid "Queue photo import"
+msgstr "Queue photo import"
+
+#: resources/views/shared/photo-labels.php:110
+msgid "One photo match is ready for server processing."
+msgstr "One photo match is ready for server processing."
+
+#: resources/views/shared/photo-labels.php:111
+msgid "Discard import draft"
+msgstr "Discard import draft"
+
+#: resources/views/shared/photo-labels.php:112
+msgid "Filename"
+msgstr "Filename"
+
+#: resources/views/shared/photo-labels.php:113
+msgid "Matched person"
+msgstr "Matched person"
+
+#: resources/views/shared/photo-labels.php:114
+msgid "Exact match"
+msgstr "Exact match"
+
+#: resources/views/shared/photo-labels.php:115
+msgid "No unique match"
+msgstr "No unique match"
+
+#: resources/views/shared/photo-labels.php:116
+msgid "Person selected more than once"
+msgstr "Person selected more than once"
+
+#: resources/views/shared/photo-labels.php:118
+msgid "{count} photo matches are ready for server processing."
+msgstr "{count} photo matches are ready for server processing."
+
+#: resources/views/shared/photo-labels.php:121
+msgid "Resolve the filename matches before queuing this import."
+msgstr "Resolve the filename matches before queuing this import."
+
+#: resources/views/shared/photo-labels.php:124
+msgid "Photo import queued. Processing continues on the server after you leave this screen."
+msgstr "Photo import queued. Processing continues on the server after you leave this screen."
+
+#: resources/views/shared/photo-labels.php:126
+msgid "Open import activity"
+msgstr "Open import activity"
+
+#: resources/views/shared/photo-labels.php:127
+msgid "Next photo matches"
+msgstr "Next photo matches"
+
+#: resources/views/shared/photo-labels.php:128
+msgid "Previous photo matches"
+msgstr "Previous photo matches"
+
+#: src/Application/Http/Controller/PersonPhotoController.php:52
+msgid "Choose one photo or archive within the stated size limit."
+msgstr "Choose one photo or archive within the stated size limit."
+
+#: src/Domain/Person/Service/PersonPhotoService.php:236
+msgid "This photo is managed by your institution. Contact staff for a correction."
+msgstr "This photo is managed by your institution. Contact staff for a correction."
+
+#: src/Domain/Person/Service/PersonPhotoService.php:287
+msgid "Enter a photo-change reason up to 500 characters."
+msgstr "Enter a photo-change reason up to 500 characters."
+
+#: src/Domain/Person/Service/PersonPhotoService.php:313
+msgid "There is no current photo to remove."
+msgstr "There is no current photo to remove."
+
+#: src/Domain/Person/Service/PersonPhotoService.php:458
+msgid "Discard an unfinished photo review or wait for it to expire before starting another."
+msgstr "Discard an unfinished photo review or wait for it to expire before starting another."
+
+#: src/Domain/Person/Service/PhotoPolicy.php:41
+msgid "Photo changes require enabled private storage, reviewed scanning and a retention policy."
+msgstr "Photo changes require enabled private storage, reviewed scanning and a retention policy."
+
+#: src/Infrastructure/Person/CurlGravatarReader.php:58
+msgid "A Gravatar photo could not be retrieved. You can upload a PNG or JPG instead."
+msgstr "A Gravatar photo could not be retrieved. You can upload a PNG or JPG instead."
+
+#: src/Infrastructure/Person/ImagickPhotoProcessor.php:31
+msgid "Choose a single PNG or JPG up to 5 MiB and four million pixels. Image scanning must succeed."
+msgstr "Choose a single PNG or JPG up to 5 MiB and four million pixels. Image scanning must succeed."
+
+#: src/Infrastructure/Person/ZipPhotoArchive.php:47
+msgid "Choose a valid flat ZIP of PNG or JPG photos."
+msgstr "Choose a valid flat ZIP of PNG or JPG photos."
+
+#: src/Infrastructure/Person/ZipPhotoArchive.php:99
+msgid "Use a photo or ZIP up to 10 MiB."
+msgstr "Use a photo or ZIP up to 10 MiB."
+
+#: src/Infrastructure/Person/ZipPhotoArchive.php:109
+msgid "Each photo must be at most 5 MiB."
+msgstr "Each photo must be at most 5 MiB."
+
+#: src/Infrastructure/Person/ZipPhotoArchive.php:120
+msgid "Use between one and 200 photos per ZIP."
+msgstr "Use between one and 200 photos per ZIP."
+
+#: src/Infrastructure/Person/ZipPhotoArchive.php:144
+msgid "The archive has duplicate, unsafe, encrypted or oversized entries."
+msgstr "The archive has duplicate, unsafe, encrypted or oversized entries."
+
+#: src/Infrastructure/Person/ZipPhotoArchive.php:172
+msgid "Use flat PNG or JPG filenames without paths or hidden files."
+msgstr "Use flat PNG or JPG filenames without paths or hidden files."
+
+#: resources/views/shared/import-labels.php:8
+#: resources/views/backend/workspace/imports.phtml:24
+msgid "Import activity"
+msgstr "Import activity"
+
+#: resources/views/shared/import-labels.php:9
+msgid "Cancelled"
+msgstr "Cancelled"
+
+#: resources/views/shared/import-labels.php:10
+msgid "Cancel remaining import steps"
+msgstr "Cancel remaining import steps"
+
+#: resources/views/shared/import-labels.php:11
+msgid "Remaining import steps were cancelled. Completed records have not been changed."
+msgstr "Remaining import steps were cancelled. Completed records have not been changed."
+
+#: resources/views/shared/import-labels.php:13
+msgid "Completed records remain. Cancellation stops future steps after any current transaction finishes."
+msgstr "Completed records remain. Cancellation stops future steps after any current transaction finishes."
+
+#: resources/views/shared/import-labels.php:15
+#: resources/views/backend/workspace/imports.phtml:20
+msgid "Import people"
+msgstr "Import people"
+
+#: resources/views/shared/import-labels.php:16
+msgid "New-person intake"
+msgstr "New-person intake"
+
+#: resources/views/shared/import-labels.php:18
+msgid "Upload a UTF-8 CSV up to 2 MB with up to 5,000 people. Each new person gets a linked account awaiting private password setup. Existing emails must be corrected; this import never merges people or assigns student or employment status."
+msgstr "Upload a UTF-8 CSV up to 2 MB with up to 5,000 people. Each new person gets a linked account awaiting private password setup. Existing emails must be corrected; this import never merges people or assigns student or employment status."
+
+#: resources/views/shared/import-labels.php:23
+msgid "Imports run on the server. You can close this browser after queuing. A private notification appears when processing finishes."
+msgstr "Imports run on the server. You can close this browser after queuing. A private notification appears when processing finishes."
+
+#: resources/views/shared/import-labels.php:27
+msgid "Columns separated by"
+msgstr "Columns separated by"
+
+#: resources/views/shared/import-labels.php:28
+msgid "Comma"
+msgstr "Comma"
+
+#: resources/views/shared/import-labels.php:29
+msgid "Semicolon"
+msgstr "Semicolon"
+
+#: resources/views/shared/import-labels.php:30
+msgid "Tab"
+msgstr "Tab"
+
+#: resources/views/shared/import-labels.php:31
+msgid "Reason for creating these people"
+msgstr "Reason for creating these people"
+
+#: resources/views/shared/import-labels.php:32
+msgid "Read columns"
+msgstr "Read columns"
+
+#: resources/views/shared/import-labels.php:33
+msgid "Match person fields"
+msgstr "Match person fields"
+
+#: resources/views/shared/import-labels.php:37
+msgid "Choose a column"
+msgstr "Choose a column"
+
+#: resources/views/shared/import-labels.php:38
+msgid "Review people"
+msgstr "Review people"
+
+#: resources/views/shared/import-labels.php:39
+msgid "Queue import"
+msgstr "Queue import"
+
+#: resources/views/shared/import-labels.php:40
+msgid "Back to setup"
+msgstr "Back to setup"
+
+#: resources/views/shared/import-labels.php:41
+msgid "Back to import activity"
+msgstr "Back to import activity"
+
+#: resources/views/shared/import-labels.php:42
+msgid "Loading import activity…"
+msgstr "Loading import activity…"
+
+#: resources/views/shared/import-labels.php:43
+msgid "Refresh"
+msgstr "Refresh"
+
+#: resources/views/shared/import-labels.php:44
+msgid "Previous"
+msgstr "Previous"
+
+#: resources/views/shared/import-labels.php:45
+msgid "Next"
+msgstr "Next"
+
+#: resources/views/shared/import-labels.php:46
+msgid "No imports have been queued by this account."
+msgstr "No imports have been queued by this account."
+
+#: resources/views/shared/import-labels.php:47
+msgid "Rows"
+msgstr "Rows"
+
+#: resources/views/shared/import-labels.php:48
+msgid "Destination"
+msgstr "Destination"
+
+#: resources/views/shared/import-labels.php:50
+msgid "Processed"
+msgstr "Processed"
+
+#: resources/views/shared/import-labels.php:51
+msgid "Created"
+msgstr "Created"
+
+#: resources/views/shared/import-labels.php:52
+msgid "Linked"
+msgstr "Linked"
+
+#: resources/views/shared/import-labels.php:53
+msgid "Previously imported"
+msgstr "Previously imported"
+
+#: resources/views/shared/import-labels.php:54
+msgid "Left out"
+msgstr "Left out"
+
+#: resources/views/shared/import-labels.php:56
+msgid "Processing"
+msgstr "Processing"
+
+#: resources/views/shared/import-labels.php:59
+#: resources/views/backend/workspace/imports.phtml:240
+msgid "View progress"
+msgstr "View progress"
+
+#: resources/views/shared/import-labels.php:60
+msgid "Import progress"
+msgstr "Import progress"
+
+#: resources/views/shared/import-labels.php:61
+msgid "Record"
+msgstr "Record"
+
+#: resources/views/shared/import-labels.php:63
+msgid "Review"
+msgstr "Review"
+
+#: resources/views/shared/import-labels.php:64
+msgid "Ready to create"
+msgstr "Ready to create"
+
+#: resources/views/shared/import-labels.php:66
+msgid "Correct the highlighted rows in your file and review it again."
+msgstr "Correct the highlighted rows in your file and review it again."
+
+#: resources/views/shared/import-labels.php:69
+msgid "Your import is queued on the server. You can leave this screen. Check Import activity or your notification drawer for completion."
+msgstr "Your import is queued on the server. You can leave this screen. Check Import activity or your notification drawer for completion."
+
+#: resources/views/shared/import-labels.php:73
+msgid "Processing stopped. The first {processed} of {total} data records were processed. No later records were imported. Resolve the remaining records before reviewing a new file; do not repeat already processed people."
+msgstr "Processing stopped. The first {processed} of {total} data records were processed. No later records were imported. Resolve the remaining records before reviewing a new file; do not repeat already processed people."
+
+#: resources/views/shared/import-labels.php:78
+msgid "The submitting account no longer has the required access."
+msgstr "The submitting account no longer has the required access."
+
+#: resources/views/shared/import-labels.php:81
+msgid "Records changed after the review. Review the remaining records using their current values."
+msgstr "Records changed after the review. Review the remaining records using their current values."
+
+#: resources/views/shared/import-labels.php:83
+msgid "The server processing window expired."
+msgstr "The server processing window expired."
+
+#: resources/views/shared/import-labels.php:85
+msgid "The private source could not be verified."
+msgstr "The private source could not be verified."
+
+#: resources/views/shared/import-labels.php:88
+msgid "The server could not finish this batch. Review the remaining records and server configuration."
+msgstr "The server could not finish this batch. Review the remaining records and server configuration."
+
+#: resources/views/shared/import-labels.php:90
+msgid "Import updates"
+msgstr "Import updates"
+
+#: resources/views/shared/import-labels.php:92
+msgid "Completed and stopped imports appear here. Deleting a notice permanently removes it; the import result remains in Import activity."
+msgstr "Completed and stopped imports appear here. Deleting a notice permanently removes it; the import result remains in Import activity."
+
+#: resources/views/shared/import-labels.php:95
+msgid "Show read updates"
+msgstr "Show read updates"
+
+#: resources/views/shared/import-labels.php:97
+msgid "Delete notification"
+msgstr "Delete notification"
+
+#: resources/views/shared/import-labels.php:98
+msgid "There are no matching import updates."
+msgstr "There are no matching import updates."
+
+#: resources/views/shared/import-labels.php:99
+msgid "Import updates loaded."
+msgstr "Import updates loaded."
+
+#: resources/views/shared/import-labels.php:101
+msgid "Import updates could not load. Use Refresh to try again."
+msgstr "Import updates could not load. Use Refresh to try again."
+
+#: resources/views/shared/import-labels.php:104
+msgid "Rows queued for server processing: {total}. Completion will appear in your notification drawer."
+msgstr "Rows queued for server processing: {total}. Completion will appear in your notification drawer."
+
+#: resources/views/shared/import-labels.php:106
+msgid "Choose a UTF-8 CSV up to 2 MB."
+msgstr "Choose a UTF-8 CSV up to 2 MB."
+
+#: resources/views/shared/import-labels.php:107
+msgid "Showing {from}–{to} of {total} records."
+msgstr "Showing {from}–{to} of {total} records."
+
+#: resources/views/shared/import-labels.php:108
+msgid "Sample people CSV"
+msgstr "Sample people CSV"
+
+#: resources/views/shared/import-labels.php:109
+msgid "Queue catalog import"
+msgstr "Queue catalog import"
+
+#: resources/views/shared/import-labels.php:110
+msgid "Import pages"
+msgstr "Import pages"
+
+#: resources/views/shared/import-labels.php:111
+msgid "Import notification pages"
+msgstr "Import notification pages"
+
+#: resources/views/backend/workspace/imports.phtml:235
+msgid "Import queued"
+msgstr "Import queued"

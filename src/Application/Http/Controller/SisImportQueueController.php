@@ -24,6 +24,10 @@ final readonly class SisImportQueueController
     {
         return new JsonResponse($this->service->status(new EntityId($id)));
     }
+    public function cancel(string $id): ResponseInterface
+    {
+        return new JsonResponse($this->service->cancel(new EntityId($id)));
+    }
     public function notices(ServerRequest $request): ResponseInterface
     {
         $query = $request->getQueryParams();

@@ -21,6 +21,28 @@ use Application\Http\Controller\AdmissionDocumentController as Documents;
 use Qubus\Routing\Psr7Router;
 
 return static function (Psr7Router $router): void {
+    $photos = \Application\Http\Controller\PersonPhotoController::class;
+    $router
+        ->post('/sis/people/{id}/photo/discard/', [$photos, 'discard'])
+        ->name('sis.people.photo.discard');
+    $router
+        ->map(['GET'], '/sis/people/{id}/photo/', [$photos, 'view'])
+        ->name('sis.people.photo.view');
+    $router
+        ->map(['GET'], '/sis/people/{id}/photo/content/', [$photos, 'content'])
+        ->name('sis.people.photo.content');
+    $router
+        ->map(['GET'], '/sis/people/{id}/photo/preview/{draft}/', [$photos, 'content'])
+        ->name('sis.people.photo.content.preview');
+    $router
+        ->map(['POST'], '/sis/people/{id}/photo/review/', [$photos, 'review'])
+        ->name('sis.people.photo.review');
+    $router
+        ->map(['POST'], '/sis/people/{id}/photo/confirm/', [$photos, 'confirm'])
+        ->name('sis.people.photo.confirm');
+    $router
+        ->post('/sis/people/photos/import/review/', [$photos, 'importReview'])
+        ->name('sis.people.photos.import');
     /** @var Psr7Router&Mappable $router */
     $websiteForms = \Application\Http\Controller\WebsiteFormController::class;
     $newsletters = \Application\Http\Controller\NewsletterController::class;
@@ -228,6 +250,9 @@ return static function (Psr7Router $router): void {
         [\Application\Http\Controller\SisImportQueueController::class, 'status']
     )
         ->name('sis.import.status');
+    $router->post('/sis/imports/jobs/{id}/cancel/', [
+        \Application\Http\Controller\SisImportQueueController::class, 'cancel',
+    ])->name('sis.import.cancel');
     $router->map(
         ['GET'],
         '/sis/imports/notices/',

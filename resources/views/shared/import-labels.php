@@ -6,6 +6,12 @@ use function Codefy\Framework\Helpers\trans_html;
 
 return [
     "activity" => trans_html("Import activity"),
+    "cancelled" => trans_html("Cancelled"),
+    "cancel" => trans_html("Cancel remaining import steps"),
+    "cancelled_help" => trans_html("Remaining import steps were cancelled. Completed records have not been changed."),
+    "cancel_help" => trans_html(
+        "Completed records remain. Cancellation stops future steps after any current transaction finishes."
+    ),
     "people" => trans_html("Import people"),
     "setup" => trans_html("New-person intake"),
     "help" => trans_html(

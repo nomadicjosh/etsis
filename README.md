@@ -123,6 +123,8 @@ The staff workspace brings campus metrics, student intake, admissions, and revie
 
 ## Setup documentation
 
+[Profile photos](docs/profile-photos.md) covers personal and institution-managed photos, private cropping/camera capture, optional consented Gravatar, reviewed background photo imports and retention setup.
+
 The [application form studio](docs/application-submission-history.md#application-form-studio) supports a searchable, paged library, institution-defined academic levels and program overrides, responsive containers with one to three columns, sortable field cards, radio choices, question limits, conditional questions, previews and reviewed publication.
 
 [Term types, academic years and terms](docs/academic-calendar-setup.md) explains calendar setup and automatically derived matriculation cohorts. [Initial student matriculation](docs/student-matriculation.md) explains the admissions review, first-program history and retry behavior.

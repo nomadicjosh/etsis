@@ -253,6 +253,41 @@ final readonly class ImportQueueService
         return self::describe($job);
     }
 
+    /** Stop this immutable owned job at a transaction boundary; accepted records remain facts. */
+    public function cancel(EntityId $id): array
+    {
+        $owner = $this->actor();
+        return $this->transactions->run(function () use ($id, $owner): array {
+            $job = $this->owned($id, $owner);
+            if (!in_array($job['state'], ['review', 'queued', 'running'], true)) {
+                $this->actor(null, $owner);
+                return self::describe($job);
+            }
+            $changes = ['state' => 'cancelled', 'lease_token' => null, 'lease_until' => null,
+                'finished_at' => $this->timestamp(), 'revision' => (int) $job['revision'] + 1];
+            $this->queue->update($id, $changes);
+            $this->queue->purgeArtifact($id);
+            if ($job['state'] !== 'review') {
+                $this->queue->notify(['id' => EntityId::generate()->value, 'owner_user_id' => $owner->value,
+                    'job_id' => $id->value, 'target' => $job['target'], 'state' => 'cancelled',
+                    'processed' => (int) $job['processed'], 'total' => (int) $job['total'],
+                    'recorded_at' => $this->timestamp(), 'read_at' => null]);
+            }
+            $this->audit->record($owner, 'import.cancelled', $id);
+            $this->actor(null, $owner);
+            $saved = $this->owned($id, $owner);
+            foreach (array_replace($job, $changes) as $field => $expected) {
+                if ($expected === null ? $saved[$field] !== null : (string) $saved[$field] !== (string) $expected) {
+                    throw new ConcurrentModificationException();
+                }
+            }
+            if ($this->queue->artifact($id) !== null) {
+                throw new ConcurrentModificationException();
+            }
+            return self::describe($saved);
+        });
+    }
+
     public function page(?EntityId $after = null): array
     {
         $owner = $this->actor();
@@ -338,7 +373,7 @@ final readonly class ImportQueueService
         $actor = $this->access->requirePermission("sis:import:manage");
         if (
             $target !== null &&
-            $target !== "people" &&
+            !in_array($target, ["people", "photos"], true) &&
             CatalogImportTarget::tryFrom($target) === null
         ) {
             throw new InvalidArgumentException(
@@ -346,9 +381,12 @@ final readonly class ImportQueueService
             );
         }
         if (
-            ($target === "people" &&
+            (in_array($target, ["people", "photos"], true) &&
                 $this->access->requirePermission("sis:person:manage")->value !==
                     $actor->value) ||
+            ($target === "photos" &&
+                $this->access->requirePermission(\Domain\Person\Service\PersonPhotoService::MANAGE)->value
+                    !== $actor->value) ||
             ($expected !== null && $expected->value !== $actor->value)
         ) {
             throw new AccessDeniedException(

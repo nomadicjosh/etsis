@@ -61,6 +61,10 @@ final readonly class HistoricalSchemaRegistry
                 'type' => 'graduation', 'root' => \Domain\Graduation\GraduationCase::class,
                 'fields' => \Domain\Graduation\GraduationCase::FIELDS,
             ],
+            \Domain\Person\Event\PersonPhotoWasRecorded::class => [
+                'type' => 'person_photo', 'root' => \Domain\Person\PhotoHistory::class,
+                'fields' => \Domain\Person\PhotoHistory::FIELDS,
+            ],
             \Domain\Person\Event\PersonSsnWasRecorded::class => [
                 'type' => 'person_ssn', 'root' => \Domain\Person\PersonSsnHistory::class,
                 'fields' => \Domain\Person\PersonSsnHistory::FIELDS,
@@ -733,6 +737,12 @@ final readonly class HistoricalSchemaRegistry
                     }
                 }
             }
+            if ($class === \Domain\Person\Event\PersonPhotoWasRecorded::class) {
+                \Domain\Person\PhotoHistory::validate($payload);
+                if ($payload['person_id'] !== (string) $stream->aggregateId) {
+                    throw new CorruptHistoryException();
+                }
+            }
             if ($class === \Domain\Person\Event\PersonSsnWasRecorded::class) {
                 \Domain\Person\PersonSsnHistory::validate($payload);
                 if ($payload['person_id'] !== (string) $stream->aggregateId) {
@@ -1236,6 +1246,7 @@ final readonly class HistoricalSchemaRegistry
                     \Domain\Finance\Event\LedgerBookWasPublished::class,
                     \Domain\Finance\Event\LedgerPeriodWasRecorded::class,
                     \Domain\ServiceFee\Event\ServiceFeeDecisionWasRecorded::class,
+                    \Domain\Person\Event\PersonPhotoWasRecorded::class,
                     \Domain\Person\Event\PersonSsnWasRecorded::class,
                     \Domain\Registration\Event\EnrollmentWasReinstated::class,
                     \Domain\AcademicRecord\Event\InstitutionalCreditWasReinstated::class,
@@ -2016,6 +2027,7 @@ final readonly class HistoricalSchemaRegistry
         $type = match ($id->aggregateClassName()) {
             \Domain\ServiceFee\ServiceFee::class => 'service_fee',
             \Domain\Graduation\GraduationCase::class => 'graduation',
+            \Domain\Person\PhotoHistory::class => 'person_photo',
             \Domain\Person\PersonSsnHistory::class => 'person_ssn',
             \Domain\Registration\Waitlist\SectionWaitlist::class => 'section_waitlist',
             \Domain\Student\StandingProposalPolicy::class => 'standing_proposal_policy',
@@ -2079,6 +2091,7 @@ final readonly class HistoricalSchemaRegistry
     public function stream(string $type, string $id): StreamReference
     {
         $aggregateId = match ($type) {
+            'person_photo' => new \Domain\Person\ValueObject\PhotoHistoryId($id),
             'person_ssn' => new \Domain\Person\ValueObject\PersonSsnId($id),
             'section_waitlist' => new \Domain\Registration\Waitlist\WaitlistId($id),
             'standing_proposal_policy' => new \Domain\Student\ValueObject\StandingProposalPolicyId($id),

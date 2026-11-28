@@ -25,6 +25,7 @@ final readonly class ReviewedImportBatchProcessor implements ImportBatchProcesso
         private PersonImportService $people,
         private AccessRepository $roles,
         private LoginAccountStateReader $accounts,
+        private \Domain\Person\Service\PhotoImportService $photos,
     ) {
     }
 
@@ -36,8 +37,11 @@ final readonly class ReviewedImportBatchProcessor implements ImportBatchProcesso
             $this->accounts,
         );
         $access->requirePermission("sis:import:manage");
-        if ($target === "people") {
+        if (in_array($target, ['people', 'photos'], true)) {
             $access->requirePermission("sis:person:manage");
+            if ($target === 'photos') {
+                $access->requirePermission(\Domain\Person\Service\PersonPhotoService::MANAGE);
+            }
         } else {
             CatalogImportTarget::from($target);
         }
@@ -52,6 +56,10 @@ final readonly class ReviewedImportBatchProcessor implements ImportBatchProcesso
         EntityId $actor,
     ): array {
         $this->authorize($actor, $target);
+        if ($target === 'photos') {
+            return $this->photos->forAccess(new ImportCommandAccess($actor, $this->roles, $this->accounts))
+                ->process($request, $expected, $offset, $limit);
+        }
         $delimiter = $request["delimiter"] ?? ",";
         $reader = Reader::fromString($request["csv"])
             ->setDelimiter($delimiter)

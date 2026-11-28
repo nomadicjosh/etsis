@@ -51,6 +51,7 @@ final readonly class WorkspaceService
     ];
     public const array PERMISSIONS = [
         'sis:finance:close',
+        'sis:person:photo:manage',
         'sis:fees:configure',
         'sis:fees:manage',
         'sis:registration:graduate-policy:publish',

@@ -61,6 +61,8 @@
         "qubus/qubus-coding-standard": "^2"
     },
     "suggest": {
+        "ext-imagick": "Required for optional scanned, normalized private profile photos.",
+        "ext-zip": "Required for optional institutional ZIP photo imports.",
         "ext-fileinfo": "Required for optional private admissions document MIME verification.",
         "fenom/fenom": "Lightweight and fast template engine for PHP.",
         "fenom/providers-collection": "Additional providers for Fenom template engine.",

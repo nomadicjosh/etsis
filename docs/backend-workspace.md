@@ -97,6 +97,8 @@ Access setup groups **Permission definitions** and **Offices & delegation** abov
 
 ### Imports and campus publishing
 
+**Import activity → Cancel remaining import steps** stops an owned queued/running import at the next transaction boundary. A step already committing can complete first; accepted records and their counts remain. The stopped job cannot resume from an original submission retry. Its private cancellation notice can be deleted like other import results. [Institution photo imports](profile-photos.md#import-institution-photos) use this same server queue.
+
 Import mapping shows the selected file, source and parsed row count, with an escaped example beside each mapped field. Changing a column updates its example from the existing parsed sample; it makes no extra server request. Review totals use labeled cards, and the reviewed-import actions sit above the paged row table. Row buttons use concise visible labels while their accessible names retain the source row number. Catalog setup opens automatically for classification errors and remains separately authorized. The original CSV sample has a labeled, keyboard-scrollable region.
 
 Import step changes show the progress navigation and focus the new heading only while Imports is visible. A response arriving after navigation does not move focus back. File, mapping and review controls pause during an in-flight action. Existing signed review tokens, explicit course-link choices, source identities, exact commit payloads and retry behavior remain in place; new courses remain inactive drafts.

@@ -66,11 +66,13 @@ final class BackgroundImportTest extends TestCase
             $f->dropCipher,
             $f->clock,
         );
+        require_once dirname(__DIR__) . '/Support/PhotoFixture.php';
         $processor = new ReviewedImportBatchProcessor(
             $f->imports(),
             $people,
             $roles,
             new SqlLoginAccountStateReader($f->sql),
+            \Tests\Support\PhotoFixture::imports($f),
         );
         $worker = new ImportWorker(
             $repo,

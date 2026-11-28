@@ -583,6 +583,7 @@ Reporting work is limited to reports **already defined in this roadmap** and per
 - [x] [Connect reference setup to course/program imports](catalog-imports.md#set-up-reference-lists-first): imported active entries immediately resolve through existing dependency libraries; return to the ordinary reference editor after confirmation. Keep references audited CRUD and publication separate; retain private/CSRF transport, accessible mapping/review and narrow-screen reflow.
 - [x] Complete [create-only people CSV intake](catalog-imports.md#import-people): required given/family names and unique email, bulk case-insensitive duplicate checks, independent import/person duties, canonical linked basic accounts awaiting private password setup, genuine protected creation history, paged review and no automatic merge/capability assignment.
 - [x] Move [all public imports to server processing](catalog-imports.md#server-processing-progress-and-notifications): encrypted reviewed artifacts, proof-only queue confirmation, immutable scoped server authority, current permission/source checks, bounded resumable transactions and leases, explicit partial-progress stops, owner-only activity and disposable persistent completion notices. Raise intake to 2 MiB/5,000 records, retain earlier receipts and configure one bounded DDEV worker.
+- [x] [Cancel remaining import steps](catalog-imports.md#run-the-server-worker): owner-scoped, CSRF-protected queued/running cancellation at transaction boundaries; retain accepted records/counts, remove queued encrypted payloads, invalidate leases and create one deletable personal outcome. Original retries cannot restart a stopped job.
 - [ ] Expand mapped imports to student/academic/financial data with their own identity/dependency reconciliation and historical/privacy rules. Complete institutional conversion remains open.
 - [ ] Build and exercise legacy-data conversion/reconciliation, preserving verified recorded history and explicitly identifying unknown earlier facts.
 
@@ -778,7 +779,7 @@ External student-progress AI remains deferred by project direction; catalog-auth
 **Done when:** the intended release scope is explicit and accepted, recovery is demonstrated, and operational/security/accessibility checks pass. Event sourcing supports evidence; it does not by itself certify legal compliance.
 
 ## 10. Misc.
-- [ ] Profile Photo: Gravatar, photo upload support with cropping, or take photo via computer camera (if institution takes a photo, then it cannot be overwritten with Gravatar or uploaded photo). Institutions should also be able to import a photo (or drag and drop) or a zip file of photos named accordingly (i.e. ID: 01M85RGDAGE378W3TF41NTR156.jpg; First,Last: joshua_parker.jpg, etc.) so that they are automatically attached to the correct person. .png, and .jpg files only.
+- [x] Complete [canonical profile photos](profile-photos.md): private scanned PNG/JPG uploads, accessible cropping and camera capture, explicit optional owner Gravatar, institution-managed protection with reasoned staff corrections, and exact reviewed ID/name matching for individual/flat-ZIP imports. Actual imports run one image per server step through the shared queue and owner completion notices; preserve original retries, source/history, private content and authenticated artifact retention. Connect workspace person/profile and portal editors, import activity, stale drafts and camera cleanup. Live scanner/provider/device, native locking/load and institutional recovery acceptance remain separate.
 - [x] [Maintenance mode](maintenance-mode.md), with current super-administrator access, private browser/API responses, paused background launches and explicit framework console controls.
 - [ ] Notifications frontend and backend (i.e. registration is now open, etc.) with sound. Action feedback, reviewed campus announcements, private admissions updates, waitlist outcome updates, private advising check-in notices, final-grade updates, academic standing updates, transcript preparation/delivery updates, server import results, current registration-opening notices, person-owned preferences and personal deletion are implemented. The advising workflow is covered in section 2; other capabilities appear below. Further recipient audiences, automatic domain triggers and push/email delivery remain open. Reviewed news can target selected current account roles or active student program pursuits as described below. Personal notifications do not require a historical archive.
 - [x] [Target reviewed campus announcements to selected account roles](campus-announcements.md#selected-account-roles): one to ten explicit role identities, current any-role membership, enabled-account matching, filtering before paging, no Super/permission/capability bypass and safe role deletion. Connect bounded searchable role labels, accessible draft selection, saved-review binding, publisher return, exact owner reading/deletion and all private content/news paths. Preserve prior public/campus behavior, original retries and journal facts; add no role grant, member report, recipient fan-out or external delivery worker.
@@ -800,7 +801,7 @@ External student-progress AI remains deferred by project direction; catalog-auth
 - [x] [Publish private transcript processing outcomes](workspace-notifications.md#private-transcript-updates): atomically coalesce accepted preparation/recorded-delivery notices by request, pin original canonical ownership, keep reviews/previews/pending cancellations silent, and preserve deletion on original accepted retries. Store no transcript, recipient or delivery evidence and add no external delivery worker or historical backfill.
 - [x] [Connect owner transcript notices and current request status](workspace-notifications.md#private-transcript-updates) across the compact workspace/portal bell: bounded indexed pages, exact revision acknowledgement, minimal owner-only detail, preserved return navigation, physical deletion and visible-only unread counts. Preserve source documents/requests/academic facts and keep settings in their person-owned editor.
 - [x] [Connect confirmed standing changes to private updates](academic-standing.md#private-standing-updates): atomic latest-per-pursuit notices for manual and confirmed GPA/load decisions and closed-pursuit corrections; strict current ownership, protected minimal detail, exact revision reading, physical deletion, indexed paging and preserved Back navigation in both bells. Keep reviews, retries and replay silent, preserve original academic facts and withhold staff evidence; add no delivery worker or historical backfill.
-- [ ] Optional secure browser access to authorized console operations for self-hosters without SSH access.
+- [ ] Optional secure browser console access to authorized console operations for self-hosters without SSH access.
 - [ ] 1098-T's for students
 - [x] [Protected SSN entry and correction on canonical person profiles](person-ssns.md): independent staff viewing/correction duties, saved last-four masks with no reveal, double-entry reviewed replacements/clearing, protected reasoned history, atomic concurrency/retries and encrypted mask-only projection in the existing journal.
 - [ ] Data Protection (if not already implemented): Use strong encryption (such as AES-256 at rest and TLS 1.2+ in transit).
@@ -812,6 +813,9 @@ External student-progress AI remains deferred by project direction; catalog-auth
 - [x] etSIS System: Provide a separate [plain-language glossary](glossary.md) for terms used throughout the docs and roadmap, including journals, projections, ULIDs, people/access, curriculum/pursuits, academic work, finance, reporting, background processing and integrations. Include concrete examples and links to the relevant workflow guides; connect it from installation, workspace, domain and event-history documentation.
 - [ ] Option of offloading uploaded documents to Amazon S3 with encryption
 - [ ] Secure and encrypted mission-critical database backups with option to offload to Amazon S3
+
+## 11. Student Accounts Additional Implementations/Features
+- [ ]
 
 **Managed hosting boundary:** the separate hosting-service assessment recommends independent SIS installations and institutional databases, with an external customer/provisioning control plane. No core multi-tenancy section, shared academic database or institution keys on SIS tables are planned. The assessment is a design, not implemented provisioning or completion of the S3/backup items above.
 
@@ -834,9 +838,11 @@ approval handoff, protected source evidence and private completion notices.
 [Prospective student-account-to-GL accounting](student-ledger-accounting.md) now completes the next
 substantial finance milestone, including mapping publication, atomic postings, retained source corrections,
 reconciliation and controlled period closing/reopening. Existing-record opening-position conversion
-belongs with finance conversion/recovery work. Next prioritize another substantial untouched workflow,
-such as the protected profile-photo lifecycle or encrypted backup/restore qualification, before another
-narrow integration extension. Establish each milestone's acceptance boundary before implementation.
+belongs with finance conversion/recovery work.
+[Canonical profile photos](profile-photos.md) now complete the next substantial identity milestone,
+including private capture/cropping, institutional protection, reviewed server imports and artifact disposal.
+Next prioritize another substantial untouched workflow, such as encrypted backup/restore qualification,
+before another narrow integration extension. Establish each milestone's acceptance boundary before implementation.
 Completed extension leaves do not complete their broad parent feature.
 
 Stagger smaller work where it supports a milestone: eligibility/section details with registration;

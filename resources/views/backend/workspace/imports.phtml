@@ -11,6 +11,10 @@ use function Codefy\Framework\Helpers\trans_html;
             <p><?= trans_html('Map CSV columns, review each row, and confirm the import.'); ?></p>
         </div>
         <div class="d-flex flex-wrap gap-2">
+            <button id="import-photos" class="btn btn-outline-secondary" type="button" hidden>
+                <i class="bi bi-images" aria-hidden="true"></i>
+                <?= trans_html('Import institution photos'); ?>
+            </button>
             <button id="import-people" class="btn btn-outline-secondary" type="button" hidden>
                 <i class="bi bi-person-plus" aria-hidden="true"></i>
                 <?= trans_html('Import people'); ?>

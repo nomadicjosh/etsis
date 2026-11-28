@@ -313,7 +313,7 @@ if ($path === '/' || str_starts_with($path, '/portal/') || in_array($path, ['/lo
 $loader = new Qubus\View\Native\NativeLoader(['framework' => $root . '/resources/views']);
 header('Cache-Control: private, no-store');
 header("Content-Security-Policy: default-src 'self'; script-src 'self'; "
-    . "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
+    . "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self'; "
     . "connect-src 'self'; frame-ancestors 'self'");
 if ($path === '/admin/error-fixture/') {
     $response = new \Application\Http\Middleware\SisPrivacyMiddleware()->process(

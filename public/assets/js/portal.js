@@ -17,6 +17,7 @@
         : (withdrawalLabels.none || 'No additional registration-charge credit is due under this schedule.'));
     const ceuText = value => window.continuingEducationText(value, ceuLabels);
     const earnedCeuText = value => window.earnedCeuText(value, ceuLabels);
+    const photoLabels = one('#campus-photo-config') ? JSON.parse(one('#campus-photo-config').textContent) : {};
     const notificationLabels = one('#campus-notification-config')
         ? JSON.parse(one('#campus-notification-config').textContent) : {};
     const notifications = one('#campus-notifications-open') ? window.createWorkspaceNotifications({
@@ -729,6 +730,8 @@
             } },
         );
         container.append(surface('Educational background', education));
+        const photo = el('div'); container.append(photo);
+        window.createPersonPhotos({ node: el, request, labels: photoLabels }).mount(photo, '/portal/api/person/photo/');
         const notificationPreferences = el('div');
         container.append(surface(notificationLabels.preferences, notificationPreferences));
         void window.createPersonNotificationPreferences({ node: el, request, labels: notificationLabels,

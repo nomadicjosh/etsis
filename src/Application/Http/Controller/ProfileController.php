@@ -57,7 +57,8 @@ final class ProfileController extends BaseController
             ]
         )->withHeader('Cache-Control', 'private, no-store, max-age=0')
             ->withHeader('Content-Security-Policy', "default-src 'self'; script-src 'self'; "
-                . "style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; "
+                . "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; "
+                . "font-src 'self'; "
                 . "connect-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'");
     }
 

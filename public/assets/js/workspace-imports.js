@@ -587,6 +587,8 @@ window.createWorkspaceImports = function (ui) {
         synchronize();
     });
     one("#import-people").hidden = !can("sis:person:manage");
+    one("#import-photos").hidden = !(can("sis:person:manage") && can("sis:person:photo:manage"));
+    action("#import-photos", () => ui.photoImports.open());
     action("#import-people", () => jobs.people());
     action("#import-activity", () => jobs.activity());
     destination();

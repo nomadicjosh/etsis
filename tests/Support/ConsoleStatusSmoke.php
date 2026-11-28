@@ -80,6 +80,7 @@ try {
                 'check-internal-transfers',
                 'check-moodle-grades',
                 'check-student-ledger',
+                'check-person-photos',
                 'check-course-auditing',
                 'check-admission-notices',
                 'check-public-event-feed',
@@ -452,6 +453,11 @@ try {
                 static fn() => $admissionNotices->campus->cipher
             );
             require __DIR__ . '/AdmissionNoticesBootChecks.php';
+            $status = 0;
+        } elseif (($argv[1] ?? '') === 'check-person-photos') {
+            $kernel->bootstrap();
+            require __DIR__ . '/SisHttpFixture.php';
+            require __DIR__ . '/PersonPhotosBootChecks.php';
             $status = 0;
         } elseif (($argv[1] ?? '') === 'check-student-ledger') {
             $kernel->bootstrap();

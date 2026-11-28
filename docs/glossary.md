@@ -15,6 +15,7 @@ Find terms by topic:
 - [Server processing and technical terms](#server-processing-and-technical-terms)
 - [Websites and integrations](#websites-and-integrations)
 
+
 ## People, accounts and access
 
 ### Person / canonical person
@@ -48,6 +49,11 @@ Assigning work or responsibility to another authorized colleague. A case assignm
 ### Super administrator
 
 An enabled account holding the protected `super` role. This is distinct from an ordinary administrator role. Maintenance-mode sign-in checks require this protected role. See [maintenance mode](maintenance-mode.md).
+
+### Institution-managed profile photo
+
+A **profile photo** belongs to the canonical person. A staff-selected **institution-managed photo** is protected from personal upload, camera, Gravatar or removal changes; authorized staff make reasoned corrections. Recorded selections retain their history, while superseded image bytes follow a separate retention deadline. [Profile photos](profile-photos.md) explains the editors and reviewed server imports.
+
 
 ## Academic setup and curriculum
 
